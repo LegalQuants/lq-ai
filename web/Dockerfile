@@ -32,8 +32,9 @@ ARG BUILD_HASH
 # `args:` from .env's PUBLIC_LQ_AI_API_BASE_URL=http://localhost:8000/api/v1.
 ARG PUBLIC_LQ_AI_API_BASE_URL=/api/v1
 
-# Set Node.js options (heap limit Allocation failed - JavaScript heap out of memory)
-# ENV NODE_OPTIONS="--max-old-space-size=4096"
+# Set Node.js options (heap limit Allocation failed - JavaScript heap out of memory).
+# Required for OpenWebUI's large bundle build; 4 GiB has been adequate in practice.
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 WORKDIR /app
 
