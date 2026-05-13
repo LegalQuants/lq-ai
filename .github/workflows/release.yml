@@ -1,0 +1,176 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry-run: build but do not push or sign"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write       # required for sigstore keyless signing (T3) + SLSA attestations (T2)
+  attestations: write   # required for actions/attest-build-provenance (T2)
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: legalquants
+
+jobs:
+  build-and-push:
+    name: Build ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: api
+            context: ./api
+          - service: gateway
+            context: ./gateway
+          - service: web
+            context: ./web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        id: tag
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=dryrun-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        if: ${{ github.event_name == 'push' || !inputs.dry_run }}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          push: ${{ github.event_name == 'push' || !inputs.dry_run }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/lq-ai-${{ matrix.service }}:${{ steps.tag.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/lq-ai-${{ matrix.service }}:latest
+          provenance: false   # we attach SLSA provenance via actions/attest-build-provenance in T2
+          sbom: false         # we attach SBOM via anchore/sbom-action in T1
+
+      - name: Generate SLSA build provenance
+        if: ${{ github.event_name == 'push' || !inputs.dry_run }}
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/lq-ai-${{ matrix.service }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+  sbom:
+    name: SBOM ${{ matrix.service }}
+    needs: build-and-push
+    if: ${{ github.event_name == 'push' || !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api, gateway, web]
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        id: tag
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=dryrun-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate SBOM (SPDX JSON)
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/lq-ai-${{ matrix.service }}:${{ steps.tag.outputs.tag }}
+          format: spdx-json
+          output-file: ${{ matrix.service }}.spdx.json
+          artifact-name: ${{ matrix.service }}.spdx.json
+          upload-artifact: true
+          upload-artifact-retention: 90
+
+      - name: Verify SBOM is non-empty
+        run: |
+          test -s ${{ matrix.service }}.spdx.json
+          jq -e '.packages | length > 0' ${{ matrix.service }}.spdx.json > /dev/null
+
+  sign:
+    name: Cosign ${{ matrix.service }}
+    needs: [build-and-push, sbom]
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' || !inputs.dry_run }}
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api, gateway, web]
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        id: tag
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=dryrun-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: v2.4.0
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download SBOM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.service }}.spdx.json
+          path: ./sbom
+
+      - name: Sign container image (keyless)
+        run: |
+          cosign sign --yes \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/lq-ai-${{ matrix.service }}:${{ steps.tag.outputs.tag }}
+
+      - name: Sign SBOM and attach as attestation
+        run: |
+          cosign attest --yes \
+            --predicate ./sbom/${{ matrix.service }}.spdx.json \
+            --type spdxjson \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/lq-ai-${{ matrix.service }}:${{ steps.tag.outputs.tag }}
