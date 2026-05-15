@@ -74,7 +74,7 @@ dependencies = [
     # drives off PyMuPDF's character stream, not Docling's offsets.
     # Heavy install footprint (transformers, sentencepiece) — accepted
     # for M1 per PRD §3 and §7.6.
-    "docling>=1.16,<2",
+    "docling>=1.16,<3",
     # arq: Redis-native asyncio job queue for the document-pipeline
     # worker. MIT-licensed; small dep footprint (just redis-py which
     # we already have, plus click). Avoids Celery's complexity at
