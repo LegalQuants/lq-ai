@@ -27,7 +27,7 @@ dependencies = [
     # `aioboto3` is an asyncio wrapper over botocore; required because the
     # backend's storage path (Task C4) is async and we don't want to block
     # the event loop on file I/O. Pulls boto3/botocore transitively.
-    "aioboto3>=13.0,<14",
+    "aioboto3>=13.0,<16",
     # httpx is FastAPI's recommended async HTTP client and is used by the
     # gateway client. Already a transitive of fastapi/starlette test deps,
     # declared explicitly here because we use it at runtime, not just in tests.
