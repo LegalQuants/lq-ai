@@ -61,7 +61,7 @@ jobs:
 
       - name: Build and push
         id: build
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.context }}
           push: ${{ github.event_name == 'push' || !inputs.dry_run }}
