@@ -28,7 +28,7 @@ dependencies = [
     # transitive that pip resolves automatically; pinned here so the
     # SBOM is honest about it.
     "sqlalchemy[asyncio]>=2.0.30,<2.1",
-    "asyncpg>=0.29,<0.31",
+    "asyncpg>=0.29,<0.32",
     "greenlet>=3.0,<4",
     # ADR 0011: encrypted-at-rest provider keys via Fernet (AES-128-CBC +
     # HMAC-SHA256). The cryptography library is the standard Python AEAD
