@@ -79,7 +79,7 @@ dependencies = [
     # worker. MIT-licensed; small dep footprint (just redis-py which
     # we already have, plus click). Avoids Celery's complexity at
     # M1 scale; ADR 0006 §2 records the call.
-    "arq>=0.25,<0.27",
+    "arq>=0.25,<0.29",
     # C6 — tiktoken: BPE tokenizer for OpenAI's text-embedding-3-* family.
     # Used by app.knowledge.embed.count_tokens to populate
     # document_chunks.tokens during the embed-on-write path. ADR 0008
