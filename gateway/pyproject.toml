@@ -55,6 +55,17 @@ dependencies = [
     "opentelemetry-exporter-otlp-proto-http>=1.27,<2",
     "opentelemetry-instrumentation-fastapi>=0.48b0,<1",
     "opentelemetry-instrumentation-httpx>=0.48b0,<1",
+    # M2-A3 (PRD §4.7) — Anonymization Layer. Presidio is Microsoft's PII
+    # detection/redaction framework; we use it for entity recognition
+    # (analyzer) and pseudonym substitution (anonymizer). spaCy is the
+    # NLP backbone presidio-analyzer ships with by default; we pull
+    # ``en_core_web_lg`` in M2-B2 when custom legal recognizers land.
+    # M2-A3 itself only loads the PseudonymMapper (in-process counter,
+    # no spaCy/presidio runtime use); the heavy import path is deferred
+    # to M2-B3 middleware integration.
+    "presidio-analyzer~=2.2",
+    "presidio-anonymizer~=2.2",
+    "spacy~=3.7",
 ]
 
 [project.optional-dependencies]
