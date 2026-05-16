@@ -315,6 +315,12 @@ async def _persist_document_and_chunks(
     existing_doc_stmt = select(Document).where(Document.file_id == file_row.id)
     existing_doc = (await db.execute(existing_doc_stmt)).scalar_one_or_none()
 
+    # M2-A1: ``normalized_content`` is exactly the PyMuPDF canonical text
+    # the chunker sliced — keeping them coupled at write time means the
+    # Citation Engine's re-read invariant
+    # ``chunk.content == normalized_content[char_offset_start:char_offset_end]``
+    # holds for every freshly ingested document. ``was_ocrd`` is False
+    # because M1's parsers never OCR.
     if existing_doc is None:
         doc = Document(
             file_id=file_row.id,
@@ -323,6 +329,8 @@ async def _persist_document_and_chunks(
             page_count=parsed.page_count,
             character_count=len(parsed.canonical_text),
             structured_content=parsed.structured_content,
+            normalized_content=parsed.canonical_text,
+            was_ocrd=False,
         )
         db.add(doc)
         await db.flush()  # populate doc.id
@@ -334,6 +342,8 @@ async def _persist_document_and_chunks(
         doc.page_count = parsed.page_count
         doc.character_count = len(parsed.canonical_text)
         doc.structured_content = parsed.structured_content
+        doc.normalized_content = parsed.canonical_text
+        doc.was_ocrd = False
         # Delete prior chunks so the re-insert doesn't violate the
         # (document_id, chunk_index) UNIQUE constraint.
         await db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == doc.id))
