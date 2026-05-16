@@ -276,11 +276,13 @@ the `project_files` join (the `files.project_id` column is the file's
 > 5. **`messages.error_code`** is a new column persisted when an
 >    assistant message fails mid-stream or the gateway raises. Carries
 >    the canonical `app.errors` code (e.g., `provider_unavailable`).
-> 6. **`messages.citations`** is `JSONB` with default `'[]'`. M1 stores
->    the empty list; M2's citation engine populates the structured
->    shape. The separate `message_citations` table (still listed below)
->    is a pre-existing PRD sketch that may or may not survive the M2
->    citation work — C3 doesn't create it.
+> 6. **`messages.citations`** is `JSONB` with default `'[]'`. M1 stored
+>    the empty list; M2-A2 chose the relational
+>    `message_citations` table (one row per citation, see below) over
+>    JSONB-on-message for queryability. The JSONB column stays at its
+>    `'[]'` default and the M2-A2 chat-send path leaves it alone — it
+>    is slated for retirement by M2-C2 (failed-citation UI rendering),
+>    which will read exclusively from `message_citations`.
 
 ### `chats`
 
@@ -385,9 +387,14 @@ ALTER TABLE inference_routing_log
 
 ### `message_citations`
 
+Per M2-A2 (migration `0025_create_message_citations.py`). One row per
+model-emitted citation, written by the chat-send path after the
+assistant message is persisted and the Citation Engine has run its
+verification cascade.
+
 ```sql
 CREATE TABLE message_citations (
-    id                        UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
+    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     message_id                UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
     source_file_id            UUID NOT NULL REFERENCES files(id) ON DELETE CASCADE,
     source_offset_start       INTEGER NOT NULL,
@@ -395,14 +402,58 @@ CREATE TABLE message_citations (
     source_page               INTEGER,
     source_text               TEXT NOT NULL,
     verified                  BOOLEAN NOT NULL DEFAULT FALSE,
-    verification_method       TEXT,  -- 'exact-match', 'llm-judge', 'failed'
+    verification_method       TEXT,  -- enum below
+    verification_confidence   NUMERIC(3,2),
     created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT chk_offsets CHECK (source_offset_end > source_offset_start)
+
+    CONSTRAINT chk_message_citations_offset_start_nonneg
+        CHECK (source_offset_start >= 0),
+    CONSTRAINT chk_message_citations_offset_end_gt_start
+        CHECK (source_offset_end > source_offset_start),
+    CONSTRAINT chk_message_citations_method_values
+        CHECK (
+            verification_method IS NULL
+            OR verification_method IN (
+                'exact_match', 'tolerant_match', 'llm_judge', 'ensemble', 'failed'
+            )
+        ),
+    CONSTRAINT chk_message_citations_confidence_range
+        CHECK (
+            verification_confidence IS NULL
+            OR (verification_confidence >= 0 AND verification_confidence <= 1)
+        ),
+    CONSTRAINT chk_message_citations_verified_has_method
+        CHECK ((verified = false) OR (verification_method IS NOT NULL))
 );
 
 CREATE INDEX idx_message_citations_message ON message_citations(message_id);
 CREATE INDEX idx_message_citations_file ON message_citations(source_file_id);
 ```
+
+The `verification_method` enum carries the stage that produced the
+verdict — every stage writes into the same row shape so the
+persistence layer (and the UI) don't need to switch on stage:
+
+| Value | Stage | Confidence | Lands in |
+|---|---|---|---|
+| `'exact_match'` | Stage 1: byte-for-byte against `documents.normalized_content[start:end]` | always `1.0` | **M2-A2 (here)** |
+| `'tolerant_match'` | Stage 2: whitespace + OCR-artefact + smart-quote normalization | similarity-based | M2-B1 |
+| `'llm_judge'` | Stage 3: LLM paraphrase judge | judge-reported | M2-C1 |
+| `'ensemble'` | Stage 4: multi-model agreement for high-stakes ops | quorum-derived | M2-D1 |
+| `'failed'` | Every stage rejected; rendered as unverified | NULL | M2-C2 wiring |
+
+The `verified=true ⇒ verification_method IS NOT NULL` CHECK constraint
+prevents a row from claiming verification without naming which stage
+passed.
+
+M2-A2 ships Stage 1 only: extraction (`app.citation.extraction`) finds
+`"..." (Source: [N])` pairs in the assistant response, locates the
+quote inside the cited retrieved chunk's content, and derives byte-
+precise document offsets. The verifier (`app.citation.verification`)
+confirms `normalized_content[start:end] == source_text` byte-for-byte.
+Candidates that fail Stage 1 are dropped (not persisted) until later
+stages ship; the M2-C2 UI work decides what to render for "model
+emitted but we couldn't verify."
 
 ---
 

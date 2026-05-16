@@ -69,12 +69,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import ActiveUser
 from app.api.skills import _resolve_skill_for_user
 from app.audit import audit_action
+from app.citation import extract_citations, verify_exact_match
 from app.clients.gateway import GatewayClient, get_gateway_client
 from app.db.session import get_db
 from app.errors import LQAIError, NotFound, ValidationError
 from app.knowledge.embed import DEFAULT_EMBEDDING_MODEL, request_embedding_vector
 from app.knowledge.retrieval import HybridSearchResult, hybrid_search
-from app.models.chat import Chat, Message
+from app.models.chat import Chat, Message, MessageCitation
+from app.models.document import Document
 from app.models.inference import InferenceRoutingLog
 from app.models.knowledge import KnowledgeBase
 from app.models.project import Project
@@ -807,6 +809,16 @@ def _format_retrieval_context_block(
     gateway request as a ``system`` message so the LLM treats it as
     grounding rather than user turn content.
 
+    The header carries the M2 Citation Engine's citation contract: when
+    the model grounds a claim in a retrieved chunk, it must quote the
+    source verbatim in straight double quotes followed by
+    ``(Source: [N])`` where N matches the bracketed index of the chunk
+    below. The extractor (``app.citation.extraction``) parses that
+    shape; the Stage 1 verifier checks the quote byte-for-byte against
+    ``documents.normalized_content``. Paraphrases or smart-quoted
+    citations fail Stage 1 and fall through to later stages when those
+    ship (M2-B1 tolerant-match, M2-C1 LLM judge).
+
     Chunk text is included verbatim. We do not truncate at the
     character level (the LLM's tokenizer will window if the request is
     oversized); :data:`RAG_MAX_TOTAL_CHUNKS` upstream is the bound.
@@ -816,6 +828,14 @@ def _format_retrieval_context_block(
         "Retrieved context from your matter's knowledge bases. "
         "Cite these sources when they bear on the user's question; "
         "ignore them if they are not relevant.",
+        "",
+        "Citation format: when you ground a claim in a retrieved chunk, "
+        'quote the source passage VERBATIM in straight double quotes "..." '
+        "immediately followed by `(Source: [N])` where N is the bracketed "
+        "index of the chunk below. Quotes must be byte-for-byte exact - "
+        "do not paraphrase, summarize, or change punctuation, casing, or "
+        "whitespace inside quoted material. Use this format every time you "
+        "rely on a chunk; otherwise the citation will render as unverified.",
         "",
     ]
     for idx, chunk in enumerate(chunks, start=1):
@@ -1151,6 +1171,7 @@ async def send_message(
             assistant_message_id=assistant_message_id,
             user_message_id=user_message.id,
             request_id=request_id,
+            retrieved_chunks=retrieved_chunks,
             http_request=request,
             attached_skill_provenance=attached_skill_provenance,
         )
@@ -1163,6 +1184,7 @@ async def send_message(
         assistant_message_id=assistant_message_id,
         user_message_id=user_message.id,
         request_id=request_id,
+        retrieved_chunks=retrieved_chunks,
         http_request=request,
         attached_skill_names=attached_skill_names,
         slash_unresolved=slash_unresolved,
@@ -1172,7 +1194,7 @@ async def send_message(
 
 @router.get(
     "/{chat_id}/messages/{message_id}/citations",
-    summary="Get citations for a message (M2 — empty until citation engine ships)",
+    summary="Get citations for a message (M2-A2: relational message_citations rows)",
 )
 async def get_citations(
     chat_id: str,
@@ -1180,12 +1202,23 @@ async def get_citations(
     user: ActiveUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[dict[str, Any]]:
-    """Return persisted citations on the message row.
+    """Return citations persisted for a message.
 
-    M1 stores ``[]``; M2 populates the structured shape. C3 returns
-    whatever the row carries so this endpoint is forward-compatible
-    without an additional task. The chat ownership check is enforced
-    so a cross-user request can't enumerate message ids.
+    M2-A2 (this version) reads from ``message_citations`` (one row per
+    citation) rather than the legacy ``messages.citations`` JSONB
+    column. Each citation in the response carries the verifier's
+    verdict (``verified``, ``verification_method``,
+    ``verification_confidence``) so the UI (M2-C2) can render unverified
+    citations distinctly.
+
+    The legacy JSONB column is kept at its ``'[]'`` default by the
+    chat-send path; readers should consume this endpoint, not the
+    column. The column itself remains for backward compatibility with
+    older clients and is slated for retirement by M2-C2.
+
+    Chat ownership is enforced so a cross-user request can't enumerate
+    message ids — the visibility check uses the same path as message
+    list reads.
     """
 
     cid = _validate_chat_id(chat_id)
@@ -1199,16 +1232,40 @@ async def get_citations(
 
     await _load_visible_chat(db, cid, user.id, include_archived=True)
 
-    stmt = select(Message).where(Message.id == mid, Message.chat_id == cid)
-    result = await db.execute(stmt)
-    row = result.scalar_one_or_none()
-    if row is None:
+    # Confirm the message exists (and belongs to the chat) before
+    # returning an empty list — distinguishes "no citations" from
+    # "no message" for the caller.
+    msg_stmt = select(Message.id).where(Message.id == mid, Message.chat_id == cid)
+    if (await db.execute(msg_stmt)).scalar_one_or_none() is None:
         raise NotFound(
             f"Message {mid} not found.",
             details={"message_id": str(mid)},
         )
-    citations: list[dict[str, Any]] = list(row.citations or [])
-    return citations
+
+    cite_stmt = (
+        select(MessageCitation)
+        .where(MessageCitation.message_id == mid)
+        .order_by(MessageCitation.created_at, MessageCitation.id)
+    )
+    rows = (await db.execute(cite_stmt)).scalars().all()
+
+    return [
+        {
+            "id": str(c.id),
+            "source_file_id": str(c.source_file_id),
+            "source_offset_start": c.source_offset_start,
+            "source_offset_end": c.source_offset_end,
+            "source_page": c.source_page,
+            "source_text": c.source_text,
+            "verified": c.verified,
+            "verification_method": c.verification_method,
+            "verification_confidence": (
+                float(c.verification_confidence) if c.verification_confidence is not None else None
+            ),
+            "created_at": c.created_at.isoformat(),
+        }
+        for c in rows
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -1283,6 +1340,89 @@ async def _audit_message_sent(
         details=details,
     )
     await db.commit()
+
+
+async def _persist_message_citations(
+    db: AsyncSession,
+    *,
+    message_id: uuid.UUID,
+    assistant_text: str,
+    retrieved_chunks: list[HybridSearchResult],
+) -> None:
+    """Extract, verify, and persist citations from an assistant message — M2-A2.
+
+    Runs after :func:`_persist_assistant_message` so ``message_id`` is
+    a real FK target. No-op when ``retrieved_chunks`` is empty
+    (no RAG context this turn → nothing to cite) or when extraction
+    finds no ``"..." (Source: [N])`` pairs.
+
+    Stage 1 (exact-match) is the only verifier wired today. Candidates
+    that fail Stage 1 are NOT persisted in M2-A2 — they'd land here
+    once Stage 2 (M2-B1) ships and routes the verifier cascade. The
+    plan's "render as unverified" UI path (M2-C2) consumes either:
+
+    * verified=true rows from Stage 1 (or later stages once they ship),
+      OR
+    * the absence of any row for a quote the model emitted.
+    """
+
+    if not retrieved_chunks:
+        return
+
+    candidates = extract_citations(assistant_text, retrieved_chunks)
+    if not candidates:
+        return
+
+    # Batch-load the documents the candidates point at so we don't
+    # round-trip the DB per citation. The verifier needs
+    # ``document.normalized_content`` to confirm the slice.
+    doc_ids = {c.source_document_id for c in candidates}
+    doc_rows = (await db.execute(select(Document).where(Document.id.in_(doc_ids)))).scalars().all()
+    docs_by_id = {d.id: d for d in doc_rows}
+
+    new_rows: list[MessageCitation] = []
+    for cand in candidates:
+        doc = docs_by_id.get(cand.source_document_id)
+        if doc is None:
+            # Defensive: chunk pointed at a document that was deleted
+            # between retrieval and persistence. Skip; the schema's FK
+            # would reject anyway.
+            continue
+
+        result = verify_exact_match(cand, doc)
+        if not result.verified:
+            # Stage 1 missed — once Stages 2-4 land they fall through
+            # here. For M2-A2 we drop unverified candidates.
+            continue
+
+        new_rows.append(
+            MessageCitation(
+                message_id=message_id,
+                source_file_id=cand.source_file_id,
+                source_offset_start=cand.source_offset_start,
+                source_offset_end=cand.source_offset_end,
+                source_page=cand.source_page,
+                source_text=cand.source_text,
+                verified=True,
+                verification_method=result.method,
+                verification_confidence=result.confidence,
+            )
+        )
+
+    if not new_rows:
+        return
+
+    db.add_all(new_rows)
+    await db.commit()
+
+    log.info(
+        "chat-send citations: persisted",
+        extra={
+            "event": "chat_message_citations_persisted",
+            "message_id": str(message_id),
+            "citation_count": len(new_rows),
+        },
+    )
 
 
 async def _persist_assistant_message(
@@ -1418,6 +1558,7 @@ async def _non_streaming_response(
     assistant_message_id: uuid.UUID,
     user_message_id: uuid.UUID,
     request_id: str,
+    retrieved_chunks: list[HybridSearchResult] | None = None,
     http_request: Request | None = None,
     attached_skill_names: list[str] | None = None,
     slash_unresolved: bool = False,
@@ -1474,6 +1615,15 @@ async def _non_streaming_response(
         error_code=None,
     )
 
+    # M2-A2: extract + verify + persist citations from the assistant
+    # response. No-op when no chunks were retrieved this turn.
+    await _persist_message_citations(
+        db,
+        message_id=assistant_message_id,
+        assistant_text=assistant_text,
+        retrieved_chunks=retrieved_chunks or [],
+    )
+
     await _audit_message_sent(
         db,
         user=user,
@@ -1522,6 +1672,7 @@ async def _stream_response(
     assistant_message_id: uuid.UUID,
     user_message_id: uuid.UUID,
     request_id: str,
+    retrieved_chunks: list[HybridSearchResult] | None = None,
     http_request: Request | None = None,
     attached_skill_provenance: list[dict[str, str | None]] | None = None,
 ) -> StreamingResponse:
@@ -1622,6 +1773,28 @@ async def _stream_response(
                 applied_skills=last_applied_skills or [],
                 error_code=error_code,
             )
+            # M2-A2: citations from the streamed assistant content.
+            # Skipped on error_code (no full artifact to cite). Failures
+            # here must not block the stream; log and continue.
+            if error_code is None:
+                try:
+                    await _persist_message_citations(
+                        db,
+                        message_id=assistant_message_id,
+                        assistant_text="".join(accumulated),
+                        retrieved_chunks=retrieved_chunks or [],
+                    )
+                except Exception as cite_exc:
+                    log.warning(
+                        "chat send_message: citation persistence failed",
+                        extra={
+                            "event": "chat_citation_persist_failed",
+                            "user_id": str(user.id),
+                            "chat_id": str(chat.id),
+                            "assistant_message_id": str(assistant_message_id),
+                            "error": str(cite_exc),
+                        },
+                    )
             # D3 audit row — best-effort, must not break the stream.
             try:
                 await _audit_message_sent(
