@@ -151,10 +151,9 @@ providers:
     api_key_env: ''  # Ollama doesn't require an API key
     tier: 1  # Fully local; no data leaves the deployment
     models:
-      - llama3.1:70b
-      - llama3.1:8b
-      - mistral-large
-      - qwen2.5:72b
+      - qwen3.5:9b
+      - qwen3.5:4b-nvfp4
+      - gemma4:e4b
     enabled: ${LOCAL_INFERENCE_ENABLED:-true}
 
   - name: vllm-local
@@ -212,7 +211,7 @@ model_aliases:
   local:
     primary:
       provider: ollama-local
-      model: llama3.1:70b
+      model: qwen3.5:9b
     fallback: []  # No fallback for local — Tier 1 must stay Tier 1
 
   # Mode-2 friendly aliases (B6 partial). Skills and the chat UI ask
@@ -220,16 +219,23 @@ model_aliases:
   # the air-gapped local model. Both stay Tier 1 — the fallback list is
   # empty so a missing local provider surfaces as a clean 503 rather
   # than silently degrading to a cloud Tier 4 path.
+  #
+  # Default model choices reflect what a current Ollama install can
+  # actually serve well in 2026. Qwen3.5 is the family we ship behind
+  # the Mode-2 aliases (PRD §6.1); operators free to repoint at any
+  # ollama-served model by editing this section. The "fast" / "thinking"
+  # split mirrors the cloud split — 4b for low-latency, 9b when the
+  # quality lift is worth the wall-clock.
   local-fast:
     primary:
       provider: ollama-local
-      model: llama3.1:8b
+      model: qwen3.5:4b-nvfp4
     fallback: []
 
   local-thinking:
     primary:
       provider: ollama-local
-      model: llama3.1:70b
+      model: qwen3.5:9b
     fallback: []
 
   # The 'embedding' alias is the alias the backend's KB layer (C6)
@@ -411,19 +417,13 @@ cost_tracking:
     'openai-prod/gpt-4o-mini':
       input_per_mtok: 0.15
       output_per_mtok: 0.60
-    'ollama-local/llama3.1:70b':
+    'ollama-local/qwen3.5:9b':
       input_per_mtok: 0.0  # Local; no per-token cost
       output_per_mtok: 0.0
-    'ollama-local/llama3.1:8b':
+    'ollama-local/qwen3.5:4b-nvfp4':
       input_per_mtok: 0.0
       output_per_mtok: 0.0
-    'ollama-local/llama3.1':
-      input_per_mtok: 0.0
-      output_per_mtok: 0.0
-    'ollama-local/mistral-large':
-      input_per_mtok: 0.0
-      output_per_mtok: 0.0
-    'ollama-local/qwen2.5:72b':
+    'ollama-local/gemma4:e4b':
       input_per_mtok: 0.0
       output_per_mtok: 0.0
     # Embedding rates — OpenAI text-embedding-3-* charges only on

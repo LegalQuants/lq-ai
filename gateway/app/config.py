@@ -248,11 +248,39 @@ class RateLimitsConfig(BaseModel):
 
 
 class AnonymizationConfig(BaseModel):
-    """``anonymization:`` block. M2 feature; A3 just loads it."""
+    """``anonymization:`` block. M2 feature.
+
+    Typed fields the M2-B3 middleware reads directly:
+
+    * :attr:`enabled` — master switch. ``False`` short-circuits the
+      pre/post middleware to a no-op regardless of per-request
+      ``anonymize`` flags or tier gating.
+    * :attr:`apply_at_tiers` — tier gate. The middleware fires only
+      when the request's routed tier is in this list. Tiers outside
+      ``[1, 5]`` raise a config-load error rather than silently
+      becoming a no-op.
+
+    Other keys from ``gateway.yaml.example`` (``entity_types`` etc.)
+    pass through under ``extra="allow"`` and are documented in
+    ``docs/security/anonymization.md``; M2-B3 does not depend on them
+    yet.
+    """
 
     model_config = ConfigDict(extra="allow")
 
     enabled: bool = False
+    apply_at_tiers: list[int] = Field(default_factory=list)
+
+    @field_validator("apply_at_tiers")
+    @classmethod
+    def _validate_tier_range(cls, value: list[int]) -> list[int]:
+        for tier in value:
+            if not 1 <= tier <= 5:
+                raise ValueError(
+                    f"apply_at_tiers entry {tier} is out of [1, 5] range; "
+                    "tiers run 1 (strongest) to 5 (weakest) per PRD §1.5.2."
+                )
+        return value
 
 
 class CostRateEntry(BaseModel):

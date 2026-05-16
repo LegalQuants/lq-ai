@@ -1066,11 +1066,19 @@ async def send_message(
     # of a tier floor (per PRD §4.4 / D1). The backend is authoritative
     # on chat ↔ project; the gateway never queries projects directly,
     # so the value travels on the request envelope.
+    # M2-B3: also resolve ``Project.privileged`` so the gateway's
+    # anonymization middleware can short-circuit for privileged chats.
+    # Cheaper to fetch both in one SELECT than two round-trips.
     project_floor: int | None = None
+    project_privileged: bool = False
     if chat.project_id is not None:
-        project_stmt = select(Project.minimum_inference_tier).where(Project.id == chat.project_id)
-        project_result = await db.execute(project_stmt)
-        project_floor = project_result.scalar_one_or_none()
+        project_stmt = select(Project.minimum_inference_tier, Project.privileged).where(
+            Project.id == chat.project_id
+        )
+        project_row = (await db.execute(project_stmt)).one_or_none()
+        if project_row is not None:
+            project_floor = project_row[0]
+            project_privileged = bool(project_row[1])
 
     # Wave D.1 T7b — RAG step: when the chat's project has KBs attached,
     # run hybrid_search across all of them for the user's just-sent
@@ -1145,6 +1153,7 @@ async def send_message(
         lq_ai_skill_inputs=dict(effective_skill_inputs),
         lq_ai_inline_skills=list(inline_skill_refs),
         lq_ai_project_minimum_inference_tier=project_floor,
+        lq_ai_privileged=project_privileged,
     )
 
     log.info(

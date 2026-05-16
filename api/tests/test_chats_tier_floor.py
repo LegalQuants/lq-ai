@@ -165,6 +165,11 @@ async def test_project_minimum_tier_forwarded_to_gateway(
 
     sent_body = _json.loads(route.calls[0].request.read())
     assert sent_body["lq_ai_project_minimum_inference_tier"] == 3
+    # M2-B3: ``project.privileged=True`` propagates so the gateway
+    # anonymization middleware skips for privileged chats. The
+    # ``project_with_floor`` fixture sets privileged=True (the CHECK
+    # constraint requires it whenever minimum_inference_tier is set).
+    assert sent_body["lq_ai_privileged"] is True
 
 
 @pytest.mark.integration
@@ -190,6 +195,9 @@ async def test_chat_outside_project_does_not_forward_project_floor(
     sent_body = _json.loads(route.calls[0].request.read())
     # The field is omitted (exclude_none) when there's no project floor.
     assert "lq_ai_project_minimum_inference_tier" not in sent_body
+    # M2-B3: ``lq_ai_privileged`` defaults False; either omitted or
+    # explicitly False. Either way, must not be True.
+    assert sent_body.get("lq_ai_privileged", False) is False
 
 
 @pytest.mark.integration

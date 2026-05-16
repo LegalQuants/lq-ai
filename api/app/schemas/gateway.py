@@ -122,6 +122,15 @@ class ChatCompletionRequest(BaseModel):
     chat_id: str | None = None
     anonymize: bool = True
 
+    lq_ai_privileged: bool = False
+    """M2-B3: backend forwards ``Project.privileged`` here when the chat
+    lives in a project. The gateway's anonymization middleware skips
+    entirely on ``True`` — rewriting attorney-client privileged work
+    product risks corrupting it, so the conservative posture is
+    "don't touch it." Defaults False so chats outside any project (and
+    chats whose project is non-privileged) get the normal middleware
+    behavior."""
+
     # --- C2 (skill prompt assembly per ADR 0007) -----------------------------
     lq_ai_skills: list[str] = Field(default_factory=list, max_length=16)
     """Skill names to attach. The gateway fetches each from

@@ -39,7 +39,7 @@ test suite that just exercises the custom recognizers in isolation
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from app.anonymization.mapper import PseudonymMapper
 from app.anonymization.recognizers.case_number import CaseNumberRecognizer
@@ -47,6 +47,20 @@ from app.anonymization.recognizers.matter_number import MatterNumberRecognizer
 
 if TYPE_CHECKING:
     from presidio_analyzer import AnalyzerEngine
+
+
+class _AnalyzerProtocol(Protocol):
+    """Subset of :class:`presidio_analyzer.AnalyzerEngine` we depend on.
+
+    Lets :class:`Anonymizer` accept either the real Presidio engine
+    (the production path) or a test double in unit tests, without
+    importing Presidio just for type-checking. The real engine's
+    ``analyze`` returns ``list[RecognizerResult]``; we only read
+    ``entity_type``, ``start``, ``end`` (and ``score`` for overlap
+    tie-breaks), which both shapes expose.
+    """
+
+    def analyze(self, *, text: str, language: str = "en") -> list[Any]: ...
 
 # Default-recognizer configuration for legal-document corpus.
 #
@@ -173,41 +187,152 @@ class AnonymizationResult:
 class Anonymizer:
     """Pseudonymize entities in outbound text; rehydrate on the response path.
 
-    Method bodies stubbed until M2-B3 lands the gateway middleware
-    and decides on the exact substitution strategy (length-ordered
-    ``str.replace`` vs. regex-based, ordering when one pseudonym is a
-    prefix of another, etc.). The signatures are final so M2-B3
-    middleware + M2-C3 round-trip tests can target a stable shape.
+    Instances are lightweight and stateless beyond the (optionally
+    injected) analyzer. The middleware allocates one Anonymizer +
+    one :class:`PseudonymMapper` per request; the analyzer dependency
+    is the module-level singleton (``get_analyzer_engine``) by default
+    so spaCy stays loaded across requests, but tests inject a stub to
+    keep the fast-feedback path off the spaCy model.
+
+    Two entry points:
+
+    * :meth:`pseudonymize_into` — extends an existing mapper with
+      substitutions from ``text``. The middleware uses this so the
+      same name appearing across multiple messages resolves to the
+      same pseudonym.
+    * :meth:`pseudonymize` — one-shot convenience that wraps a fresh
+      mapper in an :class:`AnonymizationResult`. Useful in tests and
+      single-text callers; the middleware does NOT use this.
     """
 
-    def pseudonymize(self, text: str) -> AnonymizationResult:
-        """Return an :class:`AnonymizationResult` with pseudonymized text.
+    def __init__(self, analyzer: _AnalyzerProtocol | None = None) -> None:
+        """Inject an analyzer or fall back to the module singleton lazily.
 
-        Stub until M2-B3 wires the gateway request-path middleware.
-        The implementation will call :func:`get_analyzer_engine` for
-        entity recognition and a Presidio :class:`AnonymizerEngine`
-        for substitution; M2-B2 (this task) made the analyzer
-        available, M2-B3 ties it to the request path.
+        Passing ``analyzer=None`` (the default) defers the analyzer
+        lookup to first ``pseudonymize_into`` call — Anonymizer
+        construction never triggers a spaCy load on its own.
         """
 
-        raise NotImplementedError(
-            "Anonymizer.pseudonymize is a stub until M2-B3 wires the gateway "
-            "request-path middleware. M2-B2 made the AnalyzerEngine + custom "
-            "recognizers available via get_analyzer_engine()."
-        )
+        self._analyzer = analyzer
+
+    def _resolve_analyzer(self) -> _AnalyzerProtocol:
+        analyzer = self._analyzer
+        if analyzer is None:
+            # ``AnalyzerEngine`` (the real Presidio type) satisfies
+            # ``_AnalyzerProtocol`` structurally — both expose
+            # ``analyze(text, language)`` returning a list. mypy can't
+            # verify that because Presidio's types are untyped at the
+            # third-party boundary, so we cast at the import edge.
+            analyzer = cast(_AnalyzerProtocol, get_analyzer_engine())
+            self._analyzer = analyzer
+        return analyzer
+
+    def pseudonymize(self, text: str) -> AnonymizationResult:
+        """One-shot: pseudonymize ``text`` against a fresh mapper.
+
+        Returns an :class:`AnonymizationResult` carrying the substituted
+        text + the freshly populated mapper. The middleware does NOT
+        use this — it allocates one mapper per request and threads it
+        through :meth:`pseudonymize_into` for each message — but
+        single-text callers (tests, one-off rehydration scripts) get a
+        clean façade.
+        """
+
+        mapper = PseudonymMapper()
+        substituted = self.pseudonymize_into(text, mapper)
+        return AnonymizationResult(text=substituted, mapper=mapper)
+
+    def pseudonymize_into(self, text: str, mapper: PseudonymMapper) -> str:
+        """Extend ``mapper`` with substitutions from ``text``; return the result.
+
+        Walks the analyzer's spans, resolves overlapping detections to
+        the longer span (ties broken by score), then substitutes
+        right-to-left so earlier offsets stay valid. Calling
+        :meth:`PseudonymMapper.assign` for an already-known
+        ``(entity_type, original)`` reuses the prior pseudonym, so the
+        same name across multiple ``pseudonymize_into`` calls on the
+        same mapper resolves to the same pseudonym.
+
+        Empty text short-circuits; the analyzer is never called.
+        """
+
+        if not text:
+            return text
+
+        analyzer = self._resolve_analyzer()
+        results = analyzer.analyze(text=text, language="en")
+        spans = _resolve_overlaps(results)
+
+        # Two-pass substitution. Pass 1 walks spans left-to-right and
+        # calls ``mapper.assign`` so the per-entity-type counter
+        # increments in *reading* order (``PERSON_0001`` is the first
+        # name in the text, not the last). Pass 2 splices substitutions
+        # in right-to-left order so earlier ``(start, end)`` offsets
+        # stay valid as the text length changes around each splice.
+        ordered = sorted(spans, key=lambda s: s.start)
+        pseudonyms: list[tuple[Any, str]] = [
+            (span, mapper.assign(span.entity_type, text[span.start : span.end]))
+            for span in ordered
+        ]
+
+        out = text
+        for span, pseudonym in reversed(pseudonyms):
+            out = out[: span.start] + pseudonym + out[span.end :]
+        return out
 
     def rehydrate(self, text: str, mapper: PseudonymMapper) -> str:
         """Walk pseudonyms in ``text`` and substitute originals.
 
-        Stub until M2-B3 lands the response-path middleware. The
-        implementation is straightforward (one pass over
-        ``mapper.reverse()`` items, ``str.replace`` for each ordered
-        by descending length so prefix-collisions like
-        ``PERSON_0001`` vs ``PERSON_00010`` resolve correctly) but
-        M2-B3 makes the call alongside the streaming-response handling.
+        One pass over ``mapper.reverse()`` items, ``str.replace`` for
+        each pseudonym ordered by descending length. The ordering is
+        load-bearing: without it a shorter pseudonym (``PERSON_0001``)
+        would match-and-replace inside a longer one (``PERSON_00010``)
+        and mangle the output.
+
+        Empty mapper, empty text, and text containing no pseudonyms
+        all return cleanly (an empty ``reverse()`` table makes the
+        loop a no-op).
         """
 
-        raise NotImplementedError(
-            "Anonymizer.rehydrate is a stub until M2-B3 lands the response-"
-            "path middleware. M2-A3 ships PseudonymMapper only."
-        )
+        if not text:
+            return text
+        for pseudonym, original in sorted(
+            mapper.reverse().items(), key=lambda kv: len(kv[0]), reverse=True
+        ):
+            text = text.replace(pseudonym, original)
+        return text
+
+
+def _resolve_overlaps(results: list[Any]) -> list[Any]:
+    """Collapse overlapping analyzer spans to one per region.
+
+    Presidio's :class:`AnalyzerEngine` returns every recognizer's hit;
+    two recognizers detecting the same span (e.g. ``PERSON`` and a
+    false-positive ``US_BANK_NUMBER`` on ``John Smith``) surface as
+    two results. The substitution loop must see one span per region or
+    it will try to splice inside an already-substituted pseudonym.
+
+    Resolution: sort by ``(span_length, score)`` descending and walk;
+    for each span, drop any later span whose ``[start, end)`` overlaps
+    one already kept. Longest wins; same length → higher score wins.
+    """
+
+    if not results:
+        return []
+    ordered = sorted(
+        results,
+        key=lambda r: (r.end - r.start, getattr(r, "score", 0.0)),
+        reverse=True,
+    )
+    kept: list[Any] = []
+    for span in ordered:
+        if any(_overlaps(span, k) for k in kept):
+            continue
+        kept.append(span)
+    return kept
+
+
+def _overlaps(a: Any, b: Any) -> bool:
+    """True iff ``[a.start, a.end)`` and ``[b.start, b.end)`` share any char."""
+
+    return bool(a.start < b.end and b.start < a.end)

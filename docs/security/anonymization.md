@@ -2,7 +2,7 @@
 
 > **Purpose.** Document the entity types LQ.AI's Anonymization Layer (PRD §4.7) recognizes by default, the deliberately-disabled defaults, and how to customize the recognizer set for a specific deployment's matter-numbering convention or domain-specific entities.
 >
-> **Status (2026-05-16).** M2-B2: custom legal recognizers shipped and the Presidio `AnalyzerEngine` is configured. Gateway middleware integration (the request/response pseudonymize/rehydrate path) lands in M2-B3.
+> **Status (2026-05-16).** M2-B3 complete: the gateway middleware now pseudonymizes outbound chat/skill content and rehydrates the response (streaming and non-streaming). M2-B2's custom legal recognizers + Presidio `AnalyzerEngine` configuration remain unchanged; M2-A3's `PseudonymMapper` is the request-scoped substitution table.
 
 ---
 
@@ -123,6 +123,56 @@ The plan §M2-F2 explicitly calls for an acceptance corpus of legal documents to
 - They almost never over-match (false positives are rare in normal prose).
 
 If your deployment surfaces under-matching in practice (the M2 Anonymization round-trip tests in M2-C3 will help), the right response is to add deployment-specific recognizers rather than loosening the existing patterns globally.
+
+---
+
+## Middleware behavior (M2-B3)
+
+The gateway runs two passes around the provider call:
+
+```
+Auth → Router → Rate Limit → Tier Derivation
+                 → Anonymization-Pre  (substitute)
+                 → Provider Adapter
+                 → Anonymization-Post (rehydrate)
+              → Cost Tracker → Telemetry
+```
+
+### When the middleware fires
+
+All four conditions must hold; the first that fails short-circuits to a no-op for the entire pass (provider receives unmodified content; response is not touched; audit row records `anonymization_applied = false`).
+
+| Condition | Source | Default |
+|---|---|---|
+| `gateway.yaml` `anonymization.enabled = true` | Operator config | **false** — feature flag stays off until the deployment opts in. |
+| Request's routed tier is in `anonymization.apply_at_tiers` | Operator config | `[3, 4, 5]` — local Tier 1 / Tier 2 inference skips because the data never leaves the operator's environment. |
+| Request's `lq_ai_privileged` is `false` | Backend forwards `Project.privileged` | False for chats outside any project, or in non-privileged projects. |
+| Request's `anonymize` is `true` | Per-call body field | True. Callers send `anonymize: false` only when they need the raw text on the provider call (evaluation, raw-passthrough scenarios). |
+
+### What the pre-pass touches
+
+- Every `messages[*]` whose role is `user`, `assistant`, or `system` and whose `content` is non-null. Tool-call shaped messages (`content: null`) are left alone.
+- Every string leaf inside `lq_ai_skill_inputs` (recursive — dicts and lists are walked). Numbers, booleans, and `null` pass through untouched.
+
+### What the post-pass touches
+
+**Non-streaming.** Each `choices[*].message.content` is rehydrated in place. The response body the caller sees has only originals, never pseudonyms.
+
+**Streaming.** Each SSE chunk's `choices[*].delta.content` is fed through a per-stream `StreamingRehydrator`. The rehydrator holds the tail of the stream when it ends in a partial pseudonym (e.g. `PERSON_` or `PERSON_0001` with no trailing space — could grow to `PERSON_00010`). Held text emits as soon as the pattern crystallizes or fails to grow. At `[DONE]`, any held tail flushes as a synthesized terminal chunk so the caller doesn't lose the last fragment. The buffer is bounded by the length of one in-flight pseudonym (~25 chars in practice), so streaming latency is unaffected.
+
+Per **Decision D**: the middleware rehydrates response **content** only. Citation rehydration is incidental — the api/'s downstream citation extraction operates on already-rehydrated content, so cite quotes naturally carry originals. The gateway never touches `message_citations` rows directly.
+
+### Audit log
+
+Every routed request writes one row to `inference_routing_log`. The middleware sets `anonymization_applied = true` on every row whose request passed all four firing conditions — including rows where the upstream later failed (the substitution did happen; the provider just then returned an error). Tier-floor refusals (which short-circuit before the pre-pass) leave the flag `false` because no substitution happened.
+
+### Where mappings live
+
+Per **Decision A** and **Decision B (i)** locked in M2-B3 kickoff: a fresh `PseudonymMapper` is constructed inside the request scope, populated by the pre-pass, read by the post-pass, and dropped on function exit. **It is never persisted, never logged, and never serialized to any side channel.** A new request gets a new mapper; counters reset every time.
+
+### Privileged chats — why we skip
+
+The privileged-Project skip (Decision A) is a deliberate trade-off. Privileged chats are work product the attorney-client privilege protects; replacing names with pseudonyms before the model sees them — even with the rehydration on the way back — risks corrupting that work product if any step in the pipeline behaves unexpectedly. The conservative posture is to leave privileged content untouched. Operators who want pseudonymization in privileged chats can flip `lq_ai_privileged` off at the api/ layer per chat, but the default protects the legal-work-product invariant.
 
 ---
 
