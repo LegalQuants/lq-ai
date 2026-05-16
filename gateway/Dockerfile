@@ -12,6 +12,17 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 RUN pip install --no-cache-dir .
 
+# M2-B2 — bake spaCy's en_core_web_lg model into the image so the
+# Presidio AnalyzerEngine has its NLP backbone available at first
+# request without a network round-trip at startup. ~560MB on disk;
+# a one-time SBOM cost paid for deterministic deploys and air-gapped
+# operator environments. The model is what feeds entity-recognition
+# for PERSON, ORG, LOCATION, and the others Presidio's default
+# pipeline depends on; the custom PatternRecognizers
+# (CaseNumberRecognizer, MatterNumberRecognizer) don't depend on
+# spaCy but they live in the same Analyzer.
+RUN python -m spacy download en_core_web_lg
+
 COPY app/ ./app/
 
 # D0.5 — entrypoint script seeds /etc/lq-ai/gateway.yaml from the
