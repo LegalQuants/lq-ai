@@ -62,6 +62,7 @@ class _AnalyzerProtocol(Protocol):
 
     def analyze(self, *, text: str, language: str = "en") -> list[Any]: ...
 
+
 # Default-recognizer configuration for legal-document corpus.
 #
 # **Enabled** — these recognizers pay off on legal prose; the
@@ -271,8 +272,7 @@ class Anonymizer:
         # stay valid as the text length changes around each splice.
         ordered = sorted(spans, key=lambda s: s.start)
         pseudonyms: list[tuple[Any, str]] = [
-            (span, mapper.assign(span.entity_type, text[span.start : span.end]))
-            for span in ordered
+            (span, mapper.assign(span.entity_type, text[span.start : span.end])) for span in ordered
         ]
 
         out = text

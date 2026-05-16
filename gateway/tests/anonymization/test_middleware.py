@@ -70,9 +70,7 @@ class _StubAnalyzer:
     def __init__(self, by_text: dict[str, list[_Span]]) -> None:
         self._by_text = by_text
 
-    def analyze(
-        self, *, text: str, language: str = "en", **_kwargs: object
-    ) -> list[_Span]:
+    def analyze(self, *, text: str, language: str = "en", **_kwargs: object) -> list[_Span]:
         return list(self._by_text.get(text, []))
 
 
@@ -101,9 +99,7 @@ def _make_request(
 def test_pre_anonymize_skips_when_config_disabled() -> None:
     """``anonymization.enabled=false`` is a hard short-circuit."""
 
-    req = _make_request(
-        messages=[ChatCompletionMessage(role="user", content="John Smith signed.")]
-    )
+    req = _make_request(messages=[ChatCompletionMessage(role="user", content="John Smith signed.")])
     config = AnonymizationConfig(enabled=False, apply_at_tiers=[3, 4, 5])
     analyzer = _StubAnalyzer({"John Smith signed.": [_Span("PERSON", 0, 10)]})
 
@@ -122,9 +118,7 @@ def test_pre_anonymize_skips_when_config_disabled() -> None:
 def test_pre_anonymize_skips_when_tier_not_in_apply_at_tiers() -> None:
     """Tier 1 (local inference) does not benefit from anonymization."""
 
-    req = _make_request(
-        messages=[ChatCompletionMessage(role="user", content="John Smith signed.")]
-    )
+    req = _make_request(messages=[ChatCompletionMessage(role="user", content="John Smith signed.")])
     config = AnonymizationConfig(enabled=True, apply_at_tiers=[3, 4, 5])
     analyzer = _StubAnalyzer({"John Smith signed.": [_Span("PERSON", 0, 10)]})
 
@@ -192,9 +186,7 @@ def test_pre_anonymize_skips_on_per_request_opt_out() -> None:
 def test_pre_anonymize_pseudonymizes_user_message_content() -> None:
     """When firing, a user-role message has entities replaced in place."""
 
-    req = _make_request(
-        messages=[ChatCompletionMessage(role="user", content="John Smith signed.")]
-    )
+    req = _make_request(messages=[ChatCompletionMessage(role="user", content="John Smith signed.")])
     config = AnonymizationConfig(enabled=True, apply_at_tiers=[3, 4, 5])
     analyzer = _StubAnalyzer({"John Smith signed.": [_Span("PERSON", 0, 10)]})
 
@@ -396,9 +388,7 @@ def test_post_anonymize_rehydrates_single_choice() -> None:
     mapper.assign("PERSON", "John Smith")  # → PERSON_0001
     response = _make_response(contents=["PERSON_0001 signed the agreement."])
 
-    post_anonymize_response(
-        response=response, mapper=mapper, anonymizer=Anonymizer()
-    )
+    post_anonymize_response(response=response, mapper=mapper, anonymizer=Anonymizer())
 
     assert response.choices[0].message.content == "John Smith signed the agreement."
 
@@ -417,9 +407,7 @@ def test_post_anonymize_rehydrates_multiple_choices() -> None:
         ]
     )
 
-    post_anonymize_response(
-        response=response, mapper=mapper, anonymizer=Anonymizer()
-    )
+    post_anonymize_response(response=response, mapper=mapper, anonymizer=Anonymizer())
 
     assert response.choices[0].message.content == "John Smith represented Acme LLP."
     assert response.choices[1].message.content == "Acme LLP retained John Smith."
@@ -433,9 +421,7 @@ def test_post_anonymize_leaves_none_content_as_none() -> None:
     mapper.assign("PERSON", "John Smith")
     response = _make_response(contents=[None])
 
-    post_anonymize_response(
-        response=response, mapper=mapper, anonymizer=Anonymizer()
-    )
+    post_anonymize_response(response=response, mapper=mapper, anonymizer=Anonymizer())
 
     assert response.choices[0].message.content is None
 
@@ -447,9 +433,7 @@ def test_post_anonymize_empty_mapper_is_no_op() -> None:
     mapper = PseudonymMapper()  # No assignments.
     response = _make_response(contents=["The agreement is signed."])
 
-    post_anonymize_response(
-        response=response, mapper=mapper, anonymizer=Anonymizer()
-    )
+    post_anonymize_response(response=response, mapper=mapper, anonymizer=Anonymizer())
 
     assert response.choices[0].message.content == "The agreement is signed."
 
@@ -465,9 +449,7 @@ def test_post_anonymize_preserves_non_content_fields() -> None:
     response.routed_provider = "anthropic"
     response.anonymization_applied = True
 
-    post_anonymize_response(
-        response=response, mapper=mapper, anonymizer=Anonymizer()
-    )
+    post_anonymize_response(response=response, mapper=mapper, anonymizer=Anonymizer())
 
     assert response.choices[0].message.role == "assistant"
     assert response.choices[0].finish_reason == "stop"
@@ -534,12 +516,7 @@ def test_streaming_rehydrator_pseudonym_split_across_chunks() -> None:
     mapper = _mapper_with(("PERSON", "John Smith"))
     r = StreamingRehydrator(mapper=mapper, anonymizer=Anonymizer())
 
-    out = (
-        r.process("Hello PERSON_")
-        + r.process("0001")
-        + r.process(" signed.")
-        + r.flush()
-    )
+    out = r.process("Hello PERSON_") + r.process("0001") + r.process(" signed.") + r.flush()
 
     assert out == "Hello John Smith signed."
 

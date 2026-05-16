@@ -669,9 +669,7 @@ async def chat_completions(request: Request) -> JSONResponse | StreamingResponse
     # provider's response content back to the originals. The mapper is
     # then dropped on function exit — never persisted, never logged.
     if anon_mapper is not None:
-        post_anonymize_response(
-            response=result.response, mapper=anon_mapper, anonymizer=anonymizer
-        )
+        post_anonymize_response(response=result.response, mapper=anon_mapper, anonymizer=anonymizer)
 
     # --- Success: stamp tier on body, write log, return --------------------
     annotated = _annotate_response(result.response, target=result.target, config=config)

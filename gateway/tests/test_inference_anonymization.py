@@ -59,9 +59,7 @@ class _StubAnalyzer:
     def __init__(self, by_text: dict[str, list[_Span]]) -> None:
         self._by_text = by_text
 
-    def analyze(
-        self, *, text: str, language: str = "en", **_kwargs: object
-    ) -> list[_Span]:
+    def analyze(self, *, text: str, language: str = "en", **_kwargs: object) -> list[_Span]:
         return list(self._by_text.get(text, []))
 
 
@@ -191,9 +189,7 @@ async def test_non_streaming_pseudonymizes_request_and_rehydrates_response(
         },
     )
 
-    upstream = _mock_anthropic(
-        response_text="PERSON_0001 has signed; the deal closes Friday."
-    )
+    upstream = _mock_anthropic(response_text="PERSON_0001 has signed; the deal closes Friday.")
 
     response = await client.post(
         "/v1/chat/completions",
@@ -207,8 +203,7 @@ async def test_non_streaming_pseudonymizes_request_and_rehydrates_response(
     body = response.json()
     # Response content is rehydrated: PERSON_0001 → John Smith.
     assert (
-        body["choices"][0]["message"]["content"]
-        == "John Smith has signed; the deal closes Friday."
+        body["choices"][0]["message"]["content"] == "John Smith has signed; the deal closes Friday."
     )
     assert body["anonymization_applied"] is True
 
@@ -407,12 +402,7 @@ def _mock_anthropic_streaming(*, deltas: list[str]) -> respx.Route:
         )
         + "\n\n"
     )
-    lines.append(
-        "event: message_stop\n"
-        + "data: "
-        + json.dumps({"type": "message_stop"})
-        + "\n\n"
-    )
+    lines.append("event: message_stop\n" + "data: " + json.dumps({"type": "message_stop"}) + "\n\n")
 
     body = "".join(lines).encode()
     return respx.post("https://api.anthropic.com/v1/messages").mock(

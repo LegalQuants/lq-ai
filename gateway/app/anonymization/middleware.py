@@ -213,9 +213,7 @@ def post_anonymize_response(
         choice.message.content = anonymizer.rehydrate(choice.message.content, mapper)
 
 
-def _pseudonymize_strings(
-    value: Any, *, anonymizer: Anonymizer, mapper: PseudonymMapper
-) -> Any:
+def _pseudonymize_strings(value: Any, *, anonymizer: Anonymizer, mapper: PseudonymMapper) -> Any:
     """Recursively pseudonymize string leaves; pass other types through.
 
     Skill-input values are arbitrary JSON-shaped (dict/list/str/int/
@@ -228,7 +226,10 @@ def _pseudonymize_strings(
     if isinstance(value, str):
         return anonymizer.pseudonymize_into(value, mapper)
     if isinstance(value, dict):
-        return {k: _pseudonymize_strings(v, anonymizer=anonymizer, mapper=mapper) for k, v in value.items()}
+        return {
+            k: _pseudonymize_strings(v, anonymizer=anonymizer, mapper=mapper)
+            for k, v in value.items()
+        }
     if isinstance(value, list):
         return [_pseudonymize_strings(v, anonymizer=anonymizer, mapper=mapper) for v in value]
     return value

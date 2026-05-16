@@ -90,9 +90,7 @@ def test_rehydrate_substitutes_multiple_distinct_pseudonyms() -> None:
     mapper.assign("PERSON", "Jane Doe")  # PERSON_0002
     mapper.assign("ORGANIZATION", "Acme LLP")  # ORGANIZATION_0001
 
-    text = (
-        "PERSON_0001 and PERSON_0002 of ORGANIZATION_0001 signed the deal."
-    )
+    text = "PERSON_0001 and PERSON_0002 of ORGANIZATION_0001 signed the deal."
     out = Anonymizer().rehydrate(text, mapper)
 
     assert out == "John Smith and Jane Doe of Acme LLP signed the deal."
@@ -105,9 +103,7 @@ def test_rehydrate_handles_repeated_pseudonym() -> None:
     mapper = PseudonymMapper()
     mapper.assign("PERSON", "John Smith")
 
-    out = Anonymizer().rehydrate(
-        "PERSON_0001 emailed PERSON_0001 to confirm.", mapper
-    )
+    out = Anonymizer().rehydrate("PERSON_0001 emailed PERSON_0001 to confirm.", mapper)
 
     assert out == "John Smith emailed John Smith to confirm."
 
@@ -319,9 +315,7 @@ def test_pseudonymize_returns_result_with_fresh_mapper() -> None:
     """One-shot pseudonymize wraps a fresh mapper in AnonymizationResult."""
 
     spans = [_Span("PERSON", 0, 10)]
-    result = Anonymizer(analyzer=_StubAnalyzer(spans)).pseudonymize(
-        "John Smith signed."
-    )
+    result = Anonymizer(analyzer=_StubAnalyzer(spans)).pseudonymize("John Smith signed.")
 
     assert result.text == "PERSON_0001 signed."
     assert result.mapper.reverse() == {"PERSON_0001": "John Smith"}
