@@ -327,7 +327,104 @@ async def test_chat_send_persists_verified_citation_from_verbatim_quote(
 
 
 # ---------------------------------------------------------------------------
-# 2. Paraphrased quote → no citation row (Stage 1 strict; Stage 2 will catch)
+# M2-B1 — Stage 2 (tolerant-match) covers smart quotes + whitespace drift
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+async def test_chat_send_whitespace_drift_quote_passes_tolerant_match(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    owner_user: User,
+    chat_with_kb_attached: Chat,
+) -> None:
+    """A model quote with whitespace drift passes Stage 2 (tolerant-match).
+
+    Source chunk has double spaces; model normalizes them to single
+    spaces when quoting. Stage 1 fails (byte-precise slice carries the
+    double space; model's source_text has the single-space version);
+    extraction's rapidfuzz alignment fallback still locates the span,
+    so Stage 2 runs and the normalized fuzz ratio passes.
+    """
+
+    body = "the employee  shall not  engage in any competing  business for two years."
+    drifted_quote = "the employee shall not engage in any competing business for two years."
+
+    # Fresh fixtures so the chunk content has the whitespace-drift body
+    # (avoids changing CHUNK_BODY used by other tests).
+    file_row = FileModel(
+        owner_id=owner_user.id,
+        filename="nda-template-double-space.pdf",
+        mime_type="application/pdf",
+        size_bytes=2048,
+        hash_sha256="c" * 64,
+        storage_path=f"cite-fixture/{uuid.uuid4()}",
+        ingestion_status="ready",
+    )
+    db_session.add(file_row)
+    await db_session.flush()
+
+    doc = Document(
+        file_id=file_row.id,
+        parser="pymupdf-only",
+        parser_version="pymupdf=1.27",
+        page_count=1,
+        character_count=len(body),
+        normalized_content=body,
+        was_ocrd=False,
+    )
+    db_session.add(doc)
+    await db_session.flush()
+
+    chunk = DocumentChunk(
+        document_id=doc.id,
+        chunk_index=0,
+        content=body,
+        page_start=1,
+        page_end=1,
+        char_offset_start=0,
+        char_offset_end=len(body),
+    )
+    db_session.add(chunk)
+    await db_session.flush()
+
+    assistant_text = f'The agreement states "{drifted_quote}" (Source: [1]).'
+
+    respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json=_success_payload(assistant_text)),
+    )
+
+    with patch(
+        "app.api.chats.hybrid_search",
+        new=AsyncMock(return_value=[_hybrid_result_for(chunk, doc, file_row)]),
+    ):
+        response = await client.post(
+            f"/api/v1/chats/{chat_with_kb_attached.id}/messages",
+            json={"content": "Quote the non-compete clause.", "model": "smart"},
+            headers=_h(owner_user),
+        )
+
+    assert response.status_code == 200, response.text
+
+    rows = (
+        (
+            await db_session.execute(
+                select(MessageCitation).where(MessageCitation.source_file_id == file_row.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1
+    cite = rows[0]
+    assert cite.verified is True
+    assert cite.verification_method == "tolerant_match"
+    assert cite.verification_confidence is not None
+    assert float(cite.verification_confidence) >= 0.95
+
+
+# ---------------------------------------------------------------------------
+# 2. Paraphrased quote → no citation row (Stages 1+2 reject; Stage 3 will catch)
 # ---------------------------------------------------------------------------
 
 
