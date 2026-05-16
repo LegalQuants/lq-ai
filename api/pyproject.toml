@@ -105,6 +105,13 @@ dependencies = [
     "opentelemetry-exporter-otlp-proto-http>=1.27,<2",
     "opentelemetry-instrumentation-fastapi>=0.48b0,<1",
     "opentelemetry-instrumentation-httpx>=0.48b0,<1",
+    # M2-B1 — rapidfuzz powers Citation Engine Stage 2 (tolerant-match).
+    # Two uses: (1) extraction-time `partial_ratio_alignment` fallback
+    # when the model's quote isn't a byte-for-byte substring of the
+    # retrieved chunk (smart quotes, whitespace drift); (2) Stage 2
+    # verifier's `fuzz.ratio` against normalized text with threshold
+    # 95. MIT-licensed; C-extension backbone, no runtime config needed.
+    "rapidfuzz~=3.5",
 ]
 
 [project.optional-dependencies]

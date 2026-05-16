@@ -168,13 +168,17 @@ def test_extract_tolerates_whitespace_around_source_marker() -> None:
 
 
 @pytest.mark.unit
-def test_extract_ignores_smart_quotes_for_stage_1() -> None:
-    """Stage 1 handles straight quotes only; smart quotes fall to Stage 2 (M2-B1)."""
+def test_extract_handles_smart_quotes() -> None:
+    """M2-B1: extractor accepts curly-quote pairs; Stage 2 verifier will pass them."""
 
     chunk = _chunk(content="Cited text.")
     response = "It says “Cited text.” (Source: [1]) here."
 
-    assert extract_citations(response, [chunk]) == []
+    candidates = extract_citations(response, [chunk])
+    assert len(candidates) == 1
+    # source_text preserves the model's quote shape (smart quotes); the
+    # verifier normalizes both sides before comparing.
+    assert candidates[0].source_text == "Cited text."
 
 
 @pytest.mark.unit
@@ -188,3 +192,57 @@ def test_extract_handles_multiline_quote() -> None:
     candidates = extract_citations(response, [chunk])
     assert len(candidates) == 1
     assert candidates[0].source_text == chunk_content
+
+
+# ---------------------------------------------------------------------------
+# M2-B1: rapidfuzz alignment fallback for quotes that aren't byte-for-byte
+# substrings of the cited chunk (smart quotes, whitespace drift).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_extract_alignment_fallback_finds_whitespace_drift_quote() -> None:
+    """When byte-for-byte fails, partial_ratio_alignment locates the quote.
+
+    The candidate's offsets point at the best-aligned span in the chunk;
+    the verifier (Stage 2) re-checks at threshold 95 after normalizing.
+    """
+
+    chunk = _chunk(
+        content="The   agreement\nshall terminate.",
+        char_offset_start=100,
+    )
+    # Model emits the same text with normalized whitespace — byte-for-byte
+    # find will miss; alignment fallback locates it.
+    response = 'The model says "The agreement shall terminate." (Source: [1]).'
+
+    candidates = extract_citations(response, [chunk])
+    assert len(candidates) == 1
+    cite = candidates[0]
+    # The aligned span covers the whitespace-divergent region.
+    assert cite.source_offset_start >= 100
+    assert cite.source_offset_end <= 100 + len(chunk.content)
+    # source_text is the model's quote verbatim; verifier normalizes both sides.
+    assert cite.source_text == "The agreement shall terminate."
+
+
+@pytest.mark.unit
+def test_extract_alignment_fallback_rejects_unrelated_quote() -> None:
+    """A quote with no real overlap with the chunk falls below threshold."""
+
+    chunk = _chunk(content="The contract term is five years.")
+    response = 'The model wrote "completely unrelated subject matter." (Source: [1]).'
+
+    assert extract_citations(response, [chunk]) == []
+
+
+@pytest.mark.unit
+def test_extract_smart_quote_alignment_pairs() -> None:
+    """Mixed shapes: a smart-quoted citation whose text differs in whitespace."""
+
+    chunk = _chunk(content="The   agreement\nshall  terminate.")
+    response = "The model says “The agreement shall terminate.” (Source: [1])."
+
+    candidates = extract_citations(response, [chunk])
+    assert len(candidates) == 1
+    assert candidates[0].source_text == "The agreement shall terminate."

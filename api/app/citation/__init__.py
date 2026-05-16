@@ -19,11 +19,18 @@ as "unverified" by the UI (M2-C2). The persistence shape is the
 """
 
 from app.citation.extraction import CitationCandidate, extract_citations
-from app.citation.verification import VerificationResult, verify_exact_match
+from app.citation.verification import (
+    VerificationResult,
+    verify,
+    verify_exact_match,
+    verify_tolerant_match,
+)
 
 __all__ = [
     "CitationCandidate",
     "VerificationResult",
     "extract_citations",
+    "verify",
     "verify_exact_match",
+    "verify_tolerant_match",
 ]

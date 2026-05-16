@@ -69,7 +69,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import ActiveUser
 from app.api.skills import _resolve_skill_for_user
 from app.audit import audit_action
-from app.citation import extract_citations, verify_exact_match
+from app.citation import extract_citations, verify
 from app.clients.gateway import GatewayClient, get_gateway_client
 from app.db.session import get_db
 from app.errors import LQAIError, NotFound, ValidationError
@@ -1389,10 +1389,12 @@ async def _persist_message_citations(
             # would reject anyway.
             continue
 
-        result = verify_exact_match(cand, doc)
+        result = verify(cand, doc)
         if not result.verified:
-            # Stage 1 missed — once Stages 2-4 land they fall through
-            # here. For M2-A2 we drop unverified candidates.
+            # Every wired stage (currently 1 + 2) rejected the
+            # candidate. Drop until Stages 3-4 (LLM judge / ensemble)
+            # land in M2-C1 / M2-D1; those plug into the same
+            # ``verify()`` cascade.
             continue
 
         new_rows.append(
