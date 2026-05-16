@@ -516,7 +516,9 @@ CREATE TABLE documents (
     parser_version      TEXT,            -- e.g. 'pymupdf=1.24.0; docling=1.16.0'
     page_count          INTEGER,
     character_count     INTEGER,
-    structured_content  JSONB,           -- Docling's structured representation; M2 reads
+    structured_content  JSONB,            -- Docling's structured representation; M2 reads
+    normalized_content  TEXT NOT NULL DEFAULT '',  -- M2-A1 (migration 0024); see below
+    was_ocrd            BOOLEAN NOT NULL DEFAULT FALSE,  -- M2-A1 (migration 0024); see below
     processed_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -527,6 +529,23 @@ Per ADR 0006, the `parser` column carries the cascade outcome:
 `docling+pymupdf` (both succeeded), `pymupdf` (Docling fell through),
 or `pymupdf-only` (Docling intentionally disabled via
 `LQ_AI_DOCLING_ENABLED=false`).
+
+Per M2-A1 (migration 0024), `normalized_content` carries the full,
+canonical PyMuPDF text stream — the source the M2 Citation Engine
+slices at chunk offsets when verifying that a citation appears in the
+source document. The fidelity invariant is
+`document_chunks.content == normalized_content[char_offset_start:char_offset_end]`,
+held at write time by `app.pipeline.ingest`. Pre-M2 rows landed with
+the empty-string default and were reconstructed from their chunks via
+the one-time script `scripts/backfill_normalized_content.py` (which
+remains idempotent and re-runnable should a future migration require
+it).
+
+`was_ocrd` is a forward-looking flag: a later M2 task adds an OCR
+fallback for image-only PDFs, and the tolerant-match verification stage
+(M2-B1) uses this flag to enable OCR-artifact normalization. Every M1
+ingest and every backfilled row sets `was_ocrd = FALSE` because M1's
+parsers never OCR (image-only PDFs are rejected with `parse_failed`).
 
 ### `document_chunks`
 

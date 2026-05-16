@@ -435,3 +435,114 @@ async def test_ingest_missing_row(
     result = await ingest_file(db_session, uuid.uuid4())
     assert result.status == "missing"
     assert result.error == "row_not_found"
+
+
+# ---------------------------------------------------------------------------
+# M2-A1: normalized_content + was_ocrd
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+async def test_ingest_populates_normalized_content_and_was_ocrd(
+    db_session: AsyncSession,
+    db_user: User,
+    fake_s3: FakeS3Client,
+    patched_storage: FakeS3Client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """M2-A1: ingest writes the canonical text to ``normalized_content``
+    and sets ``was_ocrd=False`` (M1 has no OCR path).
+
+    The Citation Engine (M2-A2) re-reads from ``normalized_content`` at
+    chunk offsets — this test guards the load-bearing fidelity invariant
+    that ``normalized_content[start:end] == chunk.content`` for every
+    chunk in the document.
+    """
+
+    from app.config import get_settings
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "lq_ai_docling_enabled", False)
+
+    pdf_bytes = _make_simple_pdf()
+    storage_key = f"{uuid.uuid4()}"
+    _put_in_fake_s3(fake_s3, storage_key, pdf_bytes)
+
+    file_row = await _create_file_row(
+        db_session, db_user, storage_path=storage_key, pdf_bytes=pdf_bytes
+    )
+
+    result = await ingest_file(db_session, file_row.id)
+    assert result.status == "ready"
+
+    doc = (
+        await db_session.execute(select(Document).where(Document.file_id == file_row.id))
+    ).scalar_one()
+
+    # New columns are populated and have the expected M1 values.
+    from app.pipeline.parsers import parse_pdf
+
+    parsed = parse_pdf(pdf_bytes, run_docling=False)
+    assert doc.normalized_content == parsed.canonical_text
+    assert doc.was_ocrd is False
+
+    # Fidelity: every chunk slices back byte-for-byte against the
+    # persisted normalized_content (not the re-parsed canonical text).
+    chunks = (
+        (
+            await db_session.execute(
+                select(DocumentChunk)
+                .where(DocumentChunk.document_id == doc.id)
+                .order_by(DocumentChunk.chunk_index)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(chunks) > 0
+    for chunk in chunks:
+        slice_ = doc.normalized_content[chunk.char_offset_start : chunk.char_offset_end]
+        assert slice_ == chunk.content, (
+            f"chunk {chunk.chunk_index} fidelity against normalized_content broken: "
+            f"len(slice)={len(slice_)}, len(content)={len(chunk.content)}"
+        )
+
+
+@pytest.mark.integration
+async def test_ingest_re_run_refreshes_normalized_content(
+    db_session: AsyncSession,
+    db_user: User,
+    fake_s3: FakeS3Client,
+    patched_storage: FakeS3Client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """M2-A1: idempotent re-ingest keeps normalized_content in sync with chunks."""
+
+    from app.config import get_settings
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "lq_ai_docling_enabled", False)
+
+    pdf_bytes = _make_simple_pdf()
+    storage_key = f"{uuid.uuid4()}"
+    _put_in_fake_s3(fake_s3, storage_key, pdf_bytes)
+
+    file_row = await _create_file_row(
+        db_session, db_user, storage_path=storage_key, pdf_bytes=pdf_bytes
+    )
+
+    first = await ingest_file(db_session, file_row.id)
+    assert first.status == "ready"
+    second = await ingest_file(db_session, file_row.id)
+    assert second.status == "ready"
+    assert second.document_id == first.document_id  # same row, replaced chunks.
+
+    doc = (
+        await db_session.execute(select(Document).where(Document.file_id == file_row.id))
+    ).scalar_one()
+
+    from app.pipeline.parsers import parse_pdf
+
+    parsed = parse_pdf(pdf_bytes, run_docling=False)
+    assert doc.normalized_content == parsed.canonical_text
+    assert doc.was_ocrd is False

@@ -33,6 +33,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -82,6 +83,23 @@ class Document(Base):
     structured_content: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB,
         nullable=True,
+    )
+    # M2-A1: full canonical text from PyMuPDF, the source of truth the
+    # Citation Engine slices at chunk offsets when verifying citations.
+    # ``chunk.content == normalized_content[char_offset_start:char_offset_end]``
+    # is the load-bearing invariant.
+    normalized_content: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        server_default="",
+    )
+    # M2-A1: True if the source document went through OCR — toggles
+    # OCR-artifact normalization in tolerant-match (M2-B1). False for
+    # every M1 ingest because M1's parsers do not OCR.
+    was_ocrd: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
     )
     processed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
