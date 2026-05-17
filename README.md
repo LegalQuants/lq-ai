@@ -7,7 +7,9 @@
 [![Status](https://img.shields.io/badge/Status-Pre--Release-orange.svg)](#project-status)
 [![SLSA 3](https://img.shields.io/badge/SLSA-Level%203-green)](https://slsa.dev) [![Security Policy](https://img.shields.io/badge/Security-Policy-blue)](./SECURITY.md)
 
-LQ.AI is a self-hosted AI platform purpose-built for legal teams. It delivers fast contract drafting and review, verifiable citations, reusable workflow skills, playbook-driven contract analysis, a Microsoft Word integration, and a curated library of starter skills for the everyday work lawyers actually do — running on a laptop, an internal server, or a cloud VM, against the customer's choice of model, with zero license fees.
+LQ.AI is a self-hosted AI platform purpose-built for legal teams. It delivers conversational chat with persistent history and matter-scoped projects, character-verifiable citations against source documents (M2's four-stage Citation Engine), a privacy-preserving anonymization layer for cloud inference (M2), reusable workflow skills authored in the open [agentskills.io / Anthropic Claude Skills](https://github.com/anthropics/skills) format, and a curated library of starter skills for the everyday work lawyers actually do — running on a laptop, an internal server, or a cloud VM, against the customer's choice of model (Anthropic, OpenAI, Azure OpenAI, or local Ollama out of the box), with zero license fees.
+
+Playbooks (codified legal positions for automated contract review), a Microsoft Word add-in, multi-document tabular review, and a Slack/Teams light-intake bridge are committed for M3. The Autonomous Layer (background agents) and Contract Repository (relationship graph over contract sets) are committed for M4. See [Project status](#project-status) below for the current shipped-vs-roadmap split.
 
 The project's reason for existing is simple: **legal teams should not have to choose between AI assistance and data sovereignty.** Every other capable tool in this category is a closed-source SaaS that requires sending privileged information to a third-party vendor. LQ.AI runs in your environment, with your keys, against your choice of model — including fully air-gapped deployments using local inference.
 
@@ -39,15 +41,24 @@ LQ.AI ships with a curated set of capabilities calibrated to legal work. The cap
 
 **Skill Library.** Reusable structured prompt artifacts in the [agentskills.io / Anthropic Claude Skills format](https://github.com/anthropics/skills) — a folder containing `SKILL.md` (with YAML frontmatter) and optional supporting files. Three tiers: built-in skills (ship with the product), user skills (you create), and shared skills (your team or org shares). Every active skill is one click away from being readable, debuggable, and forkable. The Skill Creator is itself a skill — a meta-skill you invoke to build new skills via conversation.
 
-**Citation Engine — architectural slot in M1; full pipeline ships M2.** The PRD describes a Citation Engine that verifies every claim against source documents at character precision, with failed citations rendered as "unverified" rather than as confident wrong citations. In M1, the architectural slot exists in the codebase but the verification pipeline is not running; the model can produce text that looks like a citation, but the per-citation verification step does not run until M2. See [HONEST-STATE.md §3.1](docs/HONEST-STATE.md#31-citation-engine--architectural-slot-not-wired) for what an operator can verify today and what M2 will add. The transparency commitment cuts both ways: the verification path is open, including the path that is not running yet.
+**Citation Engine (M2).** Verifies every model-emitted citation against the source document at character precision before rendering. Four-stage cascade:
+
+1. **Exact match** — byte-for-byte equality at the source offsets.
+2. **Tolerant match** — normalized fuzzy match (smart-quote folding, whitespace collapse, OCR-confusion rules when the document was OCR'd) at a 95% similarity threshold.
+3. **Paraphrase judge** — LLM judge call that returns `yes` / `partial` / `no` with `high` / `medium` / `low` confidence; partial verdicts persist with a `partial=true` flag so the UI can render "verified with caveats" distinctly.
+4. **Ensemble verification** — opt-in (per-skill, per-project, or deployment-default) parallel dispatch across N judge models with strict (all-agree) or majority (simple-majority) aggregation. The privacy envelope (max tier across the judge ensemble) persists per row so operators can audit which chats had citations sent to weaker tiers.
+
+The chat UI renders citations as four visual states: green (exact / tolerant match), yellow (paraphrase or ensemble judgment), red (unverified). Failed citations surface as "unverified" rather than as confident-looking wrong text. The full verification path is open source: an attorney whose work product depends on a citation can read exactly how it was verified. See [`docs/citation-engine.md`](docs/citation-engine.md) for the full cascade reference and [`api/app/citation/verification.py`](api/app/citation/verification.py) for the implementation.
 
 **Projects (matter-scoped containers).** A user-curated container that scopes a set of chats, files, skills, playbooks, and a free-form context document around a single matter — a deal, a counterparty, a regulatory question, a policy refresh. Chats inside a Project automatically inherit the Project's attached files, skills, and context. Projects carry an optional `privileged: true` flag that forces minimum inference tier and marks every chat and audit-log entry as privileged.
 
 **Organization Profile.** A singleton skill at the deployment level capturing your team's voice, jurisdiction, industry, standard positions, and escalation thresholds. Skills draw on it as context. Without it, every skill has to relearn the org from scratch every time. Like every other skill, it is open source and inspectable.
 
-**Inference Tier Awareness.** A persistent badge in the chat UI shows which Inference Tier (1–5) your current chat is running on — from local-only inference (Tier 1) through enterprise managed inference with ZDR (Tier 3) to consumer/free endpoints (Tier 5). Click the badge for what the tier implies: where the data is going, what the provider's retention policy is, whether anonymization is on. Skills can require a minimum tier; deployments can disallow tiers globally.
+**Inference Tier Awareness.** A persistent badge in the chat UI shows which Inference Tier (1–5) your current chat is running on — from local-only inference (Tier 1) through enterprise managed inference with ZDR (Tier 3) to consumer/free endpoints (Tier 5). Click the badge for what the tier implies: where the data is going, what the provider's retention policy is, whether anonymization is on. **Tier-floor enforcement** is a first-class gateway feature: skills declare a `minimum_inference_tier` in their frontmatter, projects declare one in their database row, callers can override per-request, and the gateway refuses any routing weaker than the effective floor with HTTP 403 `tier_below_minimum`. A privileged project paired with `minimum_inference_tier=1` produces fully sealed local inference — no outbound network, no anonymization rewriting, audit trail captures the local routing.
 
-**Files / Knowledge Bases.** Persistent collections of documents accessible across chats. Hybrid retrieval (vector similarity + full-text search). Files are uploaded once, ingested into the citation pipeline, and made available for retrieval.
+**Audit log.** Append-only `audit_log` table records every state-changing action with first-class columns for `privilege_marked`, `privilege_basis`, `routed_inference_tier`, `routed_provider`, plus a JSONB `details` field for action-specific context. Admin-gated `GET /admin/audit-log` endpoint supports filtering by user, resource, action, privilege, tier, and timestamp range; paginated for large windows. Privileged-matter compliance evidence is one query: `?privilege_marked=true&from_timestamp=...&to_timestamp=...`. Cross-references to the gateway's `inference_routing_log` (which records `anonymization_applied`, latency, cost estimate, and request correlation id) via `request_id` for end-to-end pipeline audit. See [`docs/procurement/sig-lite.md`](docs/procurement/sig-lite.md) for the procurement-team-facing audit posture.
+
+**Files / Knowledge Bases.** Persistent collections of documents accessible across chats. Hybrid retrieval combining vector similarity (text-embedding-3-small or operator-configured embedding model via pgvector) with Postgres full-text search; the per-KB `hybrid_alpha` slider tunes the vector/FTS weight at retrieval time. Document ingestion uses Docling for layout-aware parsing of complex PDFs (multi-column, tables, footnotes) with PyMuPDF as the fast path for simpler documents, plus PaddleOCR for scanned-PDF fallback. Character-level offsets land in `documents.normalized_content` for the Citation Engine to verify against. KB-attached chats automatically retrieve before each turn, prepend a citation-formatted context block, and write a `📎 KB retrieval` audit row visible in Receipts.
 
 **Enhance Prompt.** A prompt-rewriting skill that runs as an optional pre-step. You type a short, natural-language question; Enhance Prompt expands it into a structured legal prompt (role, jurisdiction, audience, scope, output format, constraints, citation expectations) and shows you the expanded version before submission. The skill itself is inspectable — you can read the SKILL.md driving the enhancement at any time.
 
@@ -59,7 +70,11 @@ LQ.AI ships with a curated set of capabilities calibrated to legal work. The cap
 
 **Slack / Teams Light Intake Bridge (M3).** A `/lq` slash command lets a Slack or Teams user forward a thread to an LQ.AI chat or run a quick skill in-thread. Light intake, deliberately not full triage/SLA/approvals — that is Streamline AI's category.
 
-**Anonymization Layer — config slot loads in M1; middleware ships M2.** The PRD describes a pre-processing step in the Inference Gateway that pseudonymizes sensitive entities before the model call and rehydrates them after — the privacy fallback for Tier 3+ inference when local (Tier 1) is impractical but defensible privacy posture is still required. In M1, the configuration block loads but the middleware does not run; the admin endpoint returns 501 with an explicit "M2 feature" message. See [HONEST-STATE.md §3.2](docs/HONEST-STATE.md#32-anonymization-layer--config-slot-not-running) for what an operator can verify today.
+**Anonymization Layer (M2).** Pre-processing step in the Inference Gateway that pseudonymizes sensitive entities (names, organizations, addresses, email addresses, phone numbers, case numbers, matter numbers) before requests leave for the model provider; rehydrates pseudonyms back to originals on the response path. Built on [Presidio](https://github.com/microsoft/presidio) + spaCy + two custom legal recognizers (`CaseNumberRecognizer`, `MatterNumberRecognizer`) that catch legal-specific identifiers the default Presidio config misses. Per-request `PseudonymMapper` is in-memory only — never persisted, never logged, dropped on function exit.
+
+Streaming-aware: the response-path rehydrator holds a bounded tail buffer (~25 chars typical) so pseudonyms can crystallize cleanly when the SSE stream splits them across chunks. Per-request opt-out (`anonymize=false`) supported for callers that need raw content (the Citation Engine's judge calls use this so the judge sees actual cited text). Privileged-project chats skip the layer entirely (Decision A: rewriting privileged work product risks corrupting it). Retrieved source documents stay un-pseudonymized so the model has intact source quotes for citation grounding (Decision M2-1; opt-in opposite via the `lq_ai_skip_anonymization` field on messages).
+
+The privacy fallback for Tier 3+ inference when local (Tier 1) is impractical but defensible privacy posture is still required. See [`docs/security/anonymization.md`](docs/security/anonymization.md) for the full middleware contract, recognizer set, decision basis, and known limitations.
 
 **Autonomous Layer (M4).** Long-running per-user agents that observe activity, learn patterns, take proactive actions. Cron-scheduled tasks; watches that trigger on KB changes or document arrivals; per-user persistent memory store with user-curation UI.
 
@@ -67,7 +82,7 @@ LQ.AI ships with a curated set of capabilities calibrated to legal work. The cap
 
 **Forward-looking (M5–M7, community-driven).** Workflow-aware context layer that integrates email, calendar, task systems, and document stores via [MCP (Model Context Protocol)](https://modelcontextprotocol.io); a Workspace Concierge that produces ranked Today views with rationales; agent dispatch with human-in-the-loop guardrails. See [PRD §8.5](docs/PRD.md#m5m7--forward-looking-workflow-intelligence-community-driven-not-committed) for the trajectory.
 
-The full capability specification is in [PRD §3](docs/PRD.md#3-capability-specifications). Some capabilities described above are deferred to M2, M3, or M4 — see [HONEST-STATE.md](docs/HONEST-STATE.md) for the current shipped-vs-deferred catalog with verification paths for every row.
+The full capability specification is in [PRD §3](docs/PRD.md#3-capability-specifications). Some capabilities described above are deferred to M3 (Playbooks, Word Add-In, Tabular Review, Slack/Teams) or M4 (Autonomous Layer, Contract Repository) — see [HONEST-STATE.md](docs/HONEST-STATE.md) for the current shipped-vs-deferred catalog with verification paths for every row.
 
 ---
 
@@ -207,7 +222,9 @@ After login you land on the LQ.AI home. Three good starting points:
 
 ### Providers and air-gapped deployments
 
-LQ.AI ships with three provider adapters in M1: Anthropic, OpenAI, and Ollama. Vertex AI and AWS Bedrock adapters are deferred to M2 — see [docs/HONEST-STATE.md](docs/HONEST-STATE.md) for the current shipped-vs-deferred catalog.
+LQ.AI ships with four provider adapters: **Anthropic** (Claude), **OpenAI** (GPT models + text-embedding-3-*), **Azure OpenAI** (M2-E1 — unblocks Azure-tenant enterprise deployments via the operator's existing Azure agreement), and **Ollama** (local). Any OpenAI-compatible local endpoint (vLLM, llama.cpp wrappers, LM Studio) works through the OpenAI adapter with a custom `base_url`. Google Vertex AI and AWS Bedrock adapters are on the deferred-enhancement list (DE-034 / DE-035) and welcome community contribution — see [docs/HONEST-STATE.md](docs/HONEST-STATE.md) for the current shipped-vs-deferred catalog.
+
+Multiple providers can run in parallel: operators declare `model_aliases` in `gateway.yaml` that resolve to specific provider+model pairs with fallback chains. A request for `smart` might primary-route to `anthropic-prod/claude-opus-4-7` and fall back to `vertex-anthropic/claude-opus-4-7@anthropic` on failure; the routing log captures which target actually handled the request. Provider keys are encrypted at rest in the gateway (Fernet AES-128-CBC + HMAC-SHA256 per `gateway/app/secrets.py`); the api/ service never sees them — defense-in-depth around the highest-value secret in the deployment.
 
 For a **fully air-gapped deployment** (no outbound network calls), start the stack with the `local` profile to add Ollama and PaddleOCR sidecars:
 
@@ -365,16 +382,16 @@ Accessibility findings are treated as defects, not nice-to-haves. If you find on
 
 ## Project status
 
-**Pre-release.** The PRD is at v0.2 and ten starter skills are authored. Active work toward M1.
+**M1 and M2 shipped; M3 next.** The PRD is at v0.2; ten starter skills are authored and shipping; the Citation Engine's four-stage verification cascade is operational (exact → tolerant → paraphrase judge → ensemble); the Anonymization Layer is wired end-to-end with custom legal recognizers, streaming-aware rehydration, privileged-project carve-out, and a retrieval-context skip for direct citation grounding; the Azure OpenAI adapter rounds out the M2 provider set. Active work toward M3.
 
 **Roadmap:**
 
-| Milestone | Theme | Timeline |
+| Milestone | Theme | Status |
 |---|---|---|
-| M1 — Foundation | Working self-hostable release with 10 starter skills, Projects, Organization Profile, Inference Tier Awareness, Compliance Alignment Pack, Code & Supply-Chain Transparency, MFA option, per-user export/delete | ~6 weeks |
-| M2 — Citation Engine and Anonymization | Verifiable citations with character-level fidelity; Anonymization Layer in the Gateway | ~6 weeks after M1 |
-| M3 — Playbooks, Word Add-In, Tabular Review, Slack/Teams | Feature parity with commercial legal AI; surface coverage beyond the web | ~8 weeks after M2 |
-| M4 — Autonomous Layer and Contract Repository | Background agents, watches, scheduled tasks; contract relationship graph | ~8 weeks after M3 |
+| **M1 — Foundation** | Working self-hostable release with 10 starter skills, Projects, Organization Profile, Inference Tier Awareness, hybrid retrieval, Compliance Alignment Pack, Code & Supply-Chain Transparency, MFA option, per-user export/delete | ✓ **Shipped** |
+| **M2 — Citation Engine and Anonymization** | Four-stage Citation Engine (exact / tolerant / paraphrase judge / ensemble) with character-level fidelity, audit-pinned privacy envelope on ensemble runs; Anonymization Layer in the Gateway with custom legal recognizers + streaming rehydration + privileged-project skip + retrieval-context skip; Azure OpenAI provider adapter | ✓ **Shipped** |
+| **M3 — Playbooks, Word Add-In, Tabular Review, Slack/Teams** | Codified legal positions for automated contract review; Microsoft Office.js add-in (run skills, get redlines as Word tracked changes, get comments as Word comments); structured grid output across N documents with citation-grounded cells; Slack/Teams `/lq` slash command for light intake | **Next** (~8 weeks) |
+| M4 — Autonomous Layer and Contract Repository | Background agents, watches, scheduled tasks; relationship graph over contract sets (amendments, restatements, master/sub) | After M3 (~8 weeks) |
 | M5–M7 — Forward-Looking Workflow Intelligence | Community-driven; not committed. MCP-client subsystem operationalized; Signal Aggregation Service; Today view with prioritization; agent execution framework with human-in-the-loop guardrails. | TBD |
 
 For the full roadmap and the ~50+ deferred enhancements ready for community contribution, see [PRD §8 Roadmap](docs/PRD.md#8-roadmap) and [§9 Deferred Enhancements](docs/PRD.md#9-deferred-enhancements-and-identified-future-work).
