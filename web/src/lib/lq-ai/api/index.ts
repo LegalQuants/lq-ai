@@ -9,6 +9,7 @@ export * as authApi from './auth';
 export * as projectsApi from './projects';
 export * as chatsApi from './chats';
 export * as messagesApi from './messages';
+export * as citationsApi from './citations';
 export * as skillsApi from './skills';
 export * as filesApi from './files';
 export * as knowledgeBasesApi from './knowledgeBases';

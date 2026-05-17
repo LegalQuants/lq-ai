@@ -51,7 +51,7 @@
 				</span>
 				<div>
 					<h1 class="lq-text-page-h">Sign in to LQ.AI</h1>
-					<p class="lq-text-caption" style="color: var(--lq-text-tertiary);">Open-source legal AI for in-house teams.</p>
+					<p class="lq-text-caption" style="color: var(--lq-text-tertiary);">Open-Source Legal AI</p>
 				</div>
 			</div>
 

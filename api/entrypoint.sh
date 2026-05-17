@@ -26,5 +26,16 @@ else
     echo "LQ.AI api: migrations complete."
 fi
 
-echo "LQ.AI api: starting uvicorn on 0.0.0.0:8000."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+# Respect the container's CMD when one is provided — the api service runs
+# without an override (and gets uvicorn) while the ingest-worker service
+# passes `arq app.workers.document_pipeline.WorkerSettings`. Hardcoding
+# `exec uvicorn` here silently turned the ingest-worker into a duplicate
+# api server (surfaced 2026-05-16 when KB ingestion stopped completing
+# after a worker image rebuild).
+if [ "$#" -eq 0 ]; then
+    echo "LQ.AI api: starting uvicorn on 0.0.0.0:8000."
+    exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+else
+    echo "LQ.AI api: exec'ing container CMD: $*"
+    exec "$@"
+fi

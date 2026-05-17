@@ -84,7 +84,8 @@ before(() => {
 	// OpenWebUI's auth-redirect on /lq-ai/login. Scope the bootstrap to
 	// upstream-OpenWebUI spec files only.
 	const spec = (Cypress.spec && Cypress.spec.name) || '';
-	const isLqAiSpec = spec.startsWith('wave-') || spec.startsWith('lq-ai-');
+	const isLqAiSpec =
+		spec.startsWith('wave-') || spec.startsWith('lq-ai-') || /^m\d+-/.test(spec);
 	if (!isLqAiSpec) {
 		cy.registerAdmin();
 	}

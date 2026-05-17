@@ -1217,8 +1217,10 @@ async def get_citations(
     citation) rather than the legacy ``messages.citations`` JSONB
     column. Each citation in the response carries the verifier's
     verdict (``verified``, ``verification_method``,
-    ``verification_confidence``) so the UI (M2-C2) can render unverified
-    citations distinctly.
+    ``verification_confidence``, ``partial``) so the UI (M2-C2) can
+    render the five citation states distinctly — including the
+    paraphrase-judge "partial" verdict surfaced via the ``partial``
+    flag (M2-C1).
 
     The legacy JSONB column is kept at its ``'[]'`` default by the
     chat-send path; readers should consume this endpoint, not the
@@ -1271,6 +1273,7 @@ async def get_citations(
             "verification_confidence": (
                 float(c.verification_confidence) if c.verification_confidence is not None else None
             ),
+            "partial": c.partial,
             "created_at": c.created_at.isoformat(),
         }
         for c in rows

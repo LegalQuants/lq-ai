@@ -236,6 +236,15 @@ services:
       LQ_AI_DOCLING_ENABLED: ${LQ_AI_DOCLING_ENABLED:-true}
       LQ_AI_CHUNK_TARGET_CHARS: ${LQ_AI_CHUNK_TARGET_CHARS:-2000}
       LQ_AI_CHUNK_OVERLAP_CHARS: ${LQ_AI_CHUNK_OVERLAP_CHARS:-200}
+      # Gateway endpoint + auth — required by `embed_chunks_for_file_job`
+      # which calls `POST {LQ_AI_GATEWAY_URL}/v1/embeddings` to vectorise
+      # each freshly-ingested chunk. Without these vars the embed step
+      # silently fails with `chunks_embedded: 0`, leaving chunks with
+      # NULL embeddings — KB hybrid_search then has no vector half to
+      # work with even on KBs configured for hybrid retrieval
+      # (`hybrid_alpha < 1.0`).
+      LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
+      LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     # Persist Docling's Hugging Face model cache and EasyOCR's detection
     # model cache across container restarts so the operator only pays
