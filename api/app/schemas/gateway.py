@@ -45,6 +45,13 @@ class ChatCompletionMessage(BaseModel):
     tool_call_id: str | None = None
     tool_calls: list[dict[str, Any]] | None = None
 
+    # M2-D2: when True, the gateway's anonymization pre-middleware
+    # leaves this message's content unchanged. The api/ sets this on
+    # the retrieval-context system message per Decision M2-1 so the
+    # model sees intact source quotes for citation grounding. Mirrors
+    # the gateway-side schema field of the same name.
+    lq_ai_skip_anonymization: bool = False
+
 
 class InlineSkillRef(BaseModel):
     """Wave D.2 Task 3.0 — one inline-body skill on a chat completion request.

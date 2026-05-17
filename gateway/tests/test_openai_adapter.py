@@ -470,6 +470,60 @@ async def test_chat_completion_strips_lq_ai_extension_keys() -> None:
 
 
 @pytest.mark.unit
+async def test_chat_completion_strips_per_message_lq_ai_skip_anonymization() -> None:
+    """M2-D2: per-message ``lq_ai_skip_anonymization`` is stripped before sending.
+
+    OpenAI's body validation rejects unknown fields, including
+    unknown per-message fields. The api/ sets this flag on the
+    retrieval-context system message so the gateway middleware
+    leaves the content un-pseudonymized, but the flag itself must
+    never leave the gateway — OpenAI would 400.
+    """
+
+    payload = {
+        "id": "x",
+        "object": "chat.completion",
+        "created": 0,
+        "model": "gpt-4o",
+        "choices": [
+            {"index": 0, "message": {"role": "assistant", "content": ""}, "finish_reason": "stop"}
+        ],
+        "usage": {"prompt_tokens": 1, "completion_tokens": 0, "total_tokens": 1},
+    }
+    request = ChatCompletionRequest(
+        model="gpt-4o",
+        messages=[
+            ChatCompletionMessage(
+                role="system",
+                content="Retrieved context: ...",
+                lq_ai_skip_anonymization=True,
+            ),
+            ChatCompletionMessage(role="user", content="hi"),
+        ],
+    )
+    with respx.mock(base_url="https://api.openai.com/v1") as router:
+        route = router.post("/chat/completions").mock(
+            return_value=httpx.Response(200, json=payload)
+        )
+        client = httpx.AsyncClient(base_url="https://api.openai.com/v1")
+        try:
+            adapter = OpenAIAdapter(
+                name="openai-prod",
+                base_url="https://api.openai.com/v1",
+                api_key="sk-test",
+                client=client,
+            )
+            await adapter.chat_completion(request, model="gpt-4o", stream=False)
+        finally:
+            await client.aclose()
+    sent = json.loads(route.calls.last.request.content)
+    for msg in sent["messages"]:
+        assert "lq_ai_skip_anonymization" not in msg, (
+            f"per-message LQ.AI extension leaked to OpenAI: {msg}"
+        )
+
+
+@pytest.mark.unit
 async def test_chat_completion_inline_skill_body_does_not_leak_to_openai() -> None:
     """Wave D.2 Task 3.0 security — ``lq_ai_inline_skills`` (and the
     verbatim user-drafted body inside it) must NEVER reach OpenAI.

@@ -2,13 +2,13 @@
 
 > **Purpose.** Document the entity types LQ.AI's Anonymization Layer (PRD §4.7) recognizes by default, the deliberately-disabled defaults, and how to customize the recognizer set for a specific deployment's matter-numbering convention or domain-specific entities.
 >
-> **Status (2026-05-16).** M2-B3 complete: the gateway middleware now pseudonymizes outbound chat/skill content and rehydrates the response (streaming and non-streaming). M2-B2's custom legal recognizers + Presidio `AnalyzerEngine` configuration remain unchanged; M2-A3's `PseudonymMapper` is the request-scoped substitution table.
+> **Status (2026-05-17).** M2-B3 complete: the gateway middleware now pseudonymizes outbound chat/skill content and rehydrates the response (streaming and non-streaming). M2-D2 wires the retrieval-context skip flag so source chunks reach the provider un-pseudonymized (see [Retrieval-context skip](#retrieval-context-skip-m2-d2) below). M2-B2's custom legal recognizers + Presidio `AnalyzerEngine` configuration remain unchanged; M2-A3's `PseudonymMapper` is the request-scoped substitution table.
 
 ---
 
 ## What gets pseudonymized
 
-Per the **M2-1 decision** locked at M2 kickoff, anonymization applies only to **chat and skill content** sent to the model. Retrieved source documents stay un-pseudonymized so the existing retrieval surface continues to render real document text to the user. The alternative (Option A — pseudonymize the document corpus too) is filed as **DE-269** for future consideration.
+Per the **M2-1 decision** locked at M2 kickoff, anonymization applies only to **chat and skill content** sent to the model. Retrieved source documents stay un-pseudonymized so the model sees intact source quotes for citation grounding and the user-facing retrieval surface continues to render real document text. The skip mechanism is the `lq_ai_skip_anonymization` field on `ChatCompletionMessage`: the api/ marks the retrieval-context system message with `True`; the gateway middleware honors the flag and leaves that message's content alone. See [Retrieval-context skip](#retrieval-context-skip-m2-d2) below for the data flow. The alternative (Option A — pseudonymize the document corpus too) is filed as **[DE-269](../PRD.md#de-269--anonymization-option-a-pseudonymize-source-documents-too)** for future consideration.
 
 ## Recognizer set
 
@@ -173,6 +173,26 @@ Per **Decision A** and **Decision B (i)** locked in M2-B3 kickoff: a fresh `Pseu
 ### Privileged chats — why we skip
 
 The privileged-Project skip (Decision A) is a deliberate trade-off. Privileged chats are work product the attorney-client privilege protects; replacing names with pseudonyms before the model sees them — even with the rehydration on the way back — risks corrupting that work product if any step in the pipeline behaves unexpectedly. The conservative posture is to leave privileged content untouched. Operators who want pseudonymization in privileged chats can flip `lq_ai_privileged` off at the api/ layer per chat, but the default protects the legal-work-product invariant.
+
+### Retrieval-context skip (M2-D2)
+
+Per **Decision M2-1**, retrieved source documents are NOT pseudonymized when sent to the provider. The api/ marks the retrieval-context system message (the one carrying chunks returned from `hybrid_search`) with `lq_ai_skip_anonymization=True`; the pre-middleware honors the flag and leaves the message's content unchanged. The model therefore sees:
+
+- **User turn**: pseudonymized — `"What did COMPANY_0001 agree to?"`
+- **Retrieval context system message**: un-pseudonymized — `"Acme Corp agreed to ..."` from the source file
+- **Other system messages** (chat system instructions, skill-assembled prompts): pseudonymized normally — only the retrieval-context message bears the skip flag
+
+The skip flag is api-internal: the gateway strips it from each message before serializing the request to upstream providers (the OpenAI adapter is the only one where this matters — Anthropic and Ollama adapters build per-message dicts field-by-field and ignore unknown attributes implicitly).
+
+**Why this design.** The Citation Engine (§3.3 / [docs/citation-engine.md](../citation-engine.md)) verifies model-emitted quotes byte-for-byte against `documents.normalized_content` (un-pseudonymized). When the model sees real source quotes in retrieval, it emits real source quotes in its citations — Stage 1 verification matches directly with no translation hop. When the model emits pseudonyms in its prose (referencing entities from the pseudonymized user turn), the post-rehydrator on this layer substitutes originals back. The two layers compose cleanly: the model reasons about a consistent set of pseudonyms for chat-side entities and real names for source-side entities.
+
+The alternative — Option A, pseudonymize source documents too — is filed as [DE-269](../PRD.md#de-269--anonymization-option-a-pseudonymize-source-documents-too) for future consideration. Option A adds a translation hop on the citation correctness path and makes the audit trail less granular; the spot-check is whether the model produces materially better/worse output when reasoning against pseudonymized vs un-pseudonymized retrieval.
+
+Pinning tests:
+
+- `gateway/tests/anonymization/test_middleware.py::test_pre_anonymize_skips_message_marked_skip_anonymization` — middleware honors the flag.
+- `gateway/tests/test_openai_adapter.py::test_chat_completion_strips_per_message_lq_ai_skip_anonymization` — flag is stripped before reaching OpenAI.
+- `api/tests/test_chat_citations.py::test_chat_send_marks_retrieval_context_skip_anonymization` — the api/ sets the flag on the retrieval system message and ONLY on that message.
 
 ---
 

@@ -150,21 +150,93 @@ per-judge `inference_routing_log` rows linked by `message_id`.
 
 ## Integration with Anonymization
 
-The Citation Engine and the Anonymization Layer coexist per Decision
-M2-1 (chat/skill content pseudonymized; retrieved source documents
-left un-pseudonymized). This means:
+The Citation Engine and the Anonymization Layer coexist per **Decision
+M2-1**: chat/skill content gets pseudonymized; retrieved source
+documents stay un-pseudonymized. The integration boundary is the
+`lq_ai_skip_anonymization` field on `ChatCompletionMessage`.
 
-- Citations operate on **un-pseudonymized** source text on both
-  extraction and verification sides — the Stage 3/4 judge sees the
-  real cited content and the real source chunk.
-- The model may emit citations that reference real entities (from
-  retrieved sources) AND prose that references pseudonyms (from
-  pseudonymized chat content). The post-anonymization middleware
-  rehydrates pseudonyms; citations need no rehydration step.
+### Data flow (M2-D2)
 
-M2-D2 ships the integration tests and documents the data flow in
-detail. See [docs/security/anonymization.md](security/anonymization.md)
-for the corresponding anonymization-side description.
+A chat send with both layers active follows this path:
+
+1. **User turn arrives at the api/** — `"What did Acme Corp agree to?"`.
+2. **api/ retrieves source chunks** via `hybrid_search` against the
+   chat's project KBs — chunks contain original entities verbatim
+   (`"Acme Corp agreed to ..."`).
+3. **api/ assembles the gateway request** — prepends the retrieval
+   chunks as a `system` message **with `lq_ai_skip_anonymization=True`**.
+   The user turn becomes a `user` message with no skip flag.
+4. **Gateway pre-anonymization middleware** runs:
+   - User turn → `"What did COMPANY_0001 agree to?"` (pseudonymized)
+   - Retrieval system message → unchanged (skip flag honored)
+   - Per-request `PseudonymMapper` carries the `COMPANY_0001 → Acme Corp`
+     mapping
+5. **Provider sees** pseudonymized user turn + un-pseudonymized
+   retrieval — the model has the original source quotes available
+   for citation grounding and can reason about `COMPANY_0001` as the
+   subject of the user's question.
+6. **Provider responds** with `'The agreement says "Acme Corp shall
+   not compete..." (Source: [1]). COMPANY_0001 is bound for 2
+   years.'` — quoting the retrieval verbatim, referring to the
+   pseudonym for the entity from the user turn.
+7. **Gateway post-anonymization middleware** rehydrates:
+   `"COMPANY_0001"` → `"Acme Corp"`. The cited quote (already real)
+   is unchanged.
+8. **api/ persist_citations** extracts `"Acme Corp shall not
+   compete..." (Source: [1])` from the rehydrated text; Stage 1
+   verifies the quote byte-for-byte against
+   `documents.normalized_content` (un-pseudonymized). Verified
+   citation row lands.
+
+### What the provider sees vs what the user sees
+
+| Layer | Provider sees | User sees |
+|---|---|---|
+| User turn | `COMPANY_0001` (pseudonymized) | `Acme Corp` (original; user typed it) |
+| Retrieved chunks | `Acme Corp` (un-pseudonymized, skip flag) | n/a (retrieval is gateway-internal) |
+| Assistant prose with pseudonyms | `COMPANY_0001 is bound` | `Acme Corp is bound` (rehydrated) |
+| Assistant citation quote | `"Acme Corp shall not compete..."` (real, came from un-pseudonymized retrieval) | `"Acme Corp shall not compete..."` (identical; no rehydration needed) |
+
+### Why this matters for citation correctness
+
+If the retrieval were pseudonymized too (the Option A path captured
+as [DE-269](PRD.md#de-269--anonymization-option-a-pseudonymize-source-documents-too)):
+
+- The model would see `"PERSON_0001 agreed to pay COMPANY_0001 ..."`
+  in the retrieved chunk.
+- The model would emit citations quoting pseudonyms: `'"PERSON_0001
+  agreed to pay COMPANY_0001 ..." (Source: [1])'`.
+- The post-rehydrator would have to fix the cited quote before
+  citation extraction sees it; the cascade would then verify the
+  rehydrated quote against the un-pseudonymized
+  `documents.normalized_content`. End-to-end this works, but it
+  adds a translation hop on the citation correctness path and makes
+  the audit trail noisier (everything is pseudonymized; the
+  `anonymization_applied` audit field stops carrying granular
+  signal).
+
+Decision M2-1 keeps the citation correctness path direct: the model
+sees real source quotes, emits real source quotes, and the verifier
+matches them against un-pseudonymized content with no translation
+hop.
+
+### Privileged chats (M2-B3)
+
+When the chat's project is `privileged: true`, the gateway
+pre-middleware **skips the entire request** (not just the retrieval
+message) — privileged content rides un-pseudonymized end-to-end.
+The skip flag is irrelevant in this case; everything bypasses
+pseudonymization. M2-D3 covers privileged-project handling in
+detail.
+
+### Tests pinning the integration
+
+- **api-side**: `tests/test_chat_citations.py::test_chat_send_marks_retrieval_context_skip_anonymization` pins that the api/ sets the skip flag on the retrieval system message and only on that message.
+- **gateway-side**: `tests/anonymization/test_middleware.py::test_pre_anonymize_skips_message_marked_skip_anonymization` pins that the middleware honors the flag.
+- **gateway-side**: `tests/test_openai_adapter.py::test_chat_completion_strips_per_message_lq_ai_skip_anonymization` pins that the field is stripped before reaching OpenAI (which 400s on unknown body fields).
+
+See [docs/security/anonymization.md](security/anonymization.md) for
+the anonymization-layer-side description of the same integration.
 
 ## References
 

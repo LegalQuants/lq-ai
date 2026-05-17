@@ -101,6 +101,12 @@ _LQ_AI_EXTENSION_KEYS = frozenset(
     }
 )
 
+# M2-D2: per-message LQ.AI extension keys that must not reach OpenAI.
+# Anthropic / Ollama adapters build message dicts field-by-field so
+# they ignore these implicitly; the OpenAI adapter uses ``model_dump``
+# and needs the explicit strip.
+_LQ_AI_MESSAGE_EXTENSION_KEYS = frozenset({"lq_ai_skip_anonymization"})
+
 logger = logging.getLogger(__name__)
 
 
@@ -476,6 +482,15 @@ def _to_openai_request(
     body = request.model_dump(mode="json", exclude_none=True)
     for key in _LQ_AI_EXTENSION_KEYS:
         body.pop(key, None)
+    # M2-D2: per-message LQ.AI keys (e.g., lq_ai_skip_anonymization)
+    # are api-internal markers; strip from each message so OpenAI's
+    # strict body validation doesn't reject the request.
+    messages = body.get("messages")
+    if isinstance(messages, list):
+        for msg in messages:
+            if isinstance(msg, dict):
+                for key in _LQ_AI_MESSAGE_EXTENSION_KEYS:
+                    msg.pop(key, None)
     body["model"] = model
     body["stream"] = stream
     # ``stream_options.include_usage`` is required for OpenAI to emit a
