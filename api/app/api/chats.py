@@ -1112,7 +1112,20 @@ async def send_message(
     gw_messages: list[ChatCompletionMessage] = []
     if retrieved_chunks:
         context_block = _format_retrieval_context_block(retrieved_chunks)
-        gw_messages.append(ChatCompletionMessage(role="system", content=context_block))
+        # M2-D2 / Decision M2-1: retrieved source documents are NOT
+        # pseudonymized when sent to the provider — the model needs
+        # intact source quotes for citation grounding. The skip flag
+        # tells the gateway's anonymization pre-middleware to leave
+        # this message's content unchanged even if the chat's other
+        # content is being pseudonymized. The pre-middleware still
+        # pseudonymizes the user turn + any chat-side system message.
+        gw_messages.append(
+            ChatCompletionMessage(
+                role="system",
+                content=context_block,
+                lq_ai_skip_anonymization=True,
+            )
+        )
         # T7-shape audit row. Same details schema as query_kb (kb_ids
         # plural here; query_kb is single-KB). The row commits with
         # its own boundary so it's durable even if the gateway call

@@ -267,6 +267,88 @@ def test_pre_anonymize_same_name_across_messages_stable_pseudonym() -> None:
 
 
 @pytest.mark.unit
+def test_pre_anonymize_skips_message_marked_skip_anonymization() -> None:
+    """M2-D2: ``lq_ai_skip_anonymization=True`` bypasses pseudonymization.
+
+    Per Decision M2-1, the api/ marks the retrieval-context system
+    message with this flag so the model sees intact source quotes for
+    citation grounding. Other messages in the same request still get
+    pseudonymized normally — entities present in both the marked
+    message AND another message land with consistent pseudonyms on the
+    other-message side (the mapper is per-request).
+    """
+
+    req = _make_request(
+        messages=[
+            ChatCompletionMessage(
+                role="system",
+                content="Retrieved chunk: John Smith agreed to pay $100k.",
+                lq_ai_skip_anonymization=True,
+            ),
+            ChatCompletionMessage(
+                role="user",
+                content="What did John Smith agree to?",
+            ),
+        ]
+    )
+    config = AnonymizationConfig(enabled=True, apply_at_tiers=[3, 4, 5])
+    analyzer = _StubAnalyzer(
+        {
+            # Both messages contain "John Smith" at the same offset;
+            # only the user turn should be pseudonymized.
+            "Retrieved chunk: John Smith agreed to pay $100k.": [_Span("PERSON", 17, 27)],
+            "What did John Smith agree to?": [_Span("PERSON", 9, 19)],
+        }
+    )
+
+    mapper = pre_anonymize_request(
+        chat_request=req,
+        config=config,
+        routed_tier=4,
+        anonymizer=Anonymizer(analyzer=analyzer),
+    )
+
+    assert mapper is not None
+    # Retrieval-context system message: unchanged (skip flag honored).
+    assert req.messages[0].content == "Retrieved chunk: John Smith agreed to pay $100k."
+    # User turn: pseudonymized normally.
+    assert req.messages[1].content == "What did PERSON_0001 agree to?"
+    # The mapper carries only the user-turn assignment; provider sees
+    # the real name in the retrieval chunk and the pseudonym in the
+    # user turn (the per-request mapper would have reused PERSON_0001
+    # if the skipped message had also been pseudonymized).
+    assert mapper.reverse() == {"PERSON_0001": "John Smith"}
+
+
+@pytest.mark.unit
+def test_pre_anonymize_skip_flag_false_pseudonymizes_normally() -> None:
+    """Default ``lq_ai_skip_anonymization=False`` retains M2-B3 behavior."""
+
+    req = _make_request(
+        messages=[
+            ChatCompletionMessage(
+                role="system",
+                content="Chat system: John Smith.",
+                # Explicit False; default would behave identically.
+                lq_ai_skip_anonymization=False,
+            ),
+        ]
+    )
+    config = AnonymizationConfig(enabled=True, apply_at_tiers=[3, 4, 5])
+    analyzer = _StubAnalyzer({"Chat system: John Smith.": [_Span("PERSON", 13, 23)]})
+
+    mapper = pre_anonymize_request(
+        chat_request=req,
+        config=config,
+        routed_tier=4,
+        anonymizer=Anonymizer(analyzer=analyzer),
+    )
+
+    assert mapper is not None
+    assert req.messages[0].content == "Chat system: PERSON_0001."
+
+
+@pytest.mark.unit
 def test_pre_anonymize_skips_message_with_none_content() -> None:
     """``content=None`` messages (tool-call shaped) are left alone, not crashed."""
 

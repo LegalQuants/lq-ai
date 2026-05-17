@@ -319,10 +319,14 @@ async def test_chat_send_with_attached_kb_writes_audit_and_prepends_context(
     assert "retrieved chunk #3" in messages[0]["content"]
     # File name + page rendered as the chunk header.
     assert "nda-template.pdf" in messages[0]["content"]
+    # M2-D2: retrieval-context system message opts out of anonymization
+    # so the model sees intact source quotes for citation grounding.
+    assert messages[0]["lq_ai_skip_anonymization"] is True
     # User turn unchanged at the end.
     assert messages[1] == {
         "role": "user",
         "content": "What does the NDA say about non-compete?",
+        "lq_ai_skip_anonymization": False,
     }
 
 
@@ -373,7 +377,9 @@ async def test_chat_send_with_attached_kb_and_empty_results_writes_no_audit(
 
     # Gateway request has only the user turn.
     sent_body = _json.loads(route.calls[0].request.read())
-    assert sent_body["messages"] == [{"role": "user", "content": "needle no haystack"}]
+    assert sent_body["messages"] == [
+        {"role": "user", "content": "needle no haystack", "lq_ai_skip_anonymization": False}
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -421,7 +427,9 @@ async def test_chat_send_with_project_but_no_kbs_skips_retrieval(
     assert audits == []
 
     sent_body = _json.loads(route.calls[0].request.read())
-    assert sent_body["messages"] == [{"role": "user", "content": "hello"}]
+    assert sent_body["messages"] == [
+        {"role": "user", "content": "hello", "lq_ai_skip_anonymization": False}
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -469,4 +477,6 @@ async def test_chat_send_standalone_chat_skips_retrieval(
     assert audits == []
 
     sent_body = _json.loads(route.calls[0].request.read())
-    assert sent_body["messages"] == [{"role": "user", "content": "hello world"}]
+    assert sent_body["messages"] == [
+        {"role": "user", "content": "hello world", "lq_ai_skip_anonymization": False}
+    ]

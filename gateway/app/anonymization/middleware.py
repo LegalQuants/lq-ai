@@ -94,6 +94,15 @@ def pre_anonymize_request(
             continue
         if message.content is None:
             continue
+        # M2-D2: per Decision M2-1, retrieved source documents stay
+        # un-pseudonymized so the model sees intact source quotes for
+        # citation grounding. The api/ marks the retrieval-context
+        # system message with ``lq_ai_skip_anonymization=True``; the
+        # middleware honors the flag here. Other system messages (the
+        # chat's own system instructions, skill-assembled prompts)
+        # still get pseudonymized normally.
+        if getattr(message, "lq_ai_skip_anonymization", False):
+            continue
         message.content = anonymizer.pseudonymize_into(message.content, mapper)
 
     if chat_request.lq_ai_skill_inputs:

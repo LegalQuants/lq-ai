@@ -345,7 +345,9 @@ async def test_send_message_translates_request_to_single_user_message(
 
     sent_body = _json.loads(route.calls[0].request.read())
     assert sent_body["model"] == "fast"
-    assert sent_body["messages"] == [{"role": "user", "content": "what is contract law"}]
+    assert sent_body["messages"] == [
+        {"role": "user", "content": "what is contract law", "lq_ai_skip_anonymization": False}
+    ]
     assert sent_body["chat_id"] == str(db_chat.id)
     # C3 — the new envelope fields are populated.
     assert sent_body["lq_ai_chat_id"] == str(db_chat.id)

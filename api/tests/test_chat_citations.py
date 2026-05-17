@@ -832,3 +832,85 @@ async def test_chat_send_judge_says_no_writes_no_citation(
 
     rows = (await db_session.execute(select(MessageCitation))).scalars().all()
     assert rows == []
+
+
+# ---------------------------------------------------------------------------
+# M2-D2 — Citation Engine x Anonymization integration
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+async def test_chat_send_marks_retrieval_context_skip_anonymization(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    owner_user: User,
+    chat_with_kb_attached: Chat,
+    source_file: FileModel,
+    source_document: Document,
+    source_chunk: DocumentChunk,
+) -> None:
+    """M2-D2 / Decision M2-1: retrieved source documents are NOT pseudonymized.
+
+    The api/ marks the retrieval-context system message with
+    ``lq_ai_skip_anonymization=True`` so the gateway middleware
+    leaves the chunk text untouched. The model needs intact source
+    quotes for citation grounding; pseudonymizing the retrieval
+    would make the model see ``PERSON_0001 agreed to ...`` and
+    produce citations the post-rehydrator must repair, polluting
+    the audit trail.
+
+    This test pins the api-side contract: the flag is set on the
+    retrieval message and ONLY on that message (user turn flag
+    stays default-False so the gateway middleware pseudonymizes
+    chat content as usual when anonymization is active).
+    """
+
+    import json as _stdlib_json
+
+    assistant_text = '"the employee shall not engage in any competing business" (Source: [1])'
+
+    captured_requests: list[dict[str, Any]] = []
+
+    def _capture(request: httpx.Request) -> httpx.Response:
+        captured_requests.append(_stdlib_json.loads(request.content))
+        return httpx.Response(200, json=_success_payload(assistant_text))
+
+    respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(side_effect=_capture)
+
+    with patch(
+        "app.api.chats.hybrid_search",
+        new=AsyncMock(
+            return_value=[_hybrid_result_for(source_chunk, source_document, source_file)]
+        ),
+    ):
+        response = await client.post(
+            f"/api/v1/chats/{chat_with_kb_attached.id}/messages",
+            json={"content": "Quote the non-compete clause.", "model": "smart"},
+            headers=_h(owner_user),
+        )
+
+    assert response.status_code == 200, response.text
+    assert len(captured_requests) == 1
+    sent = captured_requests[0]
+
+    # The api/ injects a system message with the retrieval context as
+    # the first messages-array entry. Confirm it carries the skip
+    # marker.
+    system_msgs = [m for m in sent["messages"] if m.get("role") == "system"]
+    assert len(system_msgs) >= 1, "expected at least one system message (retrieval context)"
+    retrieval_msg = system_msgs[0]
+    assert "Retrieved context" in retrieval_msg.get("content", ""), (
+        "first system message should be the retrieval context block"
+    )
+    assert retrieval_msg.get("lq_ai_skip_anonymization") is True, (
+        "retrieval context system message must opt out of anonymization per M2-D2"
+    )
+
+    # The user turn must NOT carry the skip flag — its content is
+    # subject to anonymization when the middleware is active.
+    user_msgs = [m for m in sent["messages"] if m.get("role") == "user"]
+    assert len(user_msgs) >= 1
+    for msg in user_msgs:
+        assert msg.get("lq_ai_skip_anonymization", False) is False, (
+            "user turn must not opt out of anonymization"
+        )

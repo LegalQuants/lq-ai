@@ -2681,6 +2681,26 @@ This subsection consolidates security and compliance enhancements deferred from 
 
 **Acceptance criteria:** Capture of a chat reply containing a known injection pattern triggers the warning; the warning is keyboard-focusable; audit log captures the event with content hash + pattern matches; Cypress E2E covers both the clean-capture happy path and the warning-triggered review path.
 
+#### DE-269 — Anonymization Option A: pseudonymize source documents too
+
+**Priority:** P3 · **Effort:** M
+
+**Context:** Per **Decision M2-1** (M2 plan kickoff), the Anonymization Layer (§4.7) pseudonymizes only chat and skill content sent to the model; retrieved source documents stay un-pseudonymized so the model sees intact source quotes for citation grounding (§3.3). M2-D2 implements this by marking the retrieval-context system message with `lq_ai_skip_anonymization=True` so the gateway's pre-middleware leaves the content unchanged. The provider therefore sees:
+
+- Pseudonymized user/assistant chat content (`PERSON_0001` etc.)
+- Un-pseudonymized retrieved source chunks (`John Smith ...` from the source file)
+
+If the source-document corpus contains entities the operator considers sensitive (counterparty names, deal amounts, regulated identifiers), those entities reach the provider in cleartext as part of the retrieval payload. **Option A** is the alternative architecture: pseudonymize the source-document corpus too, on a copy used only for inference; render originals to the user via the rehydrator on the response path.
+
+**Specific scope:** Trade-offs to resolve:
+
+- **Citation grounding.** Stage 1 (exact-match) and Stage 2 (tolerant-match) verifiers read `documents.normalized_content` (un-pseudonymized) and compare against the model's emitted quote. Under Option A the model would quote `PERSON_0001`-style strings; the post-rehydrator would substitute originals before citation extraction sees them. This works today (the M2-B3 + M2-C3 round-trip suite implies it), but introduces an extra translation hop in the citation correctness path. Calibration of the cascade thresholds (M2-E2) might need re-running.
+- **Per-request pseudonym stability across mappers.** The per-request mapper already produces stable assignments for the same `(entity_type, original)` pair across user turn + retrieval. Under Option A, the same entity in multiple source documents would consistently pseudonymize to the same value within one request — but pseudonyms drift across requests, which is fine for one-shot Q&A but might surprise users who follow-up with `"What about COMPANY_0001?"` in a subsequent turn. Probably needs a cross-conversation stability mechanism (DE-XXX).
+- **Audit-log shape.** `inference_routing_log.anonymization_applied=true` would now be the common case rather than the careful-case; the field becomes less informative. May want a more granular signal (`anonymization_scope = "chat" | "chat+sources"`).
+- **Model reasoning quality.** Empirical question: does the model produce worse outputs when it must reason against pseudonymized source content rather than originals? A spot-check on the NDA Review / MSA Review skills before deciding to ship Option A.
+
+**Acceptance criteria:** Spot-check empirical study comparing model output quality on Option A vs M2-1 for at least three skills (NDA Review, MSA Review SaaS, DPA Checklist Review); cross-conversation pseudonym stability decision documented or filed as DE-XXX; audit-log shape extended if needed; `docs/security/anonymization.md` and `docs/citation-engine.md` updated to reflect Option A as the new default; existing M2-B3 / M2-C3 / M2-D2 round-trip tests passing with the new shape.
+
 #### DE-270 — Cryptography review: Fernet vs modern AEAD
 
 **Priority:** P3 · **Effort:** S
