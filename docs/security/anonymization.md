@@ -259,6 +259,34 @@ The current pseudonym format `{ENTITY_TYPE}_{NNNN}` is deterministic and operato
 
 If you operate a deployment whose source corpus contains literal `{UPPERCASE}_{DIGITS}` patterns at risk of collision and you want resolution sooner than the roadmap, the simplest deployment-side mitigation is to override `PseudonymMapper.assign` with a salted format (e.g., `f"{entity_type}_{counter:04d}_{secrets.token_hex(2)}"`) and rebuild the gateway image.
 
+### Long entity names (>200 chars) — pseudonymize without truncation
+
+Entities of arbitrary length pseudonymize to the standard `{TYPE}_{NNNN}` format regardless of source-span length — the substitution shrinks the wire payload rather than expanding it. The mapper holds the full original (whatever its length) so the rehydrator restores it byte-for-byte on the response path. There is no length cap today; the binding constraint is Presidio's per-span analysis cost, which scales linearly with the analyzed text but is bounded by chat-message size.
+
+Pinned by `gateway/tests/anonymization/test_edge_cases.py::test_pre_anonymize_long_entity_name_substitutes_without_crash` and `::test_post_anonymize_rehydrates_long_entity_byte_for_byte`.
+
+### Multi-line entities (spans across `\n`) — substitute correctly
+
+A Presidio-detected span that crosses line boundaries (common for address blocks: `"Acme Corp\n123 Main St\nNew York, NY"`) substitutes as a single pseudonym; rehydration restores the full multi-line original including the embedded newlines. No special handling needed in the middleware — the substitution operates on raw character ranges.
+
+Pinned by `gateway/tests/anonymization/test_edge_cases.py::test_pre_anonymize_multiline_entity_substitutes_across_newline` and `::test_post_anonymize_rehydrates_multiline_entity_with_newlines_preserved`.
+
+### Foreign-language entities — out of scope for v1
+
+Presidio's `AnalyzerEngine` ships with English-only NLP models per [`gateway/app/anonymization/engine.py::get_analyzer_engine`](../../gateway/app/anonymization/engine.py); the spaCy `en_core_web_lg` model is the only language pipeline registered. Non-English text in a chat or skill input is passed through the analyzer but typically produces zero entity matches — the content reaches the provider in cleartext.
+
+**Operator implication:** for a deployment whose users send chat content in languages other than English, the anonymization layer effectively no-ops. Mitigations:
+
+1. Configure additional spaCy models per language (`pip install spacy && python -m spacy download xx_lg`) and extend `get_analyzer_engine` with per-language NLP engines.
+2. Disable anonymization entirely (`anonymization.enabled: false` in `gateway.yaml`) if the operator's privacy posture is incompatible with English-only detection.
+3. Route non-English content to a Tier-1 (local) inference path so the provider visibility question is moot.
+
+No PRD §9 DE entry today — this is a project posture choice (English-only legal practice is the primary user persona) rather than a deferred enhancement. Operators with multi-language needs should open an issue.
+
+### Citation extraction across chunk boundaries — see DE-277
+
+The Citation Engine's extractor has a related limitation: quotes that span the boundary between two retrieved chunks drop silently at extraction (the locator searches one chunk's content). The pseudonym layer is unaffected — substitution operates on raw message content, not on chunk-aligned text. See [`docs/citation-engine.md` §Known limitations](../citation-engine.md#chunk-boundary-spanning-quotes--silently-drop-today) for the citation-side detail and [DE-277](../PRD.md#de-277--citation-extractor-fallback-to-document-scan-on-chunk-boundary-miss) for the future fix.
+
 ---
 
 ## Related

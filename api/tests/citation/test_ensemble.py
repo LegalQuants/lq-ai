@@ -344,6 +344,44 @@ async def test_empty_judge_models_misses_without_calling_gateway() -> None:
 
 
 @pytest.mark.unit
+async def test_ensemble_judge_calls_carry_anonymize_false_for_correctness() -> None:
+    """M2-D4 integration edge: every ensemble judge call opts out of anonymization.
+
+    The Stage 3 :func:`verify_paraphrase` request sets
+    ``anonymize=False`` (see verification.py docstring: "the judge needs
+    to see actual content to verify it; anonymized text would destroy
+    the semantics"). Ensemble dispatches multiple Stage 3 calls in
+    parallel; each one carries the same opt-out. This test pins the
+    contract: provider sees the real cited claim + chunk on every
+    ensemble judge dispatch even when chat-level anonymization is
+    active for the originating message.
+
+    Why this composition works: anonymization happens at the
+    chat-completion request level (per-request flag). Ensemble judge
+    calls are SEPARATE chat-completion requests dispatched by the api/
+    after the original chat response is persisted. Each judge request
+    is independently routed, anonymization-gated, and audit-logged by
+    the gateway. The api/-side ``anonymize=False`` flag forces the
+    middleware to skip pseudonymization regardless of the gateway's
+    default config.
+    """
+
+    gw = _StubGateway(response_contents=[_judge_json(verdict="yes")] * 3)
+    cfg = _ensemble(n=3, rule="strict")
+    doc = _doc()
+
+    result = await verify_ensemble(_candidate(doc), doc, gateway=gw, ensemble_config=cfg)
+
+    assert result.verified is True
+    assert gw.call_count == 3
+    for req in gw.requests:
+        assert req.anonymize is False, (
+            f"every ensemble judge request must set anonymize=False; "
+            f"got anonymize={req.anonymize!r} on model={req.model!r}"
+        )
+
+
+@pytest.mark.unit
 async def test_confidence_is_mean_of_verified_judges() -> None:
     """Mixed confidences average: high(0.90) + medium(0.70) = 0.80 mean."""
 
