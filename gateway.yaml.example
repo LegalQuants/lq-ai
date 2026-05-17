@@ -126,15 +126,25 @@ providers:
 
   - name: azure-openai
     type: azure_openai
+    # M2-E1 (DE-267): Azure OpenAI adapter. Mirrors the OpenAI wire shape
+    # with a deployment-scoped URL and `api-key` auth.
+    #
     # `:-` default lets the gateway load without an Azure resource configured;
     # operators routing to Azure set AZURE_OPENAI_RESOURCE in their .env.
     base_url: https://${AZURE_OPENAI_RESOURCE:-disabled}.openai.azure.com
     api_key_env: AZURE_OPENAI_API_KEY
+    # api_version pins which Azure-side features are available (Azure rolls
+    # capabilities in/out per version). Bump to a newer GA version
+    # ('2024-10-21' or later) for current chat-completion features.
     api_version: '2024-08-01-preview'
-    tier: 3  # Azure OpenAI under customer's Azure subscription
+    tier: 3  # Azure OpenAI under enterprise agreement (ZDR + BAA)
+    # CRITICAL: each entry is the Azure DEPLOYMENT-ID (operator-named in
+    # the Azure portal), NOT the underlying model name. Many operators
+    # run multiple deployments of the same model with different SKUs;
+    # the gateway routes by deployment-id via the alias map below.
     models:
-      - gpt-4-turbo
-      - gpt-4o
+      - gpt-4-turbo-prod       # e.g., a deployment of gpt-4-turbo
+      - gpt-4o-prod            # e.g., a deployment of gpt-4o
 
   # --- Local providers (Tier 1) ---
 

@@ -16,6 +16,7 @@ cleanly.
 """
 
 from app.providers.anthropic import AnthropicAdapter
+from app.providers.azure_openai import AzureOpenAIAdapter
 from app.providers.base import (
     ProviderAdapter,
     ProviderAdapterError,
@@ -45,6 +46,7 @@ from app.providers.openai_schema import (
 
 __all__ = [
     "AnthropicAdapter",
+    "AzureOpenAIAdapter",
     "ChatCompletionChoice",
     "ChatCompletionChunk",
     "ChatCompletionChunkChoice",

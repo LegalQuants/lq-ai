@@ -66,6 +66,7 @@ from app.errors import LQAIError
 from app.model_discovery import ModelDiscoverer
 from app.providers import (
     AnthropicAdapter,
+    AzureOpenAIAdapter,
     OllamaAdapter,
     OpenAIAdapter,
     ProviderAdapter,
@@ -160,6 +161,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             except ValueError as exc:
                 logger.warning(
                     "skipping OpenAI provider %r: %s",
+                    provider.name,
+                    exc,
+                )
+            continue
+        if provider.type == "azure_openai":
+            # M2-E1 (DE-267): Azure OpenAI mirrors the OpenAI wire shape
+            # with a different URL (deployment-scoped + api-version)
+            # and ``api-key`` auth. Missing key or missing api_version
+            # surfaces as a startup warning (skip provider) and a clean
+            # 503 at request time, matching OpenAI's lifespan posture.
+            try:
+                adapters[provider.name] = AzureOpenAIAdapter.from_config(provider)
+                logger.info(
+                    "instantiated Azure OpenAI adapter for provider %r",
+                    provider.name,
+                )
+            except ValueError as exc:
+                logger.warning(
+                    "skipping Azure OpenAI provider %r: %s",
                     provider.name,
                     exc,
                 )
