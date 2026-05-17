@@ -184,6 +184,35 @@ The format is locked by M2-A3. Operators who need a different format (longer cou
 
 ---
 
+## Round-trip correctness (M2-C3)
+
+The M2-C3 round-trip test suite (`gateway/tests/anonymization/test_round_trip.py`) pins four invariants the Anonymization Layer must hold. Each runs against the **real** Presidio `AnalyzerEngine` so the tests catch real entity-detection regressions, not just substitution-logic regressions. The suite is `pytest -m slow` because the first spaCy load is ~2-3s; CI runs it on every PR touching `gateway/app/anonymization/`.
+
+1. **Byte-for-byte round-trip.** Any text that runs through `pseudonymize_into(text, mapper)` followed by `rehydrate(substituted_text, mapper)` returns the original `text` byte-for-byte. The mapper carries the round-trip; no information is lost in the substitution step.
+2. **Cross-conversation stability within a request.** A single `PseudonymMapper` shared across multiple message-content passes assigns the same pseudonym to the same `(entity_type, original)` pair every time. Same name in messages 1 and 5 of one request → same pseudonym in both.
+3. **Per-request isolation.** Two independent `PseudonymMapper` instances produce independent pseudonym spaces — `mapper_A.assign("PERSON", "John")` and `mapper_B.assign("PERSON", "John")` both yield `PERSON_0001` but the mappings live in disjoint state. Production request scoping (one mapper per request, dropped on response) is verified by this invariant.
+4. **In-process-only persistence.** After a representative request completes, no pseudonym-shaped string appears in `caplog`-captured log records OR in the `inference_routing_log` audit row payload. The mapper is in-process, in-memory, and never escapes to any persistent surface (logs, DB, MinIO/S3, telemetry).
+
+The suite also covers entity-overlap handling (`John Smith Jr.` collapses to one substitution per the longest-span-wins resolution in `Anonymizer._resolve_overlaps`) and the edge cases the M2-C3 plan §M2-C3 calls out.
+
+---
+
+## Known limitations and roadmap
+
+### Pseudonym-collision surfaces — DE-274
+
+The current pseudonym format `{ENTITY_TYPE}_{NNNN}` is deterministic and operator-readable, which is the right trade-off for legibility. The cost is two distinct collision surfaces, both pinned by the M2-C3 round-trip test suite so a future change is visible in CI:
+
+**1. Source-document collision.** If a source document happens to **literally** contain a string matching this pattern (e.g., a contract template using `PERSON_0001` as a placeholder, or a procedural doc referencing `EMAIL_ADDRESS_0023` from a different system), the rehydrator's behavior today is best-effort: `Anonymizer.rehydrate` uses `str.replace` per known mapping; a literal `PERSON_0001` in source text that does NOT match an active mapper entry passes through unchanged (the safe path). The literal string is preserved in the user-visible content. The risk is forward-looking: as the engine evolves (e.g., adding logging of unmatched pseudonym-shaped strings for operator debugging), a literal source pseudonym could surface in logs as a (minor) leak path.
+
+**2. Cross-mapper collision.** Two parallel mappers both produce `PERSON_0001` for their respective first PERSON span — there is no per-request salt in the format, so the pseudonym strings are not globally distinct across mappers. Production isolation works today **only because mappers are per-request and dropped on function exit** — there is no production path that rehydrates one request's output against another request's mapper. A future architectural change that, for any reason, cached or shared mappers across requests would silently leak originals across the request boundary. Isolation is currently **scope-enforced**, not collision-prevented.
+
+**Tracked as [PRD §9 / DE-274](../PRD.md#de-274--anonymization-pseudonym-collision-in-source-documents).** Recommended path: per-request random salt on the pseudonym format (e.g., `PERSON_0001_a3f7`). One change closes both collision surfaces — literal pseudonym patterns in source documents will no longer match any active mapper entry, and two parallel mappers will produce structurally distinct pseudonym strings even at the same counter slot. This is **on the roadmap** but deliberately deferred until either an operator hits the collision in practice OR until a future change to the rehydrator's logging surface or mapper lifecycle makes either leak path real.
+
+If you operate a deployment whose source corpus contains literal `{UPPERCASE}_{DIGITS}` patterns at risk of collision and you want resolution sooner than the roadmap, the simplest deployment-side mitigation is to override `PseudonymMapper.assign` with a salted format (e.g., `f"{entity_type}_{counter:04d}_{secrets.token_hex(2)}"`) and rebuild the gateway image.
+
+---
+
 ## Related
 
 * `PRD.md` §4.7 — Anonymization Layer architectural overview.

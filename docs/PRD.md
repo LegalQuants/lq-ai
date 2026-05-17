@@ -2713,6 +2713,29 @@ Surfaced in the fresh-install evaluation (2026-05-14) as a usability gap, not a 
 
 **Acceptance criteria:** The audit-log response renders actor labels without an additional round-trip; soft-deleted user references resolve to a stable display string; OpenAPI schema reflects the new shape; existing audit-log Cypress E2E updated to assert on the enriched shape.
 
+#### DE-274 — Anonymization pseudonym-collision in source documents
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** The Anonymization Layer (§4.7 / M2-B3) generates pseudonyms in the deterministic format `{ENTITY_TYPE}_{NNNN}` (e.g., `PERSON_0001`, `MATTER_NUMBER_0042`). On the response path, the rehydrator scans the model's output for these patterns and substitutes the originals back from the in-process mapper.
+
+Two distinct collision surfaces this format leaves open:
+
+1. **Source-doc collision.** If a source document happens to contain a literal string matching the pseudonym pattern (e.g., a contract template that literally uses `PERSON_0001` as a placeholder, or a procedural document that references `EMAIL_ADDRESS_0023` from a different system) — and the model's response quotes that string — the rehydrator today does nothing to it (no matching mapper entry, so `str.replace` is a no-op). The literal string is preserved on the way out — the **safe** path. The risk is that future rehydrator changes (e.g., logging unmatched patterns for operator debugging) could turn this into a (minor) leak path.
+
+2. **Cross-mapper collision** (surfaced by the M2-C3 round-trip suite). Because the format is `{ENTITY_TYPE}_{NNNN}` with no per-request salt, two parallel mappers both produce `PERSON_0001` for their respective first PERSON span. Production isolation works because mappers are per-request and dropped on function exit — there is no production path that rehydrates one request's output against another request's mapper. But the data structure offers no cryptographic distinctness; isolation is **scope-enforced**, not collision-prevented. A future architectural change (e.g., caching mappers across requests for any reason) would silently break isolation without surfacing as a test failure.
+
+Both surfaces are pinned by the M2-C3 round-trip test suite so a future change is visible in CI rather than silent. The current pinned behavior is documented in `docs/security/anonymization.md`.
+
+**Specific scope:** Two paths, either acceptable:
+
+- **(a) Per-request random salt on pseudonym generation.** Change `PseudonymMapper.assign` to produce `{ENTITY_TYPE}_{NNNN}_{salt}` where `salt` is a per-request short random suffix (e.g., 4-6 hex chars from `secrets.token_hex`). Source documents that happen to contain the bare `PERSON_0001` form would no longer collide; two parallel mappers would produce structurally distinct pseudonym strings even at the same counter slot, eliminating the cross-mapper collision surface as well. Cost: rehydrate's regex gets one more group; the pseudonym strings the provider sees are 5-7 chars longer.
+- **(b) Pre-scan source documents for pseudonym-shaped patterns at retrieval time, and either skip the request or escalate the pseudonym counter to a larger digit width when a collision is detected.** More complex; addresses only the source-doc collision, not the cross-mapper one; harder to compose with the cross-conversation stability invariant.
+
+Path (a) is recommended; the salt is the smaller change with cleaner round-trip semantics and closes both collision surfaces with one move.
+
+**Acceptance criteria:** No source document containing a literal pseudonym pattern can confuse the rehydrator's behavior; two parallel mappers produce structurally distinct pseudonym strings (verified by an updated round-trip test); the mapper's pseudonym format is updated; existing M2-B3 / M2-C3 tests pass with the new format (the cross-mapper test in `test_round_trip.py` flips its assertion when this lands — the test's docstring already calls this out); the change is documented in `docs/security/anonymization.md`.
+
 ### Workflow intelligence
 
 This subsection captures the bounded items that operationalize the M5+ Forward-Looking Workflow Intelligence direction (§8.5). The items are bounded enough to be picked up by community contributors as the M5+ roadmap matures. The architectural slot for the MCP-client subsystem is already committed for M1–M2 (§8 M1) so this subsection's items can be implemented incrementally without core refactoring.
