@@ -238,10 +238,91 @@ detail.
 See [docs/security/anonymization.md](security/anonymization.md) for
 the anonymization-layer-side description of the same integration.
 
+## Known limitations (M2-D4)
+
+The Citation Engine is correctness-first but ships with several
+known limitations the M2-D4 sweep documented explicitly. Each
+limitation has either a regression test pinning current behavior or
+a deferred-enhancement entry tracking the future fix.
+
+### Chunk-boundary spanning quotes — silently drop today
+
+If a citation's source quote spans the boundary between two adjacent
+retrieved chunks (i.e., neither chunk alone contains the full quote),
+the extractor's `_locate_in_chunk` returns `None` and the candidate
+is dropped silently. The M2-C2 UI renders the absence as the
+"unverified" red state.
+
+**Current scope of the bug:** the extractor searches each cited
+chunk's `content` for the quote. The verifier (Stages 1–4) reads
+against `documents.normalized_content` (which spans all chunks of a
+document), but the verifier never sees the candidate because
+extraction drops it upstream.
+
+**When this matters:** the model usually picks the chunk containing
+the full quote — the retrieval-context block tells it to. The gap
+surfaces on adversarial multi-chunk paraphrases or when the model
+genuinely needs to cite text that crosses a chunk seam.
+
+**Future fix path:** [DE-277 — Citation extractor: scan full
+`documents.normalized_content` when chunk-local search misses](PRD.md#de-277--citation-extractor-fallback-to-document-scan-on-chunk-boundary-miss).
+The extractor falls back to scanning the full document text via FK
+from the chunk to the doc when `_locate_in_chunk` misses; same
+fuzzy-vs-exact two-stage logic against the full document. Pinned by
+`api/tests/citation/test_edge_cases.py::test_chunk_boundary_spanning_citation_does_not_extract_today`
+which flips its assertion when DE-277 lands.
+
+### Deleted source documents — render as "unverified," not "system error"
+
+If a chat message references a source document that gets deleted
+between retrieval and citation persistence (rare but possible —
+user-driven document deletion during an in-flight request), the
+verifier's batch-load returns no document for that ID and the
+defensive `if doc is None: continue` guard in `_persist_message_citations`
+skips the candidate silently. No row is persisted; the M2-C2 UI
+renders the marker as "unverified" (red).
+
+**The distinction the spec drew:** M2-D4 references a "system-error
+state" — visually distinct from "unverified" (red) — but the M2-C2
+Decision H deferred the dedicated state-5 rendering to a future
+task. Implementing state-5 means: persist a row with
+`verification_method='failed'` + a details field flagging "source
+deleted"; UI extends `CitationRenderState` with a fifth value;
+chip color + tooltip differ from the existing unverified state.
+
+**Future fix path:** part of [DE-275 — Embed M2 citations in
+chat-message envelope](PRD.md#de-275--embed-m2-citations-in-chat-message-envelope)
+(state-5 system-error rendering is grouped with the envelope
+enhancement work). Pinned by
+`api/tests/citation/test_edge_cases.py::test_deleted_source_file_handled_gracefully_no_row_written`.
+
+### Empty source documents — fall through to unverified gracefully
+
+A document with empty `normalized_content` and a citation referencing
+positive offsets into it triggers the `_slice_in_range` guard in
+`verify_exact_match` / `verify_tolerant_match`; both return MISS
+without crashing. Stage 3 / 4 only run if `gateway` is supplied;
+either way the candidate falls through to "unverified." This is
+defensive-by-design rather than a future-fix item — there is nothing
+to verify against an empty document.
+
+Pinned by:
+
+- `api/tests/citation/test_edge_cases.py::test_verify_exact_match_against_empty_normalized_content`
+- `api/tests/citation/test_edge_cases.py::test_verify_cascade_against_empty_normalized_content_no_crash`
+
+### Cross-document citations — supported
+
+A message citing multiple distinct source documents produces one
+verified row per cited document. The persistence loop batch-loads
+all referenced documents in one SELECT then verifies each candidate
+against its own document. Pinned by
+`api/tests/citation/test_edge_cases.py::test_cross_document_citations_persist_one_row_per_verified_citation`.
+
 ## References
 
 - PRD §3.3 (Citation Engine spec)
-- [docs/M2-IMPLEMENTATION-PLAN.md](M2-IMPLEMENTATION-PLAN.md) §M2-C1, §M2-D1
+- [docs/M2-IMPLEMENTATION-PLAN.md](M2-IMPLEMENTATION-PLAN.md) §M2-C1, §M2-D1, §M2-D4
 - [docs/db-schema.md](db-schema.md) — `message_citations` table
 - [gateway.yaml.example](../gateway.yaml.example) — operator config surface
 - [docs/skill-authoring-guide.md](skill-authoring-guide.md) — `ensemble_verification` frontmatter field

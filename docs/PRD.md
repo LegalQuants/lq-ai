@@ -2786,6 +2786,29 @@ The failure mode is structurally bad: a deployment misconfiguration (missing env
 
 **Acceptance criteria:** `documents.embedding_status` is populated for every newly-ingested document and updates correctly on retry; the admin UI surfaces failed-embed documents distinctly from ready ones; an end-to-end test against a fresh-install stack uploads a fixture document and asserts the chunks come back embedded (not FTS-only); the gateway-misconfigured-worker class of bug surfaces as a CI failure on PR review rather than a silent production degradation.
 
+#### DE-277 — Citation extractor: fallback to document scan on chunk-boundary miss
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** Surfaced during the M2-D4 edge-case sweep. The Citation Engine's extractor (`app/citation/extraction.py::extract_citations`) locates each quote by calling `_locate_in_chunk(quote, chunk.content)` against the single chunk the model cited via `(Source: [N])`. If the quote spans the boundary between two adjacent retrieved chunks — i.e., the quote is present in `documents.normalized_content` but in neither chunk's individual content — the locator returns `None` and the candidate is dropped silently. No row is persisted; the M2-C2 UI renders the marker as "unverified" (red) even though the underlying document text matches.
+
+In practice the model usually picks the chunk containing the full quote (the retrieval-context block instructs it to). The gap surfaces on adversarial multi-chunk paraphrases or when the model genuinely needs to cite text crossing a chunk seam — both rare but not impossible.
+
+The verifier itself reads against `documents.normalized_content` (un-chunked) and would verify a spanning quote correctly if it ever saw the candidate. The fix is upstream in extraction.
+
+**Specific scope:** Extend `_locate_in_chunk` (or the surrounding loop in `extract_citations`) to fall back to a full-document scan when the chunk-local search misses. Two-stage logic, mirroring the within-chunk pattern:
+
+- **Stage A — chunk-local exact:** current behavior.
+- **Stage B — chunk-local fuzzy:** current behavior.
+- **Stage C — full-document exact:** if A and B both miss, FK-load the chunk's parent document and `_locate_in_chunk(quote, doc.normalized_content)`. Resolved offsets are document-absolute (no `chunk.char_offset_start` arithmetic needed).
+- **Stage D — full-document fuzzy:** if C misses, fuzzy-search the full document. Resolved offsets again document-absolute.
+
+The persisted citation row's `source_offset_start` / `source_offset_end` already index into `documents.normalized_content` (not the chunk), so the downstream Stages 1–4 verifier consumes the document-absolute offsets without any further change.
+
+**Edge case the fix introduces:** a quote that's NOT in the cited chunk but IS elsewhere in the document — possibly the model cited the wrong chunk index. Stage C/D would surface this as verified, masking the mis-cite. Two-option resolution: (a) accept this as a feature (the verification is what matters; chunk-index correctness is decorative); (b) when Stage C/D fires, log a `citation_chunk_mismatch` warning so operators can spot model-side drift. Recommend (b) for observability.
+
+**Acceptance criteria:** the existing `test_chunk_boundary_spanning_citation_does_not_extract_today` test flips its assertion (rows DO persist; `verification_method='exact_match'`); a new test pins the chunk-mismatch warning case; no regression in the existing extraction test suite; `docs/citation-engine.md` "Known limitations" entry on chunk-boundary spanning is updated to either remove the limitation or note the residual chunk-mismatch behavior.
+
 ### Workflow intelligence
 
 This subsection captures the bounded items that operationalize the M5+ Forward-Looking Workflow Intelligence direction (§8.5). The items are bounded enough to be picked up by community contributors as the M5+ roadmap matures. The architectural slot for the MCP-client subsystem is already committed for M1–M2 (§8 M1) so this subsection's items can be implemented incrementally without core refactoring.
