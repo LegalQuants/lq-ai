@@ -104,6 +104,12 @@ class Project(Base):
         server_default=text("false"),
         default=False,
     )
+    ensemble_verification: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+        default=False,
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

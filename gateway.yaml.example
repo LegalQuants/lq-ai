@@ -406,6 +406,51 @@ anonymization:
 citation_engine:
   judge_model: fast
 
+  # ----------------------------------------------------------------
+  # Stage 4 — ensemble verification (M2-D1)
+  # ----------------------------------------------------------------
+  # When activated, the paraphrase judge runs in parallel across
+  # ``judge_models`` and the verdicts aggregate under
+  # ``aggregation_rule``. Activation is the OR of:
+  #
+  #   1. A skill's frontmatter ``ensemble_verification: true``
+  #   2. The chat's project ``ensemble_verification`` flag
+  #   3. ``default_enabled`` below
+  #
+  # Replaces Stage 3 (single-judge) when activated. Cost-budget
+  # pre-flight: the api/ estimates spend per message
+  # (citations × n_judges × ~$0.005); if the estimate exceeds
+  # ``max_cost_per_message_usd`` the cascade falls back to single-
+  # judge Stage 3 with a warning logged.
+  #
+  # PRIVACY NOTE: each judge dispatch is an inference request that
+  # routes through the gateway like any other. If judge_models
+  # spans multiple provider tiers, the verification's privacy
+  # envelope is the *weakest* (highest-numbered) tier across the
+  # ensemble — exposed on ``message_citations.tier_envelope`` per
+  # row so operators can audit ensemble exposure post-hoc.
+  #
+  # Default is fully opt-in: empty ``judge_models`` disables Stage 4
+  # even when ``default_enabled: true`` (defense in depth against
+  # misconfiguration).
+  ensemble_verification:
+    default_enabled: false
+    judge_models: []
+    # ``strict`` — every judge must verdict verified. Any miss → MISS.
+    # ``majority`` — simple majority of verified verdicts wins;
+    #   even-N ties (e.g., 2-of-4) miss conservatively. Dissent
+    #   surfaces via the ``partial=true`` flag on the persisted row.
+    aggregation_rule: strict
+    max_cost_per_message_usd: 0.05
+  #
+  # Example operator configuration (commented for safety):
+  #
+  # ensemble_verification:
+  #   default_enabled: true
+  #   judge_models: [fast, fast-anthropic, fast-vertex]
+  #   aggregation_rule: strict
+  #   max_cost_per_message_usd: 0.10
+
 # ============================================================
 # COST TRACKING
 # ============================================================

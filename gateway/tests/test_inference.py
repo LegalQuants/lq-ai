@@ -21,7 +21,10 @@ and ``test_anthropic_provider.py`` (real-key, marked ``provider``).
 from __future__ import annotations
 
 import pytest
+from fastapi import FastAPI
 from httpx import AsyncClient
+
+from app.config import EnsembleVerificationConfig
 
 
 @pytest.mark.unit
@@ -147,20 +150,91 @@ async def test_models_returns_configured_aliases(client: AsyncClient) -> None:
 
 
 @pytest.mark.unit
-async def test_citation_engine_config_returns_judge_model(client: AsyncClient) -> None:
-    """``GET /v1/citation-engine/config`` exposes the loaded judge_model (M2-C1).
+async def test_citation_engine_config_returns_judge_model_and_ensemble(
+    client: AsyncClient,
+) -> None:
+    """``GET /v1/citation-engine/config`` exposes both M2-C1 and M2-D1 blocks.
 
     The api/'s Citation Engine pulls this at startup so the operator
-    configures the Stage 3 judge model in one place (``gateway.yaml``)
-    rather than mirroring it on the api/ side.
+    configures the Stage 3 judge model and the Stage 4 ensemble
+    settings in one place (``gateway.yaml``) rather than mirroring
+    them on the api/ side.
     """
 
     response = await client.get("/v1/citation-engine/config")
 
     assert response.status_code == 200
     body = response.json()
-    # The example config ships ``citation_engine.judge_model: fast``.
-    assert body == {"judge_model": "fast"}
+    # The example config ships ``citation_engine.judge_model: fast``
+    # and no ensemble block (default-constructed).
+    assert body["judge_model"] == "fast"
+    assert body["ensemble_verification"] == {
+        "default_enabled": False,
+        "judge_models": [],
+        "aggregation_rule": "strict",
+        "max_cost_per_message_usd": 0.05,
+        "envelope_tier": None,
+    }
+
+
+@pytest.mark.unit
+async def test_citation_engine_config_computes_envelope_tier_server_side(
+    gateway_app: FastAPI,
+    client: AsyncClient,
+) -> None:
+    """When ensemble is configured, envelope_tier is max(tier) across judge_models.
+
+    Per M2-D1 decision E (api-side audit), the gateway computes the
+    envelope server-side so the api/ side has a ready-to-persist
+    tier value without doing its own alias resolution.
+    """
+
+    # gateway.yaml.example: ``fast`` → anthropic-prod (tier 4),
+    # ``budget`` → anthropic-prod (tier 4). Both tier 4 → envelope 4.
+    gateway_app.state.config.citation_engine.ensemble_verification = EnsembleVerificationConfig(
+        default_enabled=True,
+        judge_models=["fast", "budget"],
+        aggregation_rule="majority",
+        max_cost_per_message_usd=0.10,
+    )
+
+    response = await client.get("/v1/citation-engine/config")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ensemble_verification"]["default_enabled"] is True
+    assert body["ensemble_verification"]["judge_models"] == ["fast", "budget"]
+    assert body["ensemble_verification"]["aggregation_rule"] == "majority"
+    assert body["ensemble_verification"]["max_cost_per_message_usd"] == 0.10
+    # Both aliases resolve to anthropic-prod, default tier 4.
+    assert body["ensemble_verification"]["envelope_tier"] == 4
+
+
+@pytest.mark.unit
+async def test_citation_engine_config_envelope_tier_null_on_unresolvable_judges(
+    gateway_app: FastAPI,
+    client: AsyncClient,
+) -> None:
+    """Unresolvable judge aliases are skipped; envelope_tier=None when none resolve.
+
+    A misconfigured judge alias surfaces the typo via the dispatch-time
+    error at verification time, not via a config-fetch failure — the
+    api/ still treats Stage 4 as disabled when envelope_tier is None
+    but the rest of the block surfaces.
+    """
+
+    gateway_app.state.config.citation_engine.ensemble_verification = EnsembleVerificationConfig(
+        default_enabled=True,
+        judge_models=["nonexistent-alias", "another-typo"],
+        aggregation_rule="strict",
+        max_cost_per_message_usd=0.05,
+    )
+
+    response = await client.get("/v1/citation-engine/config")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ensemble_verification"]["envelope_tier"] is None
 
 
 @pytest.mark.unit

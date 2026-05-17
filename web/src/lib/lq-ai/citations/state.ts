@@ -49,6 +49,13 @@ export interface ParsedCitationMarker {
  * always maps to verified-paraphrase (yellow), regardless of the
  * `partial` flag — `partial` modulates the tooltip wording, not the
  * color choice.
+ *
+ * Per M2-D1 Decision F, ensemble methods (`ensemble_strict` and
+ * `ensemble_majority`) also render as yellow, reusing the
+ * verified-paraphrase chip. The tooltip varies by method + partial
+ * flag (e.g., "Models disagreed: K of N verified" for majority with
+ * dissent). Reusing the chip rather than adding a 5th visual state
+ * keeps the M2-C2 design surface small.
  */
 export function citationRenderState(citation: Citation | null): CitationRenderState {
 	if (citation === null || !citation.verified) {
@@ -61,12 +68,9 @@ export function citationRenderState(citation: Citation | null): CitationRenderSt
 			return 'verified-tolerant';
 		case 'paraphrase_judge':
 		case 'llm_judge':
+		case 'ensemble_strict':
+		case 'ensemble_majority':
 			return 'verified-paraphrase';
-		case 'ensemble':
-			// Multi-model agreement is structurally a stronger verification
-			// than a single stage; render with the green treatment shared
-			// by exact / tolerant match.
-			return 'verified-tolerant';
 		case 'failed':
 			return 'unverified';
 		case null:
@@ -156,6 +160,26 @@ export function citationTooltip(
 						: conf >= 0.6
 							? 'medium confidence'
 							: 'low confidence';
+			const method = citation?.verification_method;
+			// M2-D1: ensemble methods get distinct tooltip wording.
+			// `ensemble_strict` always means every judge agreed
+			// (otherwise the row wouldn't have persisted); `partial=true`
+			// in that case flags that at least one judge said partial.
+			// `ensemble_majority` with `partial=true` flags dissent
+			// (at least one judge missed) — the spec's "Models
+			// disagreed" case.
+			if (method === 'ensemble_strict') {
+				if (citation?.partial) {
+					return `Verified by ensemble (${confLabel}): all judges agreed, but the source partially supports this claim.`;
+				}
+				return `Verified by ensemble (${confLabel}): all judges agreed.`;
+			}
+			if (method === 'ensemble_majority') {
+				if (citation?.partial) {
+					return `Verified by ensemble (${confLabel}): majority of judges verified, but some disagreed.`;
+				}
+				return `Verified by ensemble (${confLabel}): majority of judges verified.`;
+			}
 			if (citation?.partial) {
 				return `Verified by judge (${confLabel}): the source partially supports this claim.`;
 			}

@@ -11,15 +11,21 @@ Stages live in canonical method-string order:
 
 * :func:`verify_exact_match` — Stage 1 (M2-A2). Byte-for-byte equality
   at the offsets the extractor produced. Trivially fast.
-* :func:`verify_tolerant_match` — Stage 2 (M2-B1; this task).
-  Normalizes both source-at-offsets and ``source_text`` via
+* :func:`verify_tolerant_match` — Stage 2 (M2-B1). Normalizes both
+  source-at-offsets and ``source_text`` via
   :func:`app.citation.normalization.normalize` and compares with
   ``rapidfuzz.fuzz.ratio`` at threshold 95. Catches smart-quote,
   whitespace, and (when ``document.was_ocrd``) OCR-confusion
   differences that Stage 1 rejects.
-* Stage 3 LLM judge (M2-C1) and Stage 4 ensemble (M2-D1) land in
-  later milestone tasks; :func:`verify` will route into them once
-  they ship.
+* :func:`verify_paraphrase` — Stage 3 (M2-C1). LLM paraphrase judge.
+  Dispatches one structured-JSON judge call through the gateway and
+  parses the verdict into ``yes`` / ``partial`` / ``no``.
+* :func:`verify_ensemble` — Stage 4 (M2-D1). Runs the paraphrase judge
+  in parallel across multiple models and aggregates verdicts under
+  the operator-chosen rule (strict = all agree; majority = simple
+  majority wins). Replaces Stage 3 when activated; cost-budget
+  fallback drops back to Stage 3 if the ensemble would exceed the
+  per-message cap.
 
 All stages share the :class:`VerificationResult` shape so the
 persistence layer can copy fields onto ``message_citations`` without
@@ -28,11 +34,12 @@ remapping.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import uuid
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from rapidfuzz import fuzz
 
@@ -41,6 +48,17 @@ from app.citation.normalization import normalize
 from app.schemas.gateway import ChatCompletionRequest
 
 logger = logging.getLogger(__name__)
+
+
+# Conservative per-judge-call cost estimate used for the M2-D1
+# pre-flight budget check. Real cost depends on the judge model and the
+# claim/chunk lengths; the gateway records actual spend in
+# ``inference_routing_log.cost_estimate`` for post-hoc analysis. This
+# constant is deliberately high (haiku-tier rates + generous tokens)
+# so the budget check errs on the side of falling back to single-judge
+# Stage 3 rather than letting an ensemble silently overrun. M2-E2
+# (ensemble calibration pass) replaces this with measured numbers.
+FLAT_PER_JUDGE_USD = 0.005
 
 
 class _CandidateProtocol(Protocol):
@@ -87,16 +105,25 @@ class VerificationResult:
     but not all of the claim. Stages 1 and 2 always emit
     ``partial=False`` because they are exact-content stages — a
     partial match is, by their definition, no match.
+
+    M2-D1 added ``tier_envelope``: Stage 4 (ensemble) records the
+    maximum (weakest) inference tier across the judge models that
+    ran. Stages 1-3 are single-tier and emit ``tier_envelope=None``.
+    The persistence layer copies it onto
+    ``message_citations.tier_envelope``.
     """
 
     verified: bool
     method: str | None
     confidence: float | None
     partial: bool = False
+    tier_envelope: int | None = None
 
 
 # A sentinel result for misses, reused so callers don't allocate.
-_MISS = VerificationResult(verified=False, method=None, confidence=None, partial=False)
+_MISS = VerificationResult(
+    verified=False, method=None, confidence=None, partial=False, tier_envelope=None
+)
 
 # Stage 2 acceptance threshold on the rapidfuzz ratio scale (0-100).
 # 95 catches normalization-only differences (smart quotes, whitespace
@@ -364,32 +391,170 @@ def _parse_judge_response(response: Any) -> VerificationResult:
     )
 
 
+# --- Stage 4 — ensemble verification (M2-D1) ---------------------------------
+
+
+class _EnsembleConfigProtocol(Protocol):
+    """Shape :func:`verify_ensemble` reads from the ensemble config.
+
+    Production passes :class:`app.clients.gateway.EnsembleConfig` (a
+    frozen dataclass); tests pass an equivalent stub. Declared via
+    ``@property`` so frozen-dataclass read-only attributes match the
+    Protocol structurally (a plain attribute declaration would mark
+    the field as settable, which a frozen dataclass cannot satisfy).
+
+    ``judge_models`` is the list of aliases the gateway can resolve,
+    ``aggregation_rule`` selects strict vs majority, and
+    ``envelope_tier`` is the server-computed max tier across the
+    configured judge models (persisted on the citation row).
+    """
+
+    @property
+    def judge_models(self) -> tuple[str, ...]: ...
+
+    @property
+    def aggregation_rule(self) -> Literal["strict", "majority"]: ...
+
+    @property
+    def envelope_tier(self) -> int | None: ...
+
+
+async def verify_ensemble(
+    candidate: _CandidateProtocol,
+    document: _DocumentProtocol,
+    *,
+    gateway: _JudgeGatewayProtocol,
+    ensemble_config: _EnsembleConfigProtocol,
+) -> VerificationResult:
+    """Stage 4: run the paraphrase judge in parallel across N models.
+
+    Dispatches one :func:`verify_paraphrase` call per model in
+    ``ensemble_config.judge_models``, awaits all in parallel, and
+    aggregates verdicts under the configured rule:
+
+    * ``strict``: every judge must verdict verified (``yes`` or
+      ``partial``). Any miss → MISS. Persist as
+      ``'ensemble_strict'``; ``partial=true`` iff *any* judge said
+      partial (caller still sees a verified row, the partial flag
+      surfaces "some disagreement under the strict rule").
+    * ``majority``: simple majority of verified verdicts wins.
+      Ties (n=2 with one yes, one no) miss conservatively. Persist
+      as ``'ensemble_majority'``; ``partial=true`` iff *any*
+      verified judge said partial OR if any judge disagreed at all
+      (the "Models disagreed: K of N verified" tooltip case from
+      the M2-D1 spec).
+
+    The persisted confidence is the mean of the verified judges'
+    confidences (0.0 when no judges verified). ``tier_envelope`` is
+    set from ``ensemble_config.envelope_tier`` regardless of outcome
+    — the privacy exposure is the same whether the ensemble agreed.
+
+    Judge call failures (gateway error, malformed JSON) count as a
+    miss for that judge. An ensemble where most judges errored may
+    still produce a verified result under the majority rule with the
+    surviving verdicts — but with low confidence the UI's yellow
+    tooltip flags the disagreement.
+    """
+
+    if not ensemble_config.judge_models:
+        return _MISS
+
+    claim = candidate.source_text
+    if not claim:
+        return _MISS
+    if _source_chunk_with_context(candidate, document) is None:
+        return _MISS
+
+    verdicts = await asyncio.gather(
+        *[
+            verify_paraphrase(candidate, document, gateway=gateway, judge_model=model)
+            for model in ensemble_config.judge_models
+        ],
+        return_exceptions=False,
+    )
+
+    n_total = len(verdicts)
+    verified_verdicts = [v for v in verdicts if v.verified]
+    n_verified = len(verified_verdicts)
+
+    rule = ensemble_config.aggregation_rule
+    method = "ensemble_strict" if rule == "strict" else "ensemble_majority"
+
+    if rule == "strict":
+        if n_verified < n_total:
+            return _MISS
+        # All judges verified. Partial = any judge said partial.
+        partial = any(v.partial for v in verified_verdicts)
+    else:
+        # Majority: strict majority (> n/2). Even-N ties miss; we
+        # surface those rather than picking a side.
+        if n_verified * 2 <= n_total:
+            return _MISS
+        # Verified under majority. Partial flag = any judge said
+        # partial OR any judge dissented (per the M2-D1 spec's
+        # "disagreement is the yellow case" rendering).
+        any_dissent = n_verified < n_total
+        any_partial = any(v.partial for v in verified_verdicts)
+        partial = any_dissent or any_partial
+
+    mean_confidence = (
+        sum(v.confidence or 0.0 for v in verified_verdicts) / n_verified if n_verified else 0.0
+    )
+
+    return VerificationResult(
+        verified=True,
+        method=method,
+        confidence=mean_confidence,
+        partial=partial,
+        tier_envelope=ensemble_config.envelope_tier,
+    )
+
+
+# --- Cascade router ----------------------------------------------------------
+
+
 async def verify(
     candidate: _CandidateProtocol,
     document: _DocumentProtocol,
     *,
     gateway: _JudgeGatewayProtocol | None = None,
     judge_model: str = "fast",
+    ensemble_config: _EnsembleConfigProtocol | None = None,
 ) -> VerificationResult:
     """Run the verification cascade and return the first hit.
 
-    Order: Stage 1 (exact-match) → Stage 2 (tolerant-match) → Stage 3
-    (paraphrase judge). Returns :data:`_MISS` only when every stage
-    has rejected the candidate.
+    Order:
 
-    Stage 3 only runs when ``gateway`` is supplied. Callers without
-    an LLM (smoke tests, eval scripts that exercise only the
-    deterministic stages) pass ``gateway=None``; the cascade then
-    runs Stages 1+2 only and short-circuits to MISS if both miss.
+    * Stage 1 (exact-match) — pure Python; always runs.
+    * Stage 2 (tolerant-match) — pure Python; always runs on Stage 1
+      miss.
+    * When ``ensemble_config`` is supplied — **Stage 4 (ensemble)**
+      replaces Stage 3 (per M2-D1 decision B: ensemble replaces the
+      single-judge stage when activated).
+    * Otherwise — Stage 3 (single paraphrase judge).
+
+    Returns :data:`_MISS` only when every routed stage has rejected
+    the candidate.
+
+    Stages 3 and 4 only run when ``gateway`` is supplied. Callers
+    without an LLM (smoke tests, eval scripts that exercise only the
+    deterministic stages) pass ``gateway=None`` and the cascade
+    short-circuits to MISS after Stages 1+2.
 
     ``judge_model`` is the alias the gateway resolves for the Stage 3
     judge call. Default ``"fast"`` matches ``gateway.yaml.example``'s
     ``citation_engine.judge_model``; the chat-send caller passes the
-    value it pulled from ``GatewayClient.get_citation_engine_judge_model``.
+    value it pulled from
+    ``GatewayClient.get_citation_engine_judge_model``. Ignored when
+    ``ensemble_config`` is supplied (Stage 4 dispatches its own
+    per-judge aliases).
 
-    Made async in M2-C1: Stages 1 and 2 are still pure Python and run
-    synchronously inside the function; the ``async def`` is for
-    Stage 3's gateway call.
+    ``ensemble_config`` is the resolved Stage 4 config (from
+    ``GatewayClient.get_citation_engine_ensemble_config``). The
+    chat-send caller passes it for messages where ensemble has been
+    activated by skill / project / gateway default AND the per-message
+    cost-budget check passed. When the budget check fails the caller
+    drops the kwarg, falling the cascade back to Stage 3.
     """
 
     result = verify_exact_match(candidate, document)
@@ -402,5 +567,13 @@ async def verify(
 
     if gateway is None:
         return _MISS
+
+    if ensemble_config is not None:
+        return await verify_ensemble(
+            candidate,
+            document,
+            gateway=gateway,
+            ensemble_config=ensemble_config,
+        )
 
     return await verify_paraphrase(candidate, document, gateway=gateway, judge_model=judge_model)
