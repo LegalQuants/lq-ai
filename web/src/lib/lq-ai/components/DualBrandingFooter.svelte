@@ -16,7 +16,7 @@
 	data-testid="lq-ai-dual-branding-footer"
 >
 	<span>
-		<strong>LQ.AI</strong> — open-source legal AI for in-house teams.
+		<strong>LQ.AI</strong> — Open-Source Legal AI
 	</span>
 	<span>
 		Web shell powered by
