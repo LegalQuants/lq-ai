@@ -141,6 +141,98 @@ class GatewayClient:
 
         return self._client
 
+    # --- Citation engine config (M2-C1) -------------------------------------
+
+    _citation_engine_judge_model: str | None = None
+    """Process-cached judge model alias.
+
+    Populated on first :meth:`get_citation_engine_judge_model` call.
+    The gateway treats this config as immutable after startup
+    (``gateway.yaml`` is loaded once on lifespan); the api/ caches
+    the value for the same lifespan so we don't pay the round-trip
+    on every Stage 3 invocation. A gateway restart-then-api restart
+    is the deployment story for changing the alias.
+    """
+
+    async def get_citation_engine_judge_model(
+        self,
+        *,
+        fallback: str = "fast",
+    ) -> str:
+        """Fetch the configured judge model alias from the gateway.
+
+        Calls ``GET /v1/citation-engine/config`` once per process and
+        caches the result. On any failure (network, non-200, malformed
+        body) returns ``fallback`` — a missing config endpoint must not
+        crash the Citation Engine; Stage 3 silently degrades to the
+        default model.
+
+        Returns:
+            The configured ``judge_model`` (an alias the gateway can
+            resolve), or ``fallback`` when the lookup failed.
+        """
+
+        if self._citation_engine_judge_model is not None:
+            return self._citation_engine_judge_model
+
+        try:
+            response = await self._client.get(
+                "/v1/citation-engine/config",
+                timeout=5.0,
+            )
+        except Exception as exc:
+            # Catch broadly: the judge-model lookup is best-effort
+            # (the Stage 3 cascade still works with the fallback model).
+            # We don't want a transient gateway problem — or a respx
+            # test scenario that doesn't mock this endpoint — to crash
+            # the chat-send pipeline. Production callers see network,
+            # DNS, TLS, asyncio cancellation, etc. all in this slot.
+            log.warning(
+                "citation-engine config fetch failed: %s",
+                exc,
+                extra=_structured_log_extra(
+                    op="get_citation_engine_judge_model",
+                    error_type=type(exc).__name__,
+                ),
+            )
+            return fallback
+
+        if response.status_code != 200:
+            log.warning(
+                "citation-engine config endpoint returned %s",
+                response.status_code,
+                extra=_structured_log_extra(
+                    op="get_citation_engine_judge_model",
+                    status_code=response.status_code,
+                ),
+            )
+            return fallback
+
+        try:
+            payload = response.json()
+            judge_model = str(payload["judge_model"])
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            log.warning(
+                "citation-engine config response malformed: %s",
+                exc,
+                extra=_structured_log_extra(
+                    op="get_citation_engine_judge_model",
+                    error_type=type(exc).__name__,
+                ),
+            )
+            return fallback
+
+        if not judge_model:
+            return fallback
+
+        self._citation_engine_judge_model = judge_model
+        return judge_model
+
+    def _reset_citation_engine_cache_for_tests(self) -> None:
+        """Drop the cached judge model. Tests use this to test re-fetch."""
+
+        self._citation_engine_judge_model = None
+
     # --- Health probe --------------------------------------------------------
 
     async def health_check(self) -> bool:

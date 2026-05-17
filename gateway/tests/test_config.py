@@ -123,6 +123,12 @@ def test_load_config_parses_example(example_env: None) -> None:
     # would raise rather than silently passthrough.
     assert all(isinstance(t, int) for t in config.anonymization.apply_at_tiers)
 
+    # M2-C1: Citation Engine block. ``judge_model`` defaults to ``fast``
+    # so Stage 3's paraphrase judge runs on a smaller model than the
+    # citation-generating model. The api/ pulls this value over the
+    # ``/v1/citation-engine/config`` endpoint at startup.
+    assert config.citation_engine.judge_model == "fast"
+
 
 @pytest.mark.unit
 def test_anonymization_config_rejects_non_int_tiers() -> None:
@@ -142,6 +148,28 @@ def test_anonymization_config_rejects_non_int_tiers() -> None:
         AnonymizationConfig(apply_at_tiers=[0, 1])
     with pytest.raises(ValidationError):
         AnonymizationConfig(apply_at_tiers=[1, 6])
+
+
+@pytest.mark.unit
+def test_citation_engine_config_default_is_fast() -> None:
+    """An omitted ``citation_engine:`` block still yields the sensible default."""
+
+    from app.config import CitationEngineConfig
+
+    assert CitationEngineConfig().judge_model == "fast"
+    assert CitationEngineConfig(judge_model="smart").judge_model == "smart"
+
+
+@pytest.mark.unit
+def test_citation_engine_config_rejects_empty_judge_model() -> None:
+    """``judge_model`` must be a non-empty string."""
+
+    from pydantic import ValidationError
+
+    from app.config import CitationEngineConfig
+
+    with pytest.raises(ValidationError):
+        CitationEngineConfig(judge_model="")
 
 
 @pytest.mark.unit

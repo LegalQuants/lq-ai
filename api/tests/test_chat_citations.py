@@ -605,3 +605,176 @@ async def test_chat_send_out_of_range_source_writes_no_citation(
 
     rows = (await db_session.execute(select(MessageCitation))).scalars().all()
     assert rows == []
+
+
+# ---------------------------------------------------------------------------
+# M2-C1 — Stage 3 (paraphrase judge) catches paraphrases Stages 1+2 miss
+# ---------------------------------------------------------------------------
+
+
+def _judge_response_payload(*, verdict: str, confidence: str) -> dict[str, Any]:
+    """A chat.completion payload whose content is a judge JSON verdict."""
+
+    import json as _json
+
+    judge_content = _json.dumps(
+        {
+            "verdict": verdict,
+            "confidence": confidence,
+            "justification": "test justification",
+        }
+    )
+    return _success_payload(judge_content)
+
+
+@respx.mock
+async def test_chat_send_paraphrased_quote_verified_by_stage_3_judge(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    owner_user: User,
+    chat_with_kb_attached: Chat,
+    source_file: FileModel,
+    source_document: Document,
+    source_chunk: DocumentChunk,
+) -> None:
+    """Paraphrased quote misses Stages 1+2; Stage 3 judge says 'yes/high' → verified.
+
+    Wire path: the gateway client makes two calls per message —
+    (a) the assistant chat completion, then
+    (b) the Stage 3 judge chat completion when Stages 1+2 miss.
+    Both hit ``/v1/chat/completions``; we sequence the responses with
+    respx ``side_effect``.
+    """
+
+    paraphrase = "the employee may not engage in any competing business"
+    assert paraphrase not in source_chunk.content  # genuine paraphrase
+
+    assistant_text = f'The agreement says "{paraphrase}" (Source: [1]).'
+
+    respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(
+        side_effect=[
+            httpx.Response(200, json=_success_payload(assistant_text)),
+            httpx.Response(200, json=_judge_response_payload(verdict="yes", confidence="high")),
+        ]
+    )
+
+    with patch(
+        "app.api.chats.hybrid_search",
+        new=AsyncMock(
+            return_value=[_hybrid_result_for(source_chunk, source_document, source_file)]
+        ),
+    ):
+        response = await client.post(
+            f"/api/v1/chats/{chat_with_kb_attached.id}/messages",
+            json={"content": "Quote the non-compete clause.", "model": "smart"},
+            headers=_h(owner_user),
+        )
+
+    assert response.status_code == 200, response.text
+
+    rows = (
+        (
+            await db_session.execute(
+                select(MessageCitation).where(MessageCitation.source_file_id == source_file.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    assert len(rows) == 1
+    cite = rows[0]
+    assert cite.verified is True
+    assert cite.verification_method == "paraphrase_judge"
+    assert cite.verification_confidence is not None
+    assert float(cite.verification_confidence) == pytest.approx(0.90)
+    assert cite.partial is False
+    assert cite.source_text == paraphrase
+
+
+@respx.mock
+async def test_chat_send_partial_verdict_persists_with_partial_true(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    owner_user: User,
+    chat_with_kb_attached: Chat,
+    source_file: FileModel,
+    source_document: Document,
+    source_chunk: DocumentChunk,
+) -> None:
+    """'partial' verdict persists as verified=True, partial=True (M2-C2 UI flag)."""
+
+    paraphrase = "the employee may not engage in any competing business"
+    assistant_text = f'The agreement says "{paraphrase}" (Source: [1]).'
+
+    respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(
+        side_effect=[
+            httpx.Response(200, json=_success_payload(assistant_text)),
+            httpx.Response(
+                200,
+                json=_judge_response_payload(verdict="partial", confidence="medium"),
+            ),
+        ]
+    )
+
+    with patch(
+        "app.api.chats.hybrid_search",
+        new=AsyncMock(
+            return_value=[_hybrid_result_for(source_chunk, source_document, source_file)]
+        ),
+    ):
+        response = await client.post(
+            f"/api/v1/chats/{chat_with_kb_attached.id}/messages",
+            json={"content": "Quote the non-compete clause.", "model": "smart"},
+            headers=_h(owner_user),
+        )
+
+    assert response.status_code == 200, response.text
+
+    rows = (await db_session.execute(select(MessageCitation))).scalars().all()
+    assert len(rows) == 1
+    cite = rows[0]
+    assert cite.verified is True
+    assert cite.partial is True
+    assert cite.verification_method == "paraphrase_judge"
+    assert float(cite.verification_confidence or 0) == pytest.approx(0.70)
+
+
+@respx.mock
+async def test_chat_send_judge_says_no_writes_no_citation(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    owner_user: User,
+    chat_with_kb_attached: Chat,
+    source_file: FileModel,
+    source_document: Document,
+    source_chunk: DocumentChunk,
+) -> None:
+    """'no' verdict → no citation row (rendered as unverified by M2-C2)."""
+
+    paraphrase = "the employee may not engage in any competing business"
+    assistant_text = f'The agreement says "{paraphrase}" (Source: [1]).'
+
+    respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(
+        side_effect=[
+            httpx.Response(200, json=_success_payload(assistant_text)),
+            httpx.Response(200, json=_judge_response_payload(verdict="no", confidence="high")),
+        ]
+    )
+
+    with patch(
+        "app.api.chats.hybrid_search",
+        new=AsyncMock(
+            return_value=[_hybrid_result_for(source_chunk, source_document, source_file)]
+        ),
+    ):
+        response = await client.post(
+            f"/api/v1/chats/{chat_with_kb_attached.id}/messages",
+            json={"content": "Quote the non-compete clause.", "model": "smart"},
+            headers=_h(owner_user),
+        )
+
+    assert response.status_code == 200, response.text
+
+    rows = (await db_session.execute(select(MessageCitation))).scalars().all()
+    assert rows == []

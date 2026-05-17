@@ -1357,6 +1357,7 @@ async def _persist_message_citations(
     message_id: uuid.UUID,
     assistant_text: str,
     retrieved_chunks: list[HybridSearchResult],
+    gateway: GatewayClient | None = None,
 ) -> None:
     """Extract, verify, and persist citations from an assistant message — M2-A2.
 
@@ -1365,14 +1366,21 @@ async def _persist_message_citations(
     (no RAG context this turn → nothing to cite) or when extraction
     finds no ``"..." (Source: [N])`` pairs.
 
-    Stage 1 (exact-match) is the only verifier wired today. Candidates
-    that fail Stage 1 are NOT persisted in M2-A2 — they'd land here
-    once Stage 2 (M2-B1) ships and routes the verifier cascade. The
-    plan's "render as unverified" UI path (M2-C2) consumes either:
+    Verifier cascade (per the M2 plan):
 
-    * verified=true rows from Stage 1 (or later stages once they ship),
-      OR
-    * the absence of any row for a quote the model emitted.
+    * Stage 1 (exact-match) — M2-A2.
+    * Stage 2 (tolerant-match) — M2-B1.
+    * Stage 3 (paraphrase judge) — M2-C1, runs only when ``gateway``
+      is supplied. The judge model is resolved via
+      :meth:`GatewayClient.get_citation_engine_judge_model` (cached
+      for the process) so the operator configures it once in
+      ``gateway.yaml`` rather than on the api/ side.
+
+    Candidates that pass any stage persist with the stage's method
+    string and confidence. Stage 3 ``partial`` verdicts persist with
+    ``verified=true, partial=true`` — the M2-C2 UI renders these as
+    "verified with caveats". Candidates that miss every stage are NOT
+    persisted; their absence is the unverified signal the UI consumes.
     """
 
     if not retrieved_chunks:
@@ -1389,6 +1397,13 @@ async def _persist_message_citations(
     doc_rows = (await db.execute(select(Document).where(Document.id.in_(doc_ids)))).scalars().all()
     docs_by_id = {d.id: d for d in doc_rows}
 
+    # M2-C1: resolve the Stage 3 judge model once per persist call.
+    # The lookup is process-cached on the GatewayClient, so the per-
+    # request cost is one Python-dict read after the first call.
+    judge_model = "fast"
+    if gateway is not None:
+        judge_model = await gateway.get_citation_engine_judge_model()
+
     new_rows: list[MessageCitation] = []
     for cand in candidates:
         doc = docs_by_id.get(cand.source_document_id)
@@ -1398,12 +1413,12 @@ async def _persist_message_citations(
             # would reject anyway.
             continue
 
-        result = verify(cand, doc)
+        result = await verify(cand, doc, gateway=gateway, judge_model=judge_model)
         if not result.verified:
-            # Every wired stage (currently 1 + 2) rejected the
-            # candidate. Drop until Stages 3-4 (LLM judge / ensemble)
-            # land in M2-C1 / M2-D1; those plug into the same
-            # ``verify()`` cascade.
+            # Every wired stage rejected the candidate. M2-C2's UI
+            # consumes the *absence* of a row as the unverified
+            # signal — no DB row for an emitted quote means "we
+            # couldn't verify it; render as unverified."
             continue
 
         new_rows.append(
@@ -1417,6 +1432,7 @@ async def _persist_message_citations(
                 verified=True,
                 verification_method=result.method,
                 verification_confidence=result.confidence,
+                partial=result.partial,
             )
         )
 
@@ -1626,13 +1642,16 @@ async def _non_streaming_response(
         error_code=None,
     )
 
-    # M2-A2: extract + verify + persist citations from the assistant
-    # response. No-op when no chunks were retrieved this turn.
+    # M2-A2 / M2-B1 / M2-C1: extract + verify + persist citations from
+    # the assistant response. The verifier cascade is Stage 1
+    # (exact-match) → Stage 2 (tolerant-match) → Stage 3 (paraphrase
+    # judge through the gateway). No-op when no chunks were retrieved.
     await _persist_message_citations(
         db,
         message_id=assistant_message_id,
         assistant_text=assistant_text,
         retrieved_chunks=retrieved_chunks or [],
+        gateway=gateway,
     )
 
     await _audit_message_sent(
@@ -1794,6 +1813,7 @@ async def _stream_response(
                         message_id=assistant_message_id,
                         assistant_text="".join(accumulated),
                         retrieved_chunks=retrieved_chunks or [],
+                        gateway=gateway,
                     )
                 except Exception as cite_exc:
                     log.warning(
