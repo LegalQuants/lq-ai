@@ -196,7 +196,15 @@ Severity-tagged findings with citations. For the sample NDA, expect:
 
 A few things to notice about the output:
 
-**Citations resolve.** Click any "[Section X]" reference and the citation engine highlights the cited language in the source document. This is character-fidelity citation — the skill is not paraphrasing what Section 4 says; it's pointing at the exact words.
+**Citations are visibly verified.** Every `"<quote>" (Source: [N])` the skill emits is run through the Citation Engine and rendered with a color-coded visual state in the chat surface (M2-C2):
+
+- **Green check + green underline** — verified verbatim against the source (exact match) or verified after minor formatting normalization (tolerant match). The model quoted the source faithfully.
+- **Yellow check + yellow underline** — verified by the paraphrase judge. The source supports the claim, possibly with caveats; hover the citation chip for the judge's confidence and partial-support framing.
+- **Greyed text + `[unverified]` marker** — the Citation Engine could not match the model's quote to a retrieved chunk. Treat as unverified; the model may have produced a claim that doesn't follow from the cited content.
+
+The visual treatment is deliberate: scrolling the report, a reviewer should be able to spot unverified citations without reading the tooltips. Procurement reviews and document-review work both benefit from being able to quickly distinguish citations the system stands behind from ones it does not. A fifth `system-error` state (yellow warning) is reserved for a future release when the Citation Engine surfaces verification-pipeline errors as their own signal (M2-D).
+
+Click-through-to-source-viewer (highlighting the cited span in the source document) is on the roadmap for M2-D2; the M2-C2 surface ships the visual contract and the data plumbing it builds on.
 
 **Severity tags follow the rubric.** Critical / Material / Minor — the [Skill-Authoring Guide](skill-authoring-guide.md#severity-rubric-for-review-skills) documents the calibration. None of the issues in the sample NDA rise to "Critical" because the sample is calibrated to be *plausibly real, with material issues*, not catastrophic.
 

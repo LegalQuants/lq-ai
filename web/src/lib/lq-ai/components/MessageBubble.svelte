@@ -18,11 +18,14 @@
 	import { marked } from 'marked';
 
 	import { captureAffordanceInline } from '$lib/lq-ai/preferences/capture-affordance';
+	import { citationsApi, LQAIApiError } from '$lib/lq-ai/api';
+	import { decorateCitationsInline } from '$lib/lq-ai/citations/decorate-inline';
 
-	import type { Message } from '../types';
+	import type { Citation, Message } from '../types';
 	import AppliedSkillsChip from './AppliedSkillsChip.svelte';
 	import CaptureSkillModal from './CaptureSkillModal.svelte';
 	import EnhancedDiffModal from './EnhancedDiffModal.svelte';
+	import M2Citations from './M2Citations.svelte';
 	import MessageOverflowMenu from './MessageOverflowMenu.svelte';
 	import ProvenancePill from './ProvenancePill.svelte';
 	import RefusalMessageBubble from './RefusalMessageBubble.svelte';
@@ -72,6 +75,45 @@
 	// handles teardown.
 	let captureOpen = false;
 
+	// M2-C2 — Citation Engine UI. Lazy-fetch per-message citations from
+	// `GET /messages/{id}/citations` once the assistant message has
+	// finished streaming (Decision B). `fetchedCitations === null` means
+	// "not yet fetched"; `[]` means "fetched, no rows". The decorator and
+	// the sidecar chip list both consume this array. DE-275 captures the
+	// future option to embed citations in the message envelope and skip
+	// this round-trip entirely.
+	let fetchedCitations: Citation[] | null = null;
+	let citationFetchInflight = false;
+
+	async function loadCitations(chatId: string, messageId: string): Promise<void> {
+		citationFetchInflight = true;
+		try {
+			fetchedCitations = await citationsApi.getMessageCitations(chatId, messageId);
+		} catch (err) {
+			// Degrade gracefully — a 404 here just means no rows have been
+			// persisted for this message yet (skills that don't cite, or
+			// pre-M2 historical messages). Anything else is logged but the
+			// bubble keeps rendering its content cleanly.
+			if (!(err instanceof LQAIApiError) || err.status !== 404) {
+				console.warn('[M2-C2] failed to load citations', err);
+			}
+			fetchedCitations = [];
+		} finally {
+			citationFetchInflight = false;
+		}
+	}
+
+	$: if (
+		message.role === 'assistant' &&
+		message.id &&
+		message.chat_id &&
+		!isStreaming &&
+		fetchedCitations === null &&
+		!citationFetchInflight
+	) {
+		void loadCitations(message.chat_id, message.id);
+	}
+
 	$: bubbleClasses =
 		message.role === 'user'
 			? 'bg-indigo-600 text-white self-end'
@@ -105,6 +147,10 @@
 			<div
 				class="prose prose-sm dark:prose-invert max-w-none"
 				data-testid="lq-ai-message-content"
+				use:decorateCitationsInline={{
+					citations: fetchedCitations ?? [],
+					enabled: !isStreaming
+				}}
 			>
 				{@html rendered}
 			</div>
@@ -208,15 +254,20 @@
 		{/if}
 
 		<!--
-			Citations footer intentionally omitted when the array is empty —
-			the placeholder text leaked the M1/M2 internal vocabulary to
-			users. The real citation engine lands in a future release; until
-			then we render nothing rather than telegraph a roadmap.
+			M2-C2 — Citation Engine sidecar chip list. Renders one chip per
+			`"<quote>" (Source: [N])` marker the assistant emitted, joined
+			to its persisted MessageCitation row. Markers without a row are
+			the unverified signal (per `_persist_message_citations` in
+			api/app/api/chats.py). The component returns nothing when the
+			message has no citation markers — older skills + non-RAG turns
+			stay visually unchanged.
 		-->
-		{#if message.citations && message.citations.length > 0}
-			<div class="mt-1 text-xs text-gray-500" data-testid="lq-ai-message-citations">
-				{message.citations.length}
-				{message.citations.length === 1 ? 'citation' : 'citations'}
+		{#if fetchedCitations !== null}
+			<div data-testid="lq-ai-message-citations">
+				<M2Citations
+					citations={fetchedCitations}
+					messageContent={message.content}
+				/>
 			</div>
 		{/if}
 	{/if}

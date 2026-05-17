@@ -364,7 +364,7 @@ A few elements are intentionally omitted from the main diagram for readability; 
 - **Internal observability between components** — every service emits OpenTelemetry traces; the diagram shows the OTel sink rather than every individual instrumentation point.
 - **Database migrations and schema management** — Alembic for the FastAPI backend, similar in the gateway. Operational detail, not architecture.
 - **Container orchestration** (Docker Compose for development, Helm for Kubernetes production) — deployment topology rather than runtime architecture.
-- **Citation Engine internals** — within the Document Pipeline service, the Citation Engine is a multi-stage process (structured generation → deterministic substring verification → LLM-judge verification → side-panel rendering). [PRD §3.3](PRD.md#33-citation-engine-exact-quote) covers it in detail.
+- **Citation Engine internals** — within the Document Pipeline service, the Citation Engine is a multi-stage process (structured generation → deterministic substring verification → tolerant-match verification → paraphrase-judge verification → side-panel rendering). The chat surface renders each emitted citation in one of five visual states (M2-C2): verified-exact and verified-tolerant (both green), verified-paraphrase (yellow), unverified (greyed text + `[unverified]` marker), and system-error (yellow warning; deferred to M2-D when the pipeline emits the signal). The visual contract is load-bearing for procurement review — a reviewer scanning the report should be able to identify unverified citations without reading the tooltips. [PRD §3.3](PRD.md#33-citation-engine-exact-quote) covers the engine internals in detail.
 
 ---
 
