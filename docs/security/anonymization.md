@@ -170,9 +170,37 @@ Every routed request writes one row to `inference_routing_log`. The middleware s
 
 Per **Decision A** and **Decision B (i)** locked in M2-B3 kickoff: a fresh `PseudonymMapper` is constructed inside the request scope, populated by the pre-pass, read by the post-pass, and dropped on function exit. **It is never persisted, never logged, and never serialized to any side channel.** A new request gets a new mapper; counters reset every time.
 
-### Privileged chats — why we skip
+### Privileged chats — why we skip (M2-B3 + M2-D3)
 
 The privileged-Project skip (Decision A) is a deliberate trade-off. Privileged chats are work product the attorney-client privilege protects; replacing names with pseudonyms before the model sees them — even with the rehydration on the way back — risks corrupting that work product if any step in the pipeline behaves unexpectedly. The conservative posture is to leave privileged content untouched. Operators who want pseudonymization in privileged chats can flip `lq_ai_privileged` off at the api/ layer per chat, but the default protects the legal-work-product invariant.
+
+**The intended posture for privileged content is Tier 1 (local).** Privileged matters are best handled by local-only inference (per PRD §1.5.2: "no outbound network is required; customer data, prompts, and model outputs never leave the deployment") — that's the only path where the substitution layer's behavior is structurally irrelevant because no upstream provider ever sees the content in the first place. Operators configuring a privileged project typically pair `privileged=true` with `minimum_inference_tier=1` so the tier-floor enforcement refuses any routing weaker than local. Where local capacity is insufficient and the operator must use a Tier-2 (ZDR enterprise) upstream, the anonymization skip means privileged content reaches the provider verbatim — the operator's procurement / DPA terms with that provider are the binding control at that point.
+
+**Why anonymization complicates privilege analysis.** Pseudonymization rewrites identifying terms (names, organizations, matter numbers, case numbers) before the model sees them. For non-privileged content this is a privacy boost: the operator sends `"PERSON_0001 v COMPANY_0001"` to the provider instead of `"Smith v Acme"`. For privileged content the same transform creates two correctness risks:
+
+1. **Substitution errors corrupt the privileged work product.** If Presidio misidentifies an entity (false-positive on a non-name token; false-negative on a non-standard name format), the rehydrator either over-restores or leaves a fragment unrestored. For ordinary content this is a minor annoyance; for privileged work product the corruption may render the work less useful as a referenceable artifact and may complicate later assertion of privilege over the artifact's contents.
+2. **The substitution itself may be discoverable.** In a future-litigation context where the operator must assert privilege over the AI-assisted work product, the existence of a rewritten-then-restored intermediate version (even if never persisted) is one more piece of context opposing counsel can probe. Keeping the content unsubstituted means there is exactly one version of the work product — the original — at every stage.
+
+**Audit-log shape for privileged-project chats** (per M2-D3 verification):
+
+| Table | Column | Value for privileged-project chat |
+|---|---|---|
+| `audit_log` (api/) | `privilege_marked` | `true` |
+| `audit_log` (api/) | `privilege_basis` | `"project:<project name>"` |
+| `audit_log` (api/) | `routed_inference_tier` | actual routed tier (typically 1 or 2 per the project's `minimum_inference_tier`) |
+| `inference_routing_log` (gateway) | `anonymization_applied` | `false` |
+| `inference_routing_log` (gateway) | `routed_inference_tier` | same value; cross-table consistency for joins |
+
+The privilege fields on `audit_log` are first-class columns (per `docs/db-schema.md`) so audit queries can filter on privilege without descending into JSONB. Operators reviewing the audit trail for compliance evidence query `audit_log WHERE privilege_marked = true` to surface every action on privileged-project content; cross-referenced to `inference_routing_log` via `request_id`, they get the full pipeline view including which provider/model handled each request.
+
+**Combination invariant** ("privileged + Tier 1"): a privileged project with `minimum_inference_tier=1` produces fully sealed inference — local Ollama dispatches the request, no outbound network, no anonymization rewriting, audit row captures the local routing. This is the recommended posture for sensitive privileged matters; the configuration is enforced at the gateway's tier-floor layer (PRD §4.4) so a misrouted attempt to a Tier-3+ provider returns HTTP 403 with `tier_below_minimum` rather than silently downgrading the privacy posture.
+
+Pinning tests:
+
+- `gateway/tests/test_inference_anonymization.py::test_privileged_request_skips_middleware` — gateway middleware honors `lq_ai_privileged=True`; provider receives un-pseudonymized content; `routing_log.anonymization_applied=false`.
+- `api/tests/test_chat_citations.py::test_chat_send_privileged_project_full_audit_trail` — api/ forwards `lq_ai_privileged=True` + tier floor on the gateway request; `audit_log` row has `privilege_marked=true` + `privilege_basis` containing the project name; Citation Engine still operates normally for privileged chats.
+
+Procurement-readiness: see [`docs/procurement/sig-lite.md`](../procurement/sig-lite.md) for the privileged-project-relevant SIG Lite responses.
 
 ### Retrieval-context skip (M2-D2)
 

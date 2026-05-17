@@ -10,7 +10,7 @@ The Procurement-Readiness Pack is the project's contribution to that work: pre-f
 
 | Document | Status | Description |
 |---|---|---|
-| `sig-lite.md` | TBD ([DE-086](../PRD.md#de-086--procurement-readiness-pack)) | Pre-filled SIG Lite questionnaire calibrated to the typical LQ.AI deployment. |
+| [`sig-lite.md`](sig-lite.md) | **Starter (M2-D3)** — privileged-matter handling only; full pack [DE-086](../PRD.md#de-086--procurement-readiness-pack) | Pre-filled SIG Lite responses calibrated to the typical LQ.AI deployment. The M2-D3 starter covers the data-protection + audit questions whose answers depend on the privileged-project handling; community contributions fill in the remaining ~15 SIG Lite domains. |
 | `caiq.md` | TBD ([DE-086](../PRD.md#de-086--procurement-readiness-pack)) | Pre-filled CAIQ Lite questionnaire mapped to CSA Cloud Controls Matrix. |
 | `cover-letter.md` | TBD | Sample cover letter the operator can adapt for their procurement team — explains what LQ.AI is, why it's an unusual procurement (self-hosted open source rather than SaaS), and points at relevant artifacts. |
 | `aup-soc-template.md` | Future | Template Acceptable Use Policy and Statement of Operational Controls the operator can adapt for their internal AI-governance program. |

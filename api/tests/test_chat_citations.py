@@ -914,3 +914,184 @@ async def test_chat_send_marks_retrieval_context_skip_anonymization(
         assert msg.get("lq_ai_skip_anonymization", False) is False, (
             "user turn must not opt out of anonymization"
         )
+
+
+# ---------------------------------------------------------------------------
+# M2-D3 — Privileged-project handling (verification + audit trail)
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def privileged_project_for_owner(db_session: AsyncSession, owner_user: User) -> Project:
+    """A privileged project — anonymization middleware skips its chats.
+
+    The CHECK ``chk_projects_privileged_implies_tier`` requires a
+    non-NULL ``minimum_inference_tier`` when ``privileged=True``;
+    Tier 2 is the typical posture for privileged matters per PRD §5.3
+    (local Tier 1 preferred where possible; Tier 2 allows enterprise-
+    ZDR upstreams when local capacity is insufficient).
+    """
+
+    project = Project(
+        owner_id=owner_user.id,
+        name="Privileged matter (Smith v Acme)",
+        slug=f"privileged-{uuid.uuid4().hex[:8]}",
+        privileged=True,
+        minimum_inference_tier=2,
+    )
+    db_session.add(project)
+    await db_session.flush()
+    return project
+
+
+@pytest_asyncio.fixture
+async def privileged_chat_with_kb(
+    db_session: AsyncSession,
+    owner_user: User,
+    privileged_project_for_owner: Project,
+    kb_for_owner: KnowledgeBase,
+) -> Chat:
+    """A chat inside a privileged project, with a KB attached.
+
+    Combines the M2-D3 privileged-handling path with the Citation
+    Engine retrieval path so a single end-to-end test can pin both
+    behaviors at once.
+    """
+
+    junction = ProjectKnowledgeBase(
+        project_id=privileged_project_for_owner.id,
+        knowledge_base_id=kb_for_owner.id,
+    )
+    db_session.add(junction)
+    chat = Chat(
+        owner_id=owner_user.id,
+        project_id=privileged_project_for_owner.id,
+        title="privileged-chat-test",
+    )
+    db_session.add(chat)
+    await db_session.flush()
+    return chat
+
+
+@respx.mock
+async def test_chat_send_privileged_project_full_audit_trail(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    owner_user: User,
+    privileged_project_for_owner: Project,
+    privileged_chat_with_kb: Chat,
+    source_file: FileModel,
+    source_document: Document,
+    source_chunk: DocumentChunk,
+) -> None:
+    """M2-D3: a chat in a privileged project produces a clean audit trail.
+
+    Three invariants pinned by this test:
+
+    1. **Gateway request carries the privilege signal.** The api/
+       reads ``Project.privileged`` and forwards
+       ``lq_ai_privileged=True`` + ``lq_ai_project_minimum_inference_tier=2``
+       so the gateway middleware can skip pseudonymization and the
+       tier-floor enforcement applies.
+    2. **audit_log row marks the action privileged.** The
+       ``audit_action`` helper resolves the project's privilege flag
+       and writes ``privilege_marked=True`` + ``privilege_basis``
+       containing the project name on the ``chat.message_sent`` row.
+    3. **Citation Engine operates normally.** No special path for
+       privileged projects on the citation verification side; the
+       verbatim quote is verified and persisted exactly as for a
+       non-privileged chat.
+
+    The gateway-side invariants (middleware skip + provider receives
+    un-pseudonymized content + ``routing_log.anonymization_applied=False``)
+    are covered by ``gateway/tests/test_inference_anonymization.py::
+    test_privileged_request_skips_middleware``; this test pins the
+    api-side contract feeding into that gateway behavior.
+    """
+
+    import json as _stdlib_json
+
+    quote = "the employee shall not engage in any competing business"
+    assert quote in source_chunk.content
+    assistant_text = (
+        f'Per the agreement, "{quote}" (Source: [1]). This is a privileged matter context.'
+    )
+
+    captured_requests: list[dict[str, Any]] = []
+
+    def _capture(request: httpx.Request) -> httpx.Response:
+        captured_requests.append(_stdlib_json.loads(request.content))
+        return httpx.Response(200, json=_success_payload(assistant_text))
+
+    respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(side_effect=_capture)
+
+    with patch(
+        "app.api.chats.hybrid_search",
+        new=AsyncMock(
+            return_value=[_hybrid_result_for(source_chunk, source_document, source_file)]
+        ),
+    ):
+        response = await client.post(
+            f"/api/v1/chats/{privileged_chat_with_kb.id}/messages",
+            json={"content": "What does the non-compete say?", "model": "smart"},
+            headers=_h(owner_user),
+        )
+
+    assert response.status_code == 200, response.text
+    assert len(captured_requests) == 1
+    sent = captured_requests[0]
+
+    # Invariant 1: privilege signal reaches the gateway.
+    assert sent.get("lq_ai_privileged") is True, (
+        "privileged chats must forward lq_ai_privileged=True so the gateway "
+        "middleware can skip pseudonymization"
+    )
+    assert sent.get("lq_ai_project_minimum_inference_tier") == 2, (
+        "privileged projects forward their tier floor so the gateway can enforce it"
+    )
+
+    # Invariant 2: audit_log row marks the chat-message-sent action privileged.
+    from app.models.audit import AuditLog
+
+    audit_rows = (
+        (
+            await db_session.execute(
+                select(AuditLog).where(
+                    AuditLog.user_id == owner_user.id,
+                    AuditLog.action == "chat.message_sent",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(audit_rows) == 1, f"expected one chat.message_sent row, got {len(audit_rows)}"
+    row = audit_rows[0]
+    assert row.privilege_marked is True, "privileged-project actions must be marked"
+    assert row.privilege_basis is not None
+    assert privileged_project_for_owner.name in row.privilege_basis, (
+        f"privilege_basis should name the project; got {row.privilege_basis!r}"
+    )
+    assert row.routed_inference_tier == 3, (
+        "routed_inference_tier should mirror the gateway response's tier"
+    )
+
+    # Invariant 3: Citation Engine operates normally — no special path
+    # for privileged projects. The verbatim quote verified via Stage 1
+    # exactly as for a non-privileged chat.
+    citation_rows = (
+        (
+            await db_session.execute(
+                select(MessageCitation).where(MessageCitation.source_file_id == source_file.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(citation_rows) == 1, (
+        f"Citation Engine must operate normally for privileged chats; got {len(citation_rows)} rows"
+    )
+    cite = citation_rows[0]
+    assert cite.verified is True
+    assert cite.verification_method == "exact_match"
+    assert cite.source_text == quote
