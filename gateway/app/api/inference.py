@@ -96,6 +96,7 @@ from app.router import (
     RoutedProviderError,
     Router,
     estimate_cost,
+    resolve_alias_chain,
     synthesize_request_id,
 )
 from app.routing_log import (
@@ -902,19 +903,36 @@ async def list_models(request: Request) -> dict[str, Any]:
 
 
 @router.get("/citation-engine/config")
-async def citation_engine_config(request: Request) -> dict[str, str]:
-    """Expose the citation_engine block for the api/'s Citation Engine (M2-C1).
+async def citation_engine_config(request: Request) -> dict[str, Any]:
+    """Expose the citation_engine block for the api/'s Citation Engine (M2-C1 / M2-D1).
 
-    The api/ runs Stage 3 (LLM paraphrase judge) of the Citation
-    Engine cascade and reads the judge-model alias from this endpoint
-    at startup so the operator configures model choices in one place
-    (``gateway.yaml``) rather than mirroring them on the api/ side.
+    The api/ runs Stage 3 (LLM paraphrase judge) and Stage 4 (ensemble)
+    of the Citation Engine cascade and reads its configuration from
+    this endpoint at startup so the operator configures model choices
+    in one place (``gateway.yaml``) rather than mirroring them on the
+    api/ side.
 
-    Response shape:
+    Response shape (M2-D1):
 
     .. code-block:: json
 
-       {"judge_model": "fast"}
+       {
+         "judge_model": "fast",
+         "ensemble_verification": {
+           "default_enabled": false,
+           "judge_models": ["fast", "smart"],
+           "aggregation_rule": "strict",
+           "max_cost_per_message_usd": 0.05,
+           "envelope_tier": 3
+         }
+       }
+
+    ``ensemble_verification.envelope_tier`` is server-computed as
+    ``max(routed_inference_tier for each judge_model)`` using the
+    primary target of each alias (fallbacks could route weaker at
+    runtime, but the primary is the operator's intent; runtime
+    weakening is visible via per-call routing_log rows). NULL when
+    ``judge_models`` is empty.
 
     The api/ caches the value for the process lifetime; restarting the
     gateway after an alias change is the deployment story for now.
@@ -923,7 +941,33 @@ async def citation_engine_config(request: Request) -> dict[str, str]:
     """
 
     config = _config(request)
-    return {"judge_model": config.citation_engine.judge_model}
+    ensemble = config.citation_engine.ensemble_verification
+
+    envelope_tier: int | None = None
+    if ensemble.judge_models:
+        tiers: list[int] = []
+        for judge in ensemble.judge_models:
+            try:
+                resolved = resolve_alias_chain(requested_model=judge, config=config)
+            except ModelResolutionError:
+                # Misconfigured judge alias — skip it for envelope
+                # computation; the dispatch-time error message will
+                # surface the typo when verification actually runs.
+                continue
+            if resolved:
+                tiers.append(resolved[0].routed_inference_tier)
+        envelope_tier = max(tiers) if tiers else None
+
+    return {
+        "judge_model": config.citation_engine.judge_model,
+        "ensemble_verification": {
+            "default_enabled": ensemble.default_enabled,
+            "judge_models": list(ensemble.judge_models),
+            "aggregation_rule": ensemble.aggregation_rule,
+            "max_cost_per_message_usd": ensemble.max_cost_per_message_usd,
+            "envelope_tier": envelope_tier,
+        },
+    }
 
 
 # --- Streaming helpers --------------------------------------------------------

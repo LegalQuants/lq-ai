@@ -60,10 +60,23 @@ describe('citationRenderState', () => {
 		).toBe('verified-paraphrase');
 	});
 
-	it('ensemble → verified-tolerant (multi-stage agreement, green)', () => {
+	it('ensemble_strict → verified-paraphrase (yellow, per M2-D1 Decision F)', () => {
 		expect(
-			citationRenderState(makeCitation({ verification_method: 'ensemble' }))
-		).toBe('verified-tolerant');
+			citationRenderState(makeCitation({ verification_method: 'ensemble_strict' }))
+		).toBe('verified-paraphrase');
+	});
+
+	it('ensemble_majority → verified-paraphrase regardless of partial flag', () => {
+		expect(
+			citationRenderState(
+				makeCitation({ verification_method: 'ensemble_majority', partial: false })
+			)
+		).toBe('verified-paraphrase');
+		expect(
+			citationRenderState(
+				makeCitation({ verification_method: 'ensemble_majority', partial: true })
+			)
+		).toBe('verified-paraphrase');
 	});
 
 	it('failed → unverified', () => {
@@ -265,5 +278,54 @@ describe('citationTooltip', () => {
 		const tooltip = citationTooltip('unverified', null);
 		expect(tooltip).toContain('Could not verify');
 		expect(tooltip).toContain("doesn't follow from the cited content");
+	});
+
+	it('ensemble_strict tooltip mentions all judges agreed (M2-D1)', () => {
+		const tooltip = citationTooltip(
+			'verified-paraphrase',
+			makeCitation({
+				verification_method: 'ensemble_strict',
+				verification_confidence: 0.9
+			})
+		);
+		expect(tooltip).toContain('ensemble');
+		expect(tooltip).toContain('all judges agreed');
+	});
+
+	it('ensemble_strict tooltip with partial=true flags partial source support', () => {
+		const tooltip = citationTooltip(
+			'verified-paraphrase',
+			makeCitation({
+				verification_method: 'ensemble_strict',
+				verification_confidence: 0.9,
+				partial: true
+			})
+		);
+		expect(tooltip).toContain('all judges agreed');
+		expect(tooltip).toContain('partially supports');
+	});
+
+	it('ensemble_majority tooltip mentions majority of judges (M2-D1)', () => {
+		const tooltip = citationTooltip(
+			'verified-paraphrase',
+			makeCitation({
+				verification_method: 'ensemble_majority',
+				verification_confidence: 0.8
+			})
+		);
+		expect(tooltip).toContain('majority of judges verified');
+	});
+
+	it('ensemble_majority tooltip with partial=true flags disagreement', () => {
+		const tooltip = citationTooltip(
+			'verified-paraphrase',
+			makeCitation({
+				verification_method: 'ensemble_majority',
+				verification_confidence: 0.8,
+				partial: true
+			})
+		);
+		expect(tooltip).toContain('majority of judges verified');
+		expect(tooltip).toContain('some disagreed');
 	});
 });

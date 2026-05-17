@@ -58,6 +58,7 @@ lq_ai:
         description: ...
   output_format: report     # report | table | issues_list | redline
   minimum_inference_tier: 2 # optional; defaults to no minimum
+  ensemble_verification: true  # optional; M2-D1; default false
   use_organization_profile: true   # default true
   is_organization_profile: false   # singleton; only true on the org profile
   self_improvement: false   # default false for v1.0.0 skills
@@ -85,6 +86,7 @@ lq_ai:
 ### Optional fields
 
 - **`lq_ai.minimum_inference_tier`** — refuses to run if the chat's routed Inference Tier is below this. Use for skills that handle particularly sensitive content; default is no minimum.
+- **`lq_ai.ensemble_verification`** — when `true`, the Citation Engine runs **Stage 4 (ensemble verification)** on every citation the model produces while this skill is applied. Stage 4 dispatches the paraphrase judge in parallel across N models (configured deployment-side in `gateway.yaml`'s `citation_engine.ensemble_verification.judge_models`) and aggregates the verdicts under the operator-chosen rule (`strict` = all judges must agree; `majority` = simple majority wins). The persisted citation row carries `verification_method='ensemble_strict'` or `'ensemble_majority'` plus the maximum tier across the judge ensemble. Use for skills whose output is especially high-stakes (regulatory filings, board materials) and where multi-model agreement materially raises confidence. Default `false`. NOTE: ensemble verification implies each citation is sent to N providers; the privacy envelope is the *weakest* tier in the configured judge set (e.g., a Tier 4 commercial-cloud judge bumps the envelope to Tier 4 even if the primary judge is Tier 3 ZDR-enterprise). The `message_citations.tier_envelope` audit column captures this per row.
 - **`lq_ai.use_organization_profile`** — defaults to `true`. Set to `false` only for skills that should run independent of organization-specific context (rare).
 - **`lq_ai.is_organization_profile`** — set to `true` only for the singleton Organization Profile skill. Every other skill leaves this `false` or omits it.
 - **`lq_ai.self_improvement`** — defaults to `false` for v1.0.0 skills. Self-improvement is a deferred enhancement; v1.0.0 skills are stable artifacts under semver, not learning systems.

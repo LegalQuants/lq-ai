@@ -202,13 +202,17 @@ export interface ChatSearchResponse {
 
 /**
  * Which verification stage validated this citation. Mirrors
- * `MessageCitation.verification_method` in the backend (M2-A2 / M2-B1 / M2-C1).
+ * `MessageCitation.verification_method` in the backend (M2-A2 / M2-B1 / M2-C1 / M2-D1).
  *
  * - `exact_match` — Stage 1, byte-for-byte (M2-A2).
  * - `tolerant_match` — Stage 2, normalized-whitespace + OCR artefacts (M2-B1).
  * - `paraphrase_judge` — Stage 3, paraphrase judge (M2-C1).
  * - `llm_judge` — reserved for future LLM-based semantic-match stages.
- * - `ensemble` — Stage 4, multi-model agreement (M2-D1).
+ * - `ensemble_strict` — Stage 4 with strict aggregation: every judge
+ *   verified (M2-D1).
+ * - `ensemble_majority` — Stage 4 with majority aggregation: simple
+ *   majority of judges verified (M2-D1). `partial=true` flags
+ *   disagreement (some judges dissented) per the M2-D1 UI spec.
  * - `failed` — every stage rejected; rendered as unverified in the M2-C2 UI.
  */
 export type CitationVerificationMethod =
@@ -216,7 +220,8 @@ export type CitationVerificationMethod =
 	| 'tolerant_match'
 	| 'paraphrase_judge'
 	| 'llm_judge'
-	| 'ensemble'
+	| 'ensemble_strict'
+	| 'ensemble_majority'
 	| 'failed';
 
 export interface Citation {
@@ -235,8 +240,20 @@ export interface Citation {
 	 * M2-C1: true when the paraphrase judge returned `partial` — the source
 	 * supports the claim only partially. Drives the M2-C2 UI's "verified
 	 * with caveats" rendering. Defaults to `false` server-side.
+	 *
+	 * M2-D1 reuses the same flag for ensemble disagreement: an
+	 * `ensemble_majority` row with `partial=true` indicates at least one
+	 * judge dissented (the tooltip surfaces "Models disagreed").
 	 */
 	partial?: boolean;
+	/**
+	 * M2-D1: the maximum (weakest) inference tier across the judge
+	 * models that ran for ensemble-verified rows. Null for non-ensemble
+	 * methods. 1-5 per PRD §1.5.2. Audit-only; the UI does not gate
+	 * rendering on this value, but a future Receipts surface may
+	 * highlight ensembles that exposed citations to weaker tiers.
+	 */
+	tier_envelope?: number | null;
 	/** ISO-8601 timestamp the citation row was written. */
 	created_at?: string;
 }

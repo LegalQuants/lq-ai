@@ -232,7 +232,12 @@ class MessageCitation(Base):
     * ``'llm_judge'`` — reserved for future LLM-based verification
       stages (semantic match, claim decomposition); ``'paraphrase_judge'``
       is the tighter label for the M2-C1 paraphrase-only path.
-    * ``'ensemble'`` — Stage 4, multi-model agreement (M2-D1).
+    * ``'ensemble_strict'`` — Stage 4 with strict aggregation: every
+      configured judge model verdict'd ``"yes"`` (M2-D1).
+    * ``'ensemble_majority'`` — Stage 4 with majority aggregation:
+      the verdict that won the majority is the persisted outcome
+      (M2-D1). Disagreement persists with ``partial=true`` so the UI
+      can flag it (per M2-D1 §UI rendering).
     * ``'failed'`` — every stage rejected; rendered as unverified in
       the UI (M2-C2).
 
@@ -245,6 +250,15 @@ class MessageCitation(Base):
     the claim" from "judge says the source supports it *partially*".
     Both persist with ``verified=true``; the partial flag drives the
     M2-C2 UI's visually-distinct "verified with caveats" rendering.
+
+    ``tier_envelope`` (M2-D1) records the privacy envelope of the
+    ensemble that verified this citation — the maximum (weakest)
+    inference tier across the judge models that ran. NULL for non-
+    ensemble methods (Stages 1-3 are single-tier by construction);
+    1-5 for ensemble rows per PRD §1.5.2. Audit-only column: no
+    behavior gates on it, but operators can query to surface chats
+    whose verification reached weaker tiers than their primary
+    inference.
     """
 
     __tablename__ = "message_citations"
@@ -260,7 +274,8 @@ class MessageCitation(Base):
         CheckConstraint(
             "verification_method IS NULL OR verification_method IN "
             "('exact_match', 'tolerant_match', 'llm_judge', "
-            "'paraphrase_judge', 'ensemble', 'failed')",
+            "'paraphrase_judge', 'ensemble_strict', 'ensemble_majority', "
+            "'failed')",
             name="chk_message_citations_method_values",
         ),
         CheckConstraint(
@@ -271,6 +286,10 @@ class MessageCitation(Base):
         CheckConstraint(
             "(verified = false) OR (verification_method IS NOT NULL)",
             name="chk_message_citations_verified_has_method",
+        ),
+        CheckConstraint(
+            "tier_envelope IS NULL OR (tier_envelope BETWEEN 1 AND 5)",
+            name="chk_message_citations_tier_envelope_range",
         ),
     )
 
@@ -316,6 +335,7 @@ class MessageCitation(Base):
         nullable=False,
         server_default=text("false"),
     )
+    tier_envelope: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

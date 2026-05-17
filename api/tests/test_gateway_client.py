@@ -802,6 +802,157 @@ async def test_judge_model_failed_fetch_not_cached(client: GatewayClient) -> Non
     assert judge2 == "smart"
 
 
+# ---------------------------------------------------------------------------
+# Citation Engine ensemble-config fetch (M2-D1).
+#
+# The api/ pulls the Stage 4 ensemble config from the gateway over the
+# same GET /v1/citation-engine/config endpoint and caches it. Failure
+# modes (network, non-200, missing block, empty judge_models) return
+# None so Stage 4 silently disables — the cascade falls back to Stage 3.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_ensemble_config_fetched_from_gateway(client: GatewayClient) -> None:
+    """Happy path: full ensemble block parses into :class:`EnsembleConfig`."""
+
+    respx.get(f"{GATEWAY_BASE}/v1/citation-engine/config").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "judge_model": "fast",
+                "ensemble_verification": {
+                    "default_enabled": True,
+                    "judge_models": ["fast", "smart"],
+                    "aggregation_rule": "strict",
+                    "max_cost_per_message_usd": 0.10,
+                    "envelope_tier": 4,
+                },
+            },
+        )
+    )
+
+    cfg = await client.get_citation_engine_ensemble_config()
+
+    assert cfg is not None
+    assert cfg.default_enabled is True
+    assert cfg.judge_models == ("fast", "smart")
+    assert cfg.aggregation_rule == "strict"
+    assert cfg.max_cost_per_message_usd == 0.10
+    assert cfg.envelope_tier == 4
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_ensemble_config_caches_for_process(client: GatewayClient) -> None:
+    """Second call doesn't re-hit the gateway."""
+
+    route = respx.get(f"{GATEWAY_BASE}/v1/citation-engine/config").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "judge_model": "fast",
+                "ensemble_verification": {
+                    "default_enabled": False,
+                    "judge_models": ["fast"],
+                    "aggregation_rule": "strict",
+                    "max_cost_per_message_usd": 0.05,
+                    "envelope_tier": 3,
+                },
+            },
+        )
+    )
+
+    first = await client.get_citation_engine_ensemble_config()
+    second = await client.get_citation_engine_ensemble_config()
+
+    assert first is not None
+    assert second is not None
+    assert first == second
+    assert route.call_count == 1
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_ensemble_config_none_when_judge_models_empty(
+    client: GatewayClient,
+) -> None:
+    """An empty ``judge_models`` list disables Stage 4 entirely."""
+
+    respx.get(f"{GATEWAY_BASE}/v1/citation-engine/config").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "judge_model": "fast",
+                "ensemble_verification": {
+                    "default_enabled": True,
+                    "judge_models": [],
+                    "aggregation_rule": "strict",
+                    "max_cost_per_message_usd": 0.05,
+                    "envelope_tier": None,
+                },
+            },
+        )
+    )
+
+    cfg = await client.get_citation_engine_ensemble_config()
+
+    assert cfg is None
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_ensemble_config_none_when_block_missing(client: GatewayClient) -> None:
+    """Older gateway with no ``ensemble_verification`` block → None."""
+
+    respx.get(f"{GATEWAY_BASE}/v1/citation-engine/config").mock(
+        return_value=httpx.Response(200, json={"judge_model": "fast"})
+    )
+
+    cfg = await client.get_citation_engine_ensemble_config()
+
+    assert cfg is None
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_ensemble_config_none_on_network_error(client: GatewayClient) -> None:
+    """Transport failure returns None (Stage 4 silently disabled)."""
+
+    respx.get(f"{GATEWAY_BASE}/v1/citation-engine/config").mock(
+        side_effect=httpx.ConnectError("connection refused")
+    )
+
+    cfg = await client.get_citation_engine_ensemble_config()
+
+    assert cfg is None
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_ensemble_config_failed_fetch_is_cached(client: GatewayClient) -> None:
+    """A failed fetch caches the None sentinel — no re-poll storm.
+
+    Distinct from the judge_model behavior (which retries on failure)
+    because the ensemble config is a stickier misconfiguration: a
+    deployment without ensemble configured stays that way until
+    operator-driven gateway restart, and we don't want every chat
+    send to re-hit the endpoint just to confirm.
+    """
+
+    route = respx.get(f"{GATEWAY_BASE}/v1/citation-engine/config").mock(
+        return_value=httpx.Response(500, text="oops")
+    )
+
+    cfg1 = await client.get_citation_engine_ensemble_config()
+    cfg2 = await client.get_citation_engine_ensemble_config()
+
+    assert cfg1 is None
+    assert cfg2 is None
+    assert route.call_count == 1
+
+
 # Suppress the "task pending" warning that respx can emit on cancellation.
 @pytest.fixture(autouse=True)
 def _suppress_pending_task_warnings() -> None:

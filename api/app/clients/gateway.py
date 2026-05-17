@@ -59,7 +59,8 @@ import contextlib
 import json
 import logging
 from collections.abc import AsyncIterator
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Literal
 
 import httpx
 from pydantic import ValidationError as PydanticValidationError
@@ -105,6 +106,29 @@ def _structured_log_extra(**fields: Any) -> dict[str, Any]:
     """
 
     return {"event": "gateway_client", **fields}
+
+
+@dataclass(frozen=True, slots=True)
+class EnsembleConfig:
+    """Resolved Stage 4 ensemble config pulled from the gateway (M2-D1).
+
+    Returned by :meth:`GatewayClient.get_citation_engine_ensemble_config`.
+    Immutable; the gateway treats its YAML config as fixed for the
+    process lifetime so the api/-side cache stays valid until restart.
+
+    :attr:`envelope_tier` is server-computed by the gateway as the
+    max ``routed_inference_tier`` across all aliases in
+    :attr:`judge_models` (using each alias's primary target). The
+    api/ persists this value on ``message_citations.tier_envelope``
+    for ensemble-verified rows. ``None`` when the gateway couldn't
+    resolve any judge alias to a tier.
+    """
+
+    default_enabled: bool
+    judge_models: tuple[str, ...]
+    aggregation_rule: Literal["strict", "majority"]
+    max_cost_per_message_usd: float
+    envelope_tier: int | None
 
 
 class GatewayClient:
@@ -228,10 +252,118 @@ class GatewayClient:
         self._citation_engine_judge_model = judge_model
         return judge_model
 
+    _citation_engine_ensemble: EnsembleConfig | None = None
+    """Process-cached ensemble config; same lifecycle as the judge_model cache."""
+
+    _citation_engine_ensemble_loaded: bool = False
+    """Whether the cache attempt has been made.
+
+    Distinguishes "haven't fetched yet" from "fetched and got nothing
+    back" — the second case caches a sentinel so a misconfigured
+    gateway doesn't get re-polled on every Stage 4 evaluation.
+    """
+
+    async def get_citation_engine_ensemble_config(self) -> EnsembleConfig | None:
+        """Fetch the configured ensemble verification config (M2-D1).
+
+        Calls ``GET /v1/citation-engine/config`` once per process and
+        caches the result. Returns ``None`` when the gateway has no
+        ensemble configured (empty ``judge_models``), when the endpoint
+        is unreachable, or when the response is missing the
+        ``ensemble_verification`` block (older gateway). Callers treat
+        ``None`` as "Stage 4 cannot run" — the cascade falls back to
+        Stage 3 in that case.
+
+        On failure, caches a ``None`` sentinel so the next call doesn't
+        re-poll — the gateway config is immutable per-process and a
+        misconfiguration is sticky.
+        """
+
+        if self._citation_engine_ensemble_loaded:
+            return self._citation_engine_ensemble
+
+        try:
+            response = await self._client.get(
+                "/v1/citation-engine/config",
+                timeout=5.0,
+            )
+        except Exception as exc:
+            log.warning(
+                "citation-engine ensemble config fetch failed: %s",
+                exc,
+                extra=_structured_log_extra(
+                    op="get_citation_engine_ensemble_config",
+                    error_type=type(exc).__name__,
+                ),
+            )
+            self._citation_engine_ensemble_loaded = True
+            return None
+
+        if response.status_code != 200:
+            self._citation_engine_ensemble_loaded = True
+            return None
+
+        try:
+            payload = response.json()
+        except json.JSONDecodeError:
+            self._citation_engine_ensemble_loaded = True
+            return None
+
+        ensemble_block = payload.get("ensemble_verification") if isinstance(payload, dict) else None
+        if not isinstance(ensemble_block, dict):
+            # Older gateway predates M2-D1; treat as "no ensemble".
+            self._citation_engine_ensemble_loaded = True
+            return None
+
+        judge_models = ensemble_block.get("judge_models") or []
+        if not isinstance(judge_models, list) or not judge_models:
+            self._citation_engine_ensemble_loaded = True
+            return None
+
+        aggregation_rule = ensemble_block.get("aggregation_rule", "strict")
+        if aggregation_rule not in ("strict", "majority"):
+            log.warning(
+                "citation-engine ensemble config has unknown aggregation_rule %r",
+                aggregation_rule,
+                extra=_structured_log_extra(
+                    op="get_citation_engine_ensemble_config",
+                    aggregation_rule=aggregation_rule,
+                ),
+            )
+            self._citation_engine_ensemble_loaded = True
+            return None
+
+        envelope_tier_raw = ensemble_block.get("envelope_tier")
+        envelope_tier: int | None
+        if envelope_tier_raw is None:
+            envelope_tier = None
+        else:
+            try:
+                envelope_tier = int(envelope_tier_raw)
+            except (TypeError, ValueError):
+                envelope_tier = None
+
+        try:
+            max_cost = float(ensemble_block.get("max_cost_per_message_usd", 0.05))
+        except (TypeError, ValueError):
+            max_cost = 0.05
+
+        self._citation_engine_ensemble = EnsembleConfig(
+            default_enabled=bool(ensemble_block.get("default_enabled", False)),
+            judge_models=tuple(str(m) for m in judge_models),
+            aggregation_rule=aggregation_rule,
+            max_cost_per_message_usd=max_cost,
+            envelope_tier=envelope_tier,
+        )
+        self._citation_engine_ensemble_loaded = True
+        return self._citation_engine_ensemble
+
     def _reset_citation_engine_cache_for_tests(self) -> None:
-        """Drop the cached judge model. Tests use this to test re-fetch."""
+        """Drop both caches. Tests use this to test re-fetch."""
 
         self._citation_engine_judge_model = None
+        self._citation_engine_ensemble = None
+        self._citation_engine_ensemble_loaded = False
 
     # --- Health probe --------------------------------------------------------
 

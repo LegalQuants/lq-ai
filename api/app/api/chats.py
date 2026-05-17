@@ -70,7 +70,8 @@ from app.api.dependencies import ActiveUser
 from app.api.skills import _resolve_skill_for_user
 from app.audit import audit_action
 from app.citation import extract_citations, verify
-from app.clients.gateway import GatewayClient, get_gateway_client
+from app.citation.verification import FLAT_PER_JUDGE_USD
+from app.clients.gateway import EnsembleConfig, GatewayClient, get_gateway_client
 from app.db.session import get_db
 from app.errors import LQAIError, NotFound, ValidationError
 from app.knowledge.embed import DEFAULT_EMBEDDING_MODEL, request_embedding_vector
@@ -104,6 +105,7 @@ from app.schemas.gateway import (
     ChatCompletionRequest,
     InlineSkillRef,
 )
+from app.skills.registry import MutableSkillRegistry, SkillRegistry
 
 router = APIRouter(prefix="/chats", tags=["chats"])
 log = logging.getLogger(__name__)
@@ -1071,14 +1073,18 @@ async def send_message(
     # Cheaper to fetch both in one SELECT than two round-trips.
     project_floor: int | None = None
     project_privileged: bool = False
+    project_ensemble_verification: bool = False
     if chat.project_id is not None:
-        project_stmt = select(Project.minimum_inference_tier, Project.privileged).where(
-            Project.id == chat.project_id
-        )
+        project_stmt = select(
+            Project.minimum_inference_tier,
+            Project.privileged,
+            Project.ensemble_verification,
+        ).where(Project.id == chat.project_id)
         project_row = (await db.execute(project_stmt)).one_or_none()
         if project_row is not None:
             project_floor = project_row[0]
             project_privileged = bool(project_row[1])
+            project_ensemble_verification = bool(project_row[2])
 
     # Wave D.1 T7b — RAG step: when the chat's project has KBs attached,
     # run hybrid_search across all of them for the user's just-sent
@@ -1183,6 +1189,7 @@ async def send_message(
             retrieved_chunks=retrieved_chunks,
             http_request=request,
             attached_skill_provenance=attached_skill_provenance,
+            project_ensemble_verification=project_ensemble_verification,
         )
     return await _non_streaming_response(
         db=db,
@@ -1198,6 +1205,7 @@ async def send_message(
         attached_skill_names=attached_skill_names,
         slash_unresolved=slash_unresolved,
         attached_skill_provenance=attached_skill_provenance,
+        project_ensemble_verification=project_ensemble_verification,
     )
 
 
@@ -1354,6 +1362,100 @@ async def _audit_message_sent(
     await db.commit()
 
 
+def _skill_registry_from_request(http_request: Request | None) -> SkillRegistry | None:
+    """Return the current :class:`SkillRegistry` snapshot, or None.
+
+    The lifespan handler installs ``app.state.skill_registry`` as a
+    :class:`MutableSkillRegistry`. Tests may install nothing (the
+    registry is optional for the chat-send path on Stages 1-3) so we
+    return None on absence rather than raise — M2-D1 Stage 4 then
+    silently skips skill-frontmatter activation.
+    """
+
+    if http_request is None:
+        return None
+    holder: MutableSkillRegistry | None = getattr(http_request.app.state, "skill_registry", None)
+    if holder is None:
+        return None
+    return holder.current()
+
+
+async def _resolve_ensemble_config(
+    *,
+    gateway: GatewayClient | None,
+    applied_skills: list[str] | None,
+    project_ensemble_verification: bool,
+    skill_registry: SkillRegistry | None,
+    n_candidates: int,
+    message_id: uuid.UUID,
+) -> EnsembleConfig | None:
+    """Decide whether Stage 4 should run for this message — M2-D1.
+
+    Returns the resolved :class:`EnsembleConfig` when ensemble is
+    activated AND the per-message cost-budget pre-flight passes.
+    Returns ``None`` when ensemble is not activated, the gateway has
+    no ensemble configured, or the cost estimate exceeds the budget
+    (cost-budget fallback → cascade drops back to Stage 3).
+
+    Activation is ``any()`` across three sources:
+
+    * The project's ``ensemble_verification`` column.
+    * Any skill in ``applied_skills`` whose frontmatter declares
+      ``ensemble_verification: true``.
+    * The gateway's
+      ``citation_engine.ensemble_verification.default_enabled``.
+
+    Cost-budget pre-flight uses :data:`FLAT_PER_JUDGE_USD` (a
+    deliberately conservative constant) so the check errs on the side
+    of dropping back to single-judge Stage 3 rather than letting an
+    ensemble silently overrun. M2-E2 will replace the flat constant
+    with measured numbers.
+    """
+
+    if gateway is None:
+        return None
+
+    skill_activated = False
+    if applied_skills and skill_registry is not None:
+        for skill_name in applied_skills:
+            skill = skill_registry.get_skill(skill_name)
+            if skill is not None and skill.ensemble_verification:
+                skill_activated = True
+                break
+
+    config = await gateway.get_citation_engine_ensemble_config()
+    if config is None:
+        # Gateway has no ensemble configured (empty judge_models or
+        # endpoint unreachable). Whatever the activation flags say,
+        # Stage 4 cannot run.
+        return None
+
+    activated = skill_activated or project_ensemble_verification or config.default_enabled
+    if not activated:
+        return None
+
+    # Pre-flight cost-budget check. Per-message cap; if the estimated
+    # ensemble spend exceeds the cap, fall back to single-judge Stage 3
+    # by returning None (the cascade routes through verify_paraphrase
+    # instead). Logged so operators can see when the cap bites.
+    estimated_usd = n_candidates * len(config.judge_models) * FLAT_PER_JUDGE_USD
+    if estimated_usd > config.max_cost_per_message_usd:
+        log.warning(
+            "chat-send citations: ensemble budget exceeded, falling back to single judge",
+            extra={
+                "event": "chat_message_ensemble_budget_fallback",
+                "message_id": str(message_id),
+                "n_candidates": n_candidates,
+                "n_judges": len(config.judge_models),
+                "estimated_usd": round(estimated_usd, 4),
+                "max_cost_per_message_usd": config.max_cost_per_message_usd,
+            },
+        )
+        return None
+
+    return config
+
+
 async def _persist_message_citations(
     db: AsyncSession,
     *,
@@ -1361,6 +1463,9 @@ async def _persist_message_citations(
     assistant_text: str,
     retrieved_chunks: list[HybridSearchResult],
     gateway: GatewayClient | None = None,
+    applied_skills: list[str] | None = None,
+    project_ensemble_verification: bool = False,
+    skill_registry: SkillRegistry | None = None,
 ) -> None:
     """Extract, verify, and persist citations from an assistant message — M2-A2.
 
@@ -1374,16 +1479,25 @@ async def _persist_message_citations(
     * Stage 1 (exact-match) — M2-A2.
     * Stage 2 (tolerant-match) — M2-B1.
     * Stage 3 (paraphrase judge) — M2-C1, runs only when ``gateway``
-      is supplied. The judge model is resolved via
-      :meth:`GatewayClient.get_citation_engine_judge_model` (cached
-      for the process) so the operator configures it once in
+      is supplied and ensemble is NOT activated. The judge model is
+      resolved via :meth:`GatewayClient.get_citation_engine_judge_model`
+      (cached for the process) so the operator configures it once in
       ``gateway.yaml`` rather than on the api/ side.
+    * Stage 4 (ensemble) — M2-D1. Activated when any of:
+      ``applied_skills`` includes a skill whose frontmatter declares
+      ``ensemble_verification: true``, OR ``project_ensemble_verification``
+      is True, OR the gateway's ``default_enabled`` is True. Replaces
+      Stage 3 on activation. Falls back to Stage 3 if the per-message
+      cost-budget pre-flight estimate exceeds the configured cap.
 
     Candidates that pass any stage persist with the stage's method
     string and confidence. Stage 3 ``partial`` verdicts persist with
     ``verified=true, partial=true`` — the M2-C2 UI renders these as
-    "verified with caveats". Candidates that miss every stage are NOT
-    persisted; their absence is the unverified signal the UI consumes.
+    "verified with caveats". Stage 4 ``ensemble_strict`` /
+    ``ensemble_majority`` rows additionally carry ``tier_envelope``
+    (the maximum tier across the judge ensemble). Candidates that
+    miss every stage are NOT persisted; their absence is the
+    unverified signal the UI consumes.
     """
 
     if not retrieved_chunks:
@@ -1407,6 +1521,19 @@ async def _persist_message_citations(
     if gateway is not None:
         judge_model = await gateway.get_citation_engine_judge_model()
 
+    # M2-D1: resolve Stage 4 (ensemble) activation. The chat-send
+    # caller passes the project's flag + the applied skills + the
+    # skill registry; this function ORs them with the gateway's
+    # default to decide whether to dispatch ensemble verification.
+    ensemble_config = await _resolve_ensemble_config(
+        gateway=gateway,
+        applied_skills=applied_skills,
+        project_ensemble_verification=project_ensemble_verification,
+        skill_registry=skill_registry,
+        n_candidates=len(candidates),
+        message_id=message_id,
+    )
+
     new_rows: list[MessageCitation] = []
     for cand in candidates:
         doc = docs_by_id.get(cand.source_document_id)
@@ -1416,7 +1543,13 @@ async def _persist_message_citations(
             # would reject anyway.
             continue
 
-        result = await verify(cand, doc, gateway=gateway, judge_model=judge_model)
+        result = await verify(
+            cand,
+            doc,
+            gateway=gateway,
+            judge_model=judge_model,
+            ensemble_config=ensemble_config,
+        )
         if not result.verified:
             # Every wired stage rejected the candidate. M2-C2's UI
             # consumes the *absence* of a row as the unverified
@@ -1436,6 +1569,7 @@ async def _persist_message_citations(
                 verification_method=result.method,
                 verification_confidence=result.confidence,
                 partial=result.partial,
+                tier_envelope=result.tier_envelope,
             )
         )
 
@@ -1593,6 +1727,7 @@ async def _non_streaming_response(
     attached_skill_names: list[str] | None = None,
     slash_unresolved: bool = False,
     attached_skill_provenance: list[dict[str, str | None]] | None = None,
+    project_ensemble_verification: bool = False,
 ) -> JSONResponse:
     """Run the non-streaming path: forward, persist, return JSON.
 
@@ -1645,16 +1780,20 @@ async def _non_streaming_response(
         error_code=None,
     )
 
-    # M2-A2 / M2-B1 / M2-C1: extract + verify + persist citations from
-    # the assistant response. The verifier cascade is Stage 1
-    # (exact-match) → Stage 2 (tolerant-match) → Stage 3 (paraphrase
-    # judge through the gateway). No-op when no chunks were retrieved.
+    # M2-A2 / M2-B1 / M2-C1 / M2-D1: extract + verify + persist
+    # citations from the assistant response. Cascade: Stage 1
+    # (exact-match) → Stage 2 (tolerant-match) → Stage 3 (single
+    # paraphrase judge) OR Stage 4 (ensemble) when activated. No-op
+    # when no chunks were retrieved.
     await _persist_message_citations(
         db,
         message_id=assistant_message_id,
         assistant_text=assistant_text,
         retrieved_chunks=retrieved_chunks or [],
         gateway=gateway,
+        applied_skills=applied_skills,
+        project_ensemble_verification=project_ensemble_verification,
+        skill_registry=_skill_registry_from_request(http_request),
     )
 
     await _audit_message_sent(
@@ -1708,6 +1847,7 @@ async def _stream_response(
     retrieved_chunks: list[HybridSearchResult] | None = None,
     http_request: Request | None = None,
     attached_skill_provenance: list[dict[str, str | None]] | None = None,
+    project_ensemble_verification: bool = False,
 ) -> StreamingResponse:
     """Run the streaming path: forward, stream SSE, persist at end."""
 
@@ -1806,9 +1946,10 @@ async def _stream_response(
                 applied_skills=last_applied_skills or [],
                 error_code=error_code,
             )
-            # M2-A2: citations from the streamed assistant content.
-            # Skipped on error_code (no full artifact to cite). Failures
-            # here must not block the stream; log and continue.
+            # M2-A2 / M2-D1: citations from the streamed assistant
+            # content. Skipped on error_code (no full artifact to
+            # cite). Failures here must not block the stream; log
+            # and continue.
             if error_code is None:
                 try:
                     await _persist_message_citations(
@@ -1817,6 +1958,9 @@ async def _stream_response(
                         assistant_text="".join(accumulated),
                         retrieved_chunks=retrieved_chunks or [],
                         gateway=gateway,
+                        applied_skills=last_applied_skills,
+                        project_ensemble_verification=project_ensemble_verification,
+                        skill_registry=_skill_registry_from_request(http_request),
                     )
                 except Exception as cite_exc:
                     log.warning(

@@ -84,6 +84,15 @@ class LQAIFrontmatter(BaseModel):
         "enforcement (D1) consults this. C1 only surfaces the value.",
     )
 
+    ensemble_verification: bool | None = Field(
+        default=None,
+        description="When true, the Citation Engine runs Stage 4 (ensemble "
+        "verification) for citations produced from chats using this skill. "
+        "Per M2-D1, OR'd against the chat's project ensemble flag and the "
+        "gateway's deployment default. None means 'no opinion' (treated as "
+        "false at the OR site).",
+    )
+
     use_organization_profile: bool | None = None
     is_organization_profile: bool | None = None
     self_improvement: bool | None = None
@@ -133,6 +142,7 @@ class SkillSummary(BaseModel):
     tags: list[str] = Field(default_factory=list)
     jurisdiction: str | None = None
     minimum_inference_tier: int | None = None
+    ensemble_verification: bool | None = None
     output_format: str | None = None
 
 
@@ -314,6 +324,7 @@ def derive_summary(
         tags=list(lq.tags),
         jurisdiction=lq.jurisdiction,
         minimum_inference_tier=lq.minimum_inference_tier,
+        ensemble_verification=lq.ensemble_verification,
         output_format=lq.output_format,
     )
 
