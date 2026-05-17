@@ -299,7 +299,7 @@ The verification budget is the operator's to set, on a timeline the operator cho
 
 ## 10. Maintenance note
 
-This document is maintained per release. Items leave the deferred lists when they ship; items join when they are scoped. Last updated alongside M2 close — Phase D complete (Citation Engine 4-stage cascade, Anonymization Layer with custom legal recognizers, privileged-project handling, Azure OpenAI provider adapter); 2026-05-17.
+This document is maintained per release. Items leave the deferred lists when they ship; items join when they are scoped. Last updated alongside M2 Phase D + E1 close — Citation Engine 4-stage cascade, Anonymization Layer with custom legal recognizers, privileged-project handling, Azure OpenAI provider adapter (M2-E1, API-key auth; AD path tracked at DE-278); 2026-05-17.
 
 The substantive content that drives this doc lives in:
 

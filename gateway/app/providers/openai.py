@@ -540,6 +540,7 @@ async def _openai_stream_iter(
     headers: dict[str, str],
     provider_name: str,
     requested_model: str,
+    path: str = "/chat/completions",
 ) -> AsyncIterator[ChatCompletionChunk]:
     """Stream OpenAI SSE and yield :class:`ChatCompletionChunk` objects.
 
@@ -552,14 +553,15 @@ async def _openai_stream_iter(
     handler's responsibility — the adapter only yields data chunks.
     Empty lines, ``:`` comments, and ``event:`` / ``id:`` / ``retry:``
     fields are ignored (we don't depend on them).
+
+    ``path`` defaults to OpenAI's ``/chat/completions``; Azure OpenAI
+    (M2-E1) reuses this iterator with its deployment-scoped path.
     """
 
     fallback_id = f"chatcmpl-{uuid.uuid4().hex}"
 
     try:
-        async with client.stream(
-            "POST", "/chat/completions", json=body, headers=headers
-        ) as response:
+        async with client.stream("POST", path, json=body, headers=headers) as response:
             if response.status_code >= 400:
                 error_body = await response.aread()
                 _raise_from_error_body(
