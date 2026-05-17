@@ -2168,11 +2168,13 @@ Entries are tagged with priority (P1 = should be addressed in v1.5; P2 = good fo
 
 **Acceptance criteria:** Backup-restore round-trip tested in CI; documented procedure for upgrade-with-restore.
 
-#### DE-267 — Azure OpenAI provider adapter
+#### DE-267 — Azure OpenAI provider adapter — scheduled for M2-E1 (next)
+
+**Status:** **Scheduled for M2-E1**, the first task of M2 Phase E. The Phase D close (M2-D1 through M2-D4) merged 2026-05-17 and Phase E starts next; the Azure adapter is the M2-E1 deliverable. README.md and `docs/HONEST-STATE.md` already describe Azure as part of the post-M2 provider set (4 adapters: Anthropic, OpenAI, Azure OpenAI, Ollama) on the basis of that schedule. This DE entry will be marked `✓ Closed in M2-E1` and the rationale below converted to historical context once the adapter ships.
 
 **Priority:** P1 · **Effort:** M
 
-**Context:** Three provider adapters ship in M1 (Anthropic, OpenAI, Ollama); Vertex AI (DE-034) and AWS Bedrock (DE-035) are spec'd as M2 work. Microsoft Azure OpenAI is a significant gap: many enterprise legal teams hold existing Azure commitments (Azure's HIPAA BAA via the Online Services Subscription Agreement; FedRAMP High authorization; the EU AI Act-relevant DPA/SCC documentation Azure provides; an Enterprise Agreement that already covers their procurement budget). The Provider Compliance Matrix references Azure but no adapter ships in M1; operators on Microsoft-only procurement contracts cannot route through their existing stack.
+**Context:** Three provider adapters shipped in M1 (Anthropic, OpenAI, Ollama); Vertex AI (DE-034) and AWS Bedrock (DE-035) remain on the deferred-enhancement list as community-friendly work units. Microsoft Azure OpenAI is a significant gap: many enterprise legal teams hold existing Azure commitments (Azure's HIPAA BAA via the Online Services Subscription Agreement; FedRAMP High authorization; the EU AI Act-relevant DPA/SCC documentation Azure provides; an Enterprise Agreement that already covers their procurement budget). The Provider Compliance Matrix references Azure but no adapter shipped in M1; operators on Microsoft-only procurement contracts cannot route through their existing stack until M2-E1 lands.
 
 **Specific scope:** `gateway/app/providers/azure_openai.py` adapter implementing the same wire shape as the OpenAI adapter (`gateway/app/providers/openai.py`), with Azure-specific differences: authentication via Azure AD (managed identity / service principal) or API key; deployment-name resolution per Azure's `deployment-id`-not-`model`-name convention; endpoint-form URL handling (`https://<resource>.openai.azure.com/openai/deployments/<deployment-id>/chat/completions?api-version=<version>`); tier classification configurable in `gateway.yaml.example` (typically Tier 3 — Azure OpenAI under enterprise agreement carries ZDR and BAA terms). Mirrors the M1 OpenAI adapter feature set.
 

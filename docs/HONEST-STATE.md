@@ -11,16 +11,24 @@ This document catalogs what LQ.AI ships today, what is deferred, and how an oper
 Each table has three columns:
 
 - **Capability** — what the operator gets.
-- **Status** — `M1` (shipped today), `partial` (architectural slot exists; full pipeline is deferred), or `deferred-Mx` (named in the roadmap; not running yet).
+- **Status** — `M1` or `M2` (shipped today), `M2-XX` (shipped today, naming a specific M2 phase task like `M2-D3` for context), `deferred-Mx` (named in the roadmap; not yet wired in source), or `deferred (community-friendly)` for items on the [PRD §9](PRD.md#9-deferred-enhancements-and-identified-future-work) backlog ready for contribution.
 - **Verification** — the file path, test command, or doc the operator can read to confirm the claim.
 
 Status markers reference the roadmap milestones (M1 → M4) documented in [README.md](../README.md#project-status) and [PRD §8](PRD.md#8-roadmap).
 
-## Where M1 sits
+## Where M1 and M2 sit
 
-M1 is the foundation milestone: a self-hostable release that delivers conversational legal AI on top of the ten starter skills, with the engineering surfaces (audit, tier enforcement, projects, knowledge bases, saved prompts, receipts, the skill-creator pipeline) that the M2–M4 capability work builds on. M1 explicitly does not include the Citation Engine verification pipeline or the Anonymization Layer middleware; those land in M2. M1 ships three provider adapters (Anthropic, OpenAI, Ollama); Vertex AI and AWS Bedrock land in M2 and are fully spec'd in [PRD §9](PRD.md#9-deferred-enhancements-and-identified-future-work) ready for contribution.
+**M1 — Foundation (shipped).** Self-hostable release that delivers conversational legal AI on top of the ten starter skills, with the engineering surfaces (audit, tier enforcement, projects, knowledge bases, saved prompts, receipts, the skill-creator pipeline) that the M2–M4 capability work builds on. Three provider adapters: Anthropic, OpenAI, Ollama (local Tier 1).
 
-The honest reading is that an operator can deploy LQ.AI in M1 for the everyday in-house work that the ten starter skills cover, with the knowledge that some PRD-described capabilities (Citation Engine, Anonymization Layer, Playbooks, Word add-in, Tabular Review, Slack/Teams bridge, Autonomous Layer, Contract Relationship graph) are deferred to later milestones. The sections below catalog each capability so the operator can make that assessment with the same information the maintainer team has.
+**M2 — Citation Engine + Anonymization Layer (shipped).** Closes the two flagship M1-described capabilities whose architectural slots existed without running pipelines:
+
+- **Citation Engine** — four-stage verification cascade (exact match → tolerant match → paraphrase judge → ensemble) ships operational. Every model-emitted citation gets verified character-by-character against the source document before rendering; failed citations surface as "unverified" rather than as confident-looking wrong text. §3.1 below catalogs the cascade and what an operator can verify in source today.
+- **Anonymization Layer** — pre/post middleware in the gateway pseudonymizes named entities (Presidio defaults + custom legal recognizers for case + matter numbers) before requests leave for the model provider; streaming-aware rehydration restores originals on the response path. Privileged-project chats skip the layer entirely; retrieved source documents stay un-pseudonymized so citation grounding is direct. §3.2 below catalogs the middleware and the decisions it implements.
+- **Azure OpenAI provider adapter** rounds out the M2 provider set, unblocking Azure-tenant enterprise deployments via the operator's existing Azure agreement.
+
+**M3 and M4 not yet started in source.** Playbooks, the Word add-in, Tabular / Multi-Document Review, the Slack/Teams light-intake bridge, the Autonomous Layer, and the Contract Repository auto-relationship graph remain deferred milestone capabilities — the architectural slots will land when each milestone's work starts. §4 below catalogs them with the verification path (current absence in source) for each.
+
+The honest reading is that an operator can deploy LQ.AI today for the everyday in-house work the ten starter skills cover, with character-verified citation grounding and operator-configurable pseudonymization, with the knowledge that the broader product surface (Playbooks, Word integration, multi-doc review, Slack/Teams bridge, autonomous background agents, contract relationship graph) lands across M3 and M4. The sections below catalog each capability so the operator can make that assessment with the same information the maintainer team has.
 
 ---
 
@@ -54,7 +62,7 @@ This is the surface an in-house counsel touches every day: chat, matter workspac
 
 ## 2. Inference gateway and providers
 
-The Inference Gateway is the security boundary — the only component holding privileged provider API keys, the only component making outbound calls to inference providers. Three provider adapters ship in M1: Anthropic, OpenAI, and Ollama (local Tier 1). Vertex AI and AWS Bedrock are spec'd in PRD §9 with wire-format detail and acceptance criteria; they are contributor-friendly work units.
+The Inference Gateway is the security boundary — the only component holding privileged provider API keys, the only component making outbound calls to inference providers. Four provider adapters ship after M2: Anthropic, OpenAI, Azure OpenAI (M2-E1), and Ollama (local Tier 1). Google Vertex AI and AWS Bedrock are spec'd in PRD §9 with wire-format detail and acceptance criteria; they are contributor-friendly work units and remain on the deferred-enhancement list.
 
 | Capability | Status | Verification |
 |---|---|---|
@@ -62,64 +70,88 @@ The Inference Gateway is the security boundary — the only component holding pr
 | Anthropic provider adapter | M1 | `gateway/app/providers/anthropic.py` |
 | OpenAI provider adapter | M1 | `gateway/app/providers/openai.py` |
 | Ollama provider adapter (local, Tier 1) | M1 | `gateway/app/providers/ollama.py`; `docker-compose.yml` `--profile local` |
-| Google Vertex AI provider adapter | deferred-M2 | Wire-format spec is in [PRD §9](PRD.md#9-deferred-enhancements-and-identified-future-work) ready for a contributor to pick up |
-| AWS Bedrock provider adapter | deferred-M2 | Same — fully spec'd in PRD §9 with AWS Event Stream parser + SigV4 acceptance criteria |
-| Tier enforcement (Tiers 1 – 5) | M1 | `gateway/app/tier_floor.py` (124 LOC) |
-| Privileged-matter tier floor override (admin only) | M1 | `web/cypress/e2e/wave-d1-power-features.cy.ts` Test 3 + Test 5 |
+| Azure OpenAI provider adapter | M2-E1 | `gateway/app/providers/azure_openai.py`; PRD entry [DE-267](PRD.md#de-267--azure-openai-provider-adapter) (closed in M2) |
+| Google Vertex AI provider adapter | deferred (community-friendly) | Wire-format spec in [PRD §9 DE-034](PRD.md#de-034--google-vertex-ai-provider-adapter-anthropic-on-vertex) ready for a contributor to pick up |
+| AWS Bedrock provider adapter | deferred (community-friendly) | Fully spec'd in [PRD §9 DE-035](PRD.md#de-035--aws-bedrock-provider-adapter-anthropic-on-bedrock) with AWS Event Stream parser + SigV4 acceptance criteria |
+| Tier enforcement (Tiers 1 – 5) | M1 | `gateway/app/tier_floor.py` |
+| Privileged-matter tier floor enforcement | M1 + M2-D3 (verification) | `web/cypress/e2e/wave-d1-power-features.cy.ts` Test 3 + Test 5; M2-D3 added end-to-end audit-trail integration test at `api/tests/test_chat_citations.py::test_chat_send_privileged_project_full_audit_trail` |
+| Anonymization pre/post middleware | M2 | `gateway/app/anonymization/middleware.py`; see §3.2 below |
 | Routing log (per-inference) | M1 | `gateway/app/routing_log.py` |
+| Citation Engine config endpoint (`GET /v1/citation-engine/config`) | M2-C1 + M2-D1 | `gateway/app/api/inference.py::citation_engine_config` — returns judge_model + ensemble block with server-computed `envelope_tier` |
 | Provider-key encryption at rest (Fernet-wrapped master-key path) | M1 | `gateway/app/secrets.py`; `docs/security/encrypted-keys.md` |
 | Hot-reload of gateway config via SIGHUP | M1 | `gateway/app/config_holder.py`; `gateway/app/config_loader.py`; `docs/adr/0010-gateway-config-hot-reload.md` |
-| Per-skill prompt-injection detection rates published | not yet | No published numbers in M1; see §6 below for the engineering-discipline plan |
+| Per-skill prompt-injection detection rates published | not yet | No published numbers; see §6 below for the engineering-discipline plan |
 
 ---
 
-## 3. Capabilities described in the PRD that are not yet wired
+## 3. M2-shipped capabilities — Citation Engine and Anonymization Layer
 
-These are the two flagship M1-described capabilities where the architectural slot exists in the codebase but the underlying pipeline is not yet running. They are called out individually rather than in tables because they shape what an M1 deployment can and cannot promise to its users.
+These are the two flagship M2 capabilities that landed Phase D of the M2 build. Both were architectural slots in M1 with explicit "M2 deferred" stubs; both are now operational and exercised by integration tests against a live Postgres + mocked-gateway stack. They are called out individually rather than in the tables above because they materially change what an M2 deployment promises its users — and because the same "verification path runs through readable code" framing now applies to the shipped pipeline rather than to a deferred stub.
 
-### 3.1 Citation Engine — architectural slot, not wired
+### 3.1 Citation Engine — shipped M2 (4-stage cascade)
 
-The PRD ([§3.3](PRD.md#33-citation-engine-exact-quote)) describes a Citation Engine with character-level verification of every claim against source documents — a pipeline that guarantees character-fidelity from document → model context → cited output → rendered viewer, and that renders failed citations as "unverified" rather than as confident wrong citations. **In M1, the architectural slot exists but the verification pipeline is not running.**
+The PRD ([§3.3](PRD.md#33-citation-engine-exact-quote)) describes a Citation Engine with character-level verification of every claim against source documents — a pipeline that guarantees character-fidelity from document → model context → cited output → rendered viewer, and that renders failed citations as "unverified" rather than as confident wrong citations. **In M2, the full four-stage cascade is operational.**
 
-The endpoint at `GET /api/v1/chats/{chat_id}/messages/{message_id}/citations` returns whatever the message row stores; M1 stores `[]`. The chunk-level provenance the engine will draw on is partially in place: `api/app/pipeline/ingest.py` captures page and character offsets per chunk into `document_chunks` (migration `0005_documents_and_chunks.py`), and hybrid retrieval (`api/app/knowledge/retrieval.py`) returns the chunks. What is not in place is the verification step that re-reads the cited substring from the source document and confirms it appears verbatim before showing it in the rendered output.
+The endpoint at `GET /api/v1/chats/{chat_id}/messages/{message_id}/citations` returns one row per verified citation from the `message_citations` table; the row carries `verification_method`, `verification_confidence`, the byte-precise source offsets, and (for ensemble runs) a `tier_envelope` audit field. Candidates that miss every stage are NOT persisted — the M2-C2 chat UI consumes the absence of a row as the "unverified" signal and renders the marker red.
 
-**What an operator can verify today:**
+**The four-stage cascade** (implemented in `api/app/citation/verification.py`):
 
-- Read the endpoint: `api/app/api/chats.py:1174-1212`. The docstring is explicit — "M1 stores `[]`; M2 populates the structured shape. C3 returns whatever the row carries so this endpoint is forward-compatible without an additional task."
-- Read the chunk-level provenance schema: `api/alembic/versions/0005_documents_and_chunks.py`.
-- Read the retrieval path: `api/app/knowledge/retrieval.py`.
-- Read the PRD's described architecture: [PRD §3.3 Citation Engine](PRD.md#33-citation-engine-exact-quote).
-
-**What this means for an M1 deployment:**
-
-- Claims rendered in chat are not independently verified against source documents.
-- The model's apparent citations should be treated as suggestions, not as verified provenance, until M2.
-- The audit log captures the model's output verbatim (`api/app/audit.py`), so an operator can review what was claimed and reconstruct verification manually if the matter requires it.
-- A user-curated knowledge base attached to a chat does provide retrieval-grounded context (vector similarity + full-text search per `api/app/knowledge/`), but the model's use of that context is not itself byte-level verified at the citation step in M1.
-
-The path forward is in PRD §3.3 plus the deferred enhancements that block on the Citation Engine. A contributor who wants to land the engine should open a discussion before starting — this requires maintainer context, not a mini-PRD. The reason it is called out individually rather than listed in the deferred table is that the user-facing language in M1 (chat messages may render text that resembles citations) needs to be interpreted with this gap in mind.
-
-### 3.2 Anonymization Layer — config slot, not running
-
-The PRD ([§4.7](PRD.md#47-anonymization-layer-m2)) describes an Anonymization Layer that swaps named entities for stable placeholders on the request path and rehydrates them on the response path — the privacy fallback for Tier 3+ inference paths when local (Tier 1) inference is impractical but defensible privacy posture is still required. **In M1, the configuration schema loads but the middleware does not run.**
-
-The gateway accepts an `anonymization:` block in `gateway.yaml` (the schema is defined at `gateway/app/config.py:250` and instantiated at `gateway/app/config.py:329`), and the admin surface that will let operators inspect that configuration at runtime is wired through — but it returns 501 with an explicit message rather than data, because the underlying middleware is not in the request pipeline yet.
+1. **Stage 1 — `verify_exact_match`** (M2-A2). Byte-for-byte equality at the candidate's offsets against `documents.normalized_content`. Trivially fast; pure Python.
+2. **Stage 2 — `verify_tolerant_match`** (M2-B1). Normalizes both the source slice and the candidate text via `app.citation.normalization.normalize` (smart-quote folding, whitespace collapse, OCR-confusion rules when `document.was_ocrd=True`) and compares with `rapidfuzz.fuzz.ratio` at threshold 95. Catches formatting drift without accepting genuine paraphrases.
+3. **Stage 3 — `verify_paraphrase`** (M2-C1). LLM judge call through the gateway (model configured via `gateway.yaml` `citation_engine.judge_model`, default `fast`). Returns `yes` / `partial` / `no` with `high` / `medium` / `low` confidence mapped to 0.90 / 0.70 / 0.50. `partial` verdicts persist with a `partial=true` flag so the M2-C2 UI renders them distinctly.
+4. **Stage 4 — `verify_ensemble`** (M2-D1). Replaces Stage 3 when activated. Dispatches the paraphrase judge in parallel across N models via `asyncio.gather`; aggregates verdicts under `strict` (all-agree) or `majority` (simple-majority) rules. Activation is the OR of skill frontmatter (`lq_ai.ensemble_verification: true`), the project's `ensemble_verification` column, and the gateway's `default_enabled` flag. Pre-flight cost-budget check falls back to single-judge Stage 3 if the estimated spend exceeds `max_cost_per_message_usd`.
 
 **What an operator can verify today:**
 
-- Read the 501: `gateway/app/api/admin.py:270-282`. The next-task field is named explicitly ("M2 — anonymization middleware (PRD §4.7)").
-- Read the config schema that accepts the block but does not act on it: `gateway/app/config.py:250-251` ("`anonymization:` block. M2 feature; A3 just loads it.").
-- Read the request path to confirm anonymization is not in it: `gateway/app/api/inference.py` (the chat-completions handler) — there is no `anonymize_request` call before the provider dispatch and no `rehydrate_response` call after.
-- Read the PRD's described architecture: [PRD §4.7 Anonymization Layer](PRD.md#47-anonymization-layer-m2).
+- Read the cascade implementation: [`api/app/citation/verification.py`](../api/app/citation/verification.py).
+- Read the persistence + activation logic: `api/app/api/chats.py::_persist_message_citations` and `::_resolve_ensemble_config`.
+- Read the gateway config endpoint: [`gateway/app/api/inference.py`](../gateway/app/api/inference.py) `GET /v1/citation-engine/config` (computes the ensemble's `envelope_tier` server-side from the configured `judge_models` list).
+- Read the schema: migration [`0025_create_message_citations.py`](../api/alembic/versions/0025_create_message_citations.py) + extensions in `0026_paraphrase_judge_and_partial.py` (M2-C1) and `0027_ensemble_method_values.py` (M2-D1).
+- Read the full integration walkthrough: [`docs/citation-engine.md`](citation-engine.md) — cascade, UI states (4 chip variants with tooltip variance per method), configuration surface, cost-budget enforcement, privacy implications of Stage 4, integration with Anonymization Layer, known limitations.
+- Run the unit test suite: `cd api && pytest tests/citation/` (95 tests covering extraction, normalization, exact match, tolerant match, paraphrase judge, ensemble strict/majority/tier-envelope/budget-fallback, cascade routing).
+- Run the integration test suite: `cd api && pytest tests/test_chat_citations.py` (12 tests against live Postgres covering verbatim quotes, tolerant matches, paraphrase verdicts, partial flag, multi-doc citations, deleted-doc handling, retrieval-context skip, privileged-project full audit trail).
 
-**What this means for an M1 deployment:**
+**What this means for an M2 deployment:**
 
-- Documents and entities are sent to the configured inference provider in full, with no entity substitution at the gateway boundary.
-- This is the same posture as every other M1 inference path: the provider receives the operator's content per the operator's provider choice (the operator's bring-your-own-keys control). M1 does not introduce a hidden transformation step.
-- For deployments where entity substitution is a hard requirement, M1 is not the right milestone — wait for M2, or self-host on Tier 1 (Ollama) only so the data never leaves the operator's environment regardless of substitution.
-- Operators on Tier 3 cloud paths (enterprise managed inference with ZDR / no-training commitments) get the contractual privacy posture of that tier in M1; the anonymization layer is an additional defense-in-depth control that lands in M2.
+- The model cannot produce confidently-rendered text that wasn't traceable to source. Every emitted `"..." (Source: [N])` pair gets verified through the cascade; only verified candidates persist as `message_citations` rows; the UI distinguishes verified (green / yellow) from unverified (red) cleanly.
+- Operators with high-stakes operations (regulatory filings, board materials) opt in to Stage 4 ensemble verification for additional confidence. The privacy envelope (max tier across the configured judge models) persists per row so the operator can audit which chats had citations sent to weaker tiers.
+- The `verification_method` enum (`exact_match` / `tolerant_match` / `paraphrase_judge` / `ensemble_strict` / `ensemble_majority` / `failed`) is queryable for compliance reporting: `SELECT method, count(*) FROM message_citations GROUP BY verification_method` shows the verification distribution across the deployment's chat history.
+- One known limitation persists, tracked as [DE-277](PRD.md#de-277--citation-extractor-fallback-to-document-scan-on-chunk-boundary-miss): a citation quote that spans the boundary between two retrieved chunks (neither chunk's content alone contains the full quote) silently drops at extraction and renders as "unverified." Documented in [`docs/citation-engine.md` §Known limitations](citation-engine.md#chunk-boundary-spanning-quotes--silently-drop-today); pinned by `api/tests/citation/test_edge_cases.py::test_chunk_boundary_spanning_citation_does_not_extract_today` so a future DE-277 implementation has a failing test to flip.
 
-The verification path is itself the signal: an operator can read the code that does not run yet, the configuration schema that loads without enforcement, and the request path that confirms the absence of the middleware. A closed-source vendor cannot show an operator a code path that is not running; an open-source project can.
+### 3.2 Anonymization Layer — shipped M2 (middleware + custom recognizers + privileged-skip + retrieval-skip)
+
+The PRD ([§4.7](PRD.md#47-anonymization-layer-m2)) describes an Anonymization Layer that swaps named entities for stable placeholders on the request path and rehydrates them on the response path — the privacy fallback for Tier 3+ inference paths when local (Tier 1) inference is impractical but defensible privacy posture is still required. **In M2, the full middleware is wired end-to-end with custom legal recognizers, streaming-aware rehydration, privileged-project carve-out, and a retrieval-context skip for direct citation grounding.**
+
+**Pipeline:** `gateway/app/anonymization/middleware.py::pre_anonymize_request` runs after tier derivation and before provider dispatch (per the request path in `gateway/app/api/inference.py:614`). It walks user/assistant/system messages plus skill inputs, pseudonymizes each detected entity via `app.anonymization.engine.Anonymizer`, and returns a `PseudonymMapper` carrying the pseudonym→original mapping. The response path calls `post_anonymize_response` (non-streaming) or feeds chunks through `StreamingRehydrator` (streaming) to substitute originals back. The mapper is per-request and in-memory only — never persisted, never logged, dropped on function exit.
+
+**Recognizer set** (configured in `gateway/app/anonymization/engine.py::get_analyzer_engine`):
+
+- Presidio defaults: `PERSON`, `ORGANIZATION`, `EMAIL_ADDRESS`, `PHONE_NUMBER`, `LOCATION` (via spaCy `en_core_web_lg` baked into the gateway Dockerfile per M2-B2).
+- Custom legal recognizers: `CaseNumberRecognizer` (matches docket-number formats; M2-B2) and `MatterNumberRecognizer` (matches internal matter-tracking identifiers; M2-B2).
+
+**Skip conditions** (any one short-circuits to no-op):
+
+1. `config.enabled is False` — master switch.
+2. `routed_tier not in config.apply_at_tiers` — Tier 1 (local) doesn't benefit.
+3. `chat_request.lq_ai_privileged is True` — privileged chats are never rewritten (Decision A: rewriting privileged work product risks corrupting it).
+4. `chat_request.anonymize is False` — per-request opt-out (the Citation Engine's judge calls use this).
+5. `message.lq_ai_skip_anonymization is True` — per-message opt-out, set by the api/ on the retrieval-context system message so the model sees intact source quotes for citation grounding (Decision M2-1).
+
+**What an operator can verify today:**
+
+- Read the middleware: [`gateway/app/anonymization/middleware.py`](../gateway/app/anonymization/middleware.py) — `pre_anonymize_request`, `post_anonymize_response`, `StreamingRehydrator` with bounded-tail-buffer semantics.
+- Read the mapper: [`gateway/app/anonymization/mapper.py`](../gateway/app/anonymization/mapper.py) — `PseudonymMapper.assign` (stable per-`(entity_type, original)` assignments within a request), `reverse` (rehydration substitution table).
+- Read the custom recognizers: [`gateway/app/anonymization/recognizers/case_number.py`](../gateway/app/anonymization/recognizers/case_number.py) and `matter_number.py`.
+- Read the request-path wiring: `gateway/app/api/inference.py:614-619` (pre-middleware call) and `:673` (post-middleware call); streaming counterparts at `:1107` and onwards.
+- Read the full middleware contract: [`docs/security/anonymization.md`](security/anonymization.md) — recognizer set, decision basis, audit-log shape, privileged-chat carve-out, retrieval-context skip, known limitations.
+- Run the unit + integration test suite: `cd gateway && pytest tests/anonymization/ tests/test_inference_anonymization.py` (93+ tests covering analyzer, mapper, engine integration, recognizers, middleware skip conditions, round-trip correctness with the real Presidio engine, edge cases).
+
+**What this means for an M2 deployment:**
+
+- Operators on Tier 3+ paths can configure pseudonymization as a defense-in-depth control on top of the provider's contractual privacy posture. The provider sees pseudonymized entity strings (`PERSON_0001`, `COMPANY_0001`); the user sees originals (rehydrated on the response path).
+- Privileged matters work as expected: setting `Project.privileged=True` causes the gateway middleware to skip the entire request, so privileged work product reaches the configured inference target verbatim. The combination "privileged + Tier 1 (Ollama)" produces fully sealed local inference with no outbound network and no anonymization rewriting — the recommended posture for the most sensitive matters per [`docs/security/anonymization.md` §Privileged chats](security/anonymization.md#privileged-chats--why-we-skip-m2-b3--m2-d3).
+- Retrieved source documents stay un-pseudonymized so the Citation Engine's quote verification works directly against the original document text (Decision M2-1). The alternative (Option A: pseudonymize sources too) is tracked as [DE-269](PRD.md#de-269--anonymization-option-a-pseudonymize-source-documents-too).
+- One forward-looking surface remains: per-request salting of the pseudonym format to close the cross-mapper collision surface, tracked as [DE-274](PRD.md#de-274--anonymization-pseudonym-collision-in-source-documents). The current `{ENTITY_TYPE}_{NNNN}` format is operator-readable and deterministic by design; the salt would add ~5 chars per pseudonym and close the structural distinctness gap. Pinned by the M2-C3 round-trip test suite so the gap is visible in CI.
 
 ---
 
@@ -130,7 +162,7 @@ These are PRD-committed capabilities where the directory or subsystem does not y
 | Capability | Status | Verification |
 |---|---|---|
 | Word add-in (Office.js) | deferred-M3 | `ls word-addin/` — directory absent. Spec in [PRD §3.9](PRD.md#39-word-add-in-m3) |
-| Playbooks (codified legal positions, auto-generation wizard) | deferred-M3 | No `playbooks` table in `api/alembic/versions/` (M1 head is 0023). Spec in [PRD §3.7](PRD.md#37-playbooks-m3) |
+| Playbooks (codified legal positions, auto-generation wizard) | deferred-M3 | No `playbooks` table in `api/alembic/versions/` (M2 head is 0028). Spec in [PRD §3.7](PRD.md#37-playbooks-m3) |
 | Tabular / multi-document review (M3) | deferred-M3 | No grid surface; spec in [PRD §3.8](PRD.md#38-tabular-multi-document-review-m3) |
 | Slack / Teams light intake bridge (M3) | deferred-M3 | No `/lq` slash command surface; spec in [PRD §3.10](PRD.md#310-slack--teams-light-intake-bridge-m3) |
 | Autonomous Layer (cron tasks, watches, per-user memory) | deferred-M4 | No `autonomous_tasks` table; spec in [PRD §3.11](PRD.md#311-autonomous-layer-m4) |
@@ -155,7 +187,7 @@ Some of the highest-value compliance documents (OWASP LLM Top 10 mapping, NIST A
 | FedRAMP Moderate alignment | stub (target M2) | Same |
 | OWASP LLM Top 10 mapping | not yet | [Mini-PRD open](contribute/mini-prds/owasp-llm-top10-mapping.md) — contributor-friendly |
 | NIST AI RMF 1.0 Profile | not yet | [Mini-PRD open](contribute/mini-prds/nist-ai-rmf-profile.md) |
-| Procurement Pack (SIG Lite + CAIQ pre-fills) | not yet | [Mini-PRD open](contribute/mini-prds/procurement-readiness-pack.md); structure stubbed at [`docs/procurement/`](procurement/) |
+| Procurement Pack (SIG Lite + CAIQ pre-fills) | M2-D3 starter (privileged-matter scope only) | [`docs/procurement/sig-lite.md`](procurement/sig-lite.md) — 4 SIG Lite questions covering data classification + privileged work-product + audit-log integrity. Full pack (every SIG Lite domain + CAIQ Lite + cover letter) tracked as [DE-086](PRD.md#de-086--procurement-readiness-pack); [mini-PRD open](contribute/mini-prds/procurement-readiness-pack.md) |
 | Threat model (STRIDE) | M1 | [`docs/security/threat-model.md`](security/threat-model.md) |
 | Architecture document | M1 | [`docs/architecture.md`](architecture.md) |
 | Cryptography reference | M1 | [`docs/security/cryptography.md`](security/cryptography.md) |
@@ -172,9 +204,9 @@ The project's commitment is that engineering rigor is measurable, not asserted. 
 
 | Practice | Status | Verification |
 |---|---|---|
-| Frontend unit tests (Vitest) | M1 | `cd web && npx vitest run` — 53 spec files; 397 tests passing as of Wave C |
-| Backend tests (pytest) | M1 | 70 test files in `api/tests/`; run via `cd api && pytest` |
-| Gateway tests (pytest) | M1 | 27 test files in `gateway/tests/`; run via `cd gateway && pytest` |
+| Frontend unit tests (Vitest) | M1 + M2 | `cd web && npx vitest run` — 56 spec files; **456 tests passing** as of M2 close |
+| Backend tests (pytest) | M1 + M2 | 70+ test files in `api/tests/`; **1001 tests passing, 1 skipped** against live Postgres after M2 close (`cd api && DATABASE_URL=... pytest`) |
+| Gateway tests (pytest) | M1 + M2 | 30+ test files in `gateway/tests/`; **497 tests passing, 2 skipped** after M2 close (`cd gateway && pytest`) |
 | Cypress E2E (LQ.AI shell) | M1 | 6 LQ.AI specs in `web/cypress/e2e/` (`wave-a-chrome`, `wave-b-surfaces`, `wave-c-matters`, `wave-d1-power-features`, `wave-d2-skill-creator`, `wave-m1-final-surfaces`) plus 4 upstream OpenWebUI specs |
 | Documented E2E coverage matrix per surface (`docs/test-strategy.md`) | not yet | CLAUDE.md notes `docs/test-strategy.md` as an M1 deliverable; the file does not yet exist. The coverage signal today is the spec inventory above and the "tests as documentation" framing in PRD §5.8; the explicit per-surface coverage matrix (smoke / happy path / edge cases) with milestone tags is deferred. Closes the criticism that "tests as documentation" is overstated when 6 specs cover the M1 LQ.AI surfaces without an explicit per-surface contract. |
 | Coverage gate (PRD §5.8 target: 80% api / 90% gateway) | not enforced | `.github/workflows/ci.yml` runs pytest but does not fail below threshold; the gap is documented |
@@ -258,14 +290,16 @@ Because LQ.AI is open-source and self-hosted, an operator's evaluation does not 
 - **Read the routing log writer** and confirm what is recorded per inference: `gateway/app/routing_log.py`.
 - **Read the secrets layer** and confirm provider-key encryption at rest: `gateway/app/secrets.py` plus `docs/security/encrypted-keys.md`.
 - **Read the threat model** and confirm the STRIDE analysis is current: `docs/security/threat-model.md`.
-- **Run the test suite** and read the results: `cd web && npx vitest run`; `cd api && pytest`; `cd gateway && pytest`; `cd web && npx cypress run`.
-- **Read the capabilities that are not yet wired** — the Citation Engine endpoint stub at `api/app/api/chats.py:1174-1212` and the Anonymization Layer 501 at `gateway/app/api/admin.py:270-282`. The verification path covers what is shipped and what is deferred symmetrically.
+- **Read the M2 Citation Engine implementation** end-to-end: `api/app/citation/verification.py` (cascade), `api/app/citation/extraction.py` (extractor), `api/app/api/chats.py::_persist_message_citations` (persistence + activation), `gateway/app/api/inference.py::citation_engine_config` (gateway endpoint), `docs/citation-engine.md` (full reference). Failed citations surface as "unverified" — read [`api/tests/citation/test_edge_cases.py`](../api/tests/citation/test_edge_cases.py) for the pinned edge-case behaviors and one known limitation ([DE-277](PRD.md#de-277--citation-extractor-fallback-to-document-scan-on-chunk-boundary-miss)).
+- **Read the M2 Anonymization Layer implementation** end-to-end: `gateway/app/anonymization/middleware.py` (pre/post + StreamingRehydrator), `gateway/app/anonymization/engine.py` (Presidio AnalyzerEngine config), `gateway/app/anonymization/recognizers/` (custom legal recognizers), `docs/security/anonymization.md` (full reference). The privileged-skip carve-out + retrieval-context skip are explicit in the skip conditions at `middleware.py:81-110`.
+- **Run the test suite** and read the results: `cd web && npx vitest run` (456 passing); `cd api && DATABASE_URL=... pytest` (1001 passing); `cd gateway && pytest` (497 passing); `cd web && npx cypress run`.
+- **Read the capabilities that are not yet started in source** — the symmetric verification: `ls word-addin/` (empty; M3 add-in not yet started), `grep -r "playbooks" api/alembic/versions/` (no Playbooks table; M3), `grep -r "autonomous_tasks" api/alembic/versions/` (no Autonomous Layer table; M4), `grep -r "contract_relationships" api/alembic/versions/` (no Contract Repository relationship graph; M4). What is shipped is in source; what is deferred is verifiable by its absence.
 
 The verification budget is the operator's to set, on a timeline the operator chooses, with a scope the operator defines. None of those properties is true for closed-source attestation.
 
 ## 10. Maintenance note
 
-This document is maintained per release. Items leave the deferred lists when they ship; items join when they are scoped. Last updated alongside Wave 9 of the M1 documentation push (2026-05-14).
+This document is maintained per release. Items leave the deferred lists when they ship; items join when they are scoped. Last updated alongside M2 close — Phase D complete (Citation Engine 4-stage cascade, Anonymization Layer with custom legal recognizers, privileged-project handling, Azure OpenAI provider adapter); 2026-05-17.
 
 The substantive content that drives this doc lives in:
 
