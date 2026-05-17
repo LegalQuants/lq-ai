@@ -901,6 +901,31 @@ async def list_models(request: Request) -> dict[str, Any]:
     }
 
 
+@router.get("/citation-engine/config")
+async def citation_engine_config(request: Request) -> dict[str, str]:
+    """Expose the citation_engine block for the api/'s Citation Engine (M2-C1).
+
+    The api/ runs Stage 3 (LLM paraphrase judge) of the Citation
+    Engine cascade and reads the judge-model alias from this endpoint
+    at startup so the operator configures model choices in one place
+    (``gateway.yaml``) rather than mirroring them on the api/ side.
+
+    Response shape:
+
+    .. code-block:: json
+
+       {"judge_model": "fast"}
+
+    The api/ caches the value for the process lifetime; restarting the
+    gateway after an alias change is the deployment story for now.
+    Hot-reload of this value lands when M2 needs it; today the alias
+    rarely changes outside scheduled maintenance.
+    """
+
+    config = _config(request)
+    return {"judge_model": config.citation_engine.judge_model}
+
+
 # --- Streaming helpers --------------------------------------------------------
 
 

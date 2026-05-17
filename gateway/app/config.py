@@ -335,6 +335,28 @@ class DevModeConfig(BaseModel):
     enabled: bool = False
 
 
+class CitationEngineConfig(BaseModel):
+    """``citation_engine:`` block — M2-C1.
+
+    The Citation Engine runs in the api/ but reads the *model name* it
+    should use for the Stage 3 (paraphrase) judge from the gateway's
+    config so the operator has one place to configure model choices.
+    The api/ pulls this over ``GET /v1/citation-engine/config`` at
+    startup (or on first need) and caches it for the process.
+
+    :attr:`judge_model` accepts any value the gateway's router can
+    resolve: an alias from ``model_aliases`` (``fast``, ``smart``,
+    ``budget``) or a fully-qualified provider/model form
+    (``anthropic-prod/claude-haiku-4-5``). Defaults to ``"fast"`` —
+    deliberately a smaller model than the typical citation-generating
+    model so the judge cost is bounded.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    judge_model: str = Field(default="fast", min_length=1)
+
+
 # --- Top-level config ---------------------------------------------------------
 
 
@@ -355,6 +377,7 @@ class GatewayConfig(BaseModel):
     tier_policy: TierPolicyConfig = Field(default_factory=TierPolicyConfig)
     rate_limits: RateLimitsConfig = Field(default_factory=RateLimitsConfig)
     anonymization: AnonymizationConfig = Field(default_factory=AnonymizationConfig)
+    citation_engine: CitationEngineConfig = Field(default_factory=CitationEngineConfig)
     cost_tracking: CostTrackingConfig = Field(default_factory=CostTrackingConfig)
     telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
     circuit_breaker: CircuitBreakerConfig = Field(default_factory=CircuitBreakerConfig)

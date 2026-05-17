@@ -228,14 +228,23 @@ class MessageCitation(Base):
     * ``'exact_match'`` — Stage 1, byte-for-byte (M2-A2; lands here).
     * ``'tolerant_match'`` — Stage 2, normalized-whitespace + OCR
       artefacts (M2-B1).
-    * ``'llm_judge'`` — Stage 3, paraphrase judge (M2-C1).
+    * ``'paraphrase_judge'`` — Stage 3, paraphrase judge (M2-C1).
+    * ``'llm_judge'`` — reserved for future LLM-based verification
+      stages (semantic match, claim decomposition); ``'paraphrase_judge'``
+      is the tighter label for the M2-C1 paraphrase-only path.
     * ``'ensemble'`` — Stage 4, multi-model agreement (M2-D1).
     * ``'failed'`` — every stage rejected; rendered as unverified in
       the UI (M2-C2).
 
     ``verification_confidence`` is the stage's reported confidence in
     ``[0, 1]``; exact-match writes ``1.0``, tolerant-match writes a
-    similarity-based score, the LLM judge writes its own estimate.
+    similarity-based score, the paraphrase judge writes its own
+    high/medium/low → 0.90/0.70/0.50 mapping.
+
+    ``partial`` (M2-C1) distinguishes "judge says the source supports
+    the claim" from "judge says the source supports it *partially*".
+    Both persist with ``verified=true``; the partial flag drives the
+    M2-C2 UI's visually-distinct "verified with caveats" rendering.
     """
 
     __tablename__ = "message_citations"
@@ -250,7 +259,8 @@ class MessageCitation(Base):
         ),
         CheckConstraint(
             "verification_method IS NULL OR verification_method IN "
-            "('exact_match', 'tolerant_match', 'llm_judge', 'ensemble', 'failed')",
+            "('exact_match', 'tolerant_match', 'llm_judge', "
+            "'paraphrase_judge', 'ensemble', 'failed')",
             name="chk_message_citations_method_values",
         ),
         CheckConstraint(
@@ -300,6 +310,11 @@ class MessageCitation(Base):
     verification_confidence: Mapped[Decimal | None] = mapped_column(
         Numeric(3, 2),
         nullable=True,
+    )
+    partial: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

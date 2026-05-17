@@ -697,6 +697,111 @@ async def test_list_models_sends_gateway_key_header(client: GatewayClient) -> No
     assert request.headers.get(GATEWAY_KEY_HEADER) == GATEWAY_KEY
 
 
+# ---------------------------------------------------------------------------
+# Citation Engine judge-model fetch (M2-C1).
+#
+# The api/ pulls the judge-model alias from the gateway over
+# GET /v1/citation-engine/config once per process and caches it.
+# Failure modes (network, non-200, malformed body) fall back silently
+# to the configured default — a missing config endpoint must not crash
+# the Citation Engine; Stage 3 just runs against the fallback model.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_judge_model_fetched_from_gateway(client: GatewayClient) -> None:
+    """Happy path: the gateway-configured alias propagates back."""
+
+    respx.get(f"{GATEWAY_BASE}/v1/citation-engine/config").mock(
+        return_value=httpx.Response(200, json={"judge_model": "fast"})
+    )
+
+    judge = await client.get_citation_engine_judge_model()
+
+    assert judge == "fast"
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_judge_model_caches_for_process(client: GatewayClient) -> None:
+    """Second call doesn't re-hit the gateway."""
+
+    route = respx.get(f"{GATEWAY_BASE}/v1/citation-engine/config").mock(
+        return_value=httpx.Response(200, json={"judge_model": "smart"})
+    )
+
+    first = await client.get_citation_engine_judge_model()
+    second = await client.get_citation_engine_judge_model()
+
+    assert first == "smart"
+    assert second == "smart"
+    assert route.call_count == 1
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_judge_model_falls_back_on_network_error(client: GatewayClient) -> None:
+    """A transport failure returns the fallback, not an exception."""
+
+    respx.get(f"{GATEWAY_BASE}/v1/citation-engine/config").mock(
+        side_effect=httpx.ConnectError("connection refused")
+    )
+
+    judge = await client.get_citation_engine_judge_model(fallback="budget")
+
+    assert judge == "budget"
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_judge_model_falls_back_on_500(client: GatewayClient) -> None:
+    """Gateway 500 returns the fallback (the Citation Engine must keep working)."""
+
+    respx.get(f"{GATEWAY_BASE}/v1/citation-engine/config").mock(
+        return_value=httpx.Response(500, text="oops")
+    )
+
+    judge = await client.get_citation_engine_judge_model(fallback="fast")
+
+    assert judge == "fast"
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_judge_model_falls_back_on_malformed_body(client: GatewayClient) -> None:
+    """A 200 with a missing ``judge_model`` key returns the fallback."""
+
+    respx.get(f"{GATEWAY_BASE}/v1/citation-engine/config").mock(
+        return_value=httpx.Response(200, json={"other_field": "value"})
+    )
+
+    judge = await client.get_citation_engine_judge_model(fallback="fast")
+
+    assert judge == "fast"
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_judge_model_failed_fetch_not_cached(client: GatewayClient) -> None:
+    """A failed fetch doesn't poison the cache — the next call retries."""
+
+    # First call fails.
+    route_failed = respx.get(f"{GATEWAY_BASE}/v1/citation-engine/config").mock(
+        return_value=httpx.Response(500, text="oops")
+    )
+    judge1 = await client.get_citation_engine_judge_model(fallback="fast")
+    assert judge1 == "fast"
+    assert route_failed.call_count == 1
+
+    # Replace with a 200 and call again — should retry, not return cached fallback.
+    respx.get(f"{GATEWAY_BASE}/v1/citation-engine/config").mock(
+        return_value=httpx.Response(200, json={"judge_model": "smart"})
+    )
+    judge2 = await client.get_citation_engine_judge_model(fallback="fast")
+    assert judge2 == "smart"
+
+
 # Suppress the "task pending" warning that respx can emit on cancellation.
 @pytest.fixture(autouse=True)
 def _suppress_pending_task_warnings() -> None:

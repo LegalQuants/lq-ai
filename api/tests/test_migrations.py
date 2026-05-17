@@ -743,3 +743,142 @@ async def test_messages_applied_skills_default_empty_array(db_session: AsyncSess
     value = rows.scalar_one()
     # Postgres returns the text[] as a Python list.
     assert value == []
+
+
+# ---------------------------------------------------------------------------
+# 0026 — paraphrase_judge enum + partial column on message_citations (M2-C1)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+async def test_message_citations_accepts_paraphrase_judge_method(
+    db_session: AsyncSession,
+) -> None:
+    """The widened enum accepts the new ``'paraphrase_judge'`` method value.
+
+    The 0026 migration replaces the M2-A2 CHECK constraint to add
+    ``'paraphrase_judge'``. Without the migration the INSERT below
+    would fail the constraint.
+    """
+
+    # Need a real chat + message + file to satisfy the FKs.
+    user_id = uuid.uuid4()
+    chat_id = uuid.uuid4()
+    message_id = uuid.uuid4()
+    file_id = uuid.uuid4()
+    await db_session.execute(
+        text(
+            "INSERT INTO users (id, email, display_name, hashed_password) "
+            "VALUES (:uid, :email, 'M2-C1 Test', 'x')"
+        ),
+        {"uid": user_id, "email": f"c1-{uuid.uuid4().hex[:6]}@example.com"},
+    )
+    await db_session.execute(
+        text("INSERT INTO chats (id, owner_id, title) VALUES (:cid, :uid, 't')"),
+        {"cid": chat_id, "uid": user_id},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO messages (id, chat_id, role, content) "
+            "VALUES (:mid, :cid, 'assistant', 'x')"
+        ),
+        {"mid": message_id, "cid": chat_id},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO files (id, owner_id, filename, mime_type, size_bytes, "
+            "hash_sha256, storage_path) VALUES "
+            "(:fid, :uid, 'f.pdf', 'application/pdf', 1, "
+            "'a' || repeat('0', 63), 's3://k')"
+        ),
+        {"fid": file_id, "uid": user_id},
+    )
+    await db_session.flush()
+
+    await db_session.execute(
+        text(
+            "INSERT INTO message_citations "
+            "(message_id, source_file_id, source_offset_start, source_offset_end, "
+            "source_text, verified, verification_method, verification_confidence, "
+            "partial) "
+            "VALUES (:mid, :fid, 0, 5, 'hello', true, 'paraphrase_judge', "
+            "0.90, true)"
+        ),
+        {"mid": message_id, "fid": file_id},
+    )
+    await db_session.flush()
+
+    row = (
+        await db_session.execute(
+            text(
+                "SELECT verification_method, partial FROM message_citations WHERE message_id = :mid"
+            ),
+            {"mid": message_id},
+        )
+    ).one()
+    assert row[0] == "paraphrase_judge"
+    assert row[1] is True
+
+
+@pytest.mark.integration
+async def test_message_citations_partial_default_false(
+    db_session: AsyncSession,
+) -> None:
+    """``partial`` defaults to ``false`` so M2-A2 / M2-B1 callers stay correct.
+
+    The Stage 1 / Stage 2 verifiers don't write ``partial`` explicitly;
+    the default keeps their rows readable as fully-verified.
+    """
+
+    user_id = uuid.uuid4()
+    chat_id = uuid.uuid4()
+    message_id = uuid.uuid4()
+    file_id = uuid.uuid4()
+    await db_session.execute(
+        text(
+            "INSERT INTO users (id, email, display_name, hashed_password) "
+            "VALUES (:uid, :email, 'C1 Default', 'x')"
+        ),
+        {"uid": user_id, "email": f"c1-{uuid.uuid4().hex[:6]}@example.com"},
+    )
+    await db_session.execute(
+        text("INSERT INTO chats (id, owner_id, title) VALUES (:cid, :uid, 't')"),
+        {"cid": chat_id, "uid": user_id},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO messages (id, chat_id, role, content) "
+            "VALUES (:mid, :cid, 'assistant', 'x')"
+        ),
+        {"mid": message_id, "cid": chat_id},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO files (id, owner_id, filename, mime_type, size_bytes, "
+            "hash_sha256, storage_path) VALUES "
+            "(:fid, :uid, 'f.pdf', 'application/pdf', 1, "
+            "'a' || repeat('0', 63), 's3://k')"
+        ),
+        {"fid": file_id, "uid": user_id},
+    )
+    await db_session.flush()
+
+    # Omit ``partial`` — the column default should populate it.
+    await db_session.execute(
+        text(
+            "INSERT INTO message_citations "
+            "(message_id, source_file_id, source_offset_start, source_offset_end, "
+            "source_text, verified, verification_method, verification_confidence) "
+            "VALUES (:mid, :fid, 0, 5, 'hello', true, 'exact_match', 1.0)"
+        ),
+        {"mid": message_id, "fid": file_id},
+    )
+    await db_session.flush()
+
+    row = (
+        await db_session.execute(
+            text("SELECT partial FROM message_citations WHERE message_id = :mid"),
+            {"mid": message_id},
+        )
+    ).one()
+    assert row[0] is False

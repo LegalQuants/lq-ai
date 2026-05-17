@@ -388,6 +388,25 @@ anonymization:
   # before sending back to backend.
 
 # ============================================================
+# CITATION ENGINE (PRD §3.3 / M2-C1)
+# ============================================================
+# The api/ side runs the Citation Engine cascade (exact-match →
+# tolerant-match → LLM paraphrase judge → ensemble). Stage 3
+# dispatches a judge call through this gateway; ``judge_model`` is
+# the alias the gateway resolves for that call.
+#
+# Defaults to ``fast`` so the judge runs on a smaller, cheaper
+# model than whatever generated the citation. Operators who want a
+# different judge model should pick one weaker than the
+# citation-generating model (the plan's calibration intuition: the
+# judge shouldn't be smarter than the author, only different).
+# Accepts either an alias from ``model_aliases:`` above or a fully-
+# qualified ``provider-name/model-name`` form.
+
+citation_engine:
+  judge_model: fast
+
+# ============================================================
 # COST TRACKING
 # ============================================================
 # Per-model cost rates for the cost tracker. Updated as

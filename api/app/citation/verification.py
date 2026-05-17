@@ -28,13 +28,19 @@ remapping.
 
 from __future__ import annotations
 
+import json
+import logging
 import uuid
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 from rapidfuzz import fuzz
 
+from app.citation.judge_prompts import build_judge_prompt
 from app.citation.normalization import normalize
+from app.schemas.gateway import ChatCompletionRequest
+
+logger = logging.getLogger(__name__)
 
 
 class _CandidateProtocol(Protocol):
@@ -75,15 +81,22 @@ class VerificationResult:
 
     The shape is symmetric with the ``message_citations`` columns so
     the persistence layer can copy fields without re-mapping.
+
+    M2-C1 added ``partial``: Stage 3 (paraphrase judge) can return
+    ``verified=True, partial=True`` when the source supports *some*
+    but not all of the claim. Stages 1 and 2 always emit
+    ``partial=False`` because they are exact-content stages — a
+    partial match is, by their definition, no match.
     """
 
     verified: bool
     method: str | None
     confidence: float | None
+    partial: bool = False
 
 
 # A sentinel result for misses, reused so callers don't allocate.
-_MISS = VerificationResult(verified=False, method=None, confidence=None)
+_MISS = VerificationResult(verified=False, method=None, confidence=None, partial=False)
 
 # Stage 2 acceptance threshold on the rapidfuzz ratio scale (0-100).
 # 95 catches normalization-only differences (smart quotes, whitespace
@@ -182,19 +195,201 @@ def verify_tolerant_match(
     )
 
 
-def verify(
+# --- Stage 3 — paraphrase judge (M2-C1) --------------------------------------
+
+
+# Map the judge's high/medium/low to a numeric confidence the
+# ``message_citations.verification_confidence`` column accepts. Stages 1
+# and 2 emit 1.0 / 0.95+; Stage 3 sits below — a paraphrase verdict
+# is genuinely less certain than a byte-or-normalization match.
+_CONFIDENCE_MAP: dict[str, float] = {
+    "high": 0.90,
+    "medium": 0.70,
+    "low": 0.50,
+}
+
+# Window of context characters to include around the cited span. A pure
+# slice can be too narrow ("the source span says X but the claim adds Y"
+# when Y appears in the same sentence). A small window picks up that
+# context without flooding the judge with the full document.
+_CONTEXT_WINDOW_CHARS = 200
+
+
+class _JudgeGatewayProtocol(Protocol):
+    """Subset of :class:`app.clients.gateway.GatewayClient` the judge needs.
+
+    Tests pass a stub that records the request and returns canned
+    responses; production passes the real client.
+    """
+
+    async def chat_completion(
+        self,
+        request: ChatCompletionRequest,
+        *,
+        request_id: str | None = ...,
+    ) -> Any: ...
+
+
+async def verify_paraphrase(
     candidate: _CandidateProtocol,
     document: _DocumentProtocol,
+    *,
+    gateway: _JudgeGatewayProtocol,
+    judge_model: str,
+) -> VerificationResult:
+    """Stage 3: ask an LLM judge whether the claim is supported by the source.
+
+    Dispatches a structured-JSON judge prompt to the gateway, parses
+    the verdict, and maps the high/medium/low confidence to numeric
+    confidence (0.90 / 0.70 / 0.50). A ``partial`` verdict persists as
+    ``verified=True, partial=True`` so the M2-C2 UI can render it
+    distinctly from a fully verified citation.
+
+    Failure modes are silent: gateway transport errors, malformed
+    JSON, unknown verdict / confidence values, and empty responses
+    all return :data:`_MISS`. Stage 3 is best-effort verification on
+    top of Stages 1 and 2; a failure here just means the citation
+    falls through to "unverified" without crashing the persistence
+    pipeline.
+    """
+
+    claim = candidate.source_text
+    if not claim:
+        return _MISS
+
+    chunk = _source_chunk_with_context(candidate, document)
+    if chunk is None:
+        return _MISS
+
+    messages = build_judge_prompt(claim_text=claim, chunks=[chunk])
+    request = ChatCompletionRequest(
+        model=judge_model,
+        messages=messages,
+        # The judge prompt asks for a short structured JSON; cap the
+        # token budget so a chatty model can't run away with the
+        # output. ~400 tokens is plenty for ``{"verdict": ..., ...}``
+        # plus a one-sentence justification.
+        max_tokens=400,
+        # We don't want creative paraphrases of the verdict; 0.0 keeps
+        # the judge deterministic.
+        temperature=0.0,
+        # Per-request opt-out from anonymization — the judge needs to
+        # see actual content to verify it. Anonymized text would
+        # destroy the semantics the judge is checking against.
+        anonymize=False,
+    )
+
+    try:
+        response = await gateway.chat_completion(request)
+    except Exception as exc:
+        logger.warning(
+            "paraphrase judge gateway call failed: %s",
+            exc,
+            extra={"event": "citation_judge_error", "error_type": type(exc).__name__},
+        )
+        return _MISS
+
+    return _parse_judge_response(response)
+
+
+def _source_chunk_with_context(
+    candidate: _CandidateProtocol,
+    document: _DocumentProtocol,
+) -> str | None:
+    """Return the cited span plus ``_CONTEXT_WINDOW_CHARS`` on each side."""
+
+    content = document.normalized_content
+    doc_len = len(content)
+    if not _slice_in_range(candidate.source_offset_start, candidate.source_offset_end, doc_len):
+        return None
+    start = max(0, candidate.source_offset_start - _CONTEXT_WINDOW_CHARS)
+    end = min(doc_len, candidate.source_offset_end + _CONTEXT_WINDOW_CHARS)
+    return content[start:end]
+
+
+def _parse_judge_response(response: Any) -> VerificationResult:
+    """Extract verdict + confidence + partial from the judge's chat completion."""
+
+    try:
+        choices = response.choices
+        if not choices:
+            return _MISS
+        content = choices[0].message.content
+    except AttributeError:
+        return _MISS
+
+    if not content:
+        return _MISS
+
+    try:
+        payload = json.loads(content)
+    except (json.JSONDecodeError, TypeError):
+        logger.info(
+            "paraphrase judge produced non-JSON output",
+            extra={"event": "citation_judge_malformed"},
+        )
+        return _MISS
+
+    if not isinstance(payload, dict):
+        return _MISS
+
+    verdict = payload.get("verdict")
+    confidence_label = payload.get("confidence")
+
+    if verdict == "no":
+        # The judge rejected the claim — fall through to unverified.
+        return _MISS
+
+    if verdict not in ("yes", "partial"):
+        logger.info(
+            "paraphrase judge returned unknown verdict %r",
+            verdict,
+            extra={"event": "citation_judge_unknown_verdict"},
+        )
+        return _MISS
+
+    if confidence_label not in _CONFIDENCE_MAP:
+        logger.info(
+            "paraphrase judge returned unknown confidence %r",
+            confidence_label,
+            extra={"event": "citation_judge_unknown_confidence"},
+        )
+        return _MISS
+
+    return VerificationResult(
+        verified=True,
+        method="paraphrase_judge",
+        confidence=_CONFIDENCE_MAP[confidence_label],
+        partial=(verdict == "partial"),
+    )
+
+
+async def verify(
+    candidate: _CandidateProtocol,
+    document: _DocumentProtocol,
+    *,
+    gateway: _JudgeGatewayProtocol | None = None,
+    judge_model: str = "fast",
 ) -> VerificationResult:
     """Run the verification cascade and return the first hit.
 
-    Order: Stage 1 (exact-match) → Stage 2 (tolerant-match). Returns
-    :data:`_MISS` only when every stage has rejected the candidate.
-    Stages 3 and 4 (LLM judge, ensemble) land in M2-C1 / M2-D1 and
-    will plug in here.
+    Order: Stage 1 (exact-match) → Stage 2 (tolerant-match) → Stage 3
+    (paraphrase judge). Returns :data:`_MISS` only when every stage
+    has rejected the candidate.
 
-    The persistence layer in ``app.api.chats`` calls this rather than
-    a specific stage so the cascade is opaque to callers.
+    Stage 3 only runs when ``gateway`` is supplied. Callers without
+    an LLM (smoke tests, eval scripts that exercise only the
+    deterministic stages) pass ``gateway=None``; the cascade then
+    runs Stages 1+2 only and short-circuits to MISS if both miss.
+
+    ``judge_model`` is the alias the gateway resolves for the Stage 3
+    judge call. Default ``"fast"`` matches ``gateway.yaml.example``'s
+    ``citation_engine.judge_model``; the chat-send caller passes the
+    value it pulled from ``GatewayClient.get_citation_engine_judge_model``.
+
+    Made async in M2-C1: Stages 1 and 2 are still pure Python and run
+    synchronously inside the function; the ``async def`` is for
+    Stage 3's gateway call.
     """
 
     result = verify_exact_match(candidate, document)
@@ -205,4 +400,7 @@ def verify(
     if result.verified:
         return result
 
-    return _MISS
+    if gateway is None:
+        return _MISS
+
+    return await verify_paraphrase(candidate, document, gateway=gateway, judge_model=judge_model)

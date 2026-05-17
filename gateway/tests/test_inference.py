@@ -147,6 +147,23 @@ async def test_models_returns_configured_aliases(client: AsyncClient) -> None:
 
 
 @pytest.mark.unit
+async def test_citation_engine_config_returns_judge_model(client: AsyncClient) -> None:
+    """``GET /v1/citation-engine/config`` exposes the loaded judge_model (M2-C1).
+
+    The api/'s Citation Engine pulls this at startup so the operator
+    configures the Stage 3 judge model in one place (``gateway.yaml``)
+    rather than mirroring it on the api/ side.
+    """
+
+    response = await client.get("/v1/citation-engine/config")
+
+    assert response.status_code == 200
+    body = response.json()
+    # The example config ships ``citation_engine.judge_model: fast``.
+    assert body == {"judge_model": "fast"}
+
+
+@pytest.mark.unit
 async def test_chat_completions_rejects_get(client: AsyncClient) -> None:
     """Sanity: only POST is registered on /v1/chat/completions."""
 
