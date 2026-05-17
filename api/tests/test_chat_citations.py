@@ -564,6 +564,7 @@ async def test_get_citations_endpoint_returns_persisted_rows(
     assert cite["verified"] is True
     assert cite["verification_method"] == "exact_match"
     assert cite["verification_confidence"] == 1.0
+    assert cite["partial"] is False
     assert cite["source_page"] == 1
     expected_start = CHUNK_BODY.find(quote)
     assert cite["source_offset_start"] == expected_start
@@ -738,6 +739,59 @@ async def test_chat_send_partial_verdict_persists_with_partial_true(
     assert cite.partial is True
     assert cite.verification_method == "paraphrase_judge"
     assert float(cite.verification_confidence or 0) == pytest.approx(0.70)
+
+
+@respx.mock
+async def test_get_citations_endpoint_exposes_partial_flag(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    owner_user: User,
+    chat_with_kb_attached: Chat,
+    source_file: FileModel,
+    source_document: Document,
+    source_chunk: DocumentChunk,
+) -> None:
+    """`GET /messages/{id}/citations` surfaces `partial=True` for partial verdicts (M2-C2)."""
+
+    paraphrase = "the employee may not engage in any competing business"
+    assistant_text = f'The agreement says "{paraphrase}" (Source: [1]).'
+
+    respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(
+        side_effect=[
+            httpx.Response(200, json=_success_payload(assistant_text)),
+            httpx.Response(
+                200,
+                json=_judge_response_payload(verdict="partial", confidence="medium"),
+            ),
+        ]
+    )
+
+    with patch(
+        "app.api.chats.hybrid_search",
+        new=AsyncMock(
+            return_value=[_hybrid_result_for(source_chunk, source_document, source_file)]
+        ),
+    ):
+        send = await client.post(
+            f"/api/v1/chats/{chat_with_kb_attached.id}/messages",
+            json={"content": "Quote the non-compete clause.", "model": "smart"},
+            headers=_h(owner_user),
+        )
+    assert send.status_code == 200, send.text
+    message_id = send.json()["message"]["id"]
+
+    get_response = await client.get(
+        f"/api/v1/chats/{chat_with_kb_attached.id}/messages/{message_id}/citations",
+        headers=_h(owner_user),
+    )
+    assert get_response.status_code == 200, get_response.text
+    body = get_response.json()
+    assert len(body) == 1
+    cite = body[0]
+    assert cite["verified"] is True
+    assert cite["partial"] is True
+    assert cite["verification_method"] == "paraphrase_judge"
+    assert cite["verification_confidence"] == pytest.approx(0.70)
 
 
 @respx.mock

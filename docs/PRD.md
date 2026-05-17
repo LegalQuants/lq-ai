@@ -2736,6 +2736,18 @@ Path (a) is recommended; the salt is the smaller change with cleaner round-trip 
 
 **Acceptance criteria:** No source document containing a literal pseudonym pattern can confuse the rehydrator's behavior; two parallel mappers produce structurally distinct pseudonym strings (verified by an updated round-trip test); the mapper's pseudonym format is updated; existing M2-B3 / M2-C3 tests pass with the new format (the cross-mapper test in `test_round_trip.py` flips its assertion when this lands — the test's docstring already calls this out); the change is documented in `docs/security/anonymization.md`.
 
+#### DE-275 — Embed M2 citations in chat-message envelope
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** M2-C2 wires the frontend to `GET /api/v1/chats/{chat_id}/messages/{message_id}/citations` as a lazy fetch immediately after each assistant message renders. The endpoint already exists (M2-A2) and the lazy-fetch path is the smallest change to surface the five-state citation UI without disturbing the chat-streaming pipeline. The cost is one extra round-trip per assistant message; in practice it runs in parallel with the user typing their next message, so end-user-perceived latency is near-zero on a healthy network.
+
+The structural cost is a second request per message — more api/ load, more network traffic, and a small extra failure mode (the citations fetch could fail independently of the chat response). A future refactor could embed the citation rows directly in the assistant-message JSON envelope so they land alongside `content`, removing the second round-trip entirely. M2-D2 (Citation Engine integration with the chat-send path) is the natural moment to revisit this; if measured latency or backend load shows up as a concern in the M2-F2 acceptance corpus, this DE is the path forward.
+
+**Specific scope:** Extend the assistant-message response shape (the chat-send return value and the chat-message read endpoint) to include a `citations` field — same per-row schema as `GET /messages/{id}/citations` returns, including `partial`. Update the frontend renderer to prefer the embedded citations when present and fall back to the lazy GET for older messages (or when the field is absent — e.g., a skill that doesn't emit citations). Keep the GET endpoint operational regardless; it remains the canonical surface for direct citation lookup (audit-log deep-linking, debugging, future operator tooling).
+
+**Acceptance criteria:** New assistant-message responses include a `citations` array reflecting the same data the GET endpoint returns; the frontend renders citations from the embedded data without an additional fetch when present; messages persisted before this lands continue to render correctly via the GET fallback; existing M2-C2 component tests pass with both data paths; `GET /messages/{id}/citations` is unchanged and remains the canonical source-of-truth endpoint.
+
 ### Workflow intelligence
 
 This subsection captures the bounded items that operationalize the M5+ Forward-Looking Workflow Intelligence direction (§8.5). The items are bounded enough to be picked up by community contributors as the M5+ roadmap matures. The architectural slot for the MCP-client subsystem is already committed for M1–M2 (§8 M1) so this subsection's items can be implemented incrementally without core refactoring.

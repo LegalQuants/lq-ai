@@ -3387,6 +3387,14 @@ components:
           type: string
           description: "Verbatim text from source — verified to appear in source"
         verified: {type: boolean, description: "Citation engine verified the quote"}
+        partial:
+          type: boolean
+          default: false
+          description: >-
+            True when the paraphrase judge (M2-C1) returned ``partial`` —
+            the source supports the claim but only partially. Drives the
+            M2-C2 UI's "verified with caveats" rendering (verified-paraphrase
+            state).
 
     SkillSummary:
       type: object
