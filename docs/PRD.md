@@ -2748,6 +2748,24 @@ The structural cost is a second request per message — more api/ load, more net
 
 **Acceptance criteria:** New assistant-message responses include a `citations` array reflecting the same data the GET endpoint returns; the frontend renders citations from the embedded data without an additional fetch when present; messages persisted before this lands continue to render correctly via the GET fallback; existing M2-C2 component tests pass with both data paths; `GET /messages/{id}/citations` is unchanged and remains the canonical source-of-truth endpoint.
 
+#### DE-276 — Ingest observability: surface silent embed/parse failures
+
+**Priority:** P2 · **Effort:** S-M
+
+**Context:** During M2-C2 manual verification on 2026-05-16, a KB-grounded chat returned "I don't have any NDA document in our conversation" despite the KB showing a successfully-attached document. Investigation found the document had been chunked correctly (16 chunks of real NDA text) but every chunk's `embedding` was NULL. Root cause: the ingest worker's `embed_chunks_for_file_job` was failing with `KeyError: 'LQ_AI_GATEWAY_URL'` because the worker container was missing the gateway env vars in `docker-compose.yml`. The worker reported `chunks_embedded: 0` and ARQ logged a one-line truncated error, but no surface in the product (admin UI, document status field, /admin/ingest-health endpoint) escalated this to operator-visible state — the document continued to render as "ready" and KB-attach UI showed it as if it were searchable. The immediate root cause was patched in a follow-on commit; this DE captures the broader observability gap.
+
+The failure mode is structurally bad: a deployment misconfiguration (missing env var, gateway unreachable, embedding-model permissions revoked) silently degrades KB hybrid retrieval to FTS-only across the entire deployment. Operators have no in-product signal until an end-user reports "the AI can't see my documents". The current `documents` table has no embed-state column, and the ingest worker's structured logs are not surfaced anywhere an admin reads.
+
+**Specific scope:** Three paths, ideally landed together:
+
+- **(a) Document-level embed status.** Add `documents.embedding_status` (enum: `pending`, `embedded`, `failed`) populated by `embed_chunks_for_file_job` per its return value. `failed` rows carry a `last_error` text field (the same string the worker already returns). Default `pending` for legacy rows; backfill from a one-time sweep that checks `EXISTS (SELECT 1 FROM document_chunks WHERE document_id = d.id AND embedding IS NULL)`.
+
+- **(b) Admin-visible state.** Surface the new status in the admin KB-detail UI and a new `GET /api/v1/admin/ingest-health` summary endpoint. Failed-embed rows show up with their error text; the admin can decide to re-trigger the embed job per-document or per-KB. Per `[[reference_lq_ai_dev_quirks]]` the operator-facing audit-health pattern (DE-257) is the right precedent.
+
+- **(c) CI guard against the specific regression.** Add a fresh-install validation step (per `[[feedback_dry_run_value]]`) that uploads a small fixture document, waits for `documents.embedding_status='embedded'`, then asserts at least one chunk has a non-NULL `embedding`. This is the canonical guard against the env-var class of failure — it would have caught the present bug at deploy time, not at user-report time.
+
+**Acceptance criteria:** `documents.embedding_status` is populated for every newly-ingested document and updates correctly on retry; the admin UI surfaces failed-embed documents distinctly from ready ones; an end-to-end test against a fresh-install stack uploads a fixture document and asserts the chunks come back embedded (not FTS-only); the gateway-misconfigured-worker class of bug surfaces as a CI failure on PR review rather than a silent production degradation.
+
 ### Workflow intelligence
 
 This subsection captures the bounded items that operationalize the M5+ Forward-Looking Workflow Intelligence direction (§8.5). The items are bounded enough to be picked up by community contributors as the M5+ roadmap matures. The architectural slot for the MCP-client subsystem is already committed for M1–M2 (§8 M1) so this subsection's items can be implemented incrementally without core refactoring.
