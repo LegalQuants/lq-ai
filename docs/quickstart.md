@@ -342,7 +342,7 @@ You configured `allowed_tiers_global` to disallow Tier 4 in setup item 2; either
 
 ### "I want to use Mode 2 (local Ollama) instead"
 
-Replace `docker compose up -d` with `docker compose --profile local up -d`. The local profile starts an `ollama` container alongside the rest of the stack; pull a model into it once with `docker compose exec ollama ollama pull llama3.1:8b` (a few GB) before the first inference call. The gateway-side wiring is automatic — `gateway.yaml.example` ships with `local-fast` (Llama 3.1 8B) and `local-thinking` (Llama 3.1 70B) aliases that route to the local Ollama service at `http://ollama:11434`.
+Replace `docker compose up -d` with `docker compose --profile local up -d`. The local profile starts an `ollama` container alongside the rest of the stack; pull a model into it once with `docker compose exec ollama ollama pull qwen3.5:9b` (a few GB) before the first inference call. The gateway-side wiring is automatic — `gateway.yaml.example` ships with `local-fast` (Qwen 3.5 4B) and `local-thinking` (Qwen 3.5 9B) aliases that route to the local Ollama service at `http://ollama:11434`. Operators are free to repoint either alias at any model the local Ollama can serve; change `gateway.yaml.example` accordingly and pull the corresponding tag.
 
 To exercise the local path with `curl`:
 

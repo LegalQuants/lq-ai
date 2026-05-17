@@ -9,7 +9,7 @@ no external network).
 What this file covers:
 
 * Alias dispatch — ``local-fast`` resolves to ``ollama-local /
-  llama3.1:8b`` and round-trips correctly.
+  qwen3.5:4b-nvfp4`` and round-trips correctly.
 * Tier annotation — every Ollama-routed response carries
   ``routed_inference_tier=1`` (the Mode-2 / air-gap-capable tier
   per PRD §1.5.2). The body field and the
@@ -103,7 +103,7 @@ def _ollama_unary_payload(content: str = "Hi from Ollama.") -> dict[str, object]
     """A canonical Ollama ``/api/chat`` non-streaming response."""
 
     return {
-        "model": "llama3.1:8b",
+        "model": "qwen3.5:4b-nvfp4",
         "created_at": "2026-05-08T12:00:00Z",
         "message": {"role": "assistant", "content": content},
         "done": True,
@@ -122,7 +122,7 @@ def _ollama_ndjson_body(text_chunks: list[str]) -> str:
         lines.append(
             json.dumps(
                 {
-                    "model": "llama3.1:8b",
+                    "model": "qwen3.5:4b-nvfp4",
                     "created_at": "2026-05-08T12:00:00Z",
                     "message": {"role": "assistant", "content": chunk},
                     "done": False,
@@ -133,7 +133,7 @@ def _ollama_ndjson_body(text_chunks: list[str]) -> str:
     lines.append(
         json.dumps(
             {
-                "model": "llama3.1:8b",
+                "model": "qwen3.5:4b-nvfp4",
                 "created_at": "2026-05-08T12:00:01Z",
                 "message": {"role": "assistant", "content": ""},
                 "done": True,
@@ -156,7 +156,7 @@ async def test_local_fast_alias_routes_to_ollama(
     ollama_client: AsyncClient,
     ollama_app: FastAPI,
 ) -> None:
-    """``local-fast`` resolves to ``ollama-local / llama3.1:8b`` and
+    """``local-fast`` resolves to ``ollama-local / qwen3.5:4b-nvfp4`` and
     round-trips through the OllamaAdapter."""
 
     upstream = respx.post("http://ollama:11434/api/chat").mock(
@@ -191,7 +191,7 @@ async def test_local_fast_alias_routes_to_ollama(
     # Verify the upstream payload had the resolved native model.
     assert upstream.called
     sent = json.loads(upstream.calls[-1].request.content)
-    assert sent["model"] == "llama3.1:8b"
+    assert sent["model"] == "qwen3.5:4b-nvfp4"
     assert sent["stream"] is False
 
 
@@ -206,7 +206,7 @@ async def test_local_thinking_alias_routes_to_70b(
         return_value=httpx.Response(
             200,
             json={
-                "model": "llama3.1:70b",
+                "model": "qwen3.5:9b",
                 "message": {"role": "assistant", "content": "deep thoughts"},
                 "done": True,
                 "done_reason": "stop",
@@ -230,7 +230,7 @@ async def test_local_thinking_alias_routes_to_70b(
 
     assert upstream.called
     sent = json.loads(upstream.calls[-1].request.content)
-    assert sent["model"] == "llama3.1:70b"
+    assert sent["model"] == "qwen3.5:9b"
 
 
 @pytest.mark.integration
@@ -245,7 +245,7 @@ async def test_native_ollama_model_routes_directly(
         return_value=httpx.Response(
             200,
             json={
-                "model": "mistral-large",
+                "model": "gemma4:e4b",
                 "message": {"role": "assistant", "content": "ok"},
                 "done": True,
                 "done_reason": "stop",
@@ -257,7 +257,7 @@ async def test_native_ollama_model_routes_directly(
     response = await ollama_client.post(
         "/v1/chat/completions",
         json={
-            "model": "mistral-large",
+            "model": "gemma4:e4b",
             "messages": [{"role": "user", "content": "hi"}],
         },
     )
@@ -355,7 +355,7 @@ async def test_routing_log_row_written_for_ollama_success(
     row = rows[0]
     assert row.requested_model == "local-fast"
     assert row.routed_provider == "ollama-local"
-    assert row.routed_model == "llama3.1:8b"
+    assert row.routed_model == "qwen3.5:4b-nvfp4"
     assert row.routed_inference_tier == 1
     assert row.tokens_in == 9
     assert row.tokens_out == 6
@@ -482,7 +482,7 @@ async def fallback_app(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[FastAPI
         from app.config import ModelAliasConfig, ModelTarget
 
         config.model_aliases["smart-with-local-fallback"] = ModelAliasConfig(
-            primary=ModelTarget(provider="ollama-local", model="llama3.1:8b"),
+            primary=ModelTarget(provider="ollama-local", model="qwen3.5:4b-nvfp4"),
             fallback=[ModelTarget(provider="anthropic-prod", model="claude-opus-4-7")],
         )
         # Rebuild the router so the new alias is in scope.
@@ -587,7 +587,7 @@ async def test_fallback_chain_ollama_404_does_not_fall_back(
     recorder.rows.clear()
 
     ollama_route = respx.post("http://ollama:11434/api/chat").mock(
-        return_value=httpx.Response(404, json={"error": "model 'llama3.1:8b' not found"})
+        return_value=httpx.Response(404, json={"error": "model 'qwen3.5:4b-nvfp4' not found"})
     )
     anthropic_route = respx.post("https://api.anthropic.com/v1/messages").mock(
         return_value=httpx.Response(

@@ -86,7 +86,7 @@ paths:
           gateway's `model_aliases` config, with the alias's fallback
           chain applied on primary failure.
         * **A direct `<provider>/<model>` form** (`anthropic-prod/claude-opus-4-7`,
-          `openai-prod/gpt-4o`, `ollama-local/llama3.1:8b`) — dispatched
+          `openai-prod/gpt-4o`, `ollama-local/qwen3.5:9b`) — dispatched
           directly to that provider with **no fallback chain**. Per
           ADR 0011: the transparency principle requires users / admins
           to be able to pick a specific model without alias indirection.

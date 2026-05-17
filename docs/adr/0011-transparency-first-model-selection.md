@@ -58,7 +58,7 @@ Chat-completion requests can send a fully-qualified model identifier:
 ```
 model: "anthropic/claude-opus-4-7"
 model: "openai/gpt-4o"
-model: "ollama/llama3.1:70b"
+model: "ollama/qwen3.5:9b"
 model: "bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0"
 ```
 

@@ -111,6 +111,38 @@ def test_load_config_parses_example(example_env: None) -> None:
     assert config.tier_policy.allowed_tiers_global == [1, 2, 3, 4]
     assert config.tier_policy.default_minimum_tier == 4
 
+    # M2-B3: Anonymization block typed shape.
+    # The example ships anonymization.enabled=false (M2 feature flag)
+    # and anonymization.apply_at_tiers=[3, 4, 5]. The middleware reads
+    # both, so they need to be typed (not just ``extra="allow"``
+    # passthroughs) so a typo in the YAML key surfaces as a config
+    # error rather than a silent middleware no-op.
+    assert config.anonymization.enabled is False
+    assert config.anonymization.apply_at_tiers == [3, 4, 5]
+    # Type discipline: an explicit ``list[int]`` so a string-list
+    # would raise rather than silently passthrough.
+    assert all(isinstance(t, int) for t in config.anonymization.apply_at_tiers)
+
+
+@pytest.mark.unit
+def test_anonymization_config_rejects_non_int_tiers() -> None:
+    """``apply_at_tiers`` must be ``list[int]``; bad values raise."""
+
+    from pydantic import ValidationError
+
+    from app.config import AnonymizationConfig
+
+    # Valid (default) — empty tiers list.
+    AnonymizationConfig()
+    # Valid — int list.
+    cfg = AnonymizationConfig(apply_at_tiers=[3, 4, 5])
+    assert cfg.apply_at_tiers == [3, 4, 5]
+    # Tier out of [1,5] range surfaces as ValidationError.
+    with pytest.raises(ValidationError):
+        AnonymizationConfig(apply_at_tiers=[0, 1])
+    with pytest.raises(ValidationError):
+        AnonymizationConfig(apply_at_tiers=[1, 6])
+
 
 @pytest.mark.unit
 def test_load_config_alias_payload(example_env: None) -> None:

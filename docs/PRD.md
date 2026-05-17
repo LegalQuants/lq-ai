@@ -1205,7 +1205,7 @@ models:
     cost_per_1k_output_tokens_usd: 0.004
   - alias: local
     provider: ollama
-    model: llama3.1:70b
+    model: qwen3.5:9b
 
 routing:
   default: smart

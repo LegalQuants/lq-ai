@@ -51,6 +51,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
 from app import __version__
+from app.anonymization.engine import Anonymizer
 from app.api import admin_router, inference_router
 from app.clients.backend import (
     BackendClient,
@@ -238,6 +239,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     model_discoverer = ModelDiscoverer()
     app.state.model_discoverer = model_discoverer
     logger.info("model discoverer wired (Ollama 60s TTL, Anthropic 300s TTL)")
+
+    # M2-B3: anonymization middleware façade. The Anonymizer is
+    # lightweight — instance state is just an analyzer reference —
+    # and the spaCy load is deferred to first use, so this is a
+    # no-cost startup hook even when the config disables the feature.
+    # Tests override ``app.state.anonymizer`` to inject a stub analyzer
+    # without touching the singleton.
+    app.state.anonymizer = Anonymizer()
+    logger.info("anonymization middleware wired (lazy analyzer load)")
 
     try:
         yield

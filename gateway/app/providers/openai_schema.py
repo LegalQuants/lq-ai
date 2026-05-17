@@ -177,6 +177,23 @@ class ChatCompletionRequest(BaseModel):
 
     chat_id: str | None = None
     anonymize: bool = True
+    """Per-request anonymization opt-out (M2-B3). ``True`` (the default)
+    lets the gateway middleware pseudonymize entities before the
+    provider call when the deployment-level ``anonymization.enabled``
+    flag and tier gating both permit. ``False`` is the per-request
+    escape hatch — operators send it when they need the raw text on
+    the upstream call (e.g. running an evaluation that compares
+    original vs. rehydrated)."""
+
+    lq_ai_privileged: bool = False
+    """M2-B3: the chat lives inside an attorney-client privileged
+    Project (``projects.privileged = true`` in the backend). The
+    anonymization middleware skips entirely for privileged chats —
+    pseudonym rewriting of a privileged communication risks corrupting
+    the work product that privilege protects, so the conservative
+    posture is "don't touch it." Backend resolves the flag from the
+    project row and forwards it; the gateway never queries the
+    backend for it."""
 
     # --- C2 (skill prompt assembly per ADR 0007) -----------------------------
     lq_ai_skills: list[str] = Field(default_factory=list, max_length=16)
