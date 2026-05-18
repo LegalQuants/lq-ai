@@ -1535,16 +1535,23 @@ async def _persist_message_citations(
     if not retrieved_chunks:
         return
 
-    candidates = extract_citations(assistant_text, retrieved_chunks)
+    # Batch-load the documents the retrieved chunks point at so the
+    # verifier has ``document.normalized_content`` and the extractor
+    # has the same surface for the M3-0.2 / DE-277 chunk-boundary
+    # fallback. Loading by retrieved-chunk document_ids (rather than
+    # by candidate document_ids as M2 did) is a superset: every
+    # candidate's document is in this set by construction, and the
+    # extra documents the verifier never consults are negligible.
+    chunk_doc_ids = {chunk.document_id for chunk in retrieved_chunks}
+    doc_rows = (
+        (await db.execute(select(Document).where(Document.id.in_(chunk_doc_ids)))).scalars().all()
+    )
+    docs_by_id = {d.id: d for d in doc_rows}
+    doc_contents = {d.id: d.normalized_content for d in doc_rows}
+
+    candidates = extract_citations(assistant_text, retrieved_chunks, doc_contents)
     if not candidates:
         return
-
-    # Batch-load the documents the candidates point at so we don't
-    # round-trip the DB per citation. The verifier needs
-    # ``document.normalized_content`` to confirm the slice.
-    doc_ids = {c.source_document_id for c in candidates}
-    doc_rows = (await db.execute(select(Document).where(Document.id.in_(doc_ids)))).scalars().all()
-    docs_by_id = {d.id: d for d in doc_rows}
 
     # M2-C1: resolve the Stage 3 judge model once per persist call.
     # The lookup is process-cached on the GatewayClient, so the per-
