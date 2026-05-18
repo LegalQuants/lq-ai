@@ -7,7 +7,7 @@ computing per-model cost calibration.
 
 Per the M2 plan §M2-E2, the cost pre-flight in ``api/app/api/chats.py``
 previously used a single hard-coded conservative constant
-(``FLAT_PER_JUDGE_USD = 0.005``). That constant is 5-8× off for some
+(``FLAT_PER_JUDGE_USD = 0.005``). That constant is 5-8x off for some
 judge-model choices (haiku → 0.001/call; opus → 0.04/call), which
 either causes unnecessary ensemble fallbacks (cost overestimate) or
 risks runaway spend (cost underestimate when operators select
