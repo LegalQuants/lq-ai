@@ -111,6 +111,8 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         # admin
         "/api/v1/admin/audit-log",
         "/api/v1/admin/tier-policy",
+        # M3-0.1 / DE-283 — unauthenticated fresh-install state probe
+        "/api/v1/admin/bootstrap-status",
         # D0.5 — model alias admin
         "/api/v1/admin/config",
         "/api/v1/admin/aliases",
@@ -157,7 +159,8 @@ async def test_openapi_paths_match_sketch() -> None:
     # + Wave D.1 T4's /inference/override-tier-floor
     # + Wave D.2's three paths: /user-skills/{id}/versions,
     # /skills/autocomplete, /projects/sandbox/ensure.
-    assert len(actual) == 73
+    # + M3-0.1's /admin/bootstrap-status.
+    assert len(actual) == 74
 
 
 @pytest.mark.unit

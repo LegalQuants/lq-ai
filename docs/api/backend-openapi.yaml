@@ -2339,6 +2339,49 @@ paths:
                   next_cursor: {type: string, nullable: true}
 
   # ----------- ADMIN: MODEL ALIAS CRUD (D0.5) -----------
+  /api/v1/admin/bootstrap-status:
+    get:
+      tags: [admin]
+      summary: Report whether the first-run bootstrap admin password is still active
+      description: |
+        **Unauthenticated.** Consulted by the login UI before the operator
+        has credentials, so it can render a fresh-install hint pointing at
+        the API container logs when the bootstrap password has not yet
+        been rotated (M3-0.1 / DE-283).
+
+        ``default_password_active`` is True when at least one non-deleted
+        admin user still has ``must_change_password=True``. The flag flips
+        to False once the operator hits ``POST /api/v1/auth/change-password``,
+        at which point the login UI stops surfacing the hint.
+
+        The signal exposed by this endpoint is low-sensitivity: the
+        bootstrap password is 24 characters of CSPRNG output, so knowing
+        a deployment is in fresh-install state does not measurably help
+        an attacker who lacks the log line.
+      responses:
+        '200':
+          description: Bootstrap state
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [default_password_active, logs_hint]
+                properties:
+                  default_password_active:
+                    type: boolean
+                    description: |
+                      True when at least one admin user is still in the
+                      ``must_change_password=True`` state, indicating the
+                      first-run bootstrap password has not been rotated.
+                  logs_hint:
+                    type: string
+                    description: |
+                      Shell command an operator can run to retrieve the
+                      bootstrap password from the API container's logs.
+                example:
+                  default_password_active: true
+                  logs_hint: 'docker compose logs api 2>&1 | grep "First-run admin password"'
+
   /api/v1/admin/aliases:
     get:
       tags: [admin]

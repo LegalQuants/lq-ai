@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 
-	import { authApi } from '$lib/lq-ai/api';
+	import { authApi, bootstrapApi } from '$lib/lq-ai/api';
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
 	import DualBrandingFooter from '$lib/lq-ai/components/DualBrandingFooter.svelte';
 
@@ -9,6 +9,11 @@
 	let password = '';
 	let error: string | null = null;
 	let busy = false;
+	// M3-0.1 / DE-283 — populated after the first 401 if the deployment is
+	// still in fresh-install state. Stays null in all other paths so the
+	// hint never appears to operators who have already rotated.
+	let bootstrapLogsHint: string | null = null;
+	let hintCopied = false;
 
 	async function submit() {
 		error = null;
@@ -23,6 +28,13 @@
 		} catch (e: unknown) {
 			if (e instanceof LQAIApiError) {
 				error = e.status === 401 ? 'Invalid email or password.' : e.message;
+				if (e.status === 401) {
+					// Probe the fresh-install state lazily — only after the
+					// operator has already tried and failed. A clean 401 from a
+					// rotated deployment is the common case; we don't want to
+					// load extra signal there.
+					void checkBootstrapStatus();
+				}
 			} else if (e instanceof Error) {
 				error = e.message;
 			} else {
@@ -30,6 +42,31 @@
 			}
 		} finally {
 			busy = false;
+		}
+	}
+
+	async function checkBootstrapStatus() {
+		try {
+			const status = await bootstrapApi.getBootstrapStatus();
+			bootstrapLogsHint = status.default_password_active ? status.logs_hint : null;
+		} catch {
+			// Best-effort surface: if the probe itself fails, fall back to the
+			// plain 401. Don't mask the real auth error with a hint error.
+			bootstrapLogsHint = null;
+		}
+	}
+
+	async function copyHint() {
+		if (!bootstrapLogsHint) return;
+		try {
+			await navigator.clipboard.writeText(bootstrapLogsHint);
+			hintCopied = true;
+			setTimeout(() => {
+				hintCopied = false;
+			}, 1500);
+		} catch {
+			// Clipboard write can fail under restrictive iframe sandboxes; the
+			// command stays visible inline so manual copy still works.
 		}
 	}
 </script>
@@ -88,6 +125,39 @@
 				</div>
 			{/if}
 
+			{#if bootstrapLogsHint}
+				<div
+					class="lq-bootstrap-hint text-sm rounded border px-3 py-2 space-y-2"
+					data-testid="lq-ai-bootstrap-hint"
+					role="status"
+					aria-live="polite"
+				>
+					<p class="font-medium">First-run deployment?</p>
+					<p>
+						The bootstrap admin password is printed once to the API
+						container's logs. Run the command below to retrieve it,
+						sign in, then rotate immediately.
+					</p>
+					<div class="flex items-stretch gap-2">
+						<code
+							class="flex-1 px-2 py-1 rounded bg-white dark:bg-gray-900 border border-amber-200 dark:border-amber-700 text-xs overflow-x-auto whitespace-nowrap"
+							data-testid="lq-ai-bootstrap-hint-command"
+						>
+							{bootstrapLogsHint}
+						</code>
+						<button
+							type="button"
+							class="px-2 py-1 text-xs rounded border border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900"
+							on:click={copyHint}
+							data-testid="lq-ai-bootstrap-hint-copy"
+							aria-label="Copy command to clipboard"
+						>
+							{hintCopied ? 'Copied' : 'Copy'}
+						</button>
+					</div>
+				</div>
+			{/if}
+
 			<button
 				type="submit"
 				class="lq-btn-primary w-full"
@@ -96,11 +166,6 @@
 			>
 				{busy ? 'Signing in…' : 'Sign in'}
 			</button>
-
-			<p class="lq-text-caption text-center" style="color: var(--lq-text-tertiary);">
-				First-run? Check the API logs for the auto-generated admin password (per Quickstart Step
-				2).
-			</p>
 		</form>
 	</main>
 	<DualBrandingFooter />
@@ -130,5 +195,17 @@
 	.lq-btn-primary:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
+	}
+
+	.lq-bootstrap-hint {
+		background: #fffbeb;
+		border-color: #fcd34d;
+		color: #78350f;
+	}
+
+	:global(.dark) .lq-bootstrap-hint {
+		background: rgba(120, 53, 15, 0.25);
+		border-color: rgba(252, 211, 77, 0.4);
+		color: #fde68a;
 	}
 </style>

@@ -163,6 +163,8 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("GET", "/api/v1/chats/{chat_id}/receipts/export.jsonl"),
     # D0 — Model availability (proxy to gateway /v1/models)
     ("GET", "/api/v1/models"),
+    # M3-0.1 / DE-283 — unauthenticated fresh-install state probe
+    ("GET", "/api/v1/admin/bootstrap-status"),
     # D0.5 — Admin alias CRUD proxy
     ("GET", "/api/v1/admin/aliases"),
     ("GET", "/api/v1/admin/aliases/{name}"),
