@@ -74,6 +74,8 @@ Save the password. You'll use it momentarily.
 
 Open <http://localhost:3000/lq-ai> in your browser. The LQ.AI chat shell lives at `/lq-ai` per [ADR 0009](adr/0009-web-lq-ai-shell-coexistence.md); the upstream OpenWebUI shell at `/` is preserved untouched and is not the canonical experience for this quickstart. Sign in with email `admin@lq.ai` (the default — configurable via `LQ_AI_FIRST_RUN_ADMIN_EMAIL`) and the password from the previous step. The first time you sign in, you're prompted to set a permanent password; do so.
 
+> **Forgot to copy the bootstrap password?** Type any password and submit. If the deployment is still in fresh-install state, the login screen surfaces an inline hint with the exact `docker compose logs` command above and a one-click copy button (M3-0.1 / DE-283). The hint hides itself automatically once you've set your permanent password.
+
 > **Admin tip — Settings → Models.** Once signed in as an admin you'll see a **Settings** link in the top-right of the LQ.AI shell. It opens the model alias editor (D0.5) at `/lq-ai/admin/models`, where you can edit the `smart` / `fast` / `budget` / `local` / `embedding` aliases without restarting the gateway. Edits write `gateway.yaml` atomically and hot-reload the gateway in process; in-flight requests finish on the prior config and the next request picks up the new mapping. See [ADR 0010](adr/0010-gateway-config-hot-reload.md) for the full design.
 
 You then land on the first-run setup checklist. Four steps, in order, none blocking:

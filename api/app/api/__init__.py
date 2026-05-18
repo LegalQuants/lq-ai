@@ -25,6 +25,7 @@ from fastapi import APIRouter, Depends
 from app.api import (
     admin,
     auth,
+    bootstrap,
     chat_receipts,
     chats,
     enhance_prompt,
@@ -49,6 +50,11 @@ api_router = APIRouter(prefix="/api/v1")
 # Routers with mixed per-endpoint policies — see each module for details.
 api_router.include_router(auth.router)
 api_router.include_router(users.router)
+
+# Unauthenticated probe used by the login UI to surface fresh-install hints
+# (M3-0.1 / DE-283). Mounted without `_active` because the login screen
+# consults it before the operator has credentials.
+api_router.include_router(bootstrap.router)
 
 # Service-to-service router (gateway → backend). Authenticated by the
 # shared X-LQ-AI-Gateway-Key header per ADR 0006, NOT by the user-token

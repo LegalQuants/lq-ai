@@ -2964,9 +2964,11 @@ This DE intentionally combines bounded technical work with practice-specific jud
 
 #### DE-283 — Fresh-install login UX: surface the bootstrap-password path on first 401
 
-**Priority:** P2 · **Effort:** S (~30 min — community-friendly first PR)
+**Priority:** P2 · **Effort:** S (~3–4 h as actually shipped)
 
-**Status:** Open — surfaced during the M2 pre-tag fresh-install validation (2026-05-17). The maintainer team hit it; an attentive quickstart reader would not, but the failure mode is undocumented at the point it actually happens (the login screen), only at the point a careful reader is meant to have already addressed it (the quickstart Step 4).
+**Status:** **SHIPPED at M3-0.1** (Phase 0, pre-M3 hardening). Implemented as a new unauthenticated `GET /api/v1/admin/bootstrap-status` endpoint the web login screen consults on the first 401 to decide whether to surface a bootstrap-password hint; the hint hides automatically once the operator rotates (signal: any non-deleted admin still has `must_change_password=true`). Approach is a variant of the DE-283 specific-scope option (b) below — separate-endpoint rather than embedded-in-401-response, so the login endpoint's wire shape stays unchanged. Preserved as a reference example of a small, well-scoped contribution; see the M3-0.1 implementation for the pattern (single backend module + Pydantic schema + integration tests; single Svelte component change + Cypress E2E; one quickstart paragraph).
+
+**Original context (preserved for the historical record):** Surfaced during the M2 pre-tag fresh-install validation (2026-05-17). The maintainer team hit it; an attentive quickstart reader would not, but the failure mode is undocumented at the point it actually happens (the login screen), only at the point a careful reader is meant to have already addressed it (the quickstart Step 4).
 
 **Context:** When an operator deploys a fresh stack (or wipes volumes and restarts), the bootstrap path in `api/app/admin_bootstrap.py` creates a default admin user `admin@lq.ai` with a randomly-generated password printed once to the API container's logs ("First-run admin password: …"). The [quickstart §Step 4](quickstart.md#step-4--sign-in-as-the-first-run-admin) tells operators to grep the logs. Three failure modes routinely reach the login screen instead:
 
