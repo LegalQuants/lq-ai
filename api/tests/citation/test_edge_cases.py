@@ -441,36 +441,31 @@ async def test_cross_document_citations_persist_one_row_per_verified_citation(
 
 
 @respx.mock
-async def test_chunk_boundary_spanning_citation_does_not_extract_today(
+async def test_chunk_boundary_spanning_citation_verifies_via_full_doc_scan(
     client: AsyncClient,
     db_session: AsyncSession,
     owner_user: User,
     chat_with_kb: Chat,
 ) -> None:
-    """Known limitation (M2-D4 / DE-277): spanning quotes drop at extraction.
+    """M3-0.2 / DE-277: spanning quotes verify via the full-document fallback.
 
-    The Citation Engine's extractor (:func:`app.citation.extraction.extract_citations`)
-    locates each quote inside the cited chunk's content via
-    :func:`app.citation.extraction._locate_in_chunk`. If a quote
-    actually spans the boundary between two retrieved chunks — i.e.,
-    no single chunk's content contains the full quote — the locator
-    returns ``None`` and the candidate is dropped silently. The
-    verifier never sees the candidate, so no row is persisted and the
-    M2-C2 UI renders the marker as "unverified".
+    Until DE-277 landed, the Citation Engine's extractor located each
+    quote inside the cited chunk's content via
+    :func:`app.citation.extraction._locate_in_chunk`. A quote spanning
+    the boundary between two retrieved chunks — present in
+    ``documents.normalized_content`` but in neither chunk individually —
+    dropped silently and rendered as "unverified" in the UI.
 
-    In practice the model rarely emits genuinely spanning quotes —
-    instruction prompting in the retrieval-context block tells it to
-    pick the chunk containing the full quote. But the model could emit
-    such quotes (especially under adversarial or multi-chunk-paraphrase
-    prompting); the current pipeline silently degrades to unverified.
+    DE-277 extends the extractor: when the chunk-local locator misses,
+    it retries against the chunk's parent document's
+    ``normalized_content`` (M2-A1 surface) and emits the candidate
+    with document-absolute offsets. The downstream verifier already
+    reads against ``normalized_content`` so the spanning candidate
+    verifies cleanly via the same Stage 1 / Stage 2 logic.
 
-    Future fix path (DE-277): the extractor falls back to scanning
-    ``documents.normalized_content`` via FK from the chunk to the doc
-    when ``_locate_in_chunk`` misses; same fuzzy-vs-exact two-stage
-    logic against the full document text rather than the chunk slice.
-
-    This test pins the current behavior so a future implementation
-    of DE-277 has a failing assertion to flip.
+    This test pins the new behavior end-to-end: the spanning quote
+    persists with ``verification_method='exact_match'`` and the
+    persisted offsets are document-absolute.
     """
 
     full_content = (
@@ -535,10 +530,10 @@ async def test_chunk_boundary_spanning_citation_does_not_extract_today(
 
     assert response.status_code == 200, response.text
 
-    # Current behavior: extractor drops the spanning candidate; no
-    # citation row persists. When DE-277 lands, this assertion
-    # should flip to ``len(rows) == 1`` and the row should carry
-    # ``verification_method='exact_match'`` against the full-doc slice.
+    # DE-277 behavior: extractor falls back to the document-level scan,
+    # the candidate verifies with byte-for-byte equality against
+    # ``documents.normalized_content``, and one row persists with
+    # document-absolute offsets and ``verification_method='exact_match'``.
     rows = (
         (
             await db_session.execute(
@@ -548,11 +543,15 @@ async def test_chunk_boundary_spanning_citation_does_not_extract_today(
         .scalars()
         .all()
     )
-    assert rows == [], (
-        f"Expected no rows for a chunk-boundary spanning quote (DE-277 known limitation); "
-        f"got {len(rows)}. If this test fails because rows were persisted, DE-277 may have "
-        "landed — flip this assertion to verify the full-doc-scan extractor fix instead."
+    assert len(rows) == 1, (
+        f"Expected exactly one row from the DE-277 spanning fallback; got {len(rows)}."
     )
+    row = rows[0]
+    assert row.verification_method == "exact_match"
+    assert row.verified is True
+    assert row.source_offset_start == 30
+    assert row.source_offset_end == 60
+    assert row.source_text == spanning_quote
 
 
 @respx.mock

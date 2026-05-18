@@ -113,19 +113,23 @@ Three deferred enhancements surfaced during M2 land before the M3 tracks begin. 
 
 ### Task M3-0.2 — DE-277: Citation extractor chunk-boundary fallback
 
-**Scope:**
-- Implement document-scan fallback in `api/app/citation/verification.py` for the case where a citation's offsets fall on a chunk boundary and the cited span is split across two chunks.
-- On a Stage 1 or Stage 2 miss where the citation's `chunk_id` is adjacent to the next chunk in the same document, reconstruct the spanning region from `documents.normalized_content` (M2-A1 surface) and re-run Stage 1/2 against the spanning region.
-- Add a `verification_method = 'exact_match_spanning'` / `'tolerant_match_spanning'` variant to record that the verification used the cross-boundary path. UI renders this identically to the regular variants.
-- Unit tests in `api/tests/citation/test_chunk_boundary.py` covering: citation spanning two chunks; citation spanning three chunks (rare but possible for long quotes); citation entirely within one chunk (regression test — unaffected).
+**Scope** (corrected to track [DE-277 in PRD §9](PRD.md#de-277--citation-extractor-fallback-to-document-scan-on-chunk-boundary-miss) verbatim — the plan's original task description placed the fix in `verification.py`, but the actual gap is in `extraction.py`'s locator):
+
+- Extend `app/citation/extraction.py::extract_citations` with a full-document fallback. When the chunk-local locator (`_locate_in_chunk(quote, chunk.content)`) misses but the caller supplies the chunk's parent document's `normalized_content` (M2-A1 surface), retry the same exact-then-fuzzy locator against the full document.
+- Resolved offsets from the document-level scan are document-absolute already (no `chunk.char_offset_start` arithmetic); the downstream verifier reads against `documents.normalized_content` so the Stage 1 / Stage 2 logic verifies spanning candidates with no change. **No new `verification_method` values are required.**
+- Wire the chat-send pipeline (`app/api/chats.py::_persist_message_citations`) to pre-load documents for the retrieved-chunk doc_ids and pass the normalized-content map to `extract_citations`. The same loaded docs are reused by the verifier (no duplicate DB roundtrip).
+- Emit a structured `citation_chunk_mismatch` warning when the fallback fires (per [DE-277](PRD.md#de-277--citation-extractor-fallback-to-document-scan-on-chunk-boundary-miss) option b) — the citation still verifies, but the mismatch signal is worth surfacing for aggregate observability.
+- Unit tests in `api/tests/citation/test_chunk_boundary.py` covering: citation spanning two chunks; citation spanning three chunks (rare but possible for long quotes); citation entirely within one chunk (regression test — unaffected); chunk-mismatch warning emitted only on fallback path; backward compatibility when `document_contents` is not supplied.
+- Flip the existing `test_edge_cases.py::test_chunk_boundary_spanning_citation_does_not_extract_today` to assert the new behavior (`verification_method='exact_match'`, document-absolute offsets persisted).
 
 **Dependencies:** M2-A1 (normalized_content); M2-A2 (Stage 1); M2-B1 (Stage 2). All shipped at v0.2.0.
 
-**Output:** Citations split across chunk boundaries no longer fall to Stage 3 (LLM judge) when they could be verified verbatim.
+**Output:** Citations split across chunk boundaries no longer fall to Stage 3 (LLM judge) when they could be verified verbatim against the source document.
 
 **Verification:**
-- Test corpus includes citations deliberately authored across chunk boundaries; new spanning paths verify them.
+- Test corpus includes citations deliberately authored across chunk boundaries; the spanning fallback resolves them.
 - No regression in single-chunk verification (existing test suite passes unchanged).
+- The `citation_chunk_mismatch` warning surfaces in logs / Langfuse spans when the fallback fires.
 
 **Effort:** 4–6 hours.
 
