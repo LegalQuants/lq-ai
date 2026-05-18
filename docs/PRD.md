@@ -2825,6 +2825,53 @@ The persisted citation row's `source_offset_start` / `source_offset_end` already
 
 **Acceptance criteria:** `auth_mode: ad` provider entries construct cleanly under managed identity (validated in a CI integration test that mocks `DefaultAzureCredential`); the `Authorization: Bearer <token>` header is set on chat/embeddings/health calls (mocked); a regression test pins that `api-key` is NOT set when `auth_mode: ad`; `gateway.yaml.example` documents both auth modes with a comment block; `azure-identity` added to the gateway's `pyproject.toml` with the same pin discipline as other deps; SBOM diff reviewed; one mocked integration test exercises the AD path end-to-end through the FastAPI lifespan.
 
+#### DE-279 — Case citation validation (Bluebook resolution via CourtListener)
+
+**Priority:** P1 · **Effort:** M
+
+**Context:** The M2 Citation Engine validates **type 1** of three distinct citation-checking surfaces ("KB-quote accuracy" — does a model's quote and the meaning it draws accurately represent a document in the operator's KB). The other two surfaces are not built and require architecturally distinct components:
+
+- **Type 2 (this DE) — case citation validation:** given a citation string in Bluebook form (e.g., `Smith v. Jones, 123 U.S. 456 (2020)`), verify that it refers to a real, resolvable judicial opinion. Catches the "the model fabricated a case" failure mode. Distinct from type 1 because the source-of-truth is not an operator-owned document but an external case database.
+- **Type 3 — case-content accuracy:** see [DE-280](#de-280--case-content-accuracy-statement-vs-judicial-opinion).
+
+Type 2 is high-priority for any deployment used in litigation work — a fabricated case citation in a brief or memo is the canonical embarrassment-and-sanctions story (e.g., the 2023 *Mata v. Avianca* sanctions). The architectural slot exists in the project's transparency posture (every model-emitted claim is checkable), and Tucuxi-Inc has reference prior art at [`Tucuxi-Inc/Legal-Week-Cite-Checker`](https://github.com/Tucuxi-Inc/Legal-Week-Cite-Checker) — a working implementation of Bluebook-citation detection + CourtListener resolution that can be ported and adapted to the LQ.AI stack.
+
+**Specific scope:**
+
+- New module `api/app/citation/case_resolver.py` with a Bluebook-citation detector (regex + parser; the Legal-Week-Cite-Checker port covers the common Bluebook forms: U.S. Supreme Court reporters, federal reporters F./F.2d/F.3d/F. Supp., state reporters, parallel citations) and a CourtListener client.
+- CourtListener resolution uses the public FreeLaw Foundation API (`https://www.courtlistener.com/api/rest/v3/`). Authentication via an operator-supplied API token (env `LQ_AI_COURTLISTENER_TOKEN`); the API is free for reasonable use but the token improves rate limits.
+- New `message_case_citations` table mirroring the shape of `message_citations` (id, message_id, citation_string, normalized_form, courtlistener_opinion_id, resolution_status, resolved_at). Migration follows the existing alembic versioning.
+- Detector runs on every chat response (parallel with type-1 verification — same pre-render guarantee). Failed resolutions surface in the UI as "unverified case citation — could not resolve" (same chip vocabulary as type 1 for UX consistency).
+- Configurable per-deployment: `citation_engine.case_validation.enabled: bool` in `gateway.yaml` so operators with no litigation use case can skip the CourtListener dependency.
+
+**Privacy + transparency implications:** the citation string itself is the only data sent to CourtListener — no claim text, no surrounding context, no user identifier. CourtListener is operated by the Free Law Project (501(c)(3) non-profit) which publishes a clear privacy posture; the request shape is auditable in the routing log.
+
+**Acceptance criteria:** detector recognizes ≥95% of citation strings in a curated test set covering the major Bluebook forms; resolution succeeds for ≥98% of real citations and ≤2% for fabricated citations (false-positive rate); a Cypress E2E exercises the failed-resolution UI state; CourtListener-down failure mode handled gracefully (citation marked "unverified — resolver unavailable", not blocked); documented end-to-end in `docs/citation-engine.md` under a new §2 "Case citation validation"; integration with the existing `message_citations`-style audit row in `api/app/api/chats.py`.
+
+#### DE-280 — Case-content accuracy (statement vs judicial opinion)
+
+**Priority:** P1 · **Effort:** L
+
+**Context:** **Type 3** of the three citation-checking surfaces (see [DE-279](#de-279--case-citation-validation-bluebook-resolution-via-courtlistener) for the taxonomy). Given a statement the model makes *about* a case — what it held, what its reasoning was, what facts it relied on — verify that the statement is an accurate, non-cherry-picked representation of the underlying judicial opinion. Hardest of the three because the source-of-truth (opinion full text) is long, the model's statement is short, and "accurate representation" is a paraphrase-semantics judgment that the existing Stage-3 paraphrase judge (type 1) handles only over short retrieved chunks.
+
+**Scope considerations:**
+
+- **Source-of-truth fetch.** Once a case citation resolves through DE-279, the full opinion text is retrievable from CourtListener (`/api/rest/v3/opinions/<id>/`). Opinions are often 10–50 pages; the judge must reason over the whole opinion, not a single chunk. This is a different verification surface than type 1's chunk-scoped paraphrase judge.
+- **Statement extraction.** The chat model emits statements about cases inline — `"the Smith court held that …"`. A detector pairs each statement with the case citation it references (the model is prompted to colocate them; absent colocation we fall back to nearest-citation heuristic).
+- **Paraphrase-vs-cherry-pick distinction.** A statement can be technically accurate (the opinion does say *X*) but misleading (the opinion's holding turned on a fact the statement omits). The judge prompt needs to evaluate both fidelity and completeness — a meaningful step beyond type 1's "does this quote support this claim" surface.
+- **Calibrated gold set.** Required for confidence thresholds. ~50 statement-vs-opinion pairs reviewed by an attorney for ground truth; calibrate the judge to ≥0.85 precision at recall ≥0.70 before declaring a verdict. This is the one place in the three-type taxonomy where attorney attestation in the contribution path is genuinely load-bearing (the gold set's quality determines what verdicts the system produces in production).
+
+**Specific scope (M4 target):**
+
+- New module `api/app/citation/case_content_judge.py` with a paraphrase-semantics judge over full opinion text. Uses the same gateway-judge surface as type 1's Stage 3 (`paraphrase_judge`), but with a longer-context model and a prompt structured for fidelity + completeness evaluation.
+- Token-cost handling: opinion full text + statement + judge prompt = ~10-30k input tokens per judgment. Pre-flight cost budget mirrors the existing M2-D1 ensemble pre-flight; falls back to "unverified — over-budget" when a deployment hits its cap.
+- Statement detector + citation pairing — built on top of DE-279's detector.
+- New `message_case_statements` table for the verdicts.
+- UI state: case-statement chips render alongside type-1 KB chips. Same hover/click affordances; same verbal vocabulary.
+- Calibrated gold set committed at `eval/case-content-accuracy/` with attorney-reviewed annotations.
+
+**Acceptance criteria:** judge calibrated against the gold set (≥0.85 precision @ ≥0.70 recall); end-to-end integration with DE-279 (a chat response with a case statement triggers DE-279 resolution + DE-280 content check in parallel); UI renders the case-statement verdict alongside KB-quote verdicts; cost-budget pre-flight handles long-opinion edge cases; documented end-to-end in `docs/citation-engine.md` under a new §3 "Case content accuracy"; depends on DE-279 landing first.
+
 ### Workflow intelligence
 
 This subsection captures the bounded items that operationalize the M5+ Forward-Looking Workflow Intelligence direction (§8.5). The items are bounded enough to be picked up by community contributors as the M5+ roadmap matures. The architectural slot for the MCP-client subsystem is already committed for M1–M2 (§8 M1) so this subsection's items can be implemented incrementally without core refactoring.
