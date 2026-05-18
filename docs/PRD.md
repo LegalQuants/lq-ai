@@ -2962,6 +2962,31 @@ For citation verification, a recognizer miss surfaces visibly to the user as an 
 
 This DE intentionally combines bounded technical work with practice-specific judgment work. The technical pieces (runner, metrics, CI wiring) are picked up cleanly by any contributor familiar with Python + Presidio. The judgment pieces (which entity types matter, which disable choices to reconsider, which patterns are realistic) require the kind of practice-specific knowledge no single maintainer can supply across the diversity of in-house legal teams' workflows. Splitting the work across contributors who own their respective practice areas is the right shape — and the project's [transparency principle](#13-transparency-as-a-founding-principle) is what makes the invitation honest in the first place.
 
+#### DE-283 — Fresh-install login UX: surface the bootstrap-password path on first 401
+
+**Priority:** P2 · **Effort:** S (~30 min — community-friendly first PR)
+
+**Status:** Open — surfaced during the M2 pre-tag fresh-install validation (2026-05-17). The maintainer team hit it; an attentive quickstart reader would not, but the failure mode is undocumented at the point it actually happens (the login screen), only at the point a careful reader is meant to have already addressed it (the quickstart Step 4).
+
+**Context:** When an operator deploys a fresh stack (or wipes volumes and restarts), the bootstrap path in `api/app/admin_bootstrap.py` creates a default admin user `admin@lq.ai` with a randomly-generated password printed once to the API container's logs ("First-run admin password: …"). The [quickstart §Step 4](quickstart.md#step-4--sign-in-as-the-first-run-admin) tells operators to grep the logs. Three failure modes routinely reach the login screen instead:
+
+1. **Operators skim past Step 4** — the password is buried in a paragraph, not in a callout box; readers focused on "where do I sign in" miss the prerequisite step.
+2. **Operators who upgrade or wipe volumes mid-project** — they had a working admin from a prior install; the new bootstrap fires silently; their cached password no longer works; the error is a generic 401.
+3. **Operators who lost the printed password** — the docs document a CLI reset (`docker compose exec api python -m app.cli reset-admin-password`) but that's in a troubleshooting section the operator has to know to look for.
+
+In all three cases the user lands at the LQ.AI shell login form, types their best guess, and gets HTTP 401 with no actionable guidance about *why* the credentials don't match or *where* the right password lives.
+
+**Specific scope (pick whichever combination fits the contributor's interests):**
+
+- **(a) Improve the 401 response shape on the unauthenticated `/api/v1/auth/login` path.** When the request targets an account that was bootstrapped within the last ~24 hours and the operator has not yet completed the `must_change_password=true` flow, include a structured `hint` field in the response body pointing at the docs path — `{"detail": "...", "hint": "first_run_admin_password_in_logs", "docs_url": "https://github.com/LegalQuants/lq-ai/blob/main/docs/quickstart.md#step-4--sign-in-as-the-first-run-admin"}`. Conservative: only fire the hint for the bootstrapped admin email, not every 401 (to avoid leaking enumeration signal about which emails exist).
+- **(b) Surface the hint in the LQ.AI shell login UI.** When the login form receives a 401 with `hint=first_run_admin_password_in_logs`, render an explanatory banner: "First-run deployment? Your bootstrap password is in the API container logs — run `docker compose logs api | grep 'First-run admin password'` to retrieve it. See the quickstart for the full bootstrap flow." Single click-through to the docs.
+- **(c) Print the bootstrap password more prominently in the API container logs.** Currently the log line is a `WARNING` level emit; consider making it a visually-bracketed multi-line block (e.g., with `==========` separators) so it stands out in `docker compose logs api` output that's full of routine startup messages.
+- **(d) Docs-only refinement.** Add a callout box at the top of the quickstart "Sign in" step explicitly framing "if you see a 401 here, your password is probably in the API logs — see §Step 4". And cross-reference from the OpenWebUI shell login surface (since that's the first thing many operators hit) so they're directed to the LQ.AI flow if they bypassed it.
+
+**Why this is a good first contribution:** the issue is reproducible by anyone running through the quickstart; the surfaces touched are small (one endpoint, one Svelte component, or one docs section); the fix scope is bounded; the UX impact is meaningful for every new deployment.
+
+**Acceptance criteria:** an operator who wipes volumes and restarts the stack, then attempts to sign in with stale credentials, sees actionable guidance (in the API response, the UI banner, the docs, or some combination) that lets them retrieve the bootstrap password without searching the troubleshooting section. A regression test pins that the hint surfaces only for accounts within the bootstrap-recency window (defensive against enumeration). `docs/quickstart.md` Step 4 + the troubleshooting section updated for whichever scope landed.
+
 ### Workflow intelligence
 
 This subsection captures the bounded items that operationalize the M5+ Forward-Looking Workflow Intelligence direction (§8.5). The items are bounded enough to be picked up by community contributors as the M5+ roadmap matures. The architectural slot for the MCP-client subsystem is already committed for M1–M2 (§8 M1) so this subsection's items can be implemented incrementally without core refactoring.
