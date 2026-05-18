@@ -196,15 +196,15 @@ Severity-tagged findings with citations. For the sample NDA, expect:
 
 A few things to notice about the output:
 
-**Citations are visibly verified.** Every `"<quote>" (Source: [N])` the skill emits is run through the Citation Engine and rendered with a color-coded visual state in the chat surface (M2-C2):
+**Citations are visibly verified.** Every `"<quote>" (Source: [N])` the skill emits is run through the [Citation Engine](citation-engine.md) — a 4-stage cascade (exact match → tolerant match → paraphrase judge → optional ensemble) that re-reads the cited text against the source document before rendering. The chat surface (M2-C2) shows the verification state inline:
 
-- **Green check + green underline** — verified verbatim against the source (exact match) or verified after minor formatting normalization (tolerant match). The model quoted the source faithfully.
-- **Yellow check + yellow underline** — verified by the paraphrase judge. The source supports the claim, possibly with caveats; hover the citation chip for the judge's confidence and partial-support framing.
-- **Greyed text + `[unverified]` marker** — the Citation Engine could not match the model's quote to a retrieved chunk. Treat as unverified; the model may have produced a claim that doesn't follow from the cited content.
+- **Green check + green underline** — verified verbatim against the source (Stage 1 `exact_match`) or verified after minor formatting normalization for whitespace, smart quotes, or OCR confusions (Stage 2 `tolerant_match`). The model quoted the source faithfully.
+- **Yellow check + yellow underline** — verified by the paraphrase judge (Stage 3 `paraphrase_judge`) or by ensemble (Stage 4 `ensemble_strict` / `ensemble_majority` when activated). The source supports the claim, possibly with caveats; hover the citation chip for the judge's confidence, partial-support framing, and the tier envelope when ensemble fired.
+- **Greyed text + `[unverified]` marker** — the cascade could not match the model's quote against the source. Treat as unverified; the model may have produced a claim that doesn't follow from the cited content. The visual treatment is deliberate: scrolling the report, a reviewer should spot unverified citations without reading tooltips.
 
-The visual treatment is deliberate: scrolling the report, a reviewer should be able to spot unverified citations without reading the tooltips. Procurement reviews and document-review work both benefit from being able to quickly distinguish citations the system stands behind from ones it does not. A fifth `system-error` state (yellow warning) is reserved for a future release when the Citation Engine surfaces verification-pipeline errors as their own signal (M2-D).
+Procurement reviews and document-review work both benefit from being able to quickly distinguish citations the system stands behind from ones it does not. The 5th `system-error` state (verification-pipeline errors surfaced as their own signal rather than collapsed into "unverified") is tracked at [DE-275](PRD.md#de-275--embed-m2-citations-in-chat-message-envelope) for a future release; the M2-C2 surface ships the four states above.
 
-Click-through-to-source-viewer (highlighting the cited span in the source document) is on the roadmap for M2-D2; the M2-C2 surface ships the visual contract and the data plumbing it builds on.
+Click-through-to-source-viewer (highlighting the cited span in the source document with PDF.js bbox overlay) is intentionally out of scope for M2 — the visual contract and the data plumbing are in place; the viewer surface is a follow-on for v0.3+ when the docling-side citable-chunk schema is fully wired through the UI.
 
 **Severity tags follow the rubric.** Critical / Material / Minor — the [Skill-Authoring Guide](skill-authoring-guide.md#severity-rubric-for-review-skills) documents the calibration. None of the issues in the sample NDA rise to "Critical" because the sample is calibrated to be *plausibly real, with material issues*, not catastrophic.
 
@@ -244,7 +244,10 @@ Click the **Tier** badge in the top-right corner of the chat header. A panel ope
 - The provider routed to (Anthropic, OpenAI, etc.).
 - What the tier implies: where the data is going, what the provider's retention policy is, whether the audit log captured this routing decision (it did — every routing decision is in the audit log).
 
-If you want to verify against the audit log, navigate to **Admin → Audit Log** and search for your chat ID. You'll see entries for each message with `routed_inference_tier` populated.
+If you want to verify against the audit log, navigate to **Admin → Audit Log** and search for your chat ID. You'll see entries for each message with `routed_inference_tier` populated. M2 added two more audit signals visible in the same view:
+
+- **`anonymization_applied: true`** — the gateway's Anonymization Layer (M2-B3) substituted detected entities with pseudonyms before forwarding to the model provider. The audit row records that pseudonymization happened; the pseudonym table itself is held only in process memory for the request duration and never persists. If `anonymization_applied: false`, the request bypassed the middleware (typically because the request was a Citation Engine judge call with `lq_ai_purpose: 'judge_paraphrase'` or the deployment has anonymization disabled in `gateway.yaml`). See [`docs/security/anonymization.md`](security/anonymization.md) for the full mechanism and the honest validation-posture note.
+- **`privilege_marked: true` + `privilege_basis: <reason>`** — the chat sat in a privileged matter (Project with `privileged: true`); the tier floor enforcement bumped routing to Tier ≥ 3 and the audit log records both the privilege state and which signal triggered it (project flag, skill frontmatter, or admin override). Pinned end-to-end by `api/tests/test_chat_citations.py::test_chat_send_privileged_project_full_audit_trail`.
 
 If your team's matter requires a tier floor (e.g., privileged matters require Tier 1 or 2), you can:
 
