@@ -50,14 +50,16 @@ from app.schemas.gateway import ChatCompletionRequest
 logger = logging.getLogger(__name__)
 
 
-# Conservative per-judge-call cost estimate used for the M2-D1
-# pre-flight budget check. Real cost depends on the judge model and the
-# claim/chunk lengths; the gateway records actual spend in
-# ``inference_routing_log.cost_estimate`` for post-hoc analysis. This
-# constant is deliberately high (haiku-tier rates + generous tokens)
-# so the budget check errs on the side of falling back to single-judge
-# Stage 3 rather than letting an ensemble silently overrun. M2-E2
-# (ensemble calibration pass) replaces this with measured numbers.
+# Cold-start fallback for the per-judge-call cost pre-flight (M2-D1).
+# Production pre-flight uses :func:`app.citation.cost.estimate_judge_call_cost_usd`
+# which computes a per-model rolling average from the ``inference_routing_log``
+# rows tagged ``purpose='judge_paraphrase'`` (M2-E2). When a judge
+# model has fewer than 5 recent calls, the estimator falls back to
+# this constant — the same conservative value M2-D1 shipped, retained
+# so the cold-start posture is identical to the pre-M2-E2 behavior.
+# Re-exported here (rather than only from cost.py) so call sites that
+# only need the fallback can import without pulling in the SQLAlchemy
+# dependency.
 FLAT_PER_JUDGE_USD = 0.005
 
 
@@ -131,10 +133,12 @@ _MISS = VerificationResult(
 # rejecting genuine paraphrases — they live in the 70-90 range where
 # Stage 3's LLM judge belongs.
 #
-# Per M2-B1 the value is locked here; M2-E2 (ensemble calibration
-# against the M2-F1 acceptance corpus) revisits it with empirical
-# data and may move it. Keep the constant rather than inlining so
-# the calibration task changes one number.
+# Per M2-B1 the value is locked here. M2-E2 calibrated the per-judge
+# cost pre-flight against the routing log but did not adjust this
+# threshold — empirical calibration requires production telemetry
+# the project hasn't collected yet. DE-281 (operational-telemetry
+# calibration) is the future home for both this and the ensemble
+# aggregation rule. Until then the conservative default holds.
 TOLERANT_MATCH_THRESHOLD = 95.0
 
 
@@ -304,6 +308,9 @@ async def verify_paraphrase(
         # see actual content to verify it. Anonymized text would
         # destroy the semantics the judge is checking against.
         anonymize=False,
+        # M2-E2: tag the routing-log row so per-model cost calibration
+        # can filter judge calls from regular chat traffic.
+        lq_ai_purpose="judge_paraphrase",
     )
 
     try:

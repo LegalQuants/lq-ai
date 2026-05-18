@@ -58,6 +58,7 @@ import re
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
@@ -70,7 +71,7 @@ from app.api.dependencies import ActiveUser
 from app.api.skills import _resolve_skill_for_user
 from app.audit import audit_action
 from app.citation import extract_citations, verify
-from app.citation.verification import FLAT_PER_JUDGE_USD
+from app.citation.cost import estimate_judge_call_cost_usd
 from app.clients.gateway import EnsembleConfig, GatewayClient, get_gateway_client
 from app.db.session import get_db
 from app.errors import LQAIError, NotFound, ValidationError
@@ -1401,6 +1402,7 @@ async def _resolve_ensemble_config(
     skill_registry: SkillRegistry | None,
     n_candidates: int,
     message_id: uuid.UUID,
+    db: AsyncSession | None = None,
 ) -> EnsembleConfig | None:
     """Decide whether Stage 4 should run for this message — M2-D1.
 
@@ -1418,11 +1420,18 @@ async def _resolve_ensemble_config(
     * The gateway's
       ``citation_engine.ensemble_verification.default_enabled``.
 
-    Cost-budget pre-flight uses :data:`FLAT_PER_JUDGE_USD` (a
-    deliberately conservative constant) so the check errs on the side
-    of dropping back to single-judge Stage 3 rather than letting an
-    ensemble silently overrun. M2-E2 will replace the flat constant
-    with measured numbers.
+    Cost-budget pre-flight uses M2-E2 per-model calibration via
+    :func:`estimate_judge_call_cost_usd` — each configured judge
+    model's recent rolling-average cost from ``inference_routing_log``
+    rows tagged ``purpose='judge_paraphrase'``. Cold-start (a model
+    with fewer than 5 recent judge calls) falls back to the
+    conservative constant. The check errs toward dropping back to
+    single-judge Stage 3 rather than letting an ensemble silently
+    overrun.
+
+    ``db=None`` is honored by tests that don't exercise the cost-budget
+    path; in that case the estimator skips the DB query and uses the
+    cold-start default. Production callers always pass a real session.
     """
 
     if gateway is None:
@@ -1451,7 +1460,16 @@ async def _resolve_ensemble_config(
     # ensemble spend exceeds the cap, fall back to single-judge Stage 3
     # by returning None (the cascade routes through verify_paraphrase
     # instead). Logged so operators can see when the cap bites.
-    estimated_usd = n_candidates * len(config.judge_models) * FLAT_PER_JUDGE_USD
+    #
+    # M2-E2: sum per-model rolling-average judge costs rather than
+    # multiplying a single flat constant — accuracy matters because
+    # judge models span order-of-magnitude cost differences
+    # (haiku ~$0.001 vs opus ~$0.04 per call).
+    per_judge_costs = [
+        await estimate_judge_call_cost_usd(db, judge_model=judge_model)
+        for judge_model in config.judge_models
+    ]
+    estimated_usd = float(Decimal(n_candidates) * sum(per_judge_costs, Decimal("0")))
     if estimated_usd > config.max_cost_per_message_usd:
         log.warning(
             "chat-send citations: ensemble budget exceeded, falling back to single judge",
@@ -1462,6 +1480,7 @@ async def _resolve_ensemble_config(
                 "n_judges": len(config.judge_models),
                 "estimated_usd": round(estimated_usd, 4),
                 "max_cost_per_message_usd": config.max_cost_per_message_usd,
+                "per_judge_usd": [float(c) for c in per_judge_costs],
             },
         )
         return None
@@ -1539,6 +1558,7 @@ async def _persist_message_citations(
     # skill registry; this function ORs them with the gateway's
     # default to decide whether to dispatch ensemble verification.
     ensemble_config = await _resolve_ensemble_config(
+        db=db,
         gateway=gateway,
         applied_skills=applied_skills,
         project_ensemble_verification=project_ensemble_verification,

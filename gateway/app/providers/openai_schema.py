@@ -267,6 +267,14 @@ class ChatCompletionRequest(BaseModel):
     "registry-only", which is the right behavior for non-user-bearing
     callers (smoke scripts, internal admin tooling, etc.)."""
 
+    lq_ai_purpose: str | None = None
+    """M2-E2: tag for the routing-log ``purpose`` column. Distinguishes
+    judge calls (Citation Engine Stage 3/4) from regular chat
+    completions so per-model cost calibration filters down to judge
+    traffic. Known values used in code: ``'judge_paraphrase'``;
+    ``None`` or any unknown value falls back to ``'chat'`` in the
+    persisted row. Stripped from the outbound provider body."""
+
 
 # --- Chat completion response -------------------------------------------------
 

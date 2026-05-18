@@ -84,6 +84,7 @@ def test_to_params_emits_all_columns() -> None:
         "refused",
         "refusal_reason",
         "request_id",
+        "purpose",
     }
     assert set(params.keys()) == expected
     assert params["routed_provider"] == "p"

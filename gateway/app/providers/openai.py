@@ -98,6 +98,7 @@ _LQ_AI_EXTENSION_KEYS = frozenset(
         "lq_ai_chat_id",
         "lq_ai_message_id",
         "lq_ai_user_id",
+        "lq_ai_purpose",
     }
 )
 
