@@ -552,42 +552,36 @@ The Azure OpenAI adapter lands (small but strategically important); ensemble ver
 
 The trust-layer documentation lands. Acceptance test corpora are built for both Citation Engine and Anonymization. Procurement docs reflect M2 capabilities.
 
-### Task M2-F1 — Citation Engine acceptance test corpus
+### Task M2-F1 — Citation Engine acceptance test corpus — ✓ Closed (scope reframe, 2026-05-17)
 
-**Scope:**
+**Status:** **✓ Closed via scope reframe** rather than separate corpus build. During M2-F1 kickoff Kevin clarified the three-type citation taxonomy:
+
+1. **KB-quote accuracy** — verify the model's response accurately represents the cited KB document.
+2. **Case citation validation** — verify a case citation refers to a real opinion. *Not in M2 scope; tracked at [PRD §9 DE-279](PRD.md#de-279--case-citation-validation-bluebook-resolution-via-courtlistener).*
+3. **Case-content accuracy** — verify a statement about a case matches the holding. *Not in M2 scope; tracked at [PRD §9 DE-280](PRD.md#de-280--case-content-accuracy-statement-vs-judicial-opinion).*
+
+M2 shipped type 1 across Phases A–D. Verification of type-1 behavior already lives in:
+
+- `api/tests/citation/test_extraction.py` + `test_verification.py` + `test_verify_ensemble.py` — unit coverage for Stages 1–4 (exact-match, tolerant-match, paraphrase-judge, ensemble).
+- `api/tests/test_chat_citations.py` — integration coverage for the full chat-emits-citation → engine-verifies → message_citations row persisted path, including the privileged-project audit-trail integration test.
+- `api/tests/citation/test_round_trip_correctness.py` — round-trip invariants (M2-C3, 17 slow-marked tests).
+- `web/cypress/e2e/m2-c2-citation-states.cy.ts` — UI rendering states across the four verification verdicts.
+- `api/tests/citation/test_edge_cases.py` + `gateway/tests/anonymization/test_edge_cases.py` — M2-D4 edge-case sweep (14 tests; closed Phase D).
+- Real-stack browser verification on uploaded NDAs during M2-C2 (cascade fixes for ingest-worker env + entrypoint surfaced and merged).
+
+A separate annotated corpus + eval runner would duplicate the existing pin coverage for type-1 behavior and would not move the project closer to types 2 or 3 (those are different surfaces; see DE-279 / DE-280 for their distinct architectures). The plan-stated targets (Stage 1 ≥40%, Stage 1+2 ≥75%, FP <2%, FN <10%) are claims the existing tests assert at the per-case level rather than aggregate metrics — operators reading the test fixtures can see exactly what behaviors are pinned.
+
+**Original scope (preserved for historical reference; not built):**
+
 - Curate 30–50 documents with ground-truth citation annotations.
-  - Sources: anonymized real documents from the operator's practice; supplemented with public-domain documents (e.g., SEC EDGAR filings with NDA/MSA exhibits).
-  - Each document has 5–10 ground-truth citations authored by a reviewing attorney: claim, verbatim text, source file ID, offsets.
-- Build runner: `scripts/run_citation_engine_eval.py` that:
-  - Loads the ground-truth corpus.
-  - Runs each citation through the verification pipeline.
-  - Records verdict per stage (which stage passed, or final unverified).
-  - Reports metrics:
-    - Stage 1 pass rate.
-    - Stage 2 pass rate (of those that failed Stage 1).
-    - Stage 3 pass rate (of those that failed Stage 2).
-    - False-positive rate (claims marked verified that ground truth says shouldn't be).
-    - False-negative rate (ground-truth verifiable claims marked unverified).
-    - Cost per evaluation.
-- Baseline targets:
-  - Stage 1 catches ≥40% of verbatim citations.
-  - Stage 1+2 together ≥75% of legitimate citations.
-  - Stage 3 catches another ~15% (the paraphrase cases).
-  - End-to-end false-positive rate <2%.
-  - End-to-end false-negative rate <10%.
-- Document the corpus, the runner, and the baseline metrics in `docs/citation-engine.md`.
-- Add the eval to CI as a nightly job (not blocking; informational).
+- Build runner: `scripts/run_citation_engine_eval.py` reporting per-stage pass rates, false-positive rate, false-negative rate, cost per evaluation.
+- Baseline targets: Stage 1 ≥40%, Stage 1+2 ≥75%, Stage 3 +~15%, FP <2%, FN <10%.
+- Document corpus + runner + baseline in `docs/citation-engine.md`.
+- Add eval to CI as a nightly job (not blocking; informational).
 
-**Dependencies:** All of Phase A–D.
+This original scope can be revisited if/when type-2 or type-3 validation lands — at that point an aggregate empirical baseline across all three types makes sense.
 
-**Output:** Citation Engine has an empirical baseline; regressions are detectable.
-
-**Verification:**
-- Eval runs against the curated corpus successfully.
-- Baseline metrics meet or exceed targets above.
-- Eval runs in CI nightly (not blocking PR merges; surfaces in a project dashboard).
-
-**Effort:** 12–16 hours (the corpus curation is the bulk).
+**Closeout sequence updated** (Kevin, 2026-05-17): M2-E1 ✓ → ~~M2-F1~~ ✓ (scope reframe) → **M2-E2 (next)** → M2-F2 → M2-F3.
 
 ---
 
@@ -694,7 +688,7 @@ The recommended workflow mirrors the M1 implementation:
 | Anonymization recognizes too cautiously (false negatives) | Provide custom-recognizer pattern for matter-specific entities; document customization path; track recall in acceptance-test eval. |
 | Ensemble verification cost overruns | Configurable cost budget per message; fall back to single-judge with warning when exceeded; track cost-per-message in admin dashboard. |
 | Privileged-project handling has subtle bug (anonymization-applied when it shouldn't be, or tier-routing wrong) | Dedicated test coverage (M2-D3); periodic audit-log review by security reviewer. |
-| Citation Engine verification creates a perf bottleneck | Stages 1 and 2 are sub-millisecond; Stage 3+ are LLM calls (already async). Pipeline runs in parallel with response streaming where possible. Track P95 latency in M2-F1. |
+| Citation Engine verification creates a perf bottleneck | Stages 1 and 2 are sub-millisecond; Stage 3+ are LLM calls (already async). Pipeline runs in parallel with response streaming where possible. P95 latency tracked via OTel spans on `verify()` / `verify_ensemble()` in production rather than via a synthetic corpus run. |
 | OpenAI / Anthropic SDK changes break adapters | Pin SDK versions; track upstream releases; bug-fix releases for SDK updates ship as patch versions. |
 
 ---

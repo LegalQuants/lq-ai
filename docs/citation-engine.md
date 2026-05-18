@@ -15,6 +15,44 @@ integration boundary lives in §[Integration with Anonymization](#integration-wi
 
 ---
 
+## Scope
+
+"Citation checking" can mean three different things. M2 ships the first;
+the other two are tracked as M3–M4 work in PRD §9.
+
+1. **KB-quote accuracy** *(this engine, shipped in M2)* — when the
+   chat surfaces information retrieved from the operator's knowledge
+   base, the engine verifies that the model's quote and the meaning
+   it draws from that quote are an accurate representation of the
+   cited KB document. This is a textual-fidelity question between the
+   model's response and a document the operator owns.
+
+2. **Case citation validation** *(not built; tracked at
+   [PRD §9 DE-279](PRD.md#de-279--case-citation-validation-bluebook-resolution-via-courtlistener))*
+   — given a case citation in Bluebook form (e.g.,
+   `Smith v. Jones, 123 U.S. 456 (2020)`), verify it refers to a
+   real opinion that resolves through CourtListener / the FreeLaw
+   Foundation APIs. Catches fabricated citations. Tucuxi-Inc's prior
+   `Legal-Week-Cite-Checker` is the reference implementation.
+
+3. **Case-content accuracy** *(not built; tracked at
+   [PRD §9 DE-280](PRD.md#de-280--case-content-accuracy-statement-vs-judicial-opinion))*
+   — given a statement the model makes *about* what a case held or
+   reasoned, verify the statement is an accurate, non-cherry-picked
+   representation of the underlying judicial opinion. Hardest of the
+   three; requires fetching the opinion text and a paraphrase-judge
+   evaluation calibrated against a reviewed gold set.
+
+The three are architecturally distinct: type 1 operates on KB documents
+the operator uploaded; type 2 operates on Bluebook strings against
+external case databases; type 3 operates on summary statements against
+fetched opinion full text. Mixing them under one roof would be a
+category error. This document covers type 1 only; references to "the
+Citation Engine" elsewhere in the codebase also mean type 1 unless
+explicitly qualified.
+
+---
+
 ## Cascade
 
 Each citation the model emits (a `"<quote>" (Source: [N])` pair)
