@@ -585,36 +585,31 @@ This original scope can be revisited if/when type-2 or type-3 validation lands �
 
 ---
 
-### Task M2-F2 — Anonymization acceptance test corpus
+### Task M2-F2 — Anonymization acceptance test corpus — ✓ Closed (transparency-first deferral, 2026-05-17)
 
-**Scope:**
+**Status:** **✓ Closed via transparency-first deferral.** Unlike [M2-F1](#task-m2-f1--citation-engine-acceptance-test-corpus--closed-scope-reframe-2026-05-17) where the existing test coverage made the corpus redundant, M2-F2's underlying question is **genuinely open**: Presidio default-recognizer recall + precision on legal-document corpus is empirically unmeasured, and the maintainer team does not have the practice-specific judgment needed to author ground-truth annotations across the diversity of in-house legal workflows the project serves.
+
+The chosen response, per Kevin's framing on 2026-05-17:
+
+> "What we're shooting for is if we don't do something to the highest level of transparency, confidentiality and privilege we note it and ask for the community to contribute to accomplish it — honest, transparent and lets the user know where to trust and where to be careful — for example, absent this, a user might choose to use local inference to hedge against the risk — let's give them all the information they need to make the right professional decision — we win on transparency."
+
+Specifically:
+
+1. **`docs/security/anonymization.md` gained a top-level "What's validated vs what's unvalidated" section** that explicitly enumerates what the existing test coverage measures (custom recognizers, middleware integration, round-trip correctness, edge cases) and what it does not measure (Presidio default-recognizer recall + precision on legal corpus, disabled-recognizer trade-offs per practice area).
+2. **The risk framing is explicit**: a recognizer miss is a silent confidentiality incident, distinct from citation-verification misses which surface in the UI. Operational telemetry cannot recover the leak post-hoc — pre-deployment empirical validation is the right shape of work, but the project does not have the data to produce it.
+3. **Actionable guidance is provided**: practicing attorneys who cannot accept the unvalidated risk for a given matter are pointed to Tier 1 (fully local) inference, the explicit "disable anonymization" posture, pre-redaction at upload, or manual per-message review. The user has all the information they need to make the right professional decision.
+4. **The work is invited from the community via [PRD §9 / DE-282](PRD.md#de-282--anonymization-layer-empirical-validation-on-legal-document-corpus)**, structured to combine bounded technical work (runner + metrics + CI wiring) with practice-specific judgment work (entity-type prioritization, ground-truth annotations, recognizer-set re-evaluation per practice area). Personal-injury, employment, immigration, benefits, healthcare, and international-practice contributors are explicitly welcomed.
+
+The original M2-F2 scope (curate ~50 docs, build runner, hit baseline targets) is preserved verbatim in DE-282 — a contributor picking up the DE can execute against the same plan.
+
+**Original scope (preserved at DE-282 for contributors; not built by the maintainer team in v0.2):**
+
 - Curate ~50 legal documents with ground-truth entity annotations.
-  - Sources: anonymized real documents; supplemented with public-domain legal documents.
-  - Annotations: per entity type, list of (text, start_offset, end_offset, type) tuples.
-- Build runner: `scripts/run_anonymization_eval.py` that:
-  - Loads the corpus and ground-truth annotations.
-  - Runs each document through the Analyzer.
-  - Reports per-entity-type:
-    - Recall: % of ground-truth entities caught.
-    - Precision: % of caught entities that are actual entities.
-    - F1 score.
-- Baseline targets:
-  - PERSON, ORG: recall ≥95%, precision ≥90%.
-  - EMAIL, PHONE: recall ≥98%, precision ≥98% (regex-based, should be near-perfect).
-  - ADDRESS: recall ≥85%, precision ≥80% (variability is higher).
-  - CASE_NUMBER, MATTER_NUMBER: recall ≥70%, precision ≥75% (custom recognizers; harder).
-- Document the corpus, runner, and baseline metrics in `docs/security/anonymization.md`.
-- Add to CI as nightly.
+- Build runner: `scripts/run_anonymization_eval.py` reporting per-entity-type recall, precision, F1.
+- Baseline targets: PERSON / ORG ≥95% / ≥90%; EMAIL / PHONE ≥98% / ≥98%; ADDRESS ≥85% / ≥80%; CASE_NUMBER / MATTER_NUMBER ≥70% / ≥75%.
+- Document the baseline in `docs/security/anonymization.md`.
 
-**Dependencies:** All of Phase A–D.
-
-**Output:** Anonymization has an empirical baseline.
-
-**Verification:**
-- Eval runs successfully.
-- Baseline metrics meet or exceed targets above.
-
-**Effort:** 10–14 hours.
+**Closeout sequence final** (Kevin, 2026-05-17): M2-E1 ✓ → ~~M2-F1~~ ✓ (scope reframe; existing coverage is sufficient) → M2-E2 ✓ (cost calibration shipped) → ~~M2-F2~~ ✓ (transparency-first deferral; DE-282 invites community contribution) → **M2-F3 (next, final)**.
 
 ---
 

@@ -75,7 +75,7 @@ The Inference Gateway is the security boundary — the only component holding pr
 | AWS Bedrock provider adapter | deferred (community-friendly) | Fully spec'd in [PRD §9 DE-035](PRD.md#de-035--aws-bedrock-provider-adapter-anthropic-on-bedrock) with AWS Event Stream parser + SigV4 acceptance criteria |
 | Tier enforcement (Tiers 1 – 5) | M1 | `gateway/app/tier_floor.py` |
 | Privileged-matter tier floor enforcement | M1 + M2-D3 (verification) | `web/cypress/e2e/wave-d1-power-features.cy.ts` Test 3 + Test 5; M2-D3 added end-to-end audit-trail integration test at `api/tests/test_chat_citations.py::test_chat_send_privileged_project_full_audit_trail` |
-| Anonymization pre/post middleware | M2 | `gateway/app/anonymization/middleware.py`; see §3.2 below |
+| Anonymization pre/post middleware | M2 (recognizer accuracy on legal corpus: empirically unmeasured — see [PRD §9 DE-282](PRD.md#de-282--anonymization-layer-empirical-validation-on-legal-document-corpus) and [`docs/security/anonymization.md` §"What's validated vs what's unvalidated"](security/anonymization.md#whats-validated-vs-whats-unvalidated)) | `gateway/app/anonymization/middleware.py`; see §3.2 below |
 | Routing log (per-inference) | M1 | `gateway/app/routing_log.py` |
 | Citation Engine config endpoint (`GET /v1/citation-engine/config`) | M2-C1 + M2-D1 | `gateway/app/api/inference.py::citation_engine_config` — returns judge_model + ensemble block with server-computed `envelope_tier` |
 | Provider-key encryption at rest (Fernet-wrapped master-key path) | M1 | `gateway/app/secrets.py`; `docs/security/encrypted-keys.md` |
@@ -299,7 +299,7 @@ The verification budget is the operator's to set, on a timeline the operator cho
 
 ## 10. Maintenance note
 
-This document is maintained per release. Items leave the deferred lists when they ship; items join when they are scoped. Last updated alongside M2 Phase D + E1 close — Citation Engine 4-stage cascade, Anonymization Layer with custom legal recognizers, privileged-project handling, Azure OpenAI provider adapter (M2-E1, API-key auth; AD path tracked at DE-278); 2026-05-17.
+This document is maintained per release. Items leave the deferred lists when they ship; items join when they are scoped. Last updated alongside the M2 closeout chain — Phase D + E1 + E2 shipped, F1 closed via scope reframe, F2 closed via transparency-first deferral (DE-282 invites community contribution for empirical PII-recognition validation on legal corpus); 2026-05-17.
 
 The substantive content that drives this doc lives in:
 
