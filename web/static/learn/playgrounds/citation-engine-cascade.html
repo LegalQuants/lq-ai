@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LQ.AI — Citation Engine 4-stage cascade</title>
+<style>
+  :root {
+    --bg: #0c0f14;
+    --bg-elev: #151a23;
+    --bg-elev-2: #1d242f;
+    --border: #2a3340;
+    --border-hover: #3a4555;
+    --text: #e6ebf3;
+    --text-dim: #8a96a8;
+    --text-faint: #5a6578;
+    --accent: #7dd3fc;
+    --accent-dim: #38bdf8;
+    --verified: #86efac;
+    --verified-bg: rgba(134,239,172,0.08);
+    --verified-border: rgba(134,239,172,0.3);
+    --partial: #fcd34d;
+    --partial-bg: rgba(252,211,77,0.08);
+    --partial-border: rgba(252,211,77,0.3);
+    --unverified: #f87171;
+    --unverified-bg: rgba(248,113,113,0.08);
+    --unverified-border: rgba(248,113,113,0.3);
+    --pending: #5a6578;
+    --pending-bg: rgba(90,101,120,0.08);
+    --pending-border: rgba(90,101,120,0.25);
+    --shadow: rgba(0,0,0,0.4);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+  }
+  .app { display: grid; grid-template-rows: auto 1fr; height: 100vh; }
+  header {
+    padding: 12px 20px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 16px;
+  }
+  header h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
+  header .subtitle { color: var(--text-dim); font-size: 13px; }
+  header .spacer { flex: 1; }
+  header a {
+    color: var(--accent); text-decoration: none; font-size: 12px;
+    border: 1px solid var(--border); padding: 4px 10px; border-radius: 4px;
+  }
+  header a:hover { border-color: var(--border-hover); background: var(--bg-elev-2); }
+
+  .main { display: grid; grid-template-columns: 360px 1fr; overflow: hidden; }
+  .controls {
+    background: var(--bg-elev);
+    border-right: 1px solid var(--border);
+    padding: 16px; overflow-y: auto;
+  }
+  .controls h2 {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-dim); margin: 16px 0 8px;
+  }
+  .controls h2:first-child { margin-top: 0; }
+  .controls .hint { font-size: 11px; color: var(--text-faint); margin: 4px 0 8px; line-height: 1.4; }
+
+  .presets { display: grid; grid-template-columns: 1fr; gap: 5px; }
+  .preset-btn {
+    background: var(--bg-elev-2); border: 1px solid var(--border);
+    color: var(--text); padding: 7px 10px; border-radius: 4px;
+    cursor: pointer; font-size: 12px; text-align: left;
+    transition: all 0.1s; line-height: 1.4;
+  }
+  .preset-btn:hover { border-color: var(--border-hover); }
+  .preset-btn.active {
+    background: var(--accent); border-color: var(--accent);
+    color: var(--bg); font-weight: 600;
+  }
+  .preset-btn .preset-label { display: block; font-weight: 600; margin-bottom: 2px; }
+  .preset-btn .preset-desc { display: block; font-size: 11px; color: var(--text-dim); }
+  .preset-btn.active .preset-desc { color: rgba(12,15,20,0.7); }
+
+  textarea, input[type="text"] {
+    width: 100%;
+    background: var(--bg-elev-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 4px;
+    font: 12px ui-monospace, Menlo, monospace;
+    resize: vertical;
+  }
+  textarea:focus, input[type="text"]:focus { border-color: var(--accent); outline: none; }
+  textarea { min-height: 90px; }
+
+  .toggle {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 8px 8px; border-radius: 4px; cursor: pointer;
+    user-select: none; transition: background 0.1s; font-size: 13px;
+  }
+  .toggle:hover { background: var(--bg-elev-2); }
+  .toggle input { margin: 3px 0 0; cursor: pointer; accent-color: var(--accent); flex-shrink: 0; }
+  .toggle .toggle-label { flex: 1; line-height: 1.4; }
+  .toggle .toggle-label span { display: block; color: var(--text-dim); font-size: 11px; margin-top: 2px; }
+
+  .preview-wrap {
+    overflow-y: auto;
+    padding: 20px;
+    background:
+      radial-gradient(circle at 20% 20%, rgba(125,211,252,0.03), transparent 55%),
+      radial-gradient(circle at 80% 80%, rgba(134,239,172,0.03), transparent 55%);
+  }
+
+  .stage-list {
+    display: flex; flex-direction: column; gap: 10px;
+    max-width: 720px; margin: 0 auto;
+  }
+  .stage {
+    background: var(--bg-elev);
+    border: 1px solid var(--pending-border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 14px;
+    align-items: center;
+    transition: all 0.2s;
+  }
+  .stage.fired { border-color: var(--accent-dim); box-shadow: 0 0 0 1px var(--accent-dim); }
+  .stage.verified { background: var(--verified-bg); border-color: var(--verified-border); }
+  .stage.partial { background: var(--partial-bg); border-color: var(--partial-border); }
+  .stage.missed { background: var(--unverified-bg); border-color: var(--unverified-border); opacity: 0.55; }
+  .stage.skipped { opacity: 0.4; background: var(--pending-bg); }
+  .stage-num {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 11px; font-weight: 600;
+    color: var(--text-dim);
+    background: var(--bg-elev-2);
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    border-radius: 4px;
+    min-width: 38px; text-align: center;
+  }
+  .stage.verified .stage-num { color: var(--verified); border-color: var(--verified-border); }
+  .stage.partial .stage-num { color: var(--partial); border-color: var(--partial-border); }
+  .stage.missed .stage-num { color: var(--unverified); border-color: var(--unverified-border); }
+  .stage-info h3 {
+    margin: 0 0 2px; font-size: 13px; font-weight: 600;
+    font-family: ui-monospace, Menlo, monospace;
+  }
+  .stage-info p { margin: 0; font-size: 12px; color: var(--text-dim); line-height: 1.4; }
+  .stage-info .stage-detail {
+    margin-top: 6px; font-family: ui-monospace, Menlo, monospace;
+    font-size: 11px; color: var(--text-faint); padding-top: 6px;
+    border-top: 1px dashed var(--border);
+  }
+  .stage-status {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 11px; font-weight: 600;
+    padding: 4px 10px; border-radius: 4px;
+    text-align: center; min-width: 72px;
+    background: var(--bg-elev-2); color: var(--text-faint);
+    border: 1px solid var(--border);
+  }
+  .stage.verified .stage-status { color: var(--verified); border-color: var(--verified-border); background: rgba(134,239,172,0.05); }
+  .stage.partial .stage-status { color: var(--partial); border-color: var(--partial-border); background: rgba(252,211,77,0.05); }
+  .stage.missed .stage-status { color: var(--unverified); border-color: var(--unverified-border); background: rgba(248,113,113,0.05); }
+
+  .result {
+    margin-top: 20px; max-width: 720px; margin-left: auto; margin-right: auto;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 18px;
+  }
+  .result h2 {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-dim); margin: 0 0 10px;
+  }
+  .result-row {
+    display: grid; grid-template-columns: 160px 1fr;
+    gap: 12px; padding: 6px 0;
+    border-bottom: 1px dashed var(--border);
+    font-family: ui-monospace, Menlo, monospace; font-size: 12px;
+  }
+  .result-row:last-child { border-bottom: none; }
+  .result-row .k { color: var(--text-dim); }
+  .result-row .v { color: var(--text); }
+  .result-row .v.verified { color: var(--verified); }
+  .result-row .v.partial { color: var(--partial); }
+  .result-row .v.missed { color: var(--unverified); }
+
+  .ui-state {
+    margin-top: 12px; padding: 12px;
+    background: var(--bg-elev-2);
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .ui-state .chip {
+    display: inline-block; padding: 2px 8px;
+    border-radius: 3px; font-size: 11px;
+    font-family: ui-monospace, Menlo, monospace;
+    margin-right: 8px; vertical-align: middle;
+  }
+  .ui-state .chip.green { background: var(--verified-bg); color: var(--verified); border: 1px solid var(--verified-border); }
+  .ui-state .chip.yellow { background: var(--partial-bg); color: var(--partial); border: 1px solid var(--partial-border); }
+  .ui-state .chip.red { background: var(--unverified-bg); color: var(--unverified); border: 1px solid var(--unverified-border); }
+  .ui-state .quote { font-style: italic; color: var(--text); }
+  .ui-state .quote.dim { color: var(--text-faint); text-decoration: line-through dotted; }
+
+  .judges {
+    display: flex; flex-direction: column; gap: 6px;
+    margin-top: 8px;
+  }
+  .judge {
+    display: grid; grid-template-columns: 1fr auto auto;
+    gap: 10px; align-items: center;
+    padding: 6px 10px;
+    background: var(--bg-elev-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 11px;
+  }
+  .judge .judge-name { color: var(--text); }
+  .judge .judge-tier { color: var(--text-faint); font-size: 10px; }
+  .judge .judge-verdict {
+    padding: 2px 8px; border-radius: 3px;
+    font-weight: 600; font-size: 10px;
+  }
+  .judge .judge-verdict.yes { color: var(--verified); border: 1px solid var(--verified-border); }
+  .judge .judge-verdict.no { color: var(--unverified); border: 1px solid var(--unverified-border); }
+  .judge .judge-verdict.partial { color: var(--partial); border: 1px solid var(--partial-border); }
+
+  .narration {
+    background: var(--bg-elev-2);
+    border-left: 3px solid var(--accent-dim);
+    padding: 10px 14px;
+    border-radius: 0 4px 4px 0;
+    font-size: 12px; color: var(--text-dim);
+    line-height: 1.5;
+    margin-top: 14px; max-width: 720px;
+    margin-left: auto; margin-right: auto;
+  }
+  .narration strong { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Citation Engine — 4-stage cascade</h1>
+    <span class="subtitle">Pick a candidate. Watch which stage verifies. The first stage to succeed wins; failures cascade.</span>
+    <span class="spacer"></span>
+    <a href="https://github.com/LegalQuants/lq-ai/blob/main/api/app/citation/verification.py" target="_blank">source: verification.py</a>
+    <a href="https://github.com/LegalQuants/lq-ai/blob/main/docs/citation-engine.md" target="_blank">docs</a>
+  </header>
+  <div class="main">
+    <div class="controls">
+      <h2>Candidate citations</h2>
+      <p class="hint">Each preset picks a (source, quote) pair. Watch how far the cascade has to go before something verifies — or doesn't.</p>
+      <div class="presets" id="presets"></div>
+
+      <h2>Edit the source text</h2>
+      <p class="hint">The verifier reads from <code>documents.normalized_content</code>.</p>
+      <textarea id="source-text" rows="5"></textarea>
+
+      <h2>Edit the model's quote</h2>
+      <p class="hint">The string the model emitted as <code>"&lt;quote&gt;" (Source: [N])</code>.</p>
+      <input type="text" id="quote-text">
+
+      <h2>Stage 4 — ensemble</h2>
+      <label class="toggle">
+        <input type="checkbox" id="ensemble-toggle">
+        <div class="toggle-label">Enable ensemble verification
+          <span>Replaces Stage 3 single-judge with parallel dispatch across 3 judge models. Stage 1 + 2 still run first.</span>
+        </div>
+      </label>
+      <p class="hint" style="margin-top: 8px;">Activation in production is the OR of: skill frontmatter, project flag, gateway default. Pre-flight cost-budget check can fall back to Stage 3 (see <a href="https://github.com/LegalQuants/lq-ai/blob/main/api/app/citation/cost.py" target="_blank" style="color: var(--accent);">cost.py</a>).</p>
+    </div>
+
+    <div class="preview-wrap">
+      <div class="stage-list" id="stage-list"></div>
+      <div class="result" id="result"></div>
+      <div class="narration" id="narration"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const PRESETS = [
+  {
+    id: "exact",
+    label: "Exact verbatim quote",
+    desc: "Stage 1 wins. Most M2 citations land here in practice.",
+    source: "The Recipient shall maintain the Confidential Information in strict confidence and shall not disclose such Confidential Information to any third party without the prior written consent of the Discloser.",
+    quote: "The Recipient shall maintain the Confidential Information in strict confidence"
+  },
+  {
+    id: "tolerant",
+    label: "Whitespace + smart-quotes drift",
+    desc: "Stage 1 fails byte-comparison; Stage 2 rapidfuzz catches it.",
+    source: "The Recipient shall maintain the Confidential Information in strict confidence and shall not disclose such Confidential Information to any third party without the prior written consent of the Discloser.",
+    quote: "The Recipient shall maintain the Confidential Information in  strict confidence"
+  },
+  {
+    id: "paraphrase",
+    label: "Legitimate paraphrase",
+    desc: "Quotes the meaning, not the verbatim text. Stage 3 judge verifies.",
+    source: "The Recipient shall maintain the Confidential Information in strict confidence and shall not disclose such Confidential Information to any third party without the prior written consent of the Discloser.",
+    quote: "the recipient must keep confidential information secret and cannot share it with outside parties without permission"
+  },
+  {
+    id: "partial",
+    label: "Partial paraphrase",
+    desc: "Source supports part of the claim. Stage 3 returns partial.",
+    source: "The Recipient shall maintain the Confidential Information in strict confidence and shall not disclose such Confidential Information to any third party without the prior written consent of the Discloser.",
+    quote: "the recipient must keep all information about Acme Corp secret forever"
+  },
+  {
+    id: "fabricated",
+    label: "Fabricated quote",
+    desc: "Model invented text not present in the source. Every stage fails; renders as unverified.",
+    source: "The Recipient shall maintain the Confidential Information in strict confidence and shall not disclose such Confidential Information to any third party without the prior written consent of the Discloser.",
+    quote: "the recipient may freely publish the confidential information on social media platforms"
+  }
+];
+
+const JUDGE_MODELS = [
+  { name: "claude-haiku-4-5", tier: 3, propensity: 0.6 },
+  { name: "gpt-4o-mini",      tier: 3, propensity: 0.55 },
+  { name: "claude-opus-4-7",  tier: 4, propensity: 0.7 }
+];
+
+// --- Stage simulators ------------------------------------------------------
+
+function stage1ExactMatch(source, quote) {
+  return source.indexOf(quote) !== -1;
+}
+
+function normalize(s) {
+  return s
+    .replace(/[‘’“”]/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+// Crude approximation of rapidfuzz.ratio. Real Stage 2 uses rapidfuzz; this
+// playground simulates the 95-threshold behavior with a cheap character-overlap
+// score that returns 0-100.
+function fuzzyRatio(a, b) {
+  const A = new Set(a.split(/\s+/));
+  const B = new Set(b.split(/\s+/));
+  let shared = 0;
+  for (const tok of A) if (B.has(tok)) shared++;
+  const totalUnique = new Set([...A, ...B]).size;
+  if (totalUnique === 0) return 0;
+  // Lerp toward 100 when token overlap is near-complete.
+  const jacc = shared / totalUnique;
+  return Math.round(jacc * 100);
+}
+
+function stage2TolerantMatch(source, quote) {
+  const ns = normalize(source);
+  const nq = normalize(quote);
+  if (ns.indexOf(nq) !== -1) return { hit: true, score: 100 };
+  const score = fuzzyRatio(ns, nq);
+  return { hit: score >= 95, score };
+}
+
+// Stage 3 stub: a token-overlap-driven simulation of an LLM paraphrase judge.
+// Returns one of {yes, partial, no} + confidence {high, medium, low}.
+function stage3ParaphraseJudge(source, quote, propensity = 0.6) {
+  const ns = normalize(source);
+  const nq = normalize(quote);
+  const tokensS = new Set(ns.split(/\s+/).filter(t => t.length > 2));
+  const tokensQ = new Set(nq.split(/\s+/).filter(t => t.length > 2));
+  let shared = 0;
+  for (const t of tokensQ) if (tokensS.has(t)) shared++;
+  const coverage = tokensQ.size ? shared / tokensQ.size : 0;
+  // Boost: a candidate that contains semantic-overlap keywords scores higher.
+  const semanticHints = ["confidential", "secret", "disclose", "share", "third", "party", "permission", "consent", "must", "shall", "cannot", "without"];
+  const hits = semanticHints.filter(w => nq.indexOf(w) !== -1 && ns.indexOf(w) !== -1).length;
+  const score = Math.min(1, coverage * propensity + hits * 0.05);
+  if (score >= 0.75) return { verdict: "yes", confidence: "high", confidenceValue: 0.90, partial: false };
+  if (score >= 0.50) return { verdict: "yes", confidence: "medium", confidenceValue: 0.70, partial: true };
+  if (score >= 0.30) return { verdict: "yes", confidence: "low", confidenceValue: 0.50, partial: true };
+  return { verdict: "no", confidence: null, confidenceValue: null, partial: false };
+}
+
+// --- Rendering -------------------------------------------------------------
+
+const STAGE_DEFS = [
+  {
+    num: "1",
+    name: "exact_match",
+    desc: "Byte-for-byte string match against documents.normalized_content[offset_start:offset_end].",
+    cost: "Free (pure Python)"
+  },
+  {
+    num: "2",
+    name: "tolerant_match",
+    desc: "Normalize whitespace, smart quotes, OCR confusions; rapidfuzz.fuzz.ratio ≥ 95.",
+    cost: "Free (pure Python)"
+  },
+  {
+    num: "3",
+    name: "paraphrase_judge",
+    desc: "LLM judge call through the gateway. Returns yes/partial/no + high/medium/low confidence.",
+    cost: "1 judge call per citation (~$0.001–0.04 depending on model)"
+  },
+  {
+    num: "4",
+    name: "ensemble_*",
+    desc: "Parallel dispatch across N judge models with strict (unanimous) or majority aggregation.",
+    cost: "N judge calls per citation (pre-flight budget check)"
+  }
+];
+
+function render() {
+  const sourceEl = document.getElementById("source-text");
+  const quoteEl = document.getElementById("quote-text");
+  const ensembleEl = document.getElementById("ensemble-toggle");
+
+  const source = sourceEl.value;
+  const quote = quoteEl.value;
+  const ensembleOn = ensembleEl.checked;
+
+  // Run each stage.
+  const stageResults = [];
+  const s1 = stage1ExactMatch(source, quote);
+  stageResults.push({
+    fired: true,
+    verdict: s1 ? "verified" : "missed",
+    detail: s1 ? "source.indexOf(quote) !== -1 → true" : "byte-for-byte match failed"
+  });
+
+  if (s1) {
+    stageResults.push({ fired: false, verdict: "skipped" });
+    stageResults.push({ fired: false, verdict: "skipped" });
+    stageResults.push({ fired: false, verdict: "skipped" });
+  } else {
+    const s2 = stage2TolerantMatch(source, quote);
+    stageResults.push({
+      fired: true,
+      verdict: s2.hit ? "verified" : "missed",
+      detail: `rapidfuzz score = ${s2.score} (threshold = 95)`
+    });
+
+    if (s2.hit) {
+      stageResults.push({ fired: false, verdict: "skipped" });
+      stageResults.push({ fired: false, verdict: "skipped" });
+    } else if (ensembleOn) {
+      // Stage 3 is skipped when ensemble is activated (M2-D1 decision B).
+      stageResults.push({ fired: false, verdict: "skipped", detail: "skipped — ensemble activated; cascade goes 1→2→4" });
+
+      // Stage 4 — ensemble: each judge gives its own verdict.
+      const judgeVerdicts = JUDGE_MODELS.map(m => ({
+        ...m,
+        ...stage3ParaphraseJudge(source, quote, m.propensity)
+      }));
+      const yesCount = judgeVerdicts.filter(j => j.verdict === "yes" && !j.partial).length;
+      const partialAny = judgeVerdicts.some(j => j.partial);
+      // Default aggregation: strict. Unanimous YES (and no partials) verifies.
+      const strictVerified = judgeVerdicts.every(j => j.verdict === "yes");
+      const tierEnvelope = Math.max(...judgeVerdicts.map(j => j.tier));
+      const avgConf = judgeVerdicts
+        .filter(j => j.confidenceValue !== null)
+        .map(j => j.confidenceValue);
+      const meanConf = avgConf.length ? avgConf.reduce((a,b) => a+b, 0) / avgConf.length : 0;
+      stageResults.push({
+        fired: true,
+        verdict: strictVerified ? (partialAny ? "partial" : "verified") : "missed",
+        detail: `${yesCount}/3 judges said yes · tier_envelope=${tierEnvelope} · mean conf=${meanConf.toFixed(2)}`,
+        judges: judgeVerdicts,
+        tierEnvelope,
+        method: strictVerified ? "ensemble_strict" : null,
+        confidence: meanConf,
+        partial: partialAny && strictVerified
+      });
+    } else {
+      const j = stage3ParaphraseJudge(source, quote);
+      stageResults.push({
+        fired: true,
+        verdict: j.verdict === "no" ? "missed" : (j.partial ? "partial" : "verified"),
+        detail: `judge verdict="${j.verdict}" · confidence=${j.confidence ?? "n/a"} (${j.confidenceValue ?? "n/a"}) · partial=${j.partial}`,
+        method: j.verdict === "no" ? null : "paraphrase_judge",
+        confidence: j.confidenceValue,
+        partial: j.partial
+      });
+      stageResults.push({ fired: false, verdict: "skipped", detail: "skipped — single-judge Stage 3 ran" });
+    }
+  }
+
+  // Render stages.
+  const stageListEl = document.getElementById("stage-list");
+  stageListEl.innerHTML = "";
+  STAGE_DEFS.forEach((def, i) => {
+    const r = stageResults[i];
+    const cls = r.fired ? `stage fired ${r.verdict}` : `stage ${r.verdict}`;
+    const statusText = {
+      verified: "verified",
+      partial: "partial",
+      missed: "missed",
+      skipped: "skipped"
+    }[r.verdict] || "pending";
+    const detailHtml = r.detail ? `<div class="stage-detail">${escapeHtml(r.detail)}</div>` : "";
+    let judgesHtml = "";
+    if (r.judges) {
+      judgesHtml = `<div class="judges">${r.judges.map(j => `
+        <div class="judge">
+          <div>
+            <div class="judge-name">${escapeHtml(j.name)}</div>
+            <div class="judge-tier">Tier ${j.tier}</div>
+          </div>
+          <div class="judge-verdict ${j.verdict}${j.partial ? " partial" : ""}">${j.verdict.toUpperCase()}${j.partial ? "/partial" : ""}</div>
+          <div class="judge-tier">${j.confidence ?? "—"}</div>
+        </div>
+      `).join("")}</div>`;
+    }
+    stageListEl.innerHTML += `
+      <div class="${cls}">
+        <div class="stage-num">${def.num}</div>
+        <div class="stage-info">
+          <h3>${def.name}</h3>
+          <p>${escapeHtml(def.desc)}</p>
+          <p style="margin-top: 4px; color: var(--text-faint); font-size: 11px;">${escapeHtml(def.cost)}</p>
+          ${detailHtml}
+          ${judgesHtml}
+        </div>
+        <div class="stage-status">${statusText}</div>
+      </div>
+    `;
+  });
+
+  // Final result.
+  const winning = stageResults.find(r => r.verdict === "verified" || r.verdict === "partial");
+  const renderEl = document.getElementById("result");
+  const idx = stageResults.indexOf(winning);
+  const methodMap = ["exact_match", "tolerant_match", "paraphrase_judge", null]; // ensemble has its own method via .method
+  let methodName = null, confValue = null, tierEnv = null, partial = false;
+  if (winning) {
+    if (winning.method) {
+      methodName = winning.method;
+    } else if (idx === 0) {
+      methodName = "exact_match";
+    } else if (idx === 1) {
+      methodName = "tolerant_match";
+    }
+    confValue = winning.confidence ?? (idx <= 1 ? 1.00 : null);
+    tierEnv = winning.tierEnvelope ?? null;
+    partial = winning.partial ?? false;
+  }
+
+  let uiState, uiChip, uiNote;
+  if (!winning) {
+    uiState = "unverified";
+    uiChip = `<span class="chip red">unverified</span>`;
+    uiNote = `Citation rendered as <span class="quote dim">${escapeHtml(quote)}</span> — greyed text + [unverified] marker. The model emitted a quote that the cascade could not match against any source.`;
+  } else if (idx <= 1) {
+    uiState = "verified (exact/tolerant)";
+    uiChip = `<span class="chip green">verified</span>`;
+    uiNote = `Citation rendered as <span class="quote">${escapeHtml(quote)}</span> — green check + green underline. The model quoted the source faithfully (Stage ${idx + 1}).`;
+  } else if (partial) {
+    uiState = "verified — partial";
+    uiChip = `<span class="chip yellow">verified · partial</span>`;
+    uiNote = `Citation rendered as <span class="quote">${escapeHtml(quote)}</span> — yellow check + yellow underline. The source supports part of the claim; hover the chip for the judge's confidence and partial-support framing.`;
+  } else {
+    uiState = "verified (judge/ensemble)";
+    uiChip = `<span class="chip yellow">verified · ${methodName === "ensemble_strict" ? "ensemble" : "paraphrase"}</span>`;
+    uiNote = `Citation rendered as <span class="quote">${escapeHtml(quote)}</span> — yellow check + yellow underline. ${methodName === "ensemble_strict" ? "All judges agreed; tier envelope = Tier " + tierEnv + "." : "The single judge verified; hover for confidence."}`;
+  }
+
+  renderEl.innerHTML = `
+    <h2>Persisted row · what message_citations stores</h2>
+    <div class="result-row"><div class="k">verification_method</div><div class="v ${winning ? (partial ? "partial" : "verified") : "missed"}">${methodName ?? "<null> (no row persisted)"}</div></div>
+    <div class="result-row"><div class="k">confidence</div><div class="v">${confValue !== null ? confValue.toFixed(2) : "—"}</div></div>
+    <div class="result-row"><div class="k">partial</div><div class="v">${partial ? "true" : "false"}</div></div>
+    <div class="result-row"><div class="k">tier_envelope</div><div class="v">${tierEnv ?? "<null> (single-stage)"}</div></div>
+    <div class="ui-state">${uiChip}<strong>UI state:</strong> ${uiState}<br><br>${uiNote}</div>
+  `;
+
+  // Narration.
+  const narrEl = document.getElementById("narration");
+  if (!winning) {
+    narrEl.innerHTML = `<strong>Outcome.</strong> No stage verified. The row is <strong>not persisted</strong> to <code>message_citations</code>. The absence of the row is the "unverified" signal the M2-C2 UI consumes — the chat surface renders the quote greyed out with an [unverified] marker. The user sees that the system did not stand behind the citation.`;
+  } else {
+    const stageNum = idx + 1;
+    narrEl.innerHTML = `<strong>Outcome.</strong> Stage ${stageNum} verified. The row persists with <code>verification_method='${methodName}'</code>${tierEnv ? `, <code>tier_envelope=${tierEnv}</code>` : ''}. ${partial ? `The <code>partial=true</code> flag tells the UI to render with caveats. ` : ''}Stages after ${stageNum} are skipped — the first stage to verify wins; the cascade short-circuits.`;
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+}
+
+// --- Wiring ----------------------------------------------------------------
+
+const presetsEl = document.getElementById("presets");
+let activePresetId = "exact";
+
+PRESETS.forEach(p => {
+  const btn = document.createElement("button");
+  btn.className = "preset-btn" + (p.id === activePresetId ? " active" : "");
+  btn.dataset.id = p.id;
+  btn.innerHTML = `<span class="preset-label">${escapeHtml(p.label)}</span><span class="preset-desc">${escapeHtml(p.desc)}</span>`;
+  btn.addEventListener("click", () => {
+    activePresetId = p.id;
+    document.querySelectorAll(".preset-btn").forEach(b => b.classList.toggle("active", b.dataset.id === p.id));
+    document.getElementById("source-text").value = p.source;
+    document.getElementById("quote-text").value = p.quote;
+    render();
+  });
+  presetsEl.appendChild(btn);
+});
+
+const initial = PRESETS[0];
+document.getElementById("source-text").value = initial.source;
+document.getElementById("quote-text").value = initial.quote;
+
+["source-text", "quote-text"].forEach(id => {
+  document.getElementById(id).addEventListener("input", () => {
+    document.querySelectorAll(".preset-btn").forEach(b => b.classList.remove("active"));
+    render();
+  });
+});
+document.getElementById("ensemble-toggle").addEventListener("change", render);
+
+render();
+</script>
+</body>
+</html>

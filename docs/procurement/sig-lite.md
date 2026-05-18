@@ -39,6 +39,8 @@ The control set differs by classification:
 
 **References:** [`docs/security/anonymization.md` §What gets pseudonymized](anonymization.md#what-gets-pseudonymized); [`docs/security/anonymization.md` §Privileged chats](anonymization.md#privileged-chats--why-we-skip-m2-b3--m2-d3); PRD §1.5.2 (Inference Tiers), PRD §4.7 (Anonymization Layer).
 
+**Honest validation posture for non-privileged classification.** The pseudonymization control described above runs on every non-privileged chat. Its **mechanism** (pre-substitute, transmit, post-rehydrate; per-request mapper, never persisted) is exercised end-to-end by integration tests including the round-trip correctness suite. Its **recognizer accuracy on legal-document corpus** is empirically unmeasured — Presidio's published metrics target general English (news, social media), not legal prose. Procurement reviewers evaluating residual-risk should read [`docs/security/anonymization.md` §"What's validated vs what's unvalidated"](anonymization.md#whats-validated-vs-whats-unvalidated) for the explicit "where to trust and where to be careful" framing, including the explicit "route to Tier 1 (local Ollama) if the unvalidated risk is unacceptable" guidance. Empirical validation on a curated legal-document corpus is welcomed as a community contribution per [PRD §9 / DE-282](../PRD.md#de-282--anonymization-layer-empirical-validation-on-legal-document-corpus).
+
 ---
 
 ### D.2.7 — Are any controls applied to data classified as attorney work-product or covered by attorney-client privilege?

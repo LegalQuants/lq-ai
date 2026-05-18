@@ -226,21 +226,25 @@ M1 is the foundation release: a self-hostable deployment that delivers conversat
 - Code & Supply-Chain Transparency artifacts (SBOM, signed images, SLSA-3 build provenance, public threat model).
 - **Cypress E2E:** 6 LQ.AI specs (`wave-a-chrome`, `wave-b-surfaces`, `wave-c-matters`, `wave-d1-power-features`, `wave-d2-skill-creator`, `wave-m1-final-surfaces`) covering all user-facing surfaces listed above.
 
-**Not in M1 (deferred to M2):**
-- Citation Engine verification pipeline (architectural slot exists; endpoint stub returns `[]`; see [HONEST-STATE.md §3.1](HONEST-STATE.md#31-citation-engine--architectural-slot-not-wired)).
-- Anonymization Layer middleware (config slot loads; request pipeline does not run it; see [HONEST-STATE.md §3.2](HONEST-STATE.md#32-anonymization-layer--config-slot-not-running)).
-- MCP-Client Subsystem architectural slot — moved to M2 during M1 planning to keep the M1 scope focused on quickstart-shipping capabilities.
+**Not in M1 (shipped in M2):**
+- Citation Engine verification pipeline — **shipped in M2-A through M2-D** as a 4-stage cascade (exact match → tolerant match → paraphrase judge → ensemble). See [PRD §3.3](PRD.md#33-citation-engine-exact-quote) and [HONEST-STATE.md §3](HONEST-STATE.md#3-m2-shipped-capabilities--citation-engine-and-anonymization-layer).
+- Anonymization Layer middleware — **shipped in M2-B3** with M2-D2 retrieval-context skip + M2-D3 privileged-project handling. See [PRD §4.7](PRD.md#47-anonymization-layer-m2) and the honest validation-posture caveat at [`docs/security/anonymization.md`](security/anonymization.md#whats-validated-vs-whats-unvalidated).
+- MCP-Client Subsystem architectural slot — moved to M2 during M1 planning to keep M1 scope focused; M2 retained the slot as a design commitment with no connectors shipping until M5+.
 
 **Storage and providers** stand up in M1; both deployment modes (Mode 1 cloud, Mode 2 local) are operational.
 
-### M2 — Citation Engine and Anonymization
+### M2 — Citation Engine, Anonymization, and Azure OpenAI (SHIPPED 2026-05-17)
 
-**Adds:**
-- Document Pipeline (Docling + PyMuPDF + OCR + Citation Engine with character-fidelity verification).
-- Side-panel PDF.js viewer with bbox highlighting.
-- Multi-Model Ensemble Verification (configurable; the privacy posture surfaced as the *minimum* tier across the ensemble).
-- **Anonymization Layer in the Inference Gateway** — pre/post middleware pseudonymizing sensitive entities before the model call and rehydrating in responses and citations. Pre/post stages bracket the Provider Adapters in the gateway pipeline.
-- **MCP-Client Subsystem architectural slot** — moved here from M1 during M1 planning. Pluggable MCP-client in the FastAPI backend; no MCP servers ship and no connectors land in M2–M4.
+**Shipped:**
+- **Citation Engine** — 4-stage verification cascade (`exact_match` / `tolerant_match` / `paraphrase_judge` / `ensemble_strict` | `ensemble_majority`) with M2-C2 UI rendering states, M2-D1 ensemble + tier envelope, M2-E2 per-judge cost calibration. See [PRD §3.3](PRD.md#33-citation-engine-exact-quote).
+- **Anonymization Layer** — pre/post middleware in the Inference Gateway pseudonymizing sensitive entities before the model call and rehydrating on response. Retrieval-context skip (M2-D2) leaves source quotes intact for citation grounding. Privileged-project handling (M2-D3) cross-cuts with tier-floor enforcement. Honest validation posture: custom recognizers + integration are tested; Presidio default-recognizer recall/precision on legal corpus is empirically unmeasured ([DE-282](PRD.md#de-282--anonymization-layer-empirical-validation-on-legal-document-corpus) invites community contribution).
+- **Multi-Model Ensemble Verification** — landed as Stage 4 of the Citation Engine cascade rather than as a full-chat-completion surface. The privacy posture surfaces as the *maximum* tier across the ensemble (the weakest envelope), persisted on `message_citations.tier_envelope`.
+- **Azure OpenAI provider adapter** — M2-E1 (DE-267 closed). Mirrors the OpenAI wire format with deployment-scoped URL + `api-key` auth + required `api_version`. Azure AD path (managed identity / service principal) deferred to [DE-278](PRD.md#de-278--azure-openai-ad-authentication-managed-identity--service-principal).
+- **MCP-Client Subsystem architectural slot** — retained as a design commitment; no connectors ship.
+
+**Not in M2 (intentional, tracked):**
+- Side-panel PDF.js viewer with bbox highlighting — UI surface deferred; the citation rendering states (M2-C2) ship the visual contract without the viewer drilldown.
+- "Ensemble runs the full chat path with N parallel reconciled completions" — ensemble landed scoped to Citation Engine verification only; full-chat-ensemble would be a substantial follow-on if it lands at all.
 
 ### M3 — Playbooks, Word Add-In, Tabular Review, Slack/Teams
 
