@@ -332,3 +332,116 @@ async def test_streaming_response_carries_tier(
     assert row.routed_provider == "anthropic-prod"
     assert row.tokens_in == 3
     assert row.tokens_out == 1
+
+
+# --- M2-E2: purpose column ---------------------------------------------------
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_routing_log_purpose_defaults_to_chat(
+    client_with_recorder: tuple[AsyncClient, RecordingRoutingLogWriter],
+) -> None:
+    """M2-E2: a regular chat-send writes ``purpose='chat'`` on the routing log."""
+
+    client, recorder = client_with_recorder
+    respx.post("https://api.anthropic.com/v1/messages").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "msg_purpose_chat",
+                "model": "claude-opus-4-7",
+                "content": [{"type": "text", "text": "ok"}],
+                "stop_reason": "end_turn",
+                "usage": {"input_tokens": 5, "output_tokens": 2},
+            },
+        )
+    )
+
+    response = await client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "smart",
+            "messages": [{"role": "user", "content": "hi"}],
+        },
+    )
+    assert response.status_code == 200
+    assert len(recorder.rows) == 1
+    assert recorder.rows[0].purpose == "chat"
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_routing_log_purpose_judge_paraphrase_propagates(
+    client_with_recorder: tuple[AsyncClient, RecordingRoutingLogWriter],
+) -> None:
+    """M2-E2: ``lq_ai_purpose='judge_paraphrase'`` on the request lands on the row.
+
+    Citation Engine Stage 3/4 sets this so api/-side cost calibration
+    can filter routing-log rows down to judge traffic only.
+    """
+
+    client, recorder = client_with_recorder
+    respx.post("https://api.anthropic.com/v1/messages").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "msg_purpose_judge",
+                "model": "claude-opus-4-7",
+                "content": [{"type": "text", "text": '{"verdict":"yes"}'}],
+                "stop_reason": "end_turn",
+                "usage": {"input_tokens": 800, "output_tokens": 50},
+            },
+        )
+    )
+
+    response = await client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "smart",
+            "messages": [{"role": "user", "content": "judge this"}],
+            "lq_ai_purpose": "judge_paraphrase",
+        },
+    )
+    assert response.status_code == 200
+    assert len(recorder.rows) == 1
+    assert recorder.rows[0].purpose == "judge_paraphrase"
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_routing_log_purpose_unknown_value_sanitizes_to_chat(
+    client_with_recorder: tuple[AsyncClient, RecordingRoutingLogWriter],
+) -> None:
+    """M2-E2: an unknown ``lq_ai_purpose`` value falls back to ``'chat'``.
+
+    Defensive: the column is ``varchar(32)`` and downstream code expects
+    one of the known values. An arbitrary caller can't pollute the
+    column with free-form strings.
+    """
+
+    client, recorder = client_with_recorder
+    respx.post("https://api.anthropic.com/v1/messages").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "msg_purpose_unknown",
+                "model": "claude-opus-4-7",
+                "content": [{"type": "text", "text": "ok"}],
+                "stop_reason": "end_turn",
+                "usage": {"input_tokens": 3, "output_tokens": 1},
+            },
+        )
+    )
+
+    response = await client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "smart",
+            "messages": [{"role": "user", "content": "hi"}],
+            "lq_ai_purpose": "evil_attacker_string",
+        },
+    )
+    assert response.status_code == 200
+    assert len(recorder.rows) == 1
+    assert recorder.rows[0].purpose == "chat"

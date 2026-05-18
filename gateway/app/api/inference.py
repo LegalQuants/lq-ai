@@ -1181,6 +1181,7 @@ async def _stream_openai_sse(
             request_id=request_id,
             chat_id=chat_id,
             message_id=message_id,
+            purpose=_purpose_from_request(chat_request),
         )
     )
 
@@ -1223,6 +1224,35 @@ def _correlation_ids(
     chat_id = _parse(chat_request.lq_ai_chat_id) or _parse(chat_request.chat_id)
     message_id = _parse(chat_request.lq_ai_message_id)
     return chat_id, message_id
+
+
+# Known values for the ``inference_routing_log.purpose`` column. Values
+# outside this set fall back to ``'chat'`` in :func:`_purpose_from_request`
+# so an arbitrary caller can't pollute the column with free-form strings.
+_KNOWN_PURPOSES = frozenset({"chat", "judge_paraphrase", "embedding"})
+
+
+def _purpose_from_request(chat_request: ChatCompletionRequest) -> str:
+    """Resolve the routing-log ``purpose`` tag from the chat request envelope.
+
+    M2-E2 added ``lq_ai_purpose`` to :class:`ChatCompletionRequest`. The
+    Citation Engine sets it to ``'judge_paraphrase'`` on every Stage 3
+    / Stage 4 judge call so the api/ cost-calibration query can filter
+    routing-log rows down to judge traffic only. Other callers leave
+    it unset and the row records ``'chat'``.
+
+    Unknown values fall back to ``'chat'`` defensively — the column is
+    ``varchar(32)`` and downstream code expects one of the known
+    values.
+    """
+
+    raw = chat_request.lq_ai_purpose
+    if raw is None:
+        return "chat"
+    value = raw.strip()
+    if value in _KNOWN_PURPOSES:
+        return value
+    return "chat"
 
 
 def _annotate_response(
@@ -1276,6 +1306,7 @@ async def _write_success(
             request_id=request_id,
             chat_id=chat_id,
             message_id=message_id,
+            purpose=_purpose_from_request(chat_request),
         )
     )
 
@@ -1322,6 +1353,7 @@ async def _write_failure(
             request_id=request_id,
             chat_id=chat_id,
             message_id=message_id,
+            purpose=_purpose_from_request(chat_request),
         )
     )
 
@@ -1350,6 +1382,7 @@ async def _write_unavailable(
             request_id=request_id,
             chat_id=chat_id,
             message_id=message_id,
+            purpose=_purpose_from_request(chat_request),
         )
     )
 
@@ -1388,6 +1421,7 @@ async def _write_refusal(
             request_id=request_id,
             chat_id=chat_id,
             message_id=message_id,
+            purpose=_purpose_from_request(chat_request),
         )
     )
 
@@ -1424,6 +1458,7 @@ async def _write_unresolved(
             request_id=request_id,
             chat_id=chat_id,
             message_id=message_id,
+            purpose=_purpose_from_request(chat_request),
         )
     )
 
@@ -1516,6 +1551,7 @@ async def _write_embeddings_success(
             cost_estimate=cost,
             latency_ms=latency_ms,
             request_id=request_id,
+            purpose="embedding",
         )
     )
 
@@ -1541,6 +1577,7 @@ async def _write_embeddings_failure(
             refused=False,
             refusal_reason=f"upstream_error:{error.code}",
             request_id=request_id,
+            purpose="embedding",
         )
     )
 
@@ -1564,6 +1601,7 @@ async def _write_embeddings_unavailable(
             refused=False,
             refusal_reason=f"adapter_unavailable:{message}",
             request_id=request_id,
+            purpose="embedding",
         )
     )
 
@@ -1586,5 +1624,6 @@ async def _write_unresolved_embeddings(
             refused=True,
             refusal_reason=f"invalid_model:{message}",
             request_id=request_id,
+            purpose="embedding",
         )
     )

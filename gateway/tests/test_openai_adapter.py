@@ -434,6 +434,7 @@ async def test_chat_completion_strips_lq_ai_extension_keys() -> None:
         lq_ai_chat_id="11111111-1111-1111-1111-111111111111",
         lq_ai_message_id="22222222-2222-2222-2222-222222222222",
         lq_ai_user_id="33333333-3333-3333-3333-333333333333",
+        lq_ai_purpose="judge_paraphrase",
         chat_id="audit-tag",
         anonymize=True,
     )
@@ -465,6 +466,7 @@ async def test_chat_completion_strips_lq_ai_extension_keys() -> None:
         "lq_ai_chat_id",
         "lq_ai_message_id",
         "lq_ai_user_id",
+        "lq_ai_purpose",
     ):
         assert forbidden not in sent, f"LQ.AI extension {forbidden!r} leaked to OpenAI"
 

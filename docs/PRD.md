@@ -2872,6 +2872,28 @@ Type 2 is high-priority for any deployment used in litigation work — a fabrica
 
 **Acceptance criteria:** judge calibrated against the gold set (≥0.85 precision @ ≥0.70 recall); end-to-end integration with DE-279 (a chat response with a case statement triggers DE-279 resolution + DE-280 content check in parallel); UI renders the case-statement verdict alongside KB-quote verdicts; cost-budget pre-flight handles long-opinion edge cases; documented end-to-end in `docs/citation-engine.md` under a new §3 "Case content accuracy"; depends on DE-279 landing first.
 
+#### DE-281 — Citation Engine operational-telemetry calibration (TOLERANT_MATCH_THRESHOLD + aggregation_rule)
+
+**Priority:** P2 · **Effort:** S
+
+**Context:** M2-E2 calibrated the per-judge-call cost pre-flight against the routing log (replacing the M2-D1 flat `FLAT_PER_JUDGE_USD = 0.005` constant with per-model rolling averages). Two other Citation Engine constants were originally scoped for M2-E2 calibration in the M2 plan but were not addressed because they require empirical workload data the project did not collect (M2-F1 closed via scope reframe rather than building an annotated corpus):
+
+- **`TOLERANT_MATCH_THRESHOLD = 95.0`** at `api/app/citation/verification.py:138` — rapidfuzz threshold for Stage 2 (tolerant-match) acceptance. 95 catches normalization-only differences (smart quotes, whitespace collapse, OCR confusions) while rejecting genuine paraphrases (~70-90 range) that belong to Stage 3. The 95 boundary is plausible but empirically uncalibrated — a real workload might want 92 or 97 to land on the precision/recall sweet spot.
+- **`aggregation_rule: strict`** default in `gateway.yaml.example` and `gateway/app/config.py` — Stage 4 ensemble aggregation. Strict requires unanimous agreement across N judges; majority needs N/2+1. The "strict produces too many verified-with-caveats surfaces" vs "majority is too permissive" tradeoff is a UX-and-correctness call that depends on observed disagreement rates the project hasn't measured.
+
+**The M2-E2 substrate enables this:** the per-purpose routing-log column (added in migration 0029) and the rolling-average query infrastructure (`api/app/citation/cost.py`) generalize cleanly to per-stage verdict telemetry. The same machinery that calibrates cost can calibrate accuracy once production deployments accumulate enough chat-send → citation-verdict telemetry to compute disagreement rates and stage-pass distributions.
+
+**Specific scope:**
+
+- Extend `inference_routing_log` (or add a sibling `citation_verdict_log` table) to record per-citation Stage-1-vs-Stage-2-vs-Stage-3 outcomes when Stage 4 ensemble fired, including the per-judge verdict tuples. Lets operators see "of the last 1000 ensemble verifications, how often did the 3 judges agree?" without a synthetic corpus.
+- New admin endpoint `GET /admin/v1/citation-calibration` exposing rolling stats: Stage 1 pass rate, Stage 2 pass rate (of Stage 1 misses), Stage 3 pass rate (of Stage 2 misses for single-judge), Stage 4 disagreement rate (per-judge tuple distribution), per-stage average cost.
+- Calibration recommendations: when disagreement rate exceeds X%, the admin surface suggests flipping `aggregation_rule` to `majority`. When Stage 2 pass rate is near-zero, suggest lowering `TOLERANT_MATCH_THRESHOLD`. When near-100%, suggest raising it.
+- `gateway.yaml` accepts both constants as configurable values (operators can override the defaults per deployment based on the recommendations).
+
+**Why deferred:** the current values are conservative and operator-overridable; no production deployment has accumulated the telemetry needed to calibrate them. The M2-E2 cost calibration shipped because per-model judge cost has obvious order-of-magnitude variation that's measurable from published price sheets; threshold + aggregation calibration both require observing how operators' real workloads behave, which is post-v0.2 work.
+
+**Acceptance criteria:** admin endpoint surfaces per-stage rolling stats with at least 30 days of telemetry; calibration recommendations match the documented decision rules; `gateway.yaml.example` adds documented override knobs for both constants; integration test exercises the recommendation logic against seeded telemetry data; `docs/citation-engine.md` adds a "Calibration" section linking the constants to the telemetry surface.
+
 ### Workflow intelligence
 
 This subsection captures the bounded items that operationalize the M5+ Forward-Looking Workflow Intelligence direction (§8.5). The items are bounded enough to be picked up by community contributors as the M5+ roadmap matures. The architectural slot for the MCP-client subsystem is already committed for M1–M2 (§8 M1) so this subsection's items can be implemented incrementally without core refactoring.

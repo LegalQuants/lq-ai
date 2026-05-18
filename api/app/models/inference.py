@@ -87,6 +87,14 @@ class InferenceRoutingLog(Base):
 
     request_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    # M2-E2: distinguishes Citation Engine Stage 3/4 judge calls from
+    # regular chat completions and embeddings. Values written by the
+    # gateway from the request's ``lq_ai_purpose`` extension field:
+    # ``'chat'`` (default), ``'judge_paraphrase'``, ``'embedding'``.
+    # Nullable for backwards compatibility with pre-0029 rows; cost
+    # calibration treats NULL the same as ``'chat'``.
+    purpose: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
     def __repr__(self) -> str:
         return (
             f"<InferenceRoutingLog id={self.id} "

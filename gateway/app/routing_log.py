@@ -79,6 +79,11 @@ class InferenceRoutingLogRow:
     refused: bool = False
     refusal_reason: str | None = None
     request_id: str | None = None
+    # M2-E2: 'chat' | 'judge_paraphrase' | 'embedding'. Sourced from the
+    # request's ``lq_ai_purpose`` extension field on chat paths, hardcoded
+    # to ``'embedding'`` on embeddings paths. Lets per-model cost
+    # calibration filter routing-log rows down to judge-call traffic.
+    purpose: str | None = None
     timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
 
 
@@ -104,7 +109,8 @@ _INSERT_SQL = text(
         anonymization_applied,
         refused,
         refusal_reason,
-        request_id
+        request_id,
+        purpose
     ) VALUES (
         :timestamp,
         :user_id,
@@ -121,7 +127,8 @@ _INSERT_SQL = text(
         :anonymization_applied,
         :refused,
         :refusal_reason,
-        :request_id
+        :request_id,
+        :purpose
     )
     """
 )
@@ -210,4 +217,5 @@ def _to_params(row: InferenceRoutingLogRow) -> dict[str, object]:
         "refused": row.refused,
         "refusal_reason": row.refusal_reason,
         "request_id": row.request_id,
+        "purpose": row.purpose,
     }

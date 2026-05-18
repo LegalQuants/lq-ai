@@ -156,20 +156,67 @@ resolution.
 
 ## Cost-budget pre-flight
 
-Stage 4 cost grows as `n_citations × n_judges`. To prevent runaway
-spend on a single message:
+Stage 4 cost grows as `n_citations × Σ(per-judge cost)`. To prevent
+runaway spend on a single message:
 
 ```
-estimated_usd = n_citations × n_judges × FLAT_PER_JUDGE_USD
+per_judge_costs = [estimate_judge_call_cost_usd(db, model)
+                   for model in config.judge_models]
+estimated_usd = n_citations × sum(per_judge_costs)
 if estimated_usd > max_cost_per_message_usd:
     fall back to single-judge Stage 3
 ```
 
-`FLAT_PER_JUDGE_USD = 0.005` is a deliberately conservative constant
-(haiku-tier rates + generous token estimates) so the check errs on
-the side of falling back rather than overrunning. M2-E2 (ensemble
-calibration pass) replaces it with measured numbers from the
-acceptance corpus.
+### Per-judge calibration (M2-E2)
+
+`estimate_judge_call_cost_usd(db, judge_model)` in
+[`api/app/citation/cost.py`](../api/app/citation/cost.py) computes a
+rolling average over the most recent 100 (or last 30 days, whichever
+is smaller) `inference_routing_log` rows where
+`routed_model = judge_model` AND `purpose = 'judge_paraphrase'`. The
+`purpose` column was added in migration 0029 and is set by the api/
+side via the `lq_ai_purpose` request envelope field — the gateway
+strips it from the outbound provider body and writes it to the
+routing-log row.
+
+Why per-model: judge costs span order-of-magnitude differences
+(`claude-haiku-4-5` ~$0.001/call vs `claude-opus-4-7` ~$0.04/call).
+A single flat constant of 0.005 is 5× too conservative for haiku
+ensembles (causing unnecessary fallbacks) and 8× too permissive for
+opus ensembles (risking runaway spend).
+
+### Cold-start fallback
+
+Models with fewer than 5 recent judge calls fall back to
+`DEFAULT_PER_JUDGE_USD = 0.005` — the same conservative constant
+shipped in M2-D1. Cold-start deployments see the conservative budget
+posture until enough judge traffic accumulates to calibrate; that
+matches the safety story of "err toward fallback rather than runaway
+spend".
+
+### Cache
+
+The estimator caches per-model results for 300 seconds (5 min)
+in-process. A 3-model ensemble pre-flight therefore costs at most 3
+DB queries every 5 minutes; subsequent pre-flights in the same
+window cost zero DB queries. Per-process; multi-worker deployments
+accept the per-worker drift as benign noise.
+
+### What's NOT calibrated (yet)
+
+Two Citation Engine constants remain at conservative pre-calibration
+defaults — they need empirical workload data the project hasn't
+collected yet:
+
+- `TOLERANT_MATCH_THRESHOLD = 95.0` (Stage 2 rapidfuzz threshold).
+- `aggregation_rule: strict` (Stage 4 ensemble default in
+  `gateway.yaml.example`).
+
+Both are tracked at [PRD §9 DE-281](PRD.md#de-281--citation-engine-operational-telemetry-calibration-tolerant_match_threshold--aggregation_rule)
+for operational-telemetry calibration once production deployments
+accumulate sufficient stage-pass distribution and disagreement-rate
+data. The M2-E2 per-purpose routing-log substrate generalizes
+cleanly to that future work.
 
 ## Privacy implications of Stage 4
 
