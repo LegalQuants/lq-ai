@@ -6,6 +6,50 @@
 
 ---
 
+## What's validated vs what's unvalidated
+
+This section exists because LQ.AI's [founding transparency principle](../PRD.md#13-transparency-as-a-founding-principle) requires us to be explicit about where this layer has been measured and where it has not — so practicing attorneys can make informed professional judgments about confidentiality posture per matter.
+
+### What is validated
+
+- **Custom legal recognizers** (`CaseNumberRecognizer`, `MatterNumberRecognizer`): ~24 unit tests in `gateway/tests/anonymization/test_recognizers.py` exercise the pattern matchers on hand-crafted positive and negative examples (federal reporter cites, state reporter cites, docket-number variants, alpha-year-sequence matter numbers, dotted matter numbers, and adversarial near-misses). The recognizers do what they claim against the patterns we anticipated.
+- **Middleware pre/post integration**: pre-anonymization fires before the request leaves the gateway, post-anonymization rehydrates the response (including SSE-streaming tail-buffer for pseudonyms that span chunk boundaries). Pinned by `test_middleware.py` + `test_round_trip.py` + the M2-C3 17-test round-trip correctness suite.
+- **Edge cases pinned in M2-D4**: long entity names, multi-line entities (address blocks spanning `\n`), the retrieval-context skip flag, the privileged-project tier-floor invariant. See `test_edge_cases.py`.
+- **Pseudonym format stability**: `{ENTITY_TYPE}_{NNNN}` is deterministic per-request and idempotent on re-substitution.
+
+### What is NOT validated
+
+**Presidio default-recognizer accuracy on legal-document corpus.** The Anonymization Layer enables 6 of Presidio's default recognizers (`PERSON`, `ORGANIZATION`, `EMAIL_ADDRESS`, `PHONE_NUMBER`, `US_BANK_NUMBER`, `LOCATION`) and disables 7 others (`UsSsnRecognizer`, `UsPassportRecognizer`, `UsLicenseRecognizer`, `CryptoRecognizer`, `IbanRecognizer`, `IpRecognizer`, `MedicalLicenseRecognizer`). The choices reflect engineering judgment about typical legal-document corpus, **not** empirical recall + precision measurements on a curated corpus of contracts, briefs, and correspondence.
+
+Specifically, the following are unmeasured:
+
+- **Recall per entity type** — when a real contract contains 10 PERSON names, how many does Presidio actually catch? 95%? 80%? Unknown.
+- **Precision per entity type** — when Presidio flags a string as a PERSON, how often is that flag correct on legal prose vs the news/social-media corpus Presidio was developed against? Unknown.
+- **Disabled-recognizer trade-offs** — `UsSsnRecognizer` was disabled because the `123-45-6789` shape collides with case numbers and exhibit IDs in general legal corpus. But personal-injury, employment-discrimination, immigration, and benefits practices routinely handle real SSNs. The disable choice is correct for general civil litigation; it is potentially wrong for those specific practice areas, and the trade-off has not been measured.
+- **Custom-recognizer performance on real legal text** — the unit tests cover anticipated patterns. Recall against unanticipated drafting styles (international citation conventions, pre-2010 docket-number formats, firm-specific matter-number conventions) is unmeasured.
+
+### Why this matters — a miss is a silent confidentiality incident
+
+For citation verification, a miss surfaces in the user interface as an "unverified" chip — the lawyer sees the system's uncertainty and can react. For anonymization, **a miss is silent**: a PERSON name slips through, the unredacted text reaches the model provider, the response comes back rehydrated as if nothing happened, and the lawyer has no in-app signal that client confidentiality was breached. Operational telemetry cannot recover the leak post-hoc — by the time the miss is observable, the unredacted content has already been transmitted, logged, and possibly used in provider-side training (depending on the routed [Inference Tier](../PRD.md#152-the-inference-tier-model)).
+
+This is a meaningfully different load-bearing posture than the citation-verification layer's "wrong answers visibly marked unverified" story. We document it explicitly so practicing attorneys can apply the **professional-judgment standard** that confidentiality work warrants — and so the project does not overclaim a privacy guarantee it has not yet empirically supported.
+
+### What to do if you can't accept the unvalidated risk
+
+Operators with confidentiality requirements that demand validated PII recognition (e.g., privileged matter work, regulated-data practices, or any matter where a single PII miss is unacceptable) have one principal mitigation today: **route to a Tier 1 (fully local) inference path** so the question is moot. Per [PRD §1.5.2](../PRD.md#152-the-inference-tier-model), Tier 1 keeps the chat content inside the operator's environment — Ollama via `docker compose --profile local up` is the default — and no provider call leaves the deployment at all. The Anonymization Layer still runs (the pseudonym/rehydrate round-trip is observable in logs for the operator's own audit), but its failure mode shifts from "leak to a third party" to "leak inside your own infrastructure," which is a categorically different risk surface.
+
+Other paths to consider (without full Tier 1 routing):
+
+1. **Disable anonymization entirely** (`anonymization.enabled: false` in `gateway.yaml`) and rely on the routed Inference Tier's contractual protections (ZDR / no-training agreements at Tier 3 and 4). Honest posture: the operator has decided the provider's contractual commitments are sufficient, and the gateway is no longer attempting recognition.
+2. **Pre-redact at upload time** outside the LQ.AI pipeline so the chat-send path operates on already-redacted content. Suitable for narrow matter sets where the operator's existing tooling handles PII removal.
+3. **Manual review on a per-message basis** — operators who route highly sensitive chats can flip the per-chat anonymization toggle off (where exposed in the UI) and inspect each outbound chat themselves before sending. Slow; only viable for a small volume of work.
+
+### Path to closing the gap
+
+This gap is tracked at [PRD §9 / DE-282 — Anonymization Layer empirical validation on legal-document corpus](../PRD.md#de-282--anonymization-layer-empirical-validation-on-legal-document-corpus). The DE is **scoped as a community-contribution opportunity**: it needs (a) practicing-attorney judgment for entity-type prioritization and ground-truth annotation, and (b) bounded technical work for the eval runner and metrics. The original M2-F2 plan (curate ~50 legal documents, annotate per entity type, build the eval runner, report recall/precision/F1, document the baseline in this file) is preserved as the contribution-ready scope. Contributors from specific practice areas — particularly those whose work routinely involves SSN / driver-license / passport recognition, or matter-number conventions outside the current defaults — are explicitly welcomed to extend the corpus and propose recognizer-set changes.
+
+---
+
 ## What gets pseudonymized
 
 Per the **M2-1 decision** locked at M2 kickoff, anonymization applies only to **chat and skill content** sent to the model. Retrieved source documents stay un-pseudonymized so the model sees intact source quotes for citation grounding and the user-facing retrieval surface continues to render real document text. The skip mechanism is the `lq_ai_skip_anonymization` field on `ChatCompletionMessage`: the api/ marks the retrieval-context system message with `True`; the gateway middleware honors the flag and leaves that message's content alone. See [Retrieval-context skip](#retrieval-context-skip-m2-d2) below for the data flow. The alternative (Option A — pseudonymize the document corpus too) is filed as **[DE-269](../PRD.md#de-269--anonymization-option-a-pseudonymize-source-documents-too)** for future consideration.

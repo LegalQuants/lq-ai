@@ -2894,6 +2894,52 @@ Type 2 is high-priority for any deployment used in litigation work — a fabrica
 
 **Acceptance criteria:** admin endpoint surfaces per-stage rolling stats with at least 30 days of telemetry; calibration recommendations match the documented decision rules; `gateway.yaml.example` adds documented override knobs for both constants; integration test exercises the recommendation logic against seeded telemetry data; `docs/citation-engine.md` adds a "Calibration" section linking the constants to the telemetry surface.
 
+#### DE-282 — Anonymization Layer empirical validation on legal-document corpus
+
+**Priority:** P1 · **Effort:** M (10–14 hours of focused work; structured for incremental community contribution)
+
+**Status:** **Open — community contribution welcomed.** This DE captures the original [M2-F2 plan scope](M2-IMPLEMENTATION-PLAN.md#task-m2-f2--anonymization-acceptance-test-corpus) which the maintainers chose not to ship in v0.2 in favor of transparent disclosure of the validation gap (see [`docs/security/anonymization.md` §"What's validated vs what's unvalidated"](security/anonymization.md#whats-validated-vs-whats-unvalidated)). The choice keeps v0.2's ship cadence intact while inviting contributions from practitioners whose practice areas have specific recognizer needs.
+
+**Context:** The M2 Anonymization Layer (§4.7) enables 6 Presidio default recognizers (`PERSON`, `ORGANIZATION`, `EMAIL_ADDRESS`, `PHONE_NUMBER`, `US_BANK_NUMBER`, `LOCATION`) plus 2 custom legal recognizers (`CaseNumberRecognizer`, `MatterNumberRecognizer`), and disables 7 noisy defaults (`UsSsn`, `UsPassport`, `UsLicense`, `Crypto`, `Iban`, `Ip`, `MedicalLicense`). The enable/disable judgments reflect engineering reasoning about typical legal-document corpus — **not** empirical recall + precision measurements on a curated corpus of contracts, briefs, and correspondence.
+
+For citation verification, a recognizer miss surfaces visibly to the user as an "unverified" chip. For anonymization, **a miss is a silent confidentiality incident** — unredacted client data reaches the model provider before the operator has any signal something went wrong. Operational-telemetry calibration (the path used for cost in [DE-281](#de-281--citation-engine-operational-telemetry-calibration-tolerant_match_threshold--aggregation_rule)) can't address this because by the time a miss is observable, the leak has already happened. Pre-deployment empirical validation against representative legal-document corpus is the right shape of work.
+
+**Specific scope (port of the original M2-F2 plan):**
+
+- **Curate ~50 documents** with ground-truth entity annotations. Sources can mix:
+  - Anonymized real practice documents (operator/contributor-supplied; the corpus itself ships under whatever license the contributor specifies, including potentially a separate license tier from the main project).
+  - Public-domain legal documents (federal/state statutes via `uscode.house.gov`, court opinions from CourtListener, SEC EDGAR contract exhibits).
+  - Synthetic but representative documents authored under the project's license.
+- **Annotations format:** per entity type, list of `(text, start_offset, end_offset, type)` tuples. JSONL recommended for diff-friendliness in git.
+- **Build runner:** `scripts/run_anonymization_eval.py` that loads the corpus, runs each document through `get_analyzer_engine().analyze(...)`, computes per-entity-type recall / precision / F1 against ground truth, reports the aggregate baseline.
+- **Baseline targets** (restated from the original M2-F2 plan; revisit if contributor evidence suggests they need recalibration):
+  - `PERSON`, `ORGANIZATION`: recall ≥95%, precision ≥90%.
+  - `EMAIL_ADDRESS`, `PHONE_NUMBER`: recall ≥98%, precision ≥98% (regex-based; should be near-perfect).
+  - `LOCATION` (ADDRESS): recall ≥85%, precision ≥80%.
+  - `CASE_NUMBER`, `MATTER_NUMBER`: recall ≥70%, precision ≥75%.
+- **Document the corpus, runner, and baseline metrics** in `docs/security/anonymization.md`, replacing the "What's NOT validated" section's "Unknown" placeholders with measured values.
+- **Optional CI nightly** — informational, non-blocking. The corpus is stable enough that meaningful changes only happen when the recognizer set changes, so PR-time CI is sufficient to catch regressions for most contributors.
+
+**Practice-area sub-areas welcomed:**
+
+- **Personal-injury / employment / benefits / immigration practices** — re-evaluate the `UsSsnRecognizer` disable. These practices routinely handle real SSNs; the current disable is correct for general civil litigation but potentially wrong for these areas. Contribution shape: corpus subset that exercises real SSN density in representative documents, plus a measured FP-rate analysis for the case-number collision Presidio's SSN recognizer produces.
+- **Healthcare / regulated-industry practices** — re-evaluate `MedicalLicenseRecognizer`, possibly add new recognizers for DEA numbers, NPI numbers, NDC codes. Practice-specific entity types are valuable additions.
+- **International practices** — extend beyond Presidio's US-centric defaults. Foreign-language detection is a separate gap tracked in the [Foreign-language entities](security/anonymization.md#foreign-language-entities--out-of-scope-for-v1) section; recognizer-set extensions for non-US jurisdictions belong here.
+- **Document Bates numbering, account numbers, social media handles, date-of-birth patterns** — entity types not in the current set that operators have flagged or might flag.
+
+**Acceptance criteria:**
+
+- Corpus of at least 30 documents committed under `eval/anonymization/corpus/` (or a similar path), with documented sourcing and license per document.
+- Annotations file at `eval/anonymization/annotations.jsonl` with schema documented in `eval/anonymization/README.md`.
+- Eval runner at `scripts/run_anonymization_eval.py` produces per-entity-type metrics.
+- Measured baseline numbers replace the "Unknown" placeholders in `docs/security/anonymization.md` §"What's NOT validated".
+- If any recognizer-set changes are proposed alongside the corpus (e.g., re-enabling `UsSsn` for a practice-area variant), the corpus includes positive and negative examples justifying the change.
+- DCO sign-off + attestation per the project's [skill-contribution model](../skills/CONTRIBUTING.md): the contributor confirms the corpus and annotations were authored under their practice judgment.
+
+**Why this is the right kind of community contribution:**
+
+This DE intentionally combines bounded technical work with practice-specific judgment work. The technical pieces (runner, metrics, CI wiring) are picked up cleanly by any contributor familiar with Python + Presidio. The judgment pieces (which entity types matter, which disable choices to reconsider, which patterns are realistic) require the kind of practice-specific knowledge no single maintainer can supply across the diversity of in-house legal teams' workflows. Splitting the work across contributors who own their respective practice areas is the right shape — and the project's [transparency principle](#13-transparency-as-a-founding-principle) is what makes the invitation honest in the first place.
+
 ### Workflow intelligence
 
 This subsection captures the bounded items that operationalize the M5+ Forward-Looking Workflow Intelligence direction (§8.5). The items are bounded enough to be picked up by community contributors as the M5+ roadmap matures. The architectural slot for the MCP-client subsystem is already committed for M1–M2 (§8 M1) so this subsection's items can be implemented incrementally without core refactoring.
