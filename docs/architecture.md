@@ -253,6 +253,7 @@ M1 is the foundation release: a self-hostable deployment that delivers conversat
 - Word Add-In with Inference Tier badge in the task pane.
 - Tabular Review surface and `output_format: table` skill mode.
 - Slack/Teams Light Intake Bridge (optional, profile-gated; OAuth-installed bot for `/lq` slash commands).
+- Second `arq` worker process (`arq-worker`) for long-running Playbook Service jobs — the Easy Playbook generation pipeline runs there to keep within the PRD §3.7 <10-minute NFR without competing with document ingest jobs on the existing `ingest-worker` queue.
 
 ### M4 — Autonomous Layer and Contract Repository
 
@@ -367,7 +368,7 @@ A few elements are intentionally omitted from the main diagram for readability; 
 - **Reverse proxy** (Caddy, Traefik, nginx) sits in front of the Web App and the API for production deployments. See [PRD §6.3 Production Deployment](PRD.md#63-production-deployment).
 - **Internal observability between components** — every service emits OpenTelemetry traces; the diagram shows the OTel sink rather than every individual instrumentation point.
 - **Database migrations and schema management** — Alembic for the FastAPI backend, similar in the gateway. Operational detail, not architecture.
-- **Container orchestration** (Docker Compose for development, Helm for Kubernetes production) — deployment topology rather than runtime architecture.
+- **Container orchestration** (Docker Compose for development, Helm for Kubernetes production) — deployment topology rather than runtime architecture. The Mermaid diagram shows logical services (Document Pipeline, Playbook Service, etc.); at runtime, long-running work for several of these services is hosted in dedicated `arq` worker processes that share Redis with the API container but consume from disjoint queues. M2 shipped `ingest-worker` (Document Pipeline) consuming the default `arq:queue`; M3-A6 adds `arq-worker` (Playbook Service, for the Easy Playbook generation pipeline) consuming `arq:m3a6`. Queue isolation prevents a long playbook generation from blocking document ingest and vice versa.
 - **Citation Engine internals** — within the Document Pipeline service, the Citation Engine is a multi-stage process (structured generation → deterministic substring verification → tolerant-match verification → paraphrase-judge verification → side-panel rendering). The chat surface renders each emitted citation in one of five visual states (M2-C2): verified-exact and verified-tolerant (both green), verified-paraphrase (yellow), unverified (greyed text + `[unverified]` marker), and system-error (yellow warning; deferred to M2-D when the pipeline emits the signal). The visual contract is load-bearing for procurement review — a reviewer scanning the report should be able to identify unverified citations without reading the tooltips. [PRD §3.3](PRD.md#33-citation-engine-exact-quote) covers the engine internals in detail.
 
 ---

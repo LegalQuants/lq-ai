@@ -269,6 +269,46 @@ services:
       timeout: 5s
       retries: 6
 
+  arq-worker:
+    # M3-A6 worker. Sister to `ingest-worker`; same image, same Redis,
+    # but consumes from the dedicated `arq:m3a6` queue so long-running
+    # easy-playbook generation jobs (PRD §3.7: up to 10 minutes for a
+    # 10-document corpus) do not delay document ingest and vice versa.
+    # Phase 1 registers only a noop task; Phase 5 of M3-A6 adds the
+    # easy-playbook generation function. See
+    # `api/app/workers/arq_setup.py` for the WorkerSettings.
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # The worker opens DB sessions in its on_shutdown hook (and Phase
+      # 5 will add the easy-playbook generation pipeline that reads
+      # source documents). Same env wiring as the api/ingest-worker.
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-lq_ai}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-lq_ai}}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      # Gateway endpoint + auth — required by Phase 5's easy-playbook
+      # extractor which calls the inference gateway. Pre-wired now so
+      # Phase 5 doesn't need a second docker-compose edit.
+      LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
+      LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    command: ["arq", "app.workers.arq_setup.WorkerSettings"]
+    healthcheck:
+      # Same proxy as ingest-worker: redis-reachability stands in for
+      # arq-worker-liveness because the worker can't process jobs
+      # without redis.
+      test:
+        ["CMD", "python", "-c", "import os; from redis import Redis; r = Redis.from_url(os.environ['REDIS_URL']); r.ping()"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
   web:
     # OpenWebUI fork imported at v0.9.2 per ADR 0001 (Task A1.d).
     # Customizations land progressively: A5 (branding + delegated-auth wiring),
