@@ -106,10 +106,17 @@ async def list_playbooks(
         stmt = stmt.where((Playbook.created_by == user.id) | (Playbook.created_by.is_(None)))
     stmt = stmt.order_by(Playbook.name)
     rows = (await db.execute(stmt)).scalars().all()
-    # Empty positions list in the wire shape; clients call the detail endpoint.
     return [
-        PlaybookSchema.model_validate(
-            {**{k: v for k, v in row.__dict__.items() if not k.startswith("_")}, "positions": []},
+        PlaybookSchema(
+            id=row.id,
+            name=row.name,
+            contract_type=row.contract_type,
+            description=row.description,
+            version=row.version,
+            created_by=row.created_by,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+            positions=[],
         )
         for row in rows
     ]

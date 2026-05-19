@@ -152,6 +152,37 @@ async def test_get_playbook_returns_full_positions(
 
 
 @pytest.mark.integration
+async def test_user_sees_own_playbook_in_list_and_detail(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """A non-admin author can list + fetch the detail of their own playbook."""
+    user = await _make_user(db_session, is_admin=False)
+    own = Playbook(
+        name="My private NDA playbook",
+        contract_type="NDA",
+        description="",
+        version="1.0.0",
+        created_by=user.id,
+    )
+    db_session.add(own)
+    await db_session.flush()
+
+    headers = _bearer(user)
+
+    # List includes the user's own playbook AND the built-ins.
+    list_resp = await client.get("/api/v1/playbooks", headers=headers)
+    assert list_resp.status_code == 200, list_resp.text
+    names = {entry["name"] for entry in list_resp.json()}
+    assert "My private NDA playbook" in names
+    assert "NDA — Mutual" in names  # built-ins still visible
+
+    # Detail returns the user's own playbook.
+    detail_resp = await client.get(f"/api/v1/playbooks/{own.id}", headers=headers)
+    assert detail_resp.status_code == 200, detail_resp.text
+    assert detail_resp.json()["name"] == "My private NDA playbook"
+
+
+@pytest.mark.integration
 async def test_get_playbook_404_for_unauthorized(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
