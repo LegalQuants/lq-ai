@@ -1,0 +1,45 @@
+# =============================================================================
+# api/.dockerignore — files excluded from the api service's docker build context.
+# =============================================================================
+# .dockerignore patterns are matched against paths relative to the build
+# context root (api/ here, per the docker-compose.yml `build.context: ./api`
+# entry). Use `**/*pattern*` for recursive matches across subdirectories.
+# =============================================================================
+
+# ----- macOS Finder duplicate files -----
+# On iCloud-synced filesystems, Finder occasionally creates phantom duplicates
+# named "foo 2.py", "foo 3.py", "foo 4.py", etc., when it perceives a conflict.
+# These break Alembic ("Multiple head revisions") and Python imports
+# (duplicate module names) when they sneak into the docker build context.
+# This pattern excludes them at every depth.
+**/* [0-9].*
+**/* [0-9][0-9].*
+
+# Finder filesystem metadata.
+**/.DS_Store
+**/._*
+
+# ----- Python build / test caches (never belong in the image) -----
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
+**/.coverage
+**/htmlcov/
+
+# Local virtualenvs.
+.venv/
+venv/
+env/
+
+# ----- Editor / OS detritus -----
+**/*.swp
+**/*.swo
+**/.idea/
+**/.vscode/
+
+# ----- Misc -----
+*.log
+.git/

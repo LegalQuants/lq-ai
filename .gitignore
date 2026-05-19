@@ -147,6 +147,15 @@ ehthumbs.db
 Thumbs.db
 desktop.ini
 
+# macOS Finder duplicate files. On iCloud-synced trees, Finder
+# occasionally creates phantom duplicates named "foo 2.py", "foo 3.ts",
+# "foo 4.svelte", etc., when it perceives a conflict. These break
+# Alembic head resolution, Python imports, Vite imports, and docker
+# builds (see api/.dockerignore + gateway/.dockerignore + web/.dockerignore
+# for the build-time guard). This pattern keeps them out of git.
+* [0-9].*
+* [0-9][0-9].*
+
 # ---------- Operator-private content ----------
 # Test corpus is the operator's anonymized real documents; per
 # docs/acceptance-testing-framework.md, this stays local and
