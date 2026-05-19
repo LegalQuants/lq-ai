@@ -258,7 +258,7 @@ The Playbook engine is the load-bearing substrate for two M3 tracks (Word Add-In
 
 ---
 
-### Task M3-A4 — Playbook execution UI in web app
+### Task M3-A4 — Playbook execution UI in web app — **SHIPPED at M3-A4**
 
 **Scope:**
 - New SvelteKit route in `web/src/routes/lq-ai/playbooks/` for:
@@ -280,6 +280,20 @@ The Playbook engine is the load-bearing substrate for two M3 tracks (Word Add-In
 - WCAG 2.1 AA compliance for color/contrast on outcome badges.
 
 **Effort:** 12–16 hours.
+
+**Implementation deviations from original scope (recorded for M3 milestone summary):**
+- §5.1 — `GET /api/v1/playbooks` + `GET /api/v1/playbooks/{id}` ship with M3-A4; `POST/PATCH/DELETE` defer to M3-A6 alongside the Easy Playbook wizard's create flow.
+- §5.2 — Cost preview is client-side against a static `PER_MODEL_RATES` table (`web/src/lib/lq-ai/playbookCost.ts`); a server-side cost-estimate endpoint was not added.
+- §5.3 — `PlaybookDisclaimerBanner.svelte` ships in M3-A4 (Decision F implication); CONTRIBUTING.md + PRD §1.3 attestation refresh still defer to the M3-close docs batch.
+- §5.4 — Result view uses dense rows + expand-to-reveal (table-style), not full-width vertical cards.
+- Apply-Playbook entry point is from `/lq-ai/playbooks` (playbook → pick doc), not from a document's context menu. Doc-context entry point deferred to M3-A6.
+- Citation Engine integration: per-position `cited_chunk_ids` render as chunk-id pills; full Stage 1–4 5-state UI integration deferred (the existing Citation Engine UI uses continuous relevance percentage, not 5 discrete states — gap surfaced during reconnaissance).
+- Backend follow-on: exposed `KBFileResponse.document_id` (the parsed-content row UUID, distinct from File id) so the modal's KB→file picker can resolve `target_document_id` client-side. 4-file change covering schema, query, TS type, OpenAPI.
+
+**Deferred items filed as M3-A4 follow-ons** (track in M3 milestone summary):
+- DE — Playbook position citations: open-in-document drilldown (Citation Engine 5-state coloring against `cited_chunk_ids`).
+- DE — Apply-Playbook from document context menu (M3-A6 candidate).
+- DE — Automated WCAG audit tooling (no a11y ESLint plugin in the codebase today; M3-A4 verified manually via browser devtools).
 
 ---
 
