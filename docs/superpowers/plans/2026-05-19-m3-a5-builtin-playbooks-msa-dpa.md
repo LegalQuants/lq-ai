@@ -10,8 +10,8 @@
 
 | Q | Decision |
 |---|---|
-| Authorship | I draft, Kevin reviews. Iterate one playbook at a time so framework issues surface early. |
-| Attestation | Decision F applies. Disclaimer-in-description is the canonical posture; no formal practicing-attorney attestation. Test `description_includes_not_legal_advice_disclaimer` enforces it per playbook. M3-A5 entry in `docs/M3-IMPLEMENTATION-PLAN.md` updated to reflect this. |
+| Authorship | I draft. **No maintainer-team review gate** — per Kevin's 2026-05-19 reframe, the in-house attorney using LQ.AI is the validator, not the maintainer team. My drafts are explicit starting points / placeholders for that attorney to fork, customize, or replace; Kevin is not reviewing, attesting, or certifying any of the legal content. This is Decision F taken to its logical conclusion. |
+| Attestation | Decision F applies. Disclaimer-in-description is the canonical posture; no formal practicing-attorney attestation. Per-playbook description text strengthened from M3-A3's framing to be more explicit about the starting-point posture (e.g., "this is a starting point an attorney should validate before relying on it" — not just "not legal advice"). Test `description_includes_not_legal_advice_disclaimer` from M3-A3 generalizes per playbook. M3-A5 entry in `docs/M3-IMPLEMENTATION-PLAN.md` updated to reflect this. |
 | PR strategy | Single PR bundling all three YAMLs + migration 0033 + 3 integration tests. Matches M3-A3 (two playbooks one PR). |
 | Sample contracts | Public-domain / permissive templates with attribution. Common Paper CC-BY-4.0 for SaaS/MSA; EU Commission SCCs (Implementing Decision 2021/914) public-domain for DPA. |
 
@@ -109,18 +109,15 @@ Integration tests follow the (yet-to-be-written) pattern; the executor's actual 
 
 ---
 
-## Drafting protocol (Kevin review cycle)
+## Drafting protocol
 
-For each playbook:
-1. I draft the full YAML following the M3-A3 structure.
-2. I present it to Kevin for review with the position-list table as a TOC.
-3. Kevin flags legal issues; I revise.
-4. Once Kevin green-lights, the YAML lands committed on the branch.
-5. Move to next playbook (lessons applied).
+Per Kevin's reframe (2026-05-19): no maintainer-team review cycle. I draft each playbook end-to-end and commit it. The disclaimer-in-description carries the "this is a starting point an attorney needs to validate" framing forward to every operator who installs LQ.AI. The integration tests (Task 7) verify the executor runs against a sample contract and produces sensible per-position verdicts — they don't validate the legal substance of the positions themselves.
 
-**Order:** MSA-SaaS first (most standardized, biggest pool of public templates → fastest first-draft, biggest learning yield for the framework). Then DPA-GDPR (regulatory-specific, needs careful Article alignment). Then MSA-Commercial-Purchase (mirror of MSA-SaaS from the buy side; benefits from MSA-SaaS lessons).
+**Order:** MSA-SaaS first (most standardized → biggest learning yield for the YAML structure). Then DPA-GDPR (regulatory-specific, careful Article alignment). Then MSA-Commercial-Purchase (mirror of MSA-SaaS from the buy side).
 
-After all three YAMLs are merged-in, engineering scaffold (migration + tests + fixtures) lands in 1-2 commits, then PR opens.
+Each playbook gets its own commit on the branch. After all three YAMLs land, engineering scaffold (migration + drift tests + fixtures + integration tests) lands in additional commits. Then PR opens.
+
+**Implication for the description boilerplate:** the M3-A3 NDA playbooks' description text was strong but implicit about the "starting point" posture ("operator's responsibility to apply professional judgment"). M3-A5 playbooks make this explicit — e.g., "These positions are starting points that an attorney should review before relying on them. We have not validated them; you must." Worth retro-updating the M3-A3 NDA descriptions to match — filed as a follow-on inside this PR if simple, otherwise a separate small docs PR.
 
 ---
 
