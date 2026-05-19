@@ -582,6 +582,8 @@ async def list_kb_files(
             KnowledgeBaseFile.attached_at,
             doc.page_count,
             doc.character_count,
+            doc.ingest_status,
+            doc.ingest_failure_reason,
         )
         .join(KnowledgeBaseFile, KnowledgeBaseFile.file_id == FileModel.id)
         .outerjoin(doc, doc.file_id == FileModel.id)
@@ -595,7 +597,14 @@ async def list_kb_files(
     rows = result.all()
 
     out: list[KBFileResponse] = []
-    for file_row, attached_at, page_count, character_count in rows:
+    for (
+        file_row,
+        attached_at,
+        page_count,
+        character_count,
+        ingest_status,
+        ingest_failure_reason,
+    ) in rows:
         out.append(
             KBFileResponse(
                 id=file_row.id,
@@ -607,6 +616,8 @@ async def list_kb_files(
                 hash_sha256=file_row.hash_sha256,
                 ingestion_status=file_row.ingestion_status,
                 ingestion_error=file_row.ingestion_error,
+                ingest_status=ingest_status,
+                ingest_failure_reason=ingest_failure_reason,
                 page_count=page_count,
                 character_count=character_count,
                 created_at=file_row.created_at,

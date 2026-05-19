@@ -174,6 +174,8 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("GET", "/api/v1/admin/config"),
     # D3 — admin audit-log read endpoint
     ("GET", "/api/v1/admin/audit-log"),
+    # M3-0.3 / DE-276 — admin ingest-health aggregate
+    ("GET", "/api/v1/admin/ingest-health"),
     # D4 — Organization Profile singleton
     ("GET", "/api/v1/organization-profile"),
     ("PUT", "/api/v1/organization-profile"),

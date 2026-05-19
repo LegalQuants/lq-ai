@@ -6,7 +6,20 @@
 	 */
 	import type { KnowledgeBaseFile } from '$lib/lq-ai/types';
 
-	export type DocStatus = 'ready' | 'processing' | 'pending' | 'failed';
+	/**
+	 * Effective per-row status combining the file-level `ingestion_status`
+	 * (parse pipeline) with the M3-0.3 / DE-276 document-level
+	 * `ingest_status` (embed pipeline). A file at `ingestion_status=ready`
+	 * whose document is `embed_failed` or `partial` surfaces with the
+	 * more-severe document-level state.
+	 */
+	export type DocStatus =
+		| 'ready'
+		| 'processing'
+		| 'pending'
+		| 'failed'
+		| 'embed_failed'
+		| 'partial';
 
 	export function docStatusLabel(s: DocStatus): string {
 		switch (s) {
@@ -18,7 +31,28 @@
 				return '⏳ pending';
 			case 'failed':
 				return '⚠ failed';
+			case 'embed_failed':
+				return '⚠ embed failed';
+			case 'partial':
+				return '⚠ partial embed';
 		}
+	}
+
+	/** Resolve the effective per-row status for the doc-list pill. */
+	export function effectiveStatus(file: KnowledgeBaseFile): DocStatus {
+		if (file.ingestion_status !== 'ready') return file.ingestion_status as DocStatus;
+		if (file.ingest_status === 'embed_failed' || file.ingest_status === 'partial') {
+			return file.ingest_status;
+		}
+		return 'ready';
+	}
+
+	/** Failure-reason string for the effective status, or null when there's no failure. */
+	export function effectiveFailureReason(file: KnowledgeBaseFile): string | null {
+		const s = effectiveStatus(file);
+		if (s === 'failed') return file.ingestion_error ?? null;
+		if (s === 'embed_failed' || s === 'partial') return file.ingest_failure_reason ?? null;
+		return null;
 	}
 
 	/** Human-readable file size; binary units (1 KiB = 1024 bytes). */
@@ -35,16 +69,18 @@
 		return `${v.toFixed(v >= 10 ? 0 : 1)} ${units[i]}`;
 	}
 
-	/** Stable sort: ready first, then in-flight, failed last; tie-break on filename. */
+	/** Stable sort: ready first, then in-flight, failure states last; tie-break on filename. */
 	export function sortFiles(files: KnowledgeBaseFile[]): KnowledgeBaseFile[] {
 		const rank: Record<string, number> = {
 			ready: 0,
 			processing: 1,
 			pending: 2,
-			failed: 3
+			partial: 3,
+			embed_failed: 4,
+			failed: 5
 		};
 		return [...files].sort((a, b) => {
-			const d = (rank[a.ingestion_status] ?? 9) - (rank[b.ingestion_status] ?? 9);
+			const d = (rank[effectiveStatus(a)] ?? 9) - (rank[effectiveStatus(b)] ?? 9);
 			return d !== 0 ? d : a.filename.localeCompare(b.filename);
 		});
 	}
@@ -370,14 +406,19 @@
 						</thead>
 						<tbody>
 							{#each sortedFiles as file (file.id)}
-								<tr data-testid="lq-ai-knowledge-doc-row" data-doc-status={file.ingestion_status}>
+								<tr
+									data-testid="lq-ai-knowledge-doc-row"
+									data-doc-status={effectiveStatus(file)}
+								>
 									<td class="lq-doc-filename">{file.filename}</td>
 									<td>
-										<span class="lq-doc-status lq-doc-status--{file.ingestion_status}">
-											{docStatusLabel(file.ingestion_status as DocStatus)}
+										<span class="lq-doc-status lq-doc-status--{effectiveStatus(file)}">
+											{docStatusLabel(effectiveStatus(file))}
 										</span>
-										{#if file.ingestion_status === 'failed' && file.ingestion_error}
-											<div class="lq-doc-error">{file.ingestion_error}</div>
+										{#if effectiveFailureReason(file)}
+											<div class="lq-doc-error" data-testid="lq-ai-doc-failure-reason">
+												{effectiveFailureReason(file)}
+											</div>
 										{/if}
 									</td>
 									<td class="lq-tabular">{formatBytes(file.size_bytes)}</td>
@@ -556,10 +597,19 @@
 		border: 1px solid var(--lq-warn-border);
 	}
 
-	.lq-doc-status--failed {
+	.lq-doc-status--failed,
+	.lq-doc-status--embed_failed {
 		background: var(--lq-error-soft);
 		color: var(--lq-error);
 		border: 1px solid var(--lq-error-border);
+	}
+
+	/* M3-0.3: partial-embed sits between healthy and full failure — the
+	   document is still partially usable for FTS, just not fully embedded. */
+	.lq-doc-status--partial {
+		background: var(--lq-warn-soft);
+		color: var(--lq-warn);
+		border: 1px solid var(--lq-warn-border);
 	}
 
 	.lq-doc-error {
