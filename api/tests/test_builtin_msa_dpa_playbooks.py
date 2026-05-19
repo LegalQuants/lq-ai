@@ -12,6 +12,15 @@ Mirrors the structure of ``test_builtin_nda_playbooks.py`` (M3-A3):
 * **Migration round-trip** — after migration 0033 runs, each playbook
   is present in ``playbooks`` + ``playbook_positions`` with content
   matching the YAML byte-for-byte.
+* **Executor smoke** — for each of the three playbooks, load the
+  seeded playbook from the DB, build a synthetic contract document,
+  run the executor with a stubbed gateway, assert all positions are
+  classified.
+
+The sample contracts are built inline rather than read from
+``api/tests/fixtures/`` — matches the M3-A3 precedent and avoids
+external file management. The M3-A5 spec mentioned a fixtures
+directory but the M3-A3 precedent is the actual codebase pattern.
 
 The tests share the same SAVEPOINT-rolled-back per-test session as
 the rest of the API tests.
@@ -19,6 +28,10 @@ the rest of the API tests.
 
 from __future__ import annotations
 
+import json
+import uuid
+from collections.abc import Iterable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -27,8 +40,13 @@ import yaml
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.playbook import Playbook, PlaybookPosition
+from app.models.document import Document, DocumentChunk
+from app.models.file import File as FileModel
+from app.models.playbook import Playbook, PlaybookExecution, PlaybookPosition
+from app.models.user import User
+from app.playbooks.executor import run_playbook_execution
 from app.schemas.playbooks import PlaybookCreate
+from app.security import hash_password
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _PLAYBOOKS_DIR = _REPO_ROOT / "skills" / "playbooks"
@@ -230,3 +248,216 @@ async def test_migration_seeded_positions_match_yaml(db_session: AsyncSession, s
         assert db_pos.severity_if_missing == yaml_pos["severity_if_missing"]
         assert list(db_pos.detection_keywords) == list(yaml_pos.get("detection_keywords") or [])
         assert db_pos.fallback_tiers == (yaml_pos.get("fallback_tiers") or [])
+
+
+# ---------------------------------------------------------------------------
+# Executor integration smoke (one per playbook)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _StubMessage:
+    content: str
+
+
+@dataclass
+class _StubChoice:
+    message: _StubMessage
+
+
+@dataclass
+class _StubResponse:
+    choices: list[_StubChoice]
+
+
+@dataclass
+class _AllMissingGateway:
+    """Stubs every classify call to return a ``missing`` verdict.
+
+    Mirrors the M3-A3 pattern: the integration smoke verifies the
+    workflow runs end-to-end against the seeded playbook with all
+    positions classified, but doesn't try to evaluate whether real
+    classification works (that requires a live LLM and is the
+    operator-attorney's responsibility per the starting-point posture).
+    """
+
+    calls_received: list[Any] = field(default_factory=list)
+
+    async def chat_completion(self, request: Any) -> _StubResponse:
+        self.calls_received.append(request)
+        payload = json.dumps(
+            {
+                "verdict": "missing",
+                "confidence": "high",
+                "matched_fallback_rank": None,
+                "matched_text": "",
+                "cited_chunk_indices": [],
+                "justification": "Stubbed verdict for executor smoke test.",
+            }
+        )
+        return _StubResponse(choices=[_StubChoice(message=_StubMessage(content=payload))])
+
+
+async def _make_user(db: AsyncSession) -> User:
+    u = User(
+        email=f"u-{uuid.uuid4().hex[:8]}@example.com",
+        hashed_password=hash_password("pw"),
+        is_admin=False,
+        role="member",
+        mfa_enabled=False,
+        must_change_password=False,
+    )
+    db.add(u)
+    await db.flush()
+    return u
+
+
+# Synthetic contract texts per playbook. These exercise the executor's
+# retrieval + classification path end-to-end against a representative
+# document; they are deliberately minimal and not legally meaningful.
+# The stubbed gateway returns 'missing' for every position regardless of
+# document content, so the smoke test verifies workflow plumbing rather
+# than classification correctness.
+_SYNTHETIC_DOCS: dict[str, dict[str, Any]] = {
+    "msa-saas": {
+        "filename": "synthetic-saas-msa.pdf",
+        "chunks": [
+            "MASTER SERVICES AGREEMENT — Cloud Service. This Agreement is between Vendor and Customer.",
+            "Service Level. Vendor will use commercially reasonable efforts to maintain 99.9% uptime.",
+            "Security. Vendor maintains SOC 2 Type II certification and encrypts data in transit and at rest.",
+            "Customer Data. Customer retains all right, title, and interest in and to Customer Data.",
+            "Limitation of Liability. Each party's aggregate liability is capped at fees paid in the preceding 12 months.",
+            "Indemnification. Vendor will defend Customer against third-party IP infringement claims.",
+            "Termination. Either party may terminate for cause upon thirty days' notice and opportunity to cure.",
+            "Governing Law. This Agreement is governed by the laws of the State of Delaware.",
+        ],
+    },
+    "dpa-gdpr": {
+        "filename": "synthetic-dpa.pdf",
+        "chunks": [
+            "DATA PROCESSING ADDENDUM. This DPA forms part of the Master Services Agreement.",
+            "Processor will process Personal Data only on documented instructions from Controller.",
+            "Article 32. Processor implements appropriate technical and organisational measures.",
+            "Personal Data Breach. Processor will notify Controller without undue delay.",
+            "International Transfers. The parties incorporate the EU Standard Contractual Clauses.",
+            "Sub-processors. Controller grants general authorisation; Processor maintains the list.",
+            "Audit Rights. Processor will provide its SOC 2 Type II report under NDA upon request.",
+            "Deletion. At Controller's choice, Processor will delete or return Personal Data after services end.",
+        ],
+    },
+    "msa-commercial-purchase": {
+        "filename": "synthetic-commercial-msa.pdf",
+        "chunks": [
+            "MASTER SERVICES AGREEMENT — Professional Services. Between Customer and Vendor.",
+            "Acceptance. Customer has thirty business days to test each Deliverable against the criteria.",
+            "Warranties. Vendor warrants Services performed in a professional and workmanlike manner.",
+            "Indemnification. Vendor will defend Customer against third-party IP infringement claims.",
+            "Limitation of Liability. Each party's aggregate liability is capped at two times SOW fees.",
+            "Work Product. Customer owns all right, title, and interest in and to the Work Product.",
+            "Change Orders. Any scope change requires a written Change Order signed by both parties.",
+            "Termination. Customer may terminate for convenience upon thirty days' written notice.",
+            "Governing Law. This Agreement is governed by the laws of the State of Delaware.",
+        ],
+    },
+}
+
+
+async def _make_synthetic_doc(db: AsyncSession, slug: str, *, owner: User) -> Document:
+    """Build a synthetic contract document for the playbook's contract type."""
+    spec = _SYNTHETIC_DOCS[slug]
+    f = FileModel(
+        owner_id=owner.id,
+        filename=spec["filename"],
+        mime_type="application/pdf",
+        size_bytes=2048,
+        hash_sha256="f" * 64,
+        storage_path=f"{slug}-fixture/{uuid.uuid4()}",
+        ingestion_status="ready",
+    )
+    db.add(f)
+    await db.flush()
+
+    chunks_text: list[str] = spec["chunks"]
+    normalized = " ".join(chunks_text)
+
+    doc = Document(
+        file_id=f.id,
+        parser="pymupdf-only",
+        parser_version="pymupdf=1.27",
+        page_count=2,
+        character_count=len(normalized),
+        normalized_content=normalized,
+        was_ocrd=False,
+    )
+    db.add(doc)
+    await db.flush()
+
+    offset = 0
+    for i, text_value in enumerate(chunks_text):
+        chunk = DocumentChunk(
+            document_id=doc.id,
+            chunk_index=i,
+            content=text_value,
+            page_start=1,
+            page_end=1,
+            char_offset_start=offset,
+            char_offset_end=offset + len(text_value),
+        )
+        db.add(chunk)
+        offset += len(text_value) + 1  # +1 for the space joiner
+    await db.flush()
+    return doc
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("slug", _BUILTIN_SLUGS)
+async def test_executor_runs_against_seeded_playbook(db_session: AsyncSession, slug: str) -> None:
+    """End-to-end: load each M3-A5 playbook from DB and execute against a synthetic doc.
+
+    Asserts:
+    * Execution completes successfully (status='completed').
+    * All positions in the seeded playbook are classified.
+    * The stubbed gateway is called exactly once per position
+      (no redline calls because all stubs return 'missing').
+
+    This is a structural smoke test — it does not validate the legal
+    correctness of any verdict (per the starting-point posture, that's
+    the operator-attorney's responsibility).
+    """
+    owner = await _make_user(db_session)
+    doc = await _make_synthetic_doc(db_session, slug, owner=owner)
+
+    expected_name = _EXPECTED_NAMES[slug]
+    pb = (
+        await db_session.execute(
+            select(Playbook).where(Playbook.name == expected_name, Playbook.version == "1.0.0")
+        )
+    ).scalar_one()
+
+    execution = PlaybookExecution(
+        playbook_id=pb.id,
+        target_document_id=doc.id,
+        user_id=owner.id,
+    )
+    db_session.add(execution)
+    await db_session.flush()
+
+    gateway = _AllMissingGateway()
+    await run_playbook_execution(
+        db_session,
+        execution_id=execution.id,
+        gateway=gateway,  # type: ignore[arg-type]
+    )
+
+    await db_session.refresh(execution)
+    assert execution.status == "completed"
+    assert execution.error is None
+    assert execution.results is not None
+    positions: Iterable[dict[str, Any]] = execution.results["positions"]
+    expected_count = _EXPECTED_POSITION_COUNTS[slug]
+    assert len(list(positions)) == expected_count, (
+        f"{slug}: expected {expected_count} positions in results, got {len(list(positions))}"
+    )
+    # One classify call per position; zero redline calls because every
+    # stubbed verdict is 'missing' (redline only fires on 'deviates').
+    assert len(gateway.calls_received) == expected_count
