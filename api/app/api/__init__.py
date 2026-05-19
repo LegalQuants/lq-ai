@@ -36,6 +36,7 @@ from app.api import (
     knowledge_bases,
     models,
     organization_profile,
+    playbooks as playbooks_api,
     projects,
     saved_prompts,
     skills,
@@ -81,5 +82,9 @@ api_router.include_router(enhance_prompt.router, dependencies=_active)
 api_router.include_router(inference.router, dependencies=_active)
 api_router.include_router(inference_override.router, dependencies=_active)
 api_router.include_router(admin.router, dependencies=_active)
+# M3-A2: Playbook executor — two endpoints under different prefixes
+# (``/playbooks/{id}/execute`` and ``/playbook-executions/{id}``) so
+# they live alongside the M3-A4 list/CRUD endpoints in the same module.
+api_router.include_router(playbooks_api.router, dependencies=_active)
 
 __all__ = ["api_router"]

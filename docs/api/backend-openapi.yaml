@@ -2339,6 +2339,80 @@ paths:
                   next_cursor: {type: string, nullable: true}
 
   # ----------- ADMIN: MODEL ALIAS CRUD (D0.5) -----------
+  /api/v1/playbooks/{playbook_id}/execute:
+    parameters:
+      - in: path
+        name: playbook_id
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      tags: [playbooks]
+      summary: Kick off a playbook execution against a target document (M3-A2)
+      description: |
+        Creates a new ``playbook_executions`` row at status ``'pending'``
+        and schedules the four-node LangGraph workflow
+        (retrieve → classify → redline → compile) as a FastAPI
+        BackgroundTask. The response returns immediately (202) with the
+        new row; clients poll
+        ``GET /api/v1/playbook-executions/{execution_id}`` until they
+        see a terminal status (``completed`` or ``error``).
+
+        Authorization: caller must be an admin or the playbook's
+        author, and own the target document's parent file. If
+        ``project_id`` is supplied, caller must also own the project.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target_document_id]
+              properties:
+                target_document_id:
+                  type: string
+                  format: uuid
+                project_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        '202':
+          description: Execution scheduled; row created at status `pending`.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PlaybookExecution'}
+        '404':
+          description: Playbook, target document, or project not found / not owned.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/v1/playbook-executions/{execution_id}:
+    parameters:
+      - in: path
+        name: execution_id
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      tags: [playbooks]
+      summary: Poll the current state of a playbook execution (M3-A2)
+      description: |
+        Returns the row regardless of completion state. Callers poll
+        until they see a terminal ``completed`` or ``error`` status.
+        Authorization: caller must own the execution (``user_id``
+        match) or be an admin.
+      responses:
+        '200':
+          description: Current execution state.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PlaybookExecution'}
+        '404':
+          description: Execution not found or caller does not own it.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
   /api/v1/admin/ingest-health:
     get:
       tags: [admin]
@@ -2927,6 +3001,39 @@ components:
         gateway-side enforcement is a deferred D-phase item.
 
   schemas:
+    PlaybookExecution:
+      type: object
+      required: [id, playbook_id, target_document_id, status, created_at]
+      description: |
+        One execution of a playbook against a target document.
+        Status lifecycle: ``pending → running → completed | error``.
+        ``results`` is populated on ``completed``; ``error`` is populated
+        on ``error``. ``completed_at`` is non-null in either terminal state.
+      properties:
+        id: {type: string, format: uuid}
+        playbook_id: {type: string, format: uuid}
+        target_document_id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid, nullable: true}
+        project_id: {type: string, format: uuid, nullable: true}
+        status:
+          type: string
+          enum: [pending, running, completed, error]
+        results:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: |
+            Per-position outcomes + summary. Shape is versioned via
+            ``schema_version`` (currently ``m3-a2-v1``); see the
+            M3-A2 executor module for the canonical structure.
+        error:
+          type: string
+          nullable: true
+        created_at: {type: string, format: date-time}
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
     AdminUserRow:
       type: object
       required: [id, email, role, is_admin, mfa_enabled, must_change_password, created_at]
