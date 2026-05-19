@@ -112,6 +112,14 @@ dependencies = [
     # verifier's `fuzz.ratio` against normalized text with threshold
     # 95. MIT-licensed; C-extension backbone, no runtime config needed.
     "rapidfuzz~=3.5",
+    # M3-A2 — LangGraph powers the Playbook executor workflow (retrieve
+    # → classify → redline → compile) per the M3 plan's M3-1 decision
+    # ("LangGraph runtime lives in api/, not a separate service"). The
+    # same runtime is reused by the M3-C2 Tabular Review workflow, so
+    # the SBOM cost is amortized across two M3 features. MIT-licensed;
+    # transitive deps are mostly LangChain-core types (already permissive
+    # licenses, no new SBOM family beyond LangGraph + LangChain-core).
+    "langgraph>=0.2,<0.3",
 ]
 
 [project.optional-dependencies]
