@@ -303,20 +303,20 @@ The Playbook engine is the load-bearing substrate for two M3 tracks (Word Add-In
 - Author `skills/playbooks/msa-saas/playbook.yaml` — Generic SaaS MSA playbook; covers SLA, security commitments, data handling, IP, limitation of liability, indemnification, termination, audit rights, payment terms, governing law, change management.
 - Author `skills/playbooks/dpa-gdpr/playbook.yaml` — DPA (GDPR-aligned) playbook; covers Art. 28 (processor obligations), Art. 32 (security), Art. 33 (breach notification), international transfers (SCCs / TIA), sub-processor handling, audit rights, deletion / return of personal data, DSAR cooperation.
 - Author `skills/playbooks/msa-commercial-purchase/playbook.yaml` — Commercial MSA from purchase side; covers acceptance, warranties, indemnification, limitation of liability, IP, change orders, payment, termination for cause/convenience, governing law.
-- Each playbook gets practicing-attorney attestation in PR description.
-- Seed migration `0033_seed_builtin_playbooks_msa_dpa.py` inserts all three at version `1.0.0`.
-- Each gets one integration test against a representative sample contract in `api/tests/fixtures/`.
+- Each playbook carries the standard not-legal-advice disclaimer in its `description` field (Decision F locked at M3-A3 kickoff; the `test_description_includes_not_legal_advice_disclaimer` pattern from M3-A3 generalizes to each new playbook).
+- Seed migration `0033_seed_builtin_playbooks_msa_dpa.py` inserts all three at version `1.0.0`, following the M3-A3 pattern of reading the YAML files at upgrade time.
+- Each gets one integration test against a representative sample contract in `api/tests/fixtures/`. Sample contracts sourced from public-domain templates (Common Paper CC-BY-4.0, EU Commission SCCs, etc.) with attribution.
 
 **Dependencies:** M3-A4 (validates the end-to-end flow before scaling).
 
-**Output:** 4 built-in playbooks total are available out-of-the-box.
+**Output:** 4 built-in playbooks total are available out-of-the-box (NDA × 2 from M3-A3 + MSA-SaaS + DPA-GDPR + MSA-Commercial-Purchase).
 
 **Verification:**
 - Each playbook integration test passes.
-- Practicing-attorney attestation on PR.
-- Manual walk-through by reviewing attorney against ≥2 real-world contracts per playbook; outcomes are sensible.
+- Each playbook's description includes the not-legal-advice disclaimer (pinned by test).
+- Manual sanity check by Kevin against ≥1 representative sample contract per playbook; outcomes are plausible. Not a formal practicing-attorney attestation per Decision F — the disclaimer-in-description is the canonical posture and operators are expected to apply their own professional judgment.
 
-**Effort:** 12–16 hours.
+**Effort:** 12–16 hours (~80% legal-content drafting, ~20% engineering scaffold).
 
 ---
 
