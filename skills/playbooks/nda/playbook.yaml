@@ -2,17 +2,20 @@
 # Built-in playbook: NDA — Mutual (M3-A3)
 # =============================================================================
 #
-# This is the canonical starter playbook for routine mutual non-disclosure
-# agreement review. It codifies a balanced, both-sides-protected posture
-# typical of vendor-evaluation, partnership-exploration, and customer-
-# engagement contexts.
+# A starter playbook for reviewing mutual non-disclosure agreements. It
+# codifies a balanced, both-sides-protected posture typical of
+# vendor-evaluation, partnership-exploration, and customer-engagement
+# contexts.
 #
-# **Not legal advice.** Every position, fallback tier, and redline strategy
-# here represents one reasonable market position drafted by the maintainer
-# team and reviewed before merge. It is not legal advice and must not be
-# relied upon without review by a legal professional licensed to practice
-# in the relevant jurisdiction. Operators are expected to apply their own
-# professional judgment, fork this playbook for their organization's
+# **THIS IS A STARTING POINT, NOT A VETTED TEMPLATE, AND IT IS NOT
+# LEGAL ADVICE.** The maintainer team has not reviewed or validated
+# the positions, fallback tiers, or redline strategies below. They
+# were drafted as one reasonable market position to give in-house
+# counsel installing LQ.AI a head-start. You — the attorney
+# installing this software — must review every position against your
+# organization's standards and applicable jurisdiction before
+# relying on this playbook for any client work. Apply your own
+# professional judgment, fork this playbook for your organization's
 # specific standards, or replace it entirely.
 #
 # Companion file: ``api/alembic/versions/0032_seed_builtin_playbooks_nda.py``
@@ -31,12 +34,18 @@ description: |
   of confidential information, permitted disclosures, term, survival,
   carveouts, remedies, governing law, and return / destruction.
 
-  **This playbook is not legal advice.** Every position represents one
-  reasonable market posture; it is the operator's responsibility to apply
-  professional judgment, customize for their organization, and seek
-  licensed counsel for jurisdiction-specific or transaction-specific
-  variance. Use of this playbook does not establish an attorney-client
-  relationship with LegalQuants or any contributor.
+  **This playbook is a starting point, not a vetted template, and it
+  is not legal advice.** The LQ.AI maintainer team has not reviewed
+  or validated the positions, fallback tiers, or redline strategies
+  below — they were drafted as one reasonable market position to
+  give in-house counsel a head-start. You must apply your own
+  professional judgment, review every position against your
+  organization's standards and the applicable jurisdiction before
+  relying on this playbook for client work, and seek licensed
+  counsel for jurisdiction-specific or transaction-specific
+  variance. Fork it, customize it, or replace it entirely. Use of
+  this playbook does not establish an attorney-client relationship
+  with LegalQuants or any contributor.
 
 positions:
   # ---------------------------------------------------------------------------
