@@ -570,10 +570,19 @@ CREATE TABLE documents (
     structured_content  JSONB,            -- Docling's structured representation; M2 reads
     normalized_content  TEXT NOT NULL DEFAULT '',  -- M2-A1 (migration 0024); see below
     was_ocrd            BOOLEAN NOT NULL DEFAULT FALSE,  -- M2-A1 (migration 0024); see below
+    ingest_status       TEXT NOT NULL DEFAULT 'ok'    -- M3-0.3 (migration 0030); see below
+        CHECK (ingest_status IN ('ok','parse_failed','embed_failed','partial')),
+    ingest_failure_reason TEXT,                       -- M3-0.3 (migration 0030); populated when ingest_status <> 'ok'
     processed_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_documents_file_id ON documents(file_id);
+-- Partial index — only the failure-state rows. The 'ok' rows are
+-- the steady-state majority; including them would bloat the index
+-- and add write cost on the dominant insert path. Powers the
+-- /api/v1/admin/ingest-health aggregate without a sequential scan.
+CREATE INDEX idx_documents_ingest_status ON documents(ingest_status)
+    WHERE ingest_status IN ('parse_failed','embed_failed','partial');
 ```
 
 Per ADR 0006, the `parser` column carries the cascade outcome:
@@ -597,6 +606,19 @@ fallback for image-only PDFs, and the tolerant-match verification stage
 (M2-B1) uses this flag to enable OCR-artifact normalization. Every M1
 ingest and every backfilled row sets `was_ocrd = FALSE` because M1's
 parsers never OCR (image-only PDFs are rejected with `parse_failed`).
+
+Per M3-0.3 / DE-276 (migration 0030), `ingest_status` records the
+**post-parse** outcome that `files.ingestion_status` cannot detect: an
+embed batch failure that leaves chunks with NULL embeddings and
+silently degrades hybrid retrieval to FTS-only. `embed_failed` is set
+when zero chunks were embedded before the batch raised; `partial` is
+set when some succeeded but later batches did not — the operator can
+re-run ingest to recover from either state. `parse_failed` is a
+reserved value (no v0.3 code path writes it; parse failures stop
+before a `documents` row is created and are tracked at the file
+level instead). The `/api/v1/admin/ingest-health` endpoint aggregates
+this column alongside `files.ingestion_status` so operators see a
+single ingest-health summary across both pipelines.
 
 ### `document_chunks`
 

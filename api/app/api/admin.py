@@ -42,6 +42,8 @@ from app.api.dependencies import AdminUser
 from app.clients.gateway import GatewayClient, get_gateway_client
 from app.db.session import get_db
 from app.models.audit import AuditLog
+from app.models.document import Document as DocumentORM
+from app.models.file import File as FileORM
 from app.models.user import User as UserORM
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -764,4 +766,96 @@ async def update_user_role(
         email=target.email,
         role=target.role,
         is_admin=target.is_admin,
+    )
+
+
+# ---------------------------------------------------------------------------
+# M3-0.3 / DE-276 — /admin/ingest-health (aggregate ingest status)
+# ---------------------------------------------------------------------------
+
+
+class IngestHealthResponse(BaseModel):
+    """Aggregate ingest-status counts across the deployment.
+
+    The four document-level buckets sum to roughly the document count
+    (rows in ``documents``); ``parse_failed`` reports file-level
+    failures (rows in ``files`` with ``ingestion_status='failed'``),
+    which never reach the ``documents`` table.
+
+    Operators use this surface as the canonical "is my ingest healthy?"
+    signal — a non-zero ``embed_failed`` or ``partial`` count is the
+    silent-degrade signal that triggered DE-276; a non-zero
+    ``parse_failed`` count is the operator's cue to inspect specific
+    files via the existing file-list UI.
+    """
+
+    ok: int = Field(description="Documents with all chunks successfully embedded.")
+    embed_failed: int = Field(
+        description=(
+            "Documents whose embed worker raised before any chunk was embedded — "
+            "hybrid retrieval degrades to FTS-only for these."
+        )
+    )
+    partial: int = Field(
+        description=(
+            "Documents whose embed worker raised mid-batch — some chunks have "
+            "vectors, others are NULL. Operators may re-run ingest to recover."
+        )
+    )
+    parse_failed: int = Field(
+        description=(
+            "Files that failed at parse time and never produced a documents row "
+            "(``files.ingestion_status='failed'``)."
+        )
+    )
+    total_documents: int = Field(
+        description="Total rows in the documents table (sum of ok + embed_failed + partial)."
+    )
+
+
+@router.get("/ingest-health", response_model=IngestHealthResponse)
+async def get_ingest_health(
+    _admin: AdminUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> IngestHealthResponse:
+    """GET /api/v1/admin/ingest-health — aggregate ingest-status counts (admin-only).
+
+    The endpoint is read-only and stateless. Two queries: one grouped
+    aggregate over ``documents.ingest_status``, one filtered count over
+    ``files.ingestion_status``. Soft-deleted rows are excluded from
+    both (the operator is asking about the live deployment surface, not
+    historical state).
+    """
+
+    # Document-level statuses (M3-0.3 / DE-276 surface).
+    doc_status_stmt = (
+        select(DocumentORM.ingest_status, func.count())
+        .select_from(DocumentORM)
+        .join(FileORM, DocumentORM.file_id == FileORM.id)
+        .where(FileORM.deleted_at.is_(None))
+        .group_by(DocumentORM.ingest_status)
+    )
+    doc_status_rows = (await db.execute(doc_status_stmt)).all()
+    by_status: dict[str, int] = {row[0]: int(row[1]) for row in doc_status_rows}
+
+    ok_count = by_status.get("ok", 0)
+    embed_failed_count = by_status.get("embed_failed", 0)
+    partial_count = by_status.get("partial", 0)
+    total_documents = ok_count + embed_failed_count + partial_count
+
+    # File-level parse failures (existing M1 surface — surfaced here so
+    # operators get a single ingest-health summary instead of two).
+    parse_failed_stmt = (
+        select(func.count())
+        .select_from(FileORM)
+        .where(FileORM.ingestion_status == "failed", FileORM.deleted_at.is_(None))
+    )
+    parse_failed_count = int((await db.execute(parse_failed_stmt)).scalar_one())
+
+    return IngestHealthResponse(
+        ok=ok_count,
+        embed_failed=embed_failed_count,
+        partial=partial_count,
+        parse_failed=parse_failed_count,
+        total_documents=total_documents,
     )

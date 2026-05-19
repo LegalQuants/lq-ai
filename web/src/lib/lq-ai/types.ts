@@ -531,6 +531,16 @@ export interface KnowledgeBaseFile {
 	hash_sha256: string;
 	ingestion_status: IngestionStatus;
 	ingestion_error?: string | null;
+	/**
+	 * M3-0.3 / DE-276: document-level ingest status. `ok` is the steady
+	 * state once chunks are embedded; `embed_failed` and `partial` flag
+	 * silent-degrade failures the file-level `ingestion_status` cannot
+	 * detect. `null` for files that haven't yet produced a documents row
+	 * (parse pending / parse failed before document creation — in those
+	 * cases `ingestion_status` already tells the operator).
+	 */
+	ingest_status?: 'ok' | 'embed_failed' | 'partial' | 'parse_failed' | null;
+	ingest_failure_reason?: string | null;
 	page_count?: number | null;
 	character_count?: number | null;
 	created_at: string;

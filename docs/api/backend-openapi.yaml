@@ -2339,6 +2339,65 @@ paths:
                   next_cursor: {type: string, nullable: true}
 
   # ----------- ADMIN: MODEL ALIAS CRUD (D0.5) -----------
+  /api/v1/admin/ingest-health:
+    get:
+      tags: [admin]
+      summary: Aggregate ingest-status counts across the deployment (admin-only)
+      description: |
+        Reports document-level + file-level ingest health in a single
+        response: ``ok`` (chunks embedded), ``embed_failed`` /
+        ``partial`` (document-level post-parse failures introduced by
+        M3-0.3 / DE-276), and ``parse_failed`` (file-level parse
+        failures from the M1 pipeline). Soft-deleted rows are excluded.
+
+        A non-zero ``embed_failed`` or ``partial`` count is the
+        operator's canonical signal that hybrid retrieval has silently
+        degraded for some documents — the exact failure mode DE-276
+        was filed to surface. A non-zero ``parse_failed`` count means
+        operators should inspect the file-list UI for the specific
+        failures.
+      responses:
+        '200':
+          description: Aggregate ingest-health summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, embed_failed, partial, parse_failed, total_documents]
+                properties:
+                  ok:
+                    type: integer
+                    description: Documents with all chunks successfully embedded.
+                  embed_failed:
+                    type: integer
+                    description: |
+                      Documents whose embed worker raised before any chunk
+                      was embedded — hybrid retrieval falls back to FTS-only.
+                  partial:
+                    type: integer
+                    description: |
+                      Documents whose embed worker raised mid-batch — some
+                      chunks have vectors, others are NULL.
+                  parse_failed:
+                    type: integer
+                    description: |
+                      Files that failed at parse time and never produced a
+                      ``documents`` row (``files.ingestion_status='failed'``).
+                  total_documents:
+                    type: integer
+                    description: Sum of ok + embed_failed + partial.
+                example:
+                  ok: 124
+                  embed_failed: 0
+                  partial: 1
+                  parse_failed: 2
+                  total_documents: 125
+        '403':
+          description: Caller is not an admin
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
   /api/v1/admin/bootstrap-status:
     get:
       tags: [admin]

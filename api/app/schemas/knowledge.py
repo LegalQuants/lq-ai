@@ -167,6 +167,13 @@ class KBFileResponse(BaseModel):
     hash_sha256: str
     ingestion_status: str
     ingestion_error: str | None = None
+    # M3-0.3 / DE-276: document-level ingest status surfaces silent
+    # embed failures the file-level ``ingestion_status`` cannot detect.
+    # Both fields are optional on the wire because pre-document file
+    # rows (parse not yet attempted / parse failed before document
+    # creation) have no row in ``documents`` to read from.
+    ingest_status: str | None = None
+    ingest_failure_reason: str | None = None
     page_count: int | None = None
     character_count: int | None = None
     created_at: datetime

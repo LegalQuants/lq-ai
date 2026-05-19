@@ -101,6 +101,23 @@ class Document(Base):
         nullable=False,
         server_default=text("false"),
     )
+    # M3-0.3 / DE-276: post-parse ingest outcome. ``'ok'`` is the
+    # steady state once chunks are embedded; ``'embed_failed'`` and
+    # ``'partial'`` are set by the embed worker when the gateway call
+    # raises (silent-degrade fix). ``'parse_failed'`` is reserved —
+    # today parse failures stop before a documents row is created
+    # (the file row tracks them via ``files.ingestion_status``), so
+    # no v0.3 code path writes it. The CHECK constraint pins the
+    # enum at the storage layer (migration 0030).
+    ingest_status: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        server_default=text("'ok'"),
+    )
+    ingest_failure_reason: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
     processed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

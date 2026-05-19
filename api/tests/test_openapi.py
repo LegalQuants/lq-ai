@@ -113,6 +113,8 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/admin/tier-policy",
         # M3-0.1 / DE-283 — unauthenticated fresh-install state probe
         "/api/v1/admin/bootstrap-status",
+        # M3-0.3 / DE-276 — admin ingest-health aggregate
+        "/api/v1/admin/ingest-health",
         # D0.5 — model alias admin
         "/api/v1/admin/config",
         "/api/v1/admin/aliases",
@@ -160,7 +162,8 @@ async def test_openapi_paths_match_sketch() -> None:
     # + Wave D.2's three paths: /user-skills/{id}/versions,
     # /skills/autocomplete, /projects/sandbox/ensure.
     # + M3-0.1's /admin/bootstrap-status.
-    assert len(actual) == 74
+    # + M3-0.3's /admin/ingest-health.
+    assert len(actual) == 75
 
 
 @pytest.mark.unit

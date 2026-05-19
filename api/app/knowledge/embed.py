@@ -306,6 +306,11 @@ async def embed_chunks_for_file(
         )
         return EmbedFileResult(file_id=file_id, chunks_embedded=0, chunks_skipped=0)
 
+    # M3-0.3 / DE-276: total chunks needing embedding before we start,
+    # so a mid-batch failure can distinguish "embedded zero" from
+    # "embedded some but not all" — the partial case.
+    total_to_embed = len(chunks_needing_embed)
+
     # Run batches.
     embedded_count = 0
     for batch in _batched(chunks_needing_embed):
@@ -326,11 +331,18 @@ async def embed_chunks_for_file(
                     "error": str(exc),
                 },
             )
+            reason = f"{type(exc).__name__}: {exc}"
+            # M3-0.3 / DE-276: flip the document-level ingest_status so
+            # the operator-visible state matches reality. Zero progress
+            # = embed_failed; some progress = partial.
+            await _mark_document_embed_failure(
+                db, file_id=file_id, reason=reason, partial=embedded_count > 0
+            )
             return EmbedFileResult(
                 file_id=file_id,
                 chunks_embedded=embedded_count,
                 chunks_skipped=0,
-                error=f"{type(exc).__name__}: {exc}",
+                error=reason,
             )
 
         # Persist via raw SQL — pgvector's vector type accepts the
@@ -356,6 +368,13 @@ async def embed_chunks_for_file(
 
         await db.commit()
 
+    # M3-0.3 / DE-276: every chunk that needed embedding got one. If
+    # the document was previously flagged (a prior run partially
+    # failed and the operator re-ran), clear the flag back to 'ok' so
+    # the admin endpoint and UI reflect the recovered state.
+    if embedded_count == total_to_embed and total_to_embed > 0:
+        await _clear_document_ingest_status(db, file_id=file_id)
+
     log.info(
         "embed_chunks_for_file: done",
         extra={
@@ -369,6 +388,57 @@ async def embed_chunks_for_file(
         chunks_embedded=embedded_count,
         chunks_skipped=0,
     )
+
+
+async def _mark_document_embed_failure(
+    db: AsyncSession,
+    *,
+    file_id: uuid.UUID,
+    reason: str,
+    partial: bool,
+) -> None:
+    """Flip ``documents.ingest_status`` for ``file_id``'s document on embed failure.
+
+    ``partial=True`` indicates at least one chunk was successfully
+    embedded before the batch raised; that signal is worth preserving
+    so operators can tell a complete failure (gateway unreachable from
+    the start) from a partial run (a transient mid-stream issue).
+    """
+    await db.execute(
+        text(
+            "UPDATE documents "
+            "SET ingest_status = :status, ingest_failure_reason = :reason "
+            "WHERE file_id = :file_id"
+        ),
+        {
+            "status": "partial" if partial else "embed_failed",
+            "reason": reason,
+            "file_id": str(file_id),
+        },
+    )
+    await db.commit()
+
+
+async def _clear_document_ingest_status(
+    db: AsyncSession,
+    *,
+    file_id: uuid.UUID,
+) -> None:
+    """Reset ``documents.ingest_status`` to ``'ok'`` after a successful re-embed.
+
+    Idempotent for already-ok rows; the UPDATE is keyed on file_id and
+    overwrites whichever non-ok value may have been set by a prior
+    failed run.
+    """
+    await db.execute(
+        text(
+            "UPDATE documents "
+            "SET ingest_status = 'ok', ingest_failure_reason = NULL "
+            "WHERE file_id = :file_id AND ingest_status <> 'ok'"
+        ),
+        {"file_id": str(file_id)},
+    )
+    await db.commit()
 
 
 async def ensure_embeddings_for_chunk_ids(
