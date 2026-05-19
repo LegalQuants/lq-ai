@@ -1,0 +1,1034 @@
+# =============================================================================
+# Built-in playbook: MSA — SaaS (vendor-customer, mid-market) (M3-A5)
+# =============================================================================
+#
+# A starter playbook for reviewing Master Services Agreements covering
+# general SaaS subscriptions, written from the customer's perspective.
+# Calibrated to mid-market commercial SaaS engagements — not enterprise
+# bespoke negotiations, not strategic platform deals, not regulated-
+# industry overlays (those need additional jurisdiction-specific or
+# industry-specific position sets).
+#
+# **THIS IS A STARTING POINT, NOT A VETTED TEMPLATE, AND IT IS NOT
+# LEGAL ADVICE.** The maintainer team has not reviewed or validated
+# the positions, fallback tiers, or redline strategies below. They
+# were drafted from public CC-BY-4.0 templates (Common Paper Cloud
+# Service Agreement; Bonterms Software License Agreement) as a
+# head-start for in-house counsel installing LQ.AI. You — the
+# attorney installing this software — must review every position
+# against your organization's standards and applicable jurisdiction
+# before relying on this playbook for any client work. Fork it,
+# customize it, or replace it entirely.
+#
+# Companion file: ``api/alembic/versions/0033_seed_builtin_playbooks_msa_dpa.py``
+# ships an identical snapshot into the ``playbooks`` +
+# ``playbook_positions`` tables at version 1.0.0. Edits here are not
+# retroactive to existing deployments — playbook updates ship as new
+# migration versions.
+#
+# =============================================================================
+
+name: MSA — SaaS (customer-perspective)
+contract_type: MSA-SaaS
+version: 1.0.0
+description: |
+  Master Services Agreement playbook for general SaaS subscriptions,
+  written from the customer's perspective. Covers the eleven
+  positions most likely to determine whether a SaaS MSA is fit for
+  purpose: service levels, security commitments, data handling,
+  intellectual property allocation, limitation of liability,
+  indemnification, termination, audit rights, payment terms,
+  governing law, and change management.
+
+  **This playbook is a starting point, not a vetted template, and it
+  is not legal advice.** The LQ.AI maintainer team has not reviewed
+  or validated the positions, fallback tiers, or redline strategies
+  below — they were drafted from public templates (Common Paper
+  CC-BY-4.0; Bonterms CC-BY-4.0) as a head-start for in-house counsel
+  installing LQ.AI. You must review every position against your
+  organization's standards and the applicable jurisdiction before
+  relying on this playbook for client work. Fork it, customize it,
+  or replace it entirely. Use of this playbook does not establish
+  an attorney-client relationship with LegalQuants or any
+  contributor.
+
+positions:
+  # ---------------------------------------------------------------------------
+  - issue: Service Level Agreement (uptime and remedies)
+    description: |
+      Vendor's commitment to service availability and the customer's
+      remedies when the vendor falls short. The uptime percentage,
+      the exclusions (scheduled maintenance, force majeure, customer-
+      caused downtime), and the remedy mechanism (service credits
+      versus refunds versus termination) together determine whether
+      the SLA is actually load-bearing or just a comfort clause.
+    standard_language: |
+      Vendor will use commercially reasonable efforts to make the
+      Service available with a Monthly Uptime Percentage of at least
+      99.9%, excluding (a) scheduled maintenance announced at least
+      forty-eight (48) hours in advance, (b) emergency maintenance
+      not to exceed two (2) hours per calendar month, (c) force
+      majeure events, and (d) downtime caused by Customer's acts or
+      omissions. If the Monthly Uptime Percentage falls below 99.9%
+      in a given calendar month, Customer is entitled to service
+      credits as follows: 10% of the monthly subscription fee for
+      that month if uptime is 99.0%–99.89%; 25% if 95.0%–98.99%; 50%
+      if below 95.0%. If the Service fails to meet 99.0% uptime in
+      any three consecutive months or any four months in a rolling
+      twelve-month period, Customer may terminate the Agreement for
+      cause and receive a pro-rata refund of any prepaid fees for
+      the unused portion of the term.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          99.5% uptime with the same credit and termination
+          structure. Acceptable for non-mission-critical applications
+          (internal collaboration tools, marketing automation) where
+          a few hours of monthly downtime is tolerable.
+        language: |
+          Vendor will use commercially reasonable efforts to make the
+          Service available with a Monthly Uptime Percentage of at
+          least 99.5%, subject to the standard exclusions. Service
+          credits apply at 10% / 25% / 50% as the Monthly Uptime
+          Percentage falls below 99.5% / 98.0% / 95.0% respectively.
+          Termination for cause is available after three consecutive
+          months below 98.0% uptime.
+      - rank: 2
+        description: |
+          99.0% uptime with credits-only remedy (no termination
+          right). Acceptable only for low-cost, easily-replaceable
+          services where the cost of switching exceeds the cost of
+          occasional downtime.
+        language: |
+          Vendor will use commercially reasonable efforts to maintain
+          a Monthly Uptime Percentage of at least 99.0%. If uptime
+          falls below this threshold in a given month, Customer's
+          sole remedy is a service credit equal to 10% of the monthly
+          subscription fee for that month.
+    redline_strategy: |
+      If the SLA lacks a definition of "Monthly Uptime Percentage"
+      (the formula matters: usually (total minutes - downtime
+      minutes) / total minutes, but some vendors exclude many
+      categories of downtime from the numerator), push for an
+      explicit formula. If the only remedy is "use commercially
+      reasonable efforts" with no service credits, push for credits
+      tied to specific uptime thresholds. If service credits are the
+      sole and exclusive remedy with no termination right for
+      sustained breach, push to add a termination trigger (three
+      consecutive months or four in twelve below threshold). If
+      scheduled maintenance is unlimited or undefined, cap it (e.g.,
+      four hours per month) and require advance notice.
+    severity_if_missing: high
+    detection_keywords:
+      - service level
+      - uptime
+      - availability
+      - service credit
+      - SLA
+      - downtime
+      - scheduled maintenance
+    detection_examples:
+      - >-
+        Vendor shall use commercially reasonable efforts to maintain
+        99.9% uptime, measured on a monthly basis
+      - >-
+        Customer's sole and exclusive remedy for any failure to
+        meet the service level shall be a service credit
+    position_order: 0
+  # ---------------------------------------------------------------------------
+  - issue: Security Commitments (controls and certifications)
+    description: |
+      The vendor's contractual security posture — what controls it
+      maintains, what certifications it holds, and how it
+      demonstrates ongoing compliance. The gap between "we have a
+      security program" (unenforceable) and "we maintain SOC 2 Type
+      II certification refreshed annually with reports available to
+      Customer under NDA" (enforceable) is the entire game.
+    standard_language: |
+      Vendor will maintain a written information security program
+      that includes administrative, physical, and technical
+      safeguards designed to protect Customer Data against
+      unauthorized access, use, disclosure, alteration, or
+      destruction. At a minimum, Vendor will: (a) maintain SOC 2
+      Type II certification (or equivalent ISO/IEC 27001
+      certification) with annual third-party assessments and make
+      the most recent report available to Customer under NDA upon
+      request, but no more than once per twelve-month period; (b)
+      encrypt Customer Data in transit using TLS 1.2 or higher and
+      at rest using AES-256 or equivalent; (c) maintain role-based
+      access controls with the principle of least privilege; (d)
+      conduct background checks on personnel with access to Customer
+      Data; (e) maintain a documented incident response plan and
+      test it at least annually; and (f) notify Customer of any
+      material change in certification status within thirty (30)
+      days.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Maintains a security program with annual third-party
+          assessment (allows SOC 2 Type I or equivalent in lieu of
+          Type II for emerging vendors). Acceptable for newer
+          vendors who are on a Type II roadmap; pair with a
+          contractual milestone to achieve Type II within twelve
+          months.
+        language: |
+          Vendor will maintain a written information security program
+          consistent with industry standards, including encryption of
+          Customer Data in transit and at rest, role-based access
+          controls, and annual third-party security assessment.
+          Vendor will provide its most recent third-party assessment
+          report to Customer under NDA upon request.
+      - rank: 2
+        description: |
+          Self-attestation of security controls without third-party
+          certification. Acceptable only for very low-risk
+          deployments (no sensitive data, no regulated data) where
+          the cost of imposing certification requirements exceeds
+          the marginal risk reduction.
+        language: |
+          Vendor will maintain administrative, physical, and
+          technical safeguards designed to protect Customer Data
+          and will encrypt Customer Data in transit and at rest.
+          Vendor will provide a written security overview upon
+          Customer's reasonable request.
+    redline_strategy: |
+      If the contract lacks any certification requirement, push for
+      SOC 2 Type II (or ISO 27001) as a minimum. If certifications
+      are listed but there is no obligation to maintain them or
+      notify Customer of changes, add the maintenance obligation
+      and the 30-day notification of material change. If encryption
+      standards are not specified (just "industry standard"),
+      specify TLS 1.2+ and AES-256+. If the contract is silent on
+      access reports, add the right to request the most recent
+      certification report under NDA once per year.
+    severity_if_missing: critical
+    detection_keywords:
+      - information security
+      - SOC 2
+      - ISO 27001
+      - encryption
+      - security program
+      - safeguards
+      - access controls
+    detection_examples:
+      - >-
+        Vendor shall maintain a security program consistent with
+        industry standards and SOC 2 Type II certification
+      - >-
+        All Customer Data shall be encrypted in transit and at
+        rest using industry-standard encryption
+    position_order: 1
+  # ---------------------------------------------------------------------------
+  - issue: Data Handling and Privacy
+    description: |
+      Who owns Customer Data, what the vendor may and may not do
+      with it, and how the relationship is structured under
+      applicable privacy laws. Distinct from the security position
+      (which addresses how data is protected) — this position
+      addresses what the data can be used for and who has rights to
+      it. Modern best practice: customer owns its data, vendor
+      processes per a companion DPA, and the vendor explicitly does
+      not use customer data for AI/ML model training.
+    standard_language: |
+      As between the parties, Customer retains all right, title, and
+      interest in and to Customer Data. Customer hereby grants
+      Vendor a limited, non-exclusive, non-transferable, worldwide
+      license to use, host, copy, transmit, display, and process
+      Customer Data solely to the extent necessary to (a) provide
+      the Service to Customer in accordance with this Agreement and
+      (b) prevent or address service or technical problems. Vendor
+      will not use Customer Data to train, fine-tune, or otherwise
+      develop machine-learning models for any purpose other than
+      providing the Service to Customer, and Vendor will not use
+      Customer Data to develop products or services that compete
+      with Customer. To the extent Vendor processes Personal Data
+      (as defined under applicable data protection laws) on behalf
+      of Customer, the parties will enter into a Data Processing
+      Addendum substantially in the form attached as Exhibit A,
+      which is incorporated into this Agreement by reference. Upon
+      termination or expiration of this Agreement, Vendor will,
+      within thirty (30) days, return or delete all Customer Data
+      at Customer's option, subject to retention required by
+      applicable law.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Customer owns its data; vendor's license is for service
+          provision and security; vendor may use aggregated and
+          anonymized data for product improvement. Acceptable when
+          aggregation is rigorous (cannot be reidentified) and the
+          aggregation right is bounded (no third-party sharing).
+        language: |
+          Customer owns Customer Data. Customer grants Vendor a
+          license to process Customer Data solely to provide the
+          Service and to maintain the security and integrity of the
+          Service. Vendor may use aggregated and anonymized data
+          derived from Customer Data for the purpose of improving
+          the Service, provided such data does not identify
+          Customer or any individual and is not shared with third
+          parties.
+      - rank: 2
+        description: |
+          Customer-owned data with vendor analytics rights and a
+          standard DPA for personal data processing. The weakest
+          position acceptable; explicitly does not foreclose
+          machine-learning use of customer data, which has become
+          a sharp issue in 2024-2025.
+        language: |
+          Customer retains ownership of Customer Data. Customer
+          grants Vendor a license to use Customer Data to operate
+          the Service, perform analytics, and improve the Service.
+          The parties will enter into a Data Processing Addendum
+          for the processing of any personal data.
+    redline_strategy: |
+      If the contract grants vendor a broad license to "use Customer
+      Data for any purpose," narrow it to service provision and
+      security. If the contract is silent on machine-learning, add
+      an explicit prohibition on using Customer Data to train or
+      fine-tune models. If the contract permits aggregated data
+      use but does not require de-identification, add a
+      reidentification prohibition. If the contract lacks a return-
+      or-delete obligation at termination, add the 30-day return-or-
+      delete mechanism. If a DPA is referenced but not attached or
+      mutually agreed, push to attach it before signature.
+    severity_if_missing: critical
+    detection_keywords:
+      - customer data
+      - data ownership
+      - data processing
+      - personal data
+      - DPA
+      - aggregated data
+      - machine learning
+      - model training
+    detection_examples:
+      - >-
+        Customer retains all right, title, and interest in and to
+        Customer Data
+      - >-
+        Vendor may use aggregated and anonymized data derived from
+        Customer Data for analytics and product improvement
+    position_order: 2
+  # ---------------------------------------------------------------------------
+  - issue: Intellectual Property Allocation
+    description: |
+      Who owns what in the SaaS relationship — vendor's underlying
+      service IP, customer's data and derivatives, customer's
+      feedback to the vendor, and any work product created jointly
+      or as part of professional services. The default lines:
+      vendor owns the platform, customer owns its data and outputs,
+      feedback is freely licensable to vendor.
+    standard_language: |
+      As between the parties: (a) Vendor retains all right, title,
+      and interest in and to the Service, including all
+      modifications, enhancements, and derivative works of the
+      Service, and all intellectual property rights therein
+      (collectively, "Vendor IP"); (b) Customer retains all right,
+      title, and interest in and to Customer Data and any reports,
+      analyses, or other outputs generated by the Service from
+      Customer Data ("Customer Outputs"), provided that Customer
+      Outputs do not include any Vendor IP; and (c) if Customer
+      provides Vendor with suggestions, comments, or other feedback
+      regarding the Service ("Feedback"), Customer hereby grants
+      Vendor a perpetual, irrevocable, royalty-free, worldwide
+      license to use, modify, and incorporate the Feedback into the
+      Service, provided that Vendor will not identify Customer as
+      the source of any Feedback without Customer's prior written
+      consent.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Standard allocation but with broader feedback license
+          (vendor may identify Customer as source of feedback).
+          Acceptable when the customer has no concern about being
+          associated with vendor's product development.
+        language: |
+          Vendor retains all rights in and to the Service. Customer
+          retains all rights in and to Customer Data and outputs
+          generated from Customer Data. Customer grants Vendor a
+          perpetual, royalty-free license to use any feedback
+          Customer provides regarding the Service.
+      - rank: 2
+        description: |
+          Customer-favorable variant: Customer owns Customer Data
+          and outputs; vendor owns the Service; feedback is
+          provided as-is with no broad license-back. Acceptable
+          when the customer expects to be a major contributor to
+          the vendor's roadmap and does not want a perpetual
+          unattributed license.
+        language: |
+          Each party retains all right, title, and interest in
+          their respective intellectual property. Customer Data
+          and outputs derived from Customer Data are owned by
+          Customer. The Service and all improvements to the
+          Service are owned by Vendor. Any feedback Customer
+          provides is provided on an as-is basis with no implied
+          license.
+    redline_strategy: |
+      If the contract assigns ownership of Customer Data outputs to
+      the vendor (or characterizes them as "derivative works of
+      the Service"), reverse that — customer outputs from customer
+      data should remain customer-owned. If the feedback license
+      lets vendor publicly attribute feedback to Customer, add a
+      consent requirement. If the contract is silent on outputs,
+      add explicit customer ownership of outputs derived from
+      customer data. If the contract characterizes customizations
+      or customer-configured workflows as vendor IP, push to
+      carve those out as customer-owned.
+    severity_if_missing: high
+    detection_keywords:
+      - intellectual property
+      - ownership
+      - work product
+      - feedback
+      - improvements
+      - derivative works
+      - IP rights
+    detection_examples:
+      - >-
+        Vendor retains all right, title, and interest in and to the
+        Service and any improvements or modifications thereto
+      - >-
+        Customer grants Vendor a perpetual, royalty-free license
+        to use any feedback or suggestions provided by Customer
+    position_order: 3
+  # ---------------------------------------------------------------------------
+  - issue: Limitation of Liability
+    description: |
+      The cap on damages and the exclusions from that cap. Without
+      a sensible LoL framework, a vendor's exposure can be
+      unbounded; with one that's too vendor-favorable, the customer
+      has no real recourse for material breach. The key questions:
+      how big is the cap (typically 1× or 2× annual fees), what's
+      mutual and what's one-way, and which categories of damages
+      are carved out from the cap (typically IP indemnification,
+      breach of confidentiality, gross negligence, willful
+      misconduct, data breach involving Personal Data).
+    standard_language: |
+      EXCEPT FOR EXCLUDED CLAIMS (DEFINED BELOW), EACH PARTY'S
+      AGGREGATE LIABILITY ARISING OUT OF OR RELATING TO THIS
+      AGREEMENT WILL NOT EXCEED THE TOTAL AMOUNTS PAID OR PAYABLE
+      BY CUSTOMER TO VENDOR UNDER THIS AGREEMENT IN THE TWELVE (12)
+      MONTHS PRECEDING THE EVENT GIVING RISE TO THE CLAIM. EXCEPT
+      FOR EXCLUDED CLAIMS, IN NO EVENT WILL EITHER PARTY BE LIABLE
+      FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL,
+      EXEMPLARY, OR PUNITIVE DAMAGES, OR FOR ANY LOST PROFITS, LOST
+      REVENUES, OR LOST DATA, EVEN IF ADVISED OF THE POSSIBILITY
+      OF SUCH DAMAGES. "EXCLUDED CLAIMS" MEANS (A) EITHER PARTY'S
+      INDEMNIFICATION OBLIGATIONS UNDER THIS AGREEMENT; (B) EITHER
+      PARTY'S BREACH OF ITS CONFIDENTIALITY OBLIGATIONS; (C) EITHER
+      PARTY'S GROSS NEGLIGENCE OR WILLFUL MISCONDUCT; (D) VENDOR'S
+      BREACH OF ITS DATA PROTECTION AND SECURITY OBLIGATIONS THAT
+      RESULTS IN A DATA BREACH AFFECTING PERSONAL DATA; AND (E)
+      AMOUNTS OWED FOR FEES.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Liability capped at 12 months fees with a super-cap (2×
+          fees) for data breach and security failures, rather than
+          full carveout. Acceptable when the vendor's risk appetite
+          is constrained and the customer's exposure to a data
+          breach is limited (low volume of personal data, low
+          regulatory risk).
+        language: |
+          Each party's aggregate liability is capped at the fees
+          paid in the preceding twelve months, except that
+          Vendor's liability for breach of its data protection and
+          security obligations resulting in a data breach is capped
+          at two (2) times that amount (the "Super-Cap"). The
+          standard cap and Super-Cap do not apply to either party's
+          indemnification obligations, breach of confidentiality,
+          gross negligence, or willful misconduct, which are
+          uncapped.
+      - rank: 2
+        description: |
+          Mutual cap at fees paid with narrower carveouts (IP
+          indemnification and willful misconduct only). Acceptable
+          only for low-risk, low-data-volume engagements; not
+          appropriate where Personal Data or trade secrets are at
+          stake.
+        language: |
+          Each party's aggregate liability under this Agreement is
+          capped at the total amounts paid or payable by Customer
+          to Vendor in the twelve (12) months preceding the event
+          giving rise to the claim. This cap does not apply to
+          either party's indemnification obligations under this
+          Agreement or to liability arising from a party's willful
+          misconduct.
+    redline_strategy: |
+      If the contract's LoL applies to ALL claims with no carveouts,
+      push for the standard carveout set (IP indemnification,
+      confidentiality breach, gross negligence, willful misconduct,
+      data breach). If the carveouts exist but data breach is not
+      among them, add it — data breach exposure can dwarf the
+      contract value. If the cap is "fees paid" rather than "fees
+      paid in the preceding 12 months," push for the 12-month
+      rolling cap. If the cap is one-way (vendor-favorable), push
+      for mutuality. If consequential damages are excluded for
+      vendor but not customer (asymmetric), push for mutuality.
+      If the cap is below 12 months fees (e.g., 3 months), push for
+      12 months or two times annual fees.
+    severity_if_missing: critical
+    detection_keywords:
+      - limitation of liability
+      - aggregate liability
+      - cap on damages
+      - consequential damages
+      - excluded claims
+      - super-cap
+      - indirect damages
+    detection_examples:
+      - >-
+        EACH PARTY'S AGGREGATE LIABILITY UNDER THIS AGREEMENT
+        SHALL NOT EXCEED THE FEES PAID IN THE PRECEDING TWELVE
+        MONTHS
+      - >-
+        IN NO EVENT SHALL EITHER PARTY BE LIABLE FOR ANY INDIRECT,
+        INCIDENTAL, OR CONSEQUENTIAL DAMAGES
+    position_order: 4
+  # ---------------------------------------------------------------------------
+  - issue: Indemnification
+    description: |
+      The vendor's obligation to defend and indemnify the customer
+      against third-party claims arising from the customer's use of
+      the service (primarily IP infringement claims), and the
+      customer's reciprocal obligation for customer-data-related
+      claims against the vendor. The mutual conduct requirements
+      (notice, control of defense, settlement consent) make the
+      mechanism workable in practice.
+    standard_language: |
+      Vendor will defend Customer against any third-party claim
+      alleging that Customer's use of the Service as authorized
+      under this Agreement infringes such third party's
+      intellectual property rights (a "Vendor IP Claim"), and will
+      indemnify Customer against any damages and costs (including
+      reasonable attorneys' fees) finally awarded against Customer
+      by a court of competent jurisdiction or paid in a settlement
+      approved by Vendor in connection with such Vendor IP Claim.
+      Customer will defend Vendor against any third-party claim
+      arising from Customer Data, including any claim that the
+      collection or use of Customer Data violates applicable law
+      (a "Customer Data Claim"), and will indemnify Vendor against
+      any damages and costs finally awarded or paid in settlement.
+      The indemnifying party's obligations are conditioned on the
+      indemnified party (a) promptly notifying the indemnifying
+      party of the claim in writing, (b) giving the indemnifying
+      party sole control of the defense and settlement of the
+      claim (provided the indemnifying party may not settle any
+      claim that imposes a material obligation on the indemnified
+      party without its written consent), and (c) providing
+      reasonable cooperation in the defense at the indemnifying
+      party's expense. If a Vendor IP Claim arises or is likely to
+      arise, Vendor may, at its option, (i) procure for Customer
+      the right to continue using the Service, (ii) modify the
+      Service so it is non-infringing, or (iii) terminate the
+      Agreement and refund any prepaid fees for the unused portion
+      of the term.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Mutual IP indemnification with standard conduct
+          requirements, but without the explicit "modify-or-
+          refund" remedy ladder. Acceptable when the customer is
+          willing to rely on the broader indemnification language
+          without spelling out vendor's options.
+        language: |
+          Each party will defend and indemnify the other against
+          third-party claims that arise from a breach of this
+          Agreement by the indemnifying party. The indemnified
+          party will promptly notify the indemnifying party of any
+          claim and give the indemnifying party sole control of
+          the defense, subject to the indemnified party's consent
+          to any settlement imposing a material obligation on the
+          indemnified party.
+      - rank: 2
+        description: |
+          Vendor IP indemnification only (no customer-data
+          indemnification reciprocal). Acceptable when the
+          customer's use of the service does not involve
+          customer-provided content that creates third-party
+          claim exposure for the vendor (e.g., the customer is
+          uploading only its own internal data).
+        language: |
+          Vendor will defend Customer against any third-party
+          claim alleging that Customer's use of the Service as
+          authorized under this Agreement infringes such third
+          party's intellectual property rights, subject to the
+          standard conduct requirements (prompt notice, sole
+          control of defense, cooperation).
+    redline_strategy: |
+      If the contract lacks any indemnification, push for at least
+      a vendor IP indemnification — without it, a third-party
+      patent claim against the customer's use of the service is
+      the customer's problem. If the IP indemnification has
+      excessive carveouts (e.g., excludes claims arising from
+      "customer's use of the service" — circular), tighten the
+      carveouts to specific scenarios (combination with non-vendor
+      products, customer modifications, use outside the
+      documentation). If the indemnification lacks the "procure /
+      modify / terminate-and-refund" remedy ladder, add it — it's
+      what makes the indemnification operationally useful. If the
+      settlement consent right is missing, add it — without it,
+      vendor could settle on terms that bind customer.
+    severity_if_missing: high
+    detection_keywords:
+      - indemnification
+      - indemnify
+      - defend
+      - third-party claim
+      - infringement
+      - hold harmless
+    detection_examples:
+      - >-
+        Vendor shall defend, indemnify, and hold harmless Customer
+        from any third-party claim alleging that the Service
+        infringes intellectual property rights
+      - >-
+        The indemnified party shall promptly notify the
+        indemnifying party of any claim and provide sole control
+        of the defense
+    position_order: 5
+  # ---------------------------------------------------------------------------
+  - issue: Termination
+    description: |
+      How and when each party may exit the relationship. Covers
+      termination for cause (typically with a cure period for
+      material breach), termination for convenience (with notice
+      period and pro-rata refund), and the transition assistance
+      period during which the vendor continues providing the
+      service while the customer migrates off.
+    standard_language: |
+      Either party may terminate this Agreement for cause upon
+      thirty (30) days' prior written notice if the other party
+      materially breaches this Agreement and fails to cure such
+      breach within the notice period, except that no cure period
+      is required for breaches that by their nature cannot be
+      cured (such as a confidentiality breach involving public
+      disclosure or a breach of payment obligations after the
+      grace period). Customer may terminate this Agreement for
+      convenience upon ninety (90) days' prior written notice,
+      effective at the end of the then-current Subscription Term;
+      Customer's termination for convenience does not entitle
+      Customer to a refund of fees paid for the terminated term.
+      Upon any termination, the parties will cooperate in good
+      faith to facilitate an orderly transition. Vendor will
+      provide Customer with reasonable transition assistance for a
+      period of up to ninety (90) days after the effective date of
+      termination at Vendor's then-current professional services
+      rates, including continued access to Customer Data in a
+      machine-readable format and reasonable cooperation with
+      Customer's migration to a replacement service.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Termination for cause with 30-day cure; convenience
+          termination only at the end of the Subscription Term
+          with 60-day notice. Acceptable for multi-year terms
+          where the customer accepts that the term commitment is
+          the bargain — early exit costs the full prepaid fees.
+        language: |
+          Either party may terminate this Agreement for cause upon
+          thirty (30) days' prior written notice and opportunity
+          to cure. Customer may terminate this Agreement for
+          convenience effective at the end of the then-current
+          Subscription Term upon sixty (60) days' prior written
+          notice. The terminating party will receive a thirty
+          (30) day transition assistance period.
+      - rank: 2
+        description: |
+          Termination for cause only (no convenience termination
+          right). Acceptable only when the term is short (one year
+          or less) and the customer's switching cost is low.
+          Generally not recommended; the lack of a convenience
+          right is a significant constraint over a multi-year
+          relationship.
+        language: |
+          Either party may terminate this Agreement for cause upon
+          thirty (30) days' prior written notice and opportunity
+          to cure material breach. Either party may also terminate
+          immediately upon the other party's insolvency,
+          assignment for the benefit of creditors, or bankruptcy.
+    redline_strategy: |
+      If the contract lacks a customer right to terminate for
+      convenience, push for one — without it, the customer is
+      locked in for the full term regardless of service degradation
+      that doesn't rise to material breach. If termination for cause
+      lacks a cure period, push for 30 days. If the cure period
+      applies even to non-curable breaches (confidentiality, payment
+      default), carve those out. If the transition assistance
+      obligation is absent or capped at less than 90 days, push to
+      add or extend it — without transition assistance, customer
+      may face a hard cutoff that disrupts business operations. If
+      the data return obligation at termination is missing, add it
+      (see Data Handling position).
+    severity_if_missing: high
+    detection_keywords:
+      - termination
+      - terminate for cause
+      - terminate for convenience
+      - material breach
+      - cure period
+      - transition assistance
+      - wind-down
+    detection_examples:
+      - >-
+        Either party may terminate this Agreement for cause upon
+        thirty days' prior written notice if the other party
+        materially breaches this Agreement and fails to cure
+      - >-
+        Customer may terminate this Agreement for convenience
+        upon ninety days' prior written notice
+    position_order: 6
+  # ---------------------------------------------------------------------------
+  - issue: Audit Rights
+    description: |
+      The customer's right to verify vendor's compliance with the
+      contract, particularly for security and data handling
+      obligations. Without audit rights, the customer has no
+      independent way to verify representations the vendor makes
+      about its controls. The right has to be calibrated — too
+      narrow (only when there's reason to suspect a breach) and
+      it's unenforceable; too broad (unlimited inspections of
+      vendor facilities) and it's commercially unworkable.
+    standard_language: |
+      No more than once per twelve (12) month period (except in the
+      event of a confirmed security incident affecting Customer
+      Data, in which case the frequency limitation does not apply),
+      and upon at least thirty (30) days' prior written notice,
+      Customer may, at its own expense, conduct or have a mutually
+      acceptable third-party auditor (under NDA) conduct an audit
+      of Vendor's compliance with its security and data protection
+      obligations under this Agreement. The scope of the audit
+      will be reasonable in light of the obligations being audited
+      and will be conducted during normal business hours in a
+      manner that does not unreasonably interfere with Vendor's
+      operations. Vendor will provide reasonable cooperation,
+      including access to relevant personnel, policies, and
+      records. In lieu of an on-site audit, Vendor may satisfy this
+      obligation by providing Customer with a copy of Vendor's most
+      recent SOC 2 Type II report (or equivalent independent
+      assessment) under NDA. If an audit reveals a material
+      compliance failure, Vendor will reimburse Customer's
+      reasonable audit costs.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Audit right limited to vendor-provided third-party
+          certification reports (SOC 2, ISO 27001) with no
+          on-site audit right except after a confirmed material
+          breach. Acceptable for mid-market deployments where the
+          customer is willing to rely on the vendor's
+          certification rather than independent verification.
+        language: |
+          Vendor will provide its most recent SOC 2 Type II
+          report (or equivalent independent assessment) to
+          Customer under NDA upon request, not more than once per
+          twelve months. In the event of a material breach
+          affecting Customer Data, Customer may, at its own
+          expense and upon reasonable notice, conduct or have a
+          third-party auditor conduct a focused audit of the
+          breach scope.
+      - rank: 2
+        description: |
+          Self-attestation only with no third-party report and no
+          on-site audit. Acceptable only for very low-risk
+          engagements with no sensitive data; aligns with the
+          tier-2 fallback under Security Commitments.
+        language: |
+          Vendor will, upon Customer's reasonable request and not
+          more than once per twelve months, provide Customer with
+          a written attestation of compliance with Vendor's
+          security obligations under this Agreement and answer
+          reasonable security questionnaires.
+    redline_strategy: |
+      If the contract has no audit right at all, push for at least
+      a right to request the SOC 2 report under NDA annually.
+      If the audit right exists but is limited to "reasonable
+      cause" or "confirmed breach," push for a routine annual
+      right plus expanded rights after confirmed breach. If audit
+      costs are always vendor's expense (rare; vendor will push
+      back), accept customer-cost with vendor-cost-reimbursement
+      upon material finding. If the auditor must be a Big 4 firm
+      (vendor sometimes asks), push for "mutually acceptable
+      third-party auditor under NDA" instead.
+    severity_if_missing: medium
+    detection_keywords:
+      - audit
+      - inspection
+      - compliance audit
+      - third-party auditor
+      - SOC 2 report
+      - assessment
+    detection_examples:
+      - >-
+        Customer may, at its own expense and upon reasonable
+        prior written notice, audit Vendor's compliance with the
+        security obligations under this Agreement
+      - >-
+        Vendor shall provide a copy of its SOC 2 Type II report
+        to Customer under NDA upon request
+    position_order: 7
+  # ---------------------------------------------------------------------------
+  - issue: Payment Terms
+    description: |
+      How and when fees are paid, how disputes are handled, and
+      what happens when payment is late. Critical operational
+      details that can become deal-breakers in negotiation when
+      the customer's procurement process doesn't match the
+      vendor's standard terms.
+    standard_language: |
+      Customer will pay Vendor the fees set forth in the applicable
+      Order Form. Unless otherwise stated in the Order Form, all
+      fees are payable in U.S. dollars within thirty (30) days
+      after the date of Vendor's invoice. Fees are exclusive of all
+      taxes, levies, and duties imposed by any taxing authority
+      (excluding taxes based on Vendor's net income), and Customer
+      will be responsible for the payment of all such taxes. If
+      Customer fails to make any payment when due, then, in
+      addition to all other remedies that may be available, (a)
+      Vendor may charge interest on the past due amount at the
+      rate of one and one-half percent (1.5%) per month or the
+      highest rate permitted by applicable law (whichever is
+      lower), calculated daily and compounded monthly, and (b)
+      Vendor may suspend the Service upon ten (10) business days'
+      notice if the past-due amount has not been cured. Customer
+      may dispute any invoice in good faith by providing written
+      notice to Vendor within thirty (30) days of receipt of the
+      invoice, describing the basis of the dispute in reasonable
+      detail; the disputed amount will not accrue late fees or
+      give rise to suspension during good-faith resolution efforts,
+      but undisputed amounts must be paid when due.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Net 45 payment terms with standard suspension and late-
+          fee mechanics. Acceptable when the customer's procurement
+          process requires a longer cycle. Net 60 is increasingly
+          common in mid-market and is also acceptable for larger
+          customers.
+        language: |
+          Customer will pay all undisputed invoices within forty-
+          five (45) days of receipt. Late payments accrue interest
+          at 1.5% per month or the highest rate permitted by law.
+          Customer may dispute any invoice in good faith within
+          thirty days of receipt; disputed amounts will not accrue
+          late fees pending resolution.
+      - rank: 2
+        description: |
+          Net 60 with no suspension right for vendor (only the
+          late-fee remedy) and a longer dispute window. Acceptable
+          for large enterprise customers with established credit;
+          generally not recommended for mid-market.
+        language: |
+          Customer will pay all undisputed invoices within sixty
+          (60) days of receipt. Late payments accrue interest at
+          the rate of one percent per month or the highest rate
+          permitted by law. Customer may dispute any invoice in
+          good faith within forty-five days; pending good-faith
+          resolution, neither suspension nor late fees apply to
+          the disputed amount.
+    redline_strategy: |
+      If the payment terms are shorter than Net 30, push for at
+      least Net 30 — this is the market standard for B2B SaaS. If
+      late fees are above 1.5% per month, push down (state usury
+      laws often cap this). If the contract permits suspension
+      with less than 10 business days' notice, push for at least
+      10 business days. If there is no good-faith dispute
+      mechanism, add one — without it, customer must pay obviously
+      erroneous invoices to avoid suspension. If invoicing is
+      annual upfront but the customer wants quarterly or monthly,
+      negotiate (annual upfront is the vendor preference; quarterly
+      is acceptable for larger commitments).
+    severity_if_missing: medium
+    detection_keywords:
+      - payment terms
+      - net 30
+      - invoice
+      - late fees
+      - interest
+      - suspension
+      - dispute
+      - fees
+    detection_examples:
+      - >-
+        Customer shall pay all undisputed invoices within thirty
+        days of receipt
+      - >-
+        Late payments shall accrue interest at the rate of 1.5%
+        per month or the highest rate permitted by applicable law
+    position_order: 8
+  # ---------------------------------------------------------------------------
+  - issue: Governing Law and Venue
+    description: |
+      Which jurisdiction's law governs the agreement and where
+      disputes are resolved. Affects substantive contract law,
+      remedies, jury trial availability, and the cost / convenience
+      of enforcement. The market default for U.S. SaaS is Delaware
+      law (consistent body of commercial-contract case law); New
+      York is the common alternative.
+    standard_language: |
+      This Agreement is governed by and will be construed in
+      accordance with the laws of the State of Delaware, without
+      regard to its conflict-of-laws principles. The parties
+      hereby irrevocably submit to the exclusive jurisdiction of
+      the state and federal courts located in Wilmington, Delaware
+      for any dispute arising out of or relating to this Agreement,
+      and each party irrevocably waives any objection to the venue
+      of any such court on the grounds of inconvenient forum or
+      lack of jurisdiction. EACH PARTY WAIVES ANY RIGHT TO A JURY
+      TRIAL IN ANY DISPUTE ARISING OUT OF OR RELATING TO THIS
+      AGREEMENT.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          New York law and venue; widely-used alternative with
+          well-developed commercial-contract case law. Acceptable
+          when the parties are not Delaware-based and want a
+          familiar commercial forum.
+        language: |
+          This Agreement is governed by the laws of the State of
+          New York, without regard to conflict-of-laws principles.
+          The state and federal courts located in New York County,
+          New York have exclusive jurisdiction over any dispute.
+          Each party waives any right to a jury trial.
+      - rank: 2
+        description: |
+          California law and venue, often pushed by California-
+          based vendors. Less customer-favorable on commercial-
+          contract disputes than Delaware or New York (California
+          courts are sometimes more willing to set aside
+          contractual limitations as unconscionable). Acceptable
+          when the vendor is California-based and the customer is
+          willing to litigate there.
+        language: |
+          This Agreement is governed by the laws of the State of
+          California, without regard to conflict-of-laws
+          principles. The state and federal courts located in
+          San Francisco County, California have exclusive
+          jurisdiction over any dispute.
+    redline_strategy: |
+      If the contract specifies the vendor's home jurisdiction and
+      the customer is not there, counter with Delaware or New York
+      (neutral commercial forums). If arbitration is specified
+      (some vendors prefer JAMS or AAA arbitration), evaluate
+      whether it suits the customer's needs — arbitration is
+      faster and more confidential but less precedent-creating
+      and provides less appellate review. If the contract waives
+      jury trial unilaterally (vendor only) or for one type of
+      claim but not another, push for mutuality. If a class-action
+      waiver is included, evaluate whether it's enforceable in the
+      governing-law jurisdiction and whether customer wants it.
+    severity_if_missing: medium
+    detection_keywords:
+      - governing law
+      - jurisdiction
+      - venue
+      - exclusive jurisdiction
+      - conflict of laws
+      - arbitration
+      - jury trial
+    detection_examples:
+      - >-
+        This Agreement shall be governed by the laws of the State
+        of Delaware, without regard to conflict-of-laws principles
+      - >-
+        Any dispute arising under this Agreement shall be subject
+        to the exclusive jurisdiction of the courts of New York
+    position_order: 9
+  # ---------------------------------------------------------------------------
+  - issue: Change Management (price increases and material changes)
+    description: |
+      How the vendor may change the service, the pricing, or the
+      terms during the term, and what notice and customer rights
+      attach to those changes. Without explicit change-management
+      provisions, the customer can find itself with surprise
+      price increases, removed features, or unilaterally amended
+      terms. The structure: separate handling for service changes
+      (notice + minor changes permitted; material changes give
+      customer termination right), pricing changes (capped by a
+      formula or rate), and terms-of-service changes (formal
+      amendment process).
+    standard_language: |
+      Vendor may modify the Service from time to time, provided
+      that Vendor will not materially diminish the functionality
+      of the Service during the then-current Subscription Term.
+      For any material reduction in functionality or material
+      adverse change to the Service that Vendor announces during
+      the then-current Subscription Term, Vendor will provide
+      Customer with at least sixty (60) days' prior written
+      notice, and Customer may terminate the affected portion of
+      the Service for convenience upon written notice within
+      thirty (30) days of Vendor's announcement, with a pro-rata
+      refund of any prepaid fees for the terminated portion of
+      the unused term. Vendor may increase fees for renewal terms
+      by providing Customer with at least ninety (90) days' prior
+      written notice before the start of the renewal term;
+      Customer may decline to renew if the proposed increase is
+      not acceptable. Vendor will not modify the terms of this
+      Agreement (other than the Service itself, as governed by
+      this Section) without Customer's written consent, except
+      that Vendor may make changes to its Acceptable Use Policy
+      or similar operational policies referenced in this Agreement
+      upon at least thirty (30) days' prior written notice.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Material change rights with shorter notice (30 days for
+          material changes; 60 days for renewal-term price
+          increases) and the same termination remedy. Acceptable
+          when the vendor's release cadence is faster and the
+          customer prefers the agility tradeoff.
+        language: |
+          Vendor may modify the Service with thirty (30) days'
+          notice for material changes; Customer may terminate the
+          affected portion within fifteen days of such notice
+          with a pro-rata refund. Vendor may increase fees for
+          renewal terms upon sixty (60) days' prior notice;
+          Customer may decline to renew if the proposed increase
+          is not acceptable.
+      - rank: 2
+        description: |
+          Service-modification right with no Customer termination
+          remedy except at the end of the Subscription Term;
+          pricing increases capped to a formula (e.g., CPI + 3%
+          per renewal). Acceptable when the customer can absorb
+          mid-term service changes without an exit right but
+          wants predictable pricing.
+        language: |
+          Vendor may modify the Service from time to time at its
+          discretion. Vendor may increase fees for renewal terms
+          by no more than the greater of (a) three percent (3%)
+          or (b) the percentage change in the Consumer Price Index
+          for All Urban Consumers (CPI-U) over the preceding
+          twelve months. Customer may decline to renew at the end
+          of the then-current Subscription Term.
+    redline_strategy: |
+      If the contract permits unilateral mid-term material
+      changes with no customer remedy, add the material-change
+      termination right with pro-rata refund. If pricing
+      increases at renewal are unconstrained, push for a CPI-
+      based cap or a fixed percentage cap (CPI + 3% is
+      reasonable). If the contract permits unilateral amendment
+      of the agreement terms (sometimes by changing a referenced
+      online policy), tighten — operational policies (AUP) are
+      acceptable to change with notice; agreement terms should
+      require mutual amendment. If the change-notice period is
+      less than 60 days for material changes, push for 60.
+    severity_if_missing: medium
+    detection_keywords:
+      - modification
+      - changes to the service
+      - price increase
+      - renewal pricing
+      - acceptable use policy
+      - amendment
+      - notice of change
+    detection_examples:
+      - >-
+        Vendor may modify the Service from time to time provided
+        that Vendor will not materially reduce the functionality
+        during the then-current term
+      - >-
+        Vendor may increase fees for renewal terms upon ninety
+        days prior written notice
+    position_order: 10
