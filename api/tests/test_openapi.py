@@ -118,6 +118,9 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         # M3-A2 — Playbook executor surface
         "/api/v1/playbooks/{playbook_id}/execute",
         "/api/v1/playbook-executions/{execution_id}",
+        # M3-A4 — Playbook list + detail (GET-only; CRUD deferred to M3-A6)
+        "/api/v1/playbooks",
+        "/api/v1/playbooks/{playbook_id}",
         # D0.5 — model alias admin
         "/api/v1/admin/config",
         "/api/v1/admin/aliases",
@@ -167,7 +170,8 @@ async def test_openapi_paths_match_sketch() -> None:
     # + M3-0.1's /admin/bootstrap-status.
     # + M3-0.3's /admin/ingest-health.
     # + M3-A2's two playbook-executor endpoints.
-    assert len(actual) == 77
+    # + M3-A4's two playbook list/detail endpoints.
+    assert len(actual) == 79
 
 
 @pytest.mark.unit
