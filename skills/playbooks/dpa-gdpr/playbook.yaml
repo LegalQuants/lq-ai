@@ -1,0 +1,890 @@
+# =============================================================================
+# Built-in playbook: DPA — GDPR (controller-to-processor) (M3-A5)
+# =============================================================================
+#
+# A starter playbook for reviewing Data Processing Addenda (DPAs)
+# governing controller-to-processor relationships under the EU
+# General Data Protection Regulation (Regulation (EU) 2016/679) and
+# the UK GDPR. Written from the controller's perspective (the
+# customer in a typical SaaS engagement). Calibrated to mid-market
+# commercial SaaS engagements involving routine personal data
+# (employee data, customer contact data, support tickets) — not
+# special-category data (Art. 9), not law-enforcement processing,
+# not regulated-industry overlays (HIPAA, GLBA, financial-sector
+# rules), and not Chinese / Russian / other non-EU jurisdictional
+# overlays.
+#
+# **THIS IS A STARTING POINT, NOT A VETTED TEMPLATE, AND IT IS NOT
+# LEGAL ADVICE.** The maintainer team has not reviewed or validated
+# the positions, fallback tiers, or redline strategies below. They
+# were drafted from public references (European Commission
+# Standard Contractual Clauses Implementing Decision 2021/914
+# Module Two; EDPB Guidelines 07/2020; EDPB Recommendations
+# 01/2020 on supplementary measures) as a head-start for in-house
+# counsel installing LQ.AI. GDPR compliance is fact-intensive,
+# jurisdiction-specific, and changes over time — you must review
+# every position against your organization's processing activities
+# and the current state of regulatory guidance before relying on
+# this playbook. Fork it, customize it, or replace it entirely.
+# In particular, DPAs involving special-category data, large-scale
+# monitoring, or transfers to high-risk jurisdictions need
+# extensive customization beyond what this starter playbook
+# provides.
+#
+# Companion file: ``api/alembic/versions/0033_seed_builtin_playbooks_msa_dpa.py``
+# ships an identical snapshot into the ``playbooks`` +
+# ``playbook_positions`` tables at version 1.0.0. Edits here are not
+# retroactive to existing deployments — playbook updates ship as new
+# migration versions.
+#
+# =============================================================================
+
+name: DPA — GDPR (controller-to-processor)
+contract_type: DPA-GDPR
+version: 1.0.0
+description: |
+  Data Processing Addendum playbook for controller-to-processor
+  relationships under the EU GDPR and UK GDPR, written from the
+  controller's perspective. Covers the eight positions that most
+  commonly determine whether a DPA satisfies Article 28(3) and
+  related GDPR obligations: processor obligations, security of
+  processing (Art. 32), personal data breach notification (Art. 33),
+  international transfers (Chapter V), sub-processor engagement,
+  audit rights, deletion or return of personal data, and assistance
+  with data subject rights requests.
+
+  **This playbook is a starting point, not a vetted template, and
+  it is not legal advice.** The LQ.AI maintainer team has not
+  reviewed or validated the positions, fallback tiers, or redline
+  strategies below — they were drafted from public references
+  (European Commission SCCs Module 2; EDPB guidelines) as a
+  head-start for in-house counsel installing LQ.AI. GDPR
+  compliance is fact-intensive and jurisdiction-specific; you must
+  review every position against your organization's processing
+  activities and the current state of regulatory guidance before
+  relying on this playbook. Fork it, customize it, or replace it
+  entirely. Use of this playbook does not establish an attorney-
+  client relationship with LegalQuants or any contributor.
+
+positions:
+  # ---------------------------------------------------------------------------
+  - issue: Processor Obligations (GDPR Article 28(3))
+    description: |
+      The core processor obligations under Article 28(3) — the
+      processor processes personal data only on documented
+      instructions from the controller, ensures confidentiality
+      commitments from personnel, implements security per Article
+      32, assists with data subject rights, assists with breach
+      notification and DPIAs, deletes or returns personal data at
+      the end of the relationship, and makes information available
+      to demonstrate compliance. A DPA that does not contain all
+      seven of these elements is not compliant with Art. 28(3) on
+      its face.
+    standard_language: |
+      Processor will Process Personal Data only on documented
+      instructions from Controller, including with regard to
+      transfers of Personal Data to a third country or an
+      international organisation, unless required to do so by
+      Union or Member State law to which Processor is subject; in
+      such a case, Processor will inform Controller of that legal
+      requirement before Processing, unless that law prohibits such
+      information on important grounds of public interest.
+      Processor will ensure that persons authorised to Process
+      Personal Data have committed themselves to confidentiality or
+      are under an appropriate statutory obligation of
+      confidentiality. Processor will take all measures required
+      pursuant to Article 32 GDPR. Processor will assist
+      Controller, by appropriate technical and organisational
+      measures and insofar as this is possible, for the fulfilment
+      of Controller's obligation to respond to requests for
+      exercising the data subject's rights under Chapter III of
+      the GDPR. Processor will assist Controller in ensuring
+      compliance with the obligations pursuant to Articles 32 to
+      36 GDPR, taking into account the nature of Processing and
+      the information available to Processor. At the choice of
+      Controller, Processor will delete or return all Personal
+      Data to Controller after the end of the provision of
+      Services relating to Processing, and delete existing copies
+      unless Union or Member State law requires storage. Processor
+      will make available to Controller all information necessary
+      to demonstrate compliance with the obligations laid down in
+      Article 28 GDPR and allow for and contribute to audits,
+      including inspections, conducted by Controller or another
+      auditor mandated by Controller.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          The seven Article 28(3) obligations cross-referenced
+          rather than spelled out (e.g., "Processor will comply
+          with all obligations of a processor under Article 28(3)
+          GDPR"). Acceptable when the agreement also incorporates
+          the EU Commission SCCs Module 2 by reference, which
+          provides the operative text.
+        language: |
+          Processor will comply with all obligations applicable to
+          a processor under Article 28(3) GDPR, including (a)
+          processing Personal Data only on documented instructions
+          from Controller, (b) ensuring personnel confidentiality
+          commitments, (c) implementing security measures per
+          Article 32, (d) assisting Controller with data subject
+          rights requests, (e) assisting with breach notification
+          and DPIAs, (f) deleting or returning Personal Data at
+          the end of services, and (g) making information
+          available to demonstrate compliance and allowing audits.
+      - rank: 2
+        description: |
+          Article 28(3) obligations adopted by reference to the EU
+          Commission Standard Contractual Clauses Module 2
+          (Implementing Decision 2021/914). Acceptable when the
+          SCCs are appended as an exhibit; the SCCs' Annex II
+          must still be populated with the controller's specific
+          instructions and the processing details.
+        language: |
+          The parties hereby incorporate by reference the European
+          Commission Standard Contractual Clauses for the
+          transfer of personal data from controllers to processors
+          (Implementing Decision (EU) 2021/914, Module Two),
+          appended hereto as Exhibit A. Processor will comply with
+          all obligations imposed on it as a data importer /
+          processor under such Standard Contractual Clauses.
+    redline_strategy: |
+      If any of the seven Article 28(3) obligations is missing,
+      add it — the DPA is not Article-28-compliant on its face
+      without all seven. The most commonly missing element is the
+      "make information available to demonstrate compliance and
+      allow audits" obligation; the second most commonly missing
+      is the assistance with Articles 32 to 36 GDPR (security,
+      breach notification, DPIA). If the contract permits
+      processing on instructions other than from the controller,
+      narrow it. If the contract permits processing under "any
+      law" rather than "Union or Member State law to which the
+      processor is subject," tighten — this language is from the
+      SCCs and matters for transfers to third countries. If the
+      "delete or return at end of services" obligation lacks the
+      controller's choice between deletion and return, add the
+      choice.
+    severity_if_missing: critical
+    detection_keywords:
+      - Article 28
+      - documented instructions
+      - processor obligations
+      - data processing agreement
+      - confidentiality
+      - assist controller
+      - end of services
+    detection_examples:
+      - >-
+        Processor shall process Personal Data only on documented
+        instructions from Controller and shall ensure
+        confidentiality commitments from personnel
+      - >-
+        Processor will comply with the obligations applicable to a
+        processor under Article 28(3) GDPR
+    position_order: 0
+  # ---------------------------------------------------------------------------
+  - issue: Security of Processing (GDPR Article 32)
+    description: |
+      The processor's obligation to implement technical and
+      organisational measures to ensure a level of security
+      appropriate to the risk under Article 32. The DPA should
+      either describe the specific measures in an annex (the
+      typical "Annex II" approach) or commit to industry-standard
+      controls with named certifications. Without specificity,
+      the obligation is unenforceable.
+    standard_language: |
+      Processor will implement appropriate technical and
+      organisational measures to ensure a level of security
+      appropriate to the risk, including as appropriate: (a) the
+      pseudonymisation and encryption of Personal Data; (b) the
+      ability to ensure the ongoing confidentiality, integrity,
+      availability and resilience of Processing systems and
+      services; (c) the ability to restore the availability of
+      and access to Personal Data in a timely manner in the event
+      of a physical or technical incident; and (d) a process for
+      regularly testing, assessing and evaluating the
+      effectiveness of technical and organisational measures for
+      ensuring the security of Processing. Without limiting the
+      foregoing, Processor will implement at least the technical
+      and organisational measures described in Annex II hereto.
+      Processor will maintain a certification of compliance with
+      SOC 2 Type II or ISO/IEC 27001 (or equivalent independent
+      assessment) refreshed annually, and will provide Controller
+      with a copy of the most recent assessment report under NDA
+      upon request.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Article 32 obligations adopted with a description of
+          measures (TOM list) but without an annual third-party
+          certification. Acceptable when the processor is an
+          emerging vendor and the parties have agreed on a path
+          to certification within twelve months.
+        language: |
+          Processor will implement appropriate technical and
+          organisational measures to ensure a level of security
+          appropriate to the risk, taking into account the state
+          of the art, the costs of implementation, and the nature,
+          scope, context and purposes of Processing, as well as
+          the risk of varying likelihood and severity for the
+          rights and freedoms of natural persons. The technical
+          and organisational measures are described in Annex II
+          and will be reviewed and updated by Processor as
+          necessary to maintain an appropriate level of security.
+      - rank: 2
+        description: |
+          Article 32 by reference only, without a specific TOM
+          list. Acceptable only when the parties have a separate
+          security exhibit (perhaps from the main MSA) that
+          governs and the DPA incorporates it. Standalone, this
+          tier is non-compliant on its face.
+        language: |
+          Processor will implement appropriate technical and
+          organisational measures to ensure a level of security
+          appropriate to the risk in accordance with Article 32
+          GDPR. The technical and organisational measures are set
+          out in the security exhibit to the Master Services
+          Agreement, which is incorporated herein by reference.
+    redline_strategy: |
+      If the contract describes security as "industry standard"
+      without a specific TOM list or certification, push for
+      either (a) a TOM list as Annex II or (b) a named
+      certification (SOC 2 Type II / ISO 27001). If a TOM list
+      exists but lacks specific commitments around encryption,
+      access control, or incident detection, fill in the gaps. If
+      the certification commitment exists but lacks the right to
+      request the report annually under NDA, add that right. If
+      the Article 32 measures are described as the processor's
+      sole discretion ("Processor shall determine"), narrow —
+      Article 32 requires measures "appropriate to the risk,"
+      not appropriate to the processor's convenience.
+    severity_if_missing: critical
+    detection_keywords:
+      - Article 32
+      - security measures
+      - technical and organisational measures
+      - encryption
+      - pseudonymisation
+      - SOC 2
+      - ISO 27001
+      - Annex II
+    detection_examples:
+      - >-
+        Processor shall implement appropriate technical and
+        organisational measures to ensure a level of security
+        appropriate to the risk pursuant to Article 32 GDPR
+      - >-
+        The technical and organisational measures are described
+        in Annex II to this DPA
+    position_order: 1
+  # ---------------------------------------------------------------------------
+  - issue: Personal Data Breach Notification (GDPR Article 33)
+    description: |
+      The processor's obligation to notify the controller of a
+      Personal Data Breach "without undue delay" so that the
+      controller can meet its own Article 33 obligation to notify
+      the supervisory authority within 72 hours of becoming aware.
+      The DPA should specify a concrete notification timeline
+      (typically 24-48 hours from processor's becoming aware),
+      the content of the notification, and the ongoing
+      cooperation obligation.
+    standard_language: |
+      Processor will notify Controller without undue delay, and in
+      any event no later than forty-eight (48) hours, after
+      becoming aware of a Personal Data Breach affecting
+      Controller's Personal Data. The notification will contain,
+      to the extent then known to Processor: (a) a description of
+      the nature of the Personal Data Breach including, where
+      possible, the categories and approximate number of data
+      subjects concerned and the categories and approximate
+      number of Personal Data records concerned; (b) the name and
+      contact details of Processor's data protection officer or
+      other contact point where more information can be obtained;
+      (c) a description of the likely consequences of the
+      Personal Data Breach; and (d) a description of the measures
+      taken or proposed to address the Personal Data Breach,
+      including, where appropriate, measures to mitigate its
+      possible adverse effects. Processor will provide updated
+      information to Controller as it becomes available and will
+      cooperate fully with Controller in the investigation,
+      mitigation, and remediation of any Personal Data Breach,
+      including in the preparation of any notifications to
+      supervisory authorities or affected data subjects.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          72-hour notification window aligned with the controller's
+          own Article 33 obligation. Acceptable when the processor
+          can credibly commit to a 72-hour internal detection-to-
+          notification cycle and the controller can meet its own
+          deadline within the remaining time.
+        language: |
+          Processor will notify Controller without undue delay,
+          and in any event no later than seventy-two (72) hours,
+          after becoming aware of a Personal Data Breach affecting
+          Controller's Personal Data, with the information
+          required by Article 33(3) GDPR to the extent known to
+          Processor. Processor will provide updated information
+          as it becomes available and will cooperate with
+          Controller's investigation and remediation efforts.
+      - rank: 2
+        description: |
+          "Without undue delay" without a specific hour cap, which
+          tracks the GDPR language but is operationally vague.
+          Acceptable only when the parties have a separate
+          incident-response runbook that defines the operational
+          cadence. Generally not recommended; the cap is the
+          enforcement hook.
+        language: |
+          Processor will notify Controller without undue delay
+          after becoming aware of a Personal Data Breach
+          affecting Controller's Personal Data and will provide
+          the information required by Article 33(3) GDPR to the
+          extent known. Processor will cooperate with Controller
+          in good faith to mitigate and remediate the breach.
+    redline_strategy: |
+      If the notification window is longer than 72 hours, push to
+      48 — the controller has 72 hours from its own awareness to
+      notify the supervisory authority, and any time the
+      processor consumes is time the controller loses. If the
+      notification is qualified by "if Processor reasonably
+      determines a breach has occurred" (gives processor
+      discretion), tighten to "after becoming aware of a Personal
+      Data Breach." If the contract limits notification to
+      "confirmed" breaches, push to remove — Article 33 covers
+      "personal data breach" which includes suspected breaches
+      requiring investigation. If the cooperation obligation is
+      vague, specify the four Article 33(3) information
+      categories and the ongoing-update obligation. If the
+      contract limits cooperation to "reasonable efforts," push to
+      "full cooperation, including in the preparation of any
+      notifications to supervisory authorities."
+    severity_if_missing: critical
+    detection_keywords:
+      - Personal Data Breach
+      - Article 33
+      - breach notification
+      - 72 hours
+      - without undue delay
+      - data breach
+      - incident
+    detection_examples:
+      - >-
+        Processor shall notify Controller without undue delay
+        after becoming aware of a Personal Data Breach affecting
+        Controller's Personal Data
+      - >-
+        Notification shall be provided within seventy-two hours
+        and shall include the information required by Article
+        33(3) GDPR
+    position_order: 2
+  # ---------------------------------------------------------------------------
+  - issue: International Transfers (GDPR Chapter V)
+    description: |
+      The mechanism by which Personal Data may be transferred to
+      a third country outside the EEA or to an international
+      organisation. After the Schrems II decision (2020),
+      transfers to the United States and many other non-EU
+      jurisdictions require either (a) an adequacy decision (rare),
+      (b) the EU Commission Standard Contractual Clauses (SCCs)
+      together with a documented Transfer Impact Assessment (TIA)
+      and supplementary measures where necessary, or (c) Binding
+      Corporate Rules. The DPA should specify which mechanism
+      applies and incorporate the SCCs by reference if applicable.
+    standard_language: |
+      To the extent that Processor's Processing of Personal Data
+      involves a transfer to a third country or international
+      organisation outside the EEA that is not the subject of an
+      adequacy decision under Article 45 GDPR, such transfer will
+      be effected pursuant to the European Commission Standard
+      Contractual Clauses for the transfer of personal data to
+      third countries (Implementing Decision (EU) 2021/914,
+      Module Two), which are hereby incorporated by reference and
+      attached as Exhibit B (the "Standard Contractual Clauses").
+      The parties will execute the Standard Contractual Clauses
+      including Annexes I, II, and III as completed in Exhibit B.
+      Processor has conducted, and will maintain, a Transfer
+      Impact Assessment evaluating the laws and practices of the
+      third country of destination and will implement
+      supplementary technical, contractual, and organisational
+      measures as necessary to ensure that the level of
+      protection of Personal Data is essentially equivalent to
+      that guaranteed within the EU. Upon Controller's request,
+      Processor will provide a summary of the Transfer Impact
+      Assessment and the supplementary measures implemented. To
+      the extent UK Personal Data is transferred, the parties
+      additionally incorporate the UK International Data Transfer
+      Addendum (or UK IDTA) issued by the Information
+      Commissioner's Office.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          SCCs incorporated by reference with a representation of
+          TIA completion, but without the contractual obligation
+          to share the TIA with the controller on request.
+          Acceptable when the processor's TIA practice is
+          documented elsewhere (e.g., in a Trust Center) and the
+          controller is comfortable verifying through that
+          channel.
+        language: |
+          Where Processor transfers Personal Data to a third
+          country outside the EEA not benefitting from an
+          adequacy decision, the parties hereby incorporate the
+          EU Standard Contractual Clauses (Implementing Decision
+          (EU) 2021/914, Module Two) as set forth in Exhibit B.
+          Processor has conducted a Transfer Impact Assessment
+          and implemented appropriate supplementary measures.
+          The UK IDTA applies to UK Personal Data transfers.
+      - rank: 2
+        description: |
+          SCCs by reference without an explicit TIA obligation.
+          Acceptable only when the processing involves no high-
+          risk jurisdictions (US, China, Russia, etc.) — the TIA
+          is a substantive Schrems-II requirement and absent it
+          the transfer mechanism may be invalid notwithstanding
+          the SCCs being in place. Generally not recommended.
+        language: |
+          Where Processor transfers Personal Data outside the
+          EEA, the parties incorporate the EU Standard
+          Contractual Clauses (Implementing Decision (EU)
+          2021/914) as a transfer mechanism, attached as
+          Exhibit B.
+    redline_strategy: |
+      If the DPA permits transfers to third countries without
+      specifying a Chapter V transfer mechanism, push to add the
+      SCCs (Module Two) and complete Annexes I-III. If the SCCs
+      are referenced but the annexes are not populated, push to
+      complete them as a precondition to signing — unpopulated
+      SCCs are not operative. If there is no TIA representation,
+      add the obligation to conduct and maintain a TIA and to
+      provide a summary on request. If UK Personal Data is in
+      scope and the UK IDTA (or the UK Addendum to the EU SCCs)
+      is missing, add it. If the Swiss Federal Data Protection
+      Act is in scope, similarly add the Swiss-specific
+      supplementary clauses. If supplementary measures are
+      asserted but undescribed, push for at least a high-level
+      description (e.g., encryption with controller-held keys,
+      access controls preventing third-country-government
+      access).
+    severity_if_missing: critical
+    detection_keywords:
+      - international transfer
+      - Standard Contractual Clauses
+      - SCCs
+      - Chapter V
+      - third country
+      - adequacy decision
+      - Transfer Impact Assessment
+      - TIA
+      - Schrems
+      - UK IDTA
+    detection_examples:
+      - >-
+        Transfers of Personal Data outside the EEA shall be
+        subject to the European Commission Standard Contractual
+        Clauses, which are incorporated herein as Exhibit B
+      - >-
+        Processor has conducted a Transfer Impact Assessment and
+        implemented supplementary measures where appropriate
+    position_order: 3
+  # ---------------------------------------------------------------------------
+  - issue: Sub-processor Engagement (GDPR Article 28(2))
+    description: |
+      The processor's right to engage sub-processors, the
+      controller's right to object to specific sub-processors,
+      and the flow-through obligations that sub-processors must
+      satisfy. Two industry-standard models exist: the "general
+      authorisation" model (processor maintains a list of
+      sub-processors and notifies the controller of changes with
+      a right to object) and the "specific authorisation" model
+      (every sub-processor requires prior controller approval).
+      General authorisation is by far the more common in SaaS;
+      specific authorisation is used for high-sensitivity
+      processing.
+    standard_language: |
+      Controller hereby grants Processor general written
+      authorisation to engage sub-processors to Process Personal
+      Data on Controller's behalf, subject to the conditions in
+      this Section. Processor maintains a list of current
+      sub-processors at the URL set forth in Annex III, which
+      Processor updates from time to time. Processor will notify
+      Controller of any intended changes concerning the addition
+      or replacement of sub-processors at least thirty (30) days
+      in advance (or such shorter period as is reasonable given
+      the urgency of the change), thereby giving Controller the
+      opportunity to object to such changes. If Controller
+      reasonably objects on the basis that the proposed
+      sub-processor presents a material risk to Personal Data
+      protection that cannot be adequately mitigated, Processor
+      will use commercially reasonable efforts to make available
+      a change in the Service to avoid Processing of Controller's
+      Personal Data by the objected-to sub-processor without
+      unreasonably burdening Controller. If Processor is unable to
+      avoid such Processing, Controller may, as its sole and
+      exclusive remedy, terminate the affected portion of the
+      Service for cause upon thirty (30) days' written notice and
+      receive a pro-rata refund of prepaid fees. Processor will
+      impose on each sub-processor, by contract or other binding
+      legal act, data protection obligations no less protective
+      than those imposed on Processor under this DPA. Processor
+      remains fully liable to Controller for the performance of
+      any sub-processor's obligations.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          General authorisation with longer notice (60 days) and
+          standard flow-through obligations. Acceptable for
+          controllers who want more lead time to evaluate
+          sub-processor changes.
+        language: |
+          Controller grants Processor general authorisation to
+          engage sub-processors, subject to: (a) Processor
+          maintaining a current list of sub-processors and
+          providing it to Controller upon request; (b) Processor
+          notifying Controller of changes at least sixty (60) days
+          in advance; (c) Controller's right to object to any new
+          sub-processor on reasonable grounds; and (d) flow-
+          through of data protection obligations no less
+          protective than this DPA. Processor remains liable for
+          its sub-processors' performance.
+      - rank: 2
+        description: |
+          Specific authorisation — each sub-processor requires
+          prior written consent from Controller. Acceptable only
+          for high-sensitivity processing (special-category data
+          under Article 9, large-scale monitoring of a public
+          area, etc.); operationally constrains the processor's
+          ability to scale and may be impractical in commercial
+          SaaS.
+        language: |
+          Processor will not engage any sub-processor to Process
+          Personal Data without Controller's prior written
+          consent. For each sub-processor for which Controller
+          consents, Processor will impose, by contract, data
+          protection obligations no less protective than those
+          imposed on Processor under this DPA. Processor remains
+          fully liable to Controller for the performance of each
+          sub-processor's obligations.
+    redline_strategy: |
+      If the DPA permits sub-processors without notice to the
+      controller, push for at least general authorisation with
+      notification and right to object. If notification is
+      provided but with no right to object, add the objection
+      right with a termination-of-affected-portion remedy. If
+      the flow-through obligations are weak ("substantially
+      similar" rather than "no less protective"), strengthen. If
+      processor liability for sub-processors is excluded or
+      capped, push for full liability — Article 28(4) requires
+      the processor to remain fully liable to the controller for
+      sub-processor performance.
+    severity_if_missing: high
+    detection_keywords:
+      - sub-processor
+      - sub-processors
+      - Article 28(2)
+      - general authorisation
+      - prior consent
+      - flow-through
+      - liability for sub-processor
+    detection_examples:
+      - >-
+        Controller grants Processor general written authorisation
+        to engage sub-processors subject to thirty days notice
+      - >-
+        Processor shall impose on each sub-processor data
+        protection obligations no less protective than those in
+        this DPA
+    position_order: 4
+  # ---------------------------------------------------------------------------
+  - issue: Audit Rights (GDPR Article 28(3)(h))
+    description: |
+      The controller's right to audit the processor's compliance
+      with the DPA, including by way of inspections conducted by
+      the controller or a third-party auditor. Article 28(3)(h)
+      requires processors to allow for and contribute to audits.
+      In practice, controllers rarely conduct on-site inspections
+      and instead rely on third-party certifications (SOC 2 Type
+      II, ISO 27001) supplemented by questionnaires; the DPA
+      should preserve the on-site right while making the
+      certification-based path the operational default.
+    standard_language: |
+      Processor will make available to Controller all information
+      necessary to demonstrate compliance with Article 28 GDPR and
+      this DPA. Once per twelve (12) month period (more frequently
+      in the event of a confirmed Personal Data Breach affecting
+      Controller's Personal Data), and upon at least thirty (30)
+      days' prior written notice (or such shorter notice as is
+      reasonable given the urgency), Controller may audit
+      Processor's compliance with this DPA, including by way of
+      an on-site inspection conducted by Controller or a mutually
+      acceptable third-party auditor (under NDA). The scope of
+      any such audit will be reasonable in light of the
+      obligations being audited, will be conducted during normal
+      business hours, and will be conducted in a manner that does
+      not unreasonably interfere with Processor's operations. In
+      lieu of an on-site inspection, Processor may satisfy this
+      obligation by providing to Controller (a) the most recent
+      SOC 2 Type II report (or equivalent independent assessment)
+      under NDA and (b) responses to a reasonable audit
+      questionnaire. Controller's audit costs are at Controller's
+      expense; if an audit reveals a material compliance failure,
+      Processor will reimburse Controller's reasonable audit
+      costs. Nothing in this Section will limit any audit or
+      inspection rights of a supervisory authority under
+      applicable law.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Audit right limited to provision of SOC 2 / ISO 27001
+          reports and questionnaire responses, with on-site rights
+          only after confirmed breach. Acceptable for mid-market
+          deployments where the controller is willing to rely on
+          third-party certifications. Aligns with the
+          corresponding MSA-SaaS Audit Rights fallback tier 1.
+        language: |
+          Processor will, once per twelve months and upon
+          reasonable notice, provide Controller with (a) the
+          most recent SOC 2 Type II report or equivalent
+          independent assessment under NDA and (b) responses to
+          a reasonable audit questionnaire. In the event of a
+          confirmed Personal Data Breach affecting Controller's
+          Personal Data, Controller may also conduct an on-site
+          audit on reasonable notice at Controller's expense.
+      - rank: 2
+        description: |
+          Article 28(3)(h) cross-reference only — operational
+          mechanics governed by the corresponding MSA audit
+          section. Acceptable when the DPA explicitly incorporates
+          the MSA's audit provisions.
+        language: |
+          Processor will make available all information necessary
+          to demonstrate compliance with Article 28 GDPR and will
+          allow for and contribute to audits, including
+          inspections, conducted by Controller or another auditor
+          mandated by Controller in accordance with the audit
+          procedures set forth in the Master Services Agreement.
+    redline_strategy: |
+      If the DPA lacks any audit right, push for at least an
+      annual SOC 2 report under NDA with on-site rights after a
+      confirmed breach — Article 28(3)(h) requires processors to
+      allow audits; an audit right is not waivable in the abstract.
+      If the right is qualified by "reasonable cause" or similar
+      gating, broaden to routine annual rights. If audit costs
+      are always controller's expense without a reimbursement
+      mechanism for material findings, add the reimbursement
+      trigger. If the supervisory-authority preservation language
+      is missing, add it — Article 58 powers cannot be limited
+      by private contract.
+    severity_if_missing: high
+    detection_keywords:
+      - audit
+      - inspection
+      - Article 28(3)(h)
+      - SOC 2 report
+      - audit questionnaire
+      - supervisory authority
+    detection_examples:
+      - >-
+        Processor shall make available to Controller all
+        information necessary to demonstrate compliance and shall
+        allow audits by Controller or a third-party auditor
+      - >-
+        Processor will provide a copy of its most recent SOC 2
+        Type II report to Controller under NDA upon request
+    position_order: 5
+  # ---------------------------------------------------------------------------
+  - issue: Deletion or Return of Personal Data (GDPR Article 28(3)(g))
+    description: |
+      The processor's obligation, at the end of the provision of
+      services, to delete or return all Personal Data to the
+      controller at the controller's choice, and to delete any
+      remaining copies unless Union or Member State law requires
+      storage. Two operational details matter: which party
+      chooses between deletion and return, and what counts as
+      "delete" given backup retention and automated archival
+      systems.
+    standard_language: |
+      At Controller's choice, Processor will delete or return all
+      Personal Data to Controller after the end of the provision
+      of Services relating to Processing, and will delete
+      existing copies, unless Union or Member State law to which
+      Processor is subject requires storage of the Personal Data,
+      in which case Processor will inform Controller of any such
+      legal requirement. Processor will complete the deletion or
+      return within thirty (30) days of the end of the provision
+      of Services and will, upon Controller's request, certify in
+      writing that Personal Data has been deleted or returned and
+      that any retained copies are limited to those required by
+      law. Personal Data residing in Processor's automated backup
+      and archival systems will be deleted in accordance with
+      Processor's standard backup retention policies (which will
+      not exceed twelve months) and will remain subject to the
+      confidentiality and security obligations of this DPA until
+      so deleted. Return of Personal Data, where elected, will
+      be in a structured, commonly used, and machine-readable
+      format.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Same obligations but with a longer backup-retention
+          tail (up to 24 months) and certification of deletion
+          only upon request. Acceptable when the processor's
+          backup architecture genuinely requires longer cycles
+          and the controller is willing to accept the residual
+          retention as long as it is subject to the same
+          security obligations.
+        language: |
+          At Controller's choice, Processor will delete or return
+          all Personal Data after the end of services and will
+          delete existing copies, unless required to retain by
+          law. Active-system deletion or return will be
+          completed within thirty days. Personal Data in backup
+          systems will be deleted in accordance with Processor's
+          standard backup retention policies and will remain
+          subject to the confidentiality and security
+          obligations of this DPA until so deleted. Upon
+          Controller's request, Processor will provide written
+          certification of deletion.
+      - rank: 2
+        description: |
+          Article 28(3)(g) by reference only, leaving the
+          operational details to the underlying services
+          agreement. Acceptable only when the MSA has equivalent
+          deletion/return provisions; standalone, this tier is
+          operationally vague.
+        language: |
+          At Controller's choice, Processor will delete or return
+          all Personal Data after the end of services in
+          accordance with the data return and deletion procedures
+          set forth in the Master Services Agreement and will
+          delete existing copies, except as required by
+          applicable law.
+    redline_strategy: |
+      If the DPA permits processor to retain Personal Data after
+      the end of services without specifying a basis, push for
+      either deletion or return at controller's choice with
+      retention only as legally required. If the choice between
+      deletion and return is vested in the processor rather than
+      the controller, reverse it — Article 28(3)(g) requires
+      controller choice. If the deletion window is undefined or
+      longer than 90 days, push for 30 days from end of services.
+      If the contract is silent on backup retention, add a
+      bounded backup retention tail (12 months is common) with
+      confidentiality/security obligations continuing through
+      deletion. If certification of deletion is not contemplated,
+      add it on request. If the return format is unspecified,
+      add structured/commonly-used/machine-readable.
+    severity_if_missing: high
+    detection_keywords:
+      - delete or return
+      - end of services
+      - Article 28(3)(g)
+      - deletion
+      - return of Personal Data
+      - backup retention
+      - certify deletion
+    detection_examples:
+      - >-
+        At Controller's choice, Processor shall delete or return
+        all Personal Data after the end of services and shall
+        delete existing copies
+      - >-
+        Processor shall certify in writing that Personal Data has
+        been deleted or returned within thirty days of the end
+        of the provision of services
+    position_order: 6
+  # ---------------------------------------------------------------------------
+  - issue: DSAR Cooperation (GDPR Article 28(3)(e))
+    description: |
+      The processor's obligation to assist the controller in
+      responding to data subject rights requests under Chapter III
+      of the GDPR — access, rectification, erasure, restriction of
+      processing, data portability, and objection. Without an
+      explicit assistance obligation, the controller may have no
+      contractual hook to compel the processor to extract personal
+      data from its systems within the GDPR's tight timelines
+      (one month from receipt of the request, with a possible
+      two-month extension).
+    standard_language: |
+      Processor will, taking into account the nature of
+      Processing, assist Controller by appropriate technical and
+      organisational measures, insofar as this is possible, for
+      the fulfilment of Controller's obligation to respond to
+      requests from data subjects exercising their rights under
+      Chapter III of the GDPR (including the rights of access,
+      rectification, erasure, restriction of Processing, data
+      portability, and objection). Processor will, upon
+      Controller's reasonable request, provide such assistance
+      within a timeframe that allows Controller to respond to the
+      data subject within the time limits required by Article 12
+      GDPR. If Processor receives any request directly from a
+      data subject concerning Personal Data Processed on
+      Controller's behalf, Processor will, without undue delay,
+      forward the request to Controller and will not respond
+      directly to the data subject unless and until Controller
+      authorises it. Where Processor's assistance with a
+      particular request involves substantial effort beyond
+      ordinary cooperation, Controller will reimburse Processor's
+      reasonable costs of providing such assistance.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Assistance obligation with a slightly higher threshold
+          for cost reimbursement ("commercially reasonable
+          assistance at no additional charge"). Acceptable when
+          DSAR volumes are anticipated to be modest and the
+          processor's tooling makes routine DSAR fulfilment
+          inexpensive.
+        language: |
+          Processor will provide commercially reasonable
+          assistance to Controller in responding to data subject
+          rights requests under Chapter III of the GDPR. Routine
+          assistance is provided at no additional charge.
+          Processor will not respond directly to a data subject
+          request received from a data subject and will instead
+          promptly forward such request to Controller.
+      - rank: 2
+        description: |
+          Article 28(3)(e) cross-reference with assistance
+          provided at processor's then-current professional
+          services rates. Acceptable only when the controller has
+          its own data-subject-rights tooling and needs only
+          occasional processor cooperation.
+        language: |
+          Processor will assist Controller in responding to data
+          subject rights requests under Chapter III of the GDPR
+          in accordance with Article 28(3)(e) GDPR. Assistance
+          beyond providing Personal Data exports through standard
+          self-service features will be provided at Processor's
+          then-current professional services rates.
+    redline_strategy: |
+      If the DPA lacks any DSAR assistance obligation, push for
+      one — without it, the controller has no contractual mechanism
+      to compel the processor to assist within the GDPR's
+      one-month response window. If the assistance is qualified
+      by "if and when reasonably practicable" with no commitment
+      to a timeframe, tighten to "within a timeframe that allows
+      Controller to respond within Article 12 time limits."  If
+      the processor reserves the right to respond directly to data
+      subjects, reverse — the controller must be the responder. If
+      assistance is always charged at professional-services rates
+      including for routine requests, push for routine assistance
+      at no charge with charges only for "substantial effort."
+    severity_if_missing: medium
+    detection_keywords:
+      - data subject rights
+      - DSAR
+      - Article 28(3)(e)
+      - Chapter III
+      - access request
+      - erasure
+      - data portability
+      - assist Controller
+    detection_examples:
+      - >-
+        Processor shall assist Controller in responding to
+        requests from data subjects exercising their rights
+        under Chapter III of the GDPR
+      - >-
+        Processor will forward any data subject request received
+        directly to Controller without undue delay
+    position_order: 7
