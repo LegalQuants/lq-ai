@@ -18,3 +18,10 @@ uploads
 **/*.db
 _test
 backend/data/*
+
+# macOS Finder duplicate files (autonomously created on iCloud-synced trees;
+# named "foo 2.ts", "foo 3.svelte", etc.). They break Vite imports + svelte-check
+# when they sneak into the docker build context.
+**/* [0-9].*
+**/* [0-9][0-9].*
+**/._*
