@@ -153,6 +153,28 @@ class PlaybookCreate(BaseModel):
     positions: list[PositionCreate] = Field(default_factory=list)
 
 
+class PlaybookUpdate(BaseModel):
+    """Request shape for ``PATCH /api/v1/playbooks/{id}`` — M3-A6 Phase 2.
+
+    Every field is optional; the server treats a missing field as
+    "leave alone." The exception is ``positions``: when supplied, the
+    server **replaces the entire positions list atomically** (drops the
+    old rows, inserts the new ones in a single transaction). Per-position
+    diff/patch is not supported — the wizard's "edit then save" flow
+    always sends the full set, and the alternative (PATCH per position)
+    would introduce id-vs-order-vs-content ambiguities for marginal
+    value. To leave positions alone, omit the field.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = None
+    contract_type: str | None = None
+    description: str | None = None
+    version: str | None = None
+    positions: list[PositionCreate] | None = None
+
+
 class PlaybookExecution(BaseModel):
     """One execution of a playbook against a target document.
 

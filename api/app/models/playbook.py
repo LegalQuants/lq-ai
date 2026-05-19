@@ -76,6 +76,14 @@ class Playbook(Base):
         nullable=False,
         server_default=text("now()"),
     )
+    # Soft delete — M3-A6 Phase 2. NULL means visible; non-NULL is the
+    # tombstone timestamp. ``playbook_executions`` reference playbooks
+    # with ON DELETE CASCADE, so hard-deleting would drop audit history;
+    # soft delete keeps the row so historical executions still resolve.
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     positions: Mapped[list[PlaybookPosition]] = relationship(
         "PlaybookPosition",
