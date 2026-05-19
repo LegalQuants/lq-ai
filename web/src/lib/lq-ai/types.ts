@@ -543,6 +543,13 @@ export interface KnowledgeBaseFile {
 	ingest_failure_reason?: string | null;
 	page_count?: number | null;
 	character_count?: number | null;
+	/**
+	 * M3-A4: the parsed-content Document UUID, distinct from `id` (the File
+	 * UUID). Null until the C5 parse pipeline produces a documents row.
+	 * Surfaces here so playbook-execute callers can pass the right id without
+	 * a second fetch.
+	 */
+	document_id?: string | null;
 	created_at: string;
 	attached_at: string;
 }

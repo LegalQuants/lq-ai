@@ -176,6 +176,11 @@ class KBFileResponse(BaseModel):
     ingest_failure_reason: str | None = None
     page_count: int | None = None
     character_count: int | None = None
+    # M3-A4: document_id is the parsed-content row's UUID, distinct from
+    # ``id`` (the File UUID). Surfaces here so playbook-execute callers
+    # can resolve File → Document without an extra fetch; null until the
+    # C5 parse pipeline produces a documents row.
+    document_id: uuid.UUID | None = None
     created_at: datetime
     attached_at: datetime
 

@@ -4074,6 +4074,16 @@ components:
           nullable: true
         page_count: {type: integer, nullable: true}
         character_count: {type: integer, nullable: true}
+        document_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            The parsed-content `documents` row UUID, distinct from `id`
+            (the File UUID). Null until the C5 parse pipeline produces
+            a documents row. Added in M3-A4 so playbook-execute callers
+            can resolve File → Document client-side without a second
+            fetch.
         created_at: {type: string, format: date-time}
         attached_at:
           type: string

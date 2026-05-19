@@ -580,6 +580,7 @@ async def list_kb_files(
         select(
             FileModel,
             KnowledgeBaseFile.attached_at,
+            doc.id,
             doc.page_count,
             doc.character_count,
             doc.ingest_status,
@@ -600,6 +601,7 @@ async def list_kb_files(
     for (
         file_row,
         attached_at,
+        document_id,
         page_count,
         character_count,
         ingest_status,
@@ -620,6 +622,7 @@ async def list_kb_files(
                 ingest_failure_reason=ingest_failure_reason,
                 page_count=page_count,
                 character_count=character_count,
+                document_id=document_id,
                 created_at=file_row.created_at,
                 attached_at=attached_at,
             )
