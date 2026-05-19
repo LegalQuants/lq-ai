@@ -921,5 +921,5 @@ export interface PlaybookExecution {
 
 export interface PlaybookExecutionCreate {
 	target_document_id: string;
-	project_id?: string;
+	project_id?: string | null;
 }
