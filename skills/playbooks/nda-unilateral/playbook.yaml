@@ -1,0 +1,527 @@
+# =============================================================================
+# Built-in playbook: NDA — Unilateral (Discloser-favorable) (M3-A3)
+# =============================================================================
+#
+# Variant of the mutual NDA playbook calibrated for one-way disclosure
+# contexts where the operator is the Disclosing Party — typically pre-
+# release product previews, vendor pitches, or interview-stage talent
+# evaluation. Positions skew toward stronger Disclosing-Party protection
+# than the mutual variant.
+#
+# **Not legal advice.** Same posture as the mutual playbook: every
+# position represents one reasonable market position drafted by the
+# maintainer team. Operators must apply professional judgment and seek
+# licensed counsel before relying on this content.
+#
+# Companion file: ``api/alembic/versions/0032_seed_builtin_playbooks_nda.py``
+# ships an identical snapshot at version 1.0.0.
+#
+# =============================================================================
+
+name: NDA — Unilateral (Discloser-favorable)
+contract_type: NDA-unilateral
+version: 1.0.0
+description: |
+  Unilateral non-disclosure agreement playbook for contexts where the
+  operator is the Disclosing Party. Calibrated to obtain stronger
+  Receiving-Party obligations than a mutual NDA would: broader CI
+  definition, narrower permitted disclosures, longer survival, stricter
+  return / destruction. Positions and severities reflect the asymmetry —
+  what's "medium" in a mutual NDA may be "high" here because the
+  Disclosing Party bears all the downside.
+
+  **This playbook is not legal advice.** Operators must apply
+  professional judgment, customize for their organization, and seek
+  licensed counsel for jurisdiction-specific or transaction-specific
+  variance. Use of this playbook does not establish an attorney-client
+  relationship with LegalQuants or any contributor.
+
+positions:
+  # ---------------------------------------------------------------------------
+  - issue: Definition of Confidential Information
+    description: |
+      Broad definition optimized for the Disclosing Party — captures
+      information disclosed in any form, with no requirement that the
+      Disclosing Party mark or identify it as confidential at the moment
+      of disclosure.
+    standard_language: |
+      "Confidential Information" means any and all non-public information
+      of the Disclosing Party that is furnished to or learned by the
+      Receiving Party, whether before, on, or after the Effective Date,
+      and whether in oral, written, electronic, visual, observed, or any
+      other form, including (without limitation) information regarding the
+      Disclosing Party's business, customers, suppliers, finances,
+      technology, products, services, research and development, personnel,
+      strategies, plans, and any analyses, compilations, studies, or other
+      documents prepared by or for the Receiving Party that contain or
+      reflect any such information.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Same broad scope but with an explicit need-to-know qualifier on
+          the Receiving Party's downstream sharing. Acceptable when the
+          Receiving Party requires some structure for internal flow.
+        language: |
+          "Confidential Information" means any and all non-public
+          information of the Disclosing Party disclosed to the Receiving
+          Party in any form, including without limitation information
+          regarding the Disclosing Party's business, technology, finances,
+          and personnel, in each case to be held by the Receiving Party
+          and its Representatives on a need-to-know basis.
+      - rank: 2
+        description: |
+          Marked-only with a 30-day oral-disclosure cure period. Acceptable
+          fallback only when the disclosure surface is small and the
+          Disclosing Party can reliably mark in writing.
+        language: |
+          "Confidential Information" means information disclosed by the
+          Disclosing Party in writing or other tangible form and marked
+          "Confidential" or "Proprietary" at the time of disclosure, with
+          oral or visual disclosures reduced to writing and so marked
+          within thirty (30) days.
+    redline_strategy: |
+      Push hard to keep the broadest possible definition; the Disclosing
+      Party should not be required to mark to obtain protection. If the
+      Receiving Party demands marking, accept only with a 30-day oral-
+      disclosure cure period. Reject any "actually disclosed" limitation
+      that would exclude observed information (e.g., facility tours).
+    severity_if_missing: critical
+    detection_keywords:
+      - confidential information
+      - proprietary information
+      - confidential
+      - definition
+      - means
+    detection_examples:
+      - >-
+        "Confidential Information" shall mean any information disclosed by
+        the Disclosing Party
+      - >-
+        Confidential Information includes all non-public business and
+        technical information of the Disclosing Party
+    position_order: 0
+  # ---------------------------------------------------------------------------
+  - issue: Permitted Disclosures
+    description: |
+      Narrower than the mutual variant — Receiving Party may share only
+      with employees and advisors with strict need-to-know. Compelled-
+      disclosure path requires prior notice and cooperation.
+    standard_language: |
+      The Receiving Party shall hold Confidential Information in strict
+      confidence and disclose it only to its employees and outside legal
+      and financial advisors (collectively, "Representatives") who (a)
+      have a strict need to know the Confidential Information for the
+      Permitted Purpose, (b) have been informed of the confidential
+      nature of the Confidential Information, and (c) are bound by
+      written confidentiality obligations no less protective than those
+      contained in this Agreement. The Receiving Party shall be
+      responsible for any breach of this Agreement by its Representatives
+      as if such breach were its own. If the Receiving Party is required
+      by law, regulation, or order of a court of competent jurisdiction
+      to disclose Confidential Information, it shall provide the
+      Disclosing Party with prompt prior written notice (to the maximum
+      extent legally permissible) and shall cooperate with the Disclosing
+      Party's efforts to obtain a protective order or other appropriate
+      remedy.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Adds contractors with back-to-back confidentiality obligations.
+          Acceptable when the Receiving Party's operations require third-
+          party support.
+        language: |
+          The Receiving Party may disclose Confidential Information to its
+          employees, outside advisors, and contractors who have a need to
+          know and who are bound by written confidentiality obligations
+          no less protective than those of this Agreement, with the
+          Receiving Party responsible for breaches by such persons.
+      - rank: 2
+        description: |
+          Adds affiliates with back-to-back obligations. Highest fallback;
+          accept only when the Receiving Party operates through a group
+          structure that requires cross-entity disclosure.
+        language: |
+          The Receiving Party may disclose Confidential Information to its
+          Representatives, contractors, and affiliates on a need-to-know
+          basis and subject to confidentiality obligations no less
+          protective than this Agreement.
+    redline_strategy: |
+      Reject any permitted disclosure to "subsidiaries," "agents,"
+      "advisors," or other broad classes without back-to-back
+      confidentiality obligations and breach-responsibility. If the
+      contract lacks the compelled-disclosure notice mechanism, add it.
+      Reject any "deemed-acceptance" clause that would permit disclosure
+      after silence-period notice to the Disclosing Party.
+    severity_if_missing: high
+    detection_keywords:
+      - permitted disclosure
+      - representatives
+      - need to know
+      - employees
+      - advisors
+      - compelled disclosure
+      - court order
+    detection_examples:
+      - >-
+        Receiving Party may disclose Confidential Information only to
+        employees who need to know
+      - >-
+        If the Receiving Party is compelled to disclose Confidential
+        Information by law
+    position_order: 1
+  # ---------------------------------------------------------------------------
+  - issue: Term
+    description: |
+      Duration of the agreement. Discloser-favorable variant prefers a
+      longer term to capture ongoing disclosures in the relationship.
+    standard_language: |
+      This Agreement shall commence on the Effective Date and continue
+      for a period of three (3) years, unless earlier terminated by
+      either Party upon sixty (60) days' prior written notice; provided
+      that any termination shall not affect the Receiving Party's
+      confidentiality obligations with respect to Confidential
+      Information disclosed prior to the effective date of such
+      termination, which shall continue in accordance with this
+      Agreement's survival provisions.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Five-year term for long-running engagements (multi-year
+          enterprise pitches, extended diligence processes).
+        language: |
+          This Agreement shall commence on the Effective Date and continue
+          for a period of five (5) years, unless earlier terminated by
+          either Party upon sixty (60) days' prior written notice.
+      - rank: 2
+        description: |
+          Two-year term — shorter, but with extended survival to
+          compensate.
+        language: |
+          This Agreement shall commence on the Effective Date and continue
+          for a period of two (2) years, with confidentiality obligations
+          continuing per the survival provisions.
+    redline_strategy: |
+      Reject term shorter than two years. Reject any termination-for-
+      convenience right with less than 30 days' notice. Ensure the term-
+      vs-survival distinction is clear: termination ends new disclosures
+      but does NOT end confidentiality obligations on prior disclosures.
+    severity_if_missing: high
+    detection_keywords:
+      - term
+      - duration
+      - effective date
+      - expiration
+      - terminate
+      - commence
+    detection_examples:
+      - >-
+        This Agreement shall remain in effect for a period of three years
+        from the Effective Date
+      - >-
+        The term of this Agreement shall be one year
+    position_order: 2
+  # ---------------------------------------------------------------------------
+  - issue: Survival of Confidentiality Obligations
+    description: |
+      Longer survival than the mutual variant — the Disclosing Party
+      bears all the downside of post-termination disclosure, so the
+      protection should outlast the relationship by a substantial margin.
+    standard_language: |
+      Notwithstanding any expiration or termination of this Agreement,
+      the Receiving Party's confidentiality obligations with respect to
+      Confidential Information disclosed prior to such expiration or
+      termination shall survive for a period of seven (7) years from the
+      date of such disclosure. For any Confidential Information that
+      constitutes a trade secret under applicable law, such obligations
+      shall survive for so long as such information remains a trade
+      secret, regardless of any other survival period.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Five-year survival aligned with the mutual variant's standard
+          position. Acceptable for routine vendor pitches.
+        language: |
+          Confidentiality obligations shall survive for five (5) years
+          following expiration or termination, with trade secrets
+          surviving for so long as they remain trade secrets.
+      - rank: 2
+        description: |
+          Indefinite survival (perpetual). Acceptable only when the
+          Receiving Party explicitly agrees and the disclosure includes
+          high-value trade secrets where time-limited protection is
+          inappropriate.
+        language: |
+          Confidentiality obligations shall survive indefinitely as to
+          Confidential Information that constitutes a trade secret and
+          for ten (10) years as to all other Confidential Information.
+    redline_strategy: |
+      Push for survival from the date of disclosure (not from
+      termination) — gives the Disclosing Party the longer effective
+      protection. Reject survival shorter than three years for routine
+      contexts, five for sensitive ones. Always preserve the trade-
+      secret carveout (perpetual). If the Receiving Party pushes back
+      with a sunset, propose differential survival (longer for trade
+      secrets, shorter for general confidential information).
+    severity_if_missing: high
+    detection_keywords:
+      - survive
+      - survival
+      - notwithstanding termination
+      - continue in effect
+      - perpetual
+      - trade secret
+    detection_examples:
+      - >-
+        The obligations of confidentiality shall survive the termination
+        of this Agreement
+      - >-
+        Confidentiality obligations shall continue for a period of ten
+        years following termination
+    position_order: 3
+  # ---------------------------------------------------------------------------
+  - issue: Carveouts
+    description: |
+      Same four standard carveouts as the mutual variant — these are
+      market-standard and the Disclosing Party generally cannot reject
+      them — but with stricter evidentiary requirements to make the
+      Receiving Party prove the exception applies.
+    standard_language: |
+      Confidential Information does not include information that the
+      Receiving Party can demonstrate by contemporaneous written evidence
+      and proof of date: (a) was in the Receiving Party's possession
+      without obligation of confidentiality prior to receipt from the
+      Disclosing Party; (b) is or becomes generally available to the
+      public through no act or omission of the Receiving Party or its
+      Representatives; (c) is received by the Receiving Party from a
+      third party who, to the Receiving Party's knowledge after
+      reasonable inquiry, is not bound by a confidentiality obligation
+      to the Disclosing Party; or (d) is independently developed by
+      personnel of the Receiving Party who have not had access to the
+      Disclosing Party's Confidential Information.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Same four carveouts with lower evidentiary bar ("competent
+          written evidence"). Standard market position.
+        language: |
+          Confidential Information does not include information that the
+          Receiving Party can demonstrate by competent written evidence
+          (a) was already in its possession, (b) is public through no
+          fault of the Receiving Party, (c) was received from a third
+          party without confidentiality obligation, or (d) was
+          independently developed without access to the Disclosing
+          Party's Confidential Information.
+      - rank: 2
+        description: |
+          Three carveouts (drops the "publicly known" prong's "through no
+          fault" qualifier — keeps the basic exception, removes the
+          fault-allocation language).
+        language: |
+          Confidential Information does not include information that is
+          (a) already known to the Receiving Party without confidentiality
+          obligation, (b) generally available to the public, or (c)
+          received from a third party without confidentiality obligation.
+    redline_strategy: |
+      Insist on the "contemporaneous" evidentiary standard for the
+      "already known" carveout — without it, a Receiving Party can claim
+      after-the-fact that information was already known. Always include
+      "through no fault of the Receiving Party" in the public-domain
+      carveout. For independently-developed, require the no-access
+      qualifier (developed by personnel without access to the
+      confidential information).
+    severity_if_missing: critical
+    detection_keywords:
+      - exclusions
+      - exceptions
+      - does not include
+      - public domain
+      - already known
+      - independently developed
+    detection_examples:
+      - >-
+        Confidential Information does not include information that is
+        publicly available
+      - >-
+        The obligations herein shall not apply to information that is
+        independently developed by the Receiving Party
+    position_order: 4
+  # ---------------------------------------------------------------------------
+  - issue: Remedies and Injunctive Relief
+    description: |
+      Discloser-favorable variant explicitly acknowledges irreparable
+      harm AND waives bond — the Disclosing Party should not have to
+      post security to enforce a confidentiality obligation.
+    standard_language: |
+      The Receiving Party acknowledges and agrees that any breach or
+      threatened breach of this Agreement may cause irreparable and
+      irreversible harm to the Disclosing Party for which monetary
+      damages would be inadequate, and that the Disclosing Party shall
+      be entitled to seek and obtain equitable relief, including
+      preliminary and permanent injunctive relief and specific
+      performance, in addition to all other remedies available at law
+      or in equity, without the necessity of posting a bond or other
+      security and without the necessity of proving actual damages. The
+      Receiving Party further agrees to reimburse the Disclosing Party
+      for all reasonable attorney's fees and costs incurred in enforcing
+      this Agreement if the Disclosing Party prevails.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Equitable relief acknowledged with bond waiver but no fee-
+          shifting. Standard market position.
+        language: |
+          Disclosing Party shall be entitled to seek equitable relief
+          including injunctive relief and specific performance, without
+          the necessity of posting bond, in addition to all other
+          remedies available at law or in equity.
+      - rank: 2
+        description: |
+          Equitable relief acknowledged but bond may be required.
+          Acceptable when the jurisdiction routinely waives bond at
+          court discretion.
+        language: |
+          Disclosing Party shall be entitled to seek injunctive relief
+          and specific performance, subject to any bond required by the
+          court, in addition to all other available remedies.
+    redline_strategy: |
+      Always include the irreparable-harm acknowledgment and bond waiver.
+      Push for fee-shifting (prevailing party recovers reasonable fees) —
+      Receiving Parties typically resist but it materially deters breach.
+      Reject any cap on damages, any liquidated-damages-as-sole-remedy
+      clause, or any "to the extent permitted by law" qualifier on
+      equitable relief.
+    severity_if_missing: medium
+    detection_keywords:
+      - injunctive relief
+      - equitable relief
+      - specific performance
+      - irreparable harm
+      - bond
+      - attorney's fees
+    detection_examples:
+      - >-
+        Disclosing Party shall be entitled to seek injunctive relief
+        without the need to post bond
+      - >-
+        Breach may cause irreparable harm and the Disclosing Party shall
+        be entitled to equitable relief
+    position_order: 5
+  # ---------------------------------------------------------------------------
+  - issue: Governing Law and Venue
+    description: |
+      Discloser-favorable variant prefers the Disclosing Party's home
+      jurisdiction to reduce enforcement cost and friction.
+    standard_language: |
+      This Agreement shall be governed by and construed in accordance with
+      the laws of the State of Delaware, without giving effect to its
+      conflict-of-laws principles. The Receiving Party irrevocably submits
+      to the exclusive jurisdiction of the state and federal courts
+      located in Wilmington, Delaware for any dispute arising out of or
+      relating to this Agreement, and waives any objection to venue or
+      forum non conveniens in such courts.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Disclosing Party's home state (other than Delaware). Adjust the
+          state name to match the operator's actual home jurisdiction.
+        language: |
+          This Agreement shall be governed by the laws of the State of
+          [Disclosing Party's home state], without regard to conflict-of-
+          laws principles. The state and federal courts of [home
+          jurisdiction] shall have exclusive jurisdiction over any
+          dispute.
+      - rank: 2
+        description: |
+          Neutral jurisdiction (New York or Delaware). Acceptable when the
+          Receiving Party refuses Disclosing Party's home jurisdiction.
+        language: |
+          This Agreement shall be governed by the laws of the State of New
+          York, and the state and federal courts located in New York
+          County shall have exclusive jurisdiction.
+    redline_strategy: |
+      Push for the Disclosing Party's home jurisdiction or, failing that,
+      a neutral commercial jurisdiction (Delaware or New York). Reject
+      the Receiving Party's home jurisdiction. If arbitration is
+      proposed, ensure it permits expedited injunctive relief and select
+      neutral seat / rules; otherwise prefer state-court litigation.
+    severity_if_missing: medium
+    detection_keywords:
+      - governing law
+      - jurisdiction
+      - venue
+      - exclusive jurisdiction
+      - forum
+      - arbitration
+    detection_examples:
+      - >-
+        This Agreement shall be governed by the laws of the State of
+        Delaware
+      - >-
+        Any dispute arising under this Agreement shall be subject to the
+        exclusive jurisdiction of the courts of New York
+    position_order: 6
+  # ---------------------------------------------------------------------------
+  - issue: Return or Destruction of Confidential Information
+    description: |
+      Discloser-favorable variant defaults to mandatory destruction with
+      certification — return is at the Disclosing Party's option only.
+      Retention exception is narrow.
+    standard_language: |
+      Upon the earlier of (a) the expiration or termination of this
+      Agreement or (b) the Disclosing Party's written request (with or
+      without reason and at any time), the Receiving Party shall, within
+      fifteen (15) days, return or destroy (at the Disclosing Party's
+      option) all Confidential Information of the Disclosing Party,
+      including any copies, extracts, summaries, analyses, and derivative
+      materials in any form, and shall certify such return or destruction
+      in writing signed by an officer of the Receiving Party. The
+      Receiving Party may retain only (i) Confidential Information stored
+      in automated backup systems that cannot reasonably be deleted, and
+      (ii) one archival copy in the custody of outside legal counsel for
+      compliance purposes, in each case subject to continuing
+      confidentiality obligations under this Agreement.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          30-day window instead of 15. Standard market position.
+        language: |
+          Upon termination or the Disclosing Party's written request, the
+          Receiving Party shall within 30 days return or destroy
+          Confidential Information at the Disclosing Party's option, and
+          certify such return or destruction in writing, subject to the
+          retention exception for automated backups and one archival
+          copy held by outside counsel.
+      - rank: 2
+        description: |
+          Receiving Party may retain copies as required by law or
+          professional standards. Acceptable for professional-services
+          contexts where document-retention rules apply.
+        language: |
+          Upon termination, the Receiving Party shall return or destroy
+          Confidential Information except as required to be retained by
+          applicable law, professional standards, or its document-
+          retention policies, in each case subject to continuing
+          confidentiality.
+    redline_strategy: |
+      Push for written certification by an officer (not just any
+      employee). Reject broad retention exceptions for the Receiving
+      Party's "ordinary business practices" or unspecified "regulatory
+      reasons." Ensure return-on-request is available with or without
+      termination — the Disclosing Party should be able to recall its
+      information at any time.
+    severity_if_missing: medium
+    detection_keywords:
+      - return
+      - destroy
+      - destruction
+      - certify
+      - termination
+      - retention
+    detection_examples:
+      - >-
+        Upon termination, the Receiving Party shall return or destroy all
+        Confidential Information
+      - >-
+        The Receiving Party shall certify in writing that it has destroyed
+        all Confidential Information
+    position_order: 7
