@@ -16,6 +16,7 @@ export type TabId =
   | 'matters'
   | 'skills'
   | 'knowledge'
+  | 'playbooks'
   | 'saved-prompts'
   | 'learn'
   | 'admin';

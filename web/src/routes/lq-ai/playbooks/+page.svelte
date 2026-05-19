@@ -69,8 +69,8 @@
 			<thead>
 				<tr>
 					<th scope="col">Name</th>
-					<th scope="col">Contract type</th>
-					<th scope="col">Version</th>
+					<th scope="col" class="lq-playbooks-table__compact">Contract type</th>
+					<th scope="col" class="lq-playbooks-table__compact">Version</th>
 					<th scope="col" class="lq-playbooks-table__actions">&nbsp;</th>
 				</tr>
 			</thead>
@@ -83,8 +83,8 @@
 								<div class="lq-playbooks-table__desc">{p.description}</div>
 							{/if}
 						</td>
-						<td>{p.contract_type}</td>
-						<td>{formatVersion(p.version)}</td>
+						<td class="lq-playbooks-table__compact">{p.contract_type}</td>
+						<td class="lq-playbooks-table__compact">{formatVersion(p.version)}</td>
 						<td class="lq-playbooks-table__actions">
 							<button
 								type="button"
@@ -160,11 +160,25 @@
 		font-size: 0.8125rem;
 		color: var(--lq-text-secondary);
 		margin-top: 0.25rem;
+		/* Cap the description so it doesn't crowd the compact columns
+		   on long YAML descriptions (the seed playbooks have multi-
+		   paragraph descriptions including the not-legal-advice line). */
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+	}
+	.lq-playbooks-table__compact {
+		width: 1%;
+		white-space: nowrap;
+		vertical-align: top;
 	}
 	.lq-playbooks-table__actions {
 		text-align: right;
 		width: 1%;
 		white-space: nowrap;
+		vertical-align: top;
 	}
 	.lq-playbooks-table__apply {
 		padding: 0.375rem 0.75rem;
