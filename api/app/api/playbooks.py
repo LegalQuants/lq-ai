@@ -1,8 +1,17 @@
-"""Playbook executor endpoints — M3-A2.
+"""Playbook executor + read endpoints — M3-A2 and M3-A4.
 
-Surface (subset of [PRD §3.7](docs/PRD.md#37-playbooks); the rest land
-in M3-A4 + M3-A6):
+Surface (subset of [PRD §3.7](docs/PRD.md#37-playbooks); CRUD lands
+in M3-A6):
 
+* ``GET /api/v1/playbooks`` (M3-A4) — list playbooks visible to the
+  caller. Built-in playbooks (``created_by IS NULL``) are visible to
+  every authenticated user; non-admins additionally see their own
+  authored playbooks; admins see everything. Positions are NOT
+  inlined; clients fetch the detail endpoint for the position list.
+* ``GET /api/v1/playbooks/{playbook_id}`` (M3-A4) — full playbook
+  including positions + fallback tiers. Same visibility rule as the
+  list endpoint; 404 (not 403) on unauthorized access, mirroring the
+  execute endpoint.
 * ``POST /api/v1/playbooks/{playbook_id}/execute`` — kick off an
   execution against a target document. Returns 202 with the new
   :class:`PlaybookExecution` row at status ``'pending'``; the
@@ -61,6 +70,7 @@ from app.models.playbook import Playbook, PlaybookExecution
 from app.models.project import Project
 from app.playbooks.executor import PlaybookExecutorError, run_playbook_execution
 from app.schemas.playbooks import (
+    Playbook as PlaybookSchema,
     PlaybookExecution as PlaybookExecutionSchema,
     PlaybookExecutionCreate,
 )
@@ -68,6 +78,75 @@ from app.schemas.playbooks import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["playbooks"])
+
+
+@router.get(
+    "/playbooks",
+    response_model=list[PlaybookSchema],
+    summary="List playbooks visible to the caller.",
+)
+async def list_playbooks(
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> list[PlaybookSchema]:
+    """List playbooks the caller can see.
+
+    Visibility rules (mirroring the execute endpoint):
+
+    * Admins see all playbooks.
+    * Non-admins see playbooks they authored OR built-in playbooks
+      (``created_by IS NULL`` — created by the seed migration).
+
+    Positions are NOT inlined in the list response; clients fetch the
+    detail endpoint when they need them. This keeps the list response
+    bounded even when a playbook has dozens of positions.
+    """
+    stmt = select(Playbook)
+    if not user.is_admin:
+        stmt = stmt.where((Playbook.created_by == user.id) | (Playbook.created_by.is_(None)))
+    stmt = stmt.order_by(Playbook.name)
+    rows = (await db.execute(stmt)).scalars().all()
+    return [
+        PlaybookSchema(
+            id=row.id,
+            name=row.name,
+            contract_type=row.contract_type,
+            description=row.description,
+            version=row.version,
+            created_by=row.created_by,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+            positions=[],
+        )
+        for row in rows
+    ]
+
+
+@router.get(
+    "/playbooks/{playbook_id}",
+    response_model=PlaybookSchema,
+    summary="Get a playbook with its full position list.",
+)
+async def get_playbook(
+    playbook_id: uuid.UUID,
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> PlaybookSchema:
+    """Return the playbook header + positions + fallback tiers.
+
+    Visibility: admins see all; non-admins see playbooks they authored
+    or built-in playbooks (``created_by IS NULL``). 404 (not 403) on
+    unauthorized access — mirrors the playbook-execute handler.
+    """
+    playbook = await db.get(Playbook, playbook_id)
+    if playbook is None:
+        raise HTTPException(status_code=404, detail="playbook not found")
+    if not user.is_admin and playbook.created_by is not None and playbook.created_by != user.id:
+        raise HTTPException(status_code=404, detail="playbook not found")
+    # Eager-load positions in this async context (the relationship is lazy
+    # by default and would otherwise trigger an implicit I/O on access).
+    await db.refresh(playbook, attribute_names=["positions"])
+    return PlaybookSchema.model_validate(playbook, from_attributes=True)
 
 
 @router.post(

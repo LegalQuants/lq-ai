@@ -12,6 +12,7 @@
     matters: 'Matters',
     skills: 'Skills',
     knowledge: 'Knowledge',
+    playbooks: 'Playbooks',
     'saved-prompts': 'Saved Prompts',
     learn: 'Learn',
     admin: 'Admin'

@@ -543,6 +543,13 @@ export interface KnowledgeBaseFile {
 	ingest_failure_reason?: string | null;
 	page_count?: number | null;
 	character_count?: number | null;
+	/**
+	 * M3-A4: the parsed-content Document UUID, distinct from `id` (the File
+	 * UUID). Null until the C5 parse pipeline produces a documents row.
+	 * Surfaces here so playbook-execute callers can pass the right id without
+	 * a second fetch.
+	 */
+	document_id?: string | null;
 	created_at: string;
 	attached_at: string;
 }
@@ -730,30 +737,30 @@ export interface UsageQuery {
 // ----- Admin users -----
 
 export interface AdminUserRow {
-  id: string;
-  email: string;
-  display_name?: string | null;
-  role: UserRole;
-  is_admin: boolean;
-  mfa_enabled: boolean;
-  must_change_password: boolean;
-  created_at: string;
-  last_login_at?: string | null;
-  deletion_scheduled_at?: string | null;
+	id: string;
+	email: string;
+	display_name?: string | null;
+	role: UserRole;
+	is_admin: boolean;
+	mfa_enabled: boolean;
+	must_change_password: boolean;
+	created_at: string;
+	last_login_at?: string | null;
+	deletion_scheduled_at?: string | null;
 }
 
 export interface AdminUserListResponse {
-  users: AdminUserRow[];
-  total_count: number;
-  limit: number;
-  offset: number;
+	users: AdminUserRow[];
+	total_count: number;
+	limit: number;
+	offset: number;
 }
 
 export interface AdminUserListQuery {
-  role?: UserRole;
-  email_q?: string;
-  limit?: number;
-  offset?: number;
+	role?: UserRole;
+	email_q?: string;
+	limit?: number;
+	offset?: number;
 }
 
 // ----- Teams (D8.1a + D8.1c caller_role) -----
@@ -829,4 +836,97 @@ export interface UserSkillVersion {
 
 export interface UserSkillVersionsResponse {
 	items: UserSkillVersion[];
+}
+
+// ----- Playbooks (M3-A1/A2/A3/A4) -----
+
+export type PositionSeverity = 'critical' | 'high' | 'medium' | 'low';
+
+export type PlaybookExecutionStatus = 'pending' | 'running' | 'completed' | 'error';
+
+export type PlaybookPositionVerdict =
+	| 'matches_standard'
+	| 'matches_fallback'
+	| 'deviates'
+	| 'missing';
+
+export interface FallbackTier {
+	rank: number;
+	description: string;
+	language: string;
+}
+
+export interface Position {
+	id: string;
+	issue: string;
+	description: string;
+	standard_language: string;
+	fallback_tiers: FallbackTier[];
+	redline_strategy: string;
+	severity_if_missing: PositionSeverity;
+	detection_keywords: string[];
+	detection_examples: string[];
+	position_order: number;
+}
+
+export interface Playbook {
+	id: string;
+	name: string;
+	contract_type: string;
+	description: string;
+	version: string;
+	created_by: string | null;
+	created_at: string;
+	updated_at: string;
+	positions: Position[];
+}
+
+export interface PlaybookPositionRedline {
+	old_text: string;
+	new_text: string;
+	justification: string;
+}
+
+export interface PlaybookPositionResult {
+	position_id: string;
+	issue: string;
+	severity_if_missing: PositionSeverity;
+	verdict: PlaybookPositionVerdict;
+	confidence: number;
+	matched_fallback_rank: number | null;
+	cited_chunk_ids: string[];
+	matched_text: string;
+	redline: PlaybookPositionRedline | null;
+	justification: string;
+}
+
+export interface PlaybookExecutionSummary {
+	matches_standard: number;
+	matches_fallback: number;
+	deviates: number;
+	missing: number;
+}
+
+export interface PlaybookExecutionResults {
+	schema_version: string;
+	positions: PlaybookPositionResult[];
+	summary: PlaybookExecutionSummary;
+}
+
+export interface PlaybookExecution {
+	id: string;
+	playbook_id: string;
+	target_document_id: string;
+	user_id: string | null;
+	project_id: string | null;
+	status: PlaybookExecutionStatus;
+	results: PlaybookExecutionResults | null;
+	error: string | null;
+	created_at: string;
+	completed_at: string | null;
+}
+
+export interface PlaybookExecutionCreate {
+	target_document_id: string;
+	project_id?: string | null;
 }
