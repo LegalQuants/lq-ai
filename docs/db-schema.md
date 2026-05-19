@@ -988,42 +988,118 @@ CREATE INDEX idx_inference_log_refused ON inference_routing_log(timestamp DESC) 
 
 ---
 
-## M3+ tables (sketched, land at the indicated milestone)
+## Playbooks (per [PRD §3.7](docs/PRD.md#37-playbooks), M3-A1)
+
+Substrate for the Playbook engine landing in M3. A playbook codifies an
+organization's standard positions and fallback positions on common
+contract issues; the LangGraph executor (M3-A2) walks each position
+against a target contract and produces a per-position assessment with
+redline suggestions. Three tables, all introduced by migration
+`0031_playbooks.py`:
+
+* `playbooks` — header row per playbook (name, contract type, version,
+  author).
+* `playbook_positions` — one row per issue inside a playbook. The
+  per-position list of acceptable alternatives lives in a JSONB
+  `fallback_tiers` column rather than a third normalized table (small
+  per-position lists; always fetched together with the position).
+* `playbook_executions` — one row per run of a playbook against a
+  target document. `results` is JSONB shaped per the M3-A2 executor.
 
 ### `playbooks` (M3)
 
 ```sql
 CREATE TABLE playbooks (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name            TEXT NOT NULL,
-    version         TEXT NOT NULL,
-    scope           TEXT NOT NULL CHECK (scope IN ('builtin','user','team')),
-    owner_id        UUID REFERENCES users(id) ON DELETE CASCADE,
-    title           TEXT NOT NULL,
-    description     TEXT,
-    content_yaml    TEXT NOT NULL,
+    contract_type   TEXT NOT NULL,         -- e.g. 'NDA' | 'MSA-SaaS' | 'DPA' | 'MSA-Commercial'
+    description     TEXT NOT NULL DEFAULT '',
+    version         TEXT NOT NULL DEFAULT '1.0.0',
+    created_by      UUID REFERENCES users(id) ON DELETE SET NULL,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    deleted_at      TIMESTAMPTZ,
-    UNIQUE (name, version, scope, owner_id)
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
 
-### `playbook_runs` (M3)
+`created_by` is nullable + `ON DELETE SET NULL` so a deleted operator's
+playbook stays available to the rest of the team — playbooks outlive
+their individual authors (matches the project / skill ownership model).
+
+`contract_type` is free-form per [PRD §3.7](docs/PRD.md#37-playbooks);
+the canonical values used by the M3-A3 / M3-A5 built-ins are `'NDA'`,
+`'NDA-unilateral'`, `'MSA-SaaS'`, `'MSA-Commercial'`, `'DPA'`, but
+operators may define their own without a migration.
+
+### `playbook_positions` (M3)
 
 ```sql
-CREATE TABLE playbook_runs (
-    id                UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
-    playbook_id       UUID NOT NULL REFERENCES playbooks(id) ON DELETE RESTRICT,
-    chat_id           UUID NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
-    started_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-    completed_at      TIMESTAMPTZ,
-    status            TEXT NOT NULL CHECK (status IN ('running','completed','failed','cancelled')),
-    output_summary    TEXT,
-    findings_count    INTEGER,
-    error             TEXT
+CREATE TABLE playbook_positions (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    playbook_id         UUID NOT NULL REFERENCES playbooks(id) ON DELETE CASCADE,
+    issue               TEXT NOT NULL,                                  -- e.g. 'Limitation of Liability'
+    description         TEXT NOT NULL DEFAULT '',
+    standard_language   TEXT NOT NULL,                                  -- the org's preferred clause
+    fallback_tiers      JSONB NOT NULL DEFAULT '[]'::jsonb,             -- ranked acceptable alternatives
+    redline_strategy    TEXT NOT NULL DEFAULT '',
+    severity_if_missing TEXT NOT NULL
+        CHECK (severity_if_missing IN ('critical','high','medium','low')),
+    detection_keywords  TEXT[] NOT NULL DEFAULT '{}'::text[],           -- lexical match
+    detection_examples  TEXT[] NOT NULL DEFAULT '{}'::text[],           -- embedding match
+    position_order      INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE INDEX idx_playbook_positions_playbook_order
+    ON playbook_positions(playbook_id, position_order);
 ```
+
+The `fallback_tiers` JSONB array carries objects matching the Pydantic
+`FallbackTier` shape (`{rank, description, language}`). Storing as
+JSONB rather than a normalized table avoids a join on every executor
+read — the per-position list is small (typically 2-3 alternatives) and
+always loaded with the position.
+
+`detection_keywords` and `detection_examples` feed the M3-A2 executor's
+retrieval step: keywords drive a lexical match against the target
+contract; examples drive an embedding-based match.
+
+### `playbook_executions` (M3)
+
+```sql
+CREATE TABLE playbook_executions (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    playbook_id         UUID NOT NULL REFERENCES playbooks(id) ON DELETE CASCADE,
+    target_document_id  UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    user_id             UUID REFERENCES users(id) ON DELETE SET NULL,
+    project_id          UUID REFERENCES projects(id) ON DELETE SET NULL,
+    status              TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending','running','completed','error')),
+    results             JSONB,                                          -- M3-A2 executor's payload
+    error               TEXT,                                           -- populated when status='error'
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    completed_at        TIMESTAMPTZ
+);
+
+-- "My recent executions" view for the UI (M3-A4).
+CREATE INDEX idx_playbook_executions_user_created
+    ON playbook_executions(user_id, created_at DESC);
+
+-- "What playbooks have been run against this document?" — drives the
+-- document-detail view's playbook-history surface (M3-A4).
+CREATE INDEX idx_playbook_executions_target_document
+    ON playbook_executions(target_document_id);
+```
+
+Status lifecycle: `pending → running → completed | error`. The CHECK
+constraint pins the enum at the storage layer.
+
+`user_id` and `project_id` are both `ON DELETE SET NULL` so historical
+executions survive operator or project deletion — audit trails stay
+intact even after the actor or matter is removed. The
+`target_document_id` FK is `ON DELETE CASCADE` because an execution
+against a deleted document has no anchor (the source the executor
+ran against is gone).
+
+## M4+ tables (sketched, land at the indicated milestone)
 
 ### `autonomous_tasks` (M4)
 
