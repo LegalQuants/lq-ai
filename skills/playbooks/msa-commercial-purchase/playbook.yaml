@@ -1,0 +1,1082 @@
+# =============================================================================
+# Built-in playbook: MSA — Commercial Services (purchase side) (M3-A5)
+# =============================================================================
+#
+# A starter playbook for reviewing commercial Master Services
+# Agreements where the operator is the customer purchasing services
+# or deliverables (consulting, professional services, software
+# development, integration work). Written from the customer /
+# purchaser's perspective. Calibrated to mid-market commercial
+# engagements — not government procurement, not strategic
+# outsourcing megadeals, not regulated-industry overlays.
+#
+# Sister playbook to ``msa-saas/playbook.yaml`` (which addresses
+# SaaS-subscription MSAs). The MSA-Commercial playbook differs in
+# four substantive ways from MSA-SaaS:
+#   1. Acceptance: deliverables require an acceptance process; SaaS
+#      services are ongoing and have an SLA instead.
+#   2. IP allocation: customer typically owns work product;
+#      vendor retains background IP and gets a license-back to
+#      improvements. SaaS keeps vendor IP firmly with vendor.
+#   3. Change orders: scope/price changes need a formal process;
+#      SaaS handles via the change management section.
+#   4. Termination is split into "for cause" and "for convenience"
+#      sections (separated because the dynamics differ on a
+#      project-based engagement vs. an ongoing subscription).
+#
+# **THIS IS A STARTING POINT, NOT A VETTED TEMPLATE, AND IT IS NOT
+# LEGAL ADVICE.** The maintainer team has not reviewed or validated
+# the positions, fallback tiers, or redline strategies below. They
+# were drafted from public CC-BY-4.0 templates (Common Paper Master
+# Subscription Agreement, adapted to the purchase side) and standard
+# mid-market commercial-purchase positions as a head-start for in-
+# house counsel installing LQ.AI. You — the attorney installing
+# this software — must review every position against your
+# organization's standards and applicable jurisdiction before
+# relying on this playbook for any client work. Fork it, customize
+# it, or replace it entirely.
+#
+# Companion file: ``api/alembic/versions/0033_seed_builtin_playbooks_msa_dpa.py``
+# ships an identical snapshot into the ``playbooks`` +
+# ``playbook_positions`` tables at version 1.0.0. Edits here are not
+# retroactive to existing deployments — playbook updates ship as new
+# migration versions.
+#
+# =============================================================================
+
+name: MSA — Commercial Services (purchase-side)
+contract_type: MSA-Commercial-Purchase
+version: 1.0.0
+description: |
+  Master Services Agreement playbook for commercial services and
+  deliverables purchases, written from the customer / purchaser's
+  perspective. Covers the ten positions that most commonly
+  determine whether a commercial-services MSA is fit for purpose:
+  acceptance, warranties, indemnification, limitation of liability,
+  intellectual property allocation, change orders, payment terms,
+  termination for cause, termination for convenience, and governing
+  law and venue.
+
+  **This playbook is a starting point, not a vetted template, and
+  it is not legal advice.** The LQ.AI maintainer team has not
+  reviewed or validated the positions, fallback tiers, or redline
+  strategies below — they were drafted from public templates
+  (Common Paper, adapted to the purchase side) and standard
+  mid-market commercial-purchase positions as a head-start for in-
+  house counsel installing LQ.AI. You must review every position
+  against your organization's standards and the applicable
+  jurisdiction before relying on this playbook for client work.
+  Fork it, customize it, or replace it entirely. Use of this
+  playbook does not establish an attorney-client relationship
+  with LegalQuants or any contributor.
+
+positions:
+  # ---------------------------------------------------------------------------
+  - issue: Acceptance (criteria, period, deemed acceptance)
+    description: |
+      The mechanism by which deliverables are accepted or rejected.
+      Without a structured acceptance process, "deemed acceptance"
+      provisions (vendor delivers; if customer doesn't object
+      within X days, the deliverable is accepted) can lock the
+      customer into paying for work that hasn't been validated.
+      The structure: documented acceptance criteria in the SOW,
+      an acceptance period long enough for meaningful testing
+      (typically 15-30 business days), a defined rejection
+      mechanism with reasonable cure cycles, and deemed
+      acceptance only after a clear written acceptance period.
+    standard_language: |
+      Each Statement of Work ("SOW") will identify the deliverables
+      (the "Deliverables") and the acceptance criteria for each
+      Deliverable. Vendor will deliver each Deliverable in
+      accordance with the SOW. Customer will have thirty (30)
+      business days following delivery (the "Acceptance Period")
+      to test the Deliverable against the acceptance criteria and
+      to deliver to Vendor a written notice of acceptance or a
+      written notice of rejection specifying in reasonable detail
+      the failures to satisfy the acceptance criteria. If Customer
+      delivers a rejection notice within the Acceptance Period,
+      Vendor will, at its expense, correct the identified
+      deficiencies and re-deliver the Deliverable within fifteen
+      (15) business days, after which a new Acceptance Period of
+      fifteen (15) business days will apply. If the corrected
+      Deliverable is rejected for the same material deficiencies
+      on the second occasion, Customer may, at its option, (a)
+      grant Vendor a further cure period, (b) accept the
+      Deliverable subject to a price reduction reasonably
+      reflecting the deficiencies, or (c) terminate the affected
+      SOW and receive a refund of all fees paid for the rejected
+      Deliverable. If Customer does not deliver a written notice
+      within the Acceptance Period, the Deliverable will be
+      deemed accepted on the last day of the Acceptance Period.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Shorter acceptance window (15 business days) with the
+          same rejection and cure mechanics. Acceptable for
+          smaller deliverables where 30 business days is
+          disproportionate to the scope of work.
+        language: |
+          Each SOW will identify the Deliverables and the
+          acceptance criteria. Customer has fifteen (15) business
+          days following delivery to provide written notice of
+          acceptance or rejection. If rejected, Vendor will cure
+          within ten (10) business days at its expense. If the
+          cured Deliverable is rejected for the same material
+          deficiencies, Customer may terminate the affected SOW
+          and receive a pro-rata refund. Deemed acceptance applies
+          after the Acceptance Period.
+      - rank: 2
+        description: |
+          Acceptance criteria optional in the SOW; deemed
+          acceptance after a 10-business-day period. Acceptable
+          only for time-and-materials engagements where there are
+          no discrete deliverables to accept (e.g., staff
+          augmentation). Generally not recommended for
+          deliverable-based work.
+        language: |
+          If a SOW identifies Deliverables and acceptance criteria,
+          Customer will have ten (10) business days following
+          delivery to provide written notice of any failure to
+          satisfy the acceptance criteria. Vendor will cure
+          identified deficiencies at its expense. If a SOW does
+          not identify acceptance criteria, work is performed on
+          a time-and-materials basis and is deemed accepted upon
+          delivery.
+    redline_strategy: |
+      If the SOW lacks acceptance criteria entirely, push to add
+      them as a precondition to signing — without criteria, there
+      is nothing to test against and "deemed acceptance" becomes
+      automatic. If the acceptance period is shorter than 15
+      business days, push to extend (operational testing rarely
+      fits in less). If the cure cycle has no cap on the number
+      of iterations or no termination-with-refund remedy on
+      repeated failure, add a cap (typically two cure cycles)
+      with a termination remedy. If "deemed acceptance" runs
+      from delivery rather than from the Acceptance Period
+      expiring with no objection, tighten — without the
+      objection-based trigger, deemed acceptance can fire
+      before Customer has had a chance to test.
+    severity_if_missing: high
+    detection_keywords:
+      - acceptance
+      - acceptance criteria
+      - acceptance period
+      - deliverable
+      - rejection
+      - deemed accepted
+      - cure period
+    detection_examples:
+      - >-
+        Customer shall have thirty business days from delivery to
+        test the Deliverable against the acceptance criteria
+      - >-
+        If Customer does not provide a written rejection notice
+        within the acceptance period, the Deliverable shall be
+        deemed accepted
+    position_order: 0
+  # ---------------------------------------------------------------------------
+  - issue: Warranties (services, deliverables, non-infringement)
+    description: |
+      The vendor's affirmative representations about the quality
+      of its work — that services will be performed in a
+      professional, workmanlike manner; that deliverables will
+      conform to the agreed specifications; and that the
+      deliverables will not infringe third-party rights. Without
+      explicit warranties, the customer's only recourse is
+      whatever the implied warranties under the governing law
+      provide (often disclaimed or limited).
+    standard_language: |
+      Vendor represents and warrants that: (a) the Services will
+      be performed in a professional and workmanlike manner by
+      qualified personnel in accordance with industry standards
+      for similar services; (b) each Deliverable will conform to
+      the specifications and acceptance criteria set forth in
+      the applicable SOW, both at the time of delivery and for a
+      period of ninety (90) days thereafter; (c) Vendor will use
+      commercially reasonable efforts to ensure that the
+      Deliverables and Services do not contain any viruses,
+      worms, time bombs, or other malicious code; and (d) the
+      Services and Deliverables, as delivered by Vendor and used
+      by Customer in accordance with this Agreement, will not
+      infringe, misappropriate, or violate any patent, copyright,
+      trademark, trade secret, or other intellectual property
+      right of any third party. EXCEPT AS EXPRESSLY SET FORTH IN
+      THIS AGREEMENT, VENDOR DISCLAIMS ALL OTHER WARRANTIES,
+      EXPRESS OR IMPLIED, INCLUDING THE IMPLIED WARRANTIES OF
+      MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
+      NON-INFRINGEMENT, EXCEPT FOR THE EXPRESS NON-INFRINGEMENT
+      WARRANTY IN CLAUSE (D) ABOVE. Customer's sole and exclusive
+      remedy for a breach of the services or deliverables
+      warranty is, at Vendor's option, re-performance of the
+      affected Services or correction of the affected
+      Deliverable, provided Customer notifies Vendor of the
+      breach within the applicable warranty period.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Standard warranties with a shorter 60-day deliverable
+          warranty period and re-performance-only remedy.
+          Acceptable for shorter engagements where 90 days
+          significantly exceeds the engagement duration.
+        language: |
+          Vendor warrants that (a) Services will be performed in
+          a professional, workmanlike manner, (b) Deliverables
+          will conform to the specifications for sixty (60) days
+          following delivery, and (c) Deliverables will not
+          infringe third-party intellectual property rights.
+          Customer's remedy for breach of these warranties is
+          re-performance of Services or correction of the
+          Deliverable. Vendor disclaims all other warranties.
+      - rank: 2
+        description: |
+          Services warranty only ("professional and workmanlike")
+          with no deliverable conformity warranty and no
+          non-infringement warranty. Acceptable only for very
+          low-risk engagements where the customer has independent
+          confidence in vendor's IP hygiene. Generally not
+          recommended; the non-infringement warranty is critical.
+        language: |
+          Vendor warrants that the Services will be performed in
+          a professional and workmanlike manner consistent with
+          industry standards. EXCEPT AS EXPRESSLY SET FORTH IN
+          THIS AGREEMENT, VENDOR DISCLAIMS ALL WARRANTIES,
+          EXPRESS OR IMPLIED.
+    redline_strategy: |
+      If the contract has no non-infringement warranty, push for
+      one — without it, an IP claim against the vendor's work
+      product becomes the customer's exposure with no contractual
+      recourse. If the services warranty is qualified by "best
+      efforts" rather than "professional and workmanlike,"
+      tighten — "professional and workmanlike" is the enforceable
+      standard. If the deliverable warranty period is less than
+      60 days, push for at least 90 days. If the warranty remedy
+      is limited to re-performance with no termination right for
+      repeated failures, add a termination trigger after a
+      defined number of cure cycles. If the warranty disclaimer
+      is so broad it swallows the express warranties (e.g.,
+      disclaims all warranties without preserving the express
+      ones), tighten the disclaimer.
+    severity_if_missing: high
+    detection_keywords:
+      - warrant
+      - warranty
+      - represent
+      - professional and workmanlike
+      - non-infringement
+      - conform to specifications
+      - disclaimer
+    detection_examples:
+      - >-
+        Vendor warrants that Services will be performed in a
+        professional and workmanlike manner and that Deliverables
+        will conform to the specifications
+      - >-
+        Vendor warrants that the Deliverables will not infringe
+        any third-party intellectual property rights
+    position_order: 1
+  # ---------------------------------------------------------------------------
+  - issue: Indemnification (IP, third-party claims, mutual conduct)
+    description: |
+      The vendor's obligation to defend and indemnify the customer
+      against third-party claims arising from the work product
+      (primarily IP infringement claims), and the customer's
+      reciprocal obligation for claims arising from customer-
+      provided materials and instructions. The mutual conduct
+      requirements (notice, control of defense, settlement
+      consent) make the mechanism workable in practice.
+    standard_language: |
+      Vendor will defend Customer against any third-party claim
+      alleging that the Deliverables or Services, as delivered or
+      performed by Vendor, infringe, misappropriate, or violate
+      any patent, copyright, trademark, trade secret, or other
+      intellectual property right of any third party (a "Vendor
+      IP Claim"), and will indemnify Customer against any damages
+      and costs (including reasonable attorneys' fees) finally
+      awarded against Customer by a court of competent
+      jurisdiction or paid in a settlement approved by Vendor in
+      connection with such Vendor IP Claim. The foregoing
+      indemnification does not apply to the extent the alleged
+      infringement arises from (a) Customer's combination of the
+      Deliverables with products or services not furnished by
+      Vendor where the infringement would not have occurred but
+      for such combination, (b) modifications to the Deliverables
+      made by anyone other than Vendor where the unmodified
+      Deliverable would not have infringed, or (c) Customer's use
+      of the Deliverables in a manner not contemplated by this
+      Agreement or the applicable SOW. Customer will defend
+      Vendor against any third-party claim arising from materials
+      or instructions provided by Customer to Vendor for use in
+      the Services or Deliverables. The indemnifying party's
+      obligations are conditioned on the indemnified party (a)
+      promptly notifying the indemnifying party of the claim in
+      writing, (b) giving the indemnifying party sole control of
+      the defense and settlement of the claim (provided the
+      indemnifying party may not settle any claim that imposes a
+      material obligation on the indemnified party without its
+      written consent), and (c) providing reasonable cooperation
+      in the defense at the indemnifying party's expense. If a
+      Vendor IP Claim arises or is likely to arise, Vendor may,
+      at its option, (i) procure for Customer the right to
+      continue using the affected Deliverable, (ii) modify the
+      Deliverable so it is non-infringing without materially
+      diminishing its functionality, or (iii) refund the fees
+      paid by Customer for the affected Deliverable upon return
+      of such Deliverable.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Mutual IP and customer-materials indemnification with
+          standard conduct requirements, but without the explicit
+          "procure / modify / refund" remedy ladder. Acceptable
+          when the customer is willing to rely on the broader
+          indemnification language without spelling out vendor's
+          options.
+        language: |
+          Vendor will defend and indemnify Customer against any
+          third-party claim that the Deliverables or Services
+          infringe third-party intellectual property rights,
+          subject to standard exclusions for combination with
+          non-vendor products, customer modifications, and out-of-
+          scope use. Customer will defend and indemnify Vendor
+          against any claim arising from materials or
+          instructions provided by Customer. The standard conduct
+          requirements (prompt notice, sole control of defense,
+          settlement consent for material obligations) apply.
+      - rank: 2
+        description: |
+          Vendor IP indemnification only (no customer-materials
+          reciprocal). Acceptable when the customer is not
+          providing materials that create third-party claim
+          exposure for the vendor (e.g., consulting engagement
+          with no customer-supplied content).
+        language: |
+          Vendor will defend Customer against any third-party
+          claim that the Deliverables or Services infringe third-
+          party intellectual property rights and will indemnify
+          Customer against finally-awarded damages, subject to
+          the standard combination/modification/out-of-scope
+          exclusions and conduct requirements.
+    redline_strategy: |
+      If the contract lacks any indemnification, push for at
+      least a vendor IP indemnification. If the IP exclusions
+      are so broad they swallow the indemnification (e.g.,
+      excludes claims arising from any combination with other
+      products), tighten — the standard combination exclusion
+      requires "but for" causation (the infringement would not
+      have occurred but for the combination). If the indemnity
+      lacks the "procure / modify / refund" remedy ladder, add
+      it — this is what makes the indemnification operationally
+      useful when an infringement is alleged. If the customer
+      side has a broader indemnity than vendor (asymmetric), push
+      for mutuality. If the indemnification is capped by the LoL,
+      push for IP indemnification to be a carveout from the cap.
+    severity_if_missing: high
+    detection_keywords:
+      - indemnification
+      - indemnify
+      - defend
+      - third-party claim
+      - infringement
+      - hold harmless
+      - intellectual property indemnity
+    detection_examples:
+      - >-
+        Vendor shall defend, indemnify, and hold harmless Customer
+        from any third-party claim alleging that the Deliverables
+        infringe intellectual property rights
+      - >-
+        Vendor's indemnification obligations do not apply to
+        claims arising from Customer's combination of the
+        Deliverables with non-Vendor products
+    position_order: 2
+  # ---------------------------------------------------------------------------
+  - issue: Limitation of Liability
+    description: |
+      The cap on damages and the exclusions from that cap. In a
+      commercial-purchase MSA, the standard cap is typically a
+      multiple of the fees paid under the affected SOW (e.g., 1×
+      or 2× SOW fees) rather than 12-month rolling fees, because
+      the engagement is project-based rather than subscription-
+      based. Carveouts from the cap are critical: IP
+      indemnification, gross negligence, willful misconduct,
+      confidentiality breach, and (if applicable) data breach.
+    standard_language: |
+      EXCEPT FOR EXCLUDED CLAIMS (DEFINED BELOW), EACH PARTY'S
+      AGGREGATE LIABILITY ARISING OUT OF OR RELATING TO THIS
+      AGREEMENT OR ANY SOW WILL NOT EXCEED TWO (2) TIMES THE
+      TOTAL FEES PAID OR PAYABLE BY CUSTOMER TO VENDOR UNDER THE
+      SOW GIVING RISE TO THE CLAIM (OR, IF NO SOW IS APPLICABLE,
+      THE FEES PAID OR PAYABLE IN THE TWELVE (12) MONTHS
+      PRECEDING THE EVENT GIVING RISE TO THE CLAIM). EXCEPT FOR
+      EXCLUDED CLAIMS, IN NO EVENT WILL EITHER PARTY BE LIABLE
+      FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL,
+      EXEMPLARY, OR PUNITIVE DAMAGES, OR FOR ANY LOST PROFITS,
+      LOST REVENUES, OR LOST DATA, EVEN IF ADVISED OF THE
+      POSSIBILITY OF SUCH DAMAGES. "EXCLUDED CLAIMS" MEANS (A)
+      EITHER PARTY'S INDEMNIFICATION OBLIGATIONS UNDER THIS
+      AGREEMENT; (B) EITHER PARTY'S BREACH OF ITS CONFIDENTIALITY
+      OBLIGATIONS; (C) EITHER PARTY'S GROSS NEGLIGENCE OR WILLFUL
+      MISCONDUCT; (D) ANY BREACH OF VENDOR'S WARRANTIES THAT
+      RESULTS IN BODILY INJURY OR DEATH; AND (E) AMOUNTS OWED FOR
+      FEES.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Cap at 1× SOW fees with the same carveouts. Acceptable
+          when the engagement is lower-risk or the vendor's
+          financial profile cannot bear a 2× exposure.
+        language: |
+          Each party's aggregate liability is capped at one (1)
+          times the total fees paid or payable under the SOW
+          giving rise to the claim, except for the Excluded
+          Claims (indemnification, confidentiality breach, gross
+          negligence, willful misconduct, and amounts owed for
+          fees), which are uncapped.
+      - rank: 2
+        description: |
+          Mutual cap at 1× SOW fees with narrower carveouts (IP
+          indemnification and willful misconduct only). Acceptable
+          only for low-risk, low-stakes engagements; not
+          appropriate where confidentiality or significant
+          warranty exposure is in play.
+        language: |
+          Each party's aggregate liability under this Agreement
+          is capped at the total fees paid or payable under the
+          applicable SOW. This cap does not apply to either
+          party's indemnification obligations or to liability
+          arising from a party's willful misconduct.
+    redline_strategy: |
+      If the contract's LoL applies to ALL claims with no
+      carveouts, push for the standard carveout set
+      (indemnification, confidentiality, gross negligence,
+      willful misconduct). If the cap is less than 1× SOW fees,
+      push for at least 1×. If the cap is one-way (vendor-
+      favorable), push for mutuality. If the cap measurement
+      basis is unclear ("amounts paid" without specifying time
+      period or SOW scope), push for explicit "fees paid under
+      the SOW giving rise to the claim." If the cap covers
+      vendor's IP indemnification (a vendor-favored move), push
+      to carve IP indemnification out — IP exposure should not
+      be capped at SOW fees because a patent damages award can
+      vastly exceed the contract value.
+    severity_if_missing: critical
+    detection_keywords:
+      - limitation of liability
+      - aggregate liability
+      - cap on damages
+      - consequential damages
+      - excluded claims
+      - indirect damages
+    detection_examples:
+      - >-
+        EACH PARTY'S AGGREGATE LIABILITY UNDER THIS AGREEMENT
+        SHALL NOT EXCEED TWO TIMES THE TOTAL FEES PAID OR PAYABLE
+        UNDER THE APPLICABLE SOW
+      - >-
+        IN NO EVENT SHALL EITHER PARTY BE LIABLE FOR ANY INDIRECT,
+        INCIDENTAL, OR CONSEQUENTIAL DAMAGES
+    position_order: 3
+  # ---------------------------------------------------------------------------
+  - issue: Intellectual Property Allocation (work product, background IP, license-back)
+    description: |
+      The most consequential clause in a commercial services
+      agreement: who owns the work product the vendor creates for
+      the customer, what background IP the vendor brought to the
+      engagement, and what licenses flow between the parties.
+      The customer-favored default in mid-market commercial
+      purchases: customer owns the work product (defined as
+      items created specifically for customer under the SOW);
+      vendor retains its background IP and gets a license-back
+      to any general-purpose improvements that don't include
+      customer-specific content.
+    standard_language: |
+      "Work Product" means all materials, documents, software,
+      designs, processes, methods, and other items created by
+      Vendor specifically for Customer under a SOW. "Background
+      IP" means Vendor's pre-existing intellectual property,
+      tools, methodologies, and general-purpose software not
+      created specifically for Customer, including any
+      improvements thereto that are general-purpose and do not
+      include or rely on Customer Confidential Information or
+      Customer-specific content. As between the parties: (a)
+      Customer will own all right, title, and interest in and to
+      the Work Product, including all intellectual property
+      rights therein, and Vendor hereby irrevocably assigns to
+      Customer all such right, title, and interest, effective
+      upon Customer's payment of fees for the applicable Work
+      Product; (b) Vendor retains all right, title, and interest
+      in and to Background IP; (c) to the extent any Background
+      IP is incorporated into or necessary to use the Work
+      Product, Vendor hereby grants Customer a perpetual,
+      irrevocable, worldwide, royalty-free, non-exclusive
+      license to use, modify, and create derivative works of
+      such Background IP solely as incorporated into the Work
+      Product and for Customer's internal business purposes; and
+      (d) Customer hereby grants Vendor a non-exclusive,
+      worldwide, royalty-free license to use general-purpose
+      improvements to Background IP made in the course of
+      performing the Services, provided such improvements do not
+      include or rely on Customer Confidential Information,
+      Customer Data, or Customer-specific content.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Work product owned by Customer with a broader Background
+          IP license to Vendor (includes the right to incorporate
+          general learnings from the engagement into Vendor's
+          product roadmap). Acceptable when the engagement is in
+          a domain where Vendor's general-purpose improvements
+          are valuable to its broader business and the Customer
+          is comfortable with that.
+        language: |
+          Customer owns all Work Product created specifically for
+          Customer under a SOW, with full assignment of rights
+          from Vendor effective upon payment. Vendor retains its
+          Background IP and grants Customer a perpetual,
+          royalty-free license to use Background IP as
+          incorporated into Work Product. Customer grants Vendor
+          a non-exclusive license to use general learnings and
+          methodologies developed in the course of performing
+          Services for Vendor's broader business.
+      - rank: 2
+        description: |
+          Vendor owns Work Product; Customer gets a perpetual,
+          royalty-free, non-exclusive license to use it.
+          Acceptable for commodity engagements where the Work
+          Product is heavily based on Vendor's pre-existing
+          template (e.g., a standard report from a research firm)
+          and Customer has no need for exclusivity. Generally not
+          recommended for bespoke work product.
+        language: |
+          Vendor retains all right, title, and interest in and to
+          the Work Product. Vendor grants Customer a perpetual,
+          irrevocable, worldwide, royalty-free, non-exclusive
+          license to use, copy, modify, and create derivative
+          works of the Work Product for Customer's internal
+          business purposes.
+    redline_strategy: |
+      If the contract vests Work Product ownership in Vendor by
+      default, reverse it — for bespoke commercial-purchase work,
+      Customer should own. If the assignment is effective only on
+      "full payment of all amounts under the Agreement" rather
+      than fees for the specific Work Product, narrow — Customer
+      should not have to pay every SOW fee to own the Work
+      Product from an unrelated SOW. If the Background IP
+      definition is so broad it sweeps in the Work Product
+      ("everything Vendor uses or creates"), tighten — Background
+      IP should be limited to pre-existing IP and general-purpose
+      improvements. If the Background IP license to Customer is
+      revocable or term-limited, push for perpetual. If the
+      license-back from Customer to Vendor sweeps in Customer
+      Confidential Information, narrow it.
+    severity_if_missing: high
+    detection_keywords:
+      - work product
+      - deliverable
+      - intellectual property
+      - background IP
+      - assignment
+      - ownership
+      - license-back
+    detection_examples:
+      - >-
+        Customer shall own all right, title, and interest in and
+        to the Work Product, and Vendor hereby assigns all such
+        rights to Customer
+      - >-
+        Vendor retains all right, title, and interest in and to
+        its Background IP, including any improvements thereto
+    position_order: 4
+  # ---------------------------------------------------------------------------
+  - issue: Change Orders (process, pricing, dispute resolution)
+    description: |
+      The formal process for modifying scope, pricing, or schedule
+      mid-engagement. Without a defined change-order process,
+      "scope creep" disputes are routine — the vendor performs
+      work it considers out-of-scope; the customer disputes the
+      additional charges; the relationship sours. A workable
+      change-order section defines who can initiate, who must
+      authorize, what's needed for an authorization, what happens
+      to work performed prior to authorization, and how disputes
+      are resolved.
+    standard_language: |
+      Any change to the scope, fees, schedule, or other terms of
+      a SOW must be authorized in writing through a "Change
+      Order" signed by an authorized representative of each party.
+      Either party may propose a Change Order. Vendor will
+      promptly evaluate any Change Order proposed by Customer and
+      will, within five (5) business days, deliver to Customer a
+      written response that specifies the impact of the proposed
+      change on the SOW's scope, fees, schedule, and any other
+      affected terms. Customer will then accept, reject, or
+      counter-propose. Vendor will not perform any work outside
+      the scope of an authorized SOW or Change Order, and any
+      such work performed without authorization is at Vendor's
+      sole cost and risk and creates no obligation on Customer
+      to pay for it. If the parties are unable to agree on a
+      proposed Change Order, the parties will continue to perform
+      under the existing SOW; if continued performance is
+      impractical due to the unresolved change, either party may
+      terminate the affected SOW for convenience upon thirty (30)
+      days' written notice with no penalty.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Standard Change Order mechanics with a longer response
+          window (10 business days) and an internal escalation
+          process before SOW termination. Acceptable when the
+          engagement is complex enough that Change Order
+          evaluations take meaningful analysis.
+        language: |
+          Changes to a SOW require a written Change Order signed
+          by both parties. Vendor will respond to a proposed
+          Change Order within ten (10) business days with an
+          impact assessment. Work outside the SOW scope without
+          a Change Order is at Vendor's sole cost. If the
+          parties cannot agree on a Change Order, the matter
+          will be escalated to designated executives; if
+          unresolved after fifteen days, either party may
+          terminate the SOW for convenience with thirty days
+          notice.
+      - rank: 2
+        description: |
+          Change Order requirement but with no specified response
+          timeframe and no work-without-authorization protection
+          for Customer. Acceptable only when the relationship is
+          high-trust and the parties have a long history; risks
+          scope creep disputes.
+        language: |
+          Any change to a SOW will be documented in a written
+          Change Order signed by both parties. Vendor will
+          evaluate proposed Change Orders in good faith. Pending
+          a signed Change Order, the parties will continue
+          performance under the existing SOW.
+    redline_strategy: |
+      If the contract permits Vendor to perform additional work
+      and bill it without prior written authorization, fix this
+      — the work-without-authorization protection is the single
+      most important element for Customer. If Change Order
+      requires authorization but the response timeframe is
+      undefined, add a 5-10 business day window. If the Change
+      Order needs Vendor's signature only (not Customer's),
+      fix — Customer must authorize. If there's no termination
+      remedy when parties can't agree on a Change Order, add the
+      30-day convenience termination. If a Change Order can
+      modify the Agreement (not just the SOW), narrow — Change
+      Orders should only modify the affected SOW.
+    severity_if_missing: medium
+    detection_keywords:
+      - change order
+      - change request
+      - scope change
+      - modification to SOW
+      - out of scope
+      - additional work
+    detection_examples:
+      - >-
+        Any change to the scope, fees, or schedule of a SOW must
+        be authorized in writing through a Change Order signed by
+        both parties
+      - >-
+        Vendor shall not perform work outside the scope of an
+        authorized SOW or Change Order without prior written
+        authorization
+    position_order: 5
+  # ---------------------------------------------------------------------------
+  - issue: Payment Terms (currency, net days, late fees, withholding)
+    description: |
+      How and when fees are paid, how invoicing works for
+      milestone-based deliverables, what triggers withholding of
+      payment, and what late-payment remedies apply. In a
+      commercial-purchase MSA, payment is typically tied to
+      milestones or delivery, with a holdback (often 10-15%)
+      retained until final acceptance or completion of
+      transition.
+    standard_language: |
+      Customer will pay Vendor the fees set forth in each SOW.
+      Unless otherwise stated in a SOW, all fees are payable in
+      U.S. dollars within thirty (30) days after the date of
+      Vendor's correct invoice. Vendor may invoice Customer upon
+      completion of the milestones identified in the applicable
+      SOW; Vendor will not invoice for milestones that have not
+      been accepted in accordance with the Acceptance section.
+      Each SOW may identify a "Holdback" amount, not to exceed
+      fifteen percent (15%) of the total SOW fees, which Customer
+      will pay upon the later of (a) Customer's acceptance of all
+      Deliverables under the SOW and (b) completion of any
+      transition assistance required under the SOW. Fees are
+      exclusive of all taxes (excluding taxes based on Vendor's
+      net income), and Customer will be responsible for the
+      payment of all such taxes. If Customer fails to pay any
+      undisputed invoice when due, Vendor may charge interest on
+      the past-due amount at the rate of one and one-half
+      percent (1.5%) per month or the highest rate permitted by
+      applicable law (whichever is lower). Customer may dispute
+      any invoice in good faith by providing written notice
+      within thirty (30) days of receipt; the disputed amount
+      will not accrue late fees during good-faith resolution
+      efforts. Customer may withhold from any payment any
+      amount Vendor owes to Customer under this Agreement,
+      provided Customer first notifies Vendor of the basis for
+      the withholding.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Net 45 with smaller Holdback (10%) and no setoff right.
+          Acceptable when the Customer's procurement process
+          requires a longer cycle and the Vendor cannot tolerate
+          the setoff exposure.
+        language: |
+          Customer will pay all undisputed invoices within
+          forty-five (45) days of receipt. Each SOW may identify
+          a Holdback of up to ten percent (10%) of total fees,
+          payable upon Customer's acceptance of all Deliverables.
+          Late payments accrue interest at 1.5% per month or the
+          highest rate permitted by law. Customer may dispute
+          any invoice in good faith within thirty days; disputed
+          amounts do not accrue late fees during good-faith
+          resolution.
+      - rank: 2
+        description: |
+          Net 30 with no Holdback and no withholding right.
+          Acceptable for short-duration, lower-risk engagements
+          where milestone-based payment is the only retention
+          mechanism. Generally not recommended for engagements
+          with significant transition obligations.
+        language: |
+          Customer will pay all undisputed invoices within thirty
+          (30) days of receipt. Late payments accrue interest at
+          1.5% per month or the highest rate permitted by law.
+          Customer may dispute any invoice in good faith within
+          thirty days.
+    redline_strategy: |
+      If the contract requires payment in advance of milestone
+      completion or before deliverable acceptance, push for
+      milestone-based or deliverable-based invoicing. If there's
+      no Holdback, propose one (10-15% is market). If late fees
+      exceed 1.5% per month, push down (some state usury laws
+      cap this). If the contract permits suspension or
+      termination for unpaid disputed amounts, narrow — only
+      undisputed past-due amounts should trigger remedies. If
+      there's no good-faith dispute mechanism, add one. If
+      withholding/setoff is excluded, push to add a controlled
+      setoff right for amounts Vendor owes Customer.
+    severity_if_missing: medium
+    detection_keywords:
+      - payment terms
+      - net 30
+      - invoice
+      - milestone
+      - holdback
+      - retention
+      - late fees
+      - dispute
+    detection_examples:
+      - >-
+        Customer shall pay all undisputed invoices within thirty
+        days of receipt; each SOW may identify a Holdback of up
+        to fifteen percent
+      - >-
+        Late payments shall accrue interest at the rate of 1.5%
+        per month or the highest rate permitted by applicable law
+    position_order: 6
+  # ---------------------------------------------------------------------------
+  - issue: Termination for Cause
+    description: |
+      Each party's right to terminate the Agreement (or an
+      affected SOW) on the other party's material breach. The
+      standard structure: written notice describing the breach,
+      cure period (typically 30 days), termination effective if
+      not cured. Insolvency-based termination is typically
+      immediate. The customer-side considerations: ensure a
+      meaningful cure window, ensure no cure right for breaches
+      that cannot be cured (confidentiality, IP), ensure
+      survival of indemnification and other ongoing obligations.
+    standard_language: |
+      Either party may terminate this Agreement or any SOW upon
+      thirty (30) days' prior written notice if the other party
+      materially breaches the Agreement or the SOW and fails to
+      cure such breach within the notice period, except that no
+      cure period is required for (a) breaches that by their
+      nature cannot be cured (including a confidentiality breach
+      involving public disclosure or material misappropriation
+      of intellectual property), (b) breaches of payment
+      obligations not cured within an additional ten (10)
+      business day grace period following the cure notice, or
+      (c) repeated breaches of the same type that have been the
+      subject of two or more prior cure notices within the
+      preceding twelve months. Either party may also terminate
+      this Agreement or any SOW immediately upon written notice
+      if the other party (i) becomes insolvent, makes a general
+      assignment for the benefit of creditors, files a voluntary
+      petition in bankruptcy, suffers the appointment of a
+      receiver or trustee for substantially all of its assets,
+      or has an involuntary bankruptcy proceeding instituted
+      against it that is not dismissed within sixty (60) days,
+      or (ii) ceases business operations. The provisions of
+      this Agreement that by their nature should survive
+      termination (including indemnification, limitation of
+      liability, confidentiality, intellectual property, and
+      governing law) will survive.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Standard 30-day cure with the same insolvency triggers
+          but without the repeated-breach exception. Acceptable
+          when the engagement is not at risk of pattern-of-
+          breach disputes.
+        language: |
+          Either party may terminate this Agreement or any SOW
+          upon thirty (30) days' prior written notice if the
+          other party materially breaches the Agreement or SOW
+          and fails to cure within the notice period, except
+          that no cure is required for non-curable breaches
+          (such as a confidentiality breach involving public
+          disclosure). Either party may terminate immediately
+          upon the other party's insolvency, assignment for
+          benefit of creditors, or bankruptcy. Surviving
+          provisions survive.
+      - rank: 2
+        description: |
+          Termination for cause with longer cure period (60 days)
+          and no immediate-termination right for non-curable
+          breaches. Acceptable for high-trust, long-running
+          engagements where the parties want to maximize cure
+          opportunities; generally not recommended where
+          confidentiality or IP exposure is high.
+        language: |
+          Either party may terminate this Agreement or any SOW
+          upon sixty (60) days' prior written notice if the
+          other party materially breaches and fails to cure
+          within the notice period. Insolvency-based termination
+          and survival of obligations follow the standard
+          pattern.
+    redline_strategy: |
+      If the contract lacks a cure period entirely, add a
+      30-day cure for curable breaches. If the cure period
+      applies even to non-curable breaches (confidentiality, IP
+      misappropriation), carve those out. If insolvency
+      triggers are missing or limited (e.g., only voluntary
+      bankruptcy), broaden to include involuntary bankruptcy,
+      receivership, assignment for benefit of creditors, and
+      cessation of business. If termination is one-way (only
+      one party may terminate for cause), push for mutuality.
+      If the survival clause is missing or too narrow, add the
+      standard survival categories (indemnification, LoL,
+      confidentiality, IP, governing law).
+    severity_if_missing: high
+    detection_keywords:
+      - termination for cause
+      - material breach
+      - cure period
+      - insolvency
+      - bankruptcy
+      - survive termination
+      - survival
+    detection_examples:
+      - >-
+        Either party may terminate this Agreement for cause upon
+        thirty days' prior written notice if the other party
+        materially breaches and fails to cure
+      - >-
+        The provisions of this Agreement that by their nature
+        should survive termination shall survive
+    position_order: 7
+  # ---------------------------------------------------------------------------
+  - issue: Termination for Convenience
+    description: |
+      The customer's right to terminate the engagement without
+      cause, typically with a notice period and a defined
+      financial settlement (typically: payment for work
+      completed plus accepted, payment for work-in-progress as
+      of the termination date, and possibly a termination fee
+      for unrecoverable Vendor costs). In commercial-purchase
+      MSAs (unlike SaaS subscriptions), convenience termination
+      is common and important because business needs change
+      and the customer should not be locked into an engagement
+      that no longer serves its purposes.
+    standard_language: |
+      Customer may terminate this Agreement or any SOW for
+      convenience upon thirty (30) days' prior written notice
+      to Vendor. Upon a termination for convenience, Vendor
+      will, as of the effective date of termination, (a)
+      cease all work under the affected SOW or Agreement, (b)
+      deliver to Customer all completed and in-progress Work
+      Product as of the termination date, and (c) submit a
+      final invoice for (i) all completed and accepted Work
+      Product, (ii) work-in-progress as of the effective
+      termination date based on the percentage of completion
+      and the agreed pricing, and (iii) any reasonable,
+      documented unrecoverable third-party commitments Vendor
+      made specifically to perform the affected SOW work,
+      provided that the aggregate of items (ii) and (iii) does
+      not exceed twenty percent (20%) of the remaining unpaid
+      fees that would have been payable under the affected
+      SOW had it run to its scheduled completion. Customer
+      will pay Vendor's final invoice within thirty (30) days
+      of receipt, subject to the standard good-faith dispute
+      mechanism. Vendor will provide reasonable transition
+      assistance for a period of up to ninety (90) days
+      following the effective date of termination at Vendor's
+      then-current professional services rates, including
+      knowledge transfer and continued access to Work Product
+      in a structured, commonly used, and machine-readable
+      format.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          Convenience termination with a longer notice period
+          (60 days) and a slightly higher termination fee cap
+          (30% of remaining fees). Acceptable when the
+          engagement is longer-duration or the Vendor's
+          unrecoverable costs are likely to be higher (e.g.,
+          dedicated personnel commitments).
+        language: |
+          Customer may terminate this Agreement or any SOW for
+          convenience upon sixty (60) days' prior written
+          notice. On termination, Customer will pay for
+          completed and accepted Work Product, work-in-progress
+          based on percentage completion, and reasonable
+          documented unrecoverable third-party commitments,
+          provided the aggregate termination payment does not
+          exceed thirty percent (30%) of remaining unpaid fees.
+          Vendor provides transition assistance for ninety
+          days post-termination.
+      - rank: 2
+        description: |
+          Convenience termination only at the end of a
+          Subscription Term or scheduled SOW completion; no
+          mid-SOW convenience right. Acceptable only when the
+          customer's risk of needing to exit mid-engagement is
+          low (e.g., a fixed-scope short-duration deliverable
+          where any need to exit can wait until completion).
+          Generally not recommended for longer or open-ended
+          engagements.
+        language: |
+          Customer may decline to renew or extend any SOW upon
+          thirty days' written notice before the scheduled
+          completion date. No mid-SOW convenience termination
+          right is granted; for early termination, the
+          termination-for-cause section governs.
+    redline_strategy: |
+      If the customer has no convenience termination right at
+      all, push for one — without it, the customer is locked
+      in even if business needs change materially. If the
+      notice period is longer than 30 days for mid-SOW
+      termination, push to 30. If the financial settlement
+      includes "lost profits" or "expected fees through end
+      of SOW," push down — customer should pay for completed
+      and in-progress work, not for opportunity. If the
+      termination fee cap is missing or exceeds 30% of
+      remaining fees, push down. If there's no transition
+      assistance obligation, add 90 days at standard
+      professional-services rates with knowledge transfer
+      and machine-readable Work Product delivery.
+    severity_if_missing: medium
+    detection_keywords:
+      - termination for convenience
+      - terminate without cause
+      - work in progress
+      - unrecoverable costs
+      - transition assistance
+      - wind down
+    detection_examples:
+      - >-
+        Customer may terminate this Agreement or any SOW for
+        convenience upon thirty days' prior written notice
+      - >-
+        On termination for convenience, Customer shall pay for
+        completed and in-progress Work Product and any
+        unrecoverable third-party commitments
+    position_order: 8
+  # ---------------------------------------------------------------------------
+  - issue: Governing Law and Venue
+    description: |
+      Which jurisdiction's law governs the agreement and where
+      disputes are resolved. Affects substantive contract law,
+      remedies, jury trial availability, and the cost /
+      convenience of enforcement. For U.S. commercial-purchase
+      MSAs, Delaware and New York are the standard neutral
+      choices.
+    standard_language: |
+      This Agreement is governed by and will be construed in
+      accordance with the laws of the State of Delaware, without
+      regard to its conflict-of-laws principles. The parties
+      hereby irrevocably submit to the exclusive jurisdiction
+      of the state and federal courts located in Wilmington,
+      Delaware for any dispute arising out of or relating to
+      this Agreement, and each party irrevocably waives any
+      objection to the venue of any such court on the grounds
+      of inconvenient forum or lack of jurisdiction. EACH PARTY
+      WAIVES ANY RIGHT TO A JURY TRIAL IN ANY DISPUTE ARISING
+      OUT OF OR RELATING TO THIS AGREEMENT. Before initiating
+      formal legal proceedings, the parties will attempt in
+      good faith to resolve any dispute by escalation to
+      designated executives of each party; if not resolved
+      within thirty (30) days of escalation, either party may
+      proceed to litigation.
+    fallback_tiers:
+      - rank: 1
+        description: |
+          New York law and venue; widely-used alternative with
+          well-developed commercial-contract case law.
+          Acceptable when the parties are not Delaware-based
+          and want a familiar commercial forum.
+        language: |
+          This Agreement is governed by the laws of the State
+          of New York, without regard to conflict-of-laws
+          principles. The state and federal courts located in
+          New York County, New York have exclusive jurisdiction
+          over any dispute. Each party waives any right to a
+          jury trial. The parties will attempt in good faith
+          to resolve disputes by executive escalation before
+          litigation.
+      - rank: 2
+        description: |
+          AAA commercial arbitration in a neutral location with
+          expedited procedures. Acceptable when the parties
+          prefer a confidential, faster forum and are willing
+          to accept limited appellate review.
+        language: |
+          Any dispute arising out of or relating to this
+          Agreement will be finally resolved by binding
+          arbitration administered by the American Arbitration
+          Association under its Commercial Arbitration Rules
+          (including the Expedited Procedures for claims under
+          $1 million), with a single arbitrator and venue in
+          New York, New York. Judgment on the arbitration award
+          may be entered in any court of competent
+          jurisdiction.
+    redline_strategy: |
+      If the contract specifies the vendor's home jurisdiction
+      and the customer is not there, counter with Delaware or
+      New York (neutral commercial forums). If arbitration is
+      specified, evaluate whether the rules are reasonable —
+      for commercial-purchase MSAs, arbitration is acceptable
+      but check for class-action waivers, expedited procedure
+      thresholds, and any vendor-favorable rule selection. If
+      the contract waives jury trial unilaterally (vendor
+      only), push for mutuality. If there's no pre-litigation
+      executive-escalation mechanism, add one — it preserves
+      relationships and often resolves disputes before they
+      escalate.
+    severity_if_missing: medium
+    detection_keywords:
+      - governing law
+      - jurisdiction
+      - venue
+      - exclusive jurisdiction
+      - conflict of laws
+      - arbitration
+      - jury trial
+      - executive escalation
+    detection_examples:
+      - >-
+        This Agreement shall be governed by the laws of the
+        State of Delaware, without regard to conflict-of-laws
+        principles
+      - >-
+        Any dispute arising under this Agreement shall be
+        subject to the exclusive jurisdiction of the courts of
+        New York County
+    position_order: 9
