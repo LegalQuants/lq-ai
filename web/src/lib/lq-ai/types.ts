@@ -512,6 +512,13 @@ export interface FileMeta {
 	ingestion_error?: string | null;
 	page_count?: number | null;
 	character_count?: number | null;
+	/**
+	 * M3-A6 Phase 6: parsed-content Document UUID, distinct from `id`
+	 * (the File UUID). Null until the C5 parse pipeline writes the
+	 * documents row; the Easy Playbook wizard polls GET /files/{id}
+	 * until this surfaces, then passes it to POST /playbooks/easy.
+	 */
+	document_id?: string | null;
 	created_at: string;
 }
 
@@ -929,4 +936,82 @@ export interface PlaybookExecution {
 export interface PlaybookExecutionCreate {
 	target_document_id: string;
 	project_id?: string | null;
+}
+
+// ----- Playbook CRUD + Easy Playbook (M3-A6) -----
+
+/**
+ * Request shape for one position when creating or updating a playbook
+ * (M3-A6). Identical to `Position` minus the server-assigned `id`.
+ * Mirrors `PositionCreate` in `docs/api/backend-openapi.yaml`.
+ */
+export interface PositionCreate {
+	issue: string;
+	description?: string;
+	standard_language: string;
+	fallback_tiers?: FallbackTier[];
+	redline_strategy?: string;
+	severity_if_missing: PositionSeverity;
+	detection_keywords?: string[];
+	detection_examples?: string[];
+	position_order?: number;
+}
+
+/**
+ * Request shape for `POST /api/v1/playbooks` (M3-A6). The server sets
+ * `created_by` to the caller unconditionally — there is no path to mint
+ * a built-in via the HTTP surface.
+ */
+export interface PlaybookCreate {
+	name: string;
+	contract_type: string;
+	description?: string;
+	version?: string;
+	positions?: PositionCreate[];
+}
+
+/**
+ * Request shape for `PATCH /api/v1/playbooks/{id}` (M3-A6). All fields
+ * optional; missing = "leave alone". If `positions` is supplied, the
+ * server **atomically replaces** the entire list. To leave positions
+ * alone, omit; to clear, send `[]`.
+ */
+export interface PlaybookUpdate {
+	name?: string;
+	contract_type?: string;
+	description?: string;
+	version?: string;
+	positions?: PositionCreate[] | null;
+}
+
+export type EasyPlaybookGenerationStatus = 'pending' | 'running' | 'completed' | 'error';
+
+/**
+ * Request shape for `POST /api/v1/playbooks/easy` (M3-A6). The
+ * document corpus the wizard's Step 1 collected, plus the contract
+ * family and an optional caller-supplied playbook name.
+ */
+export interface EasyPlaybookGenerationCreate {
+	document_ids: string[];
+	contract_type: string;
+	name?: string | null;
+	persist_documents_after_generation?: boolean;
+}
+
+/**
+ * One row from `easy_playbook_generations`. Returned by `POST
+ * /api/v1/playbooks/easy` (at `status='pending'`) and by `GET
+ * /api/v1/playbooks/easy/{id}` (the wizard's poll target).
+ * `draft_playbook` is populated only on `status='completed'` and
+ * carries the assembled `PlaybookCreate` shape for the inline editor.
+ */
+export interface EasyPlaybookGeneration {
+	id: string;
+	user_id: string | null;
+	contract_type: string;
+	status: EasyPlaybookGenerationStatus;
+	document_ids: string[];
+	draft_playbook: PlaybookCreate | null;
+	error_message?: string | null;
+	created_at: string;
 }
