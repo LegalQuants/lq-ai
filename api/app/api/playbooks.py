@@ -23,6 +23,16 @@ Surface (per [PRD §3.7](docs/PRD.md#37-playbooks)):
   via ``deleted_at``. Same authorization as PATCH. Already-deleted
   rows are invisible to the visibility helper, so a second DELETE
   returns 404.
+* ``POST   /api/v1/playbooks/easy`` (M3-A6) — kick off an Easy
+  Playbook generation against an uploaded document corpus. Returns
+  202 with the new :class:`EasyPlaybookGeneration` row at status
+  ``'pending'``; the ARQ worker on the ``arq:m3a6`` queue runs the
+  extract → cluster → assemble pipeline and writes its progress to
+  the row.
+* ``GET    /api/v1/playbooks/easy/{generation_id}`` (M3-A6) — poll
+  the current state. The wizard's Step 2 reads ``status``; Step 3
+  binds the inline editor to ``draft_playbook`` once status reaches
+  ``completed``.
 * ``POST   /api/v1/playbooks/{playbook_id}/execute`` — kick off an
   execution against a target document. Returns 202 with the new
   :class:`PlaybookExecution` row at status ``'pending'``; the
@@ -79,16 +89,24 @@ from app.clients.gateway import GatewayClient, get_gateway_client
 from app.db.session import get_db, get_session_factory
 from app.models.document import Document
 from app.models.file import File as FileModel
-from app.models.playbook import Playbook, PlaybookExecution, PlaybookPosition
+from app.models.playbook import (
+    EasyPlaybookGeneration,
+    Playbook,
+    PlaybookExecution,
+    PlaybookPosition,
+)
 from app.models.project import Project
 from app.playbooks.executor import PlaybookExecutorError, run_playbook_execution
 from app.schemas.playbooks import (
+    EasyPlaybookGeneration as EasyPlaybookGenerationSchema,
+    EasyPlaybookGenerationCreate,
     Playbook as PlaybookSchema,
     PlaybookCreate,
     PlaybookExecution as PlaybookExecutionSchema,
     PlaybookExecutionCreate,
     PlaybookUpdate,
 )
+from app.workers.queue import enqueue_easy_playbook_generation_job
 
 logger = logging.getLogger(__name__)
 
@@ -520,6 +538,154 @@ async def get_playbook_execution(
         raise HTTPException(status_code=404, detail="execution not found")
 
     return PlaybookExecutionSchema.model_validate(execution)
+
+
+@router.post(
+    "/playbooks/easy",
+    response_model=EasyPlaybookGenerationSchema,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Start an Easy Playbook generation run.",
+)
+async def create_easy_playbook_generation(
+    body: EasyPlaybookGenerationCreate,
+    user: ActiveUser,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> EasyPlaybookGenerationSchema:
+    """Kick off an Easy Playbook generation against the supplied document corpus.
+
+    Authorization: the caller must own every document in
+    ``document_ids``. Cross-user or non-existent ids collapse into a
+    single 404 (no information leakage), matching the M3-A2 executor's
+    posture.
+
+    Creates an :class:`EasyPlaybookGeneration` row at
+    ``status='pending'`` and enqueues the ARQ worker job on the
+    ``arq:m3a6`` queue. Returns 202 immediately with the row id; the
+    wizard's Step 2 polls
+    ``GET /api/v1/playbooks/easy/{generation_id}`` until status
+    reaches ``completed`` or ``error``.
+
+    Per the M3-A6 quality bar, "generation completed" does NOT mean
+    the playbook is fit for use — the wizard's Step 3 inline editor
+    is where the user-attorney validates and edits before the final
+    save (which POSTs to ``/api/v1/playbooks`` like any other
+    playbook create).
+    """
+
+    documents = await _load_caller_owned_documents(
+        db,
+        document_ids=body.document_ids,
+        user=user,
+    )
+    if len(documents) != len(body.document_ids):
+        # Caller asked for documents they don't own (or that don't exist).
+        # 404 collapses both cases per the project's information-leakage
+        # avoidance posture.
+        raise HTTPException(status_code=404, detail="one or more documents not found")
+
+    generation = EasyPlaybookGeneration(
+        user_id=user.id,
+        contract_type=body.contract_type,
+        status="pending",
+        document_ids=list(body.document_ids),
+    )
+    db.add(generation)
+    await db.flush()
+
+    await audit_action(
+        db,
+        user_id=user.id,
+        action="easy_playbook.generation_started",
+        resource_type="easy_playbook_generation",
+        resource_id=str(generation.id),
+        request=request,
+        details={
+            "contract_type": body.contract_type,
+            "document_count": len(body.document_ids),
+        },
+    )
+    await db.commit()
+    await db.refresh(generation)
+
+    enqueued = await enqueue_easy_playbook_generation_job(generation.id)
+    logger.info(
+        "easy_playbook_generation_started",
+        extra={
+            "event": "easy_playbook_started",
+            "user_id": str(user.id),
+            "generation_id": str(generation.id),
+            "enqueued": enqueued,
+            "document_count": len(body.document_ids),
+        },
+    )
+
+    return EasyPlaybookGenerationSchema.model_validate(generation)
+
+
+@router.get(
+    "/playbooks/easy/{generation_id}",
+    response_model=EasyPlaybookGenerationSchema,
+    summary="Poll an Easy Playbook generation row.",
+)
+async def get_easy_playbook_generation(
+    generation_id: uuid.UUID,
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> EasyPlaybookGenerationSchema:
+    """Return the current state of one Easy Playbook generation.
+
+    Caller must be the row's ``user_id`` OR an admin. Cross-user /
+    missing rows collapse into 404. The wizard's Step 2 polls this
+    endpoint every few seconds until ``status`` reaches a terminal
+    state (``completed`` or ``error``).
+    """
+
+    row = await db.get(EasyPlaybookGeneration, generation_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="generation not found")
+    if not user.is_admin and row.user_id != user.id:
+        raise HTTPException(status_code=404, detail="generation not found")
+    return EasyPlaybookGenerationSchema.model_validate(row)
+
+
+async def _load_caller_owned_documents(
+    db: AsyncSession,
+    *,
+    document_ids: list[uuid.UUID],
+    user: ActiveUser,
+) -> list[Document]:
+    """Load Documents whose parent file the caller owns; admins see all.
+
+    Returns only the documents that pass the ownership check.
+    Soft-deleted files (``files.deleted_at IS NOT NULL``) are
+    excluded — generating a playbook from documents the user no
+    longer "has" would surprise on the audit trail.
+    """
+
+    if not document_ids:
+        return []
+    stmt = select(Document).where(Document.id.in_(document_ids))
+    docs = (await db.execute(stmt)).scalars().all()
+    if not docs:
+        return []
+
+    file_ids = [doc.file_id for doc in docs]
+    file_stmt = select(FileModel).where(
+        FileModel.id.in_(file_ids),
+        FileModel.deleted_at.is_(None),
+    )
+    files = (await db.execute(file_stmt)).scalars().all()
+    file_by_id = {f.id: f for f in files}
+
+    out: list[Document] = []
+    for doc in docs:
+        file_row = file_by_id.get(doc.file_id)
+        if file_row is None:
+            continue
+        if user.is_admin or file_row.owner_id == user.id:
+            out.append(doc)
+    return out
 
 
 async def _load_visible_playbook(

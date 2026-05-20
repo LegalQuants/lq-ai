@@ -19,9 +19,12 @@ The new worker therefore declares ``queue_name = M3A6_QUEUE_NAME`` and
 the API-side enqueue helpers (added in Phase 5) build their pool with
 ``default_queue_name=M3A6_QUEUE_NAME`` so the two pipelines never mix.
 
-Phase 1 (this commit) registers only a ``noop_job`` as the "ARQ is wired
-up" gate. Phase 5 (the easy-playbook worker) adds the real generation
-function alongside.
+Registered functions:
+
+* ``noop_job`` (Phase 1) — kept indefinitely as a lightweight
+  "is the worker consuming?" health probe.
+* :func:`app.workers.easy_playbook_worker.easy_playbook_generation_job`
+  (Phase 5) — the real Easy Playbook generation pipeline.
 
 Discovered by the ``arq`` CLI via::
 
@@ -38,6 +41,7 @@ from typing import Any, ClassVar
 
 from app.config import get_settings
 from app.db.session import dispose_engine
+from app.workers.easy_playbook_worker import easy_playbook_generation_job
 
 log = logging.getLogger(__name__)
 
@@ -130,7 +134,7 @@ class WorkerSettings:
     See https://arq-docs.helpmanual.io/#workersettings for the schema.
     """
 
-    functions: ClassVar[list[Any]] = [noop_job]
+    functions: ClassVar[list[Any]] = [noop_job, easy_playbook_generation_job]
     queue_name: ClassVar[str] = M3A6_QUEUE_NAME
     on_startup = on_startup
     on_shutdown = on_shutdown

@@ -2465,6 +2465,76 @@ paths:
         '401':
           description: Not authenticated.
 
+  /api/v1/playbooks/easy:
+    post:
+      tags: [playbooks]
+      summary: Start an Easy Playbook generation run (M3-A6)
+      description: |
+        Kicks off the Easy Playbook auto-generation pipeline against
+        the supplied document corpus. Creates an
+        ``EasyPlaybookGeneration`` row at ``status='pending'`` and
+        enqueues the ARQ worker job on the ``arq:m3a6`` queue (the
+        dedicated M3-A6 worker — see ``app/workers/arq_setup.py``).
+        Returns 202 immediately; the wizard's Step 2 polls
+        ``GET /api/v1/playbooks/easy/{generation_id}`` until status
+        reaches a terminal value.
+
+        Authorization: caller must own every document in
+        ``document_ids`` (admins bypass). Cross-user / missing /
+        soft-deleted documents collapse into 404.
+
+        Generation completion does NOT mean the playbook is fit for
+        use; the wizard's Step 3 inline editor is where the user-
+        attorney validates and edits before the final save (which
+        POSTs to ``/api/v1/playbooks`` like any other playbook).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EasyPlaybookGenerationCreate'}
+      responses:
+        '202':
+          description: Generation scheduled; row created at status `pending`.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EasyPlaybookGeneration'}
+        '404':
+          description: One or more documents not found / not authorized.
+        '422':
+          description: Validation error (empty ``document_ids``, unknown field, etc.).
+        '401':
+          description: Not authenticated.
+
+  /api/v1/playbooks/easy/{generation_id}:
+    parameters:
+      - in: path
+        name: generation_id
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      tags: [playbooks]
+      summary: Poll an Easy Playbook generation row (M3-A6)
+      description: |
+        Returns the current state of one Easy Playbook generation.
+        Caller must be the row's user OR an admin; cross-user / missing
+        rows return 404.
+
+        When ``status='completed'``, ``draft_playbook`` carries the
+        assembled ``PlaybookCreate`` shape — the wizard's Step 3 inline
+        editor binds to this. When ``status='error'``, ``error_message``
+        is populated. The wizard's Step 2 polls every few seconds until
+        a terminal status arrives.
+      responses:
+        '200':
+          description: Current generation row.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EasyPlaybookGeneration'}
+        '404':
+          description: Generation not found or not authorized.
+        '401':
+          description: Not authenticated.
+
   /api/v1/playbooks/{playbook_id}/execute:
     parameters:
       - in: path
@@ -3253,6 +3323,81 @@ components:
           type: array
           nullable: true
           items: {$ref: '#/components/schemas/PositionCreate'}
+
+    EasyPlaybookGenerationCreate:
+      type: object
+      additionalProperties: false
+      required: [document_ids, contract_type]
+      description: |
+        Request shape for ``POST /api/v1/playbooks/easy`` (M3-A6). The
+        document corpus the wizard's Step 1 collected, plus the
+        contract family and an optional caller-supplied name.
+      properties:
+        document_ids:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items: {type: string, format: uuid}
+        contract_type:
+          type: string
+          minLength: 1
+          description: |
+            The contract family the playbook targets ("NDA",
+            "MSA-SaaS", "DPA", etc.). Free-form; passed to the
+            extractor + assembly LLM calls as a hint.
+        name:
+          type: string
+          nullable: true
+          description: |
+            Playbook name. Falls back to "Generated {contract_type}
+            Playbook" if omitted.
+        persist_documents_after_generation:
+          type: boolean
+          default: true
+          description: |
+            Reserved for a future ephemeral-upload mode. Currently
+            always true; uploaded documents persist to the user's
+            library per M3-A6 §3.3.
+
+    EasyPlaybookGeneration:
+      type: object
+      required: [id, contract_type, status, document_ids, created_at]
+      description: |
+        One row from the ``easy_playbook_generations`` table. Returned
+        by ``POST /api/v1/playbooks/easy`` (at status ``pending``) and
+        by ``GET /api/v1/playbooks/easy/{id}`` (the wizard's poll
+        target). ``draft_playbook`` is populated only on
+        ``status='completed'`` and carries the assembled
+        ``PlaybookCreate`` shape for the Step 3 inline editor.
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid, nullable: true}
+        contract_type: {type: string}
+        status:
+          type: string
+          enum: [pending, running, completed, error]
+        document_ids:
+          type: array
+          items: {type: string, format: uuid}
+        draft_playbook:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: |
+            The assembled ``PlaybookCreate`` shape. ``null`` until the
+            worker reaches ``status='completed'``.
+        error_message:
+          type: string
+          nullable: true
+        created_at: {type: string, format: date-time}
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
 
     PlaybookExecution:
       type: object
