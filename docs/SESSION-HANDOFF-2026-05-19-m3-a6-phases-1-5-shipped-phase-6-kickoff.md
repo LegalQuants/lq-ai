@@ -351,12 +351,17 @@ Independent items worth their own follow-ons:
 
 7. **Phase 5's worker DOES NOT verify that the caller owns the documents at run time** — it just loads whatever document IDs the row carries. The POST endpoint enforces ownership at enqueue time, but if a document is reassigned (which doesn't happen today) or soft-deleted between enqueue and pickup, the worker silently skips. The graceful skip is intentional; documenting it as a known posture is worth a follow-on if Phase 6 surfaces edge-case complaints from operators.
 
+8. **211 pre-existing mypy errors in `api/tests/`** (surfaced by Phase 7's full-suite sweep; **severity: LOW**). CI's mypy step (`.github/workflows/ci.yml:113`) is scoped to `mypy app` — production code only — so the test-tree errors don't block CI. All 211 errors are in code unmodified by M3-A6; this session introduced ZERO new ones. The errors are ~150 missing `-> None` return annotations + ~30 missing parameter type annotations + ~30 SQLAlchemy `FromClause.delete()` patterns + long-tail. **Tracked as `DE-284 — Tighten api/tests/ mypy coverage`** in `docs/PRD.md §9` (Engineering discipline subsection). The fix is mechanical but bounded; the reason for the durable paper trail is to close the silent-debt-accumulation loop Kevin flagged during the M3-A6 Phase 7 sweep — without DE-284, the next contributor running `mypy .` locally would have no way to know the count is pre-existing rather than a regression.
+
+9. **Bookkeeping miss caught in Phase 7 sweep**: Phases 2 + 5 added 5 new endpoints (`POST /playbooks`, `PATCH/DELETE /playbooks/{id}`, `POST /playbooks/easy`, `GET /playbooks/easy/{id}`) but forgot to update `IMPLEMENTED_ROUTES` in `api/tests/test_endpoints.py` and `EXPECTED_PATHS` in `api/tests/test_openapi.py`. **Fixed in commit `bb26cac`** (Phase 7). Per-phase commits passed their own dedicated test files, but the full-suite test caught the drift. **Lesson:** future phase commits that add API routes should also update both scaffolding tests. Probably worth a pre-commit hook or a CI step that runs `pytest tests/test_endpoints.py tests/test_openapi.py` as part of every API PR.
+
 ---
 
 ## 10. M3-A6 follow-on DEs (file in PRD §9 when convenient)
 
 These are M3-A6-specific deferred enhancements that surfaced during this session's work and are worth filing in `docs/PRD.md §9` at PR time or the M3-close docs batch:
 
+- **DE-284 — Tighten api/tests/ mypy coverage** ✓ **Filed in PRD §9** (Phase 7 sweep). 211 pre-existing errors; P3; mechanical sweep + CI flip.
 - **DE — Easy Playbook regeneration** (add 3 more documents, re-run). The current shape is one-shot; the worker writes `draft_playbook` once at completion. A "regenerate" path would re-extract + re-cluster against the expanded corpus. Filed as out-of-scope in the prep doc's §6.
 - **DE — Multi-user / team-shared playbooks**. Current model is single-user-owned (`created_by`). "Share with my team" / "publish to the org" is a future enhancement.
 - **DE — Real-time progress events via WebSocket** instead of HTTP polling. The wizard's Step 2 uses 5-second polling; the prep doc's §6 noted WebSocket would be smoother but adds infra complexity.

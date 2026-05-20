@@ -3623,6 +3623,18 @@ This subsection operationalizes the §1.9 engineering-discipline posture and the
 
 **Acceptance criteria — Phase A:** at least one PrivacyQuant-backed community skill in `skills/community/` with a documented end-to-end path from skill invocation → PrivacyQuant tool call → citation-grounded output rendered in the LQ.AI UI; PrivacyQuant referenced in `README.md` as a LegalQuants ecosystem integration; `docs/skill-authoring-guide.md` updated with the MCP-tool-call skill pattern. **Acceptance criteria — Phase B:** revisit when MCP-client subsystem work begins.
 
+#### DE-284 — Tighten api/tests/ mypy coverage
+
+**Priority:** P3 · **Effort:** M (211 errors across 65 files; mechanical but not trivial)
+
+**Context:** CI's mypy step (`.github/workflows/ci.yml:113`) runs `mypy app`, scoping the gate to production code only. The `api/tests/` tree itself has 211 mypy errors (as of m3-a6-easy-playbook-wizard), mostly missing `-> None` return annotations on test functions plus a handful of `attr-defined` errors on older SQLAlchemy `FromClause.delete()` patterns. They predate M3 — none are introduced by the M3-A6 work that surfaced them — but until M3-A6's Phase 7 full-suite sweep, the count was not visible in any tracked place. Mirrors the pattern §1.9 calls out: silent debt accumulates when CI doesn't catch it and no one writes it down.
+
+**Specific scope:** Two-step path. **Step A:** mechanical sweep — add `-> None` return annotations to test functions; fix the `FromClause` patterns by switching to `sqlalchemy.delete()` (the standalone construct). Estimated breakdown of the 211 errors: ~150 "missing return annotation" (one-line annotations), ~30 "missing parameter type" (also one-line), ~30 "attr-defined" on SQLAlchemy patterns (small refactor each), ~1 long-tail. **Step B:** flip CI's mypy step to `mypy app tests` so the gate enforces no regression. The two steps must land together — flipping CI before Step A's sweep would break every PR.
+
+**Acceptance criteria:** `mypy .` from `api/` exits 0; CI's mypy step covers both `app` and `tests`; any future test-file change must be mypy-clean to merge. The fix is one focused PR with no production-code changes; touches every file under `api/tests/` but only adds annotations and adjusts a few imports.
+
+**Why P3:** Test code only; CI green; no functional impact. The reason to file it at all is the durable paper trail — without it, the next contributor running `mypy .` locally will be confused about why 211 errors exist and whether they're a regression. Listing it here closes the silent-debt loop and gives a community contributor a bounded, well-defined task.
+
 ### How to add to this list
 
 When new deferred items are identified during development, ongoing skill authoring, or community feedback:
