@@ -4289,6 +4289,16 @@ components:
             `ingestion_status='ready'`; counts characters of the
             canonical PyMuPDF-extracted text, not of the original
             PDF byte stream.
+        document_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            UUID of the parsed-content `documents` row (M3-A6 Phase 6).
+            Distinct from `id` (the File UUID). `null` until the C5
+            parse pipeline produces the row; the Easy Playbook wizard
+            polls `GET /files/{id}` until this flips non-null, then
+            passes the value to `POST /playbooks/easy` in `document_ids`.
         created_at: {type: string, format: date-time}
 
     KnowledgeBase:
