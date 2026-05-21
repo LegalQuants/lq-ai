@@ -299,3 +299,71 @@ async def test_get_manifest_each_call_yields_fresh_guid(
     assert id1 != id2
     uuid.UUID(id1)
     uuid.UUID(id2)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/word-addin/version — M3-B8 unauthenticated handshake
+# ---------------------------------------------------------------------------
+
+
+VERSION_PATH = "/api/v1/word-addin/version"
+
+
+@pytest.mark.integration
+async def test_get_version_is_unauthenticated(client: AsyncClient) -> None:
+    """The task pane consults this BEFORE sign-in; no bearer required."""
+    response = await client.get(VERSION_PATH)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert set(body.keys()) == {
+        "deployment_version",
+        "addin_min_compatible_version",
+        "addin_max_compatible_version",
+        "taskpane_bundle_url",
+        "taskpane_bundle_hash",
+    }
+
+
+@pytest.mark.integration
+async def test_get_version_returns_module_constants(client: AsyncClient) -> None:
+    """The compatibility-range values come from the module-level constants."""
+    from app.api.word_addin import (
+        ADDIN_MAX_COMPATIBLE_VERSION,
+        ADDIN_MIN_COMPATIBLE_VERSION,
+    )
+
+    response = await client.get(VERSION_PATH)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["addin_min_compatible_version"] == ADDIN_MIN_COMPATIBLE_VERSION
+    assert body["addin_max_compatible_version"] == ADDIN_MAX_COMPATIBLE_VERSION
+    # Hash is intentionally nullable in M3-B8; signing CI populates it later.
+    assert body["taskpane_bundle_hash"] is None
+
+
+@pytest.mark.integration
+async def test_get_version_derives_bundle_url_from_request_origin(
+    client: AsyncClient,
+) -> None:
+    """The bundle URL embeds the request's effective origin (reverse-proxy aware)."""
+    response = await client.get(
+        VERSION_PATH,
+        headers={
+            "X-Forwarded-Proto": "https",
+            "X-Forwarded-Host": "lq.acme.example",
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["taskpane_bundle_url"] == "https://lq.acme.example/word-addin/taskpane.html"
+
+
+@pytest.mark.integration
+async def test_get_version_reports_api_package_version(client: AsyncClient) -> None:
+    """``deployment_version`` mirrors ``app.__version__`` so the add-in's
+    'Update needed' overlay can quote the deployment release number."""
+    from app import __version__ as api_version
+
+    response = await client.get(VERSION_PATH)
+    assert response.status_code == 200
+    assert response.json()["deployment_version"] == api_version

@@ -60,6 +60,8 @@ tags:
     description: Audit log query (admin only)
   - name: tier-policy
     description: Inference tier policy configuration (admin only)
+  - name: word-addin
+    description: Word add-in unauthenticated handshake surfaces (M3-B8)
 
 # ============================================================
 # PATHS
@@ -2900,6 +2902,42 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
 
+  /api/v1/word-addin/version:
+    get:
+      tags: [word-addin]
+      summary: Word add-in version handshake (M3-B8)
+      description: |
+        **Unauthenticated.** The Word add-in's task pane calls this on
+        mount, BEFORE the user has signed in, so an out-of-date add-in
+        can surface an "Update needed" overlay rather than getting
+        stuck at a broken OAuth handshake or a breaking-change API
+        call.
+
+        Response payload:
+        - `deployment_version` — the LQ.AI api package version (the
+          deployment's release number). Informational; the add-in
+          surfaces it in the "Update needed" overlay so a user can
+          quote it to support.
+        - `addin_min_compatible_version` / `addin_max_compatible_version`
+          — the semver range of add-in bundles this deployment can
+          talk to. The task pane refuses to render features outside
+          the range.
+        - `taskpane_bundle_url` — canonical URL of the task pane HTML
+          entry. The task pane already knows this from `window.location`
+          today; the field exists in the handshake so a future
+          deployment can serve the bundle from a CDN or operator-chosen
+          path without changing the manifest.
+        - `taskpane_bundle_hash` — optional SHA-256 of the deployed
+          bundle JS. M3-B8 ships this nullable; M3-B7 signing CI
+          populates the value from the build manifest. Null means
+          "don't enforce" — not an error.
+      responses:
+        '200':
+          description: Version handshake payload
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WordAddinVersionResponse'}
+
   # ----------- INFERENCE (PRD §3.13 — Wave B) -----------
   /api/v1/inference/current-tier:
     get:
@@ -3112,6 +3150,55 @@ components:
         gateway-side enforcement is a deferred D-phase item.
 
   schemas:
+    WordAddinVersionResponse:
+      type: object
+      description: |
+        Response payload for `GET /api/v1/word-addin/version` (M3-B8).
+        Consumed by the task pane on mount to decide whether the
+        installed add-in version is compatible with this deployment.
+      required:
+        - deployment_version
+        - addin_min_compatible_version
+        - addin_max_compatible_version
+        - taskpane_bundle_url
+      properties:
+        deployment_version:
+          type: string
+          example: '0.3.0'
+          description: |
+            LQ.AI deployment version (the api package `__version__`).
+            Informational — the add-in surfaces it in the "Update
+            needed" overlay so users can quote it to support.
+        addin_min_compatible_version:
+          type: string
+          example: '0.3.0'
+          description: |
+            Lowest add-in version (semver string) this deployment
+            accepts. The task pane refuses to render features when
+            its bundled version is lower.
+        addin_max_compatible_version:
+          type: string
+          example: '0.3.99'
+          description: |
+            Highest add-in version this deployment recognizes. Bundles
+            newer than this still load (forward compatibility is
+            best-effort) but the add-in surfaces a soft warning so the
+            operator knows to update the deployment.
+        taskpane_bundle_url:
+          type: string
+          format: uri
+          example: 'https://lq.acme.example/word-addin/taskpane.html'
+          description: |
+            Canonical URL of the task pane bundle's HTML entry point.
+        taskpane_bundle_hash:
+          type: string
+          nullable: true
+          example: null
+          description: |
+            Optional SHA-256 hash of the deployed task pane bundle JS.
+            M3-B8 ships nullable; M3-B7 signing CI populates the value.
+            Null means "don't enforce" — not an error.
+
     FallbackTier:
       type: object
       required: [rank, description, language]

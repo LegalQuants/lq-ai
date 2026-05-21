@@ -63,6 +63,12 @@ api_router.include_router(bootstrap.router)
 # gate. Mounted without `_active` deliberately: the gateway has no user.
 api_router.include_router(internal.router)
 
+# M3-B8 — Word add-in version handshake. Unauthenticated: the task pane
+# calls this on mount BEFORE the user has signed in, so an out-of-date
+# add-in can surface an "Update needed" overlay before the OAuth dialog
+# even tries to load.
+api_router.include_router(word_addin.public_router)
+
 # Routers that uniformly require an authenticated, must_change_password=false
 # user. Applying this at the router level means every current stub and every
 # future real handler in these modules inherits the gate automatically.
@@ -87,12 +93,10 @@ api_router.include_router(admin.router, dependencies=_active)
 # (``/playbooks/{id}/execute`` and ``/playbook-executions/{id}``) so
 # they live alongside the M3-A4 list/CRUD endpoints in the same module.
 api_router.include_router(playbooks_api.router, dependencies=_active)
-# M3-B1: Word add-in admin surface (manifest generation).
-# Router prefix ``/admin/word-addin`` means it stacks on the same
-# AdminUser gate as the other admin endpoints; future M3-B2 OAuth +
-# M3-B8 version-handshake routes live in the same module under
-# different prefixes (e.g. ``/word-addin/version``) and will be
-# mounted separately when those tasks ship.
-api_router.include_router(word_addin.router, dependencies=_active)
+# M3-B1: Word add-in admin surface (manifest generation). Mounted with
+# the AdminUser dep at handler level. M3-B8's version-handshake route
+# lives in the same module but on a separate ``public_router`` mounted
+# above without the ``_active`` gate.
+api_router.include_router(word_addin.admin_router, dependencies=_active)
 
 __all__ = ["api_router"]

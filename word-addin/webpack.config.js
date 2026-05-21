@@ -17,8 +17,10 @@
  */
 
 const path = require("path");
+const webpack = require("webpack");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
+const pkg = require("./package.json");
 
 module.exports = (env, argv) => {
   const isProduction = argv.mode === "production";
@@ -72,6 +74,14 @@ module.exports = (env, argv) => {
       ],
     },
     plugins: [
+      // Inject the package.json version into the bundle as the
+      // ``__ADDIN_VERSION__`` global. M3-B8's version handshake compares
+      // this value against the deployment's compatibility range — bake
+      // it in at build time so the runtime check can't be tricked by a
+      // tampered API response.
+      new webpack.DefinePlugin({
+        __ADDIN_VERSION__: JSON.stringify(pkg.version),
+      }),
       new HtmlWebpackPlugin({
         filename: "taskpane.html",
         template: path.resolve(__dirname, "src/taskpane/taskpane.html"),

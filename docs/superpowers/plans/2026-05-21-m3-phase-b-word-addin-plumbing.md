@@ -155,6 +155,34 @@ Verification gaps carried to M3-E1 fresh-install:
 * Live Word desktop sideload of the manifest → sign in via the actual Office dialog → confirm session persists across documents. No Word client in this dev environment.
 * Cross-browser dialog behavior. The OAuth dialog page renders identically in Chrome / Edge / Safari in jsdom; live verification on each is deferred to M3-E1.
 
-### Next: M3-B8 (self-served bundle + version handshake)
+### 2026-05-21 — M3-B8 shipped (this commit)
 
-Per the original sequencing in §"Sequence for the next session" above. Lands on this branch as the third commit before the PR opens. Cert procurement (B-5) and M3-B7 follow on a separate PR when the cert arrives.
+Decision B-7 (version handshake protocol) implemented end-to-end. Three side-channel decisions worth recording:
+
+**Router split: `admin_router` + `public_router` in `word_addin.py`.** The version endpoint must be reachable BEFORE the user signs in (an out-of-date add-in needs to surface "Update needed" before the OAuth dialog can fail at a breaking-change API call). Stacking it under the existing `AdminUser` gate would defeat the purpose. The split mirrors how `bootstrap.router` lives outside `_active`. The old `word_addin.router` symbol stays as a backward-compat alias pointing at `admin_router` so any external import wouldn't break — though there are none today.
+
+**Compatibility range as module constants, not env vars.** `ADDIN_MIN_COMPATIBLE_VERSION = "0.3.0"` and `ADDIN_MAX_COMPATIBLE_VERSION = "0.3.99"` are baked into `word_addin.py`. For v0.3.0 the cost of making them operator-configurable (env vars + config schema + admin UI surface to view current values) exceeds the value. Bumping them is a code change with a clear semantic — change them when M4 lands or when a breaking add-in change forces operators to redistribute the manifest.
+
+**`taskpane_bundle_hash` shipped as nullable.** The prep doc Decision B-7 listed the hash as part of the payload. Implementing it correctly (compute the SHA-256 of the deployed bundle JS, cache it, expose it without bricking on file-not-found) is non-trivial and not load-bearing for v0.3.0. Shipped as `Optional[str]` returning `None` today; M3-B7's signing CI populates the value from the build manifest when that work lands. Schema nullability documented in OpenAPI.
+
+Add-in side: webpack's `DefinePlugin` injects `__ADDIN_VERSION__` from `package.json` so the bundle knows its own version without a runtime fetch. `version.ts` runs on App mount, classifies the response into `compatible` / `addin_outdated` / `deployment_outdated` / `unknown`, and renders one of three UI states:
+
+1. **Update-needed overlay** — for the two strict-incompatibility cases. Blocks every other UI path so an out-of-date add-in can't push the user through OAuth.
+2. **Soft "version unknown" banner** — for the network-failed case. Renders inside the normal layout (sign-in or authenticated) so an offline operator isn't blocked.
+3. **Normal layouts** — for the `compatible` case.
+
+Test coverage:
+* 4 new backend integration tests (`test_get_version_*`) — unauthenticated access, schema shape, module constants, reverse-proxy-aware origin derivation, deployment-version mirroring `app.__version__`.
+* 17 new vitest tests for `word-addin/src/taskpane/version.ts` — pure-function `parseVersion` / `compareVersions` / `classifyVersion` + `fetchVersionInfo` covering compatible / outdated-each-direction / network-error / HTTP-error / default-installed-version paths.
+* OpenAPI spec gains `/word-addin/version` path + `WordAddinVersionResponse` schema + a new `word-addin` tag.
+* `test_openapi_paths_match_sketch` updated to expect 81 paths (was 80 before B8).
+
+### Next: open PR #1 (B1 + B2 + B8) once B-5 cert decision lands
+
+The branch `m3-phase-b-word-addin-plumbing` is now at three feature commits on top of the prep doc:
+
+* `c17223e` — M3-B1 scaffold (manifest + task pane shell + admin manifest generator)
+* `70dc009` — M3-B2 OAuth (Office.js Dialog API + LQ.AI JWT)
+* (this commit) — M3-B8 version handshake + update-needed overlay
+
+PR #1 opens after a quick smoke verification path. M3-B7 (signing CI + cert) follows as PR #2 once the cert is in hand — see Decision B-5 for the open vendor choice.

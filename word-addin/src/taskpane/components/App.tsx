@@ -1,26 +1,26 @@
 /**
  * Root component for the LQ.AI Word add-in task pane.
  *
- * M3-B1 + M3-B2 scope: header + tab strip + a deep-link card per tab,
- * gated behind LQ.AI sign-in (per Decision B-3, OAuth via Office.js
- * Dialog API + the deployment's existing JWT issuer).
+ * Renders three exclusive states:
  *
- * The feature surfaces inside each tab (chat against the open document
- * for Chat, skill execution with tracked changes for Skills, playbook
- * execution for Playbooks, plus the Inference Tier badge in the header)
- * are descoped to M4 / community contribution per [DE-287]. Decision
- * B-4 in the Phase B prep doc locks the placeholder treatment: each
- * tab renders a "coming soon" card with a button that opens the
- * equivalent web-app surface in a new browser tab — giving the
- * operator a usable add-in at v0.3.0 while making the
- * community-contribution surface explicit.
+ *   1. "Update needed" overlay — installed add-in version falls outside
+ *      the deployment's compatibility range (M3-B8 version handshake).
+ *      Blocks every other UI path so an out-of-date add-in can't push
+ *      the operator through a broken OAuth handshake.
+ *   2. Sign-in gate — version is compatible (or check is "unknown") but
+ *      no LQ.AI session is stored locally (M3-B2 OAuth).
+ *   3. Authenticated layout — header + tab strip + deep-link card per
+ *      tab. The feature surfaces inside each tab are descoped to M4 /
+ *      community contribution per PRD §9 DE-287.
  */
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Header } from "./Header";
 import { TabStrip, type TabId } from "./TabStrip";
 import { DeepLinkCard } from "./DeepLinkCard";
 import { SignInGate } from "./SignInGate";
+import { UpdateNeededOverlay } from "./UpdateNeededOverlay";
 import { getSession, logout, type AuthSession } from "../auth";
+import { fetchVersionInfo, type VersionInfo } from "../version";
 
 type TabContent = {
   title: string;
@@ -49,12 +49,53 @@ const TAB_CONTENT: Record<TabId, TabContent> = {
 export const App: React.FC = () => {
   const [session, setSession] = useState<AuthSession | null>(() => getSession());
   const [activeTab, setActiveTab] = useState<TabId>("chat");
+  const [version, setVersion] = useState<VersionInfo | null>(null);
 
+  // Run the version handshake once on mount. The check is best-effort:
+  // a failed request renders `status="unknown"` and we fall through to
+  // the normal sign-in / authenticated layouts so an offline operator
+  // isn't blocked from at least seeing the task pane. The overlay only
+  // appears for the two strict-incompatibility cases.
+  useEffect(() => {
+    let cancelled = false;
+    void fetchVersionInfo().then((info) => {
+      if (!cancelled) setVersion(info);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const deploymentOrigin = window.location.origin;
+
+  // State 1 — Update-needed overlay blocks every other UI path. The
+  // overlay's heading and copy differ based on which side of the range
+  // is broken; UpdateNeededOverlay handles both cases internally.
+  if (
+    version !== null &&
+    (version.status === "addin_outdated" ||
+      version.status === "deployment_outdated")
+  ) {
+    return (
+      <div className="lq-app lq-app-update-needed">
+        <Header deploymentOrigin={deploymentOrigin} user={null} />
+        <main className="lq-content">
+          <UpdateNeededOverlay info={version} />
+        </main>
+      </div>
+    );
+  }
+
+  // State 2 — Unauthenticated. Same layout as the sign-in path; the
+  // version handshake hasn't blocked it, so the user can proceed.
   if (!session) {
     return (
       <div className="lq-app lq-app-signin">
-        <Header deploymentOrigin={window.location.origin} user={null} />
+        <Header deploymentOrigin={deploymentOrigin} user={null} />
         <main className="lq-content">
+          {version?.status === "unknown" && (
+            <VersionUnknownBanner reason={version.error} />
+          )}
           <SignInGate onSignedIn={setSession} />
         </main>
       </div>
@@ -66,8 +107,8 @@ export const App: React.FC = () => {
     setSession(null);
   }
 
+  // State 3 — Authenticated tab strip.
   const content = TAB_CONTENT[activeTab];
-  const deploymentOrigin = window.location.origin;
   const deepLinkHref = `${deploymentOrigin}${content.webAppPath}`;
 
   return (
@@ -79,6 +120,9 @@ export const App: React.FC = () => {
       />
       <TabStrip activeTab={activeTab} onTabChange={setActiveTab} />
       <main className="lq-content">
+        {version?.status === "unknown" && (
+          <VersionUnknownBanner reason={version.error} />
+        )}
         <DeepLinkCard
           title={content.title}
           body={content.body}
@@ -105,3 +149,18 @@ export const App: React.FC = () => {
     </div>
   );
 };
+
+/** Soft warning shown when the version handshake failed entirely. The
+ *  add-in continues to work so an offline operator isn't blocked, but
+ *  the banner tells them we couldn't verify compatibility — useful for
+ *  diagnosing "the add-in keeps showing X" support tickets. */
+const VersionUnknownBanner: React.FC<{ reason: string | null }> = ({
+  reason,
+}) => (
+  <p className="lq-version-warning" role="status">
+    <strong>Version check unavailable.</strong> The add-in couldn&apos;t
+    confirm it&apos;s compatible with this deployment
+    {reason ? ` (${reason})` : ""}. Sign-in and basic flows still work, but
+    let your LQ.AI admin know if you hit something unexpected.
+  </p>
+);

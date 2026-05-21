@@ -1,15 +1,19 @@
-"""Word add-in admin surface (M3-B1).
+"""Word add-in plumbing surface (M3-B1, M3-B2, M3-B8).
 
-Surface (current):
+Surfaces (current):
 
 * ``GET /api/v1/admin/word-addin/manifest`` — admin-only; returns a
   rendered Office Add-in manifest XML with the operator's deployment URL
-  + a freshly generated GUID substituted into the template. Operators
-  use the rendered file to sideload the add-in via Microsoft 365 Admin
-  Center (per `word-addin/README.md`).
+  + a freshly generated GUID substituted into the template (M3-B1).
+* ``GET /api/v1/word-addin/version`` — **unauthenticated**; returns the
+  deployment's version + the compatible add-in version range + the
+  task-pane bundle URL. The task pane consults this on mount before
+  the user even sees the sign-in screen, so an out-of-date add-in
+  surfaces an "Update needed" overlay without the operator getting
+  stuck at a broken OAuth handshake (M3-B8).
 
-Future M3 Phase B surfaces (M3-B2 OAuth, M3-B8 version handshake) land
-in this module as separate route handlers under the same router.
+OAuth (M3-B2) reuses ``/api/v1/auth/login`` + ``/auth/refresh`` from the
+existing auth surface — no Word-add-in-specific endpoint required.
 
 Template loading: the manifest template lives at ``api/app/data/word_addin_
 manifest.xml``. The source-of-truth lives in the sibling ``word-addin/
@@ -19,7 +23,7 @@ the add-in's manifest flows into the api package.
 
 Per [PRD §9 DE-287](docs/PRD.md), the user-facing feature tabs inside
 the add-in are descoped to M4 / community contribution; this M3 plumbing
-ships the install-and-authenticate surface only.
+ships the install-authenticate-version-check surface only.
 """
 
 from __future__ import annotations
@@ -31,10 +35,26 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query, Request, status
 from fastapi.responses import Response
+from pydantic import BaseModel, Field
 
+from app import __version__ as _api_version
 from app.api.dependencies import AdminUser
 
-router = APIRouter(prefix="/admin/word-addin", tags=["admin"])
+admin_router = APIRouter(prefix="/admin/word-addin", tags=["admin"])
+"""Admin-only routes (manifest generation). Mounted under the standard
+``AdminUser`` gate in :mod:`app.api.__init__`."""
+
+public_router = APIRouter(prefix="/word-addin", tags=["word-addin"])
+"""Unauthenticated routes (version handshake). The task pane consults
+the version endpoint before the user has signed in, so the gate must
+not require an auth token. Mounted without the ``ActiveUser`` dependency
+in :mod:`app.api.__init__` (same pattern as ``bootstrap.router``)."""
+
+# Back-compat alias for callers that imported ``router`` directly before
+# M3-B8 introduced the split. New code should reference ``admin_router``
+# or ``public_router`` explicitly so the auth posture is clear at the
+# import site.
+router = admin_router
 
 
 # Default values for manifest tokens. Operators can override per-request
@@ -145,7 +165,7 @@ def _resolve_deployment_origin(
     return str(request.base_url).rstrip("/")
 
 
-@router.get(
+@admin_router.get(
     "/manifest",
     response_class=Response,
     summary="Render the Word add-in manifest XML for sideload (M3-B1).",
@@ -213,4 +233,99 @@ async def get_manifest(
             "Content-Disposition": ('attachment; filename="lq-ai-word-addin-manifest.xml"'),
             "Cache-Control": "no-store",
         },
+    )
+
+
+# ---------------------------------------------------------------------------
+# M3-B8 — Version handshake. The task pane calls this on mount BEFORE the
+# user signs in, so the endpoint is unauthenticated and mounted on the
+# ``public_router`` (no ``ActiveUser`` gate).
+# ---------------------------------------------------------------------------
+
+
+# The earliest add-in version that this deployment can talk to. Bump when a
+# breaking change (e.g., a new required request field, an API rename) lands
+# in the task-pane bundle; bumping forces operators to redistribute the
+# manifest before the deployment will accept the older add-in.
+ADDIN_MIN_COMPATIBLE_VERSION = "0.3.0"
+
+# Upper bound on add-in versions this deployment recognizes. The default
+# accepts every 0.3.x patch so operators don't have to bump the deployment
+# for cosmetic add-in fixes; raise to ``0.4.99`` when M4 features ship.
+ADDIN_MAX_COMPATIBLE_VERSION = "0.3.99"
+
+
+class WordAddinVersionResponse(BaseModel):
+    """Wire shape for the version handshake (M3-B8)."""
+
+    deployment_version: str = Field(
+        description=(
+            "LQ.AI deployment version (api package ``__version__``). "
+            "Informational — the add-in doesn't use this for "
+            "compatibility decisions; it surfaces the value in the "
+            "'Update needed' overlay so the user can quote it to "
+            "support."
+        )
+    )
+    addin_min_compatible_version: str = Field(
+        description=(
+            "Lowest add-in version (semver string) this deployment "
+            "accepts. The task pane refuses to render features when "
+            "its bundled version is lower."
+        )
+    )
+    addin_max_compatible_version: str = Field(
+        description=(
+            "Highest add-in version this deployment recognizes. Task "
+            "pane bundles newer than this should still load (forward "
+            "compatibility is best-effort) but the add-in surfaces a "
+            "soft warning so the operator knows to update the "
+            "deployment."
+        )
+    )
+    taskpane_bundle_url: str = Field(
+        description=(
+            "Canonical URL of the task-pane bundle's HTML entry point. "
+            "The task pane reaches this from its `window.location` "
+            "today; the value exists in the handshake so a future "
+            "deployment can serve the bundle from a CDN or operator-"
+            "chosen path without changing the manifest."
+        )
+    )
+    taskpane_bundle_hash: str | None = Field(
+        default=None,
+        description=(
+            "Optional SHA-256 hash of the deployed task-pane bundle "
+            "JS. When present, the add-in can verify it loaded the "
+            "bundle the deployment expects (catches Office's "
+            "occasional stale-cache behavior). M3-B8 ships with this "
+            "field nullable; M3-B7 / signing CI populates the value "
+            "from the build manifest. Null means 'don't enforce' — "
+            "not an error condition."
+        ),
+    )
+
+
+@public_router.get(
+    "/version",
+    response_model=WordAddinVersionResponse,
+    summary="Version handshake for the Word add-in task pane (M3-B8).",
+    description=(
+        "Unauthenticated endpoint the task pane consults on mount. "
+        "Returns the deployment's version + the add-in version range "
+        "this deployment is compatible with. The task pane compares "
+        "its bundled version (baked in by webpack at build time) to "
+        "the range; out-of-range bundles surface an 'Update needed' "
+        "overlay rather than getting stuck against a breaking-change "
+        "API call."
+    ),
+)
+async def get_version(request: Request) -> WordAddinVersionResponse:
+    origin = _resolve_deployment_origin(request, override=None)
+    return WordAddinVersionResponse(
+        deployment_version=_api_version,
+        addin_min_compatible_version=ADDIN_MIN_COMPATIBLE_VERSION,
+        addin_max_compatible_version=ADDIN_MAX_COMPATIBLE_VERSION,
+        taskpane_bundle_url=f"{origin}/word-addin/taskpane.html",
+        taskpane_bundle_hash=None,
     )
