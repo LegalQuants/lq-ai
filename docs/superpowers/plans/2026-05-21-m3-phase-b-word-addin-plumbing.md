@@ -16,8 +16,8 @@
 | **B-2** | Manifest schema | **Office Add-in XML manifest 1.1+** | The unified JSON manifest is GA for Outlook but **still preview for Word** as of early 2026. M365 Admin Center sideload accepts both for Outlook; for Word, XML is the production path. JSON manifest migration is a DE follow-on once GA. | DE-XXX: "Migrate Word add-in to unified JSON manifest" — file when JSON manifest goes GA for Word. |
 | **B-3** | OAuth flow shape | **Office.js Dialog API + LQ.AI's existing JWT issuer** | The add-in opens a dialog popup pointing at `/lq-ai/word-addin/oauth-start` on the operator's deployment; the user authenticates with their existing LQ.AI credentials; the dialog posts the JWT back to the task pane via `Office.context.ui.messageParent`; task pane stores in `Office.context.document.settings`. Avoids the MSAL dependency and matches LQ.AI's existing auth surface. SSO via WAM is a DE follow-on if operators want SSO-without-popup. | DE-XXX: "Word add-in SSO via MSAL + WAM for Azure AD tenants." |
 | **B-4** | Empty Chat / Skills / Playbooks tabs treatment | **Deep-link to the equivalent web-app surface** | The tabs are visible (header strip per the M3 plan), but each tab renders a "Coming soon — see [web app]" card with a button that opens `{deployment_origin}/lq-ai/{chat\|skills\|playbooks}` in a new browser tab. Gives the operator a usable Word add-in at v0.3.0 (single-sign-on + immediate click-through to actual functionality), and makes the community-contribution surface explicit. | If a community PR for a tab arrives mid-M3, the deep-link card swaps out for the real implementation per DE-287. |
-| **B-5** | Code-signing cert vendor | **OPEN — needs Kevin's call before M3-B7 starts.** Three credible paths: (a) DigiCert EV (~$500–700/yr; HSM/USB token; fastest SmartScreen trust); (b) Sectigo OV (~$200–300/yr; cheaper, longer SmartScreen warmup); (c) SignPath managed signing (~$30–100/mo; no HSM; their EV cert; CI integration is trivial). | Procurement clock runs in parallel with M3-B1/B2/B8 work; the cert needs to be in hand by the time M3-B7 lands. Defer the picking to a separate AskUserQuestion when M3-B7 begins. | n/a — this is the live decision. |
-| **B-6** | Single PR vs split | **B1 + B2 + B8 in one PR; B7 follows in its own PR when the cert arrives** | B1/B2/B8 are tightly coupled (B2 needs B1's task pane shell; B8 needs B1's bundle directory). B7's CI signing step depends on having the cert + private key as GitHub Actions secrets; gating B7 to land when the cert arrives lets B1/B2/B8 land independently and avoids holding the phase on a procurement clock. | If cert arrives early, fold B7 into the first PR. If cert is slow, B7 lands as v0.3.1 or v0.3.0 ships with the unsigned-manifest path documented (M3-plan risk row 2). |
+| **B-5** | Code-signing cert vendor | **RESOLVED at PR #59 (2026-05-21) — M3-B7 descoped to community-led effort per [DE-295](../../PRD.md#de-295--word-add-in-code-signing-certificate--signed-manifest-ci-community-led).** Three credible community paths captured in DE-295: SignPath open-source sponsorship (free for qualifying OSS; recommended first attempt), community-funded DigiCert EV (~$500–700/yr), community-funded Sectigo OV (~$200–300/yr). LegalQuants holds the legal cert artifact; community organizes procurement + funding. | n/a — see DE-295 for the rollout plan. | n/a — resolved. |
+| **B-6** | Single PR vs split | **B1 + B2 + B8 in one PR (PR #59); B7 community-led** per the B-5 resolution above. | B1/B2/B8 are tightly coupled (B2 needs B1's task pane shell; B8 needs B1's bundle directory) and ship cleanly in one PR. B7 lands as a community PR (likely v0.3.1 or v0.3.2) once the cert procurement closes. | n/a — resolved at PR #59. |
 | **B-7** | Version handshake protocol (M3-B8) | **GET `/api/v1/word-addin/version` returns `{ deployment_version, addin_min_compatible_version, addin_max_compatible_version, taskpane_bundle_url, taskpane_bundle_hash }`** | Lets the add-in check at startup whether its bundled JS matches the deployment's expected version; if drift, the task pane shows "Your add-in needs an update from your IT admin — version X.Y.Z is installed; this deployment expects Y.Y.Z." The `taskpane_bundle_hash` lets the add-in optionally verify it loaded the bundle the deployment expects. | n/a — implementation detail of B8. |
 | **B-8** | Word client targeting | **Word for Microsoft 365 desktop (Windows + macOS) + Word for the web. Word for iPad and Word Mobile out of M3 scope.** | Per the M3 plan risk row 4. Office.js targets compile fine to all four; testing is the long pole. Word Desktop on Windows is dominant enterprise client; macOS gets primary dev testing (Kevin's primary box); Word Online is acceptance-test path. iPad / Mobile parity is a community-friendly DE. | DE-XXX: "Word add-in iPad / Mobile parity testing" — file at Phase B close. |
 
@@ -86,12 +86,10 @@
 
 ## PR strategy
 
-Per Decision B-6:
+Per Decision B-6 (resolved at PR #59):
 
-- **PR #1 (B1 + B2 + B8):** Word add-in scaffold + OAuth + bundle-serving + version handshake. Single PR; 4 phases internally; final state is "installable + authenticated add-in with an empty but functional task pane against a self-hosted deployment, sideloadable via the unsigned-manifest path."
-- **PR #2 (B7):** Signing CI + signed distribution package + `docs/security/word-addin.md`. Gated on cert arrival. Lands as a follow-up.
-
-If cert arrives during PR #1 work, fold B7 in and ship one PR.
+- **PR #1 (B1 + B2 + B8):** Word add-in scaffold + OAuth + bundle-serving + version handshake. Single maintainer PR; final state is "installable + authenticated add-in with an empty but functional task pane against a self-hosted deployment, sideloadable via the **unsigned-manifest** path."
+- **PR #2 (M3-B7) — community-led** per [DE-295](../../PRD.md#de-295--word-add-in-code-signing-certificate--signed-manifest-ci-community-led). The signing CI + signed distribution package + `docs/security/word-addin.md` land as a community PR (likely v0.3.1 or v0.3.2 release tag) once the cert procurement closes. The work is sized at ~12–16 hours of implementation after the cert is in hand, plus a 2–4 week procurement timeline (SignPath open-source sponsorship is the recommended first path; community-funded paid EV/OV cert is an alternative).
 
 ---
 
@@ -101,11 +99,11 @@ If cert arrives during PR #1 work, fold B7 in and ship one PR.
 |---|---|---|
 | M3-B1 — scaffold | 8–10 | webpack + manifest + task pane shell + deep-link cards |
 | M3-B2 — OAuth | 8–12 | Office.js Dialog API + JWT exchange |
-| M3-B7 — signing | 12–16 | Gated on cert; B7-only PR |
 | M3-B8 — bundle + version handshake | 6–10 | endpoint + UI + types |
-| **Total** | **34–48 hours** | Tracks M3 plan's ~35–45 hr estimate |
+| M3-B7 — signing | community-led | Procurement + ~12–16 hr CI work, community PR per DE-295 |
+| **Total (maintainer M3 scope)** | **22–32 hours** | Tracks the revised M3 plan; M3-B7 runs alongside on the community side |
 
-Single-contributor work; ~1 week full-time for PR #1; B7 lands when cert arrives.
+Single maintainer-contributor work for PR #1; ~1 week part-time. M3-B7 lands as a community PR (likely v0.3.1 or v0.3.2) once the cert procurement closes per DE-295.
 
 ---
 
@@ -177,12 +175,20 @@ Test coverage:
 * OpenAPI spec gains `/word-addin/version` path + `WordAddinVersionResponse` schema + a new `word-addin` tag.
 * `test_openapi_paths_match_sketch` updated to expect 81 paths (was 80 before B8).
 
-### Next: open PR #1 (B1 + B2 + B8) once B-5 cert decision lands
+### 2026-05-21 — M3-B7 descoped to community-led effort (this commit)
 
-The branch `m3-phase-b-word-addin-plumbing` is now at three feature commits on top of the prep doc:
+PR #59 opened with the B1+B2+B8 plumbing. While drafting the PR description, Kevin made the call to push M3-B7 out to a community-led effort: cert procurement is a real-world purchase + ongoing renewal that couples release velocity to a procurement clock the maintainer team doesn't otherwise need to run. The signed-distribution story stays committed — it just moves to a community track.
 
-* `c17223e` — M3-B1 scaffold (manifest + task pane shell + admin manifest generator)
-* `70dc009` — M3-B2 OAuth (Office.js Dialog API + LQ.AI JWT)
-* (this commit) — M3-B8 version handshake + update-needed overlay
+This commit reflects the call across the planning surface:
 
-PR #1 opens after a quick smoke verification path. M3-B7 (signing CI + cert) follows as PR #2 once the cert is in hand — see Decision B-5 for the open vendor choice.
+* **Decision B-5 RESOLVED.** The cert vendor choice moves out of the maintainer-team decision space and into [DE-295](../../PRD.md#de-295--word-add-in-code-signing-certificate--signed-manifest-ci-community-led) Phase A (community procurement). SignPath open-source sponsorship is the recommended first attempt; community-funded paid EV/OV alternatives are documented in the DE.
+* **Decision B-6 updated.** PR #2 is now a community PR rather than a maintainer-team follow-up.
+* **Decision M3-5 (top-level M3 architectural decision) revised.** The original "signed manifest ships in v0.3" commitment moves to "v0.3.0 ships the unsigned-manifest sideload path; signed distribution lands as a community PR (v0.3.x)." The procurement-track guidance ("start at M3 kickoff") no longer applies — it now starts when a community member files the DE-295 Phase A tracking issue.
+* **DE-295 filed in PRD §9.** Documents the procurement plan (three credible community paths), what's gated until the cert arrives (5 concrete operator-UX implications: M365 Admin Center "unsigned" warning, no GitHub Release zip, no SmartScreen reputation building, null `taskpane_bundle_hash` from M3-B8, no signing CI workflow), and the acceptance criteria for closing the DE.
+* **M3-IMPLEMENTATION-PLAN.md updated.** Task M3-B7 carries the "Descoped to community-led effort" status marker; the Phase B header explains the two parallel scope-reductions (DE-287 + DE-295); the effort table shows the revised M3 scope (~161–218 hr; B1+B2+B8 are now ~22–28 hr for the Phase B maintainer work instead of 35–45 hr); the M3-B8 dependency line drops the M3-B7 reference (B8 doesn't actually depend on B7 — it ships a nullable `taskpane_bundle_hash` field that B7 will populate later); the risks-table cert-acquisition row updated.
+* **PRD §3.9 updated.** Word Add-In capability section now reflects the v0.3.0 plumbing-shipping-state with the unsigned-manifest sideload path + cross-references to DE-287 (feature surface) and DE-295 (signed distribution).
+* **PR #59 description updated.** Replaces the original "M3-B7 lands as PR #2 once the cert is in hand" framing with "M3-B7 community-led per DE-295."
+
+### Next: PR #59 review + merge → community Phase A starts for DE-295
+
+PR #59 carries four commits + this M3-B7-descope commit. After it merges to `main`, the v0.3.0 release notes will explicitly document the unsigned-manifest sideload path and point at DE-295 for the community-led signed-distribution track. A community member files the DE-295 Phase A procurement issue; the maintainer team's M3 work continues on Phase C (Tabular Review).

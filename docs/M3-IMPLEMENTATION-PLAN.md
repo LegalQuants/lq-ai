@@ -9,11 +9,11 @@
 The M3 milestone is the **feature-parity-and-surface-coverage** release. Four largely-independent tracks ship together:
 
 1. **Playbook engine + 4 built-in playbooks** ([PRD §3.7](PRD.md#37-playbooks)) — Playbook schema, LangGraph executor, Easy Playbook auto-generation wizard, execution UI in web app. 4 built-ins: NDA, Generic SaaS MSA, DPA (GDPR-aligned), Commercial MSA.
-2. **Word Add-In (Office.js)** ([PRD §3.9](PRD.md#39-word-add-in-m3)) — Chat against open document; apply skills to selection or whole doc; execute Playbooks against the doc; redlines as Word tracked changes; comments as Word comments; Inference Tier badge in the task pane; **signed manifest for enterprise sideload**.
+2. **Word Add-In (Office.js)** ([PRD §3.9](PRD.md#39-word-add-in-m3)) — **Plumbing only at v0.3.0**: scaffold + OAuth + version handshake + unsigned-manifest sideload via Microsoft 365 Admin Center. Feature surfaces (chat / skills / playbook execution / Inference Tier badge) descoped to M4 per [DE-287](PRD.md#de-287--word-add-in-feature-surface-chat-skills-playbooks-tier-badge--deferred-to-m4--community-contribution). Signed manifest + enterprise distribution package descoped to a community-led effort per [DE-295](PRD.md#de-295--word-add-in-code-signing-certificate--signed-manifest-ci-community-led).
 3. **Tabular / Multi-Document Review** ([PRD §3.14](PRD.md#314-tabular--multi-document-review-m3)) — `output_format: table` skill mode; tabular UI surface; bulk operations; XLSX/CSV export; cost preview before execution.
-4. **Slack / Teams Light Intake Bridge** ([PRD §3.15](PRD.md#315-slack--teams-light-intake-bridge-m3)) — OAuth install on Slack and Teams; `/lq` slash command (forward-as-chat) and `/lq ask` quick-skill flows; bot configuration in LQ.AI admin UI.
+4. **Slack / Teams Light Intake Bridge** ([PRD §3.15](PRD.md#315-slack--teams-light-intake-bridge-m3)) — **Plumbing only at v0.3.0**: OAuth install on Slack and Teams; bot configuration in LQ.AI admin UI. The `/lq` slash-command + `/lq ask` quick-skill surfaces are descoped to M4 per [DE-288](PRD.md#de-288--slackteams-lq-slash-command--quick-skill-flow--deferred-to-m4--community-contribution).
 
-M3 ships in **~8 weeks of focused work** per [PRD §8 M3](PRD.md#m3--playbooks-word-add-in-tabular-review-and-slackteams-8-weeks-after-m2). The phase breakdown is **sequential by complexity**: the Playbook engine is the substrate that Word Add-In and Tabular both build on, and Slack/Teams is the smallest independent surface. Within each phase, parallel-execution slots are marked **[parallel]**.
+M3 ships in **~5 weeks of focused work** after two rounds of scope-reduction (see effort table below). The phase breakdown is **sequential by complexity**: the Playbook engine is the substrate that Word Add-In and Tabular both build on, and Slack/Teams is the smallest independent surface. Within each phase, parallel-execution slots are marked **[parallel]**.
 
 This document supersedes any conflicting sequencing in earlier roadmap documents. The PRD §8 roadmap remains the canonical capability commitment; this document is the implementation contract.
 
@@ -72,15 +72,17 @@ The reasoning:
 
 Bot configuration lives in the LQ.AI admin UI (M3-D4), not in environment variables, so operators don't need to redeploy to change Slack/Teams config.
 
-### Decision M3-5: Signed Word manifest ships in v0.3, not a v0.3.1 follow-on
+### Decision M3-5: Signed Word manifest — revised to community-led at PR #59 (2026-05-21)
 
-The Office.js add-in's manifest XML ships **signed for enterprise sideload** in v0.3. Per Kevin's call at M3 kickoff. The reasoning:
+**Original decision (M3 kickoff):** The Office.js add-in's manifest XML ships signed for enterprise sideload in v0.3 as part of M3-B7. The signing work was sized for M3 (~12–16h); cert acquisition was expected to run as a procurement task starting at M3 kickoff in parallel with M3-A code work.
 
-- The Word Add-In's primary procurement story is "deploy through Microsoft 365 Admin Center." A signed manifest is the procurement-ready posture. An unsigned-or-dev-only-manifest first release loses the procurement story for v0.3.
-- Code-signing infrastructure (cert acquisition + CI signing job) is incremental engineering once; deferring it to v0.3.1 creates a release whose announcement is "the add-in you've been waiting for, but you can't deploy it yet."
-- The signing work is sized for M3 (~12-16h in M3-B7); it does not bend the M3 critical path materially.
+**Revised at PR #59 (2026-05-21):** M3-B7 is descoped to a community-led effort per [PRD §9 DE-295](PRD.md#de-295--word-add-in-code-signing-certificate--signed-manifest-ci-community-led). v0.3.0 ships the unsigned-manifest sideload path (manifest generated via the admin UI's "Generate manifest" download); the signed distribution package lands as a community PR (likely v0.3.1 or v0.3.2) when the cert procurement completes. The reasoning for the revision:
 
-Cert acquisition is a procurement task that should begin at M3 kickoff in parallel with M3-A code work; cert turnaround can be multiple weeks.
+- Code-signing certificate procurement is a real-world purchase + ongoing annual renewal. Coupling the v0.3.0 release to a procurement clock the maintainer team doesn't otherwise need to run trades release velocity for an enterprise-procurement-story gain that arrives ~2–4 weeks later regardless.
+- The signed-distribution story is still committed — it just moves to a community track. SignPath's open-source sponsorship path (free for qualifying open-source projects) is the recommended first attempt; community-funded DigiCert EV / Sectigo OV are alternatives. LegalQuants, Inc. holds the legal cert artifact; the community organizes procurement + funding.
+- The Microsoft 365 Admin Center sideload at v0.3.0 will show an "unsigned add-in" warning. This is acceptable for technical-savvy operators (the install path still works); enterprise procurement teams that reject unsigned add-ins wait for the v0.3.x community-led signed release.
+
+DE-295 captures the five concrete operator-UX implications gated until M3-B7 lands. The original procurement-track guidance ("start at M3 kickoff in parallel with M3-A code work") no longer applies — it now starts when a community member files the procurement tracking issue per DE-295's Phase A.
 
 ---
 
@@ -351,7 +353,12 @@ The Playbook engine is the load-bearing substrate for two M3 tracks (Word Add-In
 
 ## Phase B — Word Add-In (Weeks 4–5)
 
-The Word Add-In brings LQ.AI capabilities into Microsoft Word as an Office.js task pane. Phase B's plumbing (M3-B1 scaffold + M3-B2 OAuth + M3-B7 signed manifest + M3-B8 self-hosted JS bundle) is in M3 scope and produces an installable, authenticated add-in distributable via Microsoft 365 Admin Center. The feature surface inside the task pane (M3-B3 chat, M3-B4 skills with tracked-changes + comments rendering, M3-B5 playbook execution, M3-B6 Inference Tier badge) is **descoped to M4 / community contribution** per the 2026-05-21 scope-reduction decision at the M3-A6 PR #57 close; see [PRD §9 DE-287](PRD.md#de-287--word-add-in-feature-surface-chat-skills-playbooks-tier-badge--deferred-to-m4--community-contribution). Each descoped task below carries an inline status marker and retains its original scope text so a contributor picking up the feature can claim it as a standalone PR against the plumbing.
+The Word Add-In brings LQ.AI capabilities into Microsoft Word as an Office.js task pane. Phase B's **shipping plumbing in M3** (M3-B1 scaffold + M3-B2 OAuth + M3-B8 self-hosted JS bundle + version handshake) produces an installable, authenticated add-in distributable via Microsoft 365 Admin Center via the **unsigned-manifest** path. Two parallel scope-reductions land at v0.3.0:
+
+1. **The feature surface inside the task pane** (M3-B3 chat, M3-B4 skills with tracked-changes + comments rendering, M3-B5 playbook execution, M3-B6 Inference Tier badge) is descoped to M4 / community contribution per the 2026-05-21 close-out decision at the M3-A6 PR #57 close; see [PRD §9 DE-287](PRD.md#de-287--word-add-in-feature-surface-chat-skills-playbooks-tier-badge--deferred-to-m4--community-contribution).
+2. **M3-B7 (signed manifest + enterprise distribution package)** is descoped to a **community-led effort** per the 2026-05-21 PR #59 decision. Code-signing certificate procurement is real-world purchase + ongoing renewal work that couples the project's release cadence to a multi-week procurement clock; treating it as maintainer work overconstrains M3. The community organizes the procurement + funding (SignPath open-source sponsorship is the recommended first path; community-funded DigiCert EV or Sectigo OV are alternatives), LegalQuants holds the legal cert artifact, and the signing CI lands as a community PR once the cert is in hand. See [PRD §9 DE-295](PRD.md#de-295--word-add-in-code-signing-certificate--signed-manifest-ci-community-led) for the procurement plan + the v0.3.x → v0.3.y community-led signing rollout.
+
+Each descoped task below carries an inline status marker and retains its original scope text so a contributor picking up the work can claim it as a standalone PR against the plumbing.
 
 **Note for the contributor:** the `word-addin/` directory does not yet exist. M3-B1 is the first task to create it. Office.js development tooling (Node 18+, the `office-addin-debugging` toolchain, a Word client for testing) must be set up before this phase begins.
 
@@ -514,27 +521,30 @@ The Word Add-In brings LQ.AI capabilities into Microsoft Word as an Office.js ta
 
 ### Task M3-B7 — Signed manifest + enterprise sideload distribution package
 
+**Status:** **Descoped to community-led effort** per [PRD §9 DE-295](PRD.md#de-295--word-add-in-code-signing-certificate--signed-manifest-ci-community-led). v0.3.0 ships the unsigned-manifest sideload path (manifest generated via the admin UI at `/lq-ai/admin/word-addin`); Microsoft 365 Admin Center will show an "unsigned add-in" warning during sideload until M3-B7 lands. The signing CI + signed distribution package land as a community PR when the code-signing cert procurement completes. Scope retained below for the community contributor claiming the task.
+
 **Scope:**
-- Acquire a code-signing certificate. Procurement task; **start at M3 kickoff** as cert turnaround can be multiple weeks. Track separately in PR template / project notes.
+- Acquire a code-signing certificate. **Community-led** per DE-295. Three credible paths: SignPath open-source sponsorship (free for qualifying open-source projects; recommended), community-funded DigiCert EV (~$500–700/yr; HSM/USB token; fastest SmartScreen warmup), or community-funded Sectigo OV (~$200–300/yr; longer SmartScreen warmup). The cert is issued to **LegalQuants, Inc.** (the legal entity that publishes the add-in); a community member walks the procurement + funding mechanism.
 - Wire signing into CI:
   - GitHub Actions workflow `.github/workflows/word-addin-release.yml` signs `manifest.xml` and the bundled JS on every release tag.
-  - Cert + private key stored as GitHub Actions secrets; manifest signing happens in a hardened workflow gated to the `release` environment.
+  - Cert + private key stored as GitHub Actions secrets (or accessed via the SignPath API if that path is chosen); manifest signing happens in a hardened workflow gated to the `release` environment.
 - Produce a distribution package:
-  - `word-addin-v0.3.zip` containing the signed manifest + a README with M365 Admin Center sideload instructions.
-  - Released as a GitHub Release asset on the v0.3 tag.
-- Update `docs/security/word-addin.md` (new doc) covering: signing chain of trust, what the operator should verify before deploying, threat model boundaries (the add-in runs in Office's web sandbox; it cannot access local files outside the document; it cannot call the LQ.AI backend without an OAuth token).
+  - `word-addin-v0.3.x.zip` containing the signed manifest + a README with M365 Admin Center sideload instructions.
+  - Released as a GitHub Release asset on the release tag.
+- Update M3-B8's version-handshake handler to populate the `taskpane_bundle_hash` field from the signing CI's build manifest (it ships nullable in v0.3.0; this completes the M3-B8 contract).
+- Create `docs/security/word-addin.md` covering: signing chain of trust, what the operator should verify before deploying (e.g., `signtool verify /pa manifest.xml`), threat model boundaries (the add-in runs in Office's web sandbox; it cannot access local files outside the document; it cannot call the LQ.AI backend without an OAuth token).
 - Security review per CODEOWNERS — touches signing infrastructure.
 
-**Dependencies:** M3-B6.
+**Dependencies:** v0.3.0 shipped with the unsigned-manifest path (this M3 PR). Cert procurement complete (community Phase A per DE-295).
 
-**Output:** Operators can download `word-addin-v0.3.zip`, verify the signature, and sideload via M365 Admin Center.
+**Output:** Operators can download `word-addin-v0.3.x.zip`, verify the signature, and sideload via M365 Admin Center without the "unsigned add-in" warning.
 
 **Verification:**
 - Manifest signature verifies against the issuing cert.
 - Sideloaded add-in works against a real LQ.AI deployment in Word desktop, Word Online, and Word for iPad.
 - Security reviewer signs off on the signing chain.
 
-**Effort:** 12–16 hours.
+**Effort:** 12–16 hours of community implementation work after the cert is in hand, plus the procurement timeline (typically 2–4 weeks for SignPath open-source approval; 1–3 weeks for a community-funded paid cert).
 
 ---
 
@@ -545,7 +555,7 @@ The Word Add-In brings LQ.AI capabilities into Microsoft Word as an Office.js ta
 - Add a version-handshake on add-in load: the add-in fetches `/api/v1/version` and compares its bundled version against the deployment's; if mismatched, surfaces a "Reload the add-in" prompt (avoids the v0.3 add-in talking to a v0.4 backend).
 - Update `docs/deploy/` operator guide for the Word Add-In: how to enable, how to generate the deployment-specific manifest, how to distribute via M365 Admin Center.
 
-**Dependencies:** M3-B7.
+**Dependencies:** M3-B2 (OAuth). The original plan listed M3-B7 as a dependency, but the M3 scope of B8 (self-served bundle + version handshake) doesn't require the signed-manifest CI to land first — the version handshake endpoint and the task-pane mount-time check operate the same way for both signed and unsigned manifests. M3-B7 (now community-led per [DE-295](PRD.md#de-295--word-add-in-code-signing-certificate--signed-manifest-ci-community-led)) will populate the `taskpane_bundle_hash` field that M3-B8 ships nullable.
 
 **Output:** A self-hosted LQ.AI deployment serves its own Word add-in bundle. No external CDN dependency.
 
@@ -781,7 +791,7 @@ The smallest and most independent track. Phase D's plumbing (M3-D1 slack-bridge 
 - Destroy all volumes and images; fresh clone; full `docker compose up --build` with all M3-relevant profiles (`--profile slack --profile teams`).
 - Walk through the M3 surfaces that ship in v0.3.0:
   - Playbook engine: run NDA playbook against sample NDA in web app; run the Easy Playbook wizard against 5 sample NDAs; verify both results.
-  - Word Add-In plumbing (M3-B1/B2/B7/B8): generate a manifest from the admin UI; sideload in Word desktop; confirm the task pane loads, OAuth completes, and the version handshake against the deployment succeeds. *(Feature surface inside the task pane is descoped to M4 per [DE-287](PRD.md#de-287--word-add-in-feature-surface-chat-skills-playbooks-tier-badge--deferred-to-m4--community-contribution); manifest-install + auth path is what verifies in M3.)*
+  - Word Add-In plumbing (M3-B1/B2/B8): generate a manifest from the admin UI; sideload in Word desktop via the unsigned-manifest path (Microsoft 365 Admin Center will warn about the unsigned add-in, which is expected at v0.3.0); confirm the task pane loads, OAuth completes, and the version handshake against the deployment succeeds. *(Feature surface inside the task pane is descoped to M4 per [DE-287](PRD.md#de-287--word-add-in-feature-surface-chat-skills-playbooks-tier-badge--deferred-to-m4--community-contribution); signed manifest + distribution package is descoped to community per [DE-295](PRD.md#de-295--word-add-in-code-signing-certificate--signed-manifest-ci-community-led); manifest-install + auth + version-check path is what verifies in M3.)*
   - Tabular Review: select 5 sample NDAs; run a 4-column tabular extraction; export XLSX; verify in Excel.
   - Slack bridge plumbing (M3-D1): install in a test workspace; complete OAuth; confirm identity binding surfaces in the LQ.AI admin UI (M3-D4). *(Slash-command surface descoped to M4 per [DE-288](PRD.md#de-288--slackteams-lq-slash-command--quick-skill-flow--deferred-to-m4--community-contribution); install + OAuth + identity binding is what verifies in M3.)*
   - Teams bridge plumbing (M3-D3): same posture as Slack — install + OAuth + identity binding.
@@ -813,7 +823,7 @@ The smallest and most independent track. Phase D's plumbing (M3-D1 slack-bridge 
   - Playbook execution cascade — walks through how a playbook executes step-by-step against a sample contract.
   - Tabular Review playground — interactive grid against a small sample document set.
 - Updated documents:
-  - `docs/PRD.md` — changelog entry for M3 release; §3.7 (Playbooks) and §3.14 (Tabular Review) statuses flipped from "Deferred-M3" to "SHIPPED"; §3.9 (Word Add-In) and §3.15 (Slack/Teams Bridge) statuses flipped to "Plumbing shipped in M3 — feature surface deferred to M4 (see DE-287 / DE-288)."
+  - `docs/PRD.md` — changelog entry for M3 release; §3.7 (Playbooks) and §3.14 (Tabular Review) statuses flipped from "Deferred-M3" to "SHIPPED"; §3.9 (Word Add-In) status flipped to "Plumbing shipped in M3 (unsigned-manifest path) — feature surface deferred to M4 (see DE-287); signed distribution community-led (see DE-295)"; §3.15 (Slack/Teams Bridge) status flipped to "Plumbing shipped in M3 — slash-command surface deferred to M4 (see DE-288)."
   - `docs/architecture.md` — Mermaid diagram updated with LangGraph runtime, Word add-in, tabular workflow, slack-bridge, teams-bridge components.
   - `docs/quickstart.md` — new sections for Playbook execution, Word add-in install, Tabular review, Slack/Teams bridges.
   - `README.md` — capability list updated to reflect M3 surfaces as shipped.
@@ -843,19 +853,22 @@ The smallest and most independent track. Phase D's plumbing (M3-D1 slack-bridge 
 
 ## Total effort estimate
 
-The original M3 estimate was ~227–302 hours across 27 tasks. The 2026-05-21 scope-reduction decision at the M3-A6 PR #57 close descopes M3-B3/B4/B5/B6 (Word add-in feature surface, ~34–44 hours; see [DE-287](PRD.md#de-287--word-add-in-feature-surface-chat-skills-playbooks-tier-badge--deferred-to-m4--community-contribution)) and M3-D2 + the slash-command facet of M3-D3 (Slack/Teams `/lq` surface, ~12–14 hours; see [DE-288](PRD.md#de-288--slackteams-lq-slash-command--quick-skill-flow--deferred-to-m4--community-contribution)), and rescopes M3-D4 to plumbing-only (~4–5 hours instead of 6–8). The net M3 effort below is the revised figure.
+The original M3 estimate was ~227–302 hours across 27 tasks. Two rounds of scope-reduction land at v0.3.0:
+
+* **2026-05-21 (M3-A6 PR #57 close)** — descopes M3-B3/B4/B5/B6 (Word feature surface, ~34–44 hr; see [DE-287](PRD.md#de-287--word-add-in-feature-surface-chat-skills-playbooks-tier-badge--deferred-to-m4--community-contribution)) and M3-D2 + the slash-command facet of M3-D3 (Slack/Teams `/lq` surface, ~12–14 hr; see [DE-288](PRD.md#de-288--slackteams-lq-slash-command--quick-skill-flow--deferred-to-m4--community-contribution)); rescopes M3-D4 to plumbing-only (~4–5 hr instead of 6–8).
+* **2026-05-21 (M3 Phase B PR #59 open)** — descopes M3-B7 (signed manifest + enterprise distribution package, ~12–16 hr) to a community-led effort per [DE-295](PRD.md#de-295--word-add-in-code-signing-certificate--signed-manifest-ci-community-led). v0.3.0 ships the unsigned-manifest sideload path; the signing CI lands as a community PR when the cert procurement completes.
 
 | Phase | Tasks (M3 scope) | Effort |
 |---|---|---|
 | **0 — Pre-M3 hardening** | 3 (all shipped) | ~13–18 hours |
 | **A — Playbook engine** | 6 (all shipped through M3-A6) | ~62–82 hours |
-| **B — Word Add-In** | 4 plumbing (B1 + B2 + B7 + B8); 4 descoped (B3/B4/B5/B6 → DE-287) | ~35–45 hours |
+| **B — Word Add-In** | 3 plumbing in M3 (B1 + B2 + B8); 4 descoped to M4 (B3/B4/B5/B6 → DE-287); 1 descoped to community (B7 → DE-295) | ~22–28 hours |
 | **C — Tabular / Multi-Document Review** | 4 | ~36–48 hours |
 | **D — Slack / Teams Light Intake Bridge** | 3 plumbing (D1 + D3 plumbing-only + D4 plumbing-only); 1 descoped (D2 → DE-288); D3's slash-command facet also descoped | ~12–20 hours |
 | **E — Acceptance + docs** | 2 | ~16–22 hours |
-| **Total (M3 scope)** | **~17 active + 6 descoped** | **~174–235 hours** |
+| **Total (M3 scope)** | **~16 active + 7 descoped** | **~161–218 hours** |
 
-The revised range fits comfortably in a **~6-week M3 build** by a single contributor working full-time, or ~9–10 weeks part-time. Parallel-execution opportunities still help; the largest remaining track is Phase C (Tabular Review).
+The revised range fits comfortably in a **~5-week M3 build** by a single contributor working full-time, or ~8–9 weeks part-time. The largest remaining track is Phase C (Tabular Review). Phase B's M3 work is now the smallest active track at ~22–28 hr; M3-B7 + its procurement timeline runs alongside on the community side.
 
 ---
 
@@ -879,7 +892,7 @@ The recommended workflow mirrors the M1 and M2 implementations:
 | Risk | Mitigation |
 |---|---|
 | M3 is genuinely 4 tracks in 8 weeks; scope creep would push v0.3 to v0.4 timing. | Decision B at M3-kickoff committed to "all four tracks must-ship." If mid-M3 a track is clearly slipping, surface as a scope-reframe decision to Kevin **before** tagging — not at release time. Build in a mid-M3 checkpoint (end of Phase B) for honest re-assessment. |
-| Code-signing certificate acquisition has multi-week lead time and could block M3-B7. | Procurement task **starts at M3 kickoff**, in parallel with all Phase A work. If cert is not in hand by end of Phase B, M3-B7 becomes a v0.3.1 follow-on and the v0.3 release notes are honest about the temporarily unsigned manifest path. |
+| Code-signing certificate acquisition has multi-week lead time. | **Revised at PR #59 (2026-05-21):** M3-B7 descoped to community-led effort per [DE-295](PRD.md#de-295--word-add-in-code-signing-certificate--signed-manifest-ci-community-led); the v0.3.0 release ships the unsigned-manifest sideload path with explicit "this signed at v0.3.x once the community procurement closes" framing in the release notes. SignPath open-source sponsorship is the recommended first path; community-funded DigiCert EV / Sectigo OV are alternatives. Maintainer release velocity is no longer coupled to the procurement clock. |
 | LangGraph version churn breaks the Playbook executor between releases. | Pin LangGraph version in `api/pyproject.toml`. Bug-fix LangGraph upgrades land as patch releases with regression tests. |
 | Word add-in development on a non-Windows primary dev machine (macOS-only contributor) limits coverage of Word desktop on Windows. | Office.js is cross-platform but Word Desktop on Windows is the dominant enterprise client. Test matrix in CI includes Word Desktop (macOS), Word Online, Word for iPad. Word Desktop (Windows) tested manually before tagging, with an explicit DE filed if a Windows-only issue is discovered. |
 | Easy Playbook wizard produces low-quality drafts on small / inconsistent corpora. | Reviewing-attorney quality review on a curated 5-corpus before M3-A6 closes. UI explicitly frames the output as "starting-point draft — review before use." Document expected corpus characteristics (≥5 documents, same contract type). |

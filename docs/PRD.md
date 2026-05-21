@@ -825,7 +825,10 @@ The scope-as-shipped is narrower than the original "ensemble runs on the whole a
 
 ### 3.9 Word Add-In (M3)
 
-**M1 status:** Deferred-M3. The `word-addin/` directory is absent from the repository (`ls word-addin/` returns no such directory). No Office.js manifest, no Word-side JS bundle, no add-in-specific backend wiring. See [HONEST-STATE.md §4](HONEST-STATE.md#4-capabilities-not-yet-started-in-source).
+**M3 status (at PR #59 open, 2026-05-21):** Plumbing landed on `m3-phase-b-word-addin-plumbing` — scaffold (M3-B1) + OAuth via Office.js Dialog API (M3-B2) + self-served bundle + version handshake (M3-B8). The `word-addin/` directory exists with the React 18 task pane, Office.js XML manifest template, admin manifest-generation endpoint, and the unsigned-manifest sideload path via Microsoft 365 Admin Center. Two parallel scope-reductions land at v0.3.0:
+
+- **Feature surface inside the task pane** (chat against the open document, skills with tracked-changes + comments rendering, playbook execution, Inference Tier badge) is descoped to M4 / community contribution per [§9 DE-287](#de-287--word-add-in-feature-surface-chat-skills-playbooks-tier-badge--deferred-to-m4--community-contribution). At v0.3.0 each tab renders a deep-link card to the equivalent web-app surface so the add-in is usable while the feature work is on the community track.
+- **Signed manifest + enterprise distribution package** (M3-B7) is descoped to a community-led effort per [§9 DE-295](#de-295--word-add-in-code-signing-certificate--signed-manifest-ci-community-led). v0.3.0 ships the unsigned-manifest sideload path (Microsoft 365 Admin Center will warn about the unsigned add-in during install); the signed `word-addin-v0.3.x.zip` distribution package lands as a community PR once the code-signing certificate procurement closes (SignPath open-source sponsorship is the recommended first path; community-funded DigiCert EV / Sectigo OV are alternatives).
 
 **Description.** Microsoft Office.js add-in that brings LQ.AI capabilities directly into Word. Users can run skills, execute Playbooks, get redlines, ask questions about the document, and act on the assistant's suggestions — all without leaving Word.
 
@@ -3799,6 +3802,61 @@ Acceptance is structured against the same four failure modes Lavern's `orchestra
 **Acceptance criteria:** depends on classification per the ADR. If M4-scope: orchestrator implementation + 4-case integration test suite + posture-document update naming R3 as "shipped" with line-level citation. If deferred: this DE is marked P2 with a note pointing to the ADR's pin.
 
 **Sequence:** DE entry lands now (with this PR). Classification pinned when the DE-289 Phase 1 ADR lands. Implementation lands with M4 (or later) per classification.
+
+#### DE-295 — Word add-in code-signing certificate + signed manifest CI (community-led)
+
+**Priority:** P1 (gates a frictionless v0.3.x operator install path) · **Effort:** M (signing CI + distribution package) plus ~$0–$700/yr ongoing for the cert itself depending on the vendor path chosen
+
+**Context:** The M3 Implementation Plan's M3-B7 task originally scoped a signed Word add-in manifest + an enterprise sideload distribution package (`word-addin-v0.3.0.zip`) as a maintainer-team deliverable. At the M3 Phase B PR #59 open (2026-05-21) Kevin's call moved M3-B7 to a community-led effort. The rationale is straightforward: code-signing certificate procurement is a real-world purchase + ongoing renewal with multi-week lead time and per-vendor identity verification. Treating it as maintainer work would couple the project's release cadence to a procurement clock the maintainer team doesn't otherwise need to run. The plumbing (M3-B1 scaffold + M3-B2 OAuth + M3-B8 version handshake) ships in v0.3.0 without the cert; sideload via Microsoft 365 Admin Center will show the "unsigned add-in" warning until M3-B7 lands.
+
+**A note on the cert and publisher identity.** The certificate is tied to a legal entity — the certificate authority verifies the entity, and the cert publishes documents in the entity's name. For the LQ.AI Word add-in, that entity is **LegalQuants, Inc.** (the org that stewards the project per [PRD §7.4 Governance](#74-governance)). A community member can fund / organize / drive the procurement, but the cert itself must be issued to LegalQuants, Inc. — LegalQuants signs the application materials and holds the legal cert artifact. Three credible paths reflect different funding + operational shapes:
+
+1. **SignPath open-source sponsorship (recommended path).** [SignPath](https://signpath.io/open-source/) provides free EV code-signing to qualifying open-source projects, including the signing CI integration and HSM-managed private key. A community member walks LegalQuants through the application (project disclosure, governance signal, license review); if approved, SignPath issues an EV cert in LegalQuants' name and the GitHub Actions workflow signs via their API. No funding required, no ongoing renewal payment, and EV-tier SmartScreen reputation builds on the same timeline as a paid EV cert. **Estimated lead time: 2-4 weeks from application to first signed manifest.**
+
+2. **Community-funded DigiCert EV or Sectigo OV.** Community raises $500-700/yr (DigiCert EV) or $200-300/yr (Sectigo OV) via GitHub Sponsors, OpenCollective, or earmarked donations to LegalQuants. LegalQuants buys the cert + HSM/USB token (EV requires hardware-backed key storage), wires it into the signing CI via Actions secrets, handles annual renewal. DigiCert EV gives the fastest SmartScreen reputation build; Sectigo OV is cheaper but the SmartScreen warmup takes longer (months of installs before "unknown publisher" warnings clear). **Estimated lead time: 1-3 weeks for procurement + identity verification.**
+
+3. **Community fork with separate publisher identity.** A community member with their own EV cert publishes a fork under a different publisher identity. Diverges the distribution surface (operators have to pick which fork to install); not recommended unless the SignPath + community-funding paths both fall through.
+
+**What's gated until the cert lands.** Five concrete operator-UX implications operators (and procurement teams) need to know about while the cert is in flight:
+
+- **Microsoft 365 Admin Center sideload shows an "unsigned add-in" warning** when an admin uploads the manifest. The warning is informational, not blocking — admins can still upload — but enterprise procurement / IT-security teams may reject the add-in pending signing.
+- **No `word-addin-v0.3.0.zip` GitHub Release asset.** M3-B7's signed distribution package isn't built until the cert is in hand. Operators get the manifest via the admin UI's "Generate manifest" download instead. This is fine for technical-savvy operators but worse for procurement teams who expect a signed-tarball distribution package out of GitHub Releases.
+- **No SmartScreen reputation building.** Until the add-in is signed, every install starts from zero with Windows SmartScreen, raising the warning-fatigue burden on operators distributing to large user populations.
+- **No `taskpane_bundle_hash` value in the version handshake.** M3-B8 ships the field nullable; signing CI is the natural place to compute + inject the hash (build manifest), so the field stays null until M3-B7 lands. Operators won't get the "did Office cache an old bundle" detection in v0.3.0.
+- **No CI signing workflow in `.github/workflows/`.** The plumbing for the workflow itself (job, secrets references, packaging step) is part of M3-B7's deliverable.
+
+**Specific scope (the community-led work):**
+
+*Phase A — procurement (community + LegalQuants):*
+1. Identify the path (SignPath open-source / community-funded paid cert / community fork). The SignPath path is the recommended first attempt.
+2. A community member files a tracking issue (`[DE-295] Word add-in code-signing certificate — procurement`) describing the chosen path, sets up the funding mechanism if needed (sponsorship link, OpenCollective project, etc.), and coordinates with LegalQuants on the application materials.
+3. LegalQuants signs the cert application + provides the legal disclosures the CA / SignPath needs. A maintainer reviews the cert chain of trust + the publisher-identity binding before it's committed to.
+4. Cert (or SignPath project) issued; private key / API access stored as GitHub Actions secrets in the `release` environment.
+
+*Phase B — signing CI + distribution package (community PR):*
+1. New `.github/workflows/word-addin-release.yml` triggered on release tags. Signs `manifest.xml` and the bundled JS using the chosen path:
+   - SignPath: calls the SignPath API with the project credentials.
+   - DigiCert/Sectigo: uses `signtool` (Windows runner) or `osslsigncode` (Linux runner) against the GHA-secret-stored key.
+2. Builds `word-addin-v0.3.x.zip` containing the signed manifest + bundled JS + a README describing the M365 Admin Center sideload steps + the signing chain-of-trust verification path. Uploads as a GitHub Release asset on the release tag.
+3. Adds `taskpane_bundle_hash` computation to the build pipeline; updates the M3-B8 `WordAddinVersionResponse` handler to return the computed value rather than null.
+4. New `docs/security/word-addin.md` covering the signing chain of trust + the operator verification path (e.g., `signtool verify /pa manifest.xml`).
+5. Security review per CODEOWNERS (touches signing infrastructure).
+
+*Phase C — documentation and rollout (community PR + LegalQuants release):*
+1. `docs/security/word-addin.md` updated with the operator's verification path.
+2. PRD §3.9 (Word Add-In) status flipped from "Plumbing shipped in M3 — feature surface deferred to M4 (see DE-287 / DE-288)" to a final status including the signed-distribution shipping state.
+3. `docs/M3-IMPLEMENTATION-PLAN.md §M3-B7` status flipped from "Descoped to community per DE-295" to the resolved state with cross-reference to the PR.
+4. Release announcement (community blog post + LinkedIn / community channels) describing the move from unsigned-sideload to signed-distribution.
+
+**Dependencies:** PR #59 (M3 Phase B plumbing) merged; v0.3.0 shipped with the unsigned-manifest path documented.
+
+**Acceptance criteria:**
+- A community member has filed and is actively driving the procurement tracking issue.
+- The signing CI workflow at `.github/workflows/word-addin-release.yml` lands as a community PR with green CI.
+- A signed `word-addin-v0.3.x.zip` is published as a GitHub Release asset on a tagged release (v0.3.1 or v0.3.2 or later, depending on when M3-B7 lands).
+- `docs/security/word-addin.md` exists and a maintainer + security reviewer have approved it.
+- The "Plumbing shipped — signed distribution: community-led" notice in `M3-IMPLEMENTATION-PLAN.md §M3-B7` is updated to "shipped" with cross-references to the PR and the GitHub Release.
+- Operators sideloading the signed manifest via Microsoft 365 Admin Center see no "unsigned add-in" warning, and the SmartScreen reputation begins building.
 
 ### How to add to this list
 
