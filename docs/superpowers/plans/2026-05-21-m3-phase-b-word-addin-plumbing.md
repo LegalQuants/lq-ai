@@ -130,3 +130,31 @@ These don't need answers now, but the implementer should surface them via `AskUs
 6. **B7** lands as PR #2 when the cert is in hand.
 
 Time horizon: PR #1 closes in ~1 week of focused work (full-time contributor). PR #2 lands when cert arrives, likely 2–4 weeks after kickoff.
+
+---
+
+## Execution log
+
+### 2026-05-21 — M3-B1 shipped (commit `c17223e`)
+
+All eight design decisions landed as scoped above. The webpack output landed at `web/static/word-addin/` (gitignored) and the SvelteKit container's existing `COPY . .` picks it up automatically — no docker-compose volume mount required. Manifest generation surface lives at `/lq-ai/admin/word-addin`; the rendered XML carries a fresh GUID per download + a `Content-Disposition: attachment` header for browser-download UX. 6 backend tests pass; ruff + mypy + svelte-check clean. Build verification of the React bundle deferred until a contributor runs `npm install + npm run build` against the working directory; no Word desktop client available in this dev environment for live sideload testing.
+
+### 2026-05-21 — M3-B2 shipped (this commit)
+
+Office.js Dialog API + LQ.AI JWT path per Decision B-3, landed as planned. Two side-channel decisions worth recording for future readers:
+
+**Skipped the `POST /api/v1/word-addin/exchange-token` endpoint.** The prep doc's M3-B2 scope listed an add-in-scoped JWT exchange with an `aud: word-addin` claim. The endpoint would have been semantically simple (validate the standard JWT → mint a new token with a per-client audience) but it would have required *every other authenticated endpoint* to accept both the existing audience and the new `word-addin` audience, OR a refactor that defers audience-checking to a future DE. Both paths add surface area without making any v0.3.0 user safer — there's no specific revocation or scope-narrowing use case yet. The add-in uses the same JWT shape as the web app (issued by `POST /api/v1/auth/login`, refreshed via `POST /api/v1/auth/refresh`). A future DE may add per-client audience scoping if endpoint-level revocation becomes load-bearing; the docstring in `word-addin/src/taskpane/auth.ts` carries this note so the next maintainer doesn't re-derive it.
+
+**Token storage: `localStorage`, not `Office.context.document.settings`.** The Office.js settings store ties data to a specific Word document — useful for per-document configuration (e.g. a saved table mapping) but wrong for auth tokens, which the user expects to span all Word documents in their session. `localStorage` is keyed by browser profile + origin, matching the web app's session model and giving "sign in once, persists across documents in this Word client" out of the box.
+
+Test coverage:
+* 22 vitest unit tests for `word-addin/src/taskpane/auth.ts` (token round-trip, refresh-coalescing, `authenticatedFetch` 401-retry path, logout). Vitest is now configured in `word-addin/` with jsdom env; first test runner addition in the directory.
+* 4 Cypress E2E tests for `/lq-ai/word-addin/oauth-start` against the SvelteKit dialog page (layout reset, oauth-success path, must-change-password rerouting, 401 inline display). Tests stub `window.Office` via `onBeforeLoad` so the page can run without a real Office host.
+
+Verification gaps carried to M3-E1 fresh-install:
+* Live Word desktop sideload of the manifest → sign in via the actual Office dialog → confirm session persists across documents. No Word client in this dev environment.
+* Cross-browser dialog behavior. The OAuth dialog page renders identically in Chrome / Edge / Safari in jsdom; live verification on each is deferred to M3-E1.
+
+### Next: M3-B8 (self-served bundle + version handshake)
+
+Per the original sequencing in §"Sequence for the next session" above. Lands on this branch as the third commit before the PR opens. Cert procurement (B-5) and M3-B7 follow on a separate PR when the cert arrives.

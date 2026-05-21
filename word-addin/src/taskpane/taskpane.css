@@ -222,3 +222,104 @@ button:focus-visible {
 .lq-footer-sep {
   opacity: 0.5;
 }
+
+/* Header right-side cluster (user label + tier badge + sign-out) -------- */
+
+.lq-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lq-header-user {
+  font-size: 12px;
+  color: var(--lq-text-subtle);
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lq-header-signout {
+  background: transparent;
+  border: 1px solid var(--lq-border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--lq-text-subtle);
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.lq-header-signout:hover {
+  color: var(--lq-text);
+  border-color: var(--lq-text-subtle);
+}
+
+/* Sign-in gate ---------------------------------------------------------- */
+
+.lq-app-signin .lq-content {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 32px;
+}
+
+.lq-signin {
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  text-align: left;
+}
+
+.lq-signin-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.lq-signin-body {
+  margin: 0;
+  color: var(--lq-text-subtle);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.lq-signin-button {
+  background: var(--lq-accent);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.15s ease;
+}
+
+.lq-signin-button:hover:not(:disabled) {
+  background: var(--lq-accent-hover);
+}
+
+.lq-signin-button:disabled {
+  background: var(--lq-text-subtle);
+  cursor: not-allowed;
+}
+
+.lq-signin-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+  font-size: 13px;
+}
+
+.lq-signin-footnote {
+  margin: 0;
+  font-size: 12px;
+  color: var(--lq-text-subtle);
+  line-height: 1.5;
+}

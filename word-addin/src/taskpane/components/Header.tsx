@@ -6,20 +6,26 @@
  * and is not currently exposed to the task pane; deriving from origin is
  * sufficient for v0.3.0) and an Inference Tier badge placeholder.
  *
- * The badge is intentionally inert at M3-B1. The tier-badge implementation
- * lands with M3-B6 / DE-287 (community contribution) and will source tier
- * state from the `/api/v1/inference-tier-detail` endpoint per [PRD §3.13].
+ * When a user is signed in (M3-B2), shows their email + a sign-out button
+ * in the header's right-side cluster. The tier badge stays inert at M3-B1
+ * / M3-B2 — the badge implementation lands with M3-B6 / DE-287 (community
+ * contribution) and will source tier state from the
+ * `/api/v1/inference-tier-detail` endpoint per PRD §3.13.
  */
 import React from "react";
+import type { AuthUser } from "../auth";
 
 type HeaderProps = {
   deploymentOrigin: string;
+  user: AuthUser | null;
+  onSignOut?: () => void;
 };
 
-export const Header: React.FC<HeaderProps> = ({ deploymentOrigin }) => {
-  // For M3-B1, we show the origin host as a recognizable label. The
-  // deployment's branded display name lands when M3-B2 OAuth exchanges
-  // a token that carries the deployment metadata.
+export const Header: React.FC<HeaderProps> = ({
+  deploymentOrigin,
+  user,
+  onSignOut,
+}) => {
   const originHost = (() => {
     try {
       return new URL(deploymentOrigin).host;
@@ -27,6 +33,8 @@ export const Header: React.FC<HeaderProps> = ({ deploymentOrigin }) => {
       return "LQ.AI";
     }
   })();
+
+  const userLabel = user?.display_name?.trim() || user?.email || null;
 
   return (
     <header className="lq-header" role="banner">
@@ -38,12 +46,30 @@ export const Header: React.FC<HeaderProps> = ({ deploymentOrigin }) => {
           {originHost}
         </span>
       </div>
-      <div
-        className="lq-header-tier-badge lq-header-tier-badge-placeholder"
-        title="Inference Tier badge — surface lands with DE-287 (community contribution / M4)"
-        aria-label="Inference Tier indicator (placeholder; not yet wired)"
-      >
-        Tier —
+
+      <div className="lq-header-right">
+        {user && (
+          <span className="lq-header-user" title={user.email}>
+            {userLabel}
+          </span>
+        )}
+        <div
+          className="lq-header-tier-badge lq-header-tier-badge-placeholder"
+          title="Inference Tier badge — surface lands with DE-287 (community contribution / M4)"
+          aria-label="Inference Tier indicator (placeholder; not yet wired)"
+        >
+          Tier —
+        </div>
+        {user && onSignOut && (
+          <button
+            type="button"
+            className="lq-header-signout"
+            onClick={onSignOut}
+            aria-label="Sign out of LQ.AI"
+          >
+            Sign out
+          </button>
+        )}
       </div>
     </header>
   );

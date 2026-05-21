@@ -1,22 +1,26 @@
 /**
  * Root component for the LQ.AI Word add-in task pane.
  *
- * M3-B1 scope: render the header + tab strip + a deep-link card per tab.
+ * M3-B1 + M3-B2 scope: header + tab strip + a deep-link card per tab,
+ * gated behind LQ.AI sign-in (per Decision B-3, OAuth via Office.js
+ * Dialog API + the deployment's existing JWT issuer).
  *
- * The feature surfaces inside each tab (chat against the open document for
- * Chat, skill execution with tracked changes for Skills, playbook execution
- * for Playbooks, plus the Inference Tier badge in the header) are descoped
- * to M4 / community contribution per [DE-287](docs/PRD.md). Decision B-4
- * in `docs/superpowers/plans/2026-05-21-m3-phase-b-word-addin-plumbing.md`
- * locks the placeholder treatment: each tab renders a "coming soon" card
- * with a button that opens the equivalent web-app surface in a new browser
- * tab — giving the operator a usable add-in at v0.3.0 while making the
+ * The feature surfaces inside each tab (chat against the open document
+ * for Chat, skill execution with tracked changes for Skills, playbook
+ * execution for Playbooks, plus the Inference Tier badge in the header)
+ * are descoped to M4 / community contribution per [DE-287]. Decision
+ * B-4 in the Phase B prep doc locks the placeholder treatment: each
+ * tab renders a "coming soon" card with a button that opens the
+ * equivalent web-app surface in a new browser tab — giving the
+ * operator a usable add-in at v0.3.0 while making the
  * community-contribution surface explicit.
  */
 import React, { useState } from "react";
 import { Header } from "./Header";
 import { TabStrip, type TabId } from "./TabStrip";
 import { DeepLinkCard } from "./DeepLinkCard";
+import { SignInGate } from "./SignInGate";
+import { getSession, logout, type AuthSession } from "../auth";
 
 type TabContent = {
   title: string;
@@ -43,14 +47,36 @@ const TAB_CONTENT: Record<TabId, TabContent> = {
 };
 
 export const App: React.FC = () => {
+  const [session, setSession] = useState<AuthSession | null>(() => getSession());
   const [activeTab, setActiveTab] = useState<TabId>("chat");
+
+  if (!session) {
+    return (
+      <div className="lq-app lq-app-signin">
+        <Header deploymentOrigin={window.location.origin} user={null} />
+        <main className="lq-content">
+          <SignInGate onSignedIn={setSession} />
+        </main>
+      </div>
+    );
+  }
+
+  async function handleSignOut(): Promise<void> {
+    await logout();
+    setSession(null);
+  }
+
   const content = TAB_CONTENT[activeTab];
   const deploymentOrigin = window.location.origin;
   const deepLinkHref = `${deploymentOrigin}${content.webAppPath}`;
 
   return (
     <div className="lq-app">
-      <Header deploymentOrigin={deploymentOrigin} />
+      <Header
+        deploymentOrigin={deploymentOrigin}
+        user={session.user}
+        onSignOut={handleSignOut}
+      />
       <TabStrip activeTab={activeTab} onTabChange={setActiveTab} />
       <main className="lq-content">
         <DeepLinkCard
