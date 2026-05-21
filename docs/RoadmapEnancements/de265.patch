@@ -1,0 +1,75 @@
+From 4bf2c0ceb07185d9736b3f685a50fed30f7bdfb2 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 20 May 2026 16:08:51 +0000
+Subject: [PATCH] Add DE-265: Lavern as design reference for Autonomous Layer,
+ ensemble, MCP
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Document AnttiHero/lavern as the closest public prior art for §3.10
+(Autonomous Layer, M4), the deferred full-chat-path extension of §3.8
+(Multi-Model Ensemble Verification), the §8.5 M5+ MCP-client subsystem,
+and a possible complexity dial on §3.7 Playbooks. Stack mismatch
+(TypeScript/Fastify/SQLite vs. our Python/FastAPI/Postgres) makes direct
+integration uneconomical; the DE scopes a design-study phase (ADRs +
+mini-PRD before M4 kickoff) and a Phase 2 of feature increments folded
+into the existing M3/M4/M5+ milestones rather than as net-new work.
+---
+ docs/PRD.md | 40 ++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 40 insertions(+)
+
+diff --git a/docs/PRD.md b/docs/PRD.md
+index 805a098..3e6276b 100644
+--- a/docs/PRD.md
++++ b/docs/PRD.md
+@@ -3623,6 +3623,46 @@ This subsection operationalizes the §1.9 engineering-discipline posture and the
+ 
+ **Acceptance criteria — Phase A:** at least one PrivacyQuant-backed community skill in `skills/community/` with a documented end-to-end path from skill invocation → PrivacyQuant tool call → citation-grounded output rendered in the LQ.AI UI; PrivacyQuant referenced in `README.md` as a LegalQuants ecosystem integration; `docs/skill-authoring-guide.md` updated with the MCP-tool-call skill pattern. **Acceptance criteria — Phase B:** revisit when MCP-client subsystem work begins.
+ 
++#### DE-265 — Lavern as design reference for the Autonomous Layer, full-path ensemble, and MCP catalog
++
++**Priority:** P2 · **Effort:** S (this entry — design study + ADRs) plus downstream impact on M3/M4/M5+ work already scoped
++
++**Context:** [AnttiHero/lavern](https://github.com/AnttiHero/lavern) is an Apache 2.0, TypeScript/React/Fastify/SQLite, open-source "agentic law firm" for document review. It ships 67 specialist agent prompts coordinated through an adversarial debate protocol, a 3-layer verification pipeline (evaluator gates + adversarial debate + 10-pass verification), 21 MCP tools, 9 workflow templates (single-specialist → full adversarial review), 5 bundled legal datasets (CUAD, MAUD, ACORD, UNFAIR-ToS, LEDGAR), a persistent "precedent board," and an autonomous mode ("Clawern") with 30-minute heartbeat monitoring, email/Telegram alerts, precedent accumulation, and cost forecasting. It supports Anthropic, Mistral (EU mode), and local Ollama.
++
++Lavern is the closest public prior art for several LQ.AI roadmap commitments that are currently underdesigned in the PRD, particularly **§3.10 Autonomous Layer (M4)**, the deferred "full chat path" extension of **§3.8 Multi-Model Ensemble Verification**, the MCP tool catalog shape implied by **§8.5 M5+ MCP-client subsystem**, and a possible "complexity dial" on **§3.7 Playbooks (M3)** and **§3.14 Tabular Review (M3)**. Studying Lavern's design choices and writing them up against ours before M3/M4 design freezes is much cheaper than re-deriving the same shape from scratch.
++
++**Stack mismatch makes direct integration uneconomical.** Lavern is TypeScript/React/Fastify/SQLite; LQ.AI is Python/FastAPI/Postgres/SvelteKit (OpenWebUI fork). Apache 2.0 permits code vendoring, but the architecture surface (sync wire formats, single-process SQLite, no vector retrieval, no durable task queue) is strictly weaker than what LQ.AI has already built or specified — re-implementing the ideas natively in the existing services is the right path. Lavern's quality claims also lack independent benchmarks; treat the design as inspiration, not as validated implementation.
++
++**Specific overlap map.**
++
++| Lavern feature | LQ.AI section | Treatment |
++|---|---|---|
++| 67 specialist agent prompts | §3.4 Skill Library | Already the model. The 67-prompt corpus is potentially seed material for community skills under `skills/community/` (DE-001, DE-219), subject to the skill-contribution path's attorney-attestation gate (§7.5 / `skills/CONTRIBUTING.md`). |
++| Adversarial debate protocol with mandatory citations | §3.3 Citation Engine (shipped M2) + §3.8 Ensemble Verification (shipped narrowly on Stage 4 of Citation Engine) | LQ.AI's deterministic substring verification and char-precise offsets are stronger than Lavern's "agents must cite or be discarded." Lavern's contribution is a candidate execution shape for the deferred "full chat path ensemble" framing flagged in §3.8 — N agents debate, an evaluator gates, the user sees the disagreement structure rather than only the reconciled answer. |
++| 10-pass verification (context, clarity, accuracy, risk, …) | §3.7 Playbooks (§3.7), §3.14 Tabular Review | Suggests a complexity dial on Playbook execution: single specialist → small panel → full adversarial. Worth scoping as an option on `POST /api/v1/playbooks/{id}/execute` rather than a separate capability. |
++| 9 workflow templates | §3.7 Playbooks | The template taxonomy (cost vs. rigor) is a useful framing for how operators choose Playbook execution modes. |
++| 21 MCP tools (debate, scoring, verification, knowledge management) | §8.5 M5+ MCP-client subsystem | Concrete prior art for tool categorization and the registration surface. Worth comparing against the MCP-client subsystem skeleton planned for M5 before that work starts. |
++| Clawern autonomous mode (30-min heartbeat, alerts, cost forecast, precedent accumulation) | §3.10 Autonomous Layer (M4) | **Highest-value overlap.** §3.10 has committed the architectural slot but explicitly deferred detailed design ("M4 territory; detailed design deferred"). Lavern's Clawern is a working pattern for several of the open questions: how the heartbeat loop interacts with cost budgets, how alerts surface across email and chat, how precedent accumulation contrasts with Project context (§3.11) and user-curated memory. |
++| Persistent precedent board | §3.10 vs. §3.11 | A third framing — system-curated cross-matter patterns visible to the user — that sits between Project context (user-curated, per-matter) and autonomous memory (system-curated, system-visible). Worth deciding explicitly whether M4 absorbs this, rejects it, or files it as a separate construct. |
++| Bundled legal datasets (CUAD/MAUD/ACORD/UNFAIR-ToS/LEDGAR) | `docs/acceptance-testing-framework.md`; DE-237 eval harness | Useful eval corpora for the Citation Engine and Playbooks, independent of Lavern's runtime. Licensing of each dataset to be verified before any bundling. |
++| EU mode (routes through Mistral) | §1.5.2 Inference Tier Spectrum + Provider Compliance Matrix | Already addressed structurally by the Tier model. Lavern's framing as a single switch is worth borrowing as UX language ("EU residency mode") even though the underlying mechanism is the same provider routing. |
++
++**Specific scope (this DE):**
++
++*Phase 1 — design study (before M4 kickoff; ~1 day of reading + writing):*
++- Read Lavern's Clawern pipeline source (TypeScript) and write `docs/adr/00XX-autonomous-layer-design-influences.md` comparing it to the §3.10 sketch — naming what LQ.AI adopts, what it adapts, and what it rejects, with the open questions in §3.10 ("Open questions") answered or explicitly punted.
++- Read Lavern's debate protocol and write a short note in §3.8 (or an ADR cross-referenced from it) on whether the "full chat path ensemble" extension should adopt the debate-and-evaluator shape; if yes, file a follow-up DE with concrete scope.
++- Read Lavern's MCP tool catalog and capture the categorization in `docs/contribute/mini-prds/mcp-client-subsystem.md` (creating that mini-PRD if it does not yet exist) so the M5 design starts with prior art rather than a blank page.
++
++*Phase 2 — feature increments (folded into existing milestones, not net-new work):*
++- **M3 — Playbook execution-mode dial (§3.7).** Add `execution_mode: "single" | "panel" | "adversarial"` to the `POST /api/v1/playbooks/{id}/execute` body, defaulting to `single`. Panel and adversarial route through the same ensemble surface §3.8 already builds on. Cost preview surfaces the mode's expected token spend per §5.5. Estimated +S work on top of M3 §3.7.
++- **M4 — Autonomous Layer informed by Clawern (§3.10).** No new line items; the existing M4 scope absorbs the Phase 1 ADR's conclusions. Particular focus areas: heartbeat-loop cost-budget integration; alert surface (email + in-app + optional webhook to align with §3.15 Slack/Teams Bridge once it ships); precedent-board vs. autonomous-memory disambiguation.
++- **M5+ — MCP catalog seeded from Lavern (§8.5).** Phase 1 ADR's tool categorization becomes the starting catalog for the MCP-client subsystem's first iteration.
++
++**What is explicitly out of scope:** direct code reuse from Lavern (stack mismatch); bulk import of the 67-agent prompt corpus (skill-contribution path applies per skill); adoption of Lavern's SQLite/Fastify/no-vector-retrieval architecture choices (strictly weaker than LQ.AI's existing substrate); marketing claims about agent counts or verification-pass counts as a quality signal in their own right (§1.9 conservative-posture principle).
++
++**Acceptance criteria — Phase 1:** the autonomous-layer ADR is merged and cross-referenced from §3.10; the §3.8 follow-up note is merged and cross-referenced from §3.8; the MCP-client mini-PRD exists and references Lavern's tool catalog. **Acceptance criteria — Phase 2:** revisit when M3/M4/M5 design freezes for each milestone.
++
+ ### How to add to this list
+ 
+ When new deferred items are identified during development, ongoing skill authoring, or community feedback:
+-- 
+2.43.0
+
