@@ -543,9 +543,13 @@
 		background: var(--lq-surface);
 	}
 	.lq-easy-wizard__step--active {
-		background: var(--lq-accent);
-		color: var(--lq-on-accent, white);
-		border-color: var(--lq-accent);
+		/* Hardcoded fallbacks — the OpenWebUI fork doesn't always
+		   define `--lq-accent` on every theme, which collapsed the
+		   background to inherit (white) while the text stayed
+		   white-on-white. Matches the PlaybookExecuteModal pattern. */
+		background: var(--lq-accent, #4f46e5);
+		color: var(--lq-on-accent, #ffffff);
+		border-color: var(--lq-accent, #4f46e5);
 	}
 	.lq-easy-wizard__panel {
 		display: flex;
@@ -660,8 +664,8 @@
 	.lq-easy-wizard__spinner {
 		width: 1.5rem;
 		height: 1.5rem;
-		border: 3px solid var(--lq-border);
-		border-top-color: var(--lq-accent);
+		border: 3px solid var(--lq-border, #e5e7eb);
+		border-top-color: var(--lq-accent, #4f46e5);
 		border-radius: 50%;
 		animation: lq-spin 1s linear infinite;
 	}
@@ -683,8 +687,8 @@
 		border: 1px solid transparent;
 	}
 	.lq-easy-wizard__btn--primary {
-		background: var(--lq-accent);
-		color: var(--lq-on-accent, white);
+		background: var(--lq-accent, #4f46e5);
+		color: var(--lq-on-accent, #ffffff);
 	}
 	.lq-easy-wizard__btn:disabled {
 		opacity: 0.5;

@@ -139,8 +139,8 @@
 	}
 	.lq-playbooks-page__cta {
 		padding: 0.5rem 0.875rem;
-		background: var(--lq-accent);
-		color: var(--lq-on-accent, white);
+		background: var(--lq-accent, #4f46e5);
+		color: var(--lq-on-accent, #ffffff);
 		border: none;
 		border-radius: 0.375rem;
 		font-size: 0.875rem;
