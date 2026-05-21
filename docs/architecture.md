@@ -250,9 +250,11 @@ M1 is the foundation release: a self-hostable deployment that delivers conversat
 
 **Adds:**
 - Playbook Service with LangGraph executor and the Easy Playbook auto-generation wizard.
-- Word Add-In with Inference Tier badge in the task pane.
+- Word Add-In **plumbing** — scaffold + OAuth (M3-B2) + signed manifest + distribution package (M3-B7) + self-served JS bundle + version handshake (M3-B8). The task pane is installable and authenticated against the operator's deployment; the in-Word feature surface inside each tab (chat against the open document, skills with tracked changes, playbook execution, Inference Tier badge) is deferred to M4 / community contribution per [PRD §9 DE-287](PRD.md#de-287--word-add-in-feature-surface-chat-skills-playbooks-tier-badge--deferred-to-m4--community-contribution).
 - Tabular Review surface and `output_format: table` skill mode.
-- Slack/Teams Light Intake Bridge (optional, profile-gated; OAuth-installed bot for `/lq` slash commands).
+- Slack/Teams Light Intake Bridge **plumbing** — `slack-bridge` + `teams-bridge` services with OAuth install + admin UI shell. The `/lq` slash-command surface is deferred to M4 / community contribution per [PRD §9 DE-288](PRD.md#de-288--slackteams-lq-slash-command--quick-skill-flow--deferred-to-m4--community-contribution).
+
+**Word add-in delivery flow.** The Word add-in's static bundle (`taskpane.html` + JS + CSS + manifest icons) lives at `word-addin/` and webpacks into `web/static/word-addin/`. The web container's SvelteKit build picks the directory up via the existing `COPY . .` step, so the bundle is served at `{deployment_origin}/word-addin/...` without any new routing logic. Operators generate per-deployment manifests via the admin UI (`/lq-ai/admin/word-addin` → `GET /api/v1/admin/word-addin/manifest`), which templates the operator's deployment URL into the XML, then sideload via Microsoft 365 Admin Center. M3-B7 wraps the signed manifest into a versioned GitHub Release asset for enterprise sideload; M3-B8 adds a version-handshake endpoint (`GET /api/v1/word-addin/version`) so the task pane surfaces a clear "update needed" overlay when the installed add-in version drifts from the deployment.
 
 ### M4 — Autonomous Layer and Contract Repository
 

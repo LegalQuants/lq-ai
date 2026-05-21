@@ -1,0 +1,12 @@
+node_modules/
+*.log
+.DS_Store
+
+# Webpack outputs land in ../web/static/word-addin/ (see webpack.config.js).
+# A `dist/` here would be a stale leftover from a previous config — ignore it
+# so contributors can rm -rf without thinking twice.
+dist/
+
+# Office Add-in dev artifacts
+.office-addin-dev-certs/
+appsetting.json

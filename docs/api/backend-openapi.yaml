@@ -2835,6 +2835,71 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/UsageResponse'}
 
+  # ----------- WORD ADD-IN (M3-B1) -----------
+  /api/v1/admin/word-addin/manifest:
+    get:
+      tags: [admin]
+      summary: Render the Word add-in manifest XML for sideload (M3-B1)
+      description: |
+        Admin-only. Renders the Office Add-in XML manifest with the
+        operator's deployment URL + a freshly generated GUID substituted
+        into the template. Operators use the rendered file to sideload
+        the add-in via Microsoft 365 Admin Center.
+
+        Origin resolution order:
+        1. ``deployment_origin`` query param when supplied
+        2. ``X-Forwarded-Proto`` + ``X-Forwarded-Host`` headers (the
+           operator's reverse-proxy reports these)
+        3. The request URL's scheme + host (single-process dev fallback)
+
+        Per PRD §9 DE-287, the Word add-in's user-facing feature tabs
+        (chat / skills / playbook execution / Inference Tier badge) are
+        descoped to M4 / community contribution; this M3-B1 endpoint
+        ships the install-and-authenticate plumbing.
+      parameters:
+        - name: deployment_origin
+          in: query
+          required: false
+          description: |
+            Override the deployment origin embedded in the manifest.
+            Defaults to the request's effective origin (reverse-proxy
+            aware). No trailing slash.
+          schema: {type: string, format: uri, example: 'https://lq.acme.example'}
+        - name: display_name
+          in: query
+          required: false
+          description: |
+            Branded name surfaced inside Word's ribbon and the task
+            pane GetStarted message.
+          schema: {type: string, maxLength: 64, default: 'LQ.AI'}
+        - name: provider_name
+          in: query
+          required: false
+          description: |
+            ProviderName value the manifest surfaces to Microsoft 365
+            Admin Center; typically the operator org's name.
+          schema: {type: string, maxLength: 64, default: 'LegalQuants'}
+      responses:
+        '200':
+          description: Rendered Office Add-in XML manifest
+          headers:
+            Content-Disposition:
+              schema: {type: string, example: 'attachment; filename="lq-ai-word-addin-manifest.xml"'}
+              description: Tells the browser to download the manifest as a file.
+          content:
+            application/xml:
+              schema: {type: string, format: byte}
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '403':
+          description: Caller is not an admin user
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
   # ----------- INFERENCE (PRD §3.13 — Wave B) -----------
   /api/v1/inference/current-tier:
     get:

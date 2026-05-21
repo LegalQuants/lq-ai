@@ -274,6 +274,15 @@ services:
     # Customizations land progressively: A5 (branding + delegated-auth wiring),
     # D2 (tier badge), and others. The container builds upstream-as-is in M1's
     # initial state.
+    #
+    # Word add-in (M3-B1) integration: the webpack build at
+    # `word-addin/` outputs to `web/static/word-addin/` which the web
+    # Dockerfile's `COPY . .` in the SvelteKit build stage picks up
+    # automatically. Run `cd word-addin && npm install && npm run build`
+    # once before `docker compose up --build` to populate the directory;
+    # see `word-addin/README.md` for the full build flow. A future DE
+    # may add an automated build stage to this compose file or to the
+    # web Dockerfile so the manual step is no longer required.
     build:
       context: ./web
       dockerfile: Dockerfile

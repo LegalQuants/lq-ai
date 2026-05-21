@@ -163,8 +163,11 @@ desktop.ini
 test-corpus/
 test-results/
 
-# Operator-generated runtime data
+# Operator-generated runtime data (runtime artifacts only — do NOT
+# ignore application-bundled data such as ``api/app/data/`` which
+# ships templates and fixtures inside the api package).
 data/
+!api/app/data/
 logs/
 uploads/
 postgres-data/

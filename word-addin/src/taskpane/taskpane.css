@@ -1,0 +1,224 @@
+/* Task pane base styles. Word task panes are narrow (~320px default
+   width on desktop, configurable up to ~800px); the layout is vertical
+   stack-first. Color palette mirrors the LQ.AI web app at a high level
+   without importing the full Tailwind/OpenWebUI surface — this is the
+   add-in's own CSS tree so it doesn't drag the web bundle's weight in. */
+
+:root {
+  --lq-bg: #ffffff;
+  --lq-bg-subtle: #f7f9fc;
+  --lq-border: #e1e5ec;
+  --lq-text: #1f2329;
+  --lq-text-subtle: #5a6472;
+  --lq-accent: #2563eb;
+  --lq-accent-hover: #1d4ed8;
+  --lq-warning-bg: #fef3c7;
+  --lq-warning-text: #92400e;
+  --lq-font:
+    "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial,
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--lq-bg);
+  color: var(--lq-text);
+  font-family: var(--lq-font);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.lq-taskpane-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+#lq-taskpane-root {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+a {
+  color: var(--lq-accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--lq-accent);
+  outline-offset: 2px;
+}
+
+/* Layout shell ---------------------------------------------------------- */
+
+.lq-app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.lq-content {
+  flex: 1 1 auto;
+  padding: 16px;
+}
+
+/* Header ---------------------------------------------------------------- */
+
+.lq-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--lq-border);
+  background: var(--lq-bg-subtle);
+}
+
+.lq-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.lq-header-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--lq-accent);
+  color: white;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.lq-header-name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.lq-header-tier-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--lq-border);
+  color: var(--lq-text-subtle);
+  background: var(--lq-bg);
+}
+
+.lq-header-tier-badge-placeholder {
+  font-style: italic;
+  opacity: 0.6;
+  cursor: help;
+}
+
+/* Tab strip ------------------------------------------------------------- */
+
+.lq-tabstrip {
+  display: flex;
+  border-bottom: 1px solid var(--lq-border);
+  background: var(--lq-bg);
+}
+
+.lq-tab {
+  flex: 1 1 auto;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  color: var(--lq-text-subtle);
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.lq-tab:hover {
+  color: var(--lq-text);
+}
+
+.lq-tab-active {
+  color: var(--lq-accent);
+  border-bottom-color: var(--lq-accent);
+}
+
+/* Deep-link card -------------------------------------------------------- */
+
+.lq-card {
+  border: 1px solid var(--lq-border);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--lq-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lq-card-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.lq-card-body {
+  margin: 0;
+  color: var(--lq-text-subtle);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.lq-card-cta {
+  align-self: flex-start;
+  background: var(--lq-accent);
+  color: white;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-weight: 500;
+  transition: background 0.15s ease;
+}
+
+.lq-card-cta:hover {
+  background: var(--lq-accent-hover);
+  text-decoration: none;
+}
+
+/* Footer ---------------------------------------------------------------- */
+
+.lq-footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--lq-border);
+  font-size: 12px;
+  color: var(--lq-text-subtle);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.lq-footer-sep {
+  opacity: 0.5;
+}

@@ -43,6 +43,7 @@ from app.api import (
     teams,
     user_skills,
     users,
+    word_addin,
 )
 from app.api.dependencies import get_active_user
 
@@ -86,5 +87,12 @@ api_router.include_router(admin.router, dependencies=_active)
 # (``/playbooks/{id}/execute`` and ``/playbook-executions/{id}``) so
 # they live alongside the M3-A4 list/CRUD endpoints in the same module.
 api_router.include_router(playbooks_api.router, dependencies=_active)
+# M3-B1: Word add-in admin surface (manifest generation).
+# Router prefix ``/admin/word-addin`` means it stacks on the same
+# AdminUser gate as the other admin endpoints; future M3-B2 OAuth +
+# M3-B8 version-handshake routes live in the same module under
+# different prefixes (e.g. ``/word-addin/version``) and will be
+# mounted separately when those tasks ship.
+api_router.include_router(word_addin.router, dependencies=_active)
 
 __all__ = ["api_router"]

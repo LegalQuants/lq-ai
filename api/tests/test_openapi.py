@@ -115,6 +115,8 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/admin/bootstrap-status",
         # M3-0.3 / DE-276 — admin ingest-health aggregate
         "/api/v1/admin/ingest-health",
+        # M3-B1 — Word add-in manifest generation (admin-only sideload helper)
+        "/api/v1/admin/word-addin/manifest",
         # M3-A2 — Playbook executor surface
         "/api/v1/playbooks/{playbook_id}/execute",
         "/api/v1/playbook-executions/{execution_id}",
@@ -171,7 +173,8 @@ async def test_openapi_paths_match_sketch() -> None:
     # + M3-0.3's /admin/ingest-health.
     # + M3-A2's two playbook-executor endpoints.
     # + M3-A4's two playbook list/detail endpoints.
-    assert len(actual) == 79
+    # + M3-B1's /admin/word-addin/manifest.
+    assert len(actual) == 80
 
 
 @pytest.mark.unit
