@@ -3635,6 +3635,22 @@ This subsection operationalizes the §1.9 engineering-discipline posture and the
 
 **Why P3:** Test code only; CI green; no functional impact. The reason to file it at all is the durable paper trail — without it, the next contributor running `mypy .` locally will be confused about why 211 errors exist and whether they're a regression. Listing it here closes the silent-debt loop and gives a community contributor a bounded, well-defined task.
 
+#### DE-285 — First-run sample-NDA knowledge base for the Easy Playbook wizard
+
+**Priority:** P2 · **Effort:** M
+
+**Context:** M3-A6 ships a 4-step Easy Playbook wizard that turns a corpus of prior contracts into a draft playbook. The wizard's quality scales with corpus size and within-corpus form consistency — meaning operators evaluating LQ.AI for the first time benefit enormously from a pre-built test corpus they can run through the wizard before they upload their own contracts. M3-A6 ships five synthetic mutual NDAs at `docs/quickstart/sample-ndas/` (designed with intentional variants on five negotiation axes) and points operators at them in the quickstart docs, but the upload-them-yourself path still requires the operator to (a) find the PDFs in the repo on disk, (b) drag them into the wizard's dropzone, and (c) wait for the C5 parse pipeline to flip each `document_id` non-null before generation can start. A pre-loaded knowledge base + an in-app "Try with sample NDAs" affordance would shave that friction to a single click.
+
+**Specific scope:** Three-part change.
+
+1. **Bundle the PDFs in the api image** — move `docs/quickstart/sample-ndas/*.pdf` into a path the api container can read at startup (e.g., `api/seed/sample-ndas/`).
+2. **First-run bootstrap seed** — analogous to the M3-A5 built-in-playbook seed migrations (0032 + 0033). On first-run bootstrap (or a new admin-triggered endpoint `POST /api/v1/admin/seed/sample-ndas`), the api: (a) creates a system-managed knowledge base named "Sample NDAs (for testing)" owned by a dedicated `__samples__` user OR by every admin's user_id; (b) uploads each PDF to MinIO under that owner; (c) runs the C5 parse pipeline synchronously so `document_id` is set before the endpoint returns; (d) emits an audit row.
+3. **Wizard UI affordance** — when the wizard's Step 1 dropzone is empty AND the operator has a "Sample NDAs" KB attached to their library, render a "Try with sample NDAs" CTA that pre-populates `selectedFiles` (or `uploadedFiles`) with the 5 sample documents — single click, no upload step required, jumps straight to the polling step.
+
+**Acceptance criteria:** On a fresh-install stack with the api container's seed step enabled, an admin who logs in and opens the Easy Playbook wizard sees the "Try with sample NDAs" CTA; clicking it kicks off a generation against the 5 bundled documents without any manual upload; the resulting draft surfaces the 5 variant axes documented in `docs/quickstart/sample-ndas/README.md` as distinct positions. The seeded KB is also visible in the operator's KB list as a system-managed entry (distinguished UI badge so it's clear it's not user-uploaded). Operators in production who don't want the sample KB can disable the seed via an env var or an admin-UI toggle.
+
+**Why P2 (not P1):** The current `docs/quickstart/sample-ndas/` setup is functional — operators can already exercise the wizard via the docs-pointed upload-them-yourself path. The friction reduction from this DE is meaningful but not blocking; the wizard ships M3-A6 without it. Worth filing because the surface — pre-loaded sample data + in-app onboarding affordances — generalizes to other capabilities (sample MSAs for the MSA-SaaS playbook, sample DPAs for the DPA playbook, etc.); shipping it once establishes the pattern for the rest.
+
 ### How to add to this list
 
 When new deferred items are identified during development, ongoing skill authoring, or community feedback:
