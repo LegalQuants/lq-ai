@@ -3651,6 +3651,28 @@ This subsection operationalizes the §1.9 engineering-discipline posture and the
 
 **Why P2 (not P1):** The current `docs/quickstart/sample-ndas/` setup is functional — operators can already exercise the wizard via the docs-pointed upload-them-yourself path. The friction reduction from this DE is meaningful but not blocking; the wizard ships M3-A6 without it. Worth filing because the surface — pre-loaded sample data + in-app onboarding affordances — generalizes to other capabilities (sample MSAs for the MSA-SaaS playbook, sample DPAs for the DPA playbook, etc.); shipping it once establishes the pattern for the rest.
 
+#### DE-286 — Cross-document label normalization on richer contract types (Easy Playbook clustering tuning)
+
+**Priority:** P2 · **Effort:** M
+
+**Context:** The Easy Playbook wizard's centroid-based clustering merge (shipped M3-A6 post-smoke iteration) works well on shorter, structurally-repetitive contract types like NDAs — the 5-NDA synthetic corpus at `docs/quickstart/sample-ndas/` produced 18 positions with 12 of them carrying 2 fallback tiers (the modal phrasing + 2 cross-document variants per position). On richer contract types like MSAs the algorithm behaves differently: the 5-MSA synthetic corpus at `docs/quickstart/sample-msas/` produced 26 positions, **every one a singleton** (0 fallback tiers, 1 source clause each).
+
+The MSA result is not a regression — the 26 positions correctly cover all 5 variant axes built into the corpus (payment terms, IP ownership, warranty scope, termination triggers, indemnification scope). The legal sub-concepts within each axis are kept as distinct positions ("Customer Indemnification" vs "Vendor Indemnification" vs "Indemnification Cap and Exceptions"), which is arguably more useful to a user-attorney than collapsing them. **But the modal-phrasing-with-fallback-tiers mechanism does not activate for cross-document variants on these document types**, because the extractor (`api/app/playbooks/easy/extractor.py`) returns highly document-specific labels per MSA, and neither exact-match grouping nor the 0.85-cosine centroid merge bridges them.
+
+The practical consequence: an operator generating an MSA playbook gets a structurally-correct draft but loses the cross-document signal (i.e., the wizard doesn't tell them "across the 5 MSAs you uploaded, payment terms varied between Net-30 / Net-45 / Net-60 / milestone-based — here's the modal and the variants"). The variant information IS in the corpus; it just doesn't surface as fallback tiers on the assembled positions.
+
+**Specific scope:** Two parallel tuning paths, either or both worth pursuing.
+
+*Path A — extractor-side normalization.* Modify `api/app/playbooks/easy/extractor.py` to use a more constrained issue-label vocabulary. Two options:
+- Pre-built enum: extractor prompt includes a curated list of common contract issues (e.g., "Payment Terms," "Indemnification," "Limitation of Liability," ...) and instructs the LLM to use exact matches from the list where applicable, falling back to free-form labels otherwise. Tradeoff: drifts over time as new contract types appear.
+- Post-extraction normalization pass: after extracting clauses from all documents in a generation, run a second LLM call that takes the union of all labels and asks for a canonical-label assignment per source label, merging semantically-equivalent labels. Tradeoff: extra LLM call per generation (modest cost).
+
+*Path B — clustering-side threshold tuning.* Lower the centroid-based merge threshold (currently 0.85) for richer document types, with the threshold parameterized by an `EasyPlaybookGenerationCreate` field. Tradeoff: may over-merge legitimately-distinct concepts on simpler document types; requires per-contract-type tuning data.
+
+**Acceptance criteria:** After implementation, a 5-MSA corpus run produces ≥50% of positions with at least 1 cross-document fallback tier (matching the NDA corpus's ~67%); no regression on the NDA corpus baseline (18 positions with the same cross-document fallback distribution); the user-attorney Step 3 inline editor remains the final dedup pass per Decision F.
+
+**Why P2 (not P1):** The current behavior is structurally correct — operators get an MSA playbook draft with all variant axes represented. They lose only the modal-with-fallback-tiers signal for cross-document variants. Decision F (M3-A6 §3) authorizes the user-attorney to add fallback tiers manually in Step 3. The fix is meaningful but not blocking; M3-A6 ships without it. Worth filing because (a) it's a real algorithmic finding from the cross-corpus validation, and (b) the path to fix is bounded and the bench (5 NDAs + 5 MSAs) already exists.
+
 ### How to add to this list
 
 When new deferred items are identified during development, ongoing skill authoring, or community feedback:
