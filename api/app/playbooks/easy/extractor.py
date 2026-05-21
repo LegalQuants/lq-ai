@@ -334,9 +334,11 @@ async def _extract_one_span(
         model=model,
         messages=messages,
         max_tokens=EASY_EXTRACT_MAX_TOKENS,
-        temperature=0.0,
-        # Anonymization off: the extractor needs the actual contract
-        # text to quote verbatim. Matches M3-A2 executor's stance.
+        # `temperature` is omitted: Anthropic Opus 4.x reasoning models
+        # rejected the parameter as of 2026-05, and the gateway already
+        # only forwards non-None values to providers. Determinism for
+        # reasoning models is implicit; sampled models keep their
+        # provider default.
         anonymize=False,
         lq_ai_purpose="playbook_easy_extract",
     )

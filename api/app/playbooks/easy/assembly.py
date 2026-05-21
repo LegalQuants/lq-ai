@@ -411,9 +411,12 @@ async def _dispatch_structured_call(
     """Dispatch one structured-JSON LLM call; return the parsed dict ({} on any failure).
 
     Same pattern as :mod:`app.playbooks.nodes._dispatch_structured_call`
-    (M3-A2): temperature 0.0 for determinism; anonymization off (the
-    clause text needs to round-trip verbatim); ``lq_ai_purpose`` for
-    cost-routing telemetry attribution.
+    (M3-A2): determinism is left to the model (Opus 4.x reasoning
+    models reject explicit `temperature` as of 2026-05; the gateway
+    only forwards non-None values, so omitting it is the correct
+    posture for both reasoning and sampled models); anonymization off
+    (the clause text needs to round-trip verbatim); ``lq_ai_purpose``
+    for cost-routing telemetry attribution.
     """
 
     request = ChatCompletionRequest(
@@ -423,7 +426,6 @@ async def _dispatch_structured_call(
             ChatCompletionMessage(role="user", content=user_content),
         ],
         max_tokens=max_tokens,
-        temperature=0.0,
         anonymize=False,
         lq_ai_purpose=purpose,
     )

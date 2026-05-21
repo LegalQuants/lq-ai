@@ -413,7 +413,9 @@ async def test_describe_position_request_carries_audit_purpose() -> None:
     request = gateway.calls_received[0]
     assert request.lq_ai_purpose == "playbook_easy_assemble_describe_position"
     assert request.anonymize is False
-    assert request.temperature == 0.0
+    # `temperature` is intentionally omitted — Opus 4.x reasoning models
+    # rejected it as of 2026-05; the gateway only forwards non-None.
+    assert request.temperature is None
 
 
 @pytest.mark.unit

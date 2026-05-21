@@ -190,7 +190,9 @@ async def test_request_carries_lq_ai_purpose_for_audit_routing() -> None:
     request = gateway.calls_received[0]
     assert request.lq_ai_purpose == "playbook_easy_extract"
     assert request.anonymize is False
-    assert request.temperature == 0.0
+    # `temperature` is intentionally omitted — Opus 4.x reasoning models
+    # rejected it as of 2026-05; the gateway only forwards non-None.
+    assert request.temperature is None
 
 
 # ---------------------------------------------------------------------------
