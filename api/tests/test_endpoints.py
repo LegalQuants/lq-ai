@@ -182,6 +182,10 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     # M3-A4 — Playbook list + detail (GET-only; CRUD deferred to M3-A6)
     ("GET", "/api/v1/playbooks"),
     ("GET", "/api/v1/playbooks/{playbook_id}"),
+    # M3-B1 — Word add-in admin manifest generation
+    ("GET", "/api/v1/admin/word-addin/manifest"),
+    # M3-B8 — Word add-in version handshake (unauthenticated)
+    ("GET", "/api/v1/word-addin/version"),
     # D4 — Organization Profile singleton
     ("GET", "/api/v1/organization-profile"),
     ("PUT", "/api/v1/organization-profile"),
