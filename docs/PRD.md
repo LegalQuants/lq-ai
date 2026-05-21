@@ -3623,6 +3623,46 @@ This subsection operationalizes the §1.9 engineering-discipline posture and the
 
 **Acceptance criteria — Phase A:** at least one PrivacyQuant-backed community skill in `skills/community/` with a documented end-to-end path from skill invocation → PrivacyQuant tool call → citation-grounded output rendered in the LQ.AI UI; PrivacyQuant referenced in `README.md` as a LegalQuants ecosystem integration; `docs/skill-authoring-guide.md` updated with the MCP-tool-call skill pattern. **Acceptance criteria — Phase B:** revisit when MCP-client subsystem work begins.
 
+#### DE-287 — Word add-in feature surface (chat, skills, playbooks, tier badge) — deferred to M4 / community contribution
+
+**Priority:** P2 · **Effort:** M (chat + skills) + M (playbook execution) + S (tier badge) = ~26–34 hours of Word-side feature work, on top of the M3 Phase B plumbing
+
+**Context:** The M3 Implementation Plan originally scoped four feature-surface tasks inside the Word add-in: M3-B3 (chat against the open document), M3-B4 (skills in Word with tracked-changes + comments rendering), M3-B5 (playbook execution in Word), and M3-B6 (Inference Tier badge in the task pane). At the M3-A6 PR #57 close (2026-05-21) the M3 critical path was retightened: Phase B retains its plumbing (M3-B1 scaffold + M3-B2 OAuth + M3-B7 signed manifest + code-signing cert procurement + M3-B8 self-hosted JS bundle and version handshake) but defers the four Word-side feature tasks to M4 or to community contribution. The plumbing alone is enough to make the add-in installable and authenticated against an LQ.AI deployment; community contributors with existing Word plugin code can fork against that plumbing without LegalQuants needing to ship every feature surface in M3.
+
+The descope is risk-driven rather than scope-driven. Office.js feature work requires a Word client for live testing, an iterative debug loop against a Microsoft 365 tenant, and a tracked-changes + comments rendering surface that has no analog in the existing SvelteKit codebase. Combining that effort with M3's already-committed Tabular Review (Phase C) + Slack/Teams plumbing (Phase D) + acceptance pass (Phase E) made M3 schedule-risk-bearing. Splitting the feature surface to M4 (where the autonomous layer is the headline) preserves the v0.3.0 release window and matches the open-source-first posture of inviting community contributors into the add-in's user-facing tabs.
+
+**Specific scope (each task carries its own DE-level acceptance):**
+
+- **M3-B3 — Chat against the open document.** Task-pane chat UI mirroring the web app's chat surface (scaled for narrower task pane), open-document and selection-only context modes, streaming responses, 5-state Citation Engine UI with in-doc span highlighting via Office.js range APIs. Calls the existing `/api/v1/chat/completions`; no new backend endpoint. Effort: 8–10 hours.
+
+- **M3-B4 — Skills in Word (apply skill to selection or document).** Task-pane Skills tab pulling from `GET /api/v1/skills`; `Apply skill` flow with whole-document or selection scope; result rendering for redlines (Word tracked changes via `Word.Range.insertText` / `delete` within a tracked-changes session), assessments (Word comments via `Word.Range.insertComment`), and descriptive text (task pane only); Inference Tier badge per-skill execution. Effort: 12–16 hours.
+
+- **M3-B5 — Playbook execution in Word.** Task-pane Playbooks tab; Apply-playbook flow with cost preview confirmation; per-position SSE streaming progress; per-position assessment as Word comment at matching clause location; per-position redline as Word tracked change; position summary card with click-through to the in-doc comment; severity filter/collapse matching the web UI (M3-A4). Effort: 10–12 hours.
+
+- **M3-B6 — Inference Tier badge in task pane.** Task-pane header badge; click-through opens tier-detail panel (reuse web component if practical, else re-implement against `/api/v1/inference-tier-detail`); updates per active chat / skill / playbook execution; matches §3.13 behavior. Effort: 4–6 hours. Parallel with M3-B5 in calendar terms.
+
+**Dependencies (when this work resumes):** the M3 Phase B plumbing (M3-B1 + M3-B2 + M3-B7 + M3-B8) must have shipped; for M3-B5 specifically, M3-A4 (web playbook execution UI) is already shipped (2026-05-19) so the result-rendering surface contract is in place.
+
+**Acceptance criteria:** each task carries its own acceptance criteria from `docs/M3-IMPLEMENTATION-PLAN.md` (Tasks M3-B3 through M3-B6 — see that file for the verification steps). When this DE resolves, the four task entries in the implementation plan transition from "descoped to M4" to "shipped" with cross-references to the PRs that landed them. Community contribution path: a contributor can claim any single task (B3/B4/B5/B6) via a tracking issue and ship it as an independent PR against the M3 Phase B plumbing.
+
+#### DE-288 — Slack/Teams `/lq` slash command + quick-skill flow — deferred to M4 / community contribution
+
+**Priority:** P2 · **Effort:** M (8–10 hours Slack + ~8 hours Teams parity)
+
+**Context:** The M3 Implementation Plan originally scoped four Slack/Teams tasks: M3-D1 (slack-bridge service + OAuth install flow), M3-D2 (`/lq` slash command + `/lq ask` quick-skill flow), M3-D3 (teams-bridge service + Teams OAuth + parity), M3-D4 (bot configuration in LQ.AI admin UI). At the M3-A6 PR #57 close (2026-05-21) the M3 Phase D scope was reduced to plumbing only: M3-D1 (Slack OAuth install + identity binding) + M3-D3 (Teams equivalent) + M3-D4 (admin UI shell). The `/lq` slash command surface (M3-D2) and its Teams mirror inside M3-D3 are deferred to M4 / community contribution.
+
+The Slack/Teams plumbing is enough for an operator to install the bot, complete the OAuth handshake, and surface the identity binding in the admin UI. Without M3-D2, the bot has no user-facing commands — it is installed but inert. That is an acceptable shipping state for v0.3.0 because (a) the bridge service substrate is the load-bearing piece, (b) a community contributor implementing a slash command flow has a clean interface to extend against, and (c) the v0.3.0 release window prioritizes finishing Phases A/B-plumbing/C/D-plumbing/E rather than every user-facing surface inside D.
+
+**Specific scope:**
+
+- **M3-D2 — Slack `/lq` slash command + `/lq ask` quick-skill flow.** Two slash command flows in the `slack-bridge` service: `/lq` (no arg) on a thread forwards thread content as the seed of a new LQ.AI chat, bot replies in-thread with a link to the chat in the web app; `/lq ask "<question>"` runs a configured Org-Profile quick-ask skill (admin-configurable; default `quick-legal-question` skill) against the question and replies in-thread with the answer + a link to open the chat in the web app. Slack user → LQ.AI user identity mapping via email match (unmatched users see a "your Slack account isn't linked" message). Thread contents stored under the linked user's chat history with normal RBAC. Cost-accounting integration tags Slack-sourced inference with `source: slack`. Effort: 8–10 hours.
+
+- **M3-D3 Teams parity for the slash command surface.** The `teams-bridge` service in scope under M3-D3 retains its OAuth install + identity binding surface (the plumbing). The slash-command parity for Teams (the equivalent of M3-D2 in the Microsoft Teams runtime) is deferred to this DE alongside the Slack flow. Effort: ~8 hours assuming the Slack flow is implemented first and the Teams runtime adapter reuses most of the orchestration logic.
+
+**Dependencies:** M3-D1 (slack-bridge service + OAuth install) and M3-D3 plumbing-only scope must have shipped. M3-D4 (bot configuration UI) gives admins the surface to configure the quick-ask skill; without it, the skill is configured via deployment config files.
+
+**Acceptance criteria:** both flows live in `slack-bridge` and `teams-bridge` per the M3-D2 / M3-D3 task acceptance criteria in `docs/M3-IMPLEMENTATION-PLAN.md`. Community contribution path: the Slack flow can ship first as a standalone PR; the Teams parity can ship as a follow-up PR.
+
 ### How to add to this list
 
 When new deferred items are identified during development, ongoing skill authoring, or community feedback:

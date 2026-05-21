@@ -351,7 +351,7 @@ The Playbook engine is the load-bearing substrate for two M3 tracks (Word Add-In
 
 ## Phase B — Word Add-In (Weeks 4–5)
 
-The Word Add-In brings LQ.AI capabilities into Microsoft Word as an Office.js task pane. It surfaces chat, skills, and playbook execution against the open document, with redlines as tracked changes and assessments as Word comments. Phase B ends with a **signed manifest distribution package** suitable for enterprise sideload via Microsoft 365 Admin Center.
+The Word Add-In brings LQ.AI capabilities into Microsoft Word as an Office.js task pane. Phase B's plumbing (M3-B1 scaffold + M3-B2 OAuth + M3-B7 signed manifest + M3-B8 self-hosted JS bundle) is in M3 scope and produces an installable, authenticated add-in distributable via Microsoft 365 Admin Center. The feature surface inside the task pane (M3-B3 chat, M3-B4 skills with tracked-changes + comments rendering, M3-B5 playbook execution, M3-B6 Inference Tier badge) is **descoped to M4 / community contribution** per the 2026-05-21 scope-reduction decision at the M3-A6 PR #57 close; see [PRD §9 DE-287](PRD.md#de-287--word-add-in-feature-surface-chat-skills-playbooks-tier-badge--deferred-to-m4--community-contribution). Each descoped task below carries an inline status marker and retains its original scope text so a contributor picking up the feature can claim it as a standalone PR against the plumbing.
 
 **Note for the contributor:** the `word-addin/` directory does not yet exist. M3-B1 is the first task to create it. Office.js development tooling (Node 18+, the `office-addin-debugging` toolchain, a Word client for testing) must be set up before this phase begins.
 
@@ -410,6 +410,8 @@ The Word Add-In brings LQ.AI capabilities into Microsoft Word as an Office.js ta
 
 ### Task M3-B3 — Chat against the open document
 
+**Status:** **Descoped to M4 / community contribution** per [PRD §9 DE-287](PRD.md#de-287--word-add-in-feature-surface-chat-skills-playbooks-tier-badge--deferred-to-m4--community-contribution). Scope retained below for a contributor claiming the task.
+
 **Scope:**
 - Task pane Chat tab: chat UI that mirrors the web app's chat UI, scaled for the narrower task pane.
 - "Open document context" toggle: when on, the contents of the open Word document are passed as initial context to the chat (the document is treated as an attached file).
@@ -431,6 +433,8 @@ The Word Add-In brings LQ.AI capabilities into Microsoft Word as an Office.js ta
 ---
 
 ### Task M3-B4 — Skills in Word (apply skill to selection or document)
+
+**Status:** **Descoped to M4 / community contribution** per [PRD §9 DE-287](PRD.md#de-287--word-add-in-feature-surface-chat-skills-playbooks-tier-badge--deferred-to-m4--community-contribution). Scope retained below for a contributor claiming the task.
 
 **Scope:**
 - Task pane Skills tab: list of available skills (from `GET /api/v1/skills`).
@@ -460,6 +464,8 @@ The Word Add-In brings LQ.AI capabilities into Microsoft Word as an Office.js ta
 
 ### Task M3-B5 — Playbook execution in Word
 
+**Status:** **Descoped to M4 / community contribution** per [PRD §9 DE-287](PRD.md#de-287--word-add-in-feature-surface-chat-skills-playbooks-tier-badge--deferred-to-m4--community-contribution). Scope retained below for a contributor claiming the task.
+
 **Scope:**
 - Task pane Playbooks tab: list of playbooks (built-in + user-created).
 - "Apply playbook" flow:
@@ -485,6 +491,8 @@ The Word Add-In brings LQ.AI capabilities into Microsoft Word as an Office.js ta
 ---
 
 ### Task M3-B6 — Inference Tier badge in task pane [parallel with M3-B5]
+
+**Status:** **Descoped to M4 / community contribution** per [PRD §9 DE-287](PRD.md#de-287--word-add-in-feature-surface-chat-skills-playbooks-tier-badge--deferred-to-m4--community-contribution). Scope retained below for a contributor claiming the task.
 
 **Scope:**
 - Add Inference Tier badge to the task pane header (matches the web app's badge per [PRD §3.13](PRD.md#313-inference-tier-awareness)).
@@ -657,7 +665,7 @@ Tabular Review is the second consumer of the LangGraph runtime landed in Phase A
 
 ## Phase D — Slack / Teams Light Intake Bridge (Weeks 7–8)
 
-The smallest and most independent track. Two bridges (Slack and Teams) ship as optional Docker Compose profiles. Two bot flows: `/lq` forwards a Slack/Teams message as the seed of a new LQ.AI chat; `/lq ask "..."` runs a short Org-Profile-configured skill and replies in-thread.
+The smallest and most independent track. Phase D's plumbing (M3-D1 slack-bridge + OAuth install, M3-D3 teams-bridge + OAuth install, M3-D4 admin UI bot configuration) ships in M3. The user-facing `/lq` slash command and its Teams parity (M3-D2 and the equivalent surface inside M3-D3) are **descoped to M4 / community contribution** per the 2026-05-21 scope-reduction decision at the M3-A6 PR #57 close; see [PRD §9 DE-288](PRD.md#de-288--slackteams-lq-slash-command--quick-skill-flow--deferred-to-m4--community-contribution). The bridges are installable and OAuth-bound at v0.3.0 but inert without the slash-command surface; a community contributor can claim the slash-command surface as a follow-up PR.
 
 ### Task M3-D1 — `slack-bridge` service + OAuth install flow
 
@@ -695,6 +703,8 @@ The smallest and most independent track. Two bridges (Slack and Teams) ship as o
 
 ### Task M3-D2 — `/lq` slash command + `/lq ask` quick-skill flow
 
+**Status:** **Descoped to M4 / community contribution** per [PRD §9 DE-288](PRD.md#de-288--slackteams-lq-slash-command--quick-skill-flow--deferred-to-m4--community-contribution). The plumbing tasks (M3-D1 Slack OAuth, M3-D3 Teams OAuth, M3-D4 admin UI) remain in M3 scope; this user-facing surface and its Teams mirror are deferred to M4 / community contribution. Scope retained below for a contributor claiming the task.
+
 **Scope:**
 - Implement two Slack slash command flows in the `slack-bridge` service:
   - `/lq` (no arg) on a thread or message: forwards the thread's content as the seed of a new LQ.AI chat. The bot replies in-thread with a link to the chat in the LQ.AI web app.
@@ -716,45 +726,50 @@ The smallest and most independent track. Two bridges (Slack and Teams) ship as o
 
 ### Task M3-D3 — `teams-bridge` service + Teams OAuth + `/lq` flows
 
+**Status:** Plumbing (Teams bridge service + OAuth install + identity mapping) **in M3 scope**. Slash-command surface (`/lq` and `/lq ask` flows) **descoped to M4 / community contribution** alongside the Slack-side M3-D2 per [PRD §9 DE-288](PRD.md#de-288--slackteams-lq-slash-command--quick-skill-flow--deferred-to-m4--community-contribution).
+
 **Scope:**
 - Mirror of M3-D1 + M3-D2 for Microsoft Teams:
-  - New `teams-bridge/` service (Python, FastAPI).
-  - Docker Compose `teams` profile.
-  - Teams bot manifest at `teams-bridge/manifest.json`.
-  - OAuth install flow using Microsoft Bot Framework auth.
-  - `/lq` and `/lq ask` flows identical in behavior to Slack.
-- Identity-mapping: Teams user's email (from M365) must match an LQ.AI user's email.
+  - New `teams-bridge/` service (Python, FastAPI). *(plumbing, M3 scope)*
+  - Docker Compose `teams` profile. *(plumbing, M3 scope)*
+  - Teams bot manifest at `teams-bridge/manifest.json`. *(plumbing, M3 scope)*
+  - OAuth install flow using Microsoft Bot Framework auth. *(plumbing, M3 scope)*
+  - `/lq` and `/lq ask` flows identical in behavior to Slack. *(descoped to M4 / community contribution per DE-288)*
+- Identity-mapping: Teams user's email (from M365) must match an LQ.AI user's email. *(plumbing, M3 scope)*
 - Security review per CODEOWNERS.
 
-**Dependencies:** M3-D2.
+**Dependencies:** M3-D1 (plumbing). The `/lq` flow parity depends on the Slack-side M3-D2 implementation that lands when DE-288 resolves.
 
-**Output:** Teams bridge parity with Slack bridge.
+**Output:** Teams bridge service is installable and OAuth-bound at v0.3.0 release; slash-command surface lands with DE-288.
 
 **Verification:**
-- Same as M3-D2 but in a Teams test tenant.
-- Confidentiality posture is symmetric with Slack: thread contents land in LQ.AI under the linked user's chat history.
+- Plumbing path: install the bot in a Teams test tenant; complete OAuth; confirm identity mapping surfaces in the LQ.AI admin UI (M3-D4).
+- Slash-command verification deferred to DE-288.
 
-**Effort:** 8–12 hours.
+**Effort:** ~4 hours for the plumbing-only path (down from the full 8–12-hour estimate that included the slash-command flow); the deferred slash-command surface is sized in DE-288.
 
 ---
 
 ### Task M3-D4 — Bot configuration in LQ.AI admin UI
 
+**Status:** Admin UI shell (install/uninstall, workspace/tenant name, linked-user count) **in M3 scope**. The "configure quick-ask skill" dropdown UI and the `/lq` invocation audit-log surface remain visible but inert until DE-288's slash-command surface lands — surfacing the dropdown alongside DE-288 keeps the admin UI from churning when the slash command arrives.
+
 **Scope:**
 - New SvelteKit admin route `web/src/routes/lq-ai/admin/intake-bridges/`:
-  - Slack section: install/uninstall, workspace name, linked-user count, "configure quick-ask skill" dropdown.
-  - Teams section: install/uninstall, tenant name, linked-user count, "configure quick-ask skill" dropdown.
-  - Audit log: recent `/lq` invocations with user / channel / matched-skill / cost.
+  - Slack section: install/uninstall, workspace name, linked-user count, "configure quick-ask skill" dropdown. *(install/uninstall + workspace name + linked-user count: M3 scope; quick-ask-skill dropdown UI visible but disabled with a "deferred to DE-288" tooltip until that DE resolves)*
+  - Teams section: install/uninstall, tenant name, linked-user count, "configure quick-ask skill" dropdown. *(same posture as Slack section)*
+  - Audit log: recent `/lq` invocations with user / channel / matched-skill / cost. *(UI shell ships empty in M3; populates when DE-288's slash-command flow lands)*
 - Backend: `/api/v1/admin/intake-bridges` endpoints for the above.
 
-**Dependencies:** M3-D3.
+**Dependencies:** M3-D3 (plumbing).
 
-**Output:** Admins configure Slack/Teams bridges entirely from the LQ.AI admin UI; no env-var edits, no redeploys for config changes.
+**Output:** Admins configure Slack/Teams bridge installation, OAuth status, and identity mapping entirely from the LQ.AI admin UI at v0.3.0 release; no env-var edits, no redeploys for plumbing-config changes. The quick-ask configuration surface arrives with DE-288.
 
 **Verification:**
-- Admin UI walks through install → configure quick-ask skill → test invocation → see invocation in audit log.
+- Plumbing path: admin UI walks through install → confirm OAuth status → confirm linked-user count.
+- Quick-ask configuration verification: deferred to DE-288.
 
-**Effort:** 6–8 hours.
+**Effort:** ~4–5 hours for the plumbing-only path (down from the full 6–8-hour estimate that assumed the slash-command surface was live).
 
 ---
 
@@ -764,22 +779,23 @@ The smallest and most independent track. Two bridges (Slack and Teams) ship as o
 
 **Scope:**
 - Destroy all volumes and images; fresh clone; full `docker compose up --build` with all M3-relevant profiles (`--profile slack --profile teams`).
-- Walk through each of the 4 M3 surfaces:
-  - Playbook engine: run NDA playbook against sample NDA in web app; verify result.
-  - Word Add-In: generate a manifest from admin UI; sideload in Word desktop; run a skill + a playbook; verify tracked changes + comments + citations.
+- Walk through the M3 surfaces that ship in v0.3.0:
+  - Playbook engine: run NDA playbook against sample NDA in web app; run the Easy Playbook wizard against 5 sample NDAs; verify both results.
+  - Word Add-In plumbing (M3-B1/B2/B7/B8): generate a manifest from the admin UI; sideload in Word desktop; confirm the task pane loads, OAuth completes, and the version handshake against the deployment succeeds. *(Feature surface inside the task pane is descoped to M4 per [DE-287](PRD.md#de-287--word-add-in-feature-surface-chat-skills-playbooks-tier-badge--deferred-to-m4--community-contribution); manifest-install + auth path is what verifies in M3.)*
   - Tabular Review: select 5 sample NDAs; run a 4-column tabular extraction; export XLSX; verify in Excel.
-  - Slack bridge: install in test workspace; run `/lq ask "what is an MSA?"`; verify in-thread reply + chat-link works.
+  - Slack bridge plumbing (M3-D1): install in a test workspace; complete OAuth; confirm identity binding surfaces in the LQ.AI admin UI (M3-D4). *(Slash-command surface descoped to M4 per [DE-288](PRD.md#de-288--slackteams-lq-slash-command--quick-skill-flow--deferred-to-m4--community-contribution); install + OAuth + identity binding is what verifies in M3.)*
+  - Teams bridge plumbing (M3-D3): same posture as Slack — install + OAuth + identity binding.
 - Document any blockers found as deferred enhancements **before** tagging.
-- Reviewing-attorney walk-through of the Playbook + Tabular surfaces against real-world contracts.
+- Reviewing-attorney walk-through of the Playbook (web) + Tabular surfaces against real-world contracts. *(Word add-in feature-surface review deferred to whichever milestone DE-287 lands in.)*
 
-**Dependencies:** All of Phases A–D.
+**Dependencies:** All of Phases A–D in their M3 scope.
 
-**Output:** Fresh-install validation passes; tagging-ready state confirmed.
+**Output:** Fresh-install validation passes for everything that ships in v0.3.0; tagging-ready state confirmed.
 
 **Verification:**
-- All 4 surfaces work end-to-end on a fresh install.
+- All M3-scope surfaces (Playbooks web + Easy Playbook, Word add-in plumbing, Tabular Review, Slack/Teams plumbing) work end-to-end on a fresh install.
 - Any blockers either fixed or explicitly accepted as DE-XXX entries with severity.
-- Reviewing-attorney signoff.
+- Reviewing-attorney signoff on the Playbook (web) + Tabular surfaces.
 
 **Effort:** 6–8 hours.
 
@@ -797,7 +813,7 @@ The smallest and most independent track. Two bridges (Slack and Teams) ship as o
   - Playbook execution cascade — walks through how a playbook executes step-by-step against a sample contract.
   - Tabular Review playground — interactive grid against a small sample document set.
 - Updated documents:
-  - `docs/PRD.md` — changelog entry for M3 release; §3.7, §3.9, §3.14, §3.15 statuses flipped from "Deferred-M3" to "SHIPPED."
+  - `docs/PRD.md` — changelog entry for M3 release; §3.7 (Playbooks) and §3.14 (Tabular Review) statuses flipped from "Deferred-M3" to "SHIPPED"; §3.9 (Word Add-In) and §3.15 (Slack/Teams Bridge) statuses flipped to "Plumbing shipped in M3 — feature surface deferred to M4 (see DE-287 / DE-288)."
   - `docs/architecture.md` — Mermaid diagram updated with LangGraph runtime, Word add-in, tabular workflow, slack-bridge, teams-bridge components.
   - `docs/quickstart.md` — new sections for Playbook execution, Word add-in install, Tabular review, Slack/Teams bridges.
   - `README.md` — capability list updated to reflect M3 surfaces as shipped.
@@ -827,17 +843,19 @@ The smallest and most independent track. Two bridges (Slack and Teams) ship as o
 
 ## Total effort estimate
 
-| Phase | Tasks | Effort |
-|---|---|---|
-| **0 — Pre-M3 hardening** | 3 | ~13–18 hours |
-| **A — Playbook engine** | 6 | ~62–82 hours |
-| **B — Word Add-In** | 8 | ~70–90 hours |
-| **C — Tabular / Multi-Document Review** | 4 | ~36–48 hours |
-| **D — Slack / Teams Light Intake Bridge** | 4 | ~30–42 hours |
-| **E — Acceptance + docs** | 2 | ~16–22 hours |
-| **Total** | **27** | **~227–302 hours** |
+The original M3 estimate was ~227–302 hours across 27 tasks. The 2026-05-21 scope-reduction decision at the M3-A6 PR #57 close descopes M3-B3/B4/B5/B6 (Word add-in feature surface, ~34–44 hours; see [DE-287](PRD.md#de-287--word-add-in-feature-surface-chat-skills-playbooks-tier-badge--deferred-to-m4--community-contribution)) and M3-D2 + the slash-command facet of M3-D3 (Slack/Teams `/lq` surface, ~12–14 hours; see [DE-288](PRD.md#de-288--slackteams-lq-slash-command--quick-skill-flow--deferred-to-m4--community-contribution)), and rescopes M3-D4 to plumbing-only (~4–5 hours instead of 6–8). The net M3 effort below is the revised figure.
 
-~265 hours fits in a focused **~8-week M3 build** by a single contributor working full-time (320 hours available), or ~12 weeks for someone working part-time. The estimate is *tight* — see Risks below. Parallel-execution opportunities (M3-B6 with M3-B5; M3-D track partially with C; cert acquisition for M3-B7 in parallel with all of Phase A) help.
+| Phase | Tasks (M3 scope) | Effort |
+|---|---|---|
+| **0 — Pre-M3 hardening** | 3 (all shipped) | ~13–18 hours |
+| **A — Playbook engine** | 6 (all shipped through M3-A6) | ~62–82 hours |
+| **B — Word Add-In** | 4 plumbing (B1 + B2 + B7 + B8); 4 descoped (B3/B4/B5/B6 → DE-287) | ~35–45 hours |
+| **C — Tabular / Multi-Document Review** | 4 | ~36–48 hours |
+| **D — Slack / Teams Light Intake Bridge** | 3 plumbing (D1 + D3 plumbing-only + D4 plumbing-only); 1 descoped (D2 → DE-288); D3's slash-command facet also descoped | ~12–20 hours |
+| **E — Acceptance + docs** | 2 | ~16–22 hours |
+| **Total (M3 scope)** | **~17 active + 6 descoped** | **~174–235 hours** |
+
+The revised range fits comfortably in a **~6-week M3 build** by a single contributor working full-time, or ~9–10 weeks part-time. Parallel-execution opportunities still help; the largest remaining track is Phase C (Tabular Review).
 
 ---
 
