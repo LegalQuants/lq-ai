@@ -291,6 +291,10 @@ The 10 starter skills are listed in the [README](README.md#starter-skills-ship-w
 - **Comms Improver** if you want to see audience-calibrated rewriting.
 - **Skill Creator** if you want to author a new skill via conversation.
 
+### Generate your own playbook from prior agreements (M3-A6)
+
+LQ.AI ships with the **Easy Playbook wizard** — a 4-step flow that turns a corpus of prior contracts into a draft playbook (Playbooks tab → "Generate from prior agreements"). To exercise it without authoring your own corpus, the repo ships five synthetic mutual NDAs designed for this purpose at [`docs/quickstart/sample-ndas/`](quickstart/sample-ndas/) — same base form, intentional variants on five negotiation axes. See [`docs/quickstart/sample-ndas/README.md`](quickstart/sample-ndas/README.md) for the full variant matrix and what a good wizard run should produce.
+
 ### Source documents from your practice
 
 The sample NDA is a synthetic demo; for real value, run the skills against documents from your actual practice (or SEC EDGAR for public-domain alternatives). The acceptance-testing framework documents what corpus a thorough evaluation needs ([acceptance-testing-framework.md](docs/acceptance-testing-framework.md#test-corpus-requirements-operator-provided)).

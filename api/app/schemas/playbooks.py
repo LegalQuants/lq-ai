@@ -153,6 +153,28 @@ class PlaybookCreate(BaseModel):
     positions: list[PositionCreate] = Field(default_factory=list)
 
 
+class PlaybookUpdate(BaseModel):
+    """Request shape for ``PATCH /api/v1/playbooks/{id}`` — M3-A6 Phase 2.
+
+    Every field is optional; the server treats a missing field as
+    "leave alone." The exception is ``positions``: when supplied, the
+    server **replaces the entire positions list atomically** (drops the
+    old rows, inserts the new ones in a single transaction). Per-position
+    diff/patch is not supported — the wizard's "edit then save" flow
+    always sends the full set, and the alternative (PATCH per position)
+    would introduce id-vs-order-vs-content ambiguities for marginal
+    value. To leave positions alone, omit the field.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = None
+    contract_type: str | None = None
+    description: str | None = None
+    version: str | None = None
+    positions: list[PositionCreate] | None = None
+
+
 class PlaybookExecution(BaseModel):
     """One execution of a playbook against a target document.
 
@@ -190,3 +212,78 @@ class PlaybookExecutionCreate(BaseModel):
 
     target_document_id: uuid.UUID
     project_id: uuid.UUID | None = None
+
+
+# ---------------------------------------------------------------------------
+# Easy Playbook generation (M3-A6 Phase 5)
+# ---------------------------------------------------------------------------
+
+
+EasyPlaybookGenerationStatus = Literal["pending", "running", "completed", "error"]
+"""Lifecycle states for an :class:`EasyPlaybookGeneration` row. Matches
+the CHECK constraint on ``easy_playbook_generations.status`` (migration
+0035) and the M3-A6 wizard's polling state machine."""
+
+
+class EasyPlaybookGenerationCreate(BaseModel):
+    """Request shape for ``POST /api/v1/playbooks/easy``.
+
+    ``document_ids`` is the corpus the wizard's Step 1 upload step
+    accumulated; the user-attorney also names the playbook (via the
+    optional ``name``) and identifies the contract family
+    (``contract_type``) so the extractor + assembly LLM calls have
+    family-appropriate context.
+
+    Per M3-A6 §3.3 the uploaded documents are persisted to the user's
+    library by default. ``persist_documents_after_generation=False``
+    is reserved for a future "ephemeral upload" mode and is not
+    consumed by Phase 5 — the field is accepted to lock the wire
+    shape now and avoid a body-shape migration when the mode lands.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    document_ids: list[uuid.UUID] = Field(min_length=1, max_length=50)
+    contract_type: str = Field(min_length=1)
+    name: str | None = Field(
+        default=None,
+        description=(
+            "Playbook name the wizard's Step 1 collected. Falls back to "
+            "an auto-generated 'Generated {contract_type} Playbook' if omitted."
+        ),
+    )
+    persist_documents_after_generation: bool = Field(
+        default=True,
+        description=(
+            "Reserved for a future 'ephemeral upload' mode. Currently always "
+            "true — uploaded documents persist to the user's library."
+        ),
+    )
+
+
+class EasyPlaybookGeneration(BaseModel):
+    """One Easy Playbook generation row.
+
+    Returned by ``POST /api/v1/playbooks/easy`` (at status ``pending``)
+    and by ``GET /api/v1/playbooks/easy/{id}`` (the wizard's Step 2
+    polling target).
+
+    ``draft_playbook`` is the assembled :class:`PlaybookCreate` shape
+    when status is ``completed`` — the wizard's Step 3 inline editor
+    binds to this. The free-form ``dict`` typing here matches the
+    JSONB column; the wizard validates by ``PlaybookCreate.model_validate``
+    on render and again at save time (POST /api/v1/playbooks).
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    user_id: uuid.UUID | None = None
+    contract_type: str
+    status: EasyPlaybookGenerationStatus
+    document_ids: list[uuid.UUID] = Field(default_factory=list)
+    draft_playbook: dict[str, Any] | None = None
+    error_message: str | None = None
+    created_at: datetime
+    started_at: datetime | None = None
+    completed_at: datetime | None = None

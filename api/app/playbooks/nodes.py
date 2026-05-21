@@ -563,11 +563,14 @@ async def _dispatch_structured_call(
 ) -> dict[str, Any]:
     """Run a structured-JSON LLM call and return the parsed dict.
 
-    Mirrors the M2-C1 paraphrase-judge dispatch pattern:
-    ``temperature=0.0`` for determinism; ``anonymize=False`` because the
-    classifier needs to see the actual contract text to verify it;
-    ``lq_ai_purpose='playbook_executor'`` so the routing log can be
-    filtered for cost calibration.
+    Mirrors the M2-C1 paraphrase-judge dispatch pattern. ``temperature``
+    is omitted: Anthropic Opus 4.x reasoning models rejected the
+    parameter as of 2026-05, and the gateway only forwards non-None
+    values to providers. Determinism for reasoning models is implicit;
+    sampled models retain their provider default. ``anonymize=False``
+    because the classifier needs to see the actual contract text to
+    verify it; ``lq_ai_purpose='playbook_executor'`` so the routing log
+    can be filtered for cost calibration.
 
     Returns an empty dict on transport / parse failure; the caller
     treats that as a low-confidence ``missing`` (the classifier's
@@ -577,7 +580,6 @@ async def _dispatch_structured_call(
         model=model,
         messages=messages,
         max_tokens=max_tokens,
-        temperature=0.0,
         anonymize=False,
         lq_ai_purpose="playbook_executor",
     )

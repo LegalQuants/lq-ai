@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 
 	import { listPlaybooks } from '$lib/lq-ai/api/playbooks';
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
@@ -45,7 +46,17 @@
 
 <section class="lq-playbooks-page">
 	<header class="lq-playbooks-page__header">
-		<h1>Playbooks</h1>
+		<div class="lq-playbooks-page__heading">
+			<h1>Playbooks</h1>
+			<button
+				type="button"
+				class="lq-playbooks-page__cta"
+				data-testid="lq-playbooks-generate-cta"
+				on:click={() => goto('/lq-ai/playbooks/easy')}
+			>
+				Generate from prior agreements
+			</button>
+		</div>
 		<p class="lq-playbooks-page__subtitle">
 			Apply a playbook to review a contract against your standard positions. The executor walks each
 			position, classifies how the contract compares, and drafts redlines where it deviates.
@@ -115,9 +126,29 @@
 		margin: 0 auto;
 		padding: 1.5rem;
 	}
+	.lq-playbooks-page__heading {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		margin-bottom: 0.5rem;
+	}
 	.lq-playbooks-page__header h1 {
-		margin: 0 0 0.5rem;
+		margin: 0;
 		font-size: 1.5rem;
+	}
+	.lq-playbooks-page__cta {
+		padding: 0.5rem 0.875rem;
+		background: var(--lq-accent, #4f46e5);
+		color: var(--lq-on-accent, #ffffff);
+		border: none;
+		border-radius: 0.375rem;
+		font-size: 0.875rem;
+		font-weight: 500;
+		cursor: pointer;
+	}
+	.lq-playbooks-page__cta:hover {
+		opacity: 0.9;
 	}
 	.lq-playbooks-page__subtitle {
 		margin: 0;

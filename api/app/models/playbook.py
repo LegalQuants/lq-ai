@@ -76,6 +76,14 @@ class Playbook(Base):
         nullable=False,
         server_default=text("now()"),
     )
+    # Soft delete — M3-A6 Phase 2. NULL means visible; non-NULL is the
+    # tombstone timestamp. ``playbook_executions`` reference playbooks
+    # with ON DELETE CASCADE, so hard-deleting would drop audit history;
+    # soft delete keeps the row so historical executions still resolve.
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     positions: Mapped[list[PlaybookPosition]] = relationship(
         "PlaybookPosition",
@@ -227,4 +235,82 @@ class PlaybookExecution(Base):
         return (
             f"<PlaybookExecution id={self.id} playbook_id={self.playbook_id} "
             f"target_document_id={self.target_document_id} status={self.status!r}>"
+        )
+
+
+class EasyPlaybookGeneration(Base):
+    """One Easy Playbook generation run — M3-A6 Phase 5.
+
+    Lifecycle (CHECK-constrained per migration 0035):
+
+    * ``pending`` — row written by the POST handler; the ARQ worker
+      hasn't picked it up yet.
+    * ``running`` — worker is walking the document corpus
+      (extract → cluster → assemble).
+    * ``completed`` — ``draft_playbook`` is populated with the
+      assembled :class:`PlaybookCreate` shape; ``completed_at`` is
+      set. The wizard's Step 3 inline editor consumes the row.
+    * ``error`` — worker raised mid-flight; ``error_message`` text
+      populated; ``draft_playbook`` may be NULL or carry partial
+      output. ``completed_at`` is set.
+
+    ``document_ids`` is the snapshot of source documents at request
+    time; not an FK so a later soft-delete of one of the source files
+    doesn't cascade-clear the audit row.
+
+    Per the M3-A6 quality bar reframe, ``draft_playbook`` is a
+    starting point the user-attorney edits via Phase 6's wizard
+    Step 3 inline editor. Generation completion does NOT mean the
+    output is fit for use; the user-attorney's edit + save (which
+    POSTs to ``/api/v1/playbooks``) is the canonical commitment.
+    """
+
+    __tablename__ = "easy_playbook_generations"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "users.id",
+            ondelete="SET NULL",
+            name="fk_easy_playbook_generations_user_id",
+        ),
+        nullable=True,
+    )
+    contract_type: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        server_default=text("'pending'"),
+    )
+    document_ids: Mapped[list[uuid.UUID]] = mapped_column(
+        ARRAY(UUID(as_uuid=True)),
+        nullable=False,
+        server_default=text("'{}'::uuid[]"),
+    )
+    draft_playbook: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<EasyPlaybookGeneration id={self.id} user_id={self.user_id} "
+            f"contract_type={self.contract_type!r} status={self.status!r} "
+            f"docs={len(self.document_ids)}>"
         )

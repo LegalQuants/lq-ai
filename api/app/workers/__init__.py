@@ -11,6 +11,12 @@ docker-compose ``ingest-worker`` service runs it. See
 mechanism rationale.
 """
 
-from app.workers.queue import enqueue_ingest_job
+from app.workers.queue import (
+    enqueue_easy_playbook_generation_job,
+    enqueue_ingest_job,
+)
 
-__all__ = ["enqueue_ingest_job"]
+__all__ = [
+    "enqueue_easy_playbook_generation_job",
+    "enqueue_ingest_job",
+]
