@@ -60,6 +60,10 @@ _PARAM_VALUES: dict[str, str] = {
     "user_id": _DUMMY_UUID,
     "interaction_id": _DUMMY_UUID,
     "job_id": _DUMMY_UUID,
+    # M3-A2 + M3-A6 — playbook surface
+    "playbook_id": _DUMMY_UUID,
+    "execution_id": _DUMMY_UUID,
+    "generation_id": _DUMMY_UUID,
 }
 
 
@@ -179,9 +183,15 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     # M3-A2 — Playbook executor surface
     ("POST", "/api/v1/playbooks/{playbook_id}/execute"),
     ("GET", "/api/v1/playbook-executions/{execution_id}"),
-    # M3-A4 — Playbook list + detail (GET-only; CRUD deferred to M3-A6)
+    # M3-A4 — Playbook list + detail
     ("GET", "/api/v1/playbooks"),
     ("GET", "/api/v1/playbooks/{playbook_id}"),
+    # M3-A6 — Playbook CRUD (Phase 2) + Easy Playbook wizard (Phase 5)
+    ("POST", "/api/v1/playbooks"),
+    ("PATCH", "/api/v1/playbooks/{playbook_id}"),
+    ("DELETE", "/api/v1/playbooks/{playbook_id}"),
+    ("POST", "/api/v1/playbooks/easy"),
+    ("GET", "/api/v1/playbooks/easy/{generation_id}"),
     # M3-B1 — Word add-in admin manifest generation
     ("GET", "/api/v1/admin/word-addin/manifest"),
     # M3-B8 — Word add-in version handshake (unauthenticated)

@@ -2348,8 +2348,10 @@ paths:
       description: |
         Returns playbooks the caller can see: admins see all;
         non-admins see playbooks they authored or built-in playbooks
-        (``created_by IS NULL``). Positions are NOT inlined; clients
-        call ``GET /api/v1/playbooks/{id}`` to fetch them.
+        (``created_by IS NULL``). Soft-deleted rows (``deleted_at IS NOT
+        NULL``) are excluded for everyone, including admins. Positions
+        are NOT inlined; clients call ``GET /api/v1/playbooks/{id}`` to
+        fetch them.
       responses:
         '200':
           description: List of playbooks (positions empty).
@@ -2361,6 +2363,30 @@ paths:
                   $ref: '#/components/schemas/Playbook'
         '401':
           description: Not authenticated.
+    post:
+      tags: [playbooks]
+      summary: Create a new playbook (M3-A6)
+      description: |
+        Creates a playbook owned by the caller (``created_by =
+        caller.id``). Admins do not get to mint built-ins through this
+        endpoint — built-ins (``created_by IS NULL``) ship via seed
+        migration only. The Inference-Tier and audit posture matches
+        other write endpoints on the API.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PlaybookCreate'}
+      responses:
+        '201':
+          description: Playbook created. Body includes the assembled positions.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Playbook'}
+        '401':
+          description: Not authenticated.
+        '422':
+          description: Validation error (e.g., unknown field, invalid severity enum).
 
   /api/v1/playbooks/{playbook_id}:
     parameters:
@@ -2374,7 +2400,7 @@ paths:
       description: |
         Returns the playbook header + positions + fallback tiers.
         Visibility matches ``GET /api/v1/playbooks``. 404 (not 403)
-        on unauthorized access.
+        on unauthorized access, including for soft-deleted rows.
       responses:
         '200':
           description: Full playbook with positions.
@@ -2384,6 +2410,130 @@ paths:
                 $ref: '#/components/schemas/Playbook'
         '404':
           description: Playbook not found, or caller is not authorized to see it.
+        '401':
+          description: Not authenticated.
+    patch:
+      tags: [playbooks]
+      summary: Update a playbook header; optionally replace positions (M3-A6)
+      description: |
+        Patches the playbook. Authorization:
+
+        * Built-in playbooks (``created_by IS NULL``) are 403 to
+          everyone, including admins — operators fork-then-edit. This
+          keeps shared deployment-level content immutable to a single
+          operator's mistake.
+        * Non-built-in playbooks can be patched by the playbook's author
+          OR by an admin. Cross-user / soft-deleted cases return 404.
+
+        Position replacement is atomic: when ``positions`` is supplied,
+        every existing position row for this playbook is deleted and
+        the new list is inserted in a single transaction.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PlaybookUpdate'}
+      responses:
+        '200':
+          description: Playbook updated; response is the fresh full shape.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Playbook'}
+        '403':
+          description: Built-in playbooks cannot be edited through this endpoint.
+        '404':
+          description: Playbook not found, soft-deleted, or not authorized.
+        '401':
+          description: Not authenticated.
+        '422':
+          description: Validation error.
+    delete:
+      tags: [playbooks]
+      summary: Soft-delete a playbook (M3-A6)
+      description: |
+        Sets ``deleted_at`` on the row. The ``playbook_positions`` rows
+        remain so historical executions still resolve their position
+        references. Authorization mirrors PATCH: built-ins are 403;
+        non-built-ins require admin OR ownership; cross-user / already-
+        deleted is 404. Subsequent reads (GET, list) treat the row as
+        absent.
+      responses:
+        '204':
+          description: Playbook soft-deleted.
+        '403':
+          description: Built-in playbooks cannot be deleted through this endpoint.
+        '404':
+          description: Playbook not found, already soft-deleted, or not authorized.
+        '401':
+          description: Not authenticated.
+
+  /api/v1/playbooks/easy:
+    post:
+      tags: [playbooks]
+      summary: Start an Easy Playbook generation run (M3-A6)
+      description: |
+        Kicks off the Easy Playbook auto-generation pipeline against
+        the supplied document corpus. Creates an
+        ``EasyPlaybookGeneration`` row at ``status='pending'`` and
+        enqueues the ARQ worker job on the ``arq:m3a6`` queue (the
+        dedicated M3-A6 worker — see ``app/workers/arq_setup.py``).
+        Returns 202 immediately; the wizard's Step 2 polls
+        ``GET /api/v1/playbooks/easy/{generation_id}`` until status
+        reaches a terminal value.
+
+        Authorization: caller must own every document in
+        ``document_ids`` (admins bypass). Cross-user / missing /
+        soft-deleted documents collapse into 404.
+
+        Generation completion does NOT mean the playbook is fit for
+        use; the wizard's Step 3 inline editor is where the user-
+        attorney validates and edits before the final save (which
+        POSTs to ``/api/v1/playbooks`` like any other playbook).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EasyPlaybookGenerationCreate'}
+      responses:
+        '202':
+          description: Generation scheduled; row created at status `pending`.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EasyPlaybookGeneration'}
+        '404':
+          description: One or more documents not found / not authorized.
+        '422':
+          description: Validation error (empty ``document_ids``, unknown field, etc.).
+        '401':
+          description: Not authenticated.
+
+  /api/v1/playbooks/easy/{generation_id}:
+    parameters:
+      - in: path
+        name: generation_id
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      tags: [playbooks]
+      summary: Poll an Easy Playbook generation row (M3-A6)
+      description: |
+        Returns the current state of one Easy Playbook generation.
+        Caller must be the row's user OR an admin; cross-user / missing
+        rows return 404.
+
+        When ``status='completed'``, ``draft_playbook`` carries the
+        assembled ``PlaybookCreate`` shape — the wizard's Step 3 inline
+        editor binds to this. When ``status='error'``, ``error_message``
+        is populated. The wizard's Step 2 polls every few seconds until
+        a terminal status arrives.
+      responses:
+        '200':
+          description: Current generation row.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EasyPlaybookGeneration'}
+        '404':
+          description: Generation not found or not authorized.
         '401':
           description: Not authenticated.
 
@@ -3261,6 +3411,145 @@ components:
         positions:
           type: array
           items: {$ref: '#/components/schemas/Position'}
+
+    PositionCreate:
+      type: object
+      additionalProperties: false
+      required: [issue, standard_language, severity_if_missing]
+      description: |
+        Request shape for a single position when creating or updating a
+        playbook (M3-A6). Identical to ``Position`` minus the server-
+        assigned ``id`` (the server mints UUIDs at insert time).
+      properties:
+        issue: {type: string}
+        description: {type: string}
+        standard_language: {type: string}
+        fallback_tiers:
+          type: array
+          items: {$ref: '#/components/schemas/FallbackTier'}
+        redline_strategy: {type: string}
+        severity_if_missing:
+          type: string
+          enum: [critical, high, medium, low]
+        detection_keywords:
+          type: array
+          items: {type: string}
+        detection_examples:
+          type: array
+          items: {type: string}
+        position_order: {type: integer, minimum: 0}
+
+    PlaybookCreate:
+      type: object
+      additionalProperties: false
+      required: [name, contract_type]
+      description: |
+        Request shape for ``POST /api/v1/playbooks`` (M3-A6). The server
+        sets ``created_by`` to the caller's id unconditionally; there is
+        no path to mint a built-in (``created_by IS NULL``) via the HTTP
+        surface (built-ins ship via seed migration only).
+      properties:
+        name: {type: string}
+        contract_type: {type: string}
+        description: {type: string}
+        version: {type: string}
+        positions:
+          type: array
+          items: {$ref: '#/components/schemas/PositionCreate'}
+
+    PlaybookUpdate:
+      type: object
+      additionalProperties: false
+      description: |
+        Request shape for ``PATCH /api/v1/playbooks/{id}`` (M3-A6). All
+        fields optional; a missing field is "leave alone." If
+        ``positions`` is supplied, the server **atomically replaces**
+        the entire positions list. To leave positions alone, omit the
+        field; to clear them, send ``positions: []``.
+      properties:
+        name: {type: string}
+        contract_type: {type: string}
+        description: {type: string}
+        version: {type: string}
+        positions:
+          type: array
+          nullable: true
+          items: {$ref: '#/components/schemas/PositionCreate'}
+
+    EasyPlaybookGenerationCreate:
+      type: object
+      additionalProperties: false
+      required: [document_ids, contract_type]
+      description: |
+        Request shape for ``POST /api/v1/playbooks/easy`` (M3-A6). The
+        document corpus the wizard's Step 1 collected, plus the
+        contract family and an optional caller-supplied name.
+      properties:
+        document_ids:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items: {type: string, format: uuid}
+        contract_type:
+          type: string
+          minLength: 1
+          description: |
+            The contract family the playbook targets ("NDA",
+            "MSA-SaaS", "DPA", etc.). Free-form; passed to the
+            extractor + assembly LLM calls as a hint.
+        name:
+          type: string
+          nullable: true
+          description: |
+            Playbook name. Falls back to "Generated {contract_type}
+            Playbook" if omitted.
+        persist_documents_after_generation:
+          type: boolean
+          default: true
+          description: |
+            Reserved for a future ephemeral-upload mode. Currently
+            always true; uploaded documents persist to the user's
+            library per M3-A6 §3.3.
+
+    EasyPlaybookGeneration:
+      type: object
+      required: [id, contract_type, status, document_ids, created_at]
+      description: |
+        One row from the ``easy_playbook_generations`` table. Returned
+        by ``POST /api/v1/playbooks/easy`` (at status ``pending``) and
+        by ``GET /api/v1/playbooks/easy/{id}`` (the wizard's poll
+        target). ``draft_playbook`` is populated only on
+        ``status='completed'`` and carries the assembled
+        ``PlaybookCreate`` shape for the Step 3 inline editor.
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid, nullable: true}
+        contract_type: {type: string}
+        status:
+          type: string
+          enum: [pending, running, completed, error]
+        document_ids:
+          type: array
+          items: {type: string, format: uuid}
+        draft_playbook:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: |
+            The assembled ``PlaybookCreate`` shape. ``null`` until the
+            worker reaches ``status='completed'``.
+        error_message:
+          type: string
+          nullable: true
+        created_at: {type: string, format: date-time}
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
 
     PlaybookExecution:
       type: object
@@ -4152,6 +4441,16 @@ components:
             `ingestion_status='ready'`; counts characters of the
             canonical PyMuPDF-extracted text, not of the original
             PDF byte stream.
+        document_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            UUID of the parsed-content `documents` row (M3-A6 Phase 6).
+            Distinct from `id` (the File UUID). `null` until the C5
+            parse pipeline produces the row; the Easy Playbook wizard
+            polls `GET /files/{id}` until this flips non-null, then
+            passes the value to `POST /playbooks/easy` in `document_ids`.
         created_at: {type: string, format: date-time}
 
     KnowledgeBase:

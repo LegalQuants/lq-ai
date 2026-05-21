@@ -515,6 +515,8 @@ def test_playbook_columns_match_migration() -> None:
         "created_by",
         "created_at",
         "updated_at",
+        # M3-A6 Phase 2: soft delete (migration 0034).
+        "deleted_at",
     }
 
     pos_cols = {c.name for c in inspect(PlaybookPosition).columns}

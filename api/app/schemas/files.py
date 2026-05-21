@@ -44,4 +44,10 @@ class FileMetadata(BaseModel):
     ingestion_status: IngestionStatus
     page_count: int | None = None
     character_count: int | None = None
+    # M3-A6 Phase 6: the parsed-content ``documents`` row's UUID,
+    # distinct from ``id`` (the File UUID). ``None`` until the C5 parse
+    # pipeline produces a document row; the Easy Playbook wizard polls
+    # GET /files/{id} until this flips non-null, then passes the value
+    # to POST /playbooks/easy in ``document_ids``.
+    document_id: uuid.UUID | None = None
     created_at: datetime

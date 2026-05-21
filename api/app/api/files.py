@@ -47,6 +47,7 @@ from app.audit import audit_action
 from app.config import get_settings
 from app.db.session import get_db
 from app.errors import NotFound, ValidationError
+from app.models.document import Document
 from app.models.file import File as FileModel
 from app.models.project import Project
 from app.schemas.files import FileMetadata
@@ -389,7 +390,11 @@ async def get_file(
 
     file_uuid = _validate_file_id(file_id)
     row = await _load_visible_file(db, file_uuid, user.id)
-    return FileMetadata.model_validate(row)
+    # Outerjoin to ``documents`` so the response carries ``document_id``
+    # once the C5 parse pipeline has produced the row (M3-A6 Phase 6).
+    document_id_stmt = select(Document.id).where(Document.file_id == row.id)
+    document_id = (await db.execute(document_id_stmt)).scalar_one_or_none()
+    return FileMetadata.model_validate(row).model_copy(update={"document_id": document_id})
 
 
 @router.get(

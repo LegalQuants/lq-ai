@@ -660,3 +660,76 @@ async def test_inserted_row_has_storage_path_equal_to_id(
     ).one()
     assert row.storage_path == file_id
     assert row.ingestion_status == "pending"
+
+
+# ---------------------------------------------------------------------------
+# M3-A6 Phase 6 prereq: document_id surfacing on the file metadata response
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+async def test_get_metadata_document_id_is_null_when_no_document_row(
+    client: AsyncClient, db_user: User
+) -> None:
+    """Freshly uploaded file: no documents row yet → document_id is null.
+
+    The C5 parse pipeline creates the row asynchronously; the wizard's
+    Step 1 polls this endpoint until ``document_id`` flips non-null.
+    """
+
+    token = _bearer_for(db_user)
+    files, _ = _multipart_body(filename="x.pdf", content_type="application/pdf", payload=b"hi")
+    upload = await client.post(
+        "/api/v1/files",
+        files=files,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    file_id = upload.json()["id"]
+
+    metadata = await client.get(
+        f"/api/v1/files/{file_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert metadata.status_code == 200
+    body = metadata.json()
+    assert "document_id" in body, "document_id field must be present on the response"
+    assert body["document_id"] is None
+
+
+@pytest.mark.integration
+async def test_get_metadata_includes_document_id_when_document_exists(
+    client: AsyncClient, db_user: User, db_session: AsyncSession
+) -> None:
+    """Once the C5 pipeline has written a ``documents`` row for the file,
+    GET /files/{id} surfaces the document UUID so the Easy Playbook wizard
+    (M3-A6 Phase 6) can hand it to ``POST /playbooks/easy``.
+    """
+
+    from app.models.document import Document
+
+    token = _bearer_for(db_user)
+    files, _ = _multipart_body(filename="x.pdf", content_type="application/pdf", payload=b"hi")
+    upload = await client.post(
+        "/api/v1/files",
+        files=files,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    file_id = upload.json()["id"]
+
+    document = Document(
+        id=uuid.uuid4(),
+        file_id=uuid.UUID(file_id),
+        parser="pymupdf",
+        parser_version="test",
+        normalized_content="hi",
+    )
+    db_session.add(document)
+    await db_session.flush()
+
+    metadata = await client.get(
+        f"/api/v1/files/{file_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert metadata.status_code == 200
+    body = metadata.json()
+    assert body["document_id"] == str(document.id)
