@@ -68,6 +68,46 @@ than 2 would let single-source noise dominate; fewer would leave
 some legitimately-variant positions without a fallback tier."""
 
 
+DEFAULT_LABEL_MERGE_THRESHOLD: Final[float] = 0.85
+"""Default cosine-similarity threshold for merging semantically-similar
+issue label groups into a single cluster (post-smoke iteration,
+2026-05-21).
+
+The original M3-A6 design grouped by normalized-label exact match
+(whitespace + case insensitive), which left semantically-identical
+positions split across multiple clusters when the extractor produced
+label drift — e.g., "Term" vs "Term of Agreement" vs "Term of
+Confidentiality Obligation" on the synthetic NDA corpus produced
+three orphan clusters instead of one merged cluster with three
+fallback variants. The first fix attempt embedded the labels and
+unioned label-embedding pairs above threshold — but the synthetic-
+NDA smoke showed that **label-only similarity is the wrong signal**:
+
+* "term of agreement" / "term of confidentiality obligation" → 0.584
+* "governing law" / "forum and jurisdiction" → 0.492 (same concept!)
+* "definition of confidential info" / "exclusions from confidential info" → 0.731 (distinct concepts, shared words)
+
+No single label-similarity threshold separates "want merge" from
+"want keep". The signal that actually works is **the centroid of
+each group's clause-text embeddings**: groups whose member clauses
+talk about the same legal concept have centroid pairs in the
+0.85-0.95 range, while distinct concepts sit in 0.65-0.78. The
+clause text is already being embedded for medoid selection so this
+piggybacks on the existing batched call with no extra round-trip.
+
+0.85 was selected against the synthetic NDA corpus as the threshold
+that merges "Term"-variant groups and "Governing Law"/"Forum and
+Jurisdiction" while keeping "Definition" vs "Exclusions"-from-
+Confidential-Information separate. Operators can override per-call
+by passing a different ``label_merge_threshold`` (stricter = fewer
+merges).
+
+Pass ``label_merge_threshold=None`` to disable label-merging entirely
+(reverts to exact-match grouping). Useful when the wizard caller
+already knows the labels are clean or for unit tests that pin only
+the exact-match path."""
+
+
 # ---------------------------------------------------------------------------
 # Wire shapes
 # ---------------------------------------------------------------------------
@@ -119,6 +159,7 @@ async def cluster_clauses_by_issue(
     gateway: GatewayClient,
     embedding_model: str = DEFAULT_EMBEDDING_MODEL,
     max_fallback_neighbors: int = DEFAULT_MAX_FALLBACK_NEIGHBORS,
+    label_merge_threshold: float | None = DEFAULT_LABEL_MERGE_THRESHOLD,
 ) -> list[Cluster]:
     """Group ``clauses`` by issue label; return one :class:`Cluster` per label.
 
@@ -127,11 +168,21 @@ async def cluster_clauses_by_issue(
     1. Group by ``_normalize_issue_label(clause.issue)``. Pick the
        most-common original-case spelling within the group as the
        cluster's display label.
-    2. Embed every clause text in one batched call.
-    3. Within each group, compute the medoid (clause whose embedding
-       minimizes total cosine distance to the others) — that's the
-       modal_clause.
-    4. Rank the non-modal members by cosine distance from the modal
+    2. Embed every clause text in a single batched call.
+    3. **Label-merge pass (centroid-based)**: if ``label_merge_threshold``
+       is set and there are 2+ unique groups, compute each group's
+       centroid (element-wise mean of its member-clause embeddings)
+       and union-find merge groups whose centroid pairs exceed the
+       cosine-similarity threshold. The canonical label for a merged
+       group is the source label whose group had the most clauses.
+       Catches semantic drift ("Term" / "Term of Agreement" / "Term
+       of Confidentiality Obligation"; "Governing Law" / "Forum and
+       Jurisdiction") that the exact-match step misses. The label
+       string itself is NOT the signal — clause-text centroids are.
+    4. Within each (possibly merged) group, compute the medoid
+       (clause whose embedding minimizes total cosine distance to the
+       others) — that's the modal_clause.
+    5. Rank the non-modal members by cosine distance from the modal
        (largest first) and take the top ``max_fallback_neighbors``
        distinct-text clauses as neighbor_clauses.
 
@@ -145,6 +196,8 @@ async def cluster_clauses_by_issue(
       retained (the first occurrence by ``document_id`` then position).
     * Embedding service failure → fall back to longest-clause modal
       selection; neighbor selection becomes "longest non-modal members".
+      Label-merging is skipped when embeddings fail (the original
+      exact-match groups stand).
 
     Args:
         clauses: every extracted clause across the upload corpus.
@@ -153,6 +206,10 @@ async def cluster_clauses_by_issue(
             defaults to the project-wide embedding alias.
         max_fallback_neighbors: how many neighbor clauses per
             cluster. Two matches the M3-A6 design.
+        label_merge_threshold: cosine-similarity threshold for the
+            label-merge pass. ``None`` disables the pass entirely
+            (exact-match grouping only — the original M3-A6 behavior).
+            Default ``0.85`` was tuned against the synthetic NDA corpus.
     """
 
     if not clauses:
@@ -170,8 +227,10 @@ async def cluster_clauses_by_issue(
         },
     )
 
-    # Single batched embedding call across all clauses — keeps the
-    # gateway round-trip count to 1 regardless of corpus size.
+    # Single batched embedding call across all clause texts. Used for
+    # both the label-merge pass (centroid-based) and the per-cluster
+    # medoid-selection step. Keeps gateway round-trips at 1 regardless
+    # of corpus size — matches the M3-A6 prep doc's design target.
     embeddings = await _embed_all_or_none(
         gateway=gateway,
         model=embedding_model,
@@ -179,6 +238,24 @@ async def cluster_clauses_by_issue(
     )
 
     clause_index_by_id = {id(c): i for i, c in enumerate(clauses)}
+
+    # Run the label-merge pass using clause-text centroids. Two
+    # label-groups are merged when the cosine similarity of their
+    # member-clause centroids exceeds the threshold — the embedding
+    # of the clause TEXT is the right signal, not the label string
+    # itself (proven by the post-smoke similarity probe). Skipped if
+    # threshold is None, only one group exists, or embeddings failed.
+    do_label_merge = (
+        label_merge_threshold is not None and len(groups) >= 2 and embeddings is not None
+    )
+    if do_label_merge:
+        groups = _merge_groups_by_clause_centroid(
+            groups=groups,
+            clauses=clauses,
+            embeddings=embeddings,  # type: ignore[arg-type]  # guarded by do_label_merge
+            clause_index_by_id=clause_index_by_id,
+            similarity_threshold=label_merge_threshold,  # type: ignore[arg-type]
+        )
     clusters: list[Cluster] = []
 
     for canonical_label, group_clauses in groups.items():
@@ -271,6 +348,100 @@ def _group_by_normalized_label(clauses: list[ClauseInput]) -> dict[str, list[Cla
     for clause in clauses:
         groups[_normalize_issue_label(clause.issue)].append(clause)
     return dict(groups)
+
+
+def _merge_groups_by_clause_centroid(
+    *,
+    groups: dict[str, list[ClauseInput]],
+    clauses: list[ClauseInput],
+    embeddings: list[list[float]],
+    clause_index_by_id: dict[int, int],
+    similarity_threshold: float,
+) -> dict[str, list[ClauseInput]]:
+    """Union-find merge of label groups whose clause-text centroids exceed the threshold.
+
+    For each label group, the centroid is the element-wise mean of its
+    member-clause embeddings. Two groups merge when the cosine similarity
+    of their centroids exceeds the threshold. The clause-text signal is
+    much stronger than the label-string signal for this task: e.g.,
+    "Governing Law" and "Forum and Jurisdiction" share no surface tokens
+    (label cosine ~0.49) but their member clauses describe the same
+    legal concept (centroid cosine in the 0.85+ range against the
+    synthetic NDA corpus).
+
+    Each connected component becomes one merged group; the canonical
+    label for a merged group is the source group's label with the most
+    clauses (ties → the lexicographically-first label, for stability).
+
+    Returns a new ``groups`` dict. Singleton components pass through
+    unchanged.
+    """
+
+    label_list = list(groups.keys())
+    n = len(label_list)
+    if n < 2:
+        return groups
+
+    centroids: list[list[float]] = []
+    for label in label_list:
+        group_clauses = groups[label]
+        vectors = [embeddings[clause_index_by_id[id(c)]] for c in group_clauses]
+        centroids.append(_centroid(vectors))
+
+    parent = list(range(n))
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[max(ra, rb)] = min(ra, rb)
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            similarity = 1.0 - _cosine_distance(centroids[i], centroids[j])
+            if similarity > similarity_threshold:
+                union(i, j)
+
+    components: dict[int, list[int]] = defaultdict(list)
+    for i in range(n):
+        components[find(i)].append(i)
+
+    merged: dict[str, list[ClauseInput]] = {}
+    for root in sorted(components.keys()):
+        member_label_indices = components[root]
+        if len(member_label_indices) == 1:
+            label = label_list[member_label_indices[0]]
+            merged[label] = groups[label]
+            continue
+
+        member_labels = [label_list[idx] for idx in member_label_indices]
+        canonical = max(member_labels, key=lambda lab: (len(groups[lab]), lab))
+
+        combined_clauses: list[ClauseInput] = []
+        for lab in member_labels:
+            combined_clauses.extend(groups[lab])
+        merged[canonical] = combined_clauses
+
+    return merged
+
+
+def _centroid(vectors: list[list[float]]) -> list[float]:
+    """Element-wise mean of the input vectors. Defensive on empty input."""
+
+    if not vectors:
+        return []
+    dim = len(vectors[0])
+    sums = [0.0] * dim
+    for v in vectors:
+        for i, x in enumerate(v):
+            sums[i] += x
+    n = len(vectors)
+    return [s / n for s in sums]
 
 
 def _pick_display_label(group_clauses: list[ClauseInput], *, canonical: str) -> str:

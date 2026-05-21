@@ -273,6 +273,150 @@ async def test_duplicate_clause_text_dedupes_in_neighbors() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Label merging via embedding similarity (M3-A6 Phase 4 post-smoke iteration)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+async def test_similar_clause_centroids_merge_into_one_cluster() -> None:
+    """Label groups whose clause-text centroids exceed the threshold merge.
+
+    Three different labels, each with one clause; the three clauses
+    embed to near-identical vectors (centroid pairs ~0.99 cosine
+    similarity, well above the 0.85 default threshold). Result: one
+    merged cluster, regardless of how different the label strings are.
+    The label-only similarity probe on the synthetic NDA corpus showed
+    that surface tokens are NOT the right signal — clause-text
+    centroids are.
+    """
+
+    gateway = _StubEmbeddingGateway(
+        vectors=[
+            # Three clauses — all embed close together
+            [1.0, 0.0, 0.0],
+            [0.99, 0.14, 0.0],
+            [0.98, 0.20, 0.0],
+        ],
+    )
+    clauses = [
+        _mk("Term", "Three years."),
+        _mk("Term of Agreement", "Five years."),
+        _mk("Term of Confidentiality Obligation", "Two years."),
+    ]
+    clusters = await cluster_clauses_by_issue(
+        clauses=clauses,
+        gateway=gateway,  # type: ignore[arg-type]
+    )
+    assert len(clusters) == 1, (
+        f"Expected 1 merged cluster, got {len(clusters)}: {[c.issue_label for c in clusters]}"
+    )
+    assert len(clusters[0].member_clauses) == 3
+
+
+@pytest.mark.unit
+async def test_dissimilar_clause_centroids_stay_separate() -> None:
+    """Label groups whose clause-text centroids are below threshold do NOT merge.
+
+    Even when label strings might share words, distinct clause-text
+    centroids keep the groups separate. (E.g., "Definition of
+    Confidential Info" vs "Exclusions from Confidential Info" share
+    surface tokens but cover distinct legal concepts.)
+    """
+
+    gateway = _StubEmbeddingGateway(
+        vectors=[
+            [1.0, 0.0],
+            [0.0, 1.0],  # orthogonal — centroid cosine 0.0
+        ],
+    )
+    clauses = [
+        _mk("Confidential Information — Definition", "Confidential Information includes [...]"),
+        _mk("Confidential Information — Exclusions", "The obligations do not apply to [...]"),
+    ]
+    clusters = await cluster_clauses_by_issue(
+        clauses=clauses,
+        gateway=gateway,  # type: ignore[arg-type]
+    )
+    assert len(clusters) == 2
+
+
+@pytest.mark.unit
+async def test_merge_threshold_controls_aggressiveness() -> None:
+    """A stricter threshold (0.99) keeps near-similar centroids separate."""
+
+    gateway = _StubEmbeddingGateway(
+        vectors=[
+            [1.0, 0.0],
+            [0.95, 0.31],  # centroid cosine ~0.95 — merges at 0.85, not at 0.99
+        ],
+    )
+    clauses = [
+        _mk("Term", "Three years."),
+        _mk("Term of Agreement", "Five years."),
+    ]
+    clusters_strict = await cluster_clauses_by_issue(
+        clauses=clauses,
+        gateway=gateway,  # type: ignore[arg-type]
+        label_merge_threshold=0.99,
+    )
+    assert len(clusters_strict) == 2
+
+
+@pytest.mark.unit
+async def test_merge_threshold_none_disables_merging() -> None:
+    """When label_merge_threshold is None, no merge runs even with identical centroids."""
+
+    gateway = _StubEmbeddingGateway(
+        vectors=[
+            [1.0, 0.0],
+            [1.0, 0.0],  # identical centroids — would merge at default threshold
+        ],
+    )
+    clauses = [
+        _mk("Term", "Three years."),
+        _mk("Term of Agreement", "Five years."),
+    ]
+    clusters = await cluster_clauses_by_issue(
+        clauses=clauses,
+        gateway=gateway,  # type: ignore[arg-type]
+        label_merge_threshold=None,
+    )
+    # No merging — two distinct exact-match labels survive as separate clusters.
+    assert len(clusters) == 2
+
+
+@pytest.mark.unit
+async def test_merged_cluster_canonical_label_is_most_populated() -> None:
+    """When merging, the canonical label = the source group with the most clauses."""
+
+    # 3 source label groups with similar clause centroids: "Term" (2
+    # clauses), "Term of Agreement" (1 clause), "Term of
+    # Confidentiality" (1 clause). All merge. Expected canonical:
+    # "Term" (most-populated source group).
+    gateway = _StubEmbeddingGateway(
+        vectors=[
+            [1.0, 0.0, 0.0],
+            [0.99, 0.14, 0.0],
+            [0.98, 0.20, 0.0],
+            [0.99, 0.14, 0.0],
+        ],
+    )
+    clauses = [
+        _mk("Term", "Three years."),
+        _mk("Term", "Five years."),
+        _mk("Term of Agreement", "Two years."),
+        _mk("Term of Confidentiality", "One year."),
+    ]
+    clusters = await cluster_clauses_by_issue(
+        clauses=clauses,
+        gateway=gateway,  # type: ignore[arg-type]
+    )
+    assert len(clusters) == 1
+    assert clusters[0].issue_label == "Term"
+    assert len(clusters[0].member_clauses) == 4
+
+
+# ---------------------------------------------------------------------------
 # Ordering — largest cluster first
 # ---------------------------------------------------------------------------
 
@@ -357,9 +501,21 @@ async def test_embedding_count_mismatch_falls_back() -> None:
 
 
 @pytest.mark.unit
-async def test_embeddings_called_once_with_all_clauses_in_one_batch() -> None:
+async def test_embeddings_called_once_with_labels_and_clauses_batched() -> None:
+    """One batched call carrying clause texts only.
+
+    The centroid-based label-merge pass reuses the clause embeddings
+    from the modal-selection step — labels are NOT embedded separately.
+    Keeps round-trip count to 1 regardless of corpus size, matching
+    the M3-A6 prep doc's "one gateway call" target.
+    """
+
     gateway = _StubEmbeddingGateway(
-        vectors=[[1.0, 0.0], [0.9, 0.1], [0.0, 1.0]],
+        vectors=[
+            [1.0, 0.0],
+            [0.9, 0.1],
+            [0.0, 1.0],
+        ],
     )
     clauses = [
         _mk("Foo", "A."),
@@ -371,4 +527,30 @@ async def test_embeddings_called_once_with_all_clauses_in_one_batch() -> None:
         gateway=gateway,  # type: ignore[arg-type]
     )
     assert len(gateway.calls_received) == 1
+    assert gateway.calls_received[0]["input_"] == ["A.", "B.", "C."]
+
+
+@pytest.mark.unit
+async def test_embeddings_call_is_clauses_only_when_merge_disabled() -> None:
+    """When ``label_merge_threshold=None`` is passed, the batched call also carries clauses only.
+
+    Same shape as the default case — the label-merge mechanism never
+    embedded labels separately under the centroid algorithm, so this
+    is asserting the more-permissive contract that the batched call
+    has not gained label inputs even when merging is off.
+    """
+
+    gateway = _StubEmbeddingGateway(
+        vectors=[[1.0, 0.0], [0.9, 0.1], [0.0, 1.0]],
+    )
+    clauses = [
+        _mk("Foo", "A."),
+        _mk("Foo", "B."),
+        _mk("Bar", "C."),
+    ]
+    await cluster_clauses_by_issue(
+        clauses=clauses,
+        gateway=gateway,  # type: ignore[arg-type]
+        label_merge_threshold=None,
+    )
     assert gateway.calls_received[0]["input_"] == ["A.", "B.", "C."]
