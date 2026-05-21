@@ -108,7 +108,13 @@ async def easy_playbook_generation_job(
                 generation=generation,
                 gateway=gateway,
             )
-        except Exception as exc:
+        except BaseException as exc:
+            # BaseException (not Exception) so the cancellation path
+            # ARQ uses on job_timeout still marks the row as error
+            # rather than leaving it stuck at 'running'. The previous
+            # `except Exception` swallowed normal failures but let
+            # asyncio.CancelledError / TimeoutError propagate, which
+            # crash-cancelled the task mid-write and left orphans.
             logger.exception(
                 "easy_playbook_worker: pipeline failed",
                 extra={
@@ -121,6 +127,11 @@ async def easy_playbook_generation_job(
             generation.error_message = f"{type(exc).__name__}: {exc}"
             generation.completed_at = datetime.now(tz=UTC)
             await session.commit()
+            # Re-raise BaseException subclasses (CancelledError,
+            # SystemExit, KeyboardInterrupt) after the bookkeeping
+            # write so arq's shutdown machinery still sees the cancel.
+            if not isinstance(exc, Exception):
+                raise
             return {
                 "generation_id": generation_id_str,
                 "status": "error",

@@ -136,6 +136,12 @@ class WorkerSettings:
 
     functions: ClassVar[list[Any]] = [noop_job, easy_playbook_generation_job]
     queue_name: ClassVar[str] = M3A6_QUEUE_NAME
+    # PRD §3.7 NFR caps generation at 10 min for a 10-doc corpus on the
+    # default judge model. A 5-doc corpus is ~5 min, so the prior
+    # default-300s ceiling cut runs off mid-assembly. 900s = NFR + 50%
+    # headroom; a future tuning pass can lower it if cluster sizes
+    # plateau lower than the worst case.
+    job_timeout: ClassVar[int] = 900
     on_startup = on_startup
     on_shutdown = on_shutdown
 
