@@ -3922,6 +3922,34 @@ When new deferred items are identified during development, ongoing skill authori
 
 This section is mutable across PRD versions; updates do not require a PRD version bump unless they change priority on P1 items.
 
+#### DE-296 — Tabular Review document-source surface: Project-scoped + free-pick (deferred from M3-C3)
+
+**Priority:** P2 (discoverability / convenience; KB-scoped picker covers the v0.3.0 happy path) · **Effort:** M (Project picker reuses existing endpoints; free-pick requires a new backend list-files endpoint plus pagination/search frontend)
+
+**Context:** The M3 Phase C prep doc Decision C-7 specified three document sources for the Tabular Review wizard's Step 1 — KB-scoped, Project-scoped, and free-pick from the operator's library. At the M3-C3 implementation kickoff (2026-05-22), the wizard scoped to **KB-scoped only** for v0.3.0 to keep the surface tight. The Project + free-pick sources are deferred here.
+
+Rationale for scoping down: (a) the existing `PlaybookExecuteModal` already proves the KB-scoped picker pattern, so M3-C3 reuses a known-good UX rather than inventing two new ones; (b) the backend `api/app/api/files.py` surface has no `GET /api/v1/files` list endpoint today (only `POST`, `GET /{id}`, `GET /{id}/content`, `DELETE /{id}`), so free-pick would require new backend work beyond M3-C3's frontend scope; (c) the 5-NDA × 4-column happy path in the Phase C prep doc lives in a single KB, which the KB-scoped picker handles natively.
+
+**Specific scope:**
+
+*Project-scoped source (~30 min frontend work, no backend changes):*
+1. Add a "Project" radio/tab alongside "Knowledge base" in the wizard's Step 1.
+2. When selected, list the caller's projects via `listProjects()`; on project selection, list its files via the existing project file endpoints (mirrors the matter-files surface).
+3. Multi-select up to `TABULAR_MAX_DOCS` files; sum across all selected sources counts toward the cap.
+
+*Free-pick source (~1-2 hr frontend + backend work):*
+1. New backend `GET /api/v1/files` endpoint paginated + searchable by filename. Returns files where `owner_id == caller` (admins see all). Soft-deleted excluded.
+2. Frontend `listFiles({ page, search })` in `web/src/lib/lq-ai/api/files.ts` with the new endpoint client + 4-6 unit tests.
+3. Wizard adds a "Files" radio/tab with paginated search-and-select UX.
+
+**Acceptance criteria:**
+
+- Operator can pick documents from any combination of KB / Project / Files sources within a single tabular run.
+- Total selected document count is enforced against `TABULAR_MAX_DOCS` server-side (already true) and surfaced in the wizard's running count.
+- Files without a `document_id` (parse-pending) are visually marked as disabled across all three sources.
+
+**When to ship:** Bundle into the v0.3.1 quickstart-corpus-expansion patch alongside the DPA / MSA-Commercial-Purchase sample corpora (already DE-tracked per [`project_lq_ai_status.md`](#) memory). Project source on its own is a 30-min lift and may justify its own micro-PR if a Tabular operator surfaces the need before v0.3.1.
+
 ---
 
 ## 10. Appendices
