@@ -54,7 +54,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -167,8 +167,11 @@ async def _load_caller_owned_documents(
 
     Mirrors the M3-A6 Easy Playbook helper. The visibility rule:
     each :class:`Document` has a parent :class:`File` whose
-    ``owner_id`` must match the caller (admins see all). Missing /
-    cross-owner documents collapse into "not found" at the caller.
+    ``owner_id`` must match the caller (admins see all) AND which
+    has not been soft-deleted. Missing / cross-owner / soft-deleted
+    documents collapse into "not found" at the caller — running
+    tabular extraction over documents the user no longer "has"
+    would surprise on the audit trail.
     """
 
     from app.models.file import File as FileModel
@@ -177,6 +180,7 @@ async def _load_caller_owned_documents(
         select(Document)
         .where(Document.id.in_(document_ids))
         .join(FileModel, Document.file_id == FileModel.id)
+        .where(FileModel.deleted_at.is_(None))
     )
     if not user.is_admin:
         stmt = stmt.where(FileModel.owner_id == user.id)
@@ -375,13 +379,14 @@ async def get_tabular_execution(
     "/tabular/executions/{execution_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Soft-delete a tabular execution.",
+    response_class=Response,
 )
 async def delete_tabular_execution(
     execution_id: uuid.UUID,
     user: ActiveUser,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> None:
+) -> Response:
     """Soft-delete (sets ``deleted_at``). Already-deleted rows return 404."""
 
     row = await _load_caller_execution(db, execution_id=execution_id, user=user)
@@ -395,6 +400,7 @@ async def delete_tabular_execution(
         request=request,
     )
     await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(
