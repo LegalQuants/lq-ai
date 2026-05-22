@@ -4189,6 +4189,36 @@ components:
             Skill's documented output format (e.g., ``report``, ``markdown``,
             ``structured_checklist``, ``redline``). Free-form per the corpus.
 
+    # M3-C1 — column definition for output_format: table skills.
+    ColumnSpec:
+      type: object
+      required: [name, query]
+      description: >-
+        One column in an ``output_format: table`` skill (M3-C1). The
+        Tabular Review workflow (M3-C2) runs each ``(document, column)``
+        cell as a Citation-Engine-grounded extraction.
+      properties:
+        name: {type: string, description: "Grid column header."}
+        query:
+          type: string
+          description: >-
+            Per-row extraction prompt instantiated against each document.
+        ensemble_verification:
+          type: boolean
+          nullable: true
+          description: >-
+            Per-column override of the skill-level ``ensemble_verification``
+            field. ``true`` routes this column's cells through Stage 4 of
+            the Citation Engine cascade.
+        minimum_inference_tier:
+          type: integer
+          minimum: 1
+          maximum: 5
+          nullable: true
+          description: >-
+            Per-column override of the skill-level tier floor. High-stakes
+            columns can demand Tier 4+ while routine columns route Tier 1.
+
     Skill:
       allOf:
         - $ref: '#/components/schemas/SkillSummary'
@@ -4225,6 +4255,16 @@ components:
                 properties:
                   path: {type: string}
                   content: {type: string}
+            columns:
+              type: array
+              nullable: true
+              description: >-
+                M3-C1 — column definitions for ``output_format: table``
+                skills. ``null`` for non-table skills. The validator
+                rejects ``output_format: table`` skills that lack a
+                non-empty ``columns`` list at load time.
+              items:
+                $ref: '#/components/schemas/ColumnSpec'
 
     # Wave A — Skill inputs (form schema for the skill-input-form pattern).
     SkillInputDef:

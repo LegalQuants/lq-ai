@@ -90,6 +90,36 @@ lq_ai:
 - **`lq_ai.use_organization_profile`** — defaults to `true`. Set to `false` only for skills that should run independent of organization-specific context (rare).
 - **`lq_ai.is_organization_profile`** — set to `true` only for the singleton Organization Profile skill. Every other skill leaves this `false` or omits it.
 - **`lq_ai.self_improvement`** — defaults to `false` for v1.0.0 skills. Self-improvement is a deferred enhancement; v1.0.0 skills are stable artifacts under semver, not learning systems.
+- **`lq_ai.columns`** — required when `output_format: table`; ignored otherwise. List of `{name, query, ensemble_verification?, minimum_inference_tier?}` specs. See [Table-mode skills](#table-mode-skills) below.
+
+### Table-mode skills
+
+Setting `output_format: table` opts the skill into the Tabular / Multi-Document Review surface (M3-C, see [PRD §3.14](PRD.md#314-tabular--multi-document-review-m3)). A table-mode skill produces a row-per-document × column-per-spec grid; each cell is a Citation-Engine-grounded extraction. The frontmatter needs a `columns` block:
+
+```yaml
+output_format: table
+columns:
+  - name: Term
+    query: What is the term length of this agreement?
+  - name: Survival
+    query: What confidentiality obligations survive termination?
+    ensemble_verification: true   # cell-level override
+  - name: Governing Law
+    query: What jurisdiction governs this agreement?
+    minimum_inference_tier: 3     # cell-level override
+```
+
+**Required per column:** `name` (the grid header) + `query` (the per-row prompt instantiated against each document).
+
+**Optional per column:** `ensemble_verification` and `minimum_inference_tier` override the skill-level fields. Use the overrides sparingly — high-stakes columns (e.g., survival periods, indemnification caps) benefit from the extra rigor of Stage 4 ensemble verification or a Tier 4+ floor; routine columns should inherit the skill defaults to keep cost predictable.
+
+**Constraints:**
+
+- `columns` must be non-empty when `output_format: table`. The skill loader rejects malformed table skills at load time (WARNING in container logs, skill skipped).
+- Every cell is a string in v0.3.0; column types (number / date / boolean) are a deferred enhancement filed at Phase C close if user-attorney walkthrough surfaces the need.
+- Bulk operations (M3-C4) run on top of a tabular execution's grid — they don't change the column spec; they spawn sibling executions.
+
+The reference skill at [`skills/contract-snapshot/SKILL.md`](../skills/contract-snapshot/SKILL.md) demonstrates the four-column NDA grid (Term / Survival / Carveouts / Governing Law) with two per-column overrides — fork it as a starting point for your own contract types.
 
 ### Tag conventions
 

@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # All built-in M1 skills are filesystem-canonical; user/team-scope forks
 # land later and gain ``user`` / ``team`` values for ``scope``. C1 only
@@ -39,6 +39,44 @@ SkillScope = Literal["builtin", "user", "team"]
 # mirrors their ``scope`` value — the frontend can use ``source`` for
 # badge rendering without inspecting ``scope``.
 SkillSource = Literal["built-in", "community", "user", "team"]
+
+
+class ColumnSpec(BaseModel):
+    """One column in an ``output_format: table`` Skill (M3-C1).
+
+    A table-mode skill produces a row-per-document by column-per-spec
+    grid; each column carries its own per-row extraction query plus
+    optional overrides for the skill-level ``ensemble_verification``
+    and ``minimum_inference_tier``. The Tabular Review LangGraph
+    workflow (M3-C2) dispatches one Citation-Engine-grounded extraction
+    per ``(document, column)`` cell.
+
+    Per Decision C-1 (Phase C prep, 2026-05-21): every cell value is a
+    string in v0.3.0; typed columns are a follow-on DE if user-attorney
+    walkthrough surfaces the need.
+    """
+
+    name: str
+    """The grid column header. Required."""
+
+    query: str
+    """The per-row extraction prompt instantiated against each document.
+    Required."""
+
+    ensemble_verification: bool | None = None
+    """When ``True``, this column's cells route through Stage 4 of the
+    Citation Engine cascade (ensemble verification). Overrides the
+    skill-level field when both are set. ``None`` means 'inherit from
+    skill / project / deployment default'."""
+
+    minimum_inference_tier: int | None = Field(
+        default=None,
+        ge=1,
+        le=5,
+        description="Per-column tier floor (1-5). Overrides the skill-level "
+        "tier floor when both are set. High-stakes columns can demand Tier 4+ "
+        "while routine columns route Tier 1.",
+    )
 
 
 class LQAIFrontmatter(BaseModel):
@@ -74,7 +112,20 @@ class LQAIFrontmatter(BaseModel):
 
     output_format: str | None = None
     """Free-form per corpus (``report``, ``markdown``,
-    ``structured_checklist``, ``redline``, etc.)."""
+    ``structured_checklist``, ``redline``, ``table``, etc.).
+
+    The ``table`` value (M3-C1) signals to the Tabular Review surface that
+    this skill produces a grid; the column spec lives in :attr:`columns`."""
+
+    columns: list[ColumnSpec] | None = None
+    """Column definitions for an ``output_format: table`` skill (M3-C1).
+
+    ``None`` for non-table skills. The loader (``app/skills/loader.py``)
+    emits a WARNING and skips the skill when ``output_format == 'table'``
+    but ``columns`` is missing or empty — mirroring the existing pattern
+    for required-but-missing fields. A non-table skill may carry a
+    ``columns`` value (e.g., a skill author iterating on output mode);
+    downstream surfaces ignore it unless ``output_format == 'table'``."""
 
     minimum_inference_tier: int | None = Field(
         default=None,
@@ -98,6 +149,23 @@ class LQAIFrontmatter(BaseModel):
     self_improvement: bool | None = None
 
     trigger_examples: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _table_mode_requires_columns(self) -> LQAIFrontmatter:
+        """``output_format: table`` requires a non-empty ``columns`` list.
+
+        Enforced at model layer so the loader's existing
+        ``ValidationError → LoaderError → WARNING → skip`` path catches
+        malformed table-mode skills the same way it catches any other
+        frontmatter mistake (per Decision C-1, M3-C1).
+        """
+
+        if self.output_format == "table" and not self.columns:
+            raise ValueError(
+                "output_format: table requires a non-empty 'columns' list "
+                "(see docs/skill-authoring-guide.md §Table-mode skills)"
+            )
+        return self
 
 
 class SkillFrontmatter(BaseModel):
@@ -358,6 +426,7 @@ def filter_summary_for_response(summary: SkillSummary) -> dict[str, Any]:
 
 
 __all__ = [
+    "ColumnSpec",
     "LQAIFrontmatter",
     "Skill",
     "SkillFile",

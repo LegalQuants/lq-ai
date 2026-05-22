@@ -566,13 +566,16 @@ inputs:
     - jurisdiction
     - perspective  # "discloser"|"recipient"|"mutual"
 lq_ai:
-  output_format: report   # "report" | "table" | "issue_list" (table reserved for §3.14 Tabular Review)
+  output_format: report   # "report" | "table" | "issue_list" | "redline" | "markdown"
   minimum_inference_tier: 2   # optional; if set, skill refuses to run below this tier (per §3.13)
   is_organization_profile: false   # optional; true marks this skill as the singleton Org Profile (per §3.12)
+  # `columns:` required when output_format == "table" (M3-C1; see below).
 ---
 ```
 
 The `lq_ai:` namespace fields are the project-specific extensions to the agentskills.io standard frontmatter. Skills authored against the open standard work without them; the LQ.AI application uses them when present. See §3.13 for the inference-tier model and §3.14 for the tabular output mode.
+
+**Table mode (M3-C1).** When `output_format: table`, the frontmatter MUST carry a `columns: [{name, query, ensemble_verification?, minimum_inference_tier?}]` list. Each column is a per-row extraction query the Tabular Review LangGraph workflow (§3.14) dispatches against each document in the operator's selected set. The per-column overrides shadow the skill-level `ensemble_verification` and `minimum_inference_tier` — high-stakes columns can demand Tier 4+ or ensemble verification while routine columns inherit cheaper defaults. The skill loader rejects malformed table skills at load time (missing or empty `columns`); see [`docs/skill-authoring-guide.md`](skill-authoring-guide.md#table-mode-skills) for the worked example and the reference skill at [`skills/contract-snapshot/SKILL.md`](../skills/contract-snapshot/SKILL.md).
 
 *Skill chaining.* When multiple skills are attached, their `SKILL.md` instructions are concatenated in the order attached, with clear delimiters. The model is instructed to apply all skills.
 

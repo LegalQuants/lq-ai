@@ -578,7 +578,7 @@ Tabular Review is the second consumer of the LangGraph runtime landed in Phase A
 - For `output_format: table` skills, frontmatter adds:
   - `columns: [{name: str, query: str, ensemble_verification: bool}]` — each column is a per-row extraction query; ensemble is optionally on by default for high-stakes columns.
 - Update `docs/skill-authoring-guide.md` and [PRD §3.4](PRD.md#34-skill-service) to document the `table` mode.
-- Update the skill-schema validator in `api/app/skills/validators.py` to enforce the new fields.
+- Extend the skill-schema validator in `api/app/skills/schema.py` (existing module; no new `validators.py`) to enforce the new fields via a Pydantic `model_validator` on `LQAIFrontmatter`.
 - Authoring conventions: a `table`-mode skill cannot specify `output_format` and `report`-mode output in the same skill — they are mutually exclusive.
 
 **Dependencies:** Phase 0 + Phase A (LangGraph runtime).
