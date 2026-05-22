@@ -17,6 +17,7 @@ export type TabId =
   | 'skills'
   | 'knowledge'
   | 'playbooks'
+  | 'tabular'
   | 'saved-prompts'
   | 'learn'
   | 'admin';
@@ -47,6 +48,7 @@ export const TABS: readonly TabDef[] = [
   { id: 'skills',        label: 'Skills',        icon: '🛠️', route: '/lq-ai/skills',         available: true },
   { id: 'knowledge',     label: 'Knowledge',     icon: '📎', route: '/lq-ai/knowledge',      available: true },
   { id: 'playbooks',     label: 'Playbooks',     icon: '📋', route: '/lq-ai/playbooks',      available: true },
+  { id: 'tabular',       label: 'Tabular',       icon: '📊', route: '/lq-ai/tabular',        available: true },
   { id: 'saved-prompts', label: 'Saved Prompts', icon: '📌', route: '/lq-ai/saved-prompts',  available: true },
   { id: 'learn',         label: 'Learn',         icon: '📖', route: '/lq-ai/learn',           available: true },
   { id: 'admin',         label: 'Admin',         icon: '🛡',  route: '/lq-ai/admin/audit-log', adminOnly: true, available: true }

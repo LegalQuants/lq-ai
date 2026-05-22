@@ -1015,3 +1015,184 @@ export interface EasyPlaybookGeneration {
 	error_message?: string | null;
 	created_at: string;
 }
+
+// ----- Tabular / Multi-Document Review (M3-C2 / M3-C3) -----
+
+/**
+ * Lifecycle states for a `TabularExecution`. Matches the backend
+ * `Literal["pending","running","completed","failed","cancelled"]`
+ * (migration 0036's CHECK constraint on `tabular_executions.status`).
+ * Note: this enum carries a `cancelled` state that the M3-A4 playbook
+ * execution surface does NOT have — tabular runs can be hours long, so
+ * cancellation matters.
+ */
+export type TabularExecutionStatus =
+	| 'pending'
+	| 'running'
+	| 'completed'
+	| 'failed'
+	| 'cancelled';
+
+/**
+ * Per-cell confidence from the Citation Engine cascade. `failed` is
+ * the Decision C-10 state for cells where extraction itself errored —
+ * distinct from the Citation Engine's red `unverified` state on a
+ * non-tabular surface.
+ */
+export type TabularCellConfidence = 'high' | 'medium' | 'low' | 'failed';
+
+/**
+ * One column in a tabular execution's column spec. Mirrors the
+ * backend `ColumnSpec` Pydantic shape (and the skill-side
+ * `lq_ai.columns` frontmatter entry from M3-C1).
+ *
+ * - `ensemble_verification` overrides the skill-level field (M2-D1
+ *   ensemble cascade).
+ * - `minimum_inference_tier` (1-5) overrides the skill-level tier
+ *   floor — high-stakes columns can demand Tier 4+ while routine
+ *   columns route Tier 1.
+ */
+export interface TabularColumnSpec {
+	name: string;
+	query: string;
+	ensemble_verification?: boolean | null;
+	minimum_inference_tier?: number | null;
+}
+
+/**
+ * Lightweight citation projection used inside `TabularCellResult`.
+ * Distinct from the existing `Citation` interface above — the
+ * grid-cell surface only needs the IDs + confidence to render the chip
+ * and route a click to the existing M2-C2 citation drawer.
+ */
+export interface TabularCitation {
+	citation_id: string;
+	document_id: string;
+	chunk_id?: string | null;
+	confidence: TabularCellConfidence;
+}
+
+/**
+ * One cell in the grid. Failed extraction renders as `confidence:
+ * 'failed'` + `error` populated (Decision C-10). Successful
+ * extractions carry the extracted `value` plus the citation list the
+ * Citation Engine grounded it against.
+ *
+ * Decimal-typed fields (`cost_usd`) come over the wire as JSON
+ * strings because the backend uses `Decimal` for monetary precision.
+ */
+export interface TabularCellResult {
+	value: string | null;
+	citations: TabularCitation[];
+	confidence: TabularCellConfidence;
+	tier_used?: number | null;
+	cost_usd?: string | null;
+	error?: string | null;
+}
+
+/**
+ * One row in the tabular grid — all cells for a single document.
+ * Rows are returned in the order of the execution's `document_ids`
+ * array (NOT sorted by document name), so the grid matches the
+ * operator's selection order.
+ */
+export interface TabularRow {
+	document_id: string;
+	document_name: string;
+	cells: Record<string, TabularCellResult>;
+}
+
+/**
+ * Aggregated grid shape persisted in `tabular_executions.results`
+ * once status is `completed`.
+ */
+export interface TabularResults {
+	rows: TabularRow[];
+}
+
+/**
+ * Full execution row returned by every `/api/v1/tabular/executions`
+ * endpoint. The `results` payload is only populated once status is
+ * terminal (`completed`); pending / running rows return `null`.
+ *
+ * Note `error_text` not `error` — matches the migration 0036 column
+ * name + the backend Pydantic field, sidestepping a collision with
+ * the bare `error` field on `PlaybookExecution`.
+ */
+export interface TabularExecution {
+	id: string;
+	user_id: string | null;
+	parent_execution_id: string | null;
+	skill_name: string | null;
+	status: TabularExecutionStatus;
+	document_ids: string[];
+	columns: TabularColumnSpec[];
+	results: TabularResults | null;
+	cost_estimate_usd: string | null;
+	cost_actual_usd: string | null;
+	error_text: string | null;
+	created_at: string;
+	started_at: string | null;
+	completed_at: string | null;
+}
+
+/**
+ * Compact list-shape returned by `GET /api/v1/tabular/executions`.
+ * Drops the (potentially large) `results` payload — operators fetch
+ * the full execution row only when they open one.
+ */
+export interface TabularExecutionSummary {
+	id: string;
+	user_id: string | null;
+	parent_execution_id: string | null;
+	skill_name: string | null;
+	status: TabularExecutionStatus;
+	document_count: number;
+	column_count: number;
+	cost_estimate_usd: string | null;
+	cost_actual_usd: string | null;
+	created_at: string;
+	completed_at: string | null;
+}
+
+/**
+ * Request body for `POST /api/v1/tabular/execute`. Either
+ * `skill_name` (resolved at execution start to snapshot the skill's
+ * `lq_ai.columns`) OR `columns` (ad-hoc spec) is required.
+ *
+ * `confirmed_cost_usd` is the echo of the
+ * `POST /api/v1/tabular/preview-cost` response value; persisting it
+ * gives an audit trail of the operator confirming a specific cost
+ * ceiling before kickoff.
+ */
+export interface TabularExecutionCreate {
+	document_ids: string[];
+	skill_name?: string | null;
+	columns?: TabularColumnSpec[] | null;
+	confirmed_cost_usd?: string | null;
+}
+
+/**
+ * Request body for `POST /api/v1/tabular/preview-cost`. Same shape
+ * as `TabularExecutionCreate` minus the `confirmed_cost_usd` echo —
+ * preview is the operation that produces the cost; confirmation
+ * echoes it back on the subsequent execute call.
+ */
+export interface TabularPreviewCostRequest {
+	document_ids: string[];
+	skill_name?: string | null;
+	columns?: TabularColumnSpec[] | null;
+}
+
+/**
+ * Response from `POST /api/v1/tabular/preview-cost`. The UI uses
+ * `estimated_cost_usd` to decide whether to render the
+ * confirmation-checkbox gate (Decision C-5: gate above $1.00, no
+ * friction below).
+ */
+export interface TabularPreviewCostResponse {
+	cells_count: number;
+	estimated_tokens: number;
+	estimated_cost_usd: string;
+	per_tier_breakdown: Record<string, number>;
+}
