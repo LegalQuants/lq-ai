@@ -178,11 +178,16 @@ async def test_openapi_paths_match_sketch() -> None:
     # + M3-0.3's /admin/ingest-health.
     # + M3-A2's two playbook-executor endpoints.
     # + M3-A4's two playbook list/detail endpoints.
-    # + M3-A6's three Playbook CRUD endpoints (POST + PATCH + DELETE on /playbooks).
-    # + M3-A6's two Easy Playbook wizard endpoints (POST /playbooks/easy + GET /playbooks/easy/{id}).
+    # + M3-A6's Playbook CRUD adds POST/PATCH/DELETE methods on /playbooks +
+    #   /playbooks/{id} — paths already counted from M3-A4's GET endpoints, so
+    #   they contribute 0 new entries to this path-count assertion (the
+    #   method-tuple assertion in test_endpoints.py is the load-bearing check
+    #   for those).
+    # + M3-A6's two NEW paths for the Easy Playbook wizard
+    #   (POST /playbooks/easy + GET /playbooks/easy/{id}).
     # + M3-B1's /admin/word-addin/manifest.
     # + M3-B8's /word-addin/version.
-    assert len(actual) == 86
+    assert len(actual) == 83
 
 
 @pytest.mark.unit
