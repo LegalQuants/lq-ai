@@ -40,6 +40,7 @@ from app.api import (
     projects,
     saved_prompts,
     skills,
+    tabular,
     teams,
     user_skills,
     users,
@@ -93,6 +94,12 @@ api_router.include_router(admin.router, dependencies=_active)
 # (``/playbooks/{id}/execute`` and ``/playbook-executions/{id}``) so
 # they live alongside the M3-A4 list/CRUD endpoints in the same module.
 api_router.include_router(playbooks_api.router, dependencies=_active)
+# M3-C2: Tabular / Multi-Document Review surface (PRD §3.14). Six
+# endpoints under /tabular/ — preview-cost / execute / list / detail /
+# delete / cancel. The shared playbook ARQ worker
+# (:mod:`app.workers.tabular_worker`) consumes from the same queue
+# as Easy Playbook per Phase C prep doc Decision C-3.
+api_router.include_router(tabular.router, dependencies=_active)
 # M3-B1: Word add-in admin surface (manifest generation). Mounted with
 # the AdminUser dep at handler level. M3-B8's version-handshake route
 # lives in the same module but on a separate ``public_router`` mounted

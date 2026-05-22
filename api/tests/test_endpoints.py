@@ -192,6 +192,15 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("DELETE", "/api/v1/playbooks/{playbook_id}"),
     ("POST", "/api/v1/playbooks/easy"),
     ("GET", "/api/v1/playbooks/easy/{generation_id}"),
+    # M3-C2 — Tabular / Multi-Document Review surface (PRD §3.14).
+    # Six method-tuples across five unique paths (cancel is a
+    # sub-resource of /executions/{id}).
+    ("POST", "/api/v1/tabular/preview-cost"),
+    ("POST", "/api/v1/tabular/execute"),
+    ("GET", "/api/v1/tabular/executions"),
+    ("GET", "/api/v1/tabular/executions/{execution_id}"),
+    ("DELETE", "/api/v1/tabular/executions/{execution_id}"),
+    ("POST", "/api/v1/tabular/executions/{execution_id}/cancel"),
     # M3-B1 — Word add-in admin manifest generation
     ("GET", "/api/v1/admin/word-addin/manifest"),
     # M3-B8 — Word add-in version handshake (unauthenticated)

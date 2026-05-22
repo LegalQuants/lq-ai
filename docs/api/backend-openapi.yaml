@@ -2537,6 +2537,174 @@ paths:
         '401':
           description: Not authenticated.
 
+  # M3-C2 — Tabular / Multi-Document Review surface (PRD §3.14).
+  /api/v1/tabular/preview-cost:
+    post:
+      tags: [tabular]
+      summary: Preview the cost of a proposed tabular execution (M3-C2)
+      description: |
+        Synchronous cost preview — no execution row is created. The UI
+        calls this before showing the confirmation modal so the
+        operator sees the cell-count + estimated cost + per-tier
+        breakdown (Phase C prep doc Decision C-5).
+
+        Either ``skill_name`` or ``columns`` is required (not both).
+        The estimator uses a rolling-average over recent
+        ``purpose='tabular_extraction'`` routing-log rows; cold-start
+        deployments see the conservative default per-cell cost until
+        enough calibration data accumulates.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TabularPreviewCostRequest'}
+      responses:
+        '200':
+          description: Cost preview.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TabularPreviewCostResponse'}
+        '400':
+          description: Both ``skill_name`` and ``columns`` provided, or skill has no columns.
+        '404':
+          description: ``skill_name`` not found in the live skill registry.
+        '422':
+          description: Validation error (empty ``document_ids``, malformed column spec, etc.).
+        '401':
+          description: Not authenticated.
+
+  /api/v1/tabular/execute:
+    post:
+      tags: [tabular]
+      summary: Start a tabular execution (M3-C2)
+      description: |
+        Kicks off a tabular execution against the supplied document
+        corpus. Creates a ``TabularExecution`` row at
+        ``status='pending'`` and enqueues the ARQ worker job on the
+        shared playbook queue (per Decision C-3 — same queue as Easy
+        Playbook). Returns 202 immediately; the result view polls
+        ``GET /api/v1/tabular/executions/{id}`` until status reaches
+        a terminal value.
+
+        Authorization: caller must own every document in
+        ``document_ids`` (admins bypass). Cross-user / missing /
+        soft-deleted documents collapse into 404.
+
+        Execution completion does NOT mean every cell is correct —
+        the result view's per-cell citation drawer is where the
+        user-attorney validates extractions before relying on them.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TabularExecutionCreate'}
+      responses:
+        '202':
+          description: Execution scheduled; row created at status `pending`.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TabularExecution'}
+        '400':
+          description: Both ``skill_name`` and ``columns`` provided, or skill has no columns.
+        '404':
+          description: One or more documents not found / not authorized, or skill not found.
+        '422':
+          description: Validation error.
+        '401':
+          description: Not authenticated.
+
+  /api/v1/tabular/executions:
+    get:
+      tags: [tabular]
+      summary: List the caller's tabular executions (M3-C2)
+      description: |
+        Returns the caller's tabular executions in recent-first order.
+        Soft-deleted rows are excluded. Admins see all rows; non-admins
+        see only their own.
+      parameters:
+        - in: query
+          name: limit
+          schema: {type: integer, default: 50, minimum: 1, maximum: 200}
+          description: Maximum rows to return; default 50.
+      responses:
+        '200':
+          description: List of tabular execution summaries.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/TabularExecutionSummary'}
+        '401':
+          description: Not authenticated.
+
+  /api/v1/tabular/executions/{execution_id}:
+    parameters:
+      - in: path
+        name: execution_id
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      tags: [tabular]
+      summary: Get a tabular execution by id (M3-C2)
+      description: |
+        Returns the full execution — status, results grid, costs,
+        timing. Caller must be the row's user OR an admin; cross-user
+        / missing / soft-deleted rows return 404.
+      responses:
+        '200':
+          description: Current execution row.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TabularExecution'}
+        '404':
+          description: Execution not found or not authorized.
+        '401':
+          description: Not authenticated.
+    delete:
+      tags: [tabular]
+      summary: Soft-delete a tabular execution (M3-C2)
+      description: |
+        Sets ``deleted_at`` to now. Soft-deleted rows are invisible
+        to list / get / cancel endpoints; subsequent operations
+        return 404.
+      responses:
+        '204':
+          description: Soft-deleted.
+        '404':
+          description: Execution not found or already deleted.
+        '401':
+          description: Not authenticated.
+
+  /api/v1/tabular/executions/{execution_id}/cancel:
+    parameters:
+      - in: path
+        name: execution_id
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      tags: [tabular]
+      summary: Cancel a pending or running tabular execution (M3-C2)
+      description: |
+        Sets status to ``cancelled`` and ``completed_at`` to now.
+        The worker's per-cell loop checks the row status at each
+        cell-iteration boundary; on cancellation it stops accepting
+        new cells and the aggregate node writes whatever partial
+        results landed. Terminal rows (``completed`` / ``failed`` /
+        ``cancelled``) return 409 — operators wanting a clean re-run
+        start a new execution via ``POST /tabular/execute``.
+      responses:
+        '200':
+          description: Cancellation accepted; row updated.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TabularExecution'}
+        '404':
+          description: Execution not found or not authorized.
+        '409':
+          description: Execution already in a terminal status.
+        '401':
+          description: Not authenticated.
+
   /api/v1/playbooks/{playbook_id}/execute:
     parameters:
       - in: path
@@ -3584,6 +3752,162 @@ components:
           type: string
           format: date-time
           nullable: true
+
+    # M3-C2 — Tabular / Multi-Document Review wire shapes (PRD §3.14).
+    TabularPreviewCostRequest:
+      type: object
+      required: [document_ids]
+      description: |
+        Request body for ``POST /api/v1/tabular/preview-cost``. Either
+        ``skill_name`` or ``columns`` must be supplied (not both).
+      properties:
+        document_ids:
+          type: array
+          minItems: 1
+          items: {type: string, format: uuid}
+        skill_name:
+          type: string
+          nullable: true
+          description: Name of a registered ``output_format: table`` skill.
+        columns:
+          type: array
+          nullable: true
+          items: {$ref: '#/components/schemas/ColumnSpec'}
+          description: Ad-hoc column spec (alternative to ``skill_name``).
+
+    TabularPreviewCostResponse:
+      type: object
+      required: [cells_count, estimated_tokens, estimated_cost_usd, per_tier_breakdown]
+      properties:
+        cells_count:
+          type: integer
+          description: ``len(document_ids) * len(columns)``.
+        estimated_tokens:
+          type: integer
+          description: Per-cell token average x cells_count.
+        estimated_cost_usd:
+          type: string
+          description: |
+            Per-cell rolling-average cost x cells_count, serialized as
+            a JSON string to preserve decimal precision.
+        per_tier_breakdown:
+          type: object
+          additionalProperties: {type: integer}
+          description: |
+            Map of tier label (``tier_1`` / ``tier_2`` / ... or
+            ``default``) to cell count routed at that tier. Columns
+            without an explicit ``minimum_inference_tier`` count in
+            the ``default`` bucket.
+
+    TabularExecutionCreate:
+      type: object
+      required: [document_ids]
+      description: |
+        Request body for ``POST /api/v1/tabular/execute``. Either
+        ``skill_name`` or ``columns`` must be supplied (not both).
+        ``confirmed_cost_usd`` echoes the preview value so the row
+        carries an audit trail of the operator confirming a specific
+        cost ceiling.
+      properties:
+        document_ids:
+          type: array
+          minItems: 1
+          items: {type: string, format: uuid}
+        skill_name: {type: string, nullable: true}
+        columns:
+          type: array
+          nullable: true
+          items: {$ref: '#/components/schemas/ColumnSpec'}
+        confirmed_cost_usd:
+          type: string
+          nullable: true
+          description: |
+            Operator-confirmed cost from the preview endpoint. Persisted
+            to ``tabular_executions.cost_estimate_usd``.
+
+    TabularExecution:
+      type: object
+      required: [id, status, document_ids, columns, created_at]
+      description: |
+        One row from the ``tabular_executions`` table. Lifecycle:
+        ``pending → running → completed | failed | cancelled``.
+        ``results`` is populated by the aggregate node on ``completed``;
+        ``error_text`` is populated on ``failed``. Soft-deleted rows
+        (``deleted_at`` non-null) are invisible to list / detail
+        endpoints.
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid, nullable: true}
+        parent_execution_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            Non-null on bulk-op sibling rows (Phase C prep doc Decision
+            C-9). Bulk ops spawn siblings rather than mutating the
+            original grid, preserving auditability.
+        skill_name:
+          type: string
+          nullable: true
+          description: |
+            Source skill name; ``null`` for ad-hoc executions where the
+            operator typed columns directly in the wizard.
+        status:
+          type: string
+          enum: [pending, running, completed, failed, cancelled]
+        document_ids:
+          type: array
+          items: {type: string, format: uuid}
+        columns:
+          type: array
+          items: {$ref: '#/components/schemas/ColumnSpec'}
+        results:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: |
+            Assembled grid shape with rows + per-cell results. Shape is
+            versioned via ``schema_version`` (currently ``m3-c2-v1``).
+        cost_estimate_usd:
+          type: string
+          nullable: true
+        cost_actual_usd:
+          type: string
+          nullable: true
+        error_text:
+          type: string
+          nullable: true
+        created_at: {type: string, format: date-time}
+        started_at: {type: string, format: date-time, nullable: true}
+        completed_at: {type: string, format: date-time, nullable: true}
+
+    TabularExecutionSummary:
+      type: object
+      required:
+        - id
+        - status
+        - document_count
+        - column_count
+        - created_at
+      description: |
+        Compact projection used by the list endpoint. Drops the
+        (potentially large) ``results`` payload — operators fetch the
+        full execution row when they open one.
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid, nullable: true}
+        parent_execution_id: {type: string, format: uuid, nullable: true}
+        skill_name: {type: string, nullable: true}
+        status:
+          type: string
+          enum: [pending, running, completed, failed, cancelled]
+        document_count: {type: integer}
+        column_count: {type: integer}
+        cost_estimate_usd: {type: string, nullable: true}
+        cost_actual_usd: {type: string, nullable: true}
+        created_at: {type: string, format: date-time}
+        completed_at: {type: string, format: date-time, nullable: true}
+
     AdminUserRow:
       type: object
       required: [id, email, role, is_admin, mfa_enabled, must_change_password, created_at]
