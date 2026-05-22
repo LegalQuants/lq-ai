@@ -203,8 +203,14 @@
 
 	// --- Step navigation ----------------------------------------------------
 
-	function canAdvanceFrom(step: WizardStep): boolean {
-		switch (step) {
+	// Reactive — referencing the dependent state directly so Svelte's
+	// compiler tracks `documentIds`, `columnsState`, `preview`, etc.
+	// A previous `canAdvanceFrom(step)` helper hid those deps inside a
+	// function call; Svelte does not trace into function bodies, so the
+	// button's `disabled` binding never re-evaluated when the selection
+	// changed and the Next button stayed disabled (DE-XXX, M3-C3).
+	$: canAdvance = ((): boolean => {
+		switch (currentStep) {
 			case 'documents':
 				return validateDocumentsStep(documentIds) === null;
 			case 'columns':
@@ -214,7 +220,7 @@
 			case 'confirm':
 				return !gateRequiresConfirmation || confirmationChecked;
 		}
-	}
+	})();
 
 	async function advance(): Promise<void> {
 		stepError = null;
@@ -378,9 +384,13 @@
 					<div class="lq-tabwiz__error" role="alert">{skillsError}</div>
 				{:else if allTableSkills.length === 0}
 					<div class="lq-tabwiz__state">
-						No table-mode skills are installed. Switch to ad-hoc mode to define columns inline,
-						or import a table-mode skill from the
-						<a href="/lq-ai/skills">Skills page</a>.
+						No table-mode skills are available. Switch to ad-hoc mode to define columns inline.
+						Reference table-mode skills (e.g.
+						<code>contract-snapshot</code>) ship as built-ins — see the
+						<a href="https://github.com/LegalQuants/lq-ai/blob/main/docs/skill-authoring-guide.md">
+							skill authoring guide
+						</a>
+						to add your own.
 					</div>
 				{:else}
 					<label class="lq-tabwiz__field">
@@ -543,7 +553,7 @@
 			class="lq-tabwiz__next"
 			data-testid="lq-tabwiz-next"
 			on:click={advance}
-			disabled={!canAdvanceFrom(currentStep) || submitting}
+			disabled={!canAdvance || submitting}
 		>
 			{#if isLastStep(currentStep)}
 				{submitting ? 'Starting…' : 'Run'}
