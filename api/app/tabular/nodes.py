@@ -466,8 +466,8 @@ def make_aggregate_node(
 
 
 def _assemble_rows(
-    per_cell_results: list[dict[str, Any]],
-    documents: list[dict[str, str]],
+    per_cell_results: list[Any],
+    documents: list[Any],
 ) -> list[dict[str, Any]]:
     """Group cells by document and emit rows in ``documents`` order.
 
@@ -505,8 +505,8 @@ def _strip_state_keys(cell: dict[str, Any]) -> dict[str, Any]:
 
 
 def _shape_results_payload(
-    per_cell_results: list[dict[str, Any]],
-    documents: list[dict[str, str]],
+    per_cell_results: list[Any],
+    documents: list[Any],
 ) -> dict[str, Any]:
     """Render the per-cell results into the JSONB payload shape."""
 
@@ -523,7 +523,7 @@ def _shape_results_payload(
     }
 
 
-def _sum_cell_costs(per_cell_results: list[dict[str, Any]]) -> Decimal:
+def _sum_cell_costs(per_cell_results: list[Any]) -> Decimal:
     """Sum per-cell costs to derive ``cost_actual_usd``.
 
     Cells without a recorded cost contribute 0 — the v0.3.0 cell node
