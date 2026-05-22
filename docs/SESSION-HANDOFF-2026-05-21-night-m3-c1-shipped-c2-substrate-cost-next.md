@@ -158,20 +158,30 @@ Per the project test discipline:
 
 ---
 
-## 5. Operator-side action items outstanding
+## 5. Corpus expansion — ratified plan (2026-05-21 late-night decision)
 
-* **Corpus question for Phase E** (parked from this session; not blocking Phase C): existing 5 NDAs + 5 MSAs in `docs/quickstart/sample-*/` satisfy the M3-E1 documented verification criterion as-is. For a richer reviewing-attorney walkthrough, three optional corpus additions worth considering before fresh-install:
-  - **Recommended:** 2-3 NDA variants with intentionally-missing clauses (no survival period, no carveouts list) — surfaces Decision C-10's "not found" rendering, which is the most credibility-sensitive UX state.
-  - **Optional:** Sample DPA corpus (3-5 docs) + sample MSA-Commercial-Purchase corpus (3-5 docs) to demonstrate tabular works across the playbook families M3-A5 shipped.
-  - **Stretch:** Larger 15-20 doc corpus for perf walkthrough of sticky-row + sticky-col grid renderer.
+**Synthetic test fixtures are functional QA, not legal-substance content.** They exercise the code's parsing/extraction against documents with known properties; they are not advice for operators and don't go through the user-attorney validation gate that applies to playbook/skill content. The maintainer team owns authoring them. (Memory `feedback_no_maintainer_legal_review.md` updated to make this carveout explicit.)
 
-  Decide at Phase C close whether to schedule corpus generation before Phase E or defer to v0.3.1 / community contribution. Filed for next session decision.
+**Confirmed scope split:**
+
+* **Phase C / Session N+2 (alongside M3-C3 UI):** Add **2-3 NDA variants with intentionally-missing clauses** to `docs/quickstart/sample-ndas/`. Examples:
+  - One NDA with no survival period specified at all → exercises Decision C-10 "not found" rendering on the Survival column of `contract-snapshot`.
+  - One NDA with no carveouts list → exercises "not found" on the Carveouts column.
+  - One NDA with unusual governing-law structure (e.g., NY substantive law + Delaware forum-selection) → exercises the per-column `minimum_inference_tier: 3` override on Governing Law.
+
+  Rationale for landing alongside M3-C3: the fixtures inform UI testing as it's built. Discovering at Phase E that the C-10 "not found" path has rough edges is the failure mode this prevents.
+
+* **v0.3.1 — "Quickstart corpus expansion" (filed for post-v0.3.0 patch release):** Sample DPA corpus (3-5 docs) + sample MSA-Commercial-Purchase corpus (3-5 docs) matching the M3-A5 playbook families. Demonstrates tabular works across contract families beyond NDAs. Not blocking v0.3.0 because the existing 5+5 satisfies the M3-E1 documented verification criterion and the missing-clause variants land in Phase C above.
+
+* **Stretch (no commitment):** Larger 15-20 doc corpus for sticky-grid renderer perf walkthrough — only if the M3-C3 implementation surfaces perf concerns that 5-row testing doesn't catch.
+
+## 6. Operator-side action items outstanding
 
 * No code-signing cert procurement progress to report (DE-295 is community-led; no maintainer work in this session).
 
 ---
 
-## 6. Memory references the next session should re-read first
+## 7. Memory references the next session should re-read first
 
 * `~/.claude/projects/-Users-kevinkeller-Desktop-lq-ai/memory/project_lq_ai_status.md` (most recent block to be added: "Status end-of-session 2026-05-21 night — M3-C1 shipped on m3-phase-c-tabular-review; M3-C2 substrate ready").
 * `~/.../memory/feedback_honest_framing.md` — surface scope changes as choices, not unilaterally absorb.
@@ -180,7 +190,7 @@ Per the project test discipline:
 
 ---
 
-## 7. What's NOT in scope for the next session
+## 8. What's NOT in scope for the next session
 
 Per the conservative-posture rule, named explicitly:
 
@@ -193,7 +203,7 @@ Per the conservative-posture rule, named explicitly:
 
 ---
 
-## 8. What to say to the next CC session
+## 9. What to say to the next CC session
 
 Paste the following into the next CC session's first message:
 
@@ -211,8 +221,9 @@ Paste the following into the next CC session's first message:
 > - Re-confirm CI on PR #62 is still green at the latest `main`.
 > - Continue M3-C2 in this order: cost.py → executor + nodes + state → worker → endpoints → commit + push for CI on each chunk.
 > - Pause for the next session to start M3-C3 once all of M3-C2 is green on CI.
+> - **In Session N+2 alongside M3-C3 UI work:** author 2-3 NDA variants with intentionally-missing clauses into `docs/quickstart/sample-ndas/` per §5. These are functional test fixtures (maintainer-team work, not legal-substance content per `feedback_no_maintainer_legal_review.md`); they exercise the Decision C-10 "not found" rendering as the M3-C3 UI is built. The wider DPA + MSA-Commercial-Purchase corpus expansion is deferred to **v0.3.1 "Quickstart corpus expansion"** post-v0.3.0 patch release.
 >
-> Estimated maintainer effort: ~6-10 hr to close M3-C2.
+> Estimated maintainer effort: ~6-10 hr to close M3-C2; the missing-clause fixtures add ~2-3 hr to Session N+2's M3-C3 budget.
 
 ---
 
