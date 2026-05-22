@@ -140,6 +140,12 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/chats/{chat_id}/receipts",
         # Wave D.1 T6 — chat receipts JSONL export
         "/api/v1/chats/{chat_id}/receipts/export.jsonl",
+        # M3-C2 — Tabular / Multi-Document Review surface
+        "/api/v1/tabular/preview-cost",
+        "/api/v1/tabular/execute",
+        "/api/v1/tabular/executions",
+        "/api/v1/tabular/executions/{execution_id}",
+        "/api/v1/tabular/executions/{execution_id}/cancel",
     }
 )
 
