@@ -37,6 +37,14 @@
 			href: '/lq-ai/playbooks'
 		},
 		{
+			id: 'tabular',
+			title: 'Tabular Review',
+			icon: '📊',
+			description: 'Run a column spec across multiple documents — every cell grounded by the Citation Engine.',
+			cta: 'Start',
+			href: '/lq-ai/tabular'
+		},
+		{
 			id: 'apply-skill',
 			title: 'Apply a Skill',
 			icon: '▶',
