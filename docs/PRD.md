@@ -3998,6 +3998,114 @@ The M3-C3 surface explicitly scoped column-editor UI out of Phase C to keep the 
 
 **When to ship:** When the built-in table-mode catalog reaches ~5 skills (the threshold at which a flat list becomes noisy). Likely v0.4 or v0.5 as a Skills-surface polish PR.
 
+#### DE-299 — OTel instrumentation for SQLAlchemy + ARQ workers (OTel Deepening DE-A)
+
+**Priority:** P2 (DB latency and background-job latency are real blind spots; junior-friendly addition) · **Effort:** S (~0.5–1 day)
+
+**Context:** M3 Phase F (per [`docs/proposals/opentelemetry-deepening.md`](proposals/opentelemetry-deepening.md)) lands the api → gateway → provider trace chain and domain spans on the four high-value LQ.AI operations. SQLAlchemy DB queries and ARQ background-job execution (KB ingest, user export/deletion, document parse pipeline, Easy Playbook generation, tabular execution) sit alongside that work but are not instrumented today.
+
+**Specific scope:**
+
+1. Pin `opentelemetry-instrumentation-sqlalchemy` in both `api/pyproject.toml` and `gateway/pyproject.toml`.
+2. Call `SQLAlchemyInstrumentor().instrument(engine=...)` in each service's `observability.py` once the engine is created — after the existing FastAPI / httpx instrumentation calls.
+3. Add ARQ span wrapping in `api/app/workers/arq_setup.py`: each job entry-point gets a top-level span (`worker.job.execute` with attributes `{worker.job_name, worker.queue, worker.execution_id (if present), worker.attempt}`); failures record exception events; auto-instrument retries as span events.
+4. Verify no double-instrumentation collisions with the existing FastAPI auto-instrumentation (SQLAlchemyInstrumentor + FastAPIInstrumentor are designed to coexist; verify in the M3-F1 regression test by asserting the trace tree has a `db.client.execute` span under the http request span).
+5. Update `docs/observability.md` (shipped in M3-F3) to call out DB + worker spans in the per-signal inventory.
+
+**Acceptance criteria:**
+
+- A KB ingest end-to-end (file upload → parse → embed → index) produces a single trace including the http request span, the parse-pipeline ARQ job span, embed-batch child spans, and per-batch SQLAlchemy `db.client.execute` spans.
+- A chat-send produces SQLAlchemy spans for the chat-message INSERT, the chat history SELECT, and the audit-log INSERT inside the same trace as the request.
+- ARQ job-execution latency p50/p95/p99 are queryable from the trace data (or from the `service.name="lq-ai-arq-worker"` filter on traces).
+
+**When to ship:** Bundle with M3-F3 docs work, or land as its own micro-PR shortly after Phase F lands.
+
+#### DE-300 — Log-trace correlation via structured-logger trace_id / span_id injection (OTel Deepening DE-B)
+
+**Priority:** P2 (operators today can correlate traces ↔ metrics via service / route labels, but trace ↔ log correlation requires manual reasoning; junior-friendly addition) · **Effort:** S (~0.5 day)
+
+**Context:** M3 Phase F lands rich trace data; structured logs already include service + request context. The pivot from "I see a slow span in Tempo / Honeycomb" to "show me the logs for this request" requires the `trace_id` / `span_id` to be on every log line so the operator's log aggregator (Loki / Datadog Logs / Splunk) can join.
+
+**Specific scope:**
+
+1. In each service's structured logger configuration (`api/app/logging.py`, `gateway/app/logging.py`), add an OTel context filter that pulls the active span's `trace_id` and `span_id` into the log record at emit time.
+2. Update the JSON log formatter to emit `trace_id` and `span_id` as top-level fields when present (omitted when no active span — e.g. lifespan startup logs).
+3. Document the field names in `docs/observability.md` (shipped in M3-F3) with a worked example showing the Loki / Datadog Logs query that joins a trace ID to its logs.
+4. Add a smoke test in `api/tests/test_logging.py` that verifies the trace_id field is present on log lines emitted inside an HTTP request.
+
+**Acceptance criteria:**
+
+- A log line emitted inside an HTTP request handler carries the same `trace_id` as the FastAPI auto-instrumented span.
+- A log line emitted outside a request (lifespan startup, idle worker poll) omits the `trace_id` field rather than emitting an empty string.
+- `docs/observability.md` shows the operator how to pivot from a trace to its logs in at least one named backend (Loki).
+
+**When to ship:** Land alongside or shortly after DE-299 (both are S-effort observability polish; they pair naturally).
+
+#### DE-301 — OTel MeterProvider for metrics export (OTel Deepening DE-C)
+
+**Priority:** P2 (operators who use Honeycomb-only or Datadog-APM-only deployments don't want to scrape Prometheus separately; mid-level effort) · **Effort:** M (~1 day)
+
+**Context:** M1 wired the OTel TracerProvider only; metrics export to Prometheus via the `/metrics` endpoint. M3 Phase F doesn't change that. Operators who want OTel-native metrics (single observability backend, no parallel Prometheus scraper) cannot get them today without standing up a Prometheus + OTel-Prometheus-receiver chain that adds operational surface for no semantic benefit.
+
+**Specific scope:**
+
+1. Add an `OTLPMetricExporter` + `MeterProvider` to each service's `observability.py`, gated on the same `OTEL_EXPORTER_OTLP_ENDPOINT` env var the TracerProvider already honors.
+2. Bridge the existing Prometheus metrics (`lq_ai_gateway_http_requests_total`, etc.) to OTel meters so a single source feeds both surfaces. Prometheus stays as the always-on scrape surface; OTel metrics export is additive.
+3. Verify no double-emission: a metric like `http_requests_total` must appear once in OTel (not twice). The OTel Prometheus bridge has a canonical pattern for this; document the resolution in `docs/observability.md`.
+4. Add a smoke test that asserts both surfaces (Prometheus scrape + OTel export) emit the same counter value after N requests.
+
+**Acceptance criteria:**
+
+- An operator configuring only `OTEL_EXPORTER_OTLP_ENDPOINT` (no Prometheus scraper) sees the LQ.AI metric inventory in their OTel backend.
+- An operator configuring both Prometheus + OTel sees consistent values across both surfaces (no double-counting, no drift).
+- The standalone-Collector recipe (shipped in M3-F3) is updated to route metrics + traces in the same pipeline.
+
+**When to ship:** Mid-level contribution; can land any time after Phase F. Pair with DE-299 + DE-300 for a coherent "OTel completion" PR set.
+
+#### DE-302 — Reconcile OTel with the OpenWebUI fork's inherited telemetry (OTel Deepening DE-D)
+
+**Priority:** P3 (the parallel `service.name` namespace is awkward but not blocking; operators learn quickly that "open-webui" spans = web tier, "lq-ai-api" spans = backend) · **Effort:** S (~0.5d decision + ~1d execution)
+
+**Context:** Upstream OpenWebUI carries its own telemetry layer at `web/backend/open_webui/utils/telemetry/`. After M3 Phase F lands, an operator running the full stack sees three `service.name` values in their tracing UI: `open-webui` (the OWUI-inherited backend telemetry), `lq-ai-api`, and `lq-ai-gateway`. The OWUI backend reports as a separate product, which is technically accurate (it's a vendored fork with its own telemetry) but operationally awkward.
+
+**Specific scope:**
+
+Two paths; the contributor picks one as part of the PR:
+
+* **Option A — Align resource attributes.** Keep the OWUI telemetry layer running but override `OTEL_RESOURCE_ATTRIBUTES` so the OWUI backend reports `service.namespace=lq-ai` and `service.name=lq-ai-web` (or similar). Operators see one logical product in their tracing UI; we preserve the OWUI upstream's contribution to tracing the web tier.
+* **Option B — Disable OWUI's OTel layer entirely.** Set the OWUI-specific telemetry-off env vars at build time so the inherited layer never initializes. Rely on the LQ.AI-emitted spans alone; the web tier's contribution to traces becomes the SvelteKit-emitted spans (when DE-303 lands) plus the api ↔ web hop traceparent.
+
+**Acceptance criteria:**
+
+- Decision documented in an ADR (`docs/adr/00NN-owui-otel-reconciliation.md`).
+- The chosen path is implemented; operators see at most two LQ.AI-named services in their tracing UI (api + gateway), or three (api + gateway + web) if Option A.
+- `docs/observability.md` is updated to call out the chosen posture.
+
+**When to ship:** Whichever cycle next touches the OWUI fork's customization layer. Not urgent; the dual-namespace state is functional.
+
+#### DE-303 — Browser RUM via OpenTelemetry SDK (OTel Deepening DE-E)
+
+**Priority:** P2 (RUM data is the next-most-valuable observability addition after backend traces — answers "is the slowness in the browser, the network, or the server?"; mid-to-senior effort because of the opt-in posture + CSP review) · **Effort:** M (~2–3 days)
+
+**Context:** M3 Phase F instruments the backend. Browser performance — page load, route navigation, fetch latency, browser-side error surface — is unobserved today. An operator investigating "the chat surface feels slow" has no signal between "the FastAPI handler returned in 80ms" and "the user saw the result 2.3 seconds later."
+
+**Specific scope:**
+
+1. Add `@opentelemetry/sdk-trace-web` + `@opentelemetry/auto-instrumentations-web` to the web bundle.
+2. Initialize the SDK in a new `web/src/lib/observability.ts` gated on a build-time env var `PUBLIC_LQ_AI_OTEL_ENDPOINT` (defaults unset → SDK never initializes). Mirrors the backend "no telemetry by default" posture per PRD §5.7.
+3. Auto-instrument `fetch`, `document-load`, `user-interaction`. The fetch instrumentation carries `traceparent` outbound so the backend joins the same trace.
+4. CSP review: the operator's OTel Collector endpoint must be on the `connect-src` allowlist. Document the CSP guidance in `docs/observability.md` + the OWUI-fork's `web/Dockerfile` CSP header section.
+5. Document the env var matrix in `docs/observability.md` (shipped in M3-F3) with a note that browser RUM is opt-in even when backend OTel is on — an extra explicit env var is required.
+
+**Acceptance criteria:**
+
+- A user clicking "Send" on a chat in the web UI produces a single trace spanning the browser fetch span, the api request span, the gateway dispatch span, and the provider call span.
+- With `PUBLIC_LQ_AI_OTEL_ENDPOINT` unset, the web bundle does not initialize the SDK and emits no network requests to any telemetry endpoint (regression test).
+- The CSP guidance documents the exact `connect-src` directive operators need to add for each of the two M3-F3 recipes (Tempo-stack + standalone-Collector).
+- A reviewer (CODEOWNERS for web tier + security) signs off on the CSP posture.
+
+**When to ship:** Sensitive surface — opt-in by default; needs a security review of the CSP changes and an explicit attestation that browser-side telemetry inherits the same anonymization-of-attributes posture as backend telemetry. Best landed as its own focused PR after Phase F + DE-299 + DE-300 have stabilized.
+
 ---
 
 ## 10. Appendices

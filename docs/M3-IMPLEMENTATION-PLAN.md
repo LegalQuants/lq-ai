@@ -851,6 +851,56 @@ The smallest and most independent track. Phase D's plumbing (M3-D1 slack-bridge 
 
 ---
 
+## Phase F — Observability deepening (post-acceptance)
+
+Added 2026-05-22 per the OpenTelemetry Deepening mini-PRD at [`docs/proposals/opentelemetry-deepening.md`](proposals/opentelemetry-deepening.md). Phase F lands the operator-facing observability story that the M1 OTel SDK shipped but did not complete: end-to-end trace correlation across the api → gateway → provider chain, manual domain spans on the four high-value LQ.AI operations (Citation Engine cascade, Anonymization middleware, Skill runner, Playbook + Tabular workflows) with explicit anonymization-of-attributes guarantees, and deployment recipes plus a `docs/observability.md` operator guide.
+
+Phase F runs **after** M3-E1 + M3-E2 — fresh-install verification (E1) gets the observability stack as a test target, and the docs finalization (E2) absorbs the new `docs/observability.md` cross-references. The three F tasks correspond 1:1 to the three PRs in the mini-PRD.
+
+### Task M3-F1 — Trace context propagation audit + regression test
+
+**Scope:** Verify W3C `traceparent` / `tracestate` propagation across the api → gateway → provider chain, fix any gaps the audit surfaces, and pin the behavior with regression tests in both `api/tests/test_trace_propagation.py` and `gateway/tests/test_trace_propagation.py`. Update [`docs/architecture.md`](architecture.md) §OBS to confirm end-to-end correlation.
+
+**Dependencies:** None (the existing M1 OTel SDK + httpx-auto-instrumentation are the substrate).
+
+**Verification:** Per the [mini-PRD's PR 1 acceptance criteria](proposals/opentelemetry-deepening.md#pr-1-acceptance) — regression test exists in both services, asserts a chat-send produces a single trace ID across api + gateway, and would fail without any fix applied.
+
+**Effort:** ~6–8 hours.
+
+### Task M3-F2 — Domain spans + rich attributes on the four high-value operations
+
+**Scope:** Manual instrumentation of Citation Engine cascade (`api/app/citation/verification.py`), Anonymization middleware (`gateway/app/anonymization/middleware.py`), Skill runner, Inference dispatch (`gateway/app/router.py`), and Playbook + Tabular executors. Each gets a top-level span with documented attributes, child spans per sub-operation, and span events for notable transitions. Anonymization-of-attributes guarantee enforced via test: span attributes carry counts and types, never raw entity values.
+
+**Dependencies:** M3-F1 (so the spans land on already-correlated traces). M3-C2 + M3-C3 (so the tabular executor exists to instrument); both have shipped.
+
+**Verification:** Per the [mini-PRD's PR 2 acceptance criteria](proposals/opentelemetry-deepening.md#pr-2-acceptance) — each documented span + attribute is emitted under expected code paths (in-memory OTel exporter tests); `gateway/tests/test_anonymization_observability.py` asserts no raw entity values appear in span attributes; no measurable p99 chat-send regression.
+
+**Effort:** ~14–18 hours.
+
+### Task M3-F3 — Deployment recipes + `docs/observability.md` operator guide
+
+**Scope:** New `deploy/observability/` subtree with two recipes (Grafana Tempo + Loki + Prometheus stack, and standalone Collector for operators with existing backends). New `docs/observability.md` operator guide covering the env-var matrix, per-signal inventory, anonymization-and-telemetry posture, the no-telemetry-by-default promise, and what's not yet shipped (links to DE-299 through DE-303). Starter Grafana dashboard with three panels (tier mix, p99 by route, error rate).
+
+**Dependencies:** M3-F2 (the recipe README walks operators through verifying domain spans land in Tempo, so the spans need to exist).
+
+**Verification:** Per the [mini-PRD's PR 3 acceptance criteria](proposals/opentelemetry-deepening.md#pr-3-acceptance) — `docker compose -f docker-compose.yml -f deploy/observability/grafana-tempo-loki/docker-compose.observability.yml config` produces a valid merged config; a non-maintainer following the recipe README sees a chat-send trace in Tempo within 15 minutes; `docs/observability.md` is linked from README.md Quickstart and HONEST-STATE.md §6+§7; "no telemetry by default" regression pinned by a test in `api/tests/test_observability.py`.
+
+**Effort:** ~12–16 hours.
+
+### Phase F deferred surfaces
+
+Seven OTel-adjacent surfaces are filed as DEs rather than absorbed into Phase F (per the mini-PRD's framing — any one can be claimed independently by a community contributor):
+
+- [DE-299](PRD.md#de-299--otel-instrumentation-for-sqlalchemy--arq-workers-otel-deepening-de-a) — SQLAlchemy + ARQ worker instrumentation
+- [DE-300](PRD.md#de-300--log-trace-correlation-via-structured-logger-trace_id--span_id-injection-otel-deepening-de-b) — Log-trace correlation
+- [DE-301](PRD.md#de-301--otel-meterprovider-for-metrics-export-otel-deepening-de-c) — OTel MeterProvider for metrics export
+- [DE-302](PRD.md#de-302--reconcile-otel-with-the-openwebui-fork-s-inherited-telemetry-otel-deepening-de-d) — Reconcile with the OpenWebUI fork's inherited OTel
+- [DE-303](PRD.md#de-303--browser-rum-via-opentelemetry-sdk-trace-web-otel-deepening-de-e) — Browser RUM (opt-in, CSP-reviewed)
+- PRD §9 — Published SLO catalog (already on the deferred list; builds on the M3-F2 span inventory)
+- PRD §9 — Performance regression tracking (already on the deferred list; builds on the M3-F2 span inventory)
+
+---
+
 ## Total effort estimate
 
 The original M3 estimate was ~227–302 hours across 27 tasks. Two rounds of scope-reduction land at v0.3.0:
@@ -866,9 +916,10 @@ The original M3 estimate was ~227–302 hours across 27 tasks. Two rounds of sco
 | **C — Tabular / Multi-Document Review** | 4 | ~36–48 hours |
 | **D — Slack / Teams Light Intake Bridge** | 3 plumbing (D1 + D3 plumbing-only + D4 plumbing-only); 1 descoped (D2 → DE-288); D3's slash-command facet also descoped | ~12–20 hours |
 | **E — Acceptance + docs** | 2 | ~16–22 hours |
-| **Total (M3 scope)** | **~16 active + 7 descoped** | **~161–218 hours** |
+| **F — Observability deepening** | 3 | ~32–42 hours |
+| **Total (M3 scope)** | **~19 active + 7 descoped** | **~193–260 hours** |
 
-The revised range fits comfortably in a **~5-week M3 build** by a single contributor working full-time, or ~8–9 weeks part-time. The largest remaining track is Phase C (Tabular Review). Phase B's M3 work is now the smallest active track at ~22–28 hr; M3-B7 + its procurement timeline runs alongside on the community side.
+The revised range fits comfortably in a **~5–6-week M3 build** by a single contributor working full-time, or ~9–10 weeks part-time. The largest remaining tracks are Phase C (Tabular Review) and Phase F (Observability deepening, added 2026-05-22). Phase B's M3 work is the smallest active track at ~22–28 hr; M3-B7 + its procurement timeline runs alongside on the community side.
 
 ---
 
