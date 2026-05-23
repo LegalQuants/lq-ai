@@ -3,7 +3,11 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 
-	import { getTabularExecution, cancelTabularExecution } from '$lib/lq-ai/api/tabular';
+	import {
+		getTabularExecution,
+		cancelTabularExecution,
+		exportTabularExecution
+	} from '$lib/lq-ai/api/tabular';
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
 	import TabularGrid from '$lib/lq-ai/components/TabularGrid.svelte';
 	import TabularCitationModal from '$lib/lq-ai/components/TabularCitationModal.svelte';
@@ -116,6 +120,31 @@
 		openCell = null;
 	}
 
+	// M3-C4a — XLSX / CSV export.
+	let exportingFormat: 'xlsx' | 'csv' | null = null;
+	let exportError: string | null = null;
+
+	async function handleExport(format: 'xlsx' | 'csv'): Promise<void> {
+		if (!executionId || exportingFormat) return;
+		exportingFormat = format;
+		exportError = null;
+		try {
+			const { blob, filename } = await exportTabularExecution(executionId, format);
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = filename;
+			document.body.appendChild(a);
+			a.click();
+			a.remove();
+			URL.revokeObjectURL(url);
+		} catch (err) {
+			exportError = err instanceof LQAIApiError ? err.message : 'Export failed.';
+		} finally {
+			exportingFormat = null;
+		}
+	}
+
 	onMount(loadOnce);
 	onDestroy(() => {
 		if (pollTimer) clearTimeout(pollTimer);
@@ -141,6 +170,28 @@
 				</p>
 			</div>
 			<div class="lq-tabres__actions">
+				{#if execution.status === 'completed'}
+					<button
+						type="button"
+						class="lq-tabres__export"
+						data-testid="lq-tabres-export-xlsx"
+						on:click={() => handleExport('xlsx')}
+						disabled={exportingFormat !== null}
+						title="Download the grid as an .xlsx workbook with citations carried in cell comments."
+					>
+						{exportingFormat === 'xlsx' ? 'Exporting…' : 'Export XLSX'}
+					</button>
+					<button
+						type="button"
+						class="lq-tabres__export"
+						data-testid="lq-tabres-export-csv"
+						on:click={() => handleExport('csv')}
+						disabled={exportingFormat !== null}
+						title="Download the grid as a .csv with citations in a trailing citation_links column."
+					>
+						{exportingFormat === 'csv' ? 'Exporting…' : 'Export CSV'}
+					</button>
+				{/if}
 				<button
 					type="button"
 					class="lq-tabres__rerun"
@@ -149,6 +200,11 @@
 				>
 			</div>
 		</header>
+		{#if exportError}
+			<div class="lq-tabres__error" role="alert" data-testid="lq-tabres-export-error">
+				{exportError}
+			</div>
+		{/if}
 
 		<!-- Status banner -->
 		<div
@@ -248,13 +304,24 @@
 		color: var(--lq-text-secondary);
 		font-size: 0.875rem;
 	}
-	.lq-tabres__rerun {
+	.lq-tabres__actions {
+		display: flex;
+		gap: 0.5rem;
+		align-items: center;
+		flex-wrap: wrap;
+	}
+	.lq-tabres__rerun,
+	.lq-tabres__export {
 		padding: 0.5rem 0.75rem;
 		border: 1px solid var(--lq-border);
 		border-radius: 0.375rem;
 		background: var(--lq-surface);
 		font-size: 0.875rem;
 		cursor: pointer;
+	}
+	.lq-tabres__export:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
 	}
 	.lq-tabres__banner {
 		padding: 0.875rem 1rem;
