@@ -326,7 +326,7 @@ async def create_tabular_execution(
         },
     )
 
-    return _to_response(execution)
+    return await _to_response(db, execution)
 
 
 @router.get(
@@ -372,7 +372,7 @@ async def get_tabular_execution(
     """
 
     row = await _load_caller_execution(db, execution_id=execution_id, user=user)
-    return _to_response(row)
+    return await _to_response(db, row)
 
 
 @router.delete(
@@ -442,7 +442,7 @@ async def cancel_tabular_execution(
     )
     await db.commit()
     await db.refresh(row)
-    return _to_response(row)
+    return await _to_response(db, row)
 
 
 # ---------------------------------------------------------------------------
@@ -470,9 +470,42 @@ async def _load_caller_execution(
     return row
 
 
-def _to_response(row: TabularExecution) -> TabularExecutionResponse:
-    """Convert the ORM row to the response wire shape."""
+async def _load_document_names(
+    db: AsyncSession, document_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, str]:
+    """Return a ``{document_id: filename}`` map for the given ids.
 
+    Joins ``documents → files.filename``. Soft-deleted files are
+    excluded — the caller treats a missing id as a deleted document
+    (renders as the empty string in the response, which the UI flags
+    as "deleted document")."""
+
+    from app.models.file import File as FileModel
+
+    if not document_ids:
+        return {}
+    stmt = (
+        select(Document.id, FileModel.filename)
+        .join(FileModel, Document.file_id == FileModel.id)
+        .where(Document.id.in_(document_ids), FileModel.deleted_at.is_(None))
+    )
+    rows = (await db.execute(stmt)).all()
+    return {row.id: row.filename for row in rows}
+
+
+async def _to_response(
+    db: AsyncSession, row: TabularExecution
+) -> TabularExecutionResponse:
+    """Convert the ORM row to the response wire shape.
+
+    Async because the response includes a ``document_names`` field
+    that requires a join on ``files`` — keeping the join inside the
+    response builder means every endpoint that returns a single
+    execution gets the names without duplicating the query."""
+
+    document_ids = list(row.document_ids)
+    name_by_id = await _load_document_names(db, document_ids)
+    document_names = [name_by_id.get(did, "") for did in document_ids]
     return TabularExecutionResponse.model_validate(
         {
             "id": row.id,
@@ -480,7 +513,8 @@ def _to_response(row: TabularExecution) -> TabularExecutionResponse:
             "parent_execution_id": row.parent_execution_id,
             "skill_name": row.skill_name,
             "status": row.status,
-            "document_ids": list(row.document_ids),
+            "document_ids": document_ids,
+            "document_names": document_names,
             "columns": list(row.columns),
             "results": row.results,
             "cost_estimate_usd": row.cost_estimate_usd,

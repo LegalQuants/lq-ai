@@ -1126,6 +1126,15 @@ export interface TabularExecution {
 	skill_name: string | null;
 	status: TabularExecutionStatus;
 	document_ids: string[];
+	/**
+	 * Filenames in the same order as `document_ids` — joined from
+	 * `documents → files.filename` at response build time. Lets the
+	 * grid render human-readable headers from execution creation,
+	 * before any row is populated by the worker. Missing entries
+	 * (file soft-deleted between create and fetch) surface as the
+	 * empty string.
+	 */
+	document_names: string[];
 	columns: TabularColumnSpec[];
 	results: TabularResults | null;
 	cost_estimate_usd: string | null;

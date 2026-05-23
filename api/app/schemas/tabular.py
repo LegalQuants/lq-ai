@@ -199,6 +199,15 @@ class TabularExecutionResponse(BaseModel):
     skill_name: str | None
     status: TabularExecutionStatus
     document_ids: list[uuid.UUID]
+    document_names: list[str]
+    """Filenames in the same order as ``document_ids`` — joined from
+    ``documents → files.filename`` at response build time. Lets the
+    UI render grid headers with human-readable labels from the moment
+    the execution is created (before any row is populated by the
+    worker), instead of falling back to raw UUIDs. Missing entries
+    (file soft-deleted between create and fetch) surface as the empty
+    string; the UI treats those as "deleted document" placeholders."""
+
     columns: list[ColumnSpec]
     results: TabularResults | None = None
     cost_estimate_usd: Decimal | None = None

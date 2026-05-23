@@ -40,14 +40,24 @@
 	$: fraction = execution
 		? progressFraction(execution.status, execution.results, docCount, colCount)
 		: 0;
-	// Map document_id -> document_name from the populated rows. Rows
-	// that haven't been written yet leave the entry undefined; the
-	// grid falls back to rendering the raw UUID as the row label
-	// until the worker writes the row.
+	// Map document_id -> document_name. Primary source: the parallel
+	// `document_names` array on the execution (populated at every
+	// response build by joining documents → files.filename) so the
+	// grid renders human-readable headers from the moment the
+	// execution is created, before any row is written. Falls back to
+	// row.document_name (worker-written) for older executions that
+	// pre-date the document_names field.
 	$: documentNameById = (() => {
 		const m: Record<string, string> = {};
+		if (execution?.document_ids && execution?.document_names) {
+			const ids = execution.document_ids;
+			const names = execution.document_names;
+			for (let i = 0; i < ids.length; i++) {
+				if (names[i]) m[ids[i]] = names[i];
+			}
+		}
 		for (const row of execution?.results?.rows ?? []) {
-			m[row.document_id] = row.document_name;
+			if (!m[row.document_id]) m[row.document_id] = row.document_name;
 		}
 		return m;
 	})();
