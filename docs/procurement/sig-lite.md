@@ -1,8 +1,8 @@
-# SIG Lite — Privileged-Matter Handling (M2-D3 starter scope)
+# SIG Lite — Privileged-Matter Handling (M2-D3 starter) + M3 External Trust Boundaries
 
-> **Scope of this file**: a **focused starter** covering only the SIG Lite questions whose answers depend on the privileged-project handling implemented in M2-B3 / verified in M2-D3. The **full Procurement-Readiness Pack** (every SIG Lite domain, plus CAIQ, plus cover letter) is **out of scope here** and tracked as [DE-086](../PRD.md#de-086--procurement-readiness-pack); this file is the starter for that work.
+> **Scope of this file**: a **focused starter** covering (1) the SIG Lite questions whose answers depend on the privileged-project handling implemented in M2-B3 / verified in M2-D3, and (2) the questions raised by the **M3 external trust boundaries** — the Word add-in OAuth flow and the Slack / Teams light intake bridges. The **full Procurement-Readiness Pack** (every SIG Lite domain, plus CAIQ, plus cover letter) is **out of scope here** and tracked as [DE-086](../PRD.md#de-086--procurement-readiness-pack); this file is the starter for that work.
 >
-> Operators reviewing this file for their own procurement cycle should treat it as a complement to (not a substitute for) the full SIG Lite questionnaire. Items not covered here either don't bear on privileged-matter handling or belong to a SIG Lite domain DE-086 will fill in.
+> Operators reviewing this file for their own procurement cycle should treat it as a complement to (not a substitute for) the full SIG Lite questionnaire. Items not covered here either don't bear on these surfaces or belong to a SIG Lite domain DE-086 will fill in.
 
 ---
 
@@ -23,9 +23,9 @@ Each question below follows the format established in [`docs/procurement/README.
 
 **Project response.** LQ.AI provides a two-tier classification mechanism at the application layer:
 
-1. **Non-privileged matters** — the default. Anonymization Layer (PRD §4.7) pseudonymizes user/assistant chat content before transmission to the configured inference provider; retrieved source documents remain un-pseudonymized so the model can reason against intact source text (per [Decision M2-1](anonymization.md#what-gets-pseudonymized)). The pre-anonymization step covers the standard Presidio entity set (PERSON, ORGANIZATION, EMAIL_ADDRESS, PHONE_NUMBER, LOCATION) plus two custom legal recognizers (CaseNumberRecognizer, MatterNumberRecognizer per M2-B2). The post-anonymization step rehydrates pseudonyms back to originals in the model's response before it reaches the user.
+1. **Non-privileged matters** — the default. Anonymization Layer (PRD §4.7) pseudonymizes user/assistant chat content before transmission to the configured inference provider; retrieved source documents remain un-pseudonymized so the model can reason against intact source text (per [Decision M2-1](../security/anonymization.md#what-gets-pseudonymized)). The pre-anonymization step covers the standard Presidio entity set (PERSON, ORGANIZATION, EMAIL_ADDRESS, PHONE_NUMBER, LOCATION) plus two custom legal recognizers (CaseNumberRecognizer, MatterNumberRecognizer per M2-B2). The post-anonymization step rehydrates pseudonyms back to originals in the model's response before it reaches the user.
 
-2. **Privileged matters** — explicit operator/user designation via the `Project.privileged` flag (`docs/db-schema.md` → `projects` table). Anonymization is **disabled** for chats inside privileged projects (per [Decision A — privileged-skip](anonymization.md#privileged-chats--why-we-skip-m2-b3--m2-d3)): the content reaches the provider verbatim because rewriting privileged work product risks corrupting it and may complicate later assertion of privilege over the artifact. Privileged projects pair with `minimum_inference_tier` (DB CHECK constraint enforces non-NULL when `privileged=true`) so the operator can require local-only (Tier 1) routing for the most sensitive matters.
+2. **Privileged matters** — explicit operator/user designation via the `Project.privileged` flag (`docs/db-schema.md` → `projects` table). Anonymization is **disabled** for chats inside privileged projects (per [Decision A — privileged-skip](../security/anonymization.md#privileged-chats--why-we-skip-m2-b3--m2-d3)): the content reaches the provider verbatim because rewriting privileged work product risks corrupting it and may complicate later assertion of privilege over the artifact. Privileged projects pair with `minimum_inference_tier` (DB CHECK constraint enforces non-NULL when `privileged=true`) so the operator can require local-only (Tier 1) routing for the most sensitive matters.
 
 The control set differs by classification:
 
@@ -37,9 +37,9 @@ The control set differs by classification:
 | Audit `privilege_basis` | NULL | `project:<name>` | `project:<name>` |
 | Provider sees raw entity names | No (pseudonymized) | N/A (local) | Yes |
 
-**References:** [`docs/security/anonymization.md` §What gets pseudonymized](anonymization.md#what-gets-pseudonymized); [`docs/security/anonymization.md` §Privileged chats](anonymization.md#privileged-chats--why-we-skip-m2-b3--m2-d3); PRD §1.5.2 (Inference Tiers), PRD §4.7 (Anonymization Layer).
+**References:** [`docs/security/anonymization.md` §What gets pseudonymized](../security/anonymization.md#what-gets-pseudonymized); [`docs/security/anonymization.md` §Privileged chats](../security/anonymization.md#privileged-chats--why-we-skip-m2-b3--m2-d3); PRD §1.5.2 (Inference Tiers), PRD §4.7 (Anonymization Layer).
 
-**Honest validation posture for non-privileged classification.** The pseudonymization control described above runs on every non-privileged chat. Its **mechanism** (pre-substitute, transmit, post-rehydrate; per-request mapper, never persisted) is exercised end-to-end by integration tests including the round-trip correctness suite. Its **recognizer accuracy on legal-document corpus** is empirically unmeasured — Presidio's published metrics target general English (news, social media), not legal prose. Procurement reviewers evaluating residual-risk should read [`docs/security/anonymization.md` §"What's validated vs what's unvalidated"](anonymization.md#whats-validated-vs-whats-unvalidated) for the explicit "where to trust and where to be careful" framing, including the explicit "route to Tier 1 (local Ollama) if the unvalidated risk is unacceptable" guidance. Empirical validation on a curated legal-document corpus is welcomed as a community contribution per [PRD §9 / DE-282](../PRD.md#de-282--anonymization-layer-empirical-validation-on-legal-document-corpus).
+**Honest validation posture for non-privileged classification.** The pseudonymization control described above runs on every non-privileged chat. Its **mechanism** (pre-substitute, transmit, post-rehydrate; per-request mapper, never persisted) is exercised end-to-end by integration tests including the round-trip correctness suite. Its **recognizer accuracy on legal-document corpus** is empirically unmeasured — Presidio's published metrics target general English (news, social media), not legal prose. Procurement reviewers evaluating residual-risk should read [`docs/security/anonymization.md` §"What's validated vs what's unvalidated"](../security/anonymization.md#whats-validated-vs-whats-unvalidated) for the explicit "where to trust and where to be careful" framing, including the explicit "route to Tier 1 (local Ollama) if the unvalidated risk is unacceptable" guidance. Empirical validation on a curated legal-document corpus is welcomed as a community contribution per [PRD §9 / DE-282](../PRD.md#de-282--anonymization-layer-empirical-validation-on-legal-document-corpus).
 
 ---
 
@@ -59,7 +59,7 @@ The control set differs by classification:
 
 **`[OPERATOR-CONFIGURABLE]`** — For privileged matters routed at Tier 2 (enterprise ZDR upstream) rather than Tier 1 (local), the operator's procurement agreement / DPA / BAA with that provider is the binding contractual control covering the unsubstituted content. The application surfaces what tier was used per request via `inference_routing_log.routed_inference_tier`; the contractual control is the operator's responsibility to negotiate and maintain with the upstream.
 
-**References:** [`docs/security/anonymization.md` §Privileged chats](anonymization.md#privileged-chats--why-we-skip-m2-b3--m2-d3); PRD §3.11 (Projects), PRD §4.4 (Tier-Floor Enforcement), PRD §5.3 (Audit Log); `api/app/audit.py::_resolve_project_privilege`; `gateway/app/anonymization/middleware.py` skip conditions.
+**References:** [`docs/security/anonymization.md` §Privileged chats](../security/anonymization.md#privileged-chats--why-we-skip-m2-b3--m2-d3); PRD §3.11 (Projects), PRD §4.4 (Tier-Floor Enforcement), PRD §5.3 (Audit Log); `api/app/audit.py::_resolve_project_privilege`; `gateway/app/anonymization/middleware.py` skip conditions.
 
 ---
 
@@ -93,8 +93,96 @@ For privileged-matter compliance evidence specifically: `GET /admin/audit-log?pr
 
 ---
 
+## Third-Party / Supplier Management Domain (G — selected questions, M3 external trust boundaries)
+
+> The questions in this domain and the next cover the **M3 external trust boundaries**: the Word add-in (Office.js task pane authenticating against the deployment) and the Slack / Teams light intake bridges (OAuth install + identity binding). These surfaces accept inbound traffic from, or run inside, third-party platforms (Microsoft Word, Slack, Microsoft 365). They are **opt-in and operator-controlled**: the operator holds every credential, and LQ.AI remains a self-hosted product — **not** a SaaS intermediary that brokers data between the operator and the third-party platform. See [`docs/word-addin.md`](../word-addin.md) and [`docs/intake-bridges.md`](../intake-bridges.md) for the authoritative implementation state.
+
+### G.1.4 — Does the product integrate with third-party platforms, and if so, who holds the credentials for those integrations?
+
+**Project response.** Three optional third-party integrations exist as of M3; all are operator-controlled, and in every case the operator holds the credentials — LQ.AI does not mediate access through any project-held account.
+
+1. **Word add-in (Microsoft Word / Office.js)** — an Office.js task pane installed into the operator's Word clients via an XML manifest the operator generates from their own admin UI and sideloads through their Microsoft 365 Admin Center. The add-in authenticates against the **deployment's own JWT issuer** (the same one the web app uses), not a third-party IdP, MSAL, or WAM (Word Add-In Decision B-3). There is no LQ.AI-held credential and no third-party OAuth app registration required for the add-in's authentication path.
+
+2. **Slack intake bridge** — an OAuth install to a Slack workspace the operator administers. The operator registers their **own** Slack App (supplying `SLACK_CLIENT_ID` / `SLACK_CLIENT_SECRET` / `SLACK_SIGNING_SECRET`), and the resulting per-workspace bot token is stored **encrypted at rest** inside the operator's own deployment (see G.2.2 and the Access-Control domain below). LQ.AI holds no Slack credential centrally; each operator's deployment holds only its own.
+
+3. **Teams intake bridge** — an OAuth admin-consent install against a Microsoft 365 tenant, backed by an Azure AD **multi-tenant** app the operator registers (`MICROSOFT_APP_ID` / `MICROSOFT_APP_PASSWORD`). The credentials are **app-level**, held by the operator's deployment; **no per-tenant token is stored** (see G.2.2).
+
+**`[OPERATOR-CONFIGURABLE]`** — All three integrations are off by default. The bridges ship behind Docker Compose `slack` / `teams` profiles; an operator who does not enable a profile runs none of that service's code and carries none of its SBOM cost. The Word add-in is distributed only when the operator generates and sideloads the manifest. The operator decides which (if any) to enable and registers the corresponding third-party app(s) under accounts they own.
+
+**Honest integration-maturity posture.** What shipped in M3 for the bridges is **plumbing only** — the service scaffolds, OAuth handlers, bridge→api persistence path, at-rest token encryption, and the admin surface. The install / OAuth / identity-binding path was verified **in isolation** (service health, bridge-bearer auth, at-rest encryption confirmed as Fernet ciphertext, admin surfacing, soft-delete). A **real OAuth round-trip against a public-URL tunnel into a live Slack workspace / M365 tenant has never been exercised** — tracked as [DE-312](../intake-bridges.md#references) (P1). The user-facing `/lq` slash-command surface is deferred to M4 ([DE-288](../intake-bridges.md#references)). The Word add-in's in-document feature surface is likewise deferred to M4 ([DE-287](../word-addin.md#references)); v0.3.0 is install-authenticate-version-check plumbing only. Procurement reviewers should not read these integrations as fully-exercised end-to-end functionality.
+
+**References:** [`docs/intake-bridges.md` §Scope](../intake-bridges.md#scope), §Known limitations; [`docs/word-addin.md` §Scope](../word-addin.md#scope); PRD §3.9 (Word Add-In), PRD §3.15 (Slack / Teams Light Intake Bridge); `slack-bridge/app/oauth.py`, `teams-bridge/app/oauth.py`, `api/app/api/word_addin.py`.
+
+---
+
+### G.2.2 — Are third-party integration secrets (OAuth tokens, API keys) encrypted at rest?
+
+**Project response.** The posture differs by integration because the integrations have different credential models:
+
+- **Slack bridge** — the per-workspace bot token (`xoxb-…`) is encrypted at rest with **Fernet authenticated encryption** under a dedicated master key, `LQ_AI_BRIDGE_MASTER_KEY` (`api/app/security/encryption.py`, `BridgeTokenEncryptor`). The api encrypts the token **before** the row lands; the plaintext travels only the trusted in-cluster network under the bridge bearer, is never persisted in plaintext, and is omitted from any response echoed back to the bridge. The bridge master key is **deliberately distinct** from the gateway's provider-key master key (`LQ_AI_GATEWAY_MASTER_KEY`): a bot token's blast radius (bot impersonation in one workspace) and a provider key's blast radius (inference routing) are different threat models, so they do not share key material.
+
+- **Teams bridge** — there is **no per-tenant secret to encrypt**. Teams uses **app-level** bot credentials (one `MICROSOFT_APP_ID` / `MICROSOFT_APP_PASSWORD` per deployment, supplied as operator-held environment config), so the `teams_tenants` table stores only an identity tuple (tenant id, tenant display name, installing-admin object id) and no token at rest.
+
+- **Word add-in** — no integration secret is stored on the deployment side for the add-in. It authenticates with the deployment's standard user-facing JWTs, which live in the client's `localStorage` (the same exposure surface as the web app, not weakened by the add-in).
+
+**`[OPERATOR-CONFIGURABLE]`** — The operator generates `LQ_AI_BRIDGE_MASTER_KEY` once and stores it as they store other high-value secrets (password manager, secrets vault, hardware token). The encryptor reads it from the environment at construction and holds it in memory only; nothing in the module persists it. An operator who never enables the Slack bridge never needs this key.
+
+**References:** [`api/app/security/encryption.py`](../../api/app/security/encryption.py) (`BridgeTokenEncryptor`); [`docs/intake-bridges.md` §At-rest secret encryption](../intake-bridges.md#at-rest-secret-encryption), §No per-tenant token; `api/app/api/integrations_slack.py`, `api/app/api/integrations_teams.py`; ADR-0011 (gateway Fernet pattern, mirrored without shared key material).
+
+---
+
+## Access Control & Application Security Domain (I — selected questions, M3 external trust boundaries)
+
+### I.3.1 — How are service-to-service and external-platform callbacks authenticated and authorized?
+
+**Project response.** Each M3 external surface uses an authentication model scoped to its trust relationship:
+
+- **Bridge → api (service-to-service).** Every bridge→api persistence POST carries a single shared bearer, `LQ_AI_BRIDGE_TOKEN`, matched **constant-time** (`secrets.compare_digest`) by the api's `require_bridge_auth` dependency (`api/app/api/dependencies.py`). This is service-to-service auth with **no user context** — it is never a user JWT. Fail-safe: if `LQ_AI_BRIDGE_TOKEN` is unset on the api, the dependency raises 500 and refuses all bridge traffic rather than running open. M3-E1 confirmed wrong-token → 401, correct-token → 201.
+
+- **Admin management surface (human admin).** The admin intake-bridges list/delete endpoints (`api/app/api/admin_intake_bridges.py`) require an authenticated user JWT (bearer + must-change-password gate) **plus** an admin-role check; a non-admin authenticated user receives 403 `forbidden`. This is distinct from the service-to-service posture on the persistence endpoints.
+
+- **OAuth CSRF protection.** Both bridges mint a single-use, TTL-bounded `state` token on install initiation and verify it on callback (popped on read, replay-protected). State tokens are held in-memory in the single-instance bridge; a bridge restart mid-install invalidates the in-flight install and the operator restarts it.
+
+- **Inbound Slack webhook signatures.** The Slack `/slack/events` endpoint verifies the Slack HMAC-SHA256 request signature (5-minute replay window) on **every** request before any handling — shipped now so the deferred slash-command handler lands on a verified substrate, even though the handler is otherwise inert at v0.3.0.
+
+- **Word add-in OAuth.** The task pane authenticates over the Office.js Dialog API against the deployment's own JWT issuer; the dialog navigates only to `{deployment_origin}/lq-ai/word-addin/oauth-start` (same origin as the pane). `messageParent` payloads from the dialog are parsed defensively — malformed JSON, unexpected types, and dialog-API failures resolve to a typed error/cancelled outcome rather than throwing.
+
+**Honest caveat (OAuth surface).** Because the real OAuth round-trip against a public tunnel has never run for the bridges ([DE-312](../intake-bridges.md#references), P1), the bridges' behavior under a genuine provider callback — live `state` round-trip, redirect-URI matching, token-exchange error handling against the real provider endpoints — is verified only by unit tests and isolated POST simulation, not by an end-to-end install. Treat the bridge OAuth surface as "implemented and unit-tested" rather than "proven against the live providers" until DE-312 closes.
+
+**References:** [`docs/intake-bridges.md` §Security / threat model](../intake-bridges.md#security--threat-model); [`docs/word-addin.md` §OAuth flow](../word-addin.md#oauth-flow-m3-b2), §Threat model; `api/app/api/dependencies.py` (`require_bridge_auth`), `api/app/api/admin_intake_bridges.py`; `slack-bridge/app/signing.py`.
+
+---
+
+### I.4.2 — What identity and permission scope do the third-party integrations carry, and do their stored identity claims grant any application authority?
+
+**Project response.** The integrations request narrow scopes and store identity claims for audit only — no stored identity claim grants any LQ.AI permission.
+
+- **Scope narrowness.** The Slack bridge requests exactly two bot scopes (`commands`, `chat:write`) — no `channels:read` / `groups:read` / `im:read`, so **the bot does not read silent channels**; it acts only on explicit user invocations (a surface that itself is deferred to M4). The Teams bridge requests `openid` / `profile` / `email` / `offline_access` / `User.Read` — `User.Read` is the narrowest scope returning a Graph-usable token for the best-effort tenant display-name lookup. The Word add-in declares `ReadWriteDocument` in its manifest, but **no shipped code exercises it** at v0.3.0 — the permission is declared ahead of the deferred feature surface (DE-287), so the granted permission currently exceeds what the shipped code uses; reviewers should note this gap.
+
+- **Identity claims are audit-only.** The Slack installer's user id, the Teams installing-admin object id, and the Teams tenant id are stored as **audit/identity fields only** and grant no LQ.AI-side permission. The Teams `id_token` is decoded **without signature verification** to read the tenant / admin claims — this is safe because the token arrived over TLS via the bridge's `client_secret`-authenticated POST to Microsoft's token endpoint, and the claims confer no authority.
+
+- **No add-in-scoped audience.** The Word add-in uses the same bearer-token shape as the web app — no `aud: word-addin` claim. The add-in is the **same trust principal** as the web app today, not a separately revocable one; this is documented honestly rather than overstated.
+
+**References:** [`docs/intake-bridges.md` §Scopes — narrow on purpose](../intake-bridges.md#scopes--narrow-on-purpose), §Identity claims grant no authority; [`docs/word-addin.md` §No add-in-scoped token](../word-addin.md#no-add-in-scoped-token), §Document permissions; `slack-bridge/manifest.yml`, `teams-bridge/manifest.json`, `word-addin/manifest.xml`.
+
+---
+
+### I.5.3 — How is software from this product distributed and verified at install time (supply-chain integrity at the install boundary)?
+
+**Project response.** Relevant to the Word add-in specifically. At v0.3.0 the add-in ships **only the unsigned-manifest sideload path**: the operator generates an XML manifest from their own admin UI and uploads it through their Microsoft 365 Admin Center. **M365 will warn the admin that the add-in is unsigned during upload** — this warning is expected and correct at v0.3.0, because the project does not yet hold a code-signing certificate. Two properties bound the residual risk:
+
+1. The trust decision rests with the operator's **own admin**, who is uploading a manifest they generated from their own deployment's admin UI. The manifest points only at the operator's own `DEPLOYMENT_ORIGIN` (a single `<AppDomain>`), so the install does not widen the navigation surface beyond the deployment the admin already trusts.
+
+2. The add-in's installed version is **baked into the bundle** (`__ADDIN_VERSION__`), not read from the API, so a tampered version-handshake response cannot misrepresent the add-in's own version to bypass the compatibility gate. The handshake's optional bundle-hash field ships `null` (don't-enforce) at v0.3.0, so the add-in cannot yet detect a stale-cached bundle.
+
+**`[OPERATOR-CONFIGURABLE]` / honest gap.** A **signed** manifest + signed distribution package would let the admin verify provenance cryptographically rather than trust the generation flow. That work is [DE-295](../word-addin.md#references) (community-led, gated on code-signing certificate procurement). Until it lands, the unsigned path must **not** be represented as equivalent to a signed enterprise distribution.
+
+**References:** [`docs/word-addin.md` §Unsigned-manifest posture](../word-addin.md#unsigned-manifest-posture), §Version handshake integrity; PRD §3.9; `word-addin/manifest.xml`, `api/app/api/word_addin.py`.
+
+---
+
 ## Out of scope for this file
 
-The full SIG Lite questionnaire covers 18 domains spanning data protection, access controls, network security, vulnerability management, incident response, business continuity, supplier management, and more. This starter file covers only the questions whose responses materially differ depending on the privileged-project handling.
+The full SIG Lite questionnaire covers 18 domains spanning data protection, access controls, network security, vulnerability management, incident response, business continuity, supplier management, and more. This starter file covers only the questions whose responses materially differ depending on the privileged-project handling (D, L) or the M3 external trust boundaries — the Word add-in and the Slack / Teams intake bridges (G, I).
 
 For the full procurement-readiness pack — pre-filled responses across every SIG Lite domain plus CAIQ Lite plus a cover letter template — see [DE-086](../PRD.md#de-086--procurement-readiness-pack). Community contributions to that work are explicitly welcomed; see [`docs/procurement/README.md` §Contributing](README.md#contributing) for the contribution path.

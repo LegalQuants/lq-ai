@@ -790,7 +790,7 @@ chunk.
 
 ---
 
-## Saved prompts (per [DE-013](docs/PRD.md#de-013--saved-prompts-library) / Issue 04)
+## Saved prompts (per [DE-013](PRD.md#de-013--saved-prompts-library) / Issue 04)
 
 ```sql
 CREATE TABLE saved_prompts (
@@ -988,7 +988,7 @@ CREATE INDEX idx_inference_log_refused ON inference_routing_log(timestamp DESC) 
 
 ---
 
-## Playbooks (per [PRD §3.7](docs/PRD.md#37-playbooks), M3-A1)
+## Playbooks (per [PRD §3.7](PRD.md#37-playbooks), M3-A1)
 
 Substrate for the Playbook engine landing in M3. A playbook codifies an
 organization's standard positions and fallback positions on common
@@ -1025,7 +1025,7 @@ CREATE TABLE playbooks (
 playbook stays available to the rest of the team — playbooks outlive
 their individual authors (matches the project / skill ownership model).
 
-`contract_type` is free-form per [PRD §3.7](docs/PRD.md#37-playbooks);
+`contract_type` is free-form per [PRD §3.7](PRD.md#37-playbooks);
 the canonical values used by the M3-A3 / M3-A5 built-ins are `'NDA'`,
 `'NDA-unilateral'`, `'MSA-SaaS'`, `'MSA-Commercial'`, `'DPA'`, but
 operators may define their own without a migration.
@@ -1098,6 +1098,184 @@ intact even after the actor or matter is removed. The
 `target_document_id` FK is `ON DELETE CASCADE` because an execution
 against a deleted document has no anchor (the source the executor
 ran against is gone).
+
+---
+
+## Tabular review (per [PRD §3.14](PRD.md#314-tabular--multi-document-review-m3), M3-C2)
+
+Substrate for the Tabular / Multi-Document Review surface
+([docs/tabular-review.md](tabular-review.md)) landing in M3. Each
+execution walks a `documents × columns` grid and produces a
+row-per-document by column-per-spec result, run as a LangGraph workflow
+on the existing `arq:m3a6` queue (Decision C-3 from the Phase C prep
+doc: reuse the queue rather than add a second worker container). One
+table, introduced by migration `0036_tabular_executions.py`:
+
+* `tabular_executions` — one row per execution; persists the inputs +
+  status + assembled grid so the result view can re-render a week later.
+
+### `tabular_executions` (M3)
+
+```sql
+CREATE TABLE tabular_executions (
+    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id              UUID REFERENCES users(id) ON DELETE SET NULL,
+    parent_execution_id  UUID REFERENCES tabular_executions(id) ON DELETE SET NULL,
+    skill_name           TEXT,                                          -- filesystem-canonical skill name; NULL for ad-hoc column lists
+    status               TEXT NOT NULL DEFAULT 'pending',
+    document_ids         UUID[] NOT NULL DEFAULT '{}'::uuid[],          -- snapshot of source documents; NOT an FK
+    columns              JSONB NOT NULL DEFAULT '[]'::jsonb,            -- resolved column spec snapshotted at execution start
+    results              JSONB,                                         -- assembled grid; populated when status='completed'
+    cost_estimate_usd    NUMERIC(10,4),                                 -- operator-confirmed estimate at start
+    cost_actual_usd      NUMERIC(10,4),                                 -- backfilled incrementally as cells complete
+    error_text           TEXT,                                          -- populated when status='failed'
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    started_at           TIMESTAMPTZ,
+    completed_at         TIMESTAMPTZ,
+    deleted_at           TIMESTAMPTZ,                                   -- soft-delete
+
+    CONSTRAINT chk_tabular_executions_status
+        CHECK (status IN ('pending','running','completed','failed','cancelled')),
+    CONSTRAINT fk_tabular_executions_user_id
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_tabular_executions_parent_execution_id
+        FOREIGN KEY (parent_execution_id) REFERENCES tabular_executions(id) ON DELETE SET NULL
+);
+
+-- The list endpoint sorts the caller's non-deleted executions by recency.
+CREATE INDEX idx_tabular_executions_user_recent
+    ON tabular_executions (user_id, created_at DESC)
+    WHERE deleted_at IS NULL;
+
+-- Bulk-op siblings query their parent.
+CREATE INDEX idx_tabular_executions_parent
+    ON tabular_executions (parent_execution_id)
+    WHERE parent_execution_id IS NOT NULL;
+```
+
+Status lifecycle: `pending → running → completed | failed | cancelled`.
+The CHECK constraint pins the enum at the storage layer so an
+application bug can't insert an invalid value. `cancelled` is reached
+via `POST /tabular/executions/{id}/cancel` before the worker finishes;
+all three terminal states set `completed_at`.
+
+`user_id` is `ON DELETE SET NULL` so historical executions survive
+operator deletion (matches `playbook_executions` and
+`easy_playbook_generations`).
+
+`parent_execution_id` is a nullable self-FK (`ON DELETE SET NULL`),
+non-NULL only on bulk-op sibling rows. Per Decision C-9, a bulk
+operation (e.g., "Redline column N") spawns a child `tabular_executions`
+row pointing at the original rather than mutating the original grid —
+preserving the original's auditability. Deleting a parent does not
+cascade-delete its siblings.
+
+`document_ids` is the snapshot of source document UUIDs from the
+caller's selection. It is deliberately **not** a foreign key: documents
+can be soft-deleted after the execution completes, and the audit row is
+preserved regardless (matches the `easy_playbook_generations` pattern).
+Document display names are carried inside the `results` grid rows, not
+in a dedicated column.
+
+`columns` is the resolved column spec snapshotted at execution start —
+either the skill's `lq_ai.columns` block at that moment, or the
+operator's ad-hoc list typed in the wizard's column step. Snapshotting
+is the load-bearing invariant: re-rendering the grid later must be
+honest about what was actually run, not what the skill currently says.
+
+`results` is the assembled grid shape
+`{rows: [{document_id, document_name, cells: {column_name: CellResult}}]}`,
+populated once status is `completed` (may carry partial output on
+`failed`).
+
+Soft delete via `deleted_at` matches the `playbooks.deleted_at` posture
+from M3-A6's migration 0034.
+
+---
+
+## Intake bridges (per [PRD §3.15](PRD.md#315-intake-bridges-m3), M3-D)
+
+Substrate for the Slack and Microsoft Teams intake bridges
+([docs/intake-bridges.md](intake-bridges.md)) landing in M3-D. Each
+bridge runs its own OAuth install flow in a dedicated service
+(`slack-bridge`, `teams-bridge`) and POSTs the resulting install tuple
+to the backend, which persists one row per connected workspace/tenant.
+Two tables, introduced by migrations `0037_slack_workspaces.py` and
+`0038_teams_tenants.py`. Both use a natural-key unique constraint and
+soft-delete; the persistence endpoints **upsert on the natural key**,
+reviving a soft-deleted row (setting `deleted_at` back to NULL) on
+re-install.
+
+### `slack_workspaces` (M3-D1)
+
+```sql
+CREATE TABLE slack_workspaces (
+    id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    team_id                  TEXT NOT NULL,                            -- Slack workspace id (T0123456...); natural key
+    team_name                TEXT NOT NULL,                           -- snapshotted at install; not auto-refreshed
+    bot_token_encrypted      BYTEA NOT NULL,                          -- Fernet-wrapped xoxb-... bot token
+    bot_user_id              TEXT NOT NULL,                           -- Slack user id of the install's bot user (U0123456...)
+    installer_slack_user_id  TEXT NOT NULL,                           -- operator who clicked install; audit-only
+    scope                    TEXT NOT NULL,                           -- comma-separated OAuth scope list, verbatim
+    installed_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+    deleted_at               TIMESTAMPTZ,                             -- soft-delete; upsert revives to NULL
+
+    CONSTRAINT uq_slack_workspaces_team_id UNIQUE (team_id)
+);
+```
+
+`bot_token_encrypted` is `BYTEA` holding the Fernet ciphertext of the
+bot user OAuth token (`xoxb-...`). It is encrypted at rest under
+`LQ_AI_BRIDGE_MASTER_KEY` — deliberately **separate** from the
+gateway's provider-key master key (Decision M3-D1-1: Slack bot tokens
+enable bot impersonation, provider keys enable inference routing —
+different blast radii, different keys). Decrypted in-memory only when
+the bridge needs to post a reply.
+
+`team_id` is the natural key from Slack's side and carries the only
+unique constraint; the upsert path conflicts on it. Per Decision
+M3-D1-2, Slack rotates the bot token on re-install, so the upsert
+replaces `bot_token_encrypted` + `installer_slack_user_id` + `scope`
+and revives `deleted_at`. No separate index on `team_id` — the unique
+constraint's backing index covers it.
+
+`installer_slack_user_id` is audit-only and grants no LQ.AI
+permissions; `scope` is stored verbatim so an operator can audit what
+the workspace consented to.
+
+### `teams_tenants` (M3-D3)
+
+```sql
+CREATE TABLE teams_tenants (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id      TEXT NOT NULL,                                    -- Microsoft tenant (M365 directory) GUID; natural key
+    tenant_name    TEXT NOT NULL,                                   -- displayName at install; not auto-refreshed
+    installer_oid  TEXT NOT NULL,                                   -- M365 oid claim of the admin who consented; audit-only
+    installed_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    deleted_at     TIMESTAMPTZ,                                     -- soft-delete; upsert revives to NULL
+
+    CONSTRAINT uq_teams_tenants_tenant_id UNIQUE (tenant_id)
+);
+```
+
+There is **no encrypted-token column**, and this is deliberate. Unlike
+Slack (which issues per-workspace bot tokens), Microsoft Teams uses
+**app-level bot credentials** — the bot authenticates to the Bot
+Framework with the operator's single `MICROSOFT_APP_ID` +
+`MICROSOFT_APP_PASSWORD` regardless of which tenant it runs in. So
+there is no per-tenant secret to persist; this table only carries the
+identity-binding fields the admin UI (M3-D4) needs to surface "the bot
+is installed in tenant X". (Per-user refresh-token storage for an M4
+on-behalf-of flow is a future column, not present today.)
+
+`tenant_id` is the natural key from Microsoft's side and carries the
+only unique constraint. Per Decision M3-D3-2 the persistence endpoint
+upserts on it: a re-install in the same M365 tenant replaces
+`tenant_name` + `installer_oid` and revives `deleted_at`. The bridge
+runs as a multi-tenant Microsoft identity-platform app (Decision
+M3-D3-4), so this table can hold rows for many tenants concurrently.
+
+`installer_oid` is audit-only and grants no LQ.AI permissions.
 
 ## M4+ tables (sketched, land at the indicated milestone)
 
@@ -1191,7 +1369,8 @@ CREATE INDEX idx_relationships_target ON contract_relationships(target_file_id);
 - `0002_skills.py` creates skills + reference + example tables.
 - `0003_audit_log.py` creates audit_log + inference_routing_log.
 - M2 migrations add citation-engine fields.
-- M3 migrations add playbooks, playbook_runs.
+- M3 migrations add playbooks, tabular_executions (M3-C2), and the
+  intake-bridge tables slack_workspaces (M3-D1) + teams_tenants (M3-D3).
 - M4 migrations add autonomous_tasks, contract_relationships.
 
 Migration conventions:

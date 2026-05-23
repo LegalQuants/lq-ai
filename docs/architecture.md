@@ -32,12 +32,13 @@ flowchart TB
             direction LR
             proj["<b>Project Service</b><br/>matter-scoped<br/>containers<br/>privilege flag<br/><i>M1</i>"]
             skill["<b>Skill Service</b><br/>incl. Org Profile<br/>singleton<br/><i>M1</i>"]
-            playbook["<b>Playbook Service</b><br/>LangGraph<br/>workflows<br/><i>M3</i>"]
+            playbook["<b>Playbook + Tabular Service</b><br/>LangGraph workflows:<br/>playbook execute · Easy Playbook ·<br/>tabular multi-doc review<br/><i>M3</i>"]
             doc["<b>Document Pipeline</b><br/>Docling + PyMuPDF +<br/>OCR + Citation Engine<br/><i>M2</i>"]
             knowledge["<b>Knowledge Service</b><br/>pgvector + FTS;<br/>contract-relationship<br/>graph in M4<br/><i>M1/M4</i>"]
             autonomous["<b>Autonomous Layer</b><br/>Pipelines · cron ·<br/>watches · per-user<br/>memory<br/><i>M4</i>"]
         end
 
+        worker["<b>Async Workers</b><br/>arq-worker — Easy Playbook +<br/>Tabular Review (arq:m3a6 queue)<br/>ingest-worker — document pipeline<br/><i>M1 ingest · M3 arq-worker</i>"]
         mcp["<b>MCP-Client Subsystem</b><br/>integration substrate;<br/>architectural slot opened in M2<br/>even though no connectors ship until M5+<br/><i>M2 slot</i>"]
         signal["<b>Signal Aggregation Service</b><br/>workspace events<br/>via MCP<br/><i>M5+ forward-looking</i>"]:::forwardLooking
     end
@@ -134,6 +135,14 @@ flowchart TB
     api --> redis
     doc --> minio
     api -->|audit log| postgres
+
+    %% =========================================
+    %%   EDGES — async workers (M1 ingest · M3 arq)
+    %% =========================================
+    redis -->|"dequeue jobs"| worker
+    worker -->|"inference"| gateway
+    worker -->|"results / chunks"| postgres
+    worker --> minio
 
     %% =========================================
     %%   EDGES — gateway to providers
@@ -248,14 +257,14 @@ M1 is the foundation release: a self-hostable deployment that delivers conversat
 
 ### M3 — Playbooks, Word Add-In, Tabular Review, Slack/Teams
 
-**Adds:**
-- Playbook Service with LangGraph executor and the Easy Playbook auto-generation wizard.
-- Word Add-In **plumbing** — scaffold + OAuth (M3-B2) + signed manifest + distribution package (M3-B7) + self-served JS bundle + version handshake (M3-B8). The task pane is installable and authenticated against the operator's deployment; the in-Word feature surface inside each tab (chat against the open document, skills with tracked changes, playbook execution, Inference Tier badge) is deferred to M4 / community contribution per [PRD §9 DE-287](PRD.md#de-287--word-add-in-feature-surface-chat-skills-playbooks-tier-badge--deferred-to-m4--community-contribution).
-- Tabular Review surface and `output_format: table` skill mode.
-- Slack/Teams Light Intake Bridge **plumbing** — `slack-bridge` + `teams-bridge` services with OAuth install + admin UI shell. The `/lq` slash-command surface is deferred to M4 / community contribution per [PRD §9 DE-288](PRD.md#de-288--slackteams-lq-slash-command--quick-skill-flow--deferred-to-m4--community-contribution).
-- Second `arq` worker process (`arq-worker`) for long-running Playbook Service jobs — the Easy Playbook generation pipeline runs there to keep within the PRD §3.7 <10-minute NFR without competing with document ingest jobs on the existing `ingest-worker` queue.
+**Adds (all shipped in M3; fresh-install-verified at M3-E1):**
+- Playbook Service with LangGraph executor and the Easy Playbook auto-generation wizard. Per-position assessments carry verbatim `matched_text` + `cited_chunk_ids` (lexical-FTS anchoring), **not** the M2 Citation Engine verification cascade — Citation Engine integration for the playbook/tabular executors is deferred. See [docs/playbooks.md](playbooks.md).
+- Word Add-In **plumbing** — scaffold + OAuth (M3-B2) + self-served JS bundle + version handshake (M3-B8). The task pane is installable via the **unsigned-manifest** path (Microsoft 365 Admin Center) and authenticated against the operator's deployment. The in-Word feature surface inside each tab (chat against the open document, skills with tracked changes, playbook execution, Inference Tier badge) is deferred to M4 / community per [PRD §9 DE-287](PRD.md#9-deferred-enhancements-and-identified-future-work); the **signed manifest + enterprise distribution package (M3-B7)** is descoped to a community-led effort per [PRD §9 DE-295](PRD.md#9-deferred-enhancements-and-identified-future-work) — only the unsigned-manifest sideload path ships at v0.3.0. See [docs/word-addin.md](word-addin.md).
+- Tabular Review surface and `output_format: table` skill mode (M3-C1/C2) + XLSX/CSV export (M3-C4a). Per-cell citations are surfaced as display-only chunk references (not Citation-Engine-resolved — [DE-309](PRD.md#9-deferred-enhancements-and-identified-future-work)). See [docs/tabular-review.md](tabular-review.md).
+- Slack/Teams Light Intake Bridge **plumbing** — `slack-bridge` + `teams-bridge` services with OAuth install + admin UI shell. The `/lq` slash-command surface is deferred to M4 / community per [PRD §9 DE-288](PRD.md#9-deferred-enhancements-and-identified-future-work). The plumbing was verified **in isolation only** — a real OAuth round-trip against a public-URL tunnel has not been exercised ([DE-312](PRD.md#9-deferred-enhancements-and-identified-future-work), P1). See [docs/intake-bridges.md](intake-bridges.md).
+- Second `arq` worker process (`arq-worker`) for long-running Playbook + Tabular jobs (the `arq:m3a6` queue) — the Easy Playbook generation and tabular extraction pipelines run there to keep within the PRD §3.7 <10-minute NFR without competing with document ingest jobs on the existing `ingest-worker` queue.
 
-**Word add-in delivery flow.** The Word add-in's static bundle (`taskpane.html` + JS + CSS + manifest icons) lives at `word-addin/` and webpacks into `web/static/word-addin/`. The web container's SvelteKit build picks the directory up via the existing `COPY . .` step, so the bundle is served at `{deployment_origin}/word-addin/...` without any new routing logic. Operators generate per-deployment manifests via the admin UI (`/lq-ai/admin/word-addin` → `GET /api/v1/admin/word-addin/manifest`), which templates the operator's deployment URL into the XML, then sideload via Microsoft 365 Admin Center. M3-B7 wraps the signed manifest into a versioned GitHub Release asset for enterprise sideload; M3-B8 adds a version-handshake endpoint (`GET /api/v1/word-addin/version`) so the task pane surfaces a clear "update needed" overlay when the installed add-in version drifts from the deployment.
+**Word add-in delivery flow.** The Word add-in's static bundle (`taskpane.html` + JS + CSS + manifest icons) lives at `word-addin/` and webpacks into `web/static/word-addin/`. The web container's SvelteKit build picks the directory up via the existing `COPY . .` step, so the bundle is served at `{deployment_origin}/word-addin/...` without any new routing logic. Operators generate per-deployment manifests via the admin UI (`/lq-ai/admin/word-addin` → `GET /api/v1/admin/word-addin/manifest`), which templates the operator's deployment URL into the XML, then sideload the **unsigned** manifest via Microsoft 365 Admin Center (which warns about the unsigned add-in — expected at v0.3.0). M3-B8 adds a version-handshake endpoint (`GET /api/v1/word-addin/version`) so the task pane surfaces a clear "update needed" overlay when the installed add-in version drifts from the deployment. The signed manifest + versioned distribution asset (M3-B7) is descoped to a community-led effort once code-signing-certificate procurement closes — see [PRD §9 DE-295](PRD.md#9-deferred-enhancements-and-identified-future-work).
 
 ### M4 — Autonomous Layer and Contract Repository
 

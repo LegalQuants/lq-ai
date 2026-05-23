@@ -45,7 +45,7 @@ The wire shape `ColumnSpec` is defined twice on purpose — `app.skills.schema.C
 
 ## Persisted row shape
 
-The `tabular_executions` table (migration 0036) carries a 5-state status (`pending` / `running` / `completed` / `failed` / `cancelled`) with a soft-delete column, plus `document_ids`, `document_names`, `columns`, `skill_name`, `results` (JSONB), `cost_estimate_usd`, `cost_actual_usd`, `error_text`, and the usual timestamps.
+The `tabular_executions` table (migration 0036) carries a 5-state status (`pending` / `running` / `completed` / `failed` / `cancelled`) with a soft-delete column, plus `document_ids`, `columns`, `skill_name`, `results` (JSONB), `cost_estimate_usd`, `cost_actual_usd`, `error_text`, a `parent_execution_id` self-reference (non-null on bulk-op sibling rows), and the usual timestamps. (The per-document display names returned by the API as `document_names` are **not** a stored column — they are assembled onto the response from the documents' parent filenames; see [docs/db-schema.md](db-schema.md).)
 
 The `results` JSONB (validated by `app.schemas.tabular.TabularResults`) is:
 

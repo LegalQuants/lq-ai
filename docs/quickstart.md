@@ -263,6 +263,50 @@ The PRD's [Inference Choice Spectrum (§1.5.2)](PRD.md#15-deployment-modes-and-t
 
 ---
 
+## Verify the M3 surfaces (fresh-install walkthrough)
+
+Steps 1–7 cover the M1 experience. This section walks the **M3** capabilities — Playbooks, Tabular Review, and the Word add-in — end-to-end on a fresh install, using the synthetic NDA corpus. A mid-level engineer should be able to follow it without reading source. (This is the same path used for the M3-E1 pre-tag fresh-install verification.)
+
+### M3.0 — Bring the stack up (with the optional intake bridges)
+
+The Slack and Teams intake bridges are **opt-in** Compose profiles. To bring them up alongside the core stack:
+
+```bash
+docker compose --profile slack --profile teams up -d --build
+```
+
+You should see ten healthy services: `api`, `gateway`, `web`, `postgres`, `redis`, `minio`, `arq-worker`, `ingest-worker`, `slack-bridge`, `teams-bridge`. (Omit the `--profile` flags to skip the bridges — see the [intake-bridges doc](intake-bridges.md) for what the bridges need before they're useful, and note that a real Slack/Teams OAuth round-trip has not yet been exercised end-to-end — [DE-312](PRD.md#9-deferred-enhancements-and-identified-future-work).)
+
+> **Port already in use?** If `docker compose up` fails with `address already in use` on `5432` (or `6379` / `9000`), you already run a host Postgres/Redis/MinIO. Remap the host-side port in `.env` — e.g. `POSTGRES_HOST_PORT=15432` — and re-run. The stack's internal traffic stays on the default ports; only the host mapping shifts. See [Troubleshooting](#docker-compose-up-fails-with-address-already-in-use).
+
+Confirm the migration head is current:
+
+```bash
+docker compose exec api alembic current   # expect 0038 (head)
+```
+
+### M3.1 — Attach the synthetic corpus
+
+The repo ships five synthetic mutual NDAs at [`docs/quickstart/sample-ndas/`](quickstart/sample-ndas/) (and sample MSAs at `docs/quickstart/sample-msas/`). In the web app, upload the five NDA PDFs (**Knowledge** → upload, or attach them to a Project). Wait for each to finish ingestion (status `ready`). The corpus is designed to vary on five negotiation axes — see [its README](quickstart/sample-ndas/README.md).
+
+### M3.2 — Run a built-in Playbook against one NDA
+
+Open **Playbooks**. Five built-ins are seeded (NDA — Mutual, NDA — Unilateral, MSA — SaaS, MSA — Commercial-Purchase, DPA — GDPR). Apply **NDA — Mutual** to one uploaded NDA. The execution runs the LangGraph cascade (retrieve → classify → redline → compile) and returns a per-position assessment — for the NDA-Mutual playbook, eight positions, each with a verdict (`matches_standard` / deviation / missing), a confidence, and the `matched_text` (the verbatim clause the classifier matched). See [docs/playbooks.md](playbooks.md). *(These per-position references are FTS-anchored `matched_text`, not the M2 Citation Engine verification cascade — that integration is deferred.)*
+
+### M3.3 — Generate a Playbook from prior agreements (Easy Playbook wizard)
+
+Open **Playbooks → Generate from prior agreements**. Pick contract type **NDA**, upload (or select) all five sample NDAs, and click **Generate playbook**. The wizard uploads → polls until each file is parsed → runs the clustering pipeline on the `arq-worker` (typically 3–6 minutes for five documents). The Step 3 inline editor surfaces the clustered positions with a modal standard value + ranked fallback tiers. Edit / approve / save. See [docs/playbooks.md](playbooks.md). *(Clustering currently over-segments — expect more positions than the corpus's five designed axes; tracked as [DE-308](PRD.md#9-deferred-enhancements-and-identified-future-work).)*
+
+### M3.4 — Run a Tabular Review across the five NDAs
+
+Open **Tabular Review**. Select the five NDAs and define four columns (e.g. *Term*, *Confidential Info Definition*, *Standard of Care*, *Governing Law*) — or pick a `output_format: table` skill. Confirm the cost preview, then run. The grid fills in one cell per `(document, column)`; click any cell to open the citation drawer (the grounding chunks). Export to **XLSX** or **CSV** from the result view. See [docs/tabular-review.md](tabular-review.md). *(Per-cell citations are display-only chunk references — [DE-309](PRD.md#9-deferred-enhancements-and-identified-future-work); per-cell cost/tier read 0 — [DE-310](PRD.md#9-deferred-enhancements-and-identified-future-work).)*
+
+### M3.5 — Install the Word add-in (unsigned-manifest path)
+
+Open **Admin → Word add-in** (`/lq-ai/admin/word-addin`) and generate a manifest — it templates your deployment URL into the XML. Sideload it in Word desktop via the **Microsoft 365 Admin Center** (it will warn about the unsigned add-in — expected at v0.3.0). The task pane loads, completes OAuth against your deployment, and the version handshake confirms compatibility. The in-pane feature surface (chat, skills, playbooks) is deferred to M4 ([DE-287](PRD.md#9-deferred-enhancements-and-identified-future-work)); the signed/distributed manifest is community-led ([DE-295](PRD.md#9-deferred-enhancements-and-identified-future-work)). See [docs/word-addin.md](word-addin.md).
+
+---
+
 ## What you've just done
 
 In about 20 minutes you have:
@@ -283,7 +327,7 @@ That is the full M1 experience compressed into one walkthrough. The same flow ap
 
 ### Try other starter skills
 
-The 10 starter skills are listed in the [README](README.md#starter-skills-ship-with-m1). Each has its own input schema and output style; calibration is documented in the per-skill test plan ([NDA Review test plan](skills/nda-review/test-plan.md), [MSA Review SaaS test plan](skills/msa-review-saas/test-plan.md), etc.). The most informative second skill to try, depending on your practice:
+The 10 starter skills are listed in the [README](../README.md#starter-skills-ship-with-m1). Each has its own input schema and output style; calibration is documented in the per-skill test plan ([NDA Review test plan](../skills/nda-review/test-plan.md), [MSA Review SaaS test plan](../skills/msa-review-saas/test-plan.md), etc.). The most informative second skill to try, depending on your practice:
 
 - **Contract QA** if you want to see citation-grounded Q&A against the same sample NDA.
 - **MSA Review — SaaS** if you have a SaaS contract handy. (For a public sample, see SEC EDGAR — many tech-company 10-Ks include SaaS-style MSAs as exhibits.)
@@ -297,7 +341,7 @@ LQ.AI ships with the **Easy Playbook wizard** — a 4-step flow that turns a cor
 
 ### Source documents from your practice
 
-The sample NDA is a synthetic demo; for real value, run the skills against documents from your actual practice (or SEC EDGAR for public-domain alternatives). The acceptance-testing framework documents what corpus a thorough evaluation needs ([acceptance-testing-framework.md](docs/acceptance-testing-framework.md#test-corpus-requirements-operator-provided)).
+The sample NDA is a synthetic demo; for real value, run the skills against documents from your actual practice (or SEC EDGAR for public-domain alternatives). The acceptance-testing framework documents what corpus a thorough evaluation needs ([acceptance-testing-framework.md](acceptance-testing-framework.md#test-corpus-requirements-operator-provided)).
 
 ### SEC EDGAR for public-domain test documents
 
@@ -321,7 +365,7 @@ The [Product Requirements Document](PRD.md) is the canonical specification of wh
 
 ### Contribute back
 
-If your team's practice diverges from a starter skill (different severity calibration, different jurisdiction-specific conventions), fork the skill and contribute the variant back. The skill contribution path is documented in [`skills/CONTRIBUTING.md`](../skills/CONTRIBUTING.md); the engineering contribution path (for code, infrastructure, deployment recipes) is in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+If your team's practice diverges from a starter skill (different severity calibration, different jurisdiction-specific conventions), fork the skill and contribute the variant back. The skill contribution path is documented in [`skills/CONTRIBUTING.md`](../skills/CONTRIBUTING.md); the engineering contribution path (for code, infrastructure, deployment recipes) is in [`CONTRIBUTING.md`](../CONTRIBUTING.md).
 
 The fastest way to make LQ.AI better for your practice is to fork a skill, fix the calibration, and propose the fix back. Each accepted skill contribution helps the next user with similar practice see better output without doing the same work.
 
@@ -332,6 +376,17 @@ The fastest way to make LQ.AI better for your practice is to fork a skill, fix t
 ### `docker compose up` hangs on first run
 
 First-run image pulls are typically the slow step. Verify with `docker compose logs -f` — if you see images downloading, it's working. If logs are silent, check Docker Desktop is running and `docker info` succeeds.
+
+### `docker compose up` fails with "address already in use"
+
+If startup fails with `ports are not available: ... bind: address already in use` on `5432` (Postgres), `6379` (Redis), or `9000`/`9001` (MinIO), you already have a host service holding that port — commonly a Homebrew/Postgres.app Postgres on `5432`. Remap the host-side port in `.env` and re-run:
+
+```bash
+# .env — host-side mapping only; the stack's internal traffic stays on 5432
+POSTGRES_HOST_PORT=15432
+```
+
+The application services reach Postgres over the Docker network at `postgres:5432` regardless, so remapping the host port has no effect on the running stack — it only changes how you reach it with host tooling (`psql -h localhost -p 15432`). The same pattern applies to `REDIS_HOST_PORT` / `MINIO_API_HOST_PORT` / `MINIO_CONSOLE_HOST_PORT`.
 
 ### "First-run admin password" doesn't appear in logs
 

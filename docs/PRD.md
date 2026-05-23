@@ -4239,6 +4239,18 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 ---
 
+#### DE-313 — Compliance Alignment Pack: reflect the M3 external trust boundaries (M3-E2b finding)
+
+**Priority:** P2 (procurement-readiness completeness) · **Effort:** M (counsel-reviewed; the SOC2/ISO docs don't exist yet)
+
+**Context:** M3 added three external trust boundaries — the Word add-in OAuth flow, the Slack bridge, and the Teams bridge — that the Compliance Alignment Pack should reflect. M3-E2b updated the one alignment document that exists ([`docs/procurement/sig-lite.md`](procurement/sig-lite.md)) for these boundaries (third-party credential ownership, at-rest secret encryption, service-to-service auth, unsigned-manifest install-boundary integrity). But the **SOC 2** (`soc2-alignment.md`) and **ISO/IEC 27001** (`iso27001-alignment.md`) alignment documents named in [`docs/compliance/README.md`](compliance/README.md) **do not exist** — they remain stubs. Authoring them is counsel-review-gated (per the compliance README) and is already a flagged community-contribution target (DE-100–115), so M3-E2b deliberately did **not** fabricate control mappings.
+
+**Specific scope:** When the SOC2 + ISO27001 alignment docs are authored, they must include control responses for: (1) the Word add-in OAuth trust boundary + unsigned-manifest posture; (2) the Slack bridge OAuth + Fernet-at-rest bot-token storage + shared bridge-bearer auth; (3) the Teams bridge multi-tenant Azure AD OAuth (no per-tenant token at rest); (4) the opt-in-by-Compose-profile posture (operators who don't enable the bridges run nothing). Cross-reference [`docs/intake-bridges.md`](intake-bridges.md) + [`docs/word-addin.md`](word-addin.md) for the authoritative honest-state, including that bridge OAuth is unverified end-to-end ([DE-312](#9-deferred-enhancements-and-identified-future-work)).
+
+**When to ship:** With the SOC2/ISO27001 alignment-doc authoring effort (community-led, counsel-reviewed). Filing now so the M3 boundaries aren't forgotten when that work happens.
+
+---
+
 ## 10. Appendices
 
 ### Appendix A — Glossary

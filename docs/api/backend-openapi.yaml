@@ -2782,6 +2782,7 @@ paths:
             schema:
               type: object
               required: [target_document_id]
+              additionalProperties: false
               properties:
                 target_document_id:
                   type: string
@@ -2796,8 +2797,18 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/PlaybookExecution'}
+        '401':
+          description: Not authenticated.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
         '404':
           description: Playbook, target document, or project not found / not owned.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '422':
+          description: Request body validation error (e.g., missing or malformed `target_document_id`, unknown field).
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
@@ -2822,6 +2833,11 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/PlaybookExecution'}
+        '401':
+          description: Not authenticated.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
         '404':
           description: Execution not found or caller does not own it.
           content:
@@ -4262,7 +4278,7 @@ components:
 
     TabularExecution:
       type: object
-      required: [id, status, document_ids, columns, created_at]
+      required: [id, status, document_ids, document_names, columns, created_at]
       description: |
         One row from the ``tabular_executions`` table. Lifecycle:
         ``pending → running → completed | failed | cancelled``.
@@ -4293,6 +4309,13 @@ components:
         document_ids:
           type: array
           items: {type: string, format: uuid}
+        document_names:
+          type: array
+          items: {type: string}
+          description: |
+            Per-document display names (operator-uploaded filenames),
+            parallel to ``document_ids`` in selection order. Assembled on
+            the response by ``_to_response``; not a stored column.
         columns:
           type: array
           items: {$ref: '#/components/schemas/ColumnSpec'}
