@@ -493,9 +493,7 @@ async def _load_document_names(
     return {row.id: row.filename for row in rows}
 
 
-async def _to_response(
-    db: AsyncSession, row: TabularExecution
-) -> TabularExecutionResponse:
+async def _to_response(db: AsyncSession, row: TabularExecution) -> TabularExecutionResponse:
     """Convert the ORM row to the response wire shape.
 
     Async because the response includes a ``document_names`` field
