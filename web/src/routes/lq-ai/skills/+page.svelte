@@ -21,6 +21,7 @@
 
 	let rows: UserSkill[] = [];
 	let builtinSlugs = new Set<string>();
+	let builtinTableSkills: SkillSummary[] = [];
 	let teamNamesById = new Map<string, string>();
 	let loading = false;
 	let listError: string | null = null;
@@ -37,6 +38,12 @@
 			]);
 			rows = mine;
 			builtinSlugs = new Set(builtins.map((s: SkillSummary) => s.name));
+			// Surface built-in table-mode reference skills (M3-C3) so
+			// operators can discover them; /skills only shows user-scope
+			// skills by default and otherwise these would be invisible.
+			builtinTableSkills = builtins
+				.filter((s: SkillSummary) => s.output_format === 'table')
+				.sort((a: SkillSummary, b: SkillSummary) => a.name.localeCompare(b.name));
 			teamNamesById = new Map(
 				(myTeams as TeamSummary[]).map((t) => [t.id, t.name])
 			);
@@ -122,6 +129,38 @@
 		>
 			{actionError}
 		</div>
+	{/if}
+
+	{#if !loading && builtinTableSkills.length > 0}
+		<section class="mb-6" data-testid="lq-ai-builtin-table-skills">
+			<h2 class="lq-text-h4 mb-2">Reference table-mode skills</h2>
+			<p class="lq-text-caption mb-3" style="color: var(--lq-text-secondary);">
+				Built-in skills with <code>output_format: table</code> — usable from the
+				<a href="/lq-ai/tabular/new" class="lq-link">Tabular Review wizard</a>'s
+				skill picker. Paired with the synthetic corpus in
+				<code>docs/quickstart/</code> for first-run exploration.
+			</p>
+			<ul class="lq-table-skill-list">
+				{#each builtinTableSkills as s (s.name)}
+					<li class="lq-table-skill-card" data-testid="lq-ai-builtin-table-skill">
+						<div class="flex items-start justify-between gap-3">
+							<div class="min-w-0">
+								<div class="flex items-center gap-2 flex-wrap">
+									<span class="font-medium lq-text-body">{s.title ?? s.name}</span>
+									<span data-testid="lq-ai-table-badge">
+										<TrustPill variant="tier" label="Table" />
+									</span>
+								</div>
+								<code class="lq-text-caption font-mono" style="color: var(--lq-text-secondary);">{s.name}</code>
+								{#if s.description}
+									<p class="lq-text-caption mt-1 line-clamp-2" style="color: var(--lq-text-tertiary);">{s.description}</p>
+								{/if}
+							</div>
+						</div>
+					</li>
+				{/each}
+			</ul>
+		</section>
 	{/if}
 
 	{#if loading}
@@ -217,6 +256,20 @@
 </div>
 
 <style>
+	.lq-table-skill-list {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+		gap: 0.5rem;
+	}
+	.lq-table-skill-card {
+		padding: 0.75rem;
+		border: 1px solid var(--lq-border);
+		border-radius: 0.5rem;
+		background: var(--lq-surface);
+	}
 	.lq-btn-primary {
 		background: var(--lq-accent);
 		color: white;
