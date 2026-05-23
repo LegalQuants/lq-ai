@@ -43,6 +43,7 @@ from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document import Document, DocumentChunk
+from app.models.file import File
 from app.models.tabular import TabularExecution
 from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
 from app.schemas.tabular import ColumnSpec
@@ -84,17 +85,24 @@ def make_load_documents_node(
     """Build the load-documents node bound to a DB session."""
 
     async def load_documents_node(state: TabularExecutionState) -> dict[str, Any]:
-        stmt = select(Document).where(Document.id.in_(document_ids))
-        rows = (await db.execute(stmt)).scalars().all()
-        by_id = {row.id: row for row in rows}
+        # Join the parent File for the operator-facing filename — the
+        # display name for the grid's row label. The Document row itself
+        # carries no filename (it lives on files.filename), so without
+        # the join the row label falls back to the document UUID.
+        stmt = (
+            select(Document.id, File.filename)
+            .join(File, Document.file_id == File.id)
+            .where(Document.id.in_(document_ids))
+        )
+        by_id = {row.id: row.filename for row in (await db.execute(stmt)).all()}
 
         # Preserve the operator's selection order (matches the playbook
         # easy_playbook_worker's _load_documents helper); missing rows
         # are silently skipped.
         documents: list[dict[str, str]] = []
         for did in document_ids:
-            row = by_id.get(did)
-            if row is None:
+            filename = by_id.get(did)
+            if filename is None:
                 logger.info(
                     "tabular_executor.load_documents: document missing; skipping",
                     extra={
@@ -105,28 +113,14 @@ def make_load_documents_node(
                 continue
             documents.append(
                 {
-                    "id": str(row.id),
-                    "name": _document_display_name(row),
+                    "id": str(did),
+                    "name": filename,
                 }
             )
 
         return {"documents": documents}
 
     return load_documents_node
-
-
-def _document_display_name(document: Document) -> str:
-    """Best-effort display name for a Document.
-
-    Tries ``original_filename`` (the operator-uploaded name) first, then
-    falls back to the row id. Matches the existing UI convention in
-    the playbook execution-view renderer.
-    """
-
-    name = getattr(document, "original_filename", None) or getattr(document, "name", None)
-    if name:
-        return str(name)
-    return str(document.id)
 
 
 # ---------------------------------------------------------------------------

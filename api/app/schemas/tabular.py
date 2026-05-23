@@ -24,7 +24,17 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+# Deterministic namespace for synthesizing a tabular cell's ``citation_id``
+# from its ``chunk_id``. The tabular executor persists raw ``cited_chunk_ids``
+# (chunk references); the read-side surface (M3-C4) models structured
+# ``Citation`` objects keyed by ``citation_id``. Until the executor mints
+# real Citation-Engine rows (deferred — see PRD §9), we derive a stable,
+# display-only ``citation_id = uuid5(NS, chunk_id)`` so the same chunk always
+# maps to the same id. The citation drawer is display-only and never resolves
+# this id against the Citation Engine, so a synthetic id is safe.
+_TABULAR_CITATION_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_DNS, "tabular-citation.lq.ai")
 
 TabularExecutionStatus = Literal["pending", "running", "completed", "failed", "cancelled"]
 """Lifecycle states for a :class:`TabularExecution`. Matches the CHECK
@@ -129,6 +139,47 @@ class TabularRow(BaseModel):
     cells: dict[str, CellResult]
     """Map of column name -> CellResult. Keys match the column names
     declared in the execution's column spec."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _synthesize_cell_citations(cls, data: object) -> object:
+        """Build display ``citations`` from each cell's persisted
+        ``cited_chunk_ids``.
+
+        The executor persists raw chunk references (``cited_chunk_ids``)
+        rather than structured citations. Without this, the read-side
+        ``CellResult.citations`` would always be empty even though the
+        grounding chunks are recorded. We project each chunk id into a
+        ``Citation`` using the row's ``document_id`` (the citation's
+        source document), the cell's ``confidence``, and a deterministic
+        synthetic ``citation_id``. Cells that already carry ``citations``
+        (e.g., a future executor emitting real Citation-Engine rows) pass
+        through untouched.
+        """
+
+        if not isinstance(data, dict):
+            return data
+        document_id = data.get("document_id")
+        cells = data.get("cells")
+        if document_id is None or not isinstance(cells, dict):
+            return data
+        for cell in cells.values():
+            if not isinstance(cell, dict) or cell.get("citations"):
+                continue
+            chunk_ids = cell.get("cited_chunk_ids")
+            if not isinstance(chunk_ids, list) or not chunk_ids:
+                continue
+            confidence = cell.get("confidence")
+            cell["citations"] = [
+                {
+                    "citation_id": str(uuid.uuid5(_TABULAR_CITATION_NAMESPACE, str(chunk_id))),
+                    "document_id": str(document_id),
+                    "chunk_id": str(chunk_id),
+                    "confidence": confidence,
+                }
+                for chunk_id in chunk_ids
+            ]
+        return data
 
 
 class TabularResults(BaseModel):

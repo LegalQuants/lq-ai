@@ -2705,6 +2705,55 @@ paths:
         '401':
           description: Not authenticated.
 
+  /api/v1/tabular/executions/{execution_id}/export:
+    parameters:
+      - in: path
+        name: execution_id
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      tags: [tabular]
+      summary: Export a completed tabular grid as XLSX or CSV (M3-C4a)
+      description: |
+        Streams the tabular grid in the requested format. Both formats
+        carry the document column (leftmost) plus one column per declared
+        column spec, in spec order. Cells with ``confidence='failed'``
+        render as ``"(failed)"`` so operators can spot gaps.
+
+        Citation surfacing differs by format:
+
+        * **XLSX** — each grid cell with at least one citation carries an
+          openpyxl cell ``Comment`` listing the citation ids + confidences
+          (up to 5 per comment; the cell retains the full count). Operators
+          hover any cell in Excel / Numbers / Google Sheets to see sources.
+        * **CSV** — a trailing ``citation_links`` column per row carries a
+          semicolon-separated list of ``"<column_name>:<citation_id>"``
+          pairs across the row's cells; empty when no cell had citations.
+
+        The execution must be in ``status='completed'`` — pending /
+        running / cancelled / failed rows return 409 (partial grids would
+        mislead downstream consumers).
+      parameters:
+        - in: query
+          name: format
+          required: false
+          schema: {type: string, enum: [xlsx, csv], default: xlsx}
+          description: Export format. `xlsx` carries citations as cell comments; `csv` flattens them into a `citation_links` column.
+      responses:
+        '200':
+          description: Streaming export; `Content-Type` matches the format.
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+            text/csv:
+              schema: {type: string, format: binary}
+        '404':
+          description: Execution not found or not authorized.
+        '409':
+          description: Execution not in a terminal `completed` status — cannot export.
+        '401':
+          description: Not authenticated.
+
   /api/v1/playbooks/{playbook_id}/execute:
     parameters:
       - in: path
