@@ -3532,6 +3532,82 @@ paths:
         '500':
           description: Operator has not configured `LQ_AI_BRIDGE_TOKEN` on the api
 
+  # ============================================================
+  # M3-D4 — admin intake-bridges surface
+  # ============================================================
+
+  /api/v1/admin/intake-bridges:
+    get:
+      tags: [admin-intake-bridges]
+      summary: List live Slack + Teams installs for the admin UI (M3-D4)
+      description: |
+        Returns non-soft-deleted Slack workspaces and Teams tenants,
+        sorted by `installed_at DESC` within each section. Admin-only.
+        Backs the SvelteKit admin page at `/lq-ai/admin/intake-bridges`.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Live install list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntakeBridgesList'
+        '401':
+          description: Not authenticated
+        '403':
+          description: Authenticated but not an admin
+
+  /api/v1/admin/intake-bridges/slack/{workspace_id}:
+    delete:
+      tags: [admin-intake-bridges]
+      summary: Soft-delete a Slack workspace install (M3-D4)
+      description: |
+        Sets `deleted_at` to now. The row stays in the DB so a
+        re-install via the slack-bridge OAuth flow revives it in
+        place per the M3-D1 upsert semantics; the install history
+        is preserved across disconnect/reconnect cycles.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspace_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Soft-deleted
+        '401':
+          description: Not authenticated
+        '403':
+          description: Authenticated but not an admin
+        '404':
+          description: Workspace not found or already disconnected
+
+  /api/v1/admin/intake-bridges/teams/{tenant_id}:
+    delete:
+      tags: [admin-intake-bridges]
+      summary: Soft-delete a Microsoft 365 tenant install (M3-D4)
+      description: |
+        Same posture as the Slack endpoint above — soft-delete with
+        revivable row.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Soft-deleted
+        '401':
+          description: Not authenticated
+        '403':
+          description: Authenticated but not an admin
+        '404':
+          description: Tenant not found or already disconnected
+
 # ============================================================
 # COMPONENTS
 # ============================================================
@@ -3682,6 +3758,61 @@ components:
           type: string
           format: date-time
           description: Original install timestamp. NOT moved by upsert.
+
+    SlackWorkspaceSummary:
+      type: object
+      description: |
+        One live Slack workspace row in the admin intake-bridges list
+        (M3-D4). The wire shape mirrors the model row minus the bot
+        token ciphertext (which the admin UI has no business seeing).
+      required:
+        - id
+        - team_id
+        - team_name
+        - installer_slack_user_id
+        - installed_at
+      properties:
+        id: { type: string, format: uuid }
+        team_id: { type: string }
+        team_name: { type: string }
+        installer_slack_user_id: { type: string }
+        installed_at: { type: string, format: date-time }
+
+    TeamsTenantSummary:
+      type: object
+      description: |
+        One live Microsoft 365 tenant row in the admin intake-bridges
+        list (M3-D4). Mirrors the model row.
+      required:
+        - id
+        - tenant_id
+        - tenant_name
+        - installer_oid
+        - installed_at
+      properties:
+        id: { type: string, format: uuid }
+        tenant_id: { type: string }
+        tenant_name: { type: string }
+        installer_oid: { type: string }
+        installed_at: { type: string, format: date-time }
+
+    IntakeBridgesList:
+      type: object
+      description: |
+        Section-split response for `GET /api/v1/admin/intake-bridges`.
+        Separate sections (rather than a single polymorphic list) so
+        the SvelteKit admin page renders two distinct sections without
+        client-side discriminator-key gymnastics.
+      required:
+        - slack_workspaces
+        - teams_tenants
+      properties:
+        slack_workspaces:
+          type: array
+          items: { $ref: '#/components/schemas/SlackWorkspaceSummary' }
+        teams_tenants:
+          type: array
+          items: { $ref: '#/components/schemas/TeamsTenantSummary' }
 
     SlackWorkspaceResponse:
       type: object

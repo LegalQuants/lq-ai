@@ -7,6 +7,7 @@
 		{ href: '/lq-ai/admin/audit-log', label: 'Audit log' },
 		{ href: '/lq-ai/admin/models', label: 'Models' },
 		{ href: '/lq-ai/admin/word-addin', label: 'Word add-in' },
+		{ href: '/lq-ai/admin/intake-bridges', label: 'Intake bridges' },
 		{ href: '/lq-ai/admin/developer', label: 'Developer Support' }
 	];
 </script>

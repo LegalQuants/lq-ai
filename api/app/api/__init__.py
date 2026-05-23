@@ -24,6 +24,7 @@ from fastapi import APIRouter, Depends
 
 from app.api import (
     admin,
+    admin_intake_bridges,
     auth,
     bootstrap,
     chat_receipts,
@@ -104,6 +105,11 @@ api_router.include_router(enhance_prompt.router, dependencies=_active)
 api_router.include_router(inference.router, dependencies=_active)
 api_router.include_router(inference_override.router, dependencies=_active)
 api_router.include_router(admin.router, dependencies=_active)
+# M3-D4: admin intake-bridges surface (list + soft-delete for Slack
+# workspaces + Teams tenants). Admin-gated at handler level via the
+# AdminUser dependency; mounted under the `_active` group so the
+# bearer-token + must-change-password gates fire first.
+api_router.include_router(admin_intake_bridges.router, dependencies=_active)
 # M3-A2: Playbook executor — two endpoints under different prefixes
 # (``/playbooks/{id}/execute`` and ``/playbook-executions/{id}``) so
 # they live alongside the M3-A4 list/CRUD endpoints in the same module.

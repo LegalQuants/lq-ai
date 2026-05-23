@@ -64,6 +64,9 @@ _PARAM_VALUES: dict[str, str] = {
     "playbook_id": _DUMMY_UUID,
     "execution_id": _DUMMY_UUID,
     "generation_id": _DUMMY_UUID,
+    # M3-D4 — admin intake-bridges surface
+    "workspace_id": _DUMMY_UUID,
+    "tenant_id": _DUMMY_UUID,
 }
 
 
@@ -211,6 +214,10 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("POST", "/api/v1/integrations/slack/workspaces"),
     # M3-D3 — teams-bridge persistence surface (bridge-token bearer auth)
     ("POST", "/api/v1/integrations/teams/tenants"),
+    # M3-D4 — admin intake-bridges surface
+    ("GET", "/api/v1/admin/intake-bridges"),
+    ("DELETE", "/api/v1/admin/intake-bridges/slack/{workspace_id}"),
+    ("DELETE", "/api/v1/admin/intake-bridges/teams/{tenant_id}"),
     # D4 — Organization Profile singleton
     ("GET", "/api/v1/organization-profile"),
     ("PUT", "/api/v1/organization-profile"),

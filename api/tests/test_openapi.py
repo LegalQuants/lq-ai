@@ -152,6 +152,10 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/integrations/slack/workspaces",
         # M3-D3 — teams-bridge persistence surface (bearer-token, no user)
         "/api/v1/integrations/teams/tenants",
+        # M3-D4 — admin intake-bridges surface (admin-only)
+        "/api/v1/admin/intake-bridges",
+        "/api/v1/admin/intake-bridges/slack/{workspace_id}",
+        "/api/v1/admin/intake-bridges/teams/{tenant_id}",
     }
 )
 
@@ -212,7 +216,10 @@ async def test_openapi_paths_match_sketch() -> None:
     # + M3-D3's one NEW path for the teams-bridge persistence surface
     #   (POST /integrations/teams/tenants). Same posture as M3-D1's
     #   slack equivalent.
-    assert len(actual) == 91
+    # + M3-D4's three NEW paths for the admin intake-bridges surface
+    #   (GET /admin/intake-bridges, DELETE /admin/intake-bridges/slack/{id},
+    #   DELETE /admin/intake-bridges/teams/{id}). Admin-only.
+    assert len(actual) == 94
 
 
 @pytest.mark.unit
