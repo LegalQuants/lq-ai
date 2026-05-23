@@ -119,7 +119,7 @@ dependencies = [
     # the SBOM cost is amortized across two M3 features. MIT-licensed;
     # transitive deps are mostly LangChain-core types (already permissive
     # licenses, no new SBOM family beyond LangGraph + LangChain-core).
-    "langgraph>=0.2,<0.3",
+    "langgraph>=0.2,<1.3",
     # M3-C4 — openpyxl powers the Tabular Review XLSX export
     # (GET /tabular/executions/{id}/export?format=xlsx). Each grid cell
     # gets a Comment with its citation source so operators can pivot
