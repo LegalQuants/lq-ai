@@ -150,6 +150,8 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/tabular/executions/{execution_id}/export",
         # M3-D1 — slack-bridge persistence surface (bearer-token, no user)
         "/api/v1/integrations/slack/workspaces",
+        # M3-D3 — teams-bridge persistence surface (bearer-token, no user)
+        "/api/v1/integrations/teams/tenants",
     }
 )
 
@@ -207,7 +209,10 @@ async def test_openapi_paths_match_sketch() -> None:
     #   (POST /integrations/slack/workspaces). One method-tuple here;
     #   the bridge is the sole caller so additional verbs aren't needed
     #   in M3-D1 (uninstall comes in M3-D4 admin UI work).
-    assert len(actual) == 90
+    # + M3-D3's one NEW path for the teams-bridge persistence surface
+    #   (POST /integrations/teams/tenants). Same posture as M3-D1's
+    #   slack equivalent.
+    assert len(actual) == 91
 
 
 @pytest.mark.unit

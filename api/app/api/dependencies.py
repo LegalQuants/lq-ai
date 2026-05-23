@@ -16,17 +16,22 @@ first needed (admin endpoints land later — see C7, D3, D4, D5, D6, D7).
 
 from __future__ import annotations
 
+import logging
+import secrets
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import Settings, get_settings
 from app.db.session import get_db
-from app.errors import PasswordChangeRequired
+from app.errors import InternalError, PasswordChangeRequired, Unauthorized
 from app.models.user import User
 from app.security.jwt import decode_access_token
+
+log = logging.getLogger(__name__)
 
 # tokenUrl is the documented login endpoint (per the OpenAPI sketch).
 # auto_error=True so a missing Authorization header raises 401 directly;
@@ -193,3 +198,53 @@ this in place of ``ActiveUser`` so the role gate fires before any
 business logic runs. Admin-only endpoints continue to use
 ``AdminUser``; pure-read endpoints stay on ``ActiveUser``.
 """
+
+
+# ---------------------------------------------------------------------------
+# M3-D1 / M3-D3 — bridge bearer auth (service-to-service, no user)
+# ---------------------------------------------------------------------------
+
+
+def require_bridge_auth(
+    settings: Annotated[Settings, Depends(get_settings)],
+    authorization: Annotated[str | None, Header(alias="Authorization")] = None,
+) -> None:
+    """Constant-time match the ``Authorization: Bearer …`` token against
+    :envvar:`LQ_AI_BRIDGE_TOKEN`.
+
+    Shared by every bridge → api persistence endpoint
+    (`/api/v1/integrations/slack/workspaces`,
+    `/api/v1/integrations/teams/tenants`, future bridges) because all
+    bridges authenticate to the api with the same shared secret per
+    M3-D1 decision #3.
+
+    Raises:
+      * :class:`InternalError` (500) when ``LQ_AI_BRIDGE_TOKEN`` is
+        unset on the api — accepting bridge traffic with no enforced
+        secret would silently break the trust contract.
+      * :class:`Unauthorized` (401) on missing, malformed, or
+        non-matching bearer.
+    """
+
+    expected = settings.lq_ai_bridge_token
+    if not expected:
+        log.error(
+            "LQ_AI_BRIDGE_TOKEN is not set on the api/ service; refusing "
+            "bridge traffic. Set the env var and restart."
+        )
+        raise InternalError(
+            message=(
+                "Bridge authentication is not configured on the backend. "
+                "Operator must set LQ_AI_BRIDGE_TOKEN."
+            ),
+        )
+
+    presented = ""
+    if authorization and authorization.startswith("Bearer "):
+        presented = authorization[len("Bearer ") :].strip()
+
+    if not presented or not secrets.compare_digest(presented, expected):
+        raise Unauthorized(
+            message="Invalid or missing bridge bearer token.",
+            details={"header": "Authorization"},
+        )

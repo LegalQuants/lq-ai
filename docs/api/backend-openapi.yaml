@@ -3493,6 +3493,45 @@ paths:
         '500':
           description: Operator has not configured `LQ_AI_BRIDGE_TOKEN` on the api
 
+  /api/v1/integrations/teams/tenants:
+    post:
+      tags: [integrations-teams]
+      summary: Persist a Microsoft 365 tenant from the teams-bridge OAuth flow (M3-D3)
+      description: |
+        Service-to-service endpoint. Authenticated by the **same**
+        `Authorization: Bearer ${LQ_AI_BRIDGE_TOKEN}` bearer as the
+        slack-bridge endpoint per M3-D3 decision #2 — one shared
+        secret authenticates every bridge → api call.
+
+        Unlike the Slack equivalent, no bot token is persisted here:
+        Microsoft Teams uses operator-supplied APP-LEVEL bot
+        credentials (one `MICROSOFT_APP_ID` per deployment) not
+        per-tenant tokens. The persisted record carries only the
+        tenant id + display name + installer object id.
+
+        Upserts on `tenant_id`. Soft-deleted rows revive on
+        re-install. `installed_at` is NOT moved by upsert (operators
+        can infer re-install activity from other field changes).
+      security:
+        - bridgeBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamsTenantCreate'
+      responses:
+        '201':
+          description: Persisted (or upserted) the tenant record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamsTenantResponse'
+        '401':
+          description: Missing, malformed, or non-matching bridge bearer token
+        '500':
+          description: Operator has not configured `LQ_AI_BRIDGE_TOKEN` on the api
+
 # ============================================================
 # COMPONENTS
 # ============================================================
@@ -3576,6 +3615,73 @@ components:
           minLength: 1
           description: Comma-separated scope list Slack returned.
           example: 'commands,chat:write'
+
+    TeamsTenantCreate:
+      type: object
+      description: |
+        Request body for `POST /api/v1/integrations/teams/tenants`
+        (M3-D3). Shape matches what `teams-bridge/app/oauth.py`
+        constructs from the Microsoft id_token claims (`tid`, `oid`)
+        + a best-effort Microsoft Graph `/organization` display-name
+        lookup.
+      required:
+        - tenant_id
+        - tenant_name
+        - installer_oid
+      additionalProperties: false
+      properties:
+        tenant_id:
+          type: string
+          minLength: 1
+          description: Microsoft tenant id (`tid` claim — the M365 directory GUID).
+          example: '00000000-0000-0000-0000-aaaaaaaaaaaa'
+        tenant_name:
+          type: string
+          minLength: 1
+          description: |
+            Tenant display name at install time. Best-effort from
+            Microsoft Graph `/organization`; falls back to the
+            tenant_id if Graph errors.
+          example: 'Acme Legal LLP'
+        installer_oid:
+          type: string
+          minLength: 1
+          description: |
+            M365 `oid` claim of the admin who completed consent.
+            Audit only — does not grant LQ.AI permissions.
+          example: '00000000-0000-0000-0000-111111111111'
+
+    TeamsTenantResponse:
+      type: object
+      description: |
+        Persisted-tenant response for `POST
+        /api/v1/integrations/teams/tenants`. Mirrors
+        `SlackWorkspaceResponse` minus the per-tenant bot fields
+        (Teams uses app-level credentials).
+      required:
+        - id
+        - tenant_id
+        - tenant_name
+        - installer_oid
+        - installed_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: api-side tenant row id.
+        tenant_id:
+          type: string
+          example: '00000000-0000-0000-0000-aaaaaaaaaaaa'
+        tenant_name:
+          type: string
+          example: 'Acme Legal LLP'
+        installer_oid:
+          type: string
+          example: '00000000-0000-0000-0000-111111111111'
+        installed_at:
+          type: string
+          format: date-time
+          description: Original install timestamp. NOT moved by upsert.
 
     SlackWorkspaceResponse:
       type: object

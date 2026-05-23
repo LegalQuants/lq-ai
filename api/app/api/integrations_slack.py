@@ -27,16 +27,15 @@ its secret surface stays minimal.
 from __future__ import annotations
 
 import logging
-import secrets
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies import require_bridge_auth
 from app.config import Settings, get_settings
 from app.db.session import get_db
-from app.errors import InternalError, Unauthorized
 from app.models.slack_workspace import SlackWorkspace
 from app.schemas.slack_workspace import SlackWorkspaceCreate, SlackWorkspaceResponse
 from app.security.encryption import BridgeTokenEncryptor
@@ -44,44 +43,6 @@ from app.security.encryption import BridgeTokenEncryptor
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/integrations/slack", tags=["integrations-slack"])
-
-
-def require_bridge_auth(
-    settings: Annotated[Settings, Depends(get_settings)],
-    authorization: Annotated[str | None, Header(alias="Authorization")] = None,
-) -> None:
-    """Constant-time match the ``Authorization: Bearer …`` token.
-
-    Raises:
-      * :class:`InternalError` (500) if ``LQ_AI_BRIDGE_TOKEN`` is unset
-        on the api — accepting bridge traffic with no enforced secret
-        would silently break the trust contract.
-      * :class:`Unauthorized` (401) on missing, malformed, or
-        non-matching bearer.
-    """
-
-    expected = settings.lq_ai_bridge_token
-    if not expected:
-        log.error(
-            "LQ_AI_BRIDGE_TOKEN is not set on the api/ service; refusing "
-            "slack-bridge traffic. Set the env var and restart."
-        )
-        raise InternalError(
-            message=(
-                "Bridge authentication is not configured on the backend. "
-                "Operator must set LQ_AI_BRIDGE_TOKEN."
-            ),
-        )
-
-    presented = ""
-    if authorization and authorization.startswith("Bearer "):
-        presented = authorization[len("Bearer ") :].strip()
-
-    if not presented or not secrets.compare_digest(presented, expected):
-        raise Unauthorized(
-            message="Invalid or missing bridge bearer token.",
-            details={"header": "Authorization"},
-        )
 
 
 @router.post(

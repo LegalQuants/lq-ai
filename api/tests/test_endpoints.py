@@ -209,6 +209,8 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("GET", "/api/v1/word-addin/version"),
     # M3-D1 — slack-bridge persistence surface (bridge-token bearer auth)
     ("POST", "/api/v1/integrations/slack/workspaces"),
+    # M3-D3 — teams-bridge persistence surface (bridge-token bearer auth)
+    ("POST", "/api/v1/integrations/teams/tenants"),
     # D4 — Organization Profile singleton
     ("GET", "/api/v1/organization-profile"),
     ("PUT", "/api/v1/organization-profile"),

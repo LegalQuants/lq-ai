@@ -449,6 +449,48 @@ services:
       timeout: 3s
       retries: 10
 
+  teams-bridge:
+    # M3-D3 — Microsoft Teams OAuth bridge. Gated by the ``teams``
+    # profile so operators who don't use Teams don't pay the SBOM
+    # cost or run a service they have nothing to do with.
+    #
+    # Bring up with: ``docker compose --profile teams up -d teams-bridge``
+    #
+    # Credentials come from the operator's Azure AD app registration
+    # (MICROSOFT_APP_ID + MICROSOFT_APP_PASSWORD); LQ_AI_BRIDGE_TOKEN
+    # is REUSED from the slack-bridge per M3-D3 decision #2 (same
+    # bearer authenticates both bridges to the api).
+    # LQ_AI_TEAMS_BRIDGE_PUBLIC_URL is the externally reachable URL
+    # Microsoft will hit on OAuth callback — typically fronted by the
+    # operator's reverse proxy.
+    build:
+      context: ./teams-bridge
+      dockerfile: Dockerfile
+    profiles: ["teams"]
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      # Microsoft-side credentials (Azure AD multi-tenant app)
+      MICROSOFT_APP_ID: ${MICROSOFT_APP_ID:?MICROSOFT_APP_ID is required when teams profile is enabled}
+      MICROSOFT_APP_PASSWORD: ${MICROSOFT_APP_PASSWORD:?MICROSOFT_APP_PASSWORD is required when teams profile is enabled}
+      # LQ.AI-side coordinates
+      LQ_AI_BACKEND_URL: ${LQ_AI_BACKEND_URL:-http://api:8000}
+      LQ_AI_BRIDGE_TOKEN: ${LQ_AI_BRIDGE_TOKEN:?LQ_AI_BRIDGE_TOKEN is required when teams profile is enabled}
+      LQ_AI_TEAMS_BRIDGE_PUBLIC_URL: ${LQ_AI_TEAMS_BRIDGE_PUBLIC_URL:?LQ_AI_TEAMS_BRIDGE_PUBLIC_URL is required when teams profile is enabled}
+      # Observability (opt-in)
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-lq-ai-teams-bridge}
+      LQ_AI_TEAMS_BRIDGE_LOG_LEVEL: ${LQ_AI_TEAMS_BRIDGE_LOG_LEVEL:-INFO}
+    ports:
+      - "${TEAMS_BRIDGE_BIND_ADDR:-127.0.0.1}:${TEAMS_BRIDGE_HOST_PORT:-8003}:8003"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8003/healthz', timeout=2).status == 200 else 1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 # ============================================================
 # Persistent volumes (PRD §6.5)
 # ============================================================

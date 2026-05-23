@@ -1,0 +1,49 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.16",
+  "version": "0.1.0",
+  "id": "${MICROSOFT_APP_ID}",
+  "_comment_id": "The 'id' field is the Teams App ID. For a bot-only app it can be the same GUID as the bot id (MICROSOFT_APP_ID). Operators substitute the placeholder before uploading the manifest.",
+  "packageName": "ai.lqai.teams",
+  "developer": {
+    "name": "LegalQuants",
+    "websiteUrl": "https://lqai.example.com",
+    "privacyUrl": "https://lqai.example.com/privacy",
+    "termsOfUseUrl": "https://lqai.example.com/terms"
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "name": {
+    "short": "LQ.AI",
+    "full": "LQ.AI for Microsoft Teams"
+  },
+  "description": {
+    "short": "In-house legal AI bridge for LQ.AI deployments.",
+    "full": "LQ.AI is a self-hosted, transparency-first AI platform for in-house legal teams. This Microsoft Teams bridge connects a tenant to one LQ.AI deployment so that future slash-command and bot surfaces can be wired up by operator and community contributors. The bot does not read silent channels — it only responds to explicit user invocations."
+  },
+  "accentColor": "#0B3A53",
+  "_comment_bots": "The slash-command surface lands with DE-288 (M4 / community). At v0.3.0 the bot is registered so the tenant install flow + identity binding work; commandLists is intentionally empty until DE-288 ships.",
+  "bots": [
+    {
+      "botId": "${MICROSOFT_APP_ID}",
+      "scopes": ["personal", "team", "groupchat"],
+      "isNotificationOnly": false,
+      "supportsCalling": false,
+      "supportsVideo": false,
+      "supportsFiles": false,
+      "commandLists": []
+    }
+  ],
+  "validDomains": [
+    "${LQ_AI_TEAMS_BRIDGE_PUBLIC_HOST}"
+  ],
+  "_comment_validDomains": "${LQ_AI_TEAMS_BRIDGE_PUBLIC_HOST} is the bare host (no scheme, no path) of the teams-bridge — e.g. 'lqai.example.com'. Operators substitute before uploading.",
+  "permissions": ["identity", "messageTeamMembers"],
+  "_comment_webApplicationInfo": "webApplicationInfo enables Azure AD SSO for future task-pane / message-extension surfaces. The resource value uses the api://-prefixed app id URI from the Azure AD app registration; operators set this when M4 SSO lands.",
+  "webApplicationInfo": {
+    "id": "${MICROSOFT_APP_ID}",
+    "resource": "api://${LQ_AI_TEAMS_BRIDGE_PUBLIC_HOST}/${MICROSOFT_APP_ID}"
+  }
+}

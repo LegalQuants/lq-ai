@@ -33,6 +33,7 @@ from app.api import (
     inference,
     inference_override,
     integrations_slack,
+    integrations_teams,
     internal,
     knowledge_bases,
     models,
@@ -70,6 +71,12 @@ api_router.include_router(internal.router)
 # the user-token gate. Mounted without `_active` deliberately: the
 # bridge is a service-to-service caller with no user context.
 api_router.include_router(integrations_slack.router)
+
+# M3-D3: teams-bridge → api persistence surface. Same auth posture as
+# the slack-bridge endpoint (shared LQ_AI_BRIDGE_TOKEN bearer); no
+# per-tenant secrets persisted because Teams uses app-level bot
+# credentials (one MICROSOFT_APP_ID per deployment).
+api_router.include_router(integrations_teams.router)
 
 # M3-B8 — Word add-in version handshake. Unauthenticated: the task pane
 # calls this on mount BEFORE the user has signed in, so an out-of-date
