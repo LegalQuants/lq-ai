@@ -4141,6 +4141,104 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 ---
 
+#### DE-305 — Bridge env vars use `${VAR:?}` and break all Compose commands when unset (M3-E1 finding F1)
+
+**Priority:** P2 (degrades the fresh-install / non-bridge-operator experience) · **Effort:** S (~1–2 hr)
+
+**Context:** Surfaced during M3-E1 fresh-install verification. `docker-compose.yml` declares the slack-bridge and teams-bridge env vars (`LQ_AI_BRIDGE_TOKEN`, `SLACK_CLIENT_ID`, `MICROSOFT_APP_ID`, etc.) with the required-error `${VAR:?msg}` interpolation form. Docker Compose interpolates **every** service definition at parse time regardless of the active `--profile`, so any `docker compose` command (`up`, `down`, `config`, `ps`) fails with `"required variable LQ_AI_BRIDGE_TOKEN is missing a value"` for an operator who has not set the bridge vars — **even one who never enables the `slack`/`teams` profiles.** This directly contradicts `.env.example` (~L297-300): "Operators who don't use Slack can leave all of the variables below unset."
+
+**Specific scope:**
+- Change the bridge service env interpolation from `${VAR:?...}` to the soft-default `${VAR:-}` form so parse-time interpolation succeeds when unset.
+- Move the "required when the profile is active" enforcement into each bridge's container entrypoint / config loader (fail fast on startup with a clear message), where it only fires when the bridge actually runs.
+- Alternatively (lower effort, less correct): leave the compose file as-is and correct the `.env.example` wording to state the bridge vars are mandatory whenever the compose file is used at all. The entrypoint-enforcement option is preferred — it honors the opt-in-by-profile design.
+
+**When to ship:** Before or alongside any M4 bridge work; low-risk, improves first-run UX for the majority of operators (who don't use the chat bridges).
+
+#### DE-306 — Fresh-install host-port collision needs prominent quickstart callout (M3-E1 finding F2)
+
+**Priority:** P3 (documentation; `.env.example` already documents the remap) · **Effort:** S (~30 min, folds into M3-E2 docs)
+
+**Context:** On a macOS dev box already running a host PostgreSQL (Homebrew / Postgres.app on `:5432`), a fresh `docker compose up` fails to bind (`address already in use`) and the stack never comes up. `.env.example` documents the `POSTGRES_HOST_PORT=15432` remap inline, but a developer following the "I just cloned the repo" path hits the failure before reading that comment. M3-E1 itself had to remap to 15432 to proceed.
+
+**Specific scope:**
+- `docs/quickstart.md` "I just cloned the repo" onboarding path gets an explicit "if you already run a local Postgres/Redis/MinIO, remap the `*_HOST_PORT` vars" step near the `docker compose up` instruction, with the 15432 example.
+- Optionally: a preflight note that the stack binds 127.0.0.1:{5432,6379,9000,9001,8000,8001,3000} by default.
+
+**When to ship:** Folds naturally into M3-E2 documentation finalization.
+
+#### DE-307 — `File` API schema exposes `page_count`/`character_count` that never populate (M3-E1 finding F4)
+
+**Priority:** P3 (misleading-but-harmless; fields read null) · **Effort:** S (~1–2 hr)
+
+**Context:** After ingestion completes (`ingestion_status='ready'`, `document_id` populated), the `File` API response still returns `page_count: null` and `character_count: null`. Those metrics are computed and stored on the `documents` row (`documents.page_count` / `documents.character_count`), not back-filled onto `files`. The `File` schema exposes the two fields anyway, so any consumer reading `File.page_count` shows a blank.
+
+**Specific scope:** Either (a) populate `files.page_count`/`character_count` from the ingest worker when it writes the `documents` row, or (b) drop the two fields from the `File` schema and have consumers read them off the document. Decide which surface owns the metric; confirm whether the web UI reads `File.page_count` anywhere before choosing.
+
+**When to ship:** Opportunistic; pairs with any ingest-pipeline or file-detail-view work.
+
+#### DE-308 — Easy Playbook clustering over-segments and can miss a designed axis (M3-E1 finding F5)
+
+**Priority:** P2 (output quality; engine is functional) · **Effort:** M (~half-day investigation + tuning)
+
+**Context:** An Easy Playbook run over the 5-NDA synthetic corpus (`docs/quickstart/sample-ndas/`) produced **20 positions** against the corpus README's stated expectation of ~5–10. The "Standard of Care" variant axis — one of the five dimensions the corpus is explicitly designed to vary on — did **not** surface as a distinct position. The output also contained redundant position families (three license positions: "No Transfer of Rights" / "No Implied License" / "No License Granted"; two jurisdiction positions; three confidential-information-definition-family positions) plus eight singleton positions with zero fallback tiers (each appeared in only one document). The engine itself works end-to-end (3.2 min, valid `draft_playbook` with fallback tiers); this is a **clustering-quality** signal, exactly the kind the corpus README flags as file-worthy.
+
+**Specific scope:**
+- Investigate `api/app/playbooks/easy/clustering.py`: why near-synonym positions aren't merged (license family, jurisdiction family, CI-definition family), and why "Standard of Care" didn't cluster into its own position despite varying across all five documents.
+- Tune toward the README's "~5–10 positions, each of the 5 designed axes present" target.
+- Consider a post-clustering merge/dedup pass and a minimum-document-support threshold for singleton positions.
+- The reviewing-attorney walk-through should weigh whether the over-segmentation or the missed axis affects the legal usefulness of generated playbooks.
+
+**When to ship:** Post-M3; clustering quality is iterative and benefits from real-corpus signal, but the missed-axis behavior is worth an early look.
+
+#### DE-309 — Tabular cells: real Citation-Engine-backed provenance (M3-E1 finding F6 follow-on)
+
+**Priority:** P2 (provenance depth) · **Effort:** M (~half-day + possible migration)
+
+**Context:** M3-E1 fixed F6 (tabular citations were stored as `cited_chunk_ids` but never surfaced through the API) with a read-side bridge that synthesizes a **display-only** `citation_id = uuid5(NS, chunk_id)`. That `citation_id` is not a real Citation-Engine row — the tabular citation drawer is display-only and never resolves it, so the synthetic id is safe for v0.3.0. The deferred enhancement is to have the tabular executor mint **real** Citation-Engine-backed citations during extraction (resolvable `citation_id`, full positional/offset provenance), so the tabular drawer can offer the same "jump to source span" affordance as the chat citation drawer.
+
+**Specific scope:**
+- Tabular executor (`api/app/tabular/nodes.py`) creates Citation-Engine rows (or the equivalent `MessageCitation`-shaped records) per grounded cell during extraction.
+- Persist real `citation_id`s; retire the synthetic-id bridge once real ids flow (the `TabularRow` validator already passes through cells that carry real `citations`).
+- Likely touches the persistence shape and may need a migration.
+
+**When to ship:** M4, alongside any tabular-drawer "view source span" UX.
+
+#### DE-310 — Tabular per-cell `tier_used` + `cost_usd` propagation from the gateway (M3-E1 finding F6 telemetry)
+
+**Priority:** P3 (telemetry completeness) · **Effort:** M (depends on gateway response surface)
+
+**Context:** Tabular cells persist `tier_used: null` and `cost_usd: "0"`, and the execution's `cost_actual_usd` sums to 0, even though extraction routed real inference. This is a **known, code-documented** v0.3.0 limitation (`api/app/tabular/nodes.py` ~L304-308, L529-532): the cell node does not yet propagate per-call cost/tier back from the gateway response; the cost estimator's rolling average converges off the routing log instead. The enhancement is to thread the gateway's per-response tier + cost back onto each `CellResult` so the grid and export show real per-cell economics.
+
+**Specific scope:** Gateway returns tier + cost in its response surface (may itself be a gateway enhancement); tabular cell node reads them onto the persisted cell; aggregate node sums real `cost_actual_usd`.
+
+**When to ship:** Pairs naturally with the OTel deepening (Phase F) and any gateway response-shape work.
+
+#### DE-311 — Single source of truth for the application version (M3-E1 finding F3 follow-on)
+
+**Priority:** P3 (release hygiene) · **Effort:** S (~1–2 hr)
+
+**Context:** M3-E1 found `api/app/__init__.py:__version__` stuck at `"0.1.0"` — never bumped through the v0.2.0 tag — which the M3-B8 Word add-in version handshake surfaced as a stale `deployment_version`. E1 bumped it to `0.3.0`, but the value lives in source and will drift again at the next tag. The enhancement is a single source of truth (e.g., derive `__version__` from the git tag at build time, or a top-level `VERSION` file both the api package and the release tooling read) so the deployment version, the Word manifest `<Version>`, and the git tag never disagree.
+
+**Specific scope:** Pick a version-source mechanism; wire `app.__version__`, the Word manifest generator, and any release scripts to it; add a CI check that the source version matches the tag on release.
+
+**When to ship:** Before or at the v0.3.0 tag if cheap; otherwise early v0.4.
+
+#### DE-312 — Slack + Teams bridge OAuth end-to-end tunnel verification (M3-E1 finding)
+
+**Priority:** P1 (blocks promoting the bridge surfaces from "plumbing shipped" to "shipped end-to-end") · **Effort:** M (~half-day, mostly setup)
+
+**Context:** M3 shipped the Slack (PR #76) and Teams (PR #77/#78) bridge plumbing, and M3-E1 verified the full plumbing path in isolation — service health, bridge-bearer auth (POST→201, wrong-token→401), at-rest bot-token encryption, admin `intake-bridges` surfacing, and soft-delete (204). But the **install + real OAuth callback + identity-binding** flow has **never** been exercised against a real public-URL tunnel — no ngrok/cloudflared tunnel was ever stood up during M3-D1/D3 development (confirmed: no `LQ_AI_BRIDGE_PUBLIC_URL` in any `.env`, no tunnel reference in any commit or handoff). The bridges' M3 status is therefore "plumbing shipped, real-OAuth integration unverified."
+
+**Specific scope:**
+- Stand up a public-URL tunnel (ngrok / cloudflared); set `LQ_AI_BRIDGE_PUBLIC_URL` + `LQ_AI_TEAMS_BRIDGE_PUBLIC_URL`.
+- Configure the Slack App redirect URL and the Azure AD app redirect URI to match.
+- Complete a real OAuth round-trip per bridge against a test Slack workspace + test M365 tenant.
+- Confirm the workspace/tenant rows surface in `/lq-ai/admin/intake-bridges` from a genuine install (not a simulated bridge POST), and that the Teams Graph `/organization` display-name lookup resolves (or falls back to `tid`).
+
+**When to ship:** Before whichever milestone delivers the slash-command surface (DE-288) or any "full integrations" work — and before any marketing claims the bridges are end-to-end functional.
+
+---
+
 ## 10. Appendices
 
 ### Appendix A — Glossary
