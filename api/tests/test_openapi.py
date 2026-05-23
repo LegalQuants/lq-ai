@@ -146,6 +146,8 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/tabular/executions",
         "/api/v1/tabular/executions/{execution_id}",
         "/api/v1/tabular/executions/{execution_id}/cancel",
+        # M3-C4a — XLSX/CSV export.
+        "/api/v1/tabular/executions/{execution_id}/export",
     }
 )
 
@@ -198,7 +200,8 @@ async def test_openapi_paths_match_sketch() -> None:
     #    /tabular/executions/{id}, /tabular/executions/{id}/cancel).
     #   DELETE on /executions/{id} shares the GET path so it adds zero
     #   new paths here; the method-tuple count is in test_endpoints.py.
-    assert len(actual) == 88
+    # + M3-C4a's /tabular/executions/{id}/export.
+    assert len(actual) == 89
 
 
 @pytest.mark.unit
