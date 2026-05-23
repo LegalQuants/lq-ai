@@ -217,6 +217,7 @@ When you need to find something quickly:
 | Skill conventions | [docs/skill-authoring-guide.md](docs/skill-authoring-guide.md) |
 | What's already implemented | Existing code in `api/`, `gateway/`, `web/` |
 | What's deferred | [docs/PRD.md §9](docs/PRD.md#9-deferred-enhancements-and-identified-future-work) |
+| Contributor-pickup mini-PRDs | [docs/proposals/](docs/proposals/) |
 | Security policy | [SECURITY.md](SECURITY.md) |
 | Conduct policy | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) |
 
