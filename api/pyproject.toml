@@ -120,6 +120,13 @@ dependencies = [
     # transitive deps are mostly LangChain-core types (already permissive
     # licenses, no new SBOM family beyond LangGraph + LangChain-core).
     "langgraph>=0.2,<0.3",
+    # M3-C4 — openpyxl powers the Tabular Review XLSX export
+    # (GET /tabular/executions/{id}/export?format=xlsx). Each grid cell
+    # gets a Comment with its citation source so operators can pivot
+    # from the spreadsheet back into the deployment. CSV export uses
+    # stdlib csv; no pandas dependency. MIT-licensed; no new SBOM
+    # family beyond openpyxl + its single transitive `et-xmlfile`.
+    "openpyxl>=3.1,<4",
 ]
 
 [project.optional-dependencies]

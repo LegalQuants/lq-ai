@@ -49,12 +49,14 @@ doc — the threshold is enforced UI-side, not server-side).
 
 from __future__ import annotations
 
+import csv
+import io
 import logging
 import uuid
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -64,12 +66,14 @@ from app.db.session import get_db
 from app.models.document import Document
 from app.models.tabular import TabularExecution
 from app.schemas.tabular import (
+    Citation,
     ColumnSpec,
     TabularExecutionCreate,
     TabularExecutionResponse,
     TabularExecutionSummary,
     TabularPreviewCostRequest,
     TabularPreviewCostResponse,
+    TabularResults,
 )
 from app.skills.registry import MutableSkillRegistry
 from app.tabular.cost import estimate_tabular_execution_cost
@@ -443,6 +447,220 @@ async def cancel_tabular_execution(
     await db.commit()
     await db.refresh(row)
     return await _to_response(db, row)
+
+
+# ---------------------------------------------------------------------------
+# Export (M3-C4a — XLSX + CSV)
+# ---------------------------------------------------------------------------
+
+
+_XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+_CSV_MEDIA_TYPE = "text/csv"
+
+
+@router.get(
+    "/tabular/executions/{execution_id}/export",
+    summary="Export a completed tabular execution as XLSX or CSV.",
+    responses={
+        200: {
+            "description": "Streaming export — Content-Type matches format.",
+            "content": {
+                _XLSX_MEDIA_TYPE: {},
+                _CSV_MEDIA_TYPE: {},
+            },
+        },
+        409: {"description": "Execution not in terminal status — cannot export."},
+    },
+)
+async def export_tabular_execution(
+    execution_id: uuid.UUID,
+    user: ActiveUser,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    format: Annotated[
+        Literal["xlsx", "csv"],
+        Query(
+            description="Export format. `xlsx` carries citations as cell comments; `csv` flattens citations into a `citation_links` column."
+        ),
+    ] = "xlsx",
+) -> Response:
+    """Stream the tabular grid in XLSX or CSV.
+
+    Both formats include the document column (leftmost) plus one column
+    per declared column spec, in spec order. Cells with
+    ``confidence='failed'`` render as ``"(failed)"`` rather than an
+    empty string so operators can spot the gap without cross-referencing
+    the source execution.
+
+    Citation surfacing differs by format:
+
+    * **XLSX** — each grid cell with at least one citation carries an
+      openpyxl ``Comment`` listing the citation IDs and confidences.
+      Operators can hover any cell in Excel / Numbers / Google Sheets
+      to see the source. (Up to 5 citations per comment; the cell
+      retains the full count.)
+    * **CSV** — a trailing ``citation_links`` column per row carries a
+      semicolon-separated list of ``"<column_name>:<citation_id>"``
+      pairs across every cell in the row. Empty when no cell in the
+      row had citations.
+
+    The execution must be in ``status='completed'``. Pending / running
+    / cancelled / failed rows return 409 — partial grids would mislead
+    downstream consumers. (DE-XXX candidate: a separate
+    ``allow_partial=true`` query param to export partial grids with a
+    visible watermark; deferred until an operator surfaces the need.)
+    """
+
+    row = await _load_caller_execution(db, execution_id=execution_id, user=user)
+    if row.status != "completed":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"execution must be in status='completed' to export "
+                f"(current status: {row.status!r})"
+            ),
+        )
+
+    columns = [ColumnSpec.model_validate(c) for c in (row.columns or [])]
+    results = TabularResults.model_validate(row.results) if row.results else TabularResults(rows=[])
+
+    await audit_action(
+        db,
+        user_id=user.id,
+        action="tabular.execution_exported",
+        resource_type="tabular_execution",
+        resource_id=str(execution_id),
+        request=request,
+        details={"format": format, "row_count": len(results.rows)},
+    )
+    await db.commit()
+
+    if format == "xlsx":
+        content = _build_xlsx(columns=columns, results=results)
+        media_type = _XLSX_MEDIA_TYPE
+        filename = f"tabular-{execution_id}.xlsx"
+    else:
+        content = _build_csv(columns=columns, results=results).encode("utf-8")
+        media_type = _CSV_MEDIA_TYPE
+        filename = f"tabular-{execution_id}.csv"
+
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _build_xlsx(*, columns: list[ColumnSpec], results: TabularResults) -> bytes:
+    """Render the grid as an XLSX workbook (openpyxl).
+
+    Cell comments carry citation metadata so an operator can pivot
+    from the spreadsheet back to the deployment. The comment text is
+    deliberately compact (citation IDs + confidence) — operators
+    needing the full source text click through to the deployment URL
+    (a deferred enhancement covers stamping a deployment URL on each
+    comment, DE-XXX).
+    """
+
+    # Lazy import keeps the openpyxl dependency from being imported on
+    # the FastAPI app's hot path (export is the only consumer).
+    from openpyxl import Workbook  # type: ignore[import-untyped]
+
+    wb = Workbook()
+    ws = wb.active
+    if ws is None:
+        # openpyxl always creates an active sheet on Workbook(); the
+        # branch exists for the type checker.
+        ws = wb.create_sheet()
+    ws.title = "Tabular Review"
+
+    column_names = [c.name for c in columns]
+
+    # Header row.
+    ws.cell(row=1, column=1, value="Document")
+    for ci, name in enumerate(column_names, start=2):
+        ws.cell(row=1, column=ci, value=name)
+
+    # Data rows.
+    for ri, grid_row in enumerate(results.rows, start=2):
+        ws.cell(row=ri, column=1, value=grid_row.document_name)
+        for ci, name in enumerate(column_names, start=2):
+            cell_data = grid_row.cells.get(name)
+            value = _cell_display_value(cell_data)
+            xlsx_cell = ws.cell(row=ri, column=ci, value=value)
+            if cell_data and cell_data.citations:
+                xlsx_cell.comment = _build_xlsx_comment(cell_data.citations)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def _build_csv(*, columns: list[ColumnSpec], results: TabularResults) -> str:
+    """Render the grid as RFC 4180 CSV (stdlib `csv`).
+
+    The trailing ``citation_links`` column flattens every cell's
+    citations in the row into a single semicolon-separated string of
+    ``<column_name>:<citation_id>`` pairs. Empty when no cell had
+    citations.
+    """
+
+    out = io.StringIO()
+    writer = csv.writer(out)
+    column_names = [c.name for c in columns]
+    writer.writerow(["Document", *column_names, "citation_links"])
+
+    for grid_row in results.rows:
+        row_values: list[str] = [grid_row.document_name]
+        row_citations: list[str] = []
+        for name in column_names:
+            cell_data = grid_row.cells.get(name)
+            row_values.append(_cell_display_value(cell_data))
+            if cell_data and cell_data.citations:
+                row_citations.extend(f"{name}:{c.citation_id}" for c in cell_data.citations)
+        row_values.append(";".join(row_citations))
+        writer.writerow(row_values)
+
+    return out.getvalue()
+
+
+def _cell_display_value(cell_data: object) -> str:
+    """Project a CellResult into a single string for export rendering.
+
+    Failed cells render as ``"(failed)"`` so the gap is visible in the
+    spreadsheet without consulting the source execution. None / missing
+    cells render as the empty string.
+    """
+
+    if cell_data is None:
+        return ""
+    confidence = getattr(cell_data, "confidence", None)
+    if confidence == "failed":
+        return "(failed)"
+    value = getattr(cell_data, "value", None)
+    return value if value is not None else ""
+
+
+def _build_xlsx_comment(citations: list[Citation]) -> object:
+    """Build an openpyxl Comment summarising the cell's citations.
+
+    Caps at 5 citations to keep the comment readable; the full count
+    is preserved in the lead line so operators know whether the
+    summary is complete.
+    """
+
+    from openpyxl.comments import Comment  # type: ignore[import-untyped]
+
+    total = len(citations)
+    shown = citations[:5]
+    lines = [f"{total} citation(s):"]
+    for c in shown:
+        cid = c.citation_id
+        conf = c.confidence
+        lines.append(f"- {str(cid)[:8]} ({conf})")
+    if total > len(shown):
+        lines.append(f"- ... and {total - len(shown)} more")
+    return Comment("\n".join(lines), "LQ.AI")
 
 
 # ---------------------------------------------------------------------------
