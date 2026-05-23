@@ -146,6 +146,8 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/tabular/executions",
         "/api/v1/tabular/executions/{execution_id}",
         "/api/v1/tabular/executions/{execution_id}/cancel",
+        # M3-C4a — XLSX/CSV export.
+        "/api/v1/tabular/executions/{execution_id}/export",
         # M3-D1 — slack-bridge persistence surface (bearer-token, no user)
         "/api/v1/integrations/slack/workspaces",
     }
@@ -200,11 +202,12 @@ async def test_openapi_paths_match_sketch() -> None:
     #    /tabular/executions/{id}, /tabular/executions/{id}/cancel).
     #   DELETE on /executions/{id} shares the GET path so it adds zero
     #   new paths here; the method-tuple count is in test_endpoints.py.
+    # + M3-C4a's /tabular/executions/{id}/export.
     # + M3-D1's one NEW path for the slack-bridge persistence surface
     #   (POST /integrations/slack/workspaces). One method-tuple here;
     #   the bridge is the sole caller so additional verbs aren't needed
     #   in M3-D1 (uninstall comes in M3-D4 admin UI work).
-    assert len(actual) == 89
+    assert len(actual) == 90
 
 
 @pytest.mark.unit
