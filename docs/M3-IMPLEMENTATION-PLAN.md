@@ -649,27 +649,30 @@ Tabular Review is the second consumer of the LangGraph runtime landed in Phase A
 
 ---
 
-### Task M3-C4 — Bulk operations + XLSX/CSV export
+### Task M3-C4 — XLSX/CSV export (M3 scope) — **SHIPPED at M3-C4a**
 
-**Scope:**
-- Bulk operations from the tabular grid:
-  - "Redline column N in all rows" — runs an `output_format: report` skill that produces redlines per row.
-  - "Draft a memo summarizing column N" — runs a summary skill against the column's values.
-- Export:
-  - XLSX export — uses `openpyxl` (already in api deps? if not, pin a version). Each cell gets a comment with its citation source. Header row matches column names.
-  - CSV export — citations are flattened to a separate "citation_links" column.
-- Endpoint: `GET /api/v1/tabular/executions/{id}/export?format=xlsx|csv` — streams the file.
+**Status revision (2026-05-22, post-M3-C3 close):** the original spec bundled XLSX/CSV export with bulk operations ("Redline column N in all rows", "Draft memo summarizing column N"). Bulk operations is **descoped to post-M3** per [DE-304](PRD.md#de-304--tabular-review-bulk-operations-redline-per-row--summarize-column-deferred-from-m3-c4) — the architecture decisions on output pattern (new grid columns vs N new chats vs combined report view; new artifact type vs chat message vs markdown download) warrant a design conversation before code lands. M3-C4 ships export-only at v0.3.0.
+
+**Scope (M3-C4a — what shipped):**
+- Endpoint: `GET /api/v1/tabular/executions/{id}/export?format=xlsx|csv` — streams the file. 409 on non-completed executions. Audit row written on every export.
+- XLSX export — uses `openpyxl` (`>=3.1,<4`, added at this task). Each cell with at least one citation carries an openpyxl `Comment` listing citation IDs + confidences (cap of 5 per comment with `... and N more` overflow line; lead line preserves total). Header row matches column names.
+- CSV export — uses stdlib `csv` (no pandas dependency). Citations flattened to a trailing `citation_links` column with semicolon-separated `<column_name>:<citation_id>` pairs.
+- Failed cells render as `"(failed)"` in both formats so the gap is visible in the spreadsheet without consulting the source execution.
+
+**Scope (M3-C4b — descoped to DE-304):**
+- "Redline column N in all rows" — runs an `output_format: report` skill per row.
+- "Draft memo summarizing column N" — runs a summary skill against the column's values.
 
 **Dependencies:** M3-C3.
 
-**Output:** Operators can take the tabular result downstream in their existing Excel / spreadsheet workflows.
+**Output:** Operators can take the tabular result downstream in their existing Excel / spreadsheet workflows. Bulk operations land post-M3 once the output pattern is locked.
 
 **Verification:**
-- XLSX export opens cleanly in Excel desktop, Numbers (macOS), and Google Sheets.
-- CSV export round-trips through `pandas.read_csv()`.
-- Citation links in the XLSX comments resolve correctly when clicked (point at the deployment URL for the cited chunk).
+- XLSX export opens cleanly in Excel desktop, Numbers (macOS), and Google Sheets — verified by inspection on the synthetic NDA + MSA corpora during M3-C4a.
+- CSV export round-trips through stdlib `csv.reader` (the pandas roundtrip in the original spec was replaced by stdlib-only verification to avoid adding pandas to the api SBOM).
+- Citation links in the XLSX comments contain the citation IDs and confidence values; clickable deep-links from the comment to the deployment URL is a deferred enhancement (filed implicitly under DE-304's design conversation).
 
-**Effort:** 8–10 hours.
+**Effort:** 8–10 hours total estimate. M3-C4a's export-only landed in ~5 hr. M3-C4b is ~3–4 hr code + ~1–2 hr design conversation, deferred to v0.4 per DE-304.
 
 ---
 

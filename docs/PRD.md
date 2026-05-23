@@ -4106,6 +4106,39 @@ Two paths; the contributor picks one as part of the PR:
 
 **When to ship:** Sensitive surface — opt-in by default; needs a security review of the CSP changes and an explicit attestation that browser-side telemetry inherits the same anonymization-of-attributes posture as backend telemetry. Best landed as its own focused PR after Phase F + DE-299 + DE-300 have stabilized.
 
+#### DE-304 — Tabular Review bulk operations: redline-per-row + summarize-column (deferred from M3-C4)
+
+**Priority:** P2 (operators get most of M3-C4's value from export today; bulk operations is the "second step" beyond a static grid) · **Effort:** M (~3–4 hr code; ~1–2 hr design conversation upfront because the output pattern is architecturally novel)
+
+**Context:** The M3-C4 spec bundled two distinct deliverables — XLSX/CSV export, and bulk operations on the grid. The export half shipped at M3-C4a (PR #75); the bulk operations half is deferred here because it surfaces architectural decisions the substrate work does not anticipate. M3-C4's M3 scope is reduced to "export only" for v0.3.0; the M3 plan's effort estimate stays 8–10 hr because the M3-C4a work landed in that range.
+
+**Specific scope:**
+
+Two bulk operations as originally written in the M3-C4 spec:
+
+* **"Redline column N in all rows"** — runs an `output_format: report` skill once per row, taking the row's cell value (the extracted text for the named column) plus the source document as input, and producing redline language. The architectural question: where does the output go? Three candidates, none obviously right:
+  - **(a) New grid columns appended to the right** — preserves the grid-shaped affordance but doubles the visible width; only works for short redline output.
+  - **(b) N new chats, one per (row × redline)** — natural for downstream conversation but loses the grid context; operator clicks through to each chat to see the redline.
+  - **(c) Single combined "redline report" view** — bundles all N redlines into one scrollable artifact accessible via "View redlines" button on the result page. Simpler UI, but no per-row drill-down.
+* **"Draft a memo summarizing column N"** — runs a summary skill once against the column's values (one input, N values), producing a single memo paragraph. Output candidates:
+  - **(a) New artifact type on the execution row** — `bulk_op_outputs: {[op_id]: {type: 'memo', column: 'Term', text: '...', generated_at: ...}}`; UI exposes a "Memos" panel.
+  - **(b) A new chat message** — operator can iterate on the memo in the regular chat surface; but the artifact is "lost" to the chat history rather than attached to the tabular run.
+  - **(c) A markdown download** — simplest; operator gets a `.md` file; no in-app surface.
+
+**Acceptance criteria** (to be locked at design conversation, but the substrate-side commitments are):
+
+- The bulk operation's cost preview is shown before execution (matches the M3-C2 cost-preview pattern).
+- The bulk operation's output is causally linked back to the parent tabular execution (a `parent_execution_id` or `parent_op_id` field on whatever shape the output lands in).
+- A failed row in a bulk redline operation does not block the rest; partial results land with the failure rendered visibly.
+
+**Design conversation prompt for the contributor / next session:**
+
+> The M3-C4 spec says "runs an `output_format: report` skill that produces redlines per row." `output_format: report` is the chat-message format — so the natural mechanical reading is option (b) above: each row spawns a new chat. But the user's mental model is the grid, not the chat history; option (c)'s "redline report" view may match operator intent better even though it's a less mechanical reading of the spec.
+>
+> Pick one. Document the decision in an ADR (`docs/adr/00NN-tabular-bulk-operations.md`) before any code lands.
+
+**When to ship:** Post-M3. Likely v0.4 once a few operators have run real Tabular Reviews with the export-only shape and we have signal on which output pattern they'd actually use. Filing now (rather than waiting for v0.4) so the M3-C4 spec stays accurate.
+
 ---
 
 ## 10. Appendices
