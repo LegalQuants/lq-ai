@@ -181,6 +181,29 @@ Before implementing a task, read:
 3. The relevant DB schema section if the task touches the database.
 4. Any existing implementation in the same area (don't rebuild what exists).
 
+### Common pitfalls (catch at write-time, not test-time)
+
+A few traps that have bitten this codebase more than once. Each has a fix recipe; follow it the first time and the bug never surfaces in your branch.
+
+**`DELETE` endpoints returning `204 No Content`** — FastAPI's default `JSONResponse` is body-emitting and asserts at import time when `status_code=204`. The assertion (`Status code 204 must not have a response body`) fires during test collection, collapsing the whole test suite — not just the new endpoint's tests. Recurred between M3-C2 (fix in commit `c613c43`) and M3-D4 because the recipe lived only in code comments.
+
+Recipe:
+
+```python
+from fastapi import Response, status
+
+@router.delete(
+    "/things/{thing_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,                       # critical — overrides default JSONResponse
+)
+async def soft_delete_thing(...) -> Response:
+    ...
+    return Response(status_code=status.HTTP_204_NO_CONTENT)  # explicit empty return
+```
+
+Both `response_class=Response` AND the explicit `return Response(...)` are required. Omitting either resurfaces the assertion.
+
 ### Surface ideas as DE-XXX
 
 When a useful idea surfaces that is out of scope for the current task, file it as a deferred enhancement (DE-XXX) in PRD §9. Do not expand the task to incorporate the idea; preserve the focus, defer the idea.
