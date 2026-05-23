@@ -39,6 +39,12 @@ dependencies = [
     # M3-D2 will use when the slash-command surface lands). Pinning
     # the 3.x line; 4.x is not yet released.
     "slack-sdk>=3.27,<4",
+    # aiohttp is a transitive runtime requirement of slack_sdk's async
+    # web client (slack_sdk.web.async_client.AsyncWebClient). slack-sdk
+    # treats it as an optional/lazy dep; we pin it explicitly because
+    # every OAuth callback uses the async client, so an unpinned
+    # missing-aiohttp is a runtime crash on first install.
+    "aiohttp>=3.10,<4",
     # OpenTelemetry — mirrors api/ + gateway/ so the bridge participates
     # in the M1 OTel substrate from day one. The deepening work in
     # M3 Phase F (per docs/proposals/opentelemetry-deepening.md) will

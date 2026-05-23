@@ -22,6 +22,7 @@ from app.models.playbook import Playbook, PlaybookExecution, PlaybookPosition
 from app.models.project import Project, ProjectFile, ProjectSkill
 from app.models.project_knowledge_base import ProjectKnowledgeBase
 from app.models.saved_prompt import SavedPrompt
+from app.models.slack_workspace import SlackWorkspace
 from app.models.tabular import TabularExecution
 from app.models.team import Team, TeamMember
 from app.models.user import User, UserSession
@@ -49,6 +50,7 @@ __all__ = [
     "ProjectKnowledgeBase",
     "ProjectSkill",
     "SavedPrompt",
+    "SlackWorkspace",
     "TabularExecution",
     "Team",
     "TeamMember",

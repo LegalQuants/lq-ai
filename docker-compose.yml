@@ -197,6 +197,11 @@ services:
       # not mutate it (skill authoring is a host-side / human-attestation
       # workflow per CLAUDE.md "Working with skills").
       LQ_AI_SKILLS_DIR: ${LQ_AI_SKILLS_DIR:-/skills}
+      # M3-D1 slack-bridge integration. Both optional: only required for
+      # operators who enable the `slack` compose profile. The api refuses
+      # bridge traffic with 500 when either is unset.
+      LQ_AI_BRIDGE_TOKEN: ${LQ_AI_BRIDGE_TOKEN:-}
+      LQ_AI_BRIDGE_MASTER_KEY: ${LQ_AI_BRIDGE_MASTER_KEY:-}
     volumes:
       - ./skills:/skills:ro
     ports:
@@ -396,6 +401,53 @@ services:
     restart: "no"
     # Disabled in M1; placeholder so Mode 2 ops know where it goes.
     entrypoint: ["sh", "-c", "echo 'PaddleOCR-VL service lands in M2.'; sleep 1"]
+
+  # ============================================================
+  # Integration bridges (PRD §3.15 — opt-in by Compose profile)
+  # ============================================================
+
+  slack-bridge:
+    # M3-D1 — Slack OAuth + webhook bridge. Gated by the ``slack``
+    # profile so operators who don't use Slack don't pay the SBOM cost
+    # or run a service they have nothing to do with.
+    #
+    # Bring up with: ``docker compose --profile slack up -d slack-bridge``
+    #
+    # Credentials come from the operator's Slack App admin UI
+    # (SLACK_CLIENT_ID / SLACK_CLIENT_SECRET / SLACK_SIGNING_SECRET);
+    # LQ_AI_BRIDGE_TOKEN is the shared secret the bridge presents on
+    # internal calls to the api (the api validates with the same env
+    # var). LQ_AI_BRIDGE_PUBLIC_URL is the externally reachable URL
+    # Slack will hit on OAuth callback — operators typically front
+    # this with their reverse proxy.
+    build:
+      context: ./slack-bridge
+      dockerfile: Dockerfile
+    profiles: ["slack"]
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      # Slack-side credentials (operator obtains from Slack App admin UI)
+      SLACK_CLIENT_ID: ${SLACK_CLIENT_ID:?SLACK_CLIENT_ID is required when slack profile is enabled}
+      SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET:?SLACK_CLIENT_SECRET is required when slack profile is enabled}
+      SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:?SLACK_SIGNING_SECRET is required when slack profile is enabled}
+      # LQ.AI-side coordinates
+      LQ_AI_BACKEND_URL: ${LQ_AI_BACKEND_URL:-http://api:8000}
+      LQ_AI_BRIDGE_TOKEN: ${LQ_AI_BRIDGE_TOKEN:?LQ_AI_BRIDGE_TOKEN is required when slack profile is enabled}
+      LQ_AI_BRIDGE_PUBLIC_URL: ${LQ_AI_BRIDGE_PUBLIC_URL:?LQ_AI_BRIDGE_PUBLIC_URL is required when slack profile is enabled}
+      # Observability (opt-in)
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-lq-ai-slack-bridge}
+      LQ_AI_BRIDGE_LOG_LEVEL: ${LQ_AI_BRIDGE_LOG_LEVEL:-INFO}
+    ports:
+      - "${SLACK_BRIDGE_BIND_ADDR:-127.0.0.1}:${SLACK_BRIDGE_HOST_PORT:-8002}:8002"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8002/healthz', timeout=2).status == 200 else 1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
 # ============================================================
 # Persistent volumes (PRD §6.5)

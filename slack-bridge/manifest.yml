@@ -1,0 +1,68 @@
+# Slack App manifest for the LQ.AI Slack Bridge (M3-D1).
+#
+# Operators paste this into the Slack App admin UI at
+# https://api.slack.com/apps?new_app=1 → "From a manifest" to create
+# the LQ.AI app in their workspace, then export the resulting
+# SLACK_CLIENT_ID / SLACK_CLIENT_SECRET / SLACK_SIGNING_SECRET to
+# the slack-bridge service (see slack-bridge/README.md).
+#
+# Scopes are kept narrow on purpose — the bridge only needs to:
+#
+#   - present a future slash command (`commands`)
+#   - reply to invocations and post in invited channels (`chat:write`)
+#
+# It does NOT need `channels:read` / `groups:read` / `im:read` because
+# the bot does not read silent channels (PRD §3.15 — only acts on
+# explicit user invocations).
+#
+# The slash-command surface (M3-D2) is descoped to M4 / community per
+# DE-288, so this manifest declares no `slash_commands` block today.
+# Community contributors adding `/lq` extend this file via PR.
+#
+# `${LQ_AI_BRIDGE_PUBLIC_URL}` is a placeholder the operator replaces
+# manually before pasting into Slack — Slack's manifest UI does not
+# perform environment substitution. The bridge OAuth handler builds
+# the matching `redirect_uri` from the same env var at runtime, so the
+# values must agree.
+
+_metadata:
+  major_version: 1
+  minor_version: 1
+
+display_information:
+  name: LQ.AI
+  description: In-house legal AI — Slack bridge for LQ.AI deployments.
+  long_description: >-
+    LQ.AI is a self-hosted, transparency-first AI platform for in-house
+    legal teams. This Slack bridge connects a Slack workspace to one
+    LQ.AI deployment so that future slash-command and bot surfaces can
+    be wired up by operator and community contributors. The bot does
+    not read silent channels — it only responds to explicit user
+    invocations.
+  background_color: "#0b3a53"
+
+features:
+  bot_user:
+    display_name: LQ.AI
+    always_online: false
+
+oauth_config:
+  redirect_urls:
+    # Replace ${LQ_AI_BRIDGE_PUBLIC_URL} with the externally reachable
+    # base URL of the bridge before saving the manifest. The bridge
+    # OAuth handler builds the same URL at runtime from
+    # LQ_AI_BRIDGE_PUBLIC_URL; the two must match exactly or Slack
+    # will reject the callback.
+    - ${LQ_AI_BRIDGE_PUBLIC_URL}/slack/oauth/callback
+  scopes:
+    bot:
+      - commands
+      - chat:write
+
+settings:
+  # Slash commands + interactive components land in M3-D2 / community
+  # per DE-288. When they do, populate interactivity.request_url and
+  # add the slash_commands block above.
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false

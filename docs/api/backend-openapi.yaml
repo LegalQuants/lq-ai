@@ -3446,6 +3446,53 @@ paths:
         '404':
           description: Chat not found
 
+  # ============================================================
+  # M3-D1 — slack-bridge persistence surface
+  # ============================================================
+
+  /api/v1/integrations/slack/workspaces:
+    post:
+      tags: [integrations-slack]
+      summary: Persist a Slack workspace from the slack-bridge OAuth flow (M3-D1)
+      description: |
+        Service-to-service endpoint. Authenticated by a shared
+        `Authorization: Bearer ${LQ_AI_BRIDGE_TOKEN}` token (NOT a user
+        JWT) — the slack-bridge is the only intended caller.
+
+        The bridge POSTs the workspace tuple after the operator
+        completes the Slack OAuth install flow at
+        `${LQ_AI_BRIDGE_PUBLIC_URL}/slack/oauth/install`. The api
+        encrypts the bot token at rest under `LQ_AI_BRIDGE_MASTER_KEY`
+        (a separate Fernet master key from the gateway's
+        `LQ_AI_GATEWAY_MASTER_KEY` — different threat models) and
+        upserts on `team_id` so a re-install (Slack rotates bot tokens
+        on re-install) replaces the old ciphertext + scope + installer
+        in place. Soft-deleted rows revive on re-install.
+
+        500 (not 401) is the response when the operator hasn't set
+        `LQ_AI_BRIDGE_TOKEN` on the api — accepting bridge traffic
+        with no enforced secret would silently break the trust
+        contract.
+      security:
+        - bridgeBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SlackWorkspaceCreate'
+      responses:
+        '201':
+          description: Persisted (or upserted) the workspace record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlackWorkspaceResponse'
+        '401':
+          description: Missing, malformed, or non-matching bridge bearer token
+        '500':
+          description: Operator has not configured `LQ_AI_BRIDGE_TOKEN` on the api
+
 # ============================================================
 # COMPONENTS
 # ============================================================
@@ -3466,8 +3513,110 @@ components:
         same secret is used in the reverse direction (backend → gateway)
         for incoming-request auth on the gateway's surface, though the
         gateway-side enforcement is a deferred D-phase item.
+    bridgeBearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        Shared-secret bearer token the slack-bridge service presents
+        on POSTs to `/api/v1/integrations/slack/workspaces` (M3-D1).
+        Constant-time compare against `LQ_AI_BRIDGE_TOKEN` on the
+        backend. Distinct from `gatewayKeyAuth` — the bridge and the
+        gateway have separate service identities and separate
+        threat models.
 
   schemas:
+    SlackWorkspaceCreate:
+      type: object
+      description: |
+        Request body for `POST /api/v1/integrations/slack/workspaces`
+        (M3-D1). Shape matches what `slack-bridge/app/oauth.py`
+        constructs from Slack's `oauth.v2.access` response after the
+        operator completes consent. The bridge → api contract is
+        position-coupled to this shape; renames here would break it.
+      required:
+        - team_id
+        - team_name
+        - bot_token
+        - bot_user_id
+        - installer_slack_user_id
+        - scope
+      additionalProperties: false
+      properties:
+        team_id:
+          type: string
+          minLength: 1
+          description: Slack workspace id (T0...).
+          example: 'T01234567'
+        team_name:
+          type: string
+          minLength: 1
+          description: Workspace display name at install time.
+          example: 'Acme Legal'
+        bot_token:
+          type: string
+          minLength: 1
+          description: |
+            The xoxb- bot user OAuth token Slack returned. Plaintext
+            on the wire (the request travels over the trusted
+            in-cluster network with a bridge bearer token); encrypted
+            under `LQ_AI_BRIDGE_MASTER_KEY` before persistence.
+          example: 'xoxb-...'
+        bot_user_id:
+          type: string
+          minLength: 1
+          description: Slack user id of the bot user.
+          example: 'U99BOT'
+        installer_slack_user_id:
+          type: string
+          minLength: 1
+          description: Slack user id of the operator who completed install (audit only).
+          example: 'U11INSTALLER'
+        scope:
+          type: string
+          minLength: 1
+          description: Comma-separated scope list Slack returned.
+          example: 'commands,chat:write'
+
+    SlackWorkspaceResponse:
+      type: object
+      description: |
+        Persisted-workspace response for `POST
+        /api/v1/integrations/slack/workspaces`. Bot token is
+        deliberately omitted — neither the plaintext nor the
+        ciphertext is echoed back to the bridge.
+      required:
+        - id
+        - team_id
+        - team_name
+        - bot_user_id
+        - installer_slack_user_id
+        - scope
+        - installed_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: api-side workspace row id.
+        team_id:
+          type: string
+          example: 'T01234567'
+        team_name:
+          type: string
+          example: 'Acme Legal'
+        bot_user_id:
+          type: string
+          example: 'U99BOT'
+        installer_slack_user_id:
+          type: string
+          example: 'U11INSTALLER'
+        scope:
+          type: string
+          example: 'commands,chat:write'
+        installed_at:
+          type: string
+          format: date-time
+          description: Original install timestamp. NOT moved by upsert.
+
     WordAddinVersionResponse:
       type: object
       description: |

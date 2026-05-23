@@ -286,6 +286,31 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ----- M3-D1 slack-bridge integration -----
+    # The slack-bridge runs the OAuth dance with Slack then POSTs the
+    # resulting workspace record to
+    # ``POST /api/v1/integrations/slack/workspaces``. Both secrets here
+    # live on the api ONLY (NOT on the gateway): the gateway has no
+    # role in the Slack OAuth surface, and keeping its secret surface
+    # minimal is a load-bearing posture. Different from the gateway's
+    # ``LQ_AI_GATEWAY_MASTER_KEY`` on purpose — Slack bot tokens enable
+    # bot impersonation; provider keys enable inference routing.
+    # Different blast radii → different keys.
+    lq_ai_bridge_token: str = Field(
+        default="",
+        description=(
+            "Shared bearer token the slack-bridge presents on POSTs to "
+            "/api/v1/integrations/slack/workspaces. Constant-time matched."
+        ),
+    )
+    lq_ai_bridge_master_key: str = Field(
+        default="",
+        description=(
+            "urlsafe-base64 Fernet master key used to encrypt Slack bot "
+            "tokens at rest (and any future bridge-issued secret)."
+        ),
+    )
+
     # ----- Operational -----
     log_level: LogLevel = Field(default="info", description="Log level for the api/ service.")
     lq_ai_dev_mode: bool = Field(

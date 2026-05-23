@@ -205,6 +205,8 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("GET", "/api/v1/admin/word-addin/manifest"),
     # M3-B8 — Word add-in version handshake (unauthenticated)
     ("GET", "/api/v1/word-addin/version"),
+    # M3-D1 — slack-bridge persistence surface (bridge-token bearer auth)
+    ("POST", "/api/v1/integrations/slack/workspaces"),
     # D4 — Organization Profile singleton
     ("GET", "/api/v1/organization-profile"),
     ("PUT", "/api/v1/organization-profile"),

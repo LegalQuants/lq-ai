@@ -32,6 +32,7 @@ from app.api import (
     files,
     inference,
     inference_override,
+    integrations_slack,
     internal,
     knowledge_bases,
     models,
@@ -63,6 +64,12 @@ api_router.include_router(bootstrap.router)
 # shared X-LQ-AI-Gateway-Key header per ADR 0006, NOT by the user-token
 # gate. Mounted without `_active` deliberately: the gateway has no user.
 api_router.include_router(internal.router)
+
+# M3-D1: slack-bridge → api persistence surface. Authenticated by the
+# shared LQ_AI_BRIDGE_TOKEN bearer header at the handler level, NOT by
+# the user-token gate. Mounted without `_active` deliberately: the
+# bridge is a service-to-service caller with no user context.
+api_router.include_router(integrations_slack.router)
 
 # M3-B8 — Word add-in version handshake. Unauthenticated: the task pane
 # calls this on mount BEFORE the user has signed in, so an out-of-date
