@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LQ.AI — OTel Trace: chat-send end to end</title>
+<style>
+  :root {
+    --bg: #0c0f14;
+    --bg-elev: #151a23;
+    --bg-elev-2: #1d242f;
+    --border: #2a3340;
+    --border-hover: #3a4555;
+    --text: #e6ebf3;
+    --text-dim: #8a96a8;
+    --text-faint: #5a6578;
+    --accent: #7dd3fc;
+    --accent-dim: #38bdf8;
+    --verified: #86efac;
+    --verified-bg: rgba(134,239,172,0.08);
+    --verified-border: rgba(134,239,172,0.3);
+    --partial: #fcd34d;
+    --partial-bg: rgba(252,211,77,0.08);
+    --partial-border: rgba(252,211,77,0.3);
+    --unverified: #f87171;
+    --unverified-bg: rgba(248,113,113,0.08);
+    --unverified-border: rgba(248,113,113,0.3);
+    --pending: #5a6578;
+    --pending-bg: rgba(90,101,120,0.08);
+    --pending-border: rgba(90,101,120,0.25);
+    --shadow: rgba(0,0,0,0.4);
+    --span-api: rgba(125,211,252,0.12);
+    --span-gateway: rgba(134,239,172,0.10);
+    --span-provider: rgba(252,211,77,0.08);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+  }
+  .app { display: grid; grid-template-rows: auto 1fr; height: 100vh; }
+  header {
+    padding: 12px 20px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 16px;
+  }
+  header h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
+  header .subtitle { color: var(--text-dim); font-size: 13px; }
+  header .spacer { flex: 1; }
+  header a {
+    color: var(--accent); text-decoration: none; font-size: 12px;
+    border: 1px solid var(--border); padding: 4px 10px; border-radius: 4px;
+  }
+  header a:hover { border-color: var(--border-hover); background: var(--bg-elev-2); }
+
+  .main { display: grid; grid-template-columns: 360px 1fr; overflow: hidden; }
+  .controls {
+    background: var(--bg-elev);
+    border-right: 1px solid var(--border);
+    padding: 16px; overflow-y: auto;
+  }
+  .controls h2 {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-dim); margin: 16px 0 8px;
+  }
+  .controls h2:first-child { margin-top: 0; }
+  .controls .hint { font-size: 11px; color: var(--text-faint); margin: 4px 0 8px; line-height: 1.4; }
+
+  .presets { display: grid; grid-template-columns: 1fr; gap: 5px; }
+  .preset-btn {
+    background: var(--bg-elev-2); border: 1px solid var(--border);
+    color: var(--text); padding: 7px 10px; border-radius: 4px;
+    cursor: pointer; font-size: 12px; text-align: left;
+    transition: all 0.1s; line-height: 1.4;
+  }
+  .preset-btn:hover { border-color: var(--border-hover); }
+  .preset-btn.active {
+    background: var(--accent); border-color: var(--accent);
+    color: var(--bg); font-weight: 600;
+  }
+  .preset-btn .preset-label { display: block; font-weight: 600; margin-bottom: 2px; }
+  .preset-btn .preset-desc { display: block; font-size: 11px; color: var(--text-dim); }
+  .preset-btn.active .preset-desc { color: rgba(12,15,20,0.7); }
+
+  .toggle {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 8px 8px; border-radius: 4px; cursor: pointer;
+    user-select: none; transition: background 0.1s; font-size: 13px;
+  }
+  .toggle:hover { background: var(--bg-elev-2); }
+  .toggle input { margin: 3px 0 0; cursor: pointer; accent-color: var(--accent); flex-shrink: 0; }
+  .toggle .toggle-label { flex: 1; line-height: 1.4; }
+  .toggle .toggle-label span { display: block; color: var(--text-dim); font-size: 11px; margin-top: 2px; }
+
+  select {
+    width: 100%;
+    background: var(--bg-elev-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 7px 10px;
+    border-radius: 4px;
+    font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    cursor: pointer;
+  }
+  select:focus { border-color: var(--accent); outline: none; }
+
+  .preview-wrap {
+    overflow-y: auto;
+    padding: 20px;
+    background:
+      radial-gradient(circle at 20% 20%, rgba(125,211,252,0.03), transparent 55%),
+      radial-gradient(circle at 80% 80%, rgba(134,239,172,0.03), transparent 55%);
+  }
+  .preview-inner { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+  /* --- Span tree --- */
+  .tree-section { }
+  .tree-title {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-dim); margin: 0 0 10px;
+  }
+  .span-tree { display: flex; flex-direction: column; gap: 4px; }
+  .span-node {
+    display: flex; flex-direction: column; gap: 0;
+  }
+  .span-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    gap: 8px;
+    align-items: center;
+    padding: 7px 10px;
+    border-radius: 5px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: border-color 0.1s;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 12px;
+  }
+  .span-row:hover { border-color: var(--border-hover); }
+  .span-row.expanded { border-color: var(--accent-dim); }
+  .span-row.service-api { background: var(--span-api); }
+  .span-row.service-gateway { background: var(--span-gateway); }
+  .span-row.service-provider { background: var(--span-provider); }
+  .span-row.hidden-node { display: none; }
+
+  .span-indent { color: var(--text-faint); white-space: pre; font-size: 11px; }
+  .span-name { color: var(--text); font-weight: 600; }
+  .span-name .span-sub { color: var(--text-dim); font-weight: 400; font-size: 11px; margin-left: 6px; }
+  .span-kind {
+    font-size: 10px; padding: 1px 6px; border-radius: 3px;
+    border: 1px solid var(--border); color: var(--text-faint);
+    font-weight: 600; white-space: nowrap;
+  }
+  .span-kind.SERVER { color: var(--accent); border-color: rgba(125,211,252,0.3); }
+  .span-kind.CLIENT { color: var(--partial); border-color: rgba(252,211,77,0.3); }
+  .span-kind.INTERNAL { color: var(--text-faint); }
+
+  .span-dur-wrap { width: 80px; }
+  .span-dur-bar {
+    height: 6px; border-radius: 2px;
+    background: var(--border);
+    overflow: hidden;
+    margin-bottom: 2px;
+  }
+  .span-dur-fill { height: 100%; border-radius: 2px; background: var(--accent); }
+  .span-dur-label { font-size: 10px; color: var(--text-faint); text-align: right; }
+
+  .span-attrs {
+    padding: 10px 14px;
+    background: var(--bg-elev-2);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 5px 5px;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 11px;
+    display: none;
+  }
+  .span-attrs.open { display: block; }
+  .attr-row {
+    display: grid; grid-template-columns: 220px 1fr;
+    gap: 10px; padding: 3px 0;
+    border-bottom: 1px dashed var(--border);
+  }
+  .attr-row:last-child { border-bottom: none; }
+  .attr-k { color: var(--text-dim); }
+  .attr-v { color: var(--text); }
+  .attr-v.green { color: var(--verified); }
+  .attr-v.yellow { color: var(--partial); }
+  .attr-v.red { color: var(--unverified); }
+  .attr-event {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 0; font-size: 11px;
+    color: var(--accent); border-bottom: 1px dashed var(--border);
+  }
+  .attr-event:last-child { border-bottom: none; }
+  .attr-event-label { font-weight: 600; }
+  .attr-section-title {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-faint); margin: 6px 0 3px;
+  }
+
+  /* --- Panels --- */
+  .panel {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .panel-header {
+    padding: 10px 14px;
+    background: var(--bg-elev-2);
+    border-bottom: 1px solid var(--border);
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-dim);
+  }
+  .panel-body { padding: 14px; }
+
+  .q-list { display: flex; flex-direction: column; gap: 10px; }
+  .q-item {
+    padding: 10px 12px;
+    border-radius: 5px;
+    background: var(--bg-elev-2);
+    border: 1px solid var(--border);
+  }
+  .q-item .q-text { font-size: 13px; color: var(--text); margin-bottom: 5px; font-weight: 500; }
+  .q-item .q-answer { font-size: 12px; color: var(--text-dim); }
+  .q-item .q-answer code {
+    display: inline-block;
+    background: rgba(125,211,252,0.08);
+    border: 1px solid rgba(125,211,252,0.2);
+    border-radius: 3px; padding: 0 5px;
+    color: var(--accent); font-size: 11px;
+    font-family: ui-monospace, Menlo, monospace;
+  }
+
+  .query-list { display: flex; flex-direction: column; gap: 8px; }
+  .query-item {
+    padding: 10px 12px;
+    border-radius: 5px;
+    background: var(--bg-elev-2);
+    border: 1px solid var(--border);
+  }
+  .query-item .q-lang {
+    font-size: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--text-faint); margin-bottom: 5px;
+  }
+  .query-item .q-code {
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px;
+    color: var(--accent); word-break: break-all; line-height: 1.5;
+  }
+  .query-item .q-note { font-size: 11px; color: var(--text-faint); margin-top: 5px; }
+  .query-item .copy-btn {
+    float: right; font-size: 10px; color: var(--text-faint);
+    background: none; border: 1px solid var(--border);
+    border-radius: 3px; padding: 2px 7px; cursor: pointer;
+    font-family: ui-monospace, Menlo, monospace;
+  }
+  .query-item .copy-btn:hover { color: var(--text); border-color: var(--border-hover); }
+  .query-item .copy-btn.copied { color: var(--verified); border-color: var(--verified-border); }
+
+  .attr-hygiene { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .hygiene-col { }
+  .hygiene-col-title {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em; margin-bottom: 8px;
+  }
+  .hygiene-col-title.green { color: var(--verified); }
+  .hygiene-col-title.red { color: var(--unverified); }
+  .hygiene-row {
+    padding: 5px 8px; border-radius: 4px;
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px;
+    margin-bottom: 4px; border: 1px solid var(--border);
+    background: var(--bg-elev-2);
+  }
+  .hygiene-row.appears { color: var(--verified); border-color: var(--verified-border); }
+  .hygiene-row.never { color: var(--unverified); border-color: var(--unverified-border); }
+  .hygiene-row .hygiene-key { color: inherit; }
+  .hygiene-row .hygiene-ex { color: var(--text-faint); font-size: 10px; display: block; margin-top: 2px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>OTel trace — chat-send end to end</h1>
+    <span class="subtitle">Every chat-send is one distributed trace. Explore the span hierarchy, domain attributes, and operator questions.</span>
+    <span class="spacer"></span>
+    <a href="https://github.com/LegalQuants/lq-ai/blob/main/docs/observability.md" target="_blank">docs/observability.md</a>
+    <a href="https://github.com/LegalQuants/lq-ai/blob/main/api/app/observability_helpers.py" target="_blank">observability_helpers.py</a>
+  </header>
+  <div class="main">
+    <div class="controls">
+      <h2>Citation path</h2>
+      <p class="hint">Determines the <code>citation.verify</code> subtree shape.</p>
+      <div class="presets" id="citation-presets"></div>
+
+      <h2>Anonymization</h2>
+      <label class="toggle">
+        <input type="checkbox" id="anon-toggle" checked>
+        <div class="toggle-label">Anonymization active
+          <span>Shows anonymization.pre / .post spans + entity_count attribute. Uncheck to simulate privileged project (skip_reason = "privileged").</span>
+        </div>
+      </label>
+
+      <h2>Workflow</h2>
+      <div class="presets" id="workflow-presets"></div>
+
+      <h2>Provider / tier</h2>
+      <p class="hint">Sets attributes on the <code>inference.dispatch</code> span.</p>
+      <select id="provider-select">
+        <option value="anthropic-smart">Anthropic · claude-opus-4-7 · Tier 5 (cloud)</option>
+        <option value="anthropic-fast">Anthropic · claude-haiku-4-5 · Tier 5 (cloud)</option>
+        <option value="openai-smart">OpenAI · gpt-4o · Tier 5 (cloud)</option>
+        <option value="azure-smart">Azure OpenAI · gpt-4o · Tier 3 (private cloud)</option>
+        <option value="local-llama">Local Ollama · llama-3.3-70b · Tier 1 (on-prem)</option>
+      </select>
+    </div>
+
+    <div class="preview-wrap">
+      <div class="preview-inner">
+        <div class="tree-section">
+          <div class="tree-title">Span tree — click any span to expand attributes</div>
+          <div class="span-tree" id="span-tree"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">5 operator questions — which span answers each one</div>
+          <div class="panel-body">
+            <div class="q-list" id="q-list"></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">Sample queries — TraceQL · PromQL · LogQL</div>
+          <div class="panel-body">
+            <div class="query-list" id="query-list"></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">Attribute hygiene — what appears vs. what never appears</div>
+          <div class="panel-body">
+            <div class="attr-hygiene" id="hygiene"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+
+const CITATION_PRESETS = [
+  {
+    id: "exact",
+    label: "Exact-match hit (fast)",
+    desc: "Stage 1 wins — short-circuit event; no tolerant/judge spans emitted.",
+    stages: ["citation.stage.exact_match"],
+    method: "exact_match",
+    confidence: 1.0,
+    partial: false,
+    shortCircuit: "exact_match.hit",
+    totalMs: 2
+  },
+  {
+    id: "ensemble",
+    label: "Ensemble (3 judges)",
+    desc: "Stages 1+2 miss; cascade goes to ensemble. 3 parallel judge spans.",
+    stages: ["citation.stage.exact_match", "citation.stage.tolerant_match", "citation.stage.ensemble"],
+    method: "ensemble_strict",
+    confidence: 0.87,
+    partial: false,
+    shortCircuit: null,
+    totalMs: 1240
+  }
+];
+
+const WORKFLOW_PRESETS = [
+  {
+    id: "chat",
+    label: "Chat",
+    desc: "Plain chat-send. One skill, one inference call.",
+    spanName: null,
+    childCount: 0,
+    totalMs: 890
+  },
+  {
+    id: "playbook",
+    label: "Playbook (30 positions)",
+    desc: "playbook.execute spans each position sequentially.",
+    spanName: "playbook.execute",
+    childCount: 30,
+    totalMs: 48200
+  },
+  {
+    id: "tabular",
+    label: "Tabular (5 docs × 4 cols)",
+    desc: "tabular.execute spans each cell in a 5 × 4 grid.",
+    spanName: "tabular.execute",
+    childCount: 20,
+    totalMs: 22400
+  }
+];
+
+const PROVIDERS = {
+  "anthropic-smart": { provider: "anthropic", model: "claude-opus-4-7", tier: 5, tokensIn: 4120, tokensOut: 387, costUsd: 0.0613, inferenceMs: 3840 },
+  "anthropic-fast":  { provider: "anthropic", model: "claude-haiku-4-5", tier: 5, tokensIn: 4120, tokensOut: 387, costUsd: 0.0031, inferenceMs: 1120 },
+  "openai-smart":    { provider: "openai",    model: "gpt-4o",           tier: 5, tokensIn: 4120, tokensOut: 387, costUsd: 0.0247, inferenceMs: 2980 },
+  "azure-smart":     { provider: "azure",     model: "gpt-4o",           tier: 3, tokensIn: 4120, tokensOut: 387, costUsd: 0.0247, inferenceMs: 3240 },
+  "local-llama":     { provider: "ollama",    model: "llama-3.3-70b",    tier: 1, tokensIn: 4120, tokensOut: 387, costUsd: 0.0000, inferenceMs: 7610 }
+};
+
+let activeCitationId = "exact";
+let activeWorkflowId = "chat";
+let anonOn = true;
+let providerKey = "anthropic-smart";
+
+// ---------------------------------------------------------------------------
+// Build span tree data
+// ---------------------------------------------------------------------------
+
+function buildTree() {
+  const prov = PROVIDERS[providerKey];
+  const cit = CITATION_PRESETS.find(c => c.id === activeCitationId);
+  const wf = WORKFLOW_PRESETS.find(w => w.id === activeWorkflowId);
+  const totalMs = wf.totalMs || (prov.inferenceMs + cit.totalMs + (anonOn ? 40 : 0) + 80);
+
+  const anon_pre_ms = anonOn ? 18 : 0;
+  const anon_post_ms = anonOn ? 7 : 0;
+
+  const nodes = [];
+
+  // Root: HTTP span (api, SERVER)
+  nodes.push({
+    id: "root",
+    indent: "",
+    connector: "",
+    name: "POST /api/v1/chats/{chat_id}/messages",
+    sub: "(api — SERVER)",
+    kind: "SERVER",
+    service: "api",
+    ms: totalMs,
+    maxMs: totalMs,
+    attrs: [
+      { k: "http.method", v: "POST" },
+      { k: "http.route", v: "/api/v1/chats/{chat_id}/messages" },
+      { k: "http.status_code", v: "200" },
+      { k: "net.peer.ip", v: "10.0.1.42" }
+    ],
+    events: []
+  });
+
+  // skill.execute (api, INTERNAL) — one per skill in slug list
+  nodes.push({
+    id: "skill",
+    indent: "   ",
+    connector: "└─ ",
+    name: "skill.execute",
+    sub: "(nda-review)",
+    kind: "INTERNAL",
+    service: "api",
+    ms: totalMs - 5,
+    maxMs: totalMs,
+    attrs: [
+      { k: "skill.slug", v: "nda-review" },
+      { k: "skill.version", v: "1.0.0" },
+      { k: "skill.author", v: "Jane Doe" },
+      { k: "project.id", v: "a7f3d2e1-..." },
+      { k: "project.privileged", v: anonOn ? "false" : "true" },
+      { k: "chat.id", v: "b91c4f08-..." }
+    ],
+    events: []
+  });
+
+  // Workflow span (only for playbook / tabular)
+  if (wf.id !== "chat") {
+    const wfMs = wf.id === "playbook" ? wf.totalMs - 60 : wf.totalMs - 40;
+    const childLabel = wf.id === "playbook" ? "position_index" : "cell_index";
+    const childAttrs = wf.id === "playbook"
+      ? [
+          { k: "playbook.id", v: "pb-nda-standard" },
+          { k: "playbook.position_count", v: "30" },
+          { k: "playbook.position_index", v: "0..29 (one span each)" },
+          { k: "playbook.position_slug", v: "governing_law" }
+        ]
+      : [
+          { k: "tabular.review_id", v: "tr-9f3a2d" },
+          { k: "tabular.doc_count", v: "5" },
+          { k: "tabular.col_count", v: "4" },
+          { k: "tabular.cell_index", v: "0..19 (one span each)" }
+        ];
+    nodes.push({
+      id: "workflow",
+      indent: "      ",
+      connector: "└─ ",
+      name: wf.id === "playbook" ? "playbook.execute" : "tabular.execute",
+      sub: wf.id === "playbook" ? "(30 positions)" : "(5 docs × 4 cols)",
+      kind: "INTERNAL",
+      service: "api",
+      ms: wfMs,
+      maxMs: totalMs,
+      attrs: wfAttrs(wf),
+      events: []
+    });
+
+    // Collapsed child spans (we show one representative + count)
+    nodes.push({
+      id: "workflow-child",
+      indent: "         ",
+      connector: "└─ ",
+      name: wf.id === "playbook" ? "playbook.position" : "tabular.cell",
+      sub: `(×${wf.childCount} spans, one shown)`,
+      kind: "INTERNAL",
+      service: "api",
+      ms: Math.round(wfMs / wf.childCount),
+      maxMs: totalMs,
+      attrs: wfChildAttrs(wf),
+      events: []
+    });
+  }
+
+  // HTTP client span: POST /v1/chat/completions (api→gateway, CLIENT)
+  nodes.push({
+    id: "http-client",
+    indent: "   ",
+    connector: "└─ ",
+    name: "POST /v1/chat/completions",
+    sub: "(api → gateway — CLIENT)",
+    kind: "CLIENT",
+    service: "api",
+    ms: prov.inferenceMs + anon_pre_ms + anon_post_ms + 12,
+    maxMs: totalMs,
+    attrs: [
+      { k: "http.method", v: "POST" },
+      { k: "http.url", v: "http://gateway:8001/v1/chat/completions" },
+      { k: "http.status_code", v: "200" }
+    ],
+    events: []
+  });
+
+  // inference.dispatch (gateway, INTERNAL)
+  nodes.push({
+    id: "inference",
+    indent: "      ",
+    connector: "└─ ",
+    name: "inference.dispatch",
+    sub: "(gateway)",
+    kind: "INTERNAL",
+    service: "gateway",
+    ms: prov.inferenceMs + anon_pre_ms + anon_post_ms,
+    maxMs: totalMs,
+    attrs: [
+      { k: "inference.provider", v: prov.provider, cls: "green" },
+      { k: "inference.model", v: prov.model },
+      { k: "inference.tier", v: String(prov.tier) },
+      { k: "inference.tokens_in", v: String(prov.tokensIn) },
+      { k: "inference.tokens_out", v: String(prov.tokensOut) },
+      { k: "inference.cost_usd", v: prov.costUsd.toFixed(4), cls: prov.costUsd === 0 ? "green" : "yellow" },
+      { k: "inference.outcome", v: "success", cls: "green" }
+    ],
+    events: []
+  });
+
+  // anonymization.pre (gateway, INTERNAL) — conditional
+  if (anonOn) {
+    nodes.push({
+      id: "anon-pre",
+      indent: "         ",
+      connector: "└─ ",
+      name: "anonymization.pre",
+      sub: "(gateway)",
+      kind: "INTERNAL",
+      service: "gateway",
+      ms: anon_pre_ms,
+      maxMs: totalMs,
+      attrs: [
+        { k: "anonymization.enabled", v: "true", cls: "green" },
+        { k: "anonymization.tier", v: String(prov.tier) },
+        { k: "anonymization.entity_count", v: "3", cls: "green" },
+        { k: "anonymization.entity_types", v: '["PERSON","ORGANIZATION","MATTER_NUMBER"]', cls: "green" }
+      ],
+      events: []
+    });
+  } else {
+    nodes.push({
+      id: "anon-pre",
+      indent: "         ",
+      connector: "└─ ",
+      name: "anonymization.pre",
+      sub: "(gateway — skipped)",
+      kind: "INTERNAL",
+      service: "gateway",
+      ms: 1,
+      maxMs: totalMs,
+      attrs: [
+        { k: "anonymization.enabled", v: "true" },
+        { k: "anonymization.tier", v: String(prov.tier) },
+        { k: "anonymization.skip_reason", v: "privileged", cls: "yellow" },
+        { k: "anonymization.entity_count", v: "0" }
+      ],
+      events: []
+    });
+  }
+
+  // (provider call — represented as a note, not a real span unless httpx instrumented)
+  nodes.push({
+    id: "provider-call",
+    indent: "         ",
+    connector: "└─ ",
+    name: "POST " + providerEndpoint(prov.provider),
+    sub: "(provider — CLIENT, httpx auto-instrumented)",
+    kind: "CLIENT",
+    service: "provider",
+    ms: prov.inferenceMs - 20,
+    maxMs: totalMs,
+    attrs: [
+      { k: "http.method", v: "POST" },
+      { k: "http.url", v: providerEndpoint(prov.provider) },
+      { k: "http.status_code", v: "200" }
+    ],
+    events: []
+  });
+
+  // anonymization.post (gateway, INTERNAL) — conditional
+  if (anonOn) {
+    nodes.push({
+      id: "anon-post",
+      indent: "         ",
+      connector: "└─ ",
+      name: "anonymization.post",
+      sub: "(gateway)",
+      kind: "INTERNAL",
+      service: "gateway",
+      ms: anon_post_ms,
+      maxMs: totalMs,
+      attrs: [
+        { k: "anonymization.entity_count", v: "3", cls: "green" },
+        { k: "anonymization.entity_types", v: '["PERSON","ORGANIZATION","MATTER_NUMBER"]' }
+      ],
+      events: []
+    });
+  } else {
+    nodes.push({
+      id: "anon-post",
+      indent: "         ",
+      connector: "└─ ",
+      name: "anonymization.post",
+      sub: "(gateway — skipped)",
+      kind: "INTERNAL",
+      service: "gateway",
+      ms: 1,
+      maxMs: totalMs,
+      attrs: [
+        { k: "anonymization.skip_reason", v: "privileged", cls: "yellow" },
+        { k: "anonymization.entity_count", v: "0" }
+      ],
+      events: []
+    });
+  }
+
+  // citation.verify (api, INTERNAL)
+  const citEvents = [];
+  if (cit.shortCircuit) citEvents.push(cit.shortCircuit);
+  const citAttrs = [
+    { k: "citation.method", v: cit.method, cls: "green" },
+    { k: "citation.confidence", v: cit.confidence.toFixed(2), cls: cit.confidence >= 0.9 ? "green" : "yellow" },
+    { k: "citation.partial", v: String(cit.partial) }
+  ];
+  nodes.push({
+    id: "citation",
+    indent: "   ",
+    connector: "└─ ",
+    name: "citation.verify",
+    sub: "(api)",
+    kind: "INTERNAL",
+    service: "api",
+    ms: cit.totalMs,
+    maxMs: totalMs,
+    attrs: citAttrs,
+    events: citEvents
+  });
+
+  // Per-stage citation spans
+  for (const stageName of cit.stages) {
+    const shortName = stageName.replace("citation.stage.", "");
+    const isEnsemble = shortName === "ensemble";
+    const isFinalStage = stageName === cit.stages[cit.stages.length - 1];
+    const stageMs = isEnsemble ? cit.totalMs - 4 : (shortName === "exact_match" ? 1 : 3);
+    const stageAttrs = [
+      { k: "citation.stage.verified", v: isFinalStage ? "true" : "false",
+        cls: isFinalStage ? "green" : "red" }
+    ];
+    if (isEnsemble) {
+      stageAttrs.push({ k: "citation.ensemble.n_judges", v: "3" });
+      stageAttrs.push({ k: "citation.ensemble.rule", v: "strict" });
+    }
+    nodes.push({
+      id: "citation-stage-" + shortName,
+      indent: "      ",
+      connector: "└─ ",
+      name: stageName,
+      sub: "",
+      kind: "INTERNAL",
+      service: "api",
+      ms: stageMs,
+      maxMs: totalMs,
+      attrs: stageAttrs,
+      events: []
+    });
+  }
+
+  return nodes;
+}
+
+function wfAttrs(wf) {
+  if (wf.id === "playbook") {
+    return [
+      { k: "playbook.id", v: "pb-nda-standard" },
+      { k: "playbook.position_count", v: "30" }
+    ];
+  }
+  return [
+    { k: "tabular.review_id", v: "tr-9f3a2d" },
+    { k: "tabular.doc_count", v: "5" },
+    { k: "tabular.col_count", v: "4" }
+  ];
+}
+
+function wfChildAttrs(wf) {
+  if (wf.id === "playbook") {
+    return [
+      { k: "playbook.position_index", v: "0" },
+      { k: "playbook.position_slug", v: "governing_law" },
+      { k: "playbook.classification", v: "DEVIATE" }
+    ];
+  }
+  return [
+    { k: "tabular.cell_row", v: "0" },
+    { k: "tabular.cell_col", v: "0" },
+    { k: "tabular.question_slug", v: "governing_law" }
+  ];
+}
+
+function providerEndpoint(p) {
+  if (p === "anthropic") return "https://api.anthropic.com/v1/messages";
+  if (p === "openai")    return "https://api.openai.com/v1/chat/completions";
+  if (p === "azure")     return "https://resource.openai.azure.com/v1/chat/completions";
+  return "http://localhost:11434/v1/chat/completions";
+}
+
+// ---------------------------------------------------------------------------
+// Render
+// ---------------------------------------------------------------------------
+
+function fmtMs(ms) {
+  if (ms >= 1000) return (ms / 1000).toFixed(2) + "s";
+  return ms + "ms";
+}
+
+function escHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+}
+
+function renderSpanTree(nodes) {
+  const el = document.getElementById("span-tree");
+  el.innerHTML = "";
+
+  nodes.forEach((node, i) => {
+    const nodeDiv = document.createElement("div");
+    nodeDiv.className = "span-node";
+    nodeDiv.dataset.id = node.id;
+
+    const pct = Math.max(3, Math.round((node.ms / node.maxMs) * 100));
+    const rowCls = ["span-row", "service-" + node.service].join(" ");
+
+    const attrsHtml = buildAttrsHtml(node);
+
+    nodeDiv.innerHTML = `
+      <div class="${rowCls}" data-node="${node.id}">
+        <span class="span-indent">${escHtml(node.indent + node.connector)}</span>
+        <span class="span-name">${escHtml(node.name)}<span class="span-sub">${escHtml(node.sub)}</span></span>
+        <span class="span-kind ${node.kind}">${node.kind}</span>
+        <div class="span-dur-wrap">
+          <div class="span-dur-bar"><div class="span-dur-fill" style="width:${pct}%"></div></div>
+          <div class="span-dur-label">${fmtMs(node.ms)}</div>
+        </div>
+      </div>
+      <div class="span-attrs" data-attrs="${node.id}">${attrsHtml}</div>
+    `;
+    el.appendChild(nodeDiv);
+  });
+
+  // Click to toggle attrs
+  el.querySelectorAll(".span-row").forEach(row => {
+    row.addEventListener("click", () => {
+      const id = row.dataset.node;
+      const attrsEl = el.querySelector(`[data-attrs="${id}"]`);
+      const open = attrsEl.classList.toggle("open");
+      row.classList.toggle("expanded", open);
+    });
+  });
+}
+
+function buildAttrsHtml(node) {
+  let html = "";
+  if (node.events.length > 0) {
+    html += `<div class="attr-section-title">Span events</div>`;
+    for (const ev of node.events) {
+      html += `<div class="attr-event"><span class="attr-event-label">&#9654; ${escHtml(ev)}</span></div>`;
+    }
+  }
+  if (node.attrs.length > 0) {
+    if (node.events.length > 0) html += `<div class="attr-section-title" style="margin-top:8px;">Attributes</div>`;
+    for (const a of node.attrs) {
+      const cls = a.cls ? ` class="attr-v ${a.cls}"` : ` class="attr-v"`;
+      html += `<div class="attr-row"><div class="attr-k">${escHtml(a.k)}</div><div${cls}>${escHtml(a.v)}</div></div>`;
+    }
+  }
+  if (!html) html = `<div style="color:var(--text-faint);font-size:11px;">No attributes recorded.</div>`;
+  return html;
+}
+
+function renderQuestions() {
+  const prov = PROVIDERS[providerKey];
+  const cit = CITATION_PRESETS.find(c => c.id === activeCitationId);
+  const qs = [
+    {
+      q: "Why was this slow?",
+      a: "Compare the duration bars. The longest bar is your bottleneck. For cloud providers, <code>inference.dispatch</code> dominates. For playbooks, <code>playbook.execute</code> stacks 30 sequential positions."
+    },
+    {
+      q: "How much did this inference call cost?",
+      a: `<code>inference.dispatch</code> → attribute <code>inference.cost_usd = ${prov.costUsd.toFixed(4)}</code> (provider = ${prov.provider}, model = ${prov.model}, tier = ${prov.tier}).`
+    },
+    {
+      q: "Did anonymization run? How many entities?",
+      a: anonOn
+        ? `<code>anonymization.pre</code> → <code>anonymization.entity_count = 3</code>, <code>entity_types = ["PERSON","ORGANIZATION","MATTER_NUMBER"]</code>. Anonymization fired.`
+        : `<code>anonymization.pre</code> → <code>anonymization.skip_reason = "privileged"</code>, <code>entity_count = 0</code>. Privileged project — layer bypassed.`
+    },
+    {
+      q: "Which provider + model served each tier?",
+      a: `<code>inference.dispatch</code> → <code>inference.provider = "${prov.provider}"</code>, <code>inference.model = "${prov.model}"</code>, <code>inference.tier = ${prov.tier}</code>. Filter by tier across requests to see fleet distribution.`
+    },
+    {
+      q: "What's the citation-cascade outcome distribution across requests?",
+      a: `<code>citation.verify</code> → <code>citation.method = "${cit.method}"</code> on this trace. Aggregate <code>citation.method</code> across traces with TraceQL or a PromQL counter to get distribution (exact_match / tolerant_match / paraphrase_judge / ensemble_strict).`
+    }
+  ];
+
+  const el = document.getElementById("q-list");
+  el.innerHTML = qs.map(({ q, a }) => `
+    <div class="q-item">
+      <div class="q-text">${escHtml(q)}</div>
+      <div class="q-answer">${a}</div>
+    </div>
+  `).join("");
+}
+
+function renderQueries() {
+  const prov = PROVIDERS[providerKey];
+  const queries = [
+    {
+      lang: "TraceQL (Grafana Tempo)",
+      code: `{ name = "inference.dispatch" && .inference.tier = ${prov.tier} }`,
+      note: "Find all inference calls at Tier " + prov.tier + ". Swap tier value to compare across tiers."
+    },
+    {
+      lang: "TraceQL — cost > threshold",
+      code: `{ name = "inference.dispatch" && .inference.cost_usd > 0.05 }`,
+      note: "Surface expensive calls for cost anomaly investigation."
+    },
+    {
+      lang: "TraceQL — citation method",
+      code: `{ name = "citation.verify" && .citation.method = "ensemble_strict" }`,
+      note: "Find traces where the ensemble path fired — indicates exact+tolerant both missed."
+    },
+    {
+      lang: "PromQL (Prometheus / Grafana)",
+      code: `histogram_quantile(0.99, sum by (le, route) (rate(lq_ai_gateway_http_request_duration_seconds_bucket[5m])))`,
+      note: "P99 latency per route across the gateway. Same histogram shape in lq_ai_api_* for the api service."
+    },
+    {
+      lang: "LogQL (Grafana Loki) — note",
+      code: `# Log-trace correlation is a deferred enhancement (see PRD §9).`,
+      note: "Logs and traces are emitted separately today. Correlating a Loki log line to its Tempo trace by trace_id is DE-pending. The trace_id is available in structured log fields when OTel is initialized."
+    }
+  ];
+
+  const el = document.getElementById("query-list");
+  el.innerHTML = queries.map((q, i) => `
+    <div class="query-item">
+      <div class="q-lang">${escHtml(q.lang)}</div>
+      <div style="display:flex;align-items:flex-start;gap:8px;">
+        <div class="q-code" style="flex:1;">${escHtml(q.code)}</div>
+        <button class="copy-btn" data-idx="${i}" data-code="${escHtml(q.code)}">copy</button>
+      </div>
+      <div class="q-note">${escHtml(q.note)}</div>
+    </div>
+  `).join("");
+
+  el.querySelectorAll(".copy-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const code = btn.dataset.code.replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&#39;/g,"'");
+      navigator.clipboard.writeText(code).then(() => {
+        btn.textContent = "copied";
+        btn.classList.add("copied");
+        setTimeout(() => { btn.textContent = "copy"; btn.classList.remove("copied"); }, 1500);
+      });
+    });
+  });
+}
+
+function renderHygiene() {
+  const appears = [
+    { key: "anonymization.entity_count", ex: "integer — e.g., 3" },
+    { key: "anonymization.entity_types", ex: '["PERSON","ORGANIZATION","MATTER_NUMBER"]' },
+    { key: "anonymization.skip_reason",  ex: '"privileged" | "disabled"' },
+    { key: "inference.provider",         ex: '"anthropic" | "openai" | "azure" | "ollama"' },
+    { key: "inference.model",            ex: '"claude-opus-4-7" | "gpt-4o" | ...' },
+    { key: "inference.tier",             ex: "integer 1–5" },
+    { key: "inference.tokens_in",        ex: "integer" },
+    { key: "inference.tokens_out",       ex: "integer" },
+    { key: "inference.cost_usd",         ex: "float — e.g., 0.0613" },
+    { key: "inference.outcome",          ex: '"success" | "provider_error" | "network_error"' },
+    { key: "citation.method",            ex: '"exact_match" | "tolerant_match" | "ensemble_strict"' },
+    { key: "citation.confidence",        ex: "float 0–1" },
+    { key: "skill.slug",                 ex: '"nda-review"' },
+    { key: "project.privileged",         ex: "boolean" }
+  ];
+
+  const never = [
+    { key: "raw PERSON names",          ex: "e.g., \"Alexandra Pemberton\" → NEVER in any attr" },
+    { key: "MATTER_NUMBER values",      ex: "e.g., \"MATTER-2024-0042\" → pseudonymized before dispatch" },
+    { key: "document text / content",   ex: "prompt body, source text, normalized_content" },
+    { key: "ORGANIZATION names",        ex: "client / counterparty names replaced by pseudonyms" },
+    { key: "EMAIL / PHONE values",      ex: "PII fields — count + type only" },
+    { key: "chat.message content",      ex: "user message text never in OTel attributes" },
+    { key: "skill.system_prompt",       ex: "skill prompt text — not recorded in telemetry" },
+    { key: "inference.response_text",   ex: "model response body — never in attributes" }
+  ];
+
+  const el = document.getElementById("hygiene");
+  el.innerHTML = `
+    <div class="hygiene-col">
+      <div class="hygiene-col-title green">Appears in span attributes</div>
+      ${appears.map(a => `<div class="hygiene-row appears"><span class="hygiene-key">${escHtml(a.key)}</span><span class="hygiene-ex">${escHtml(a.ex)}</span></div>`).join("")}
+    </div>
+    <div class="hygiene-col">
+      <div class="hygiene-col-title red">NEVER appears in any span attribute</div>
+      ${never.map(a => `<div class="hygiene-row never"><span class="hygiene-key">${escHtml(a.key)}</span><span class="hygiene-ex">${escHtml(a.ex)}</span></div>`).join("")}
+    </div>
+  `;
+}
+
+function render() {
+  const nodes = buildTree();
+  renderSpanTree(nodes);
+  renderQuestions();
+  renderQueries();
+  renderHygiene();
+}
+
+// ---------------------------------------------------------------------------
+// Control wiring
+// ---------------------------------------------------------------------------
+
+// Citation presets
+const citPresetsEl = document.getElementById("citation-presets");
+CITATION_PRESETS.forEach(p => {
+  const btn = document.createElement("button");
+  btn.className = "preset-btn" + (p.id === activeCitationId ? " active" : "");
+  btn.dataset.id = p.id;
+  btn.innerHTML = `<span class="preset-label">${escHtml(p.label)}</span><span class="preset-desc">${escHtml(p.desc)}</span>`;
+  btn.addEventListener("click", () => {
+    activeCitationId = p.id;
+    citPresetsEl.querySelectorAll(".preset-btn").forEach(b => b.classList.toggle("active", b.dataset.id === p.id));
+    render();
+  });
+  citPresetsEl.appendChild(btn);
+});
+
+// Workflow presets
+const wfPresetsEl = document.getElementById("workflow-presets");
+WORKFLOW_PRESETS.forEach(p => {
+  const btn = document.createElement("button");
+  btn.className = "preset-btn" + (p.id === activeWorkflowId ? " active" : "");
+  btn.dataset.id = p.id;
+  btn.innerHTML = `<span class="preset-label">${escHtml(p.label)}</span><span class="preset-desc">${escHtml(p.desc)}</span>`;
+  btn.addEventListener("click", () => {
+    activeWorkflowId = p.id;
+    wfPresetsEl.querySelectorAll(".preset-btn").forEach(b => b.classList.toggle("active", b.dataset.id === p.id));
+    render();
+  });
+  wfPresetsEl.appendChild(btn);
+});
+
+// Anon toggle
+document.getElementById("anon-toggle").addEventListener("change", e => {
+  anonOn = e.target.checked;
+  render();
+});
+
+// Provider select
+document.getElementById("provider-select").addEventListener("change", e => {
+  providerKey = e.target.value;
+  render();
+});
+
+render();
+</script>
+</body>
+</html>

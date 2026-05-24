@@ -21,10 +21,10 @@
 		<a href="/lq-ai/learn" class="lq-back-link">← Learn</a>
 		<h1 class="lq-text-page-h">How It Works</h1>
 		<p class="lq-text-body lq-page-intro">
-			Ten interactive surfaces. Together they tell the story of how LQ.AI works from request to
-			response — the engine, its boundaries, and the M3 capability surfaces built on top. Each
-			playground links to the source files that implement what it shows — if a visualization makes a
-			claim, the linked file is where you verify it.
+			Eleven interactive surfaces. Together they tell the story of how LQ.AI works from request to
+			response — the engine, its boundaries, the M3 capability surfaces built on top, and the
+			observability trace that ties them together. Each playground links to the source files that
+			implement what it shows — if a visualization makes a claim, the linked file is where you verify it.
 		</p>
 	</header>
 
@@ -537,6 +537,58 @@
 						class="lq-link"
 						target="_blank"
 						rel="noopener noreferrer">docs/word-addin.md</a
+					>
+				</span>
+			</div>
+		</section>
+
+		<p class="lq-transition lq-text-body">
+			Every chat-send, playbook run, and tabular extraction emits a distributed trace. The final
+			playground makes the full span hierarchy visible — from the HTTP boundary at the api down
+			through inference dispatch, anonymization, and citation verification — so operators can answer
+			latency, cost, and data-handling questions from a single trace view.
+		</p>
+
+		<!-- 11: OTel trace visualizer -->
+		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-otel-eval">
+			<h2 class="lq-section-h">11. Seeing it all at once: the observability trace</h2>
+			<p class="lq-text-body">
+				Every chat-send is one OpenTelemetry trace spanning api → gateway → provider, with domain
+				spans for citation verification, anonymization, skill dispatch, and inference carrying counts
+				and types only — never raw entity values, prompt text, or response content. This playground
+				lets you toggle the citation path, anonymization state, workflow type, and provider tier to
+				see how the span tree changes, and shows which span attribute answers each of the five
+				questions an operator is most likely to ask in production.
+			</p>
+			<div class="lq-playground-wrap">
+				<iframe
+					src="/learn/playgrounds/otel-eval.html"
+					title="OTel trace — chat-send end to end"
+					loading="lazy"
+					data-testid="learn-playground-otel-eval"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+				></iframe>
+			</div>
+			<div class="lq-playground-foot">
+				<a
+					href="/learn/playgrounds/otel-eval.html"
+					class="lq-link lq-fullscreen-link"
+					target="_blank"
+					rel="noopener noreferrer">Open full-screen ↗</a
+				>
+				<span class="lq-source-ref">
+					Source:
+					<a
+						href="https://github.com/LegalQuants/lq-ai/blob/main/docs/observability.md"
+						class="lq-link"
+						target="_blank"
+						rel="noopener noreferrer">docs/observability.md</a
+					>;
+					<a
+						href="https://github.com/LegalQuants/lq-ai/blob/main/api/app/observability_helpers.py"
+						class="lq-link"
+						target="_blank"
+						rel="noopener noreferrer">api/app/observability_helpers.py</a
 					>
 				</span>
 			</div>
