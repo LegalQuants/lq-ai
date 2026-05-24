@@ -43,9 +43,21 @@ async def test_usage_returns_501(client: AsyncClient) -> None:
 
 
 @pytest.mark.unit
-async def test_anonymization_config_returns_501(client: AsyncClient) -> None:
+async def test_anonymization_config_returns_loaded_block(client: AsyncClient) -> None:
+    """Loaded ``anonymization`` block is exposed verbatim under /admin/v1.
+
+    The M2 middleware shipped and runs; this read surface reflects the
+    live config rather than the old 501 stub.
+    """
+
     response = await client.get("/admin/v1/anonymization-config")
-    assert response.status_code == 501
+
+    assert response.status_code == 200
     body = response.json()
-    assert body["error"]["code"] == "not_implemented"
-    assert "M2" in body["error"]["details"]["next_task"]
+    anonymization = body["anonymization"]
+
+    # Values from gateway.yaml.example
+    assert anonymization["enabled"] is False
+    assert anonymization["apply_at_tiers"] == [3, 4, 5]
+    # Passthrough keys (AnonymizationConfig has extra="allow") survive round-trip.
+    assert "person_name" in anonymization["entity_types"]

@@ -34,7 +34,7 @@ info:
       GET  /admin/v1/usage                (admin.py — 501 stub)
       GET  /admin/v1/tier-config          (admin.py — live)
       PATCH /admin/v1/tier-config         (admin.py — live)
-      GET  /admin/v1/anonymization-config (admin.py — 501 stub)
+      GET  /admin/v1/anonymization-config (admin.py — live)
       GET  /admin/v1/config               (admin.py — live)
       GET  /admin/v1/aliases              (admin.py — live)
       POST /admin/v1/aliases              (admin.py — live)
@@ -504,11 +504,11 @@ paths:
       tags: [admin]
       summary: Get current anonymization configuration (M2)
       description: |
-        M1 status: route exists in code (gateway/app/api/admin.py:270-282)
-        but returns 501 — the anonymization middleware is not running. The
-        config schema loads via gateway.yaml but is not enforced. Full
-        implementation lands with the M2 anonymization middleware (PRD §4.7).
-        See docs/HONEST-STATE.md §3.2.
+        Returns the loaded anonymization block from gateway.yaml — `enabled`,
+        `apply_at_tiers`, and the pass-through keys (`entity_types`, etc.).
+        The M2 anonymization middleware shipped and runs (pre/post
+        pseudonymization wired in gateway/app/main.py; PRD §4.7), so this read
+        surface reflects the live config. See docs/HONEST-STATE.md §3.2.
       responses:
         '200':
           description: Anonymization configuration
@@ -516,14 +516,17 @@ paths:
             application/json:
               schema:
                 type: object
-                additionalProperties: true
+                properties:
+                  anonymization:
+                    type: object
+                    additionalProperties: true
     patch:
       tags: [admin]
       summary: Partial update to anonymization configuration (M2)
       description: |
-        M1 status: NOT yet in code — this PATCH route does not exist in
-        gateway/app/api/admin.py at M1. The GET returns 501; the PATCH
-        lands with the M2 anonymization middleware alongside it.
+        Status: the PATCH (write) surface is NOT yet in code — only the GET
+        (read) surface is live in gateway/app/api/admin.py. The write path
+        lands with the anonymization admin UI.
         Admin-only. Audited. Updates take effect for new requests immediately.
       requestBody:
         required: true

@@ -11,7 +11,7 @@ Surface (current):
 * ``GET    /admin/v1/tier-config``            — tier policy block (A3)
 * ``GET    /admin/v1/providers/health``       — 501 stub
 * ``GET    /admin/v1/usage``                  — 501 stub
-* ``GET    /admin/v1/anonymization-config``   — 501 stub (M2)
+* ``GET    /admin/v1/anonymization-config``   — loaded anonymization block (M2)
 
 Auth: every endpoint here is gated by
 :func:`app.api.dependencies.make_require_gateway_key` — the same shared
@@ -270,18 +270,18 @@ async def patch_tier_config(
 
 
 @router.get("/anonymization-config")
-async def get_anonymization_config(request: Request) -> JSONResponse:
-    """Anonymization config — M2 feature; A3 returns 501."""
+async def get_anonymization_config(request: Request) -> dict[str, Any]:
+    """Return the loaded ``anonymization`` block from ``gateway.yaml``.
 
-    return _not_implemented(
-        message=(
-            "Anonymization configuration is an M2 feature. The "
-            "``anonymization`` block in gateway.yaml loads today but is not "
-            "yet enforced; this admin surface lands with the M2 anonymization "
-            "middleware (PRD §4.7)."
-        ),
-        next_task="M2 — anonymization middleware (PRD §4.7)",
-    )
+    The M2 middleware shipped and runs (pre/post pseudonymization wired in
+    :mod:`app.main`; PRD §4.7), so this read surface exposes the live config
+    instead of a 501. ``enabled`` and ``apply_at_tiers`` are typed; the
+    remaining keys (``entity_types`` etc.) pass through under ``extra="allow"``
+    and are echoed verbatim.
+    """
+
+    cfg = _config(request)
+    return {"anonymization": cfg.anonymization.model_dump(mode="json")}
 
 
 # ---------------------------------------------------------------------------

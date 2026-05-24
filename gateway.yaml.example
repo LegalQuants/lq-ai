@@ -368,7 +368,7 @@ rate_limits:
 # Tier 1 (local) inference where there's no benefit.
 
 anonymization:
-  enabled: false  # M2 feature; false until M2 ships
+  enabled: false  # M2 middleware shipped + runs; off by default — opt in per deployment
 
   # Apply when:
   # - The request's routed tier is in apply_at_tiers, AND
