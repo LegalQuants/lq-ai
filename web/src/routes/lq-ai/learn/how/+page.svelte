@@ -1,11 +1,11 @@
 <!--
   /lq-ai/learn/how — "How It Works" visualization page.
 
-  Seven interactive playground iframes in narrative order: system map →
+  Ten interactive playground iframes in narrative order: system map →
   request lifecycle → tier system → skill composition → citation engine →
-  anonymization layer → data residency. Each section has: a heading, a
-  2-3 sentence framing paragraph, the embedded iframe, and an
-  "Open full-screen" link.
+  anonymization layer → data residency → playbook cascade → tabular review →
+  word add-in flow. Each section has: a heading, a 2-3 sentence framing
+  paragraph, the embedded iframe, and an "Open full-screen" link.
 
   Iframes load the static HTML playgrounds at /learn/playgrounds/*.html
   served directly by the web container from web/static/learn/playgrounds/.
@@ -21,9 +21,10 @@
 		<a href="/lq-ai/learn" class="lq-back-link">← Learn</a>
 		<h1 class="lq-text-page-h">How It Works</h1>
 		<p class="lq-text-body lq-page-intro">
-			Seven interactive surfaces. Together they tell the story of how LQ.AI works from request to
-			response. Each playground links to the source files that implement what it shows — if a
-			visualization makes a claim, the linked file is where you verify it.
+			Ten interactive surfaces. Together they tell the story of how LQ.AI works from request to
+			response — the engine, its boundaries, and the M3 capability surfaces built on top. Each
+			playground links to the source files that implement what it shows — if a visualization makes a
+			claim, the linked file is where you verify it.
 		</p>
 	</header>
 
@@ -341,7 +342,7 @@
 		<p class="lq-transition lq-text-body">
 			Understanding what the model receives answers the "what" — but procurement and security teams
 			also need to know where that data is stored and whether it ever leaves the operator's
-			environment. The final playground addresses that directly.
+			environment. The next playground addresses that directly.
 		</p>
 
 		<!-- 7: Data Residency -->
@@ -386,6 +387,156 @@
 						class="lq-link"
 						target="_blank"
 						rel="noopener noreferrer">gateway/app/router.py</a
+					>
+				</span>
+			</div>
+		</section>
+		<p class="lq-transition lq-text-body">
+			The seven playgrounds above trace the engine and its boundaries. The final three demonstrate the
+			M3 capability surfaces — Playbooks, Tabular Review, and the Word add-in — built on that engine.
+		</p>
+
+		<!-- 8: Playbook execution cascade -->
+		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-playbook-cascade">
+			<h2 class="lq-section-h">8. Reviewing a contract: the Playbook execution cascade</h2>
+			<p class="lq-text-body">
+				A Playbook codifies an organization's standard positions on common contract issues. Applying
+				one runs a four-node LangGraph cascade — retrieve → classify → redline → compile — that walks
+				each position, extracts the matching clause, classifies it against the standard, and drafts a
+				redline where it deviates. This playground steps through that cascade position-by-position
+				against synthetic NDAs. The per-position references are the verbatim matched clause text
+				(lexical FTS), not the M2 Citation Engine verification cascade — that integration is deferred.
+			</p>
+			<div class="lq-playground-wrap">
+				<iframe
+					src="/learn/playgrounds/playbook-cascade.html"
+					title="Playbook executor — 4-node cascade"
+					loading="lazy"
+					data-testid="learn-playground-playbook-cascade"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+				></iframe>
+			</div>
+			<div class="lq-playground-foot">
+				<a
+					href="/learn/playgrounds/playbook-cascade.html"
+					class="lq-link lq-fullscreen-link"
+					target="_blank"
+					rel="noopener noreferrer">Open full-screen ↗</a
+				>
+				<span class="lq-source-ref">
+					Source:
+					<a
+						href="https://github.com/LegalQuants/lq-ai/blob/main/api/app/playbooks/nodes.py"
+						class="lq-link"
+						target="_blank"
+						rel="noopener noreferrer">api/app/playbooks/nodes.py</a
+					>;
+					<a
+						href="https://github.com/LegalQuants/lq-ai/blob/main/docs/playbooks.md"
+						class="lq-link"
+						target="_blank"
+						rel="noopener noreferrer">docs/playbooks.md</a
+					>
+				</span>
+			</div>
+		</section>
+
+		<p class="lq-transition lq-text-body">
+			A Playbook reviews one contract against many positions. Tabular Review inverts that — many
+			contracts against a few questions, in a grid.
+		</p>
+
+		<!-- 9: Tabular Review grid -->
+		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-tabular-review">
+			<h2 class="lq-section-h">9. Comparing many contracts: the Tabular Review grid</h2>
+			<p class="lq-text-body">
+				Tabular Review extracts the same set of questions across a set of documents and lays the
+				answers out in a grid — one row per document, one column per question. Each cell is grounded in
+				the chunks the model cited; click a cell to open its citation drawer. This playground renders a
+				small grid of synthetic NDAs; the citation drawer shows the same fields the real surface does.
+				Per-cell citations are display-only chunk references today (a synthetic citation id), not
+				Citation-Engine-resolved provenance.
+			</p>
+			<div class="lq-playground-wrap">
+				<iframe
+					src="/learn/playgrounds/tabular-review.html"
+					title="Tabular Review — grid + cell citation drawer"
+					loading="lazy"
+					data-testid="learn-playground-tabular-review"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+				></iframe>
+			</div>
+			<div class="lq-playground-foot">
+				<a
+					href="/learn/playgrounds/tabular-review.html"
+					class="lq-link lq-fullscreen-link"
+					target="_blank"
+					rel="noopener noreferrer">Open full-screen ↗</a
+				>
+				<span class="lq-source-ref">
+					Source:
+					<a
+						href="https://github.com/LegalQuants/lq-ai/blob/main/api/app/tabular/nodes.py"
+						class="lq-link"
+						target="_blank"
+						rel="noopener noreferrer">api/app/tabular/nodes.py</a
+					>;
+					<a
+						href="https://github.com/LegalQuants/lq-ai/blob/main/docs/tabular-review.md"
+						class="lq-link"
+						target="_blank"
+						rel="noopener noreferrer">docs/tabular-review.md</a
+					>
+				</span>
+			</div>
+		</section>
+
+		<p class="lq-transition lq-text-body">
+			Playbooks and Tabular Review run in the web app. The Word add-in brings the deployment into the
+			operator's editor — the last playground walks its install and auth flow.
+		</p>
+
+		<!-- 10: Word add-in install + auth flow -->
+		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-word-addin-flow">
+			<h2 class="lq-section-h">10. Into the editor: the Word add-in install + auth flow</h2>
+			<p class="lq-text-body">
+				The Word add-in is an Office.js task pane installed against the operator's own deployment. This
+				playground walks the four-stage flow: admin generates a per-deployment manifest, the operator
+				sideloads the unsigned manifest via the Microsoft 365 Admin Center (which warns about the
+				unsigned add-in — expected at v0.3.0), the task pane completes OAuth against the deployment, and
+				the version handshake confirms compatibility. M3 shipped the plumbing only — the in-pane feature
+				surface (chat, skills, playbooks) is deferred to M4, and the signed distribution package is
+				community-led.
+			</p>
+			<div class="lq-playground-wrap">
+				<iframe
+					src="/learn/playgrounds/word-addin-flow.html"
+					title="Word Add-In — install + auth flow"
+					loading="lazy"
+					data-testid="learn-playground-word-addin-flow"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+				></iframe>
+			</div>
+			<div class="lq-playground-foot">
+				<a
+					href="/learn/playgrounds/word-addin-flow.html"
+					class="lq-link lq-fullscreen-link"
+					target="_blank"
+					rel="noopener noreferrer">Open full-screen ↗</a
+				>
+				<span class="lq-source-ref">
+					Source:
+					<a
+						href="https://github.com/LegalQuants/lq-ai/blob/main/api/app/api/word_addin.py"
+						class="lq-link"
+						target="_blank"
+						rel="noopener noreferrer">api/app/api/word_addin.py</a
+					>;
+					<a
+						href="https://github.com/LegalQuants/lq-ai/blob/main/docs/word-addin.md"
+						class="lq-link"
+						target="_blank"
+						rel="noopener noreferrer">docs/word-addin.md</a
 					>
 				</span>
 			</div>

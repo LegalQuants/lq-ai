@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LQ.AI — Tabular Review grid + cell citation drawer</title>
+<style>
+  :root {
+    --bg: #0c0f14;
+    --bg-elev: #151a23;
+    --bg-elev-2: #1d242f;
+    --border: #2a3340;
+    --border-hover: #3a4555;
+    --text: #e6ebf3;
+    --text-dim: #8a96a8;
+    --text-faint: #5a6578;
+    --accent: #7dd3fc;
+    --accent-dim: #38bdf8;
+    --high: #86efac;
+    --high-bg: rgba(134,239,172,0.08);
+    --high-border: rgba(134,239,172,0.3);
+    --medium: #fcd34d;
+    --medium-bg: rgba(252,211,77,0.08);
+    --medium-border: rgba(252,211,77,0.3);
+    --low: #fdba74;
+    --low-bg: rgba(253,186,116,0.08);
+    --low-border: rgba(253,186,116,0.3);
+    --failed: #f87171;
+    --failed-bg: rgba(248,113,113,0.08);
+    --failed-border: rgba(248,113,113,0.3);
+    --pending: #5a6578;
+    --shadow: rgba(0,0,0,0.4);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+  }
+  .app { display: grid; grid-template-rows: auto 1fr auto; height: 100vh; }
+  header {
+    padding: 12px 20px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 16px;
+  }
+  header h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
+  header .subtitle { color: var(--text-dim); font-size: 13px; }
+  header .spacer { flex: 1; }
+  header a {
+    color: var(--accent); text-decoration: none; font-size: 12px;
+    border: 1px solid var(--border); padding: 4px 10px; border-radius: 4px;
+    white-space: nowrap;
+  }
+  header a:hover { border-color: var(--border-hover); background: var(--bg-elev-2); }
+
+  .main { display: grid; grid-template-columns: 360px 1fr; overflow: hidden; }
+  .controls {
+    background: var(--bg-elev);
+    border-right: 1px solid var(--border);
+    padding: 16px; overflow-y: auto;
+  }
+  .controls h2 {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-dim); margin: 16px 0 8px;
+  }
+  .controls h2:first-child { margin-top: 0; }
+  .controls .hint { font-size: 11px; color: var(--text-faint); margin: 4px 0 8px; line-height: 1.4; }
+  .controls code { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--accent); }
+
+  .presets { display: grid; grid-template-columns: 1fr; gap: 5px; }
+  .preset-btn {
+    background: var(--bg-elev-2); border: 1px solid var(--border);
+    color: var(--text); padding: 7px 10px; border-radius: 4px;
+    cursor: pointer; font-size: 12px; text-align: left;
+    transition: all 0.1s; line-height: 1.4;
+  }
+  .preset-btn:hover { border-color: var(--border-hover); }
+  .preset-btn.active {
+    background: var(--accent); border-color: var(--accent);
+    color: var(--bg); font-weight: 600;
+  }
+  .preset-btn .preset-label { display: block; font-weight: 600; margin-bottom: 2px; }
+  .preset-btn .preset-desc { display: block; font-size: 11px; color: var(--text-dim); }
+  .preset-btn.active .preset-desc { color: rgba(12,15,20,0.7); }
+
+  .toggle {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 8px 8px; border-radius: 4px; cursor: pointer;
+    user-select: none; transition: background 0.1s; font-size: 13px;
+  }
+  .toggle:hover { background: var(--bg-elev-2); }
+  .toggle input { margin: 3px 0 0; cursor: pointer; accent-color: var(--accent); flex-shrink: 0; }
+  .toggle .toggle-label { flex: 1; line-height: 1.4; }
+  .toggle .toggle-label span { display: block; color: var(--text-dim); font-size: 11px; margin-top: 2px; }
+
+  .preview-wrap {
+    overflow: auto;
+    padding: 20px;
+    position: relative;
+    background:
+      radial-gradient(circle at 20% 20%, rgba(125,211,252,0.03), transparent 55%),
+      radial-gradient(circle at 80% 80%, rgba(134,239,172,0.03), transparent 55%);
+  }
+
+  .grid-intro {
+    max-width: 860px; margin: 0 auto 14px;
+    color: var(--text-dim); font-size: 12px; line-height: 1.5;
+  }
+  .grid-intro strong { color: var(--text); }
+
+  .grid-scroll { max-width: 860px; margin: 0 auto; overflow-x: auto; }
+  table.grid {
+    border-collapse: separate; border-spacing: 0;
+    width: 100%;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  table.grid th, table.grid td {
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    text-align: left;
+    vertical-align: top;
+  }
+  table.grid th:last-child, table.grid td:last-child { border-right: none; }
+  table.grid tr:last-child td { border-bottom: none; }
+  table.grid thead th {
+    background: var(--bg-elev-2);
+    color: var(--text-dim);
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 10px 12px;
+  }
+  table.grid thead th.doc-col,
+  table.grid tbody td.doc-col {
+    position: sticky; left: 0; z-index: 2;
+    background: var(--bg-elev-2);
+    min-width: 190px;
+  }
+  table.grid tbody td.doc-col {
+    background: var(--bg-elev);
+    font-size: 12px; color: var(--text);
+    padding: 10px 12px;
+    font-family: ui-monospace, Menlo, monospace;
+  }
+  table.grid tbody td.doc-col .doc-sub {
+    display: block; color: var(--text-faint); font-size: 10px; margin-top: 3px;
+    font-family: -apple-system, system-ui, sans-serif;
+  }
+
+  /* Cell — mirrors TabularCell.svelte: value left, confidence chip right. */
+  .cell {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; padding: 10px 12px; min-height: 52px;
+    cursor: pointer; transition: background 0.1s;
+    border-left: 3px solid transparent;
+  }
+  .cell:hover { background: var(--bg-elev-2); }
+  .cell:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .cell[data-confidence="high"]   { border-left-color: var(--high-border); }
+  .cell[data-confidence="medium"] { border-left-color: var(--medium-border); }
+  .cell[data-confidence="low"]    { border-left-color: var(--low-border); }
+  .cell[data-confidence="failed"] { border-left-color: var(--failed-border); }
+  .cell .cell-val { font-size: 12.5px; line-height: 1.4; color: var(--text); }
+  .cell .cell-val.failed { font-style: italic; color: var(--failed); }
+  .cell .chip {
+    flex-shrink: 0;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 10px; font-weight: 600;
+    padding: 2px 7px; border-radius: 999px;
+    text-transform: uppercase; letter-spacing: 0.02em;
+    border: 1px solid var(--border);
+  }
+  .cell .chip[data-confidence="high"]   { color: var(--high);   background: var(--high-bg);   border-color: var(--high-border); }
+  .cell .chip[data-confidence="medium"] { color: var(--medium); background: var(--medium-bg); border-color: var(--medium-border); }
+  .cell .chip[data-confidence="low"]    { color: var(--low);    background: var(--low-bg);    border-color: var(--low-border); }
+  .cell .chip[data-confidence="failed"] { color: var(--failed); background: var(--failed-bg); border-color: var(--failed-border); }
+
+  .grid-legend {
+    max-width: 860px; margin: 14px auto 0;
+    display: flex; flex-wrap: wrap; gap: 14px;
+    font-size: 11px; color: var(--text-dim);
+  }
+  .grid-legend .lg { display: inline-flex; align-items: center; gap: 6px; }
+  .grid-legend .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .grid-legend .dot.high   { background: var(--high); }
+  .grid-legend .dot.medium { background: var(--medium); }
+  .grid-legend .dot.low    { background: var(--low); }
+  .grid-legend .dot.failed { background: var(--failed); }
+
+  .summary-bar {
+    max-width: 860px; margin: 16px auto 0;
+    display: flex; gap: 24px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 16px;
+    font-family: ui-monospace, Menlo, monospace; font-size: 12px;
+  }
+  .summary-bar .k { color: var(--text-dim); }
+  .summary-bar .v { color: var(--text); margin-left: 6px; }
+  .summary-bar .v.zero { color: var(--text-faint); }
+
+  /* --- Citation drawer (modal) — mirrors TabularCitationModal.svelte --- */
+  .backdrop {
+    position: absolute; inset: 0;
+    background: rgba(8,11,16,0.66);
+    display: none; align-items: center; justify-content: center;
+    z-index: 50; padding: 24px;
+  }
+  .backdrop.open { display: flex; }
+  .drawer {
+    width: 100%; max-width: 520px;
+    max-height: calc(100% - 48px); overflow-y: auto;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 12px 40px var(--shadow);
+  }
+  .drawer__header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 16px 18px; border-bottom: 1px solid var(--border);
+  }
+  .drawer__col { font-weight: 600; font-size: 15px; }
+  .drawer__doc { font-size: 12px; color: var(--text-dim); margin-top: 3px; font-family: ui-monospace, Menlo, monospace; }
+  .drawer__close {
+    background: none; border: none; font-size: 22px;
+    color: var(--text-dim); cursor: pointer; line-height: 1; padding: 0;
+  }
+  .drawer__close:hover { color: var(--text); }
+  .drawer__body { padding: 18px; display: flex; flex-direction: column; gap: 16px; }
+
+  .drawer__failed {
+    margin: 0; padding: 10px 12px;
+    background: var(--failed-bg); border: 1px solid var(--failed-border);
+    border-radius: 6px; font-size: 13px;
+  }
+  .drawer__failed strong { color: var(--failed); }
+  .drawer__error {
+    margin: 8px 0 0; padding: 8px 10px;
+    background: var(--bg-elev-2); border-radius: 4px;
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px;
+    white-space: pre-wrap; color: var(--text-dim);
+  }
+
+  .drawer__meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 0; }
+  .drawer__meta dt {
+    font-size: 10px; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 0.04em; margin: 0;
+  }
+  .drawer__meta dd { margin: 4px 0 0; font-size: 13px; font-weight: 500; }
+  .drawer__meta dd[data-confidence="high"]   { color: var(--high); }
+  .drawer__meta dd[data-confidence="medium"] { color: var(--medium); }
+  .drawer__meta dd[data-confidence="low"]    { color: var(--low); }
+  .drawer__meta dd.faint { color: var(--text-faint); }
+
+  .drawer__cite-header {
+    margin: 0; font-size: 11px; text-transform: uppercase;
+    color: var(--text-dim); letter-spacing: 0.06em; font-weight: 600;
+  }
+  .drawer__empty { margin: 0; color: var(--text-dim); font-size: 13px; }
+  .cites { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+  .cite {
+    padding: 9px 11px; border: 1px solid var(--border);
+    border-radius: 6px; background: var(--bg-elev-2);
+  }
+  .cite__id { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+  .cite__chip {
+    padding: 1px 7px; border-radius: 999px;
+    font-size: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.02em;
+    border: 1px solid var(--border);
+  }
+  .cite__chip[data-confidence="high"]   { color: var(--high);   border-color: var(--high-border); }
+  .cite__chip[data-confidence="medium"] { color: var(--medium); border-color: var(--medium-border); }
+  .cite__chip[data-confidence="low"]    { color: var(--low);    border-color: var(--low-border); }
+  .cite__id code { font-family: ui-monospace, Menlo, monospace; color: var(--accent); font-size: 11px; }
+  .cite__meta {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px;
+    font-size: 11px; color: var(--text-dim);
+  }
+  .cite__meta code { font-family: ui-monospace, Menlo, monospace; color: var(--text); }
+
+  .drawer__caption {
+    margin: 0; padding: 10px 12px;
+    background: var(--bg-elev-2);
+    border-left: 3px solid var(--medium);
+    border-radius: 0 4px 4px 0;
+    font-size: 11.5px; line-height: 1.5; color: var(--text-dim);
+  }
+  .drawer__caption strong { color: var(--medium); }
+  .drawer__caption code { font-family: ui-monospace, Menlo, monospace; color: var(--accent); font-size: 11px; }
+  .drawer__caption a { color: var(--accent); text-decoration: none; }
+  .drawer__caption a:hover { text-decoration: underline; }
+
+  footer {
+    padding: 10px 20px;
+    background: var(--bg-elev);
+    border-top: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: 16px; align-items: center;
+    font-size: 11px; color: var(--text-faint);
+  }
+  footer .label { color: var(--text-dim); }
+  footer a { color: var(--accent); text-decoration: none; font-family: ui-monospace, Menlo, monospace; }
+  footer a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Tabular Review — grid + cell citation drawer</h1>
+    <span class="subtitle">N documents × M columns. Each cell is one extraction. Click a cell to open its grounding drawer.</span>
+    <span class="spacer"></span>
+    <a href="https://github.com/LegalQuants/lq-ai/blob/main/docs/tabular-review.md" target="_blank">docs</a>
+  </header>
+  <div class="main">
+    <div class="controls">
+      <h2>Presets</h2>
+      <p class="hint">Each preset reshapes the grid — different document sets, columns, and confidence profiles.</p>
+      <div class="presets" id="presets"></div>
+
+      <h2>Columns</h2>
+      <p class="hint">Toggle which columns render. Each column is one per-row <code>query</code> dispatched as a structured-output LLM call.</p>
+      <div id="column-toggles"></div>
+
+      <h2>Document set</h2>
+      <p class="hint">Rows = documents, in selection order (not sorted by name). Synthetic mutual NDAs from the sample corpus.</p>
+      <div id="docset-toggles"></div>
+
+      <h2>Failed-cell demo</h2>
+      <label class="toggle">
+        <input type="checkbox" id="failed-toggle">
+        <div class="toggle-label">Force a failed cell
+          <span>Sets one cell to <code>confidence='failed'</code> (Decision C-10) — extraction errored. Renders "not found"; the drawer explains the cell errored before producing a citation.</span>
+        </div>
+      </label>
+    </div>
+
+    <div class="preview-wrap">
+      <p class="grid-intro">
+        <strong>Tabular Review</strong> runs the same per-position extraction over many documents at once.
+        Retrieval is lexical full-text search (FTS) over each document's chunks, top-K = 4; one structured-output
+        LLM call per cell returns <code>{value, cited_chunk_indices, confidence, justification}</code>. Click any
+        cell to open the per-cell citation drawer.
+      </p>
+      <div class="grid-scroll">
+        <table class="grid" id="grid"></table>
+      </div>
+      <div class="grid-legend">
+        <span class="lg"><span class="dot high"></span> high — stated explicitly</span>
+        <span class="lg"><span class="dot medium"></span> medium — implied, not verbatim</span>
+        <span class="lg"><span class="dot low"></span> low — weakly supported; flag for review</span>
+        <span class="lg"><span class="dot failed"></span> failed — extraction errored (not "unverified")</span>
+      </div>
+      <div class="summary-bar" id="summary"></div>
+    </div>
+  </div>
+
+  <footer>
+    <span class="label">source:</span>
+    <a href="https://github.com/LegalQuants/lq-ai/blob/main/api/app/tabular/nodes.py" target="_blank">api/app/tabular/nodes.py</a>
+    <a href="https://github.com/LegalQuants/lq-ai/blob/main/web/src/lib/lq-ai/components/TabularGrid.svelte" target="_blank">web/src/lib/lq-ai/components/TabularGrid.svelte</a>
+  </footer>
+</div>
+
+<!-- Citation drawer -->
+<div class="backdrop" id="backdrop" role="presentation">
+  <div class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-col" id="drawer">
+    <header class="drawer__header">
+      <div>
+        <div class="drawer__col" id="drawer-col"></div>
+        <div class="drawer__doc" id="drawer-doc"></div>
+      </div>
+      <button type="button" class="drawer__close" id="drawer-close" aria-label="Close citations">×</button>
+    </header>
+    <section class="drawer__body" id="drawer-body"></section>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------------------------------------------------------------------------
+// Synthetic NDA corpus — values match docs/quickstart/sample-ndas/README.md.
+// Hardcoded so the playground works fully offline. cited_chunk_ids are
+// synthetic chunk UUIDs (the executor persists raw cited_chunk_ids; the
+// read-side model_validator synthesizes a display-only citation_id from each).
+// ---------------------------------------------------------------------------
+
+const DOC_SETS = {
+  threeNdas: {
+    label: "3 NDAs (Acme, Cypress, Echo)",
+    docs: [
+      { id: "11111111-1111-4111-8111-111111111111", name: "nda-1-acme-beta.pdf",      sub: "Acme ↔ Beta" },
+      { id: "22222222-2222-4222-8222-222222222222", name: "nda-2-cypress-delta.pdf",  sub: "Cypress ↔ Delta" },
+      { id: "33333333-3333-4333-8333-333333333333", name: "nda-3-echo-foxtrot.pdf",   sub: "Echo ↔ Foxtrot" }
+    ]
+  },
+  fiveNdas: {
+    label: "5 NDAs (full corpus)",
+    docs: [
+      { id: "11111111-1111-4111-8111-111111111111", name: "nda-1-acme-beta.pdf",      sub: "Acme ↔ Beta" },
+      { id: "22222222-2222-4222-8222-222222222222", name: "nda-2-cypress-delta.pdf",  sub: "Cypress ↔ Delta" },
+      { id: "33333333-3333-4333-8333-333333333333", name: "nda-3-echo-foxtrot.pdf",   sub: "Echo ↔ Foxtrot" },
+      { id: "44444444-4444-4444-8444-444444444444", name: "nda-4-gamma-helix.pdf",    sub: "Gamma ↔ Helix" },
+      { id: "55555555-5555-4555-8555-555555555555", name: "nda-5-indigo-juniper.pdf", sub: "Indigo ↔ Juniper" }
+    ]
+  }
+};
+
+// Stable chunk-id pool per (doc, column) so the synthetic citation_id is
+// deterministic across renders, mirroring uuid5(NS, chunk_id) on the backend.
+const CHUNK = (d, c, n) => `chunk-${d}-${c}-${n}`;
+
+// Cell content keyed by document id + column key. Confidence values chosen to
+// show the full high/medium/low spread the real grid surfaces.
+const CELLS = {
+  "11111111-1111-4111-8111-111111111111": {
+    term:       { value: "3 years from the Effective Date.", confidence: "high",   chunks: [CHUNK(1,"term",2)] },
+    definition: { value: "Broad — oral and written information, marked or not.", confidence: "high",   chunks: [CHUNK(1,"def",4), CHUNK(1,"def",5)] },
+    law:        { value: "State of Delaware.", confidence: "high",   chunks: [CHUNK(1,"law",9)] }
+  },
+  "22222222-2222-4222-8222-222222222222": {
+    term:       { value: "2 years from the Effective Date.", confidence: "high",   chunks: [CHUNK(2,"term",1)] },
+    definition: { value: "Narrow — written and marked only; oral confirmed within 30 days.", confidence: "medium", chunks: [CHUNK(2,"def",3)] },
+    law:        { value: "State of Delaware.", confidence: "high",   chunks: [CHUNK(2,"law",8)] }
+  },
+  "33333333-3333-4333-8333-333333333333": {
+    term:       { value: "5 years from the Effective Date.", confidence: "high",   chunks: [CHUNK(3,"term",2)] },
+    definition: { value: "Broad, with explicit enumerated categories.", confidence: "medium", chunks: [CHUNK(3,"def",4), CHUNK(3,"def",6)] },
+    law:        { value: "Delaware (governing law not separately stated in venue clause).", confidence: "low", chunks: [CHUNK(3,"law",10)] }
+  },
+  "44444444-4444-4444-8444-444444444444": {
+    term:       { value: "1 year from the Effective Date.", confidence: "high",   chunks: [CHUNK(4,"term",1)] },
+    definition: { value: "Broad — oral and written, no marking required.", confidence: "high",   chunks: [CHUNK(4,"def",3)] },
+    law:        { value: "State of Delaware.", confidence: "medium", chunks: [CHUNK(4,"law",7)] }
+  },
+  "55555555-5555-4555-8555-555555555555": {
+    term:       { value: "4 years from the Effective Date.", confidence: "high",   chunks: [CHUNK(5,"term",2)] },
+    definition: { value: "Medium — oral confirmed within 30 days.", confidence: "medium", chunks: [CHUNK(5,"def",4)] },
+    law:        { value: "State of Delaware.", confidence: "high",   chunks: [CHUNK(5,"law",9)] }
+  }
+};
+
+const COLUMNS = [
+  { key: "term",       name: "Term",                          query: "What is the term or duration of the confidentiality obligations?" },
+  { key: "definition", name: "Confidential Info Definition",  query: "How does the agreement define Confidential Information?" },
+  { key: "law",        name: "Governing Law",                 query: "What is the governing law of the agreement?" }
+];
+
+const PRESETS = [
+  {
+    id: "snapshot3",
+    label: "Contract snapshot — 3 NDAs",
+    desc: "3 rows × 3 columns. The default tabular comparison surface.",
+    docSet: "threeNdas",
+    columns: ["term", "definition", "law"],
+    failed: false
+  },
+  {
+    id: "fullcorpus",
+    label: "Full corpus — 5 NDAs",
+    desc: "All five sample NDAs × 3 columns. Term spans 1–5 years.",
+    docSet: "fiveNdas",
+    columns: ["term", "definition", "law"],
+    failed: false
+  },
+  {
+    id: "termonly",
+    label: "Single column — Term only",
+    desc: "One column across 5 docs. The 'compare these on one point' minimal grid.",
+    docSet: "fiveNdas",
+    columns: ["term"],
+    failed: false
+  },
+  {
+    id: "failed",
+    label: "Failed cell — governing law",
+    desc: "Demonstrates the failed-cell state on one cell of the 3-NDA grid.",
+    docSet: "threeNdas",
+    columns: ["term", "definition", "law"],
+    failed: true
+  }
+];
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+
+const state = {
+  docSet: "threeNdas",
+  enabledColumns: new Set(["term", "definition", "law"]),
+  forceFailed: false,
+  activePreset: "snapshot3"
+};
+
+// The failed-cell demo targets the last document's "law" cell.
+function failedTarget() {
+  const docs = DOC_SETS[state.docSet].docs;
+  return { docId: docs[docs.length - 1].id, columnKey: "law" };
+}
+
+// ---------------------------------------------------------------------------
+// Build a cell's effective render shape (applying the failed override).
+// ---------------------------------------------------------------------------
+
+function cellFor(docId, columnKey) {
+  const base = CELLS[docId] && CELLS[docId][columnKey];
+  if (!base) {
+    return { value: null, confidence: "failed", chunks: [], error: "no chunks retrieved" };
+  }
+  if (state.forceFailed) {
+    const t = failedTarget();
+    if (t.docId === docId && t.columnKey === columnKey) {
+      return {
+        value: null,
+        confidence: "failed",
+        chunks: [],
+        error: "no value in extraction response"
+      };
+    }
+  }
+  return { value: base.value, confidence: base.confidence, chunks: base.chunks, error: null };
+}
+
+const CHIP_LABEL = { high: "High", medium: "Med", low: "Low", failed: "Failed" };
+
+// ---------------------------------------------------------------------------
+// Deterministic display-only citation_id: a UUIDv5-shaped hash of the chunk
+// id, matching the backend's uuid5(NS, chunk_id). This is NOT a resolvable
+// Citation-Engine row — it is synthesized purely for display.
+// ---------------------------------------------------------------------------
+
+function hashStr(s) {
+  // FNV-1a 32-bit, expanded into a longer hex string for a UUID shape.
+  let h = 0x811c9dc5 >>> 0;
+  const out = [];
+  for (let pass = 0; pass < 4; pass++) {
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    h = (h + pass * 0x9e3779b1) >>> 0;
+    out.push(("00000000" + h.toString(16)).slice(-8));
+  }
+  return out.join("");
+}
+
+function syntheticCitationId(chunkId) {
+  const hex = hashStr("tabular-citation.lq.ai|" + chunkId);
+  // Shape as a UUIDv5: set version nibble to 5 and a valid variant nibble.
+  const p = hex.slice(0, 32);
+  return (
+    p.slice(0, 8) + "-" +
+    p.slice(8, 12) + "-" +
+    "5" + p.slice(13, 16) + "-" +
+    "8" + p.slice(17, 20) + "-" +
+    p.slice(20, 32)
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Render — controls
+// ---------------------------------------------------------------------------
+
+function renderControls() {
+  const presetsEl = document.getElementById("presets");
+  presetsEl.innerHTML = "";
+  PRESETS.forEach(p => {
+    const btn = document.createElement("button");
+    btn.className = "preset-btn" + (p.id === state.activePreset ? " active" : "");
+    btn.dataset.id = p.id;
+    btn.innerHTML = `<span class="preset-label">${escapeHtml(p.label)}</span><span class="preset-desc">${escapeHtml(p.desc)}</span>`;
+    btn.addEventListener("click", () => applyPreset(p));
+    presetsEl.appendChild(btn);
+  });
+
+  const colEl = document.getElementById("column-toggles");
+  colEl.innerHTML = "";
+  COLUMNS.forEach(col => {
+    const label = document.createElement("label");
+    label.className = "toggle";
+    const checked = state.enabledColumns.has(col.key) ? "checked" : "";
+    label.innerHTML = `
+      <input type="checkbox" data-col="${col.key}" ${checked}>
+      <div class="toggle-label">${escapeHtml(col.name)}
+        <span>${escapeHtml(col.query)}</span>
+      </div>`;
+    label.querySelector("input").addEventListener("change", (e) => {
+      if (e.target.checked) state.enabledColumns.add(col.key);
+      else state.enabledColumns.delete(col.key);
+      // Keep at least one column on.
+      if (state.enabledColumns.size === 0) {
+        state.enabledColumns.add(col.key);
+        e.target.checked = true;
+      }
+      clearActivePreset();
+      render();
+    });
+    colEl.appendChild(label);
+  });
+
+  const dsEl = document.getElementById("docset-toggles");
+  dsEl.innerHTML = "";
+  Object.entries(DOC_SETS).forEach(([key, set]) => {
+    const label = document.createElement("label");
+    label.className = "toggle";
+    const checked = state.docSet === key ? "checked" : "";
+    label.innerHTML = `
+      <input type="radio" name="docset" data-ds="${key}" ${checked} style="accent-color: var(--accent);">
+      <div class="toggle-label">${escapeHtml(set.label)}
+        <span>${set.docs.length} document${set.docs.length === 1 ? "" : "s"}</span>
+      </div>`;
+    label.querySelector("input").addEventListener("change", () => {
+      state.docSet = key;
+      clearActivePreset();
+      render();
+    });
+    dsEl.appendChild(label);
+  });
+
+  document.getElementById("failed-toggle").checked = state.forceFailed;
+}
+
+function applyPreset(p) {
+  state.activePreset = p.id;
+  state.docSet = p.docSet;
+  state.enabledColumns = new Set(p.columns);
+  state.forceFailed = p.failed;
+  renderControls();
+  render();
+}
+
+function clearActivePreset() {
+  state.activePreset = null;
+  document.querySelectorAll(".preset-btn").forEach(b => b.classList.remove("active"));
+}
+
+// ---------------------------------------------------------------------------
+// Render — grid
+// ---------------------------------------------------------------------------
+
+function render() {
+  const set = DOC_SETS[state.docSet];
+  const cols = COLUMNS.filter(c => state.enabledColumns.has(c.key));
+  const gridEl = document.getElementById("grid");
+
+  let head = `<thead><tr><th class="doc-col">Document</th>`;
+  cols.forEach(c => { head += `<th>${escapeHtml(c.name)}</th>`; });
+  head += `</tr></thead>`;
+
+  let body = `<tbody>`;
+  let total = 0, failed = 0;
+  set.docs.forEach(doc => {
+    body += `<tr><td class="doc-col">${escapeHtml(doc.name)}<span class="doc-sub">${escapeHtml(doc.sub)}</span></td>`;
+    cols.forEach(col => {
+      const cell = cellFor(doc.id, col.key);
+      total++;
+      if (cell.confidence === "failed") failed++;
+      const valHtml = cell.confidence === "failed"
+        ? `<span class="cell-val failed">not found</span>`
+        : `<span class="cell-val">${escapeHtml(cell.value)}</span>`;
+      body += `
+        <td>
+          <div class="cell" role="button" tabindex="0"
+               data-confidence="${cell.confidence}"
+               data-doc="${doc.id}" data-col="${col.key}">
+            ${valHtml}
+            <span class="chip" data-confidence="${cell.confidence}">${CHIP_LABEL[cell.confidence]}</span>
+          </div>
+        </td>`;
+    });
+    body += `</tr>`;
+  });
+  body += `</tbody>`;
+  gridEl.innerHTML = head + body;
+
+  gridEl.querySelectorAll(".cell").forEach(el => {
+    el.addEventListener("click", () => openDrawer(el.dataset.doc, el.dataset.col));
+    el.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openDrawer(el.dataset.doc, el.dataset.col); }
+    });
+  });
+
+  const summaryEl = document.getElementById("summary");
+  summaryEl.innerHTML = `
+    <span><span class="k">schema_version</span><span class="v">m3-c2-v1</span></span>
+    <span><span class="k">total_cells</span><span class="v">${total}</span></span>
+    <span><span class="k">failed_cells</span><span class="v ${failed ? "" : "zero"}">${failed}</span></span>
+    <span><span class="k">cost_actual_usd</span><span class="v zero">0</span> <span class="k" style="font-size:10px;">(DE-310)</span></span>
+  `;
+}
+
+// ---------------------------------------------------------------------------
+// Render — citation drawer (mirrors TabularCitationModal.svelte)
+// ---------------------------------------------------------------------------
+
+function openDrawer(docId, columnKey) {
+  const set = DOC_SETS[state.docSet];
+  const doc = set.docs.find(d => d.id === docId);
+  const col = COLUMNS.find(c => c.key === columnKey);
+  const cell = cellFor(docId, columnKey);
+
+  document.getElementById("drawer-col").textContent = col.name;
+  document.getElementById("drawer-doc").textContent = doc.name;
+
+  // Build the synthetic citations exactly as the read-side validator does:
+  // one Citation per cited chunk, carrying the row's document_id + the
+  // cell's confidence + a display-only uuid5 citation_id.
+  const citations = (cell.chunks || []).map(chunkId => ({
+    citation_id: syntheticCitationId(chunkId),
+    document_id: docId,
+    chunk_id: chunkId,
+    confidence: cell.confidence
+  }));
+
+  let body = "";
+  if (cell.confidence === "failed") {
+    body += `<p class="drawer__failed"><strong>Not found.</strong> Extraction failed for this cell.</p>`;
+    if (cell.error) {
+      body += `<pre class="drawer__error">${escapeHtml(cell.error)}</pre>`;
+    }
+  } else {
+    body += `
+      <dl class="drawer__meta">
+        <div><dt>Value</dt><dd>${escapeHtml(cell.value)}</dd></div>
+        <div><dt>Confidence</dt><dd data-confidence="${cell.confidence}">${cell.confidence}</dd></div>
+        <div><dt>Tier</dt><dd class="faint">— (DE-310)</dd></div>
+      </dl>`;
+  }
+
+  body += `<h3 class="drawer__cite-header">Citations</h3>`;
+  if (citations.length === 0) {
+    const msg = cell.confidence === "failed"
+      ? "The cell errored before producing a citation."
+      : "No citations were attached to this cell.";
+    body += `<p class="drawer__empty">${msg}</p>`;
+  } else {
+    body += `<ul class="cites">`;
+    citations.forEach(cite => {
+      body += `
+        <li class="cite">
+          <div class="cite__id">
+            <span class="cite__chip" data-confidence="${cite.confidence}">${cite.confidence}</span>
+            <code>${escapeHtml(cite.citation_id)}</code>
+          </div>
+          <div class="cite__meta">
+            <span>Document: <code>${escapeHtml(cite.document_id)}</code></span>
+            <span>· Chunk: <code>${escapeHtml(cite.chunk_id)}</code></span>
+          </div>
+        </li>`;
+    });
+    body += `</ul>`;
+  }
+
+  // Honesty caption — always shown.
+  body += `
+    <p class="drawer__caption">
+      <strong>Display-only grounding.</strong> The <code>citation_id</code> above is synthesized
+      (<code>uuid5(NS, chunk_id)</code>) and is <strong>not</strong> a resolvable Citation-Engine row.
+      The drawer shows the grounding chunk but offers no "jump to source span" — deferred
+      (<a href="https://github.com/LegalQuants/lq-ai/blob/main/docs/tabular-review.md" target="_blank">DE-309</a>).
+      Per-cell <code>tier_used</code> and <code>cost_usd</code> read null / 0 today (DE-310). These are
+      grounding chunk references, not Citation-Engine-verified cells.
+    </p>`;
+
+  document.getElementById("drawer-body").innerHTML = body;
+  document.getElementById("backdrop").classList.add("open");
+}
+
+function closeDrawer() {
+  document.getElementById("backdrop").classList.remove("open");
+}
+
+// ---------------------------------------------------------------------------
+// Wiring
+// ---------------------------------------------------------------------------
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+}
+
+document.getElementById("failed-toggle").addEventListener("change", (e) => {
+  state.forceFailed = e.target.checked;
+  clearActivePreset();
+  render();
+});
+document.getElementById("drawer-close").addEventListener("click", closeDrawer);
+document.getElementById("backdrop").addEventListener("click", (e) => {
+  if (e.target === document.getElementById("backdrop")) closeDrawer();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeDrawer();
+});
+
+renderControls();
+render();
+</script>
+</body>
+</html>

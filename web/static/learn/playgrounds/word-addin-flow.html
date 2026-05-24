@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LQ.AI — Word Add-In install + auth flow</title>
+<style>
+  :root {
+    --bg: #0c0f14;
+    --bg-elev: #151a23;
+    --bg-elev-2: #1d242f;
+    --border: #2a3340;
+    --border-hover: #3a4555;
+    --text: #e6ebf3;
+    --text-dim: #8a96a8;
+    --text-faint: #5a6578;
+    --accent: #7dd3fc;
+    --accent-dim: #38bdf8;
+    --verified: #86efac;
+    --verified-bg: rgba(134,239,172,0.08);
+    --verified-border: rgba(134,239,172,0.3);
+    --partial: #fcd34d;
+    --partial-bg: rgba(252,211,77,0.08);
+    --partial-border: rgba(252,211,77,0.3);
+    --unverified: #f87171;
+    --unverified-bg: rgba(248,113,113,0.08);
+    --unverified-border: rgba(248,113,113,0.3);
+    --pending: #5a6578;
+    --pending-bg: rgba(90,101,120,0.08);
+    --pending-border: rgba(90,101,120,0.25);
+    --shadow: rgba(0,0,0,0.4);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+  }
+  .app { display: grid; grid-template-rows: auto 1fr; height: 100vh; }
+  header {
+    padding: 12px 20px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 16px;
+  }
+  header h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
+  header .subtitle { color: var(--text-dim); font-size: 13px; }
+  header .spacer { flex: 1; }
+  header a {
+    color: var(--accent); text-decoration: none; font-size: 12px;
+    border: 1px solid var(--border); padding: 4px 10px; border-radius: 4px;
+  }
+  header a:hover { border-color: var(--border-hover); background: var(--bg-elev-2); }
+
+  .main { display: grid; grid-template-columns: 360px 1fr; overflow: hidden; }
+  .controls {
+    background: var(--bg-elev);
+    border-right: 1px solid var(--border);
+    padding: 16px; overflow-y: auto;
+  }
+  .controls h2 {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-dim); margin: 16px 0 8px;
+  }
+  .controls h2:first-child { margin-top: 0; }
+  .controls .hint { font-size: 11px; color: var(--text-faint); margin: 4px 0 8px; line-height: 1.4; }
+  .controls code { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--accent); }
+
+  .presets { display: grid; grid-template-columns: 1fr; gap: 5px; }
+  .preset-btn {
+    background: var(--bg-elev-2); border: 1px solid var(--border);
+    color: var(--text); padding: 7px 10px; border-radius: 4px;
+    cursor: pointer; font-size: 12px; text-align: left;
+    transition: all 0.1s; line-height: 1.4;
+  }
+  .preset-btn:hover { border-color: var(--border-hover); }
+  .preset-btn.active {
+    background: var(--accent); border-color: var(--accent);
+    color: var(--bg); font-weight: 600;
+  }
+  .preset-btn .preset-label { display: block; font-weight: 600; margin-bottom: 2px; }
+  .preset-btn .preset-desc { display: block; font-size: 11px; color: var(--text-dim); }
+  .preset-btn.active .preset-desc { color: rgba(12,15,20,0.7); }
+
+  .step-nav { display: flex; gap: 6px; margin-bottom: 6px; }
+  .step-nav button {
+    flex: 1; background: var(--bg-elev-2); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 0; border-radius: 4px;
+    cursor: pointer; font-size: 13px; transition: all 0.1s;
+  }
+  .step-nav button:hover:not(:disabled) { border-color: var(--border-hover); }
+  .step-nav button:disabled { opacity: 0.35; cursor: not-allowed; }
+  .step-indicator {
+    text-align: center; font-family: ui-monospace, Menlo, monospace;
+    font-size: 11px; color: var(--text-dim); margin: 4px 0 10px;
+  }
+
+  select {
+    width: 100%;
+    background: var(--bg-elev-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 4px;
+    font: 12px ui-monospace, Menlo, monospace;
+  }
+  select:focus { border-color: var(--accent); outline: none; }
+
+  .toggle {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 8px 8px; border-radius: 4px; cursor: pointer;
+    user-select: none; transition: background 0.1s; font-size: 13px;
+  }
+  .toggle:hover { background: var(--bg-elev-2); }
+  .toggle input { margin: 3px 0 0; cursor: pointer; accent-color: var(--accent); flex-shrink: 0; }
+  .toggle .toggle-label { flex: 1; line-height: 1.4; }
+  .toggle .toggle-label span { display: block; color: var(--text-dim); font-size: 11px; margin-top: 2px; }
+
+  .preview-wrap {
+    overflow-y: auto;
+    padding: 20px;
+    background:
+      radial-gradient(circle at 20% 20%, rgba(125,211,252,0.03), transparent 55%),
+      radial-gradient(circle at 80% 80%, rgba(134,239,172,0.03), transparent 55%);
+  }
+
+  .scope-banner {
+    max-width: 720px; margin: 0 auto 16px;
+    background: var(--partial-bg);
+    border: 1px solid var(--partial-border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 12px; line-height: 1.5; color: var(--text);
+  }
+  .scope-banner strong { color: var(--partial); }
+  .scope-banner code { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--accent); }
+
+  .stage-list {
+    display: flex; flex-direction: column; gap: 10px;
+    max-width: 720px; margin: 0 auto;
+  }
+  .stage {
+    background: var(--bg-elev);
+    border: 1px solid var(--pending-border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 14px;
+    align-items: center;
+    transition: all 0.2s;
+  }
+  .stage.active { border-color: var(--accent-dim); box-shadow: 0 0 0 1px var(--accent-dim); }
+  .stage.done { background: var(--verified-bg); border-color: var(--verified-border); }
+  .stage.warn { background: var(--partial-bg); border-color: var(--partial-border); }
+  .stage.blocked { background: var(--unverified-bg); border-color: var(--unverified-border); }
+  .stage.pending { opacity: 0.45; }
+  .stage-num {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 11px; font-weight: 600;
+    color: var(--text-dim);
+    background: var(--bg-elev-2);
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    border-radius: 4px;
+    min-width: 38px; text-align: center;
+  }
+  .stage.done .stage-num { color: var(--verified); border-color: var(--verified-border); }
+  .stage.warn .stage-num { color: var(--partial); border-color: var(--partial-border); }
+  .stage.blocked .stage-num { color: var(--unverified); border-color: var(--unverified-border); }
+  .stage-info h3 {
+    margin: 0 0 2px; font-size: 13px; font-weight: 600;
+    font-family: ui-monospace, Menlo, monospace;
+  }
+  .stage-info p { margin: 0; font-size: 12px; color: var(--text-dim); line-height: 1.4; }
+  .stage-info .stage-detail {
+    margin-top: 6px; font-family: ui-monospace, Menlo, monospace;
+    font-size: 11px; color: var(--text-faint); padding-top: 6px;
+    border-top: 1px dashed var(--border); word-break: break-word;
+  }
+  .stage-status {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 11px; font-weight: 600;
+    padding: 4px 10px; border-radius: 4px;
+    text-align: center; min-width: 72px;
+    background: var(--bg-elev-2); color: var(--text-faint);
+    border: 1px solid var(--border);
+  }
+  .stage.done .stage-status { color: var(--verified); border-color: var(--verified-border); background: rgba(134,239,172,0.05); }
+  .stage.warn .stage-status { color: var(--partial); border-color: var(--partial-border); background: rgba(252,211,77,0.05); }
+  .stage.blocked .stage-status { color: var(--unverified); border-color: var(--unverified-border); background: rgba(248,113,113,0.05); }
+  .stage.active .stage-status { color: var(--accent); border-color: var(--accent-dim); }
+
+  /* --- Simulated Word task pane --------------------------------------- */
+  .pane-wrap { max-width: 720px; margin: 20px auto 0; }
+  .pane-wrap h2 {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-dim); margin: 0 0 10px;
+  }
+  .word-frame {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--bg-elev);
+  }
+  .word-ribbon {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--bg-elev-2);
+    border-bottom: 1px solid var(--border);
+    padding: 8px 14px; font-size: 12px; color: var(--text-dim);
+  }
+  .word-ribbon .ribbon-tab { color: var(--text-faint); }
+  .word-ribbon .ribbon-tab.home { color: var(--text); font-weight: 600; }
+  .word-ribbon .spacer { flex: 1; }
+  .ribbon-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--bg-elev); border: 1px solid var(--border);
+    border-radius: 4px; padding: 4px 10px; font-size: 11px; color: var(--text);
+  }
+  .ribbon-btn.show { border-color: var(--accent-dim); color: var(--accent); }
+  .ribbon-btn .dot { width: 8px; height: 8px; border-radius: 2px; background: var(--accent); }
+
+  .pane-body { padding: 18px 20px; min-height: 220px; }
+  .pane-title { font-size: 14px; font-weight: 600; margin: 0 0 8px; }
+  .pane-text { font-size: 12px; color: var(--text-dim); line-height: 1.5; margin: 0 0 12px; }
+  .pane-text strong { color: var(--text); }
+  .pane-btn {
+    display: inline-block;
+    background: var(--accent); color: var(--bg);
+    border: none; border-radius: 4px; padding: 8px 16px;
+    font-size: 12px; font-weight: 600; cursor: default;
+  }
+  .pane-btn.ghost { background: var(--bg-elev-2); color: var(--text); border: 1px solid var(--border); }
+
+  .pane-tabs { display: flex; gap: 4px; margin-bottom: 14px; border-bottom: 1px solid var(--border); }
+  .pane-tab {
+    padding: 6px 12px; font-size: 12px; color: var(--text-faint);
+    border-bottom: 2px solid transparent; cursor: default;
+  }
+  .pane-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .deep-link-card {
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 14px; background: var(--bg-elev-2);
+  }
+  .deep-link-card h4 { margin: 0 0 6px; font-size: 13px; }
+  .deep-link-card p { margin: 0 0 10px; font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+  .deep-link-card .de-tag {
+    display: inline-block; font-family: ui-monospace, Menlo, monospace;
+    font-size: 10px; padding: 2px 6px; border-radius: 3px;
+    background: var(--partial-bg); color: var(--partial);
+    border: 1px solid var(--partial-border); margin-bottom: 8px;
+  }
+  .deep-link-card a { color: var(--accent); text-decoration: none; font-size: 12px; }
+  .tier-badge {
+    display: inline-block; font-family: ui-monospace, Menlo, monospace;
+    font-size: 10px; padding: 2px 7px; border-radius: 3px;
+    background: var(--pending-bg); color: var(--text-faint);
+    border: 1px dashed var(--pending-border);
+  }
+
+  /* Update-needed overlay */
+  .update-overlay { text-align: left; }
+  .update-overlay h3 { margin: 0 0 8px; font-size: 14px; color: var(--unverified); }
+  .update-overlay.deploy h3 { color: var(--partial); }
+  .update-overlay p { font-size: 12px; color: var(--text-dim); line-height: 1.5; margin: 0 0 12px; }
+  .ver-table {
+    display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px;
+    font-family: ui-monospace, Menlo, monospace; font-size: 12px;
+    background: var(--bg-elev-2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 12px 14px;
+  }
+  .ver-table .k { color: var(--text-dim); }
+  .ver-table .v { color: var(--text); }
+  .pane-footnote { font-size: 11px; color: var(--text-faint); margin-top: 12px; }
+  .soft-banner {
+    background: var(--partial-bg); border: 1px solid var(--partial-border);
+    border-radius: 6px; padding: 10px 12px; font-size: 12px;
+    color: var(--text); margin-bottom: 14px; line-height: 1.4;
+  }
+  .soft-banner strong { color: var(--partial); }
+
+  .result {
+    margin-top: 20px; max-width: 720px; margin-left: auto; margin-right: auto;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 18px;
+  }
+  .result h2 {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-dim); margin: 0 0 10px;
+  }
+  .result-row {
+    display: grid; grid-template-columns: 200px 1fr;
+    gap: 12px; padding: 6px 0;
+    border-bottom: 1px dashed var(--border);
+    font-family: ui-monospace, Menlo, monospace; font-size: 12px;
+  }
+  .result-row:last-child { border-bottom: none; }
+  .result-row .k { color: var(--text-dim); }
+  .result-row .v { color: var(--text); word-break: break-all; }
+
+  .narration {
+    background: var(--bg-elev-2);
+    border-left: 3px solid var(--accent-dim);
+    padding: 10px 14px;
+    border-radius: 0 4px 4px 0;
+    font-size: 12px; color: var(--text-dim);
+    line-height: 1.5;
+    margin-top: 14px; max-width: 720px;
+    margin-left: auto; margin-right: auto;
+  }
+  .narration strong { color: var(--text); }
+  .narration code { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--accent); }
+
+  .pg-footer {
+    max-width: 720px; margin: 22px auto 0;
+    border-top: 1px solid var(--border);
+    padding-top: 12px; font-size: 11px; color: var(--text-faint);
+    line-height: 1.6;
+  }
+  .pg-footer a { color: var(--accent); text-decoration: none; }
+  .pg-footer a:hover { text-decoration: underline; }
+  .pg-footer .label { color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; font-size: 10px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Word Add-In — install + auth flow</h1>
+    <span class="subtitle">Sideload an unsigned manifest, OAuth against your deployment, and check the M3-B8 version handshake. Step through it.</span>
+    <span class="spacer"></span>
+    <a href="https://github.com/LegalQuants/lq-ai/blob/main/api/app/api/word_addin.py" target="_blank">source: word_addin.py</a>
+    <a href="https://github.com/LegalQuants/lq-ai/blob/main/docs/word-addin.md" target="_blank">docs</a>
+  </header>
+  <div class="main">
+    <div class="controls">
+      <h2>Step through the flow</h2>
+      <p class="hint">Four stages: generate manifest → sideload (unsigned) → OAuth → version handshake. The simulated task pane on the right reflects the current step.</p>
+      <div class="step-nav">
+        <button id="step-prev">‹ Back</button>
+        <button id="step-next">Next ›</button>
+      </div>
+      <div class="step-indicator" id="step-indicator"></div>
+
+      <h2>Presets</h2>
+      <p class="hint">Each preset sets the step + version-handshake state to a representative scenario.</p>
+      <div class="presets" id="presets"></div>
+
+      <h2>Version-handshake state</h2>
+      <p class="hint">What <code>GET /api/v1/word-addin/version</code> resolves to once the task pane runs <code>classifyVersion()</code> on mount. Affects step 4.</p>
+      <select id="version-state">
+        <option value="compatible">compatible — within range</option>
+        <option value="addin_outdated">addin_outdated — installed &lt; min</option>
+        <option value="deployment_outdated">deployment_outdated — installed &gt; max</option>
+        <option value="unknown">unknown — handshake failed</option>
+      </select>
+
+      <h2>Manifest tokens</h2>
+      <p class="hint">Substituted into the XML by <code>render_manifest()</code> at generate time.</p>
+      <label class="toggle">
+        <input type="checkbox" id="custom-brand">
+        <div class="toggle-label">Custom brand / provider
+          <span>Set <code>display_name=Acme Legal</code> &amp; <code>provider_name=Acme Corp</code> query params (default <code>LQ.AI</code> / <code>LegalQuants</code>).</span>
+        </div>
+      </label>
+
+      <p class="hint" style="margin-top: 12px;">
+        Scope reminder: M3 shipped <strong>plumbing only</strong>. In-pane chat / skills / playbooks (DE-287) and the signed distribution package (DE-295) are not built — see the caption in the preview.
+      </p>
+    </div>
+
+    <div class="preview-wrap">
+      <div class="scope-banner" id="scope-banner"></div>
+      <div class="stage-list" id="stage-list"></div>
+
+      <div class="pane-wrap">
+        <h2>Simulated Word task pane</h2>
+        <div class="word-frame">
+          <div class="word-ribbon" id="word-ribbon"></div>
+          <div class="pane-body" id="pane-body"></div>
+        </div>
+      </div>
+
+      <div class="result" id="result"></div>
+      <div class="narration" id="narration"></div>
+
+      <div class="pg-footer">
+        <span class="label">Source</span><br>
+        Backend (manifest generation + version handshake): <a href="https://github.com/LegalQuants/lq-ai/blob/main/api/app/api/word_addin.py" target="_blank">api/app/api/word_addin.py</a><br>
+        Add-in (manifest template, OAuth dialog, version client, task pane): <a href="https://github.com/LegalQuants/lq-ai/blob/main/word-addin/" target="_blank">word-addin/</a><br>
+        Honest-state doc: <a href="https://github.com/LegalQuants/lq-ai/blob/main/docs/word-addin.md" target="_blank">docs/word-addin.md</a>
+        · <a href="https://github.com/LegalQuants/lq-ai/blob/main/docs/PRD.md#de-287--word-add-in-feature-surface-chat-skills-playbooks-tier-badge--deferred-to-m4--community-contribution" target="_blank">DE-287</a>
+        · <a href="https://github.com/LegalQuants/lq-ai/blob/main/docs/PRD.md#de-295--word-add-in-code-signing-certificate--signed-manifest-ci-community-led" target="_blank">DE-295</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// --- Constants accurate to the code ---------------------------------------
+const DEPLOYMENT_VERSION = "0.3.0";        // api/app/__init__.py __version__
+const ADDIN_MIN = "0.3.0";                  // ADDIN_MIN_COMPATIBLE_VERSION
+const ADDIN_MAX = "0.3.99";                 // ADDIN_MAX_COMPATIBLE_VERSION
+const MANIFEST_VERSION = "0.3.0.0";         // <Version> in manifest.xml
+
+// Installed add-in version (__ADDIN_VERSION__, baked by webpack DefinePlugin)
+// chosen to put classifyVersion() into each branch.
+const INSTALLED_BY_STATE = {
+  compatible: "0.3.0",
+  addin_outdated: "0.2.4",
+  deployment_outdated: "0.4.0",
+  unknown: "0.3.0"
+};
+
+const STEP_DEFS = [
+  {
+    num: "1",
+    name: "GET /admin/word-addin/manifest",
+    desc: "Admin opens /lq-ai/admin/word-addin → Generate manifest. The backend templates the deployment URL + a fresh uuid4 into the XML and returns application/xml as an attachment.",
+  },
+  {
+    num: "2",
+    name: "Sideload (UNSIGNED) via M365",
+    desc: "Admin uploads the manifest in Microsoft 365 Admin Center → Integrated apps → Upload custom apps → Office Add-in. M365 warns it is unsigned — expected at v0.3.0.",
+  },
+  {
+    num: "3",
+    name: "OAuth via Office.js Dialog API",
+    desc: "Task pane loads in the sandboxed iframe; SignInGate opens displayDialogAsync against the deployment's own login form (its existing JWT issuer — no MSAL). messageParent posts the session back.",
+  },
+  {
+    num: "4",
+    name: "GET /word-addin/version handshake",
+    desc: "On mount (before sign-in) the pane calls the unauthenticated version endpoint and runs classifyVersion(). Out-of-range → blocking Update-needed overlay; in-range → normal layout.",
+  },
+];
+
+const PRESETS = [
+  {
+    id: "fresh",
+    label: "Fresh install",
+    desc: "Walk steps 1→4 with a compatible add-in. The happy path.",
+    step: 0,
+    versionState: "compatible",
+    customBrand: false
+  },
+  {
+    id: "compatible",
+    label: "Compatible (signed-in)",
+    desc: "Jump to step 4, version compatible. Authenticated tab strip + deep-link placeholders.",
+    step: 3,
+    versionState: "compatible",
+    customBrand: false
+  },
+  {
+    id: "drift",
+    label: "Version drift (add-in outdated)",
+    desc: "Step 4 with installed 0.2.4 < min 0.3.0 → blocking Update-needed overlay.",
+    step: 3,
+    versionState: "addin_outdated",
+    customBrand: false
+  },
+  {
+    id: "toonew",
+    label: "Deployment outdated (add-in too new)",
+    desc: "Step 4 with installed 0.4.0 > max 0.3.99 → 'update the deployment' overlay.",
+    step: 3,
+    versionState: "deployment_outdated",
+    customBrand: false
+  },
+  {
+    id: "offline",
+    label: "Handshake unreachable",
+    desc: "Step 4, version endpoint fails → soft non-blocking banner; the pane still renders.",
+    step: 3,
+    versionState: "unknown",
+    customBrand: false
+  }
+];
+
+// --- State -----------------------------------------------------------------
+let step = 0;                 // 0..3 (steps 1..4)
+let versionState = "compatible";
+let customBrand = false;
+let activePresetId = "fresh";
+
+// --- Version handshake simulation (mirrors version.ts) ---------------------
+function parseVersion(v) {
+  return v.split(".").map(seg => {
+    const m = seg.match(/^(\d+)/);
+    return m ? parseInt(m[1], 10) : 0;
+  });
+}
+function compareVersions(a, b) {
+  const av = parseVersion(a), bv = parseVersion(b);
+  const len = Math.max(av.length, bv.length);
+  for (let i = 0; i < len; i++) {
+    const ai = av[i] ?? 0, bi = bv[i] ?? 0;
+    if (ai < bi) return -1;
+    if (ai > bi) return 1;
+  }
+  return 0;
+}
+function classifyVersion(installed) {
+  if (compareVersions(installed, ADDIN_MIN) < 0) return "addin_outdated";
+  if (compareVersions(installed, ADDIN_MAX) > 0) return "deployment_outdated";
+  return "compatible";
+}
+
+// --- Helpers ---------------------------------------------------------------
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+}
+function deploymentOrigin() { return "https://lq.acme.example"; }
+function brand() {
+  return customBrand
+    ? { display: "Acme Legal", provider: "Acme Corp" }
+    : { display: "LQ.AI", provider: "LegalQuants" };
+}
+
+// --- Per-step stage verdicts -----------------------------------------------
+// Returns an array of 4 verdicts: "done" | "active" | "pending" | "warn" | "blocked".
+function stageVerdicts() {
+  const verdicts = ["pending", "pending", "pending", "pending"];
+  for (let i = 0; i < 4; i++) {
+    if (i < step) verdicts[i] = "done";
+    else if (i === step) verdicts[i] = "active";
+  }
+  // Step 2 (sideload) always carries the unsigned warning once reached.
+  if (step >= 1) verdicts[1] = step === 1 ? "warn" : (verdicts[1] === "done" ? "done" : verdicts[1]);
+  // Step 4 verdict depends on the handshake outcome.
+  if (step === 3) {
+    if (versionState === "addin_outdated" || versionState === "deployment_outdated") verdicts[3] = "blocked";
+    else if (versionState === "unknown") verdicts[3] = "warn";
+    else verdicts[3] = "done";
+  }
+  return verdicts;
+}
+
+function stageDetail(i) {
+  const origin = deploymentOrigin();
+  const b = brand();
+  if (i === 0) {
+    return `display_name=${escapeHtml(b.display)} · provider_name=${escapeHtml(b.provider)} · DEPLOYMENT_ORIGIN=${escapeHtml(origin)} · ADDIN_ID=&lt;uuid4&gt; · &lt;Version&gt;${MANIFEST_VERSION}&lt;/Version&gt;`;
+  }
+  if (i === 1) {
+    return `Unsigned XML manifest (Phase B Decision B-2). M365 warning expected — signed package is DE-295 (community-led).`;
+  }
+  if (i === 2) {
+    return `displayDialogAsync → ${escapeHtml(origin)}/lq-ai/word-addin/oauth-start · messageParent → storeSession() in localStorage["lq-ai-word-addin-session"]`;
+  }
+  if (i === 3) {
+    const installed = INSTALLED_BY_STATE[versionState];
+    if (versionState === "unknown") return `fetch failed → status="unknown" · soft banner, pane still renders`;
+    return `installed=${installed} vs range ${ADDIN_MIN}–${ADDIN_MAX} → classifyVersion()="${versionState === "compatible" ? "compatible" : versionState}"`;
+  }
+  return "";
+}
+
+// --- Render ----------------------------------------------------------------
+function render() {
+  // Scope banner — the critical honesty caption, always visible.
+  document.getElementById("scope-banner").innerHTML =
+    `<strong>What actually works at v0.3.0:</strong> install (unsigned manifest) · OAuth · version handshake — <em>plumbing only</em>. ` +
+    `The in-pane feature surface (chat, skills, playbooks, the Inference Tier badge) is <strong>not built</strong> — deferred to M4 ` +
+    `(<code>DE-287</code>); each authenticated tab is a deep-link card to the web app. A <strong>signed manifest</strong> + enterprise ` +
+    `distribution package is community-led (<code>DE-295</code>). This playground depicts those as placeholders, never as working features.`;
+
+  // Step nav.
+  document.getElementById("step-prev").disabled = step === 0;
+  document.getElementById("step-next").disabled = step === 3;
+  document.getElementById("step-indicator").textContent =
+    `Step ${step + 1} of 4 — ${STEP_DEFS[step].name}`;
+
+  // Version-state select.
+  document.getElementById("version-state").value = versionState;
+  document.getElementById("custom-brand").checked = customBrand;
+
+  // Stage list.
+  const verdicts = stageVerdicts();
+  const statusText = { done: "done", active: "running", pending: "pending", warn: "warning", blocked: "blocked" };
+  const listEl = document.getElementById("stage-list");
+  listEl.innerHTML = "";
+  STEP_DEFS.forEach((def, i) => {
+    const v = verdicts[i];
+    const showDetail = i <= step;
+    listEl.innerHTML += `
+      <div class="stage ${v}">
+        <div class="stage-num">${def.num}</div>
+        <div class="stage-info">
+          <h3>${escapeHtml(def.name)}</h3>
+          <p>${escapeHtml(def.desc)}</p>
+          ${showDetail ? `<div class="stage-detail">${stageDetail(i)}</div>` : ""}
+        </div>
+        <div class="stage-status">${statusText[v]}</div>
+      </div>`;
+  });
+
+  renderPane();
+  renderResult();
+  renderNarration();
+}
+
+// --- Simulated task pane ---------------------------------------------------
+function renderPane() {
+  const ribbonEl = document.getElementById("word-ribbon");
+  const bodyEl = document.getElementById("pane-body");
+  const b = brand();
+  const origin = deploymentOrigin();
+
+  // Ribbon — the TabHome button only appears once the add-in is installed (step >= 1).
+  let ribbonBtn = "";
+  if (step >= 1) {
+    const showing = step >= 2;
+    ribbonBtn = `<span class="ribbon-btn ${showing ? "show" : ""}"><span class="dot"></span>Open ${escapeHtml(b.display)}</span>`;
+  }
+  ribbonEl.innerHTML =
+    `<span class="ribbon-tab">File</span>` +
+    `<span class="ribbon-tab home">Home</span>` +
+    `<span class="ribbon-tab">Insert</span>` +
+    `<span class="ribbon-tab">Review</span>` +
+    `<span class="spacer"></span>` + ribbonBtn;
+
+  if (step === 0) {
+    bodyEl.innerHTML = `
+      <p class="pane-title">No add-in installed yet</p>
+      <p class="pane-text">Admin generates the manifest from <strong>${escapeHtml(origin)}/lq-ai/admin/word-addin</strong>. The backend
+        substitutes <code>DEPLOYMENT_ORIGIN</code>, a fresh <code>ADDIN_ID</code> (uuid4), <code>DEPLOYMENT_DISPLAY_NAME</code>
+        (<strong>${escapeHtml(b.display)}</strong>) and <code>PROVIDER_NAME</code> (<strong>${escapeHtml(b.provider)}</strong>) into the XML and
+        downloads <code>lq-ai-word-addin-manifest.xml</code>.</p>
+      <span class="pane-btn ghost">⬇ lq-ai-word-addin-manifest.xml</span>`;
+    return;
+  }
+
+  if (step === 1) {
+    bodyEl.innerHTML = `
+      <div class="soft-banner"><strong>⚠ Unsigned add-in.</strong> Microsoft 365 Admin Center warns that this add-in is not signed.
+        That is <strong>expected at v0.3.0</strong> — the signed distribution package is DE-295 (community-led). The admin is
+        uploading a manifest they generated from their own deployment; the only <code>&lt;AppDomain&gt;</code> is <strong>${escapeHtml(origin)}</strong>.</div>
+      <p class="pane-title">Sideloading via M365 Admin Center</p>
+      <p class="pane-text">Integrated apps → Upload custom apps → Office Add-in → upload the XML → assign to users. The branded
+        <strong>Open ${escapeHtml(b.display)}</strong> button appears on Word's Home ribbon within a few minutes.</p>`;
+    return;
+  }
+
+  if (step === 2) {
+    // OAuth step — the SignInGate (version compatible / not yet checked here).
+    bodyEl.innerHTML = `
+      <p class="pane-title">Sign in to ${escapeHtml(b.display)}</p>
+      <p class="pane-text">The add-in authenticates against <strong>lq.acme.example</strong> before it can run against your documents.
+        Clicking <em>Sign in</em> opens <code>Office.context.ui.displayDialogAsync</code> against
+        <strong>${escapeHtml(origin)}/lq-ai/word-addin/oauth-start</strong> — the deployment's own login form (its existing JWT issuer, no MSAL).
+        On success the dialog calls <code>messageParent</code> with the <code>LoginResponse</code> payload; the pane closes the dialog and
+        <code>storeSession()</code> persists it to <code>localStorage</code>.</p>
+      <span class="pane-btn">Sign in</span>
+      <p class="pane-footnote">Office error 12006 ("dialog closed") maps to a silent <code>cancelled</code>; other non-zero codes surface as an error banner.</p>`;
+    return;
+  }
+
+  // step === 3 — version handshake decides which of the three exclusive App states renders.
+  const installed = INSTALLED_BY_STATE[versionState];
+
+  if (versionState === "addin_outdated" || versionState === "deployment_outdated") {
+    const isAddin = versionState === "addin_outdated";
+    const heading = isAddin ? "Your LQ.AI add-in needs an update" : "This deployment needs an update";
+    const body = isAddin
+      ? "The installed add-in is older than this deployment accepts. Ask your LQ.AI admin to redistribute the latest manifest via Microsoft 365 Admin Center; once Word picks up the update you can re-open the task pane and sign in."
+      : "The installed add-in is newer than this deployment recognizes. Ask your LQ.AI admin to update the deployment to the latest release, or roll the add-in back to the version this deployment expects.";
+    bodyEl.innerHTML = `
+      <div class="update-overlay ${isAddin ? "" : "deploy"}">
+        <h3>${escapeHtml(heading)}</h3>
+        <p>${escapeHtml(body)}</p>
+        <div class="ver-table">
+          <span class="k">Installed add-in</span><span class="v">${installed}</span>
+          <span class="k">Deployment</span><span class="v">${DEPLOYMENT_VERSION}</span>
+          <span class="k">Compatible range</span><span class="v">${ADDIN_MIN} – ${ADDIN_MAX}</span>
+        </div>
+        <p class="pane-footnote">Quote these version numbers when you contact your LQ.AI admin. This overlay BLOCKS sign-in so an out-of-date add-in can't proceed to a doomed handshake.</p>
+      </div>`;
+    return;
+  }
+
+  // compatible or unknown → authenticated layout (signed in at step 4 in this sim).
+  const softBanner = versionState === "unknown"
+    ? `<div class="soft-banner"><strong>Version check unavailable.</strong> The add-in couldn't confirm it's compatible with this deployment
+        (network/parse failure → <code>status="unknown"</code>). Sign-in and basic flows still work — the pane is non-blocking by design.</div>`
+    : "";
+  bodyEl.innerHTML = `
+    ${softBanner}
+    <div class="pane-tabs">
+      <span class="pane-tab active">Chat</span>
+      <span class="pane-tab">Skills</span>
+      <span class="pane-tab">Playbooks</span>
+      <span class="spacer" style="flex:1"></span>
+      <span class="tier-badge" title="Inert placeholder at v0.3.0 (DE-287)">Tier · —</span>
+    </div>
+    <div class="deep-link-card">
+      <span class="de-tag">DE-287 · M4 / community</span>
+      <h4>Chat with the open document</h4>
+      <p>In-Word chat against the open document is on the M4 / community-contribution roadmap. Until then, chat against the same
+        documents in the LQ.AI web app — your document context follows.</p>
+      <a href="${escapeHtml(origin)}/lq-ai" target="_blank">Open in the LQ.AI web app →</a>
+    </div>
+    <p class="pane-footnote">Each tab is a deep-link card placeholder. The Inference Tier badge is inert. No in-pane skill/playbook execution exists at v0.3.0 — that is DE-287.</p>`;
+}
+
+// --- Wire-shape result panel -----------------------------------------------
+function renderResult() {
+  const el = document.getElementById("result");
+  const b = brand();
+  const origin = deploymentOrigin();
+
+  if (step === 0) {
+    el.innerHTML = `
+      <h2>render_manifest() — token substitution</h2>
+      <div class="result-row"><div class="k">ADDIN_ID</div><div class="v">&lt;fresh uuid4 per call&gt;</div></div>
+      <div class="result-row"><div class="k">DEPLOYMENT_ORIGIN</div><div class="v">${escapeHtml(origin)}</div></div>
+      <div class="result-row"><div class="k">DEPLOYMENT_DISPLAY_NAME</div><div class="v">${escapeHtml(b.display)}</div></div>
+      <div class="result-row"><div class="k">PROVIDER_NAME</div><div class="v">${escapeHtml(b.provider)}</div></div>
+      <div class="result-row"><div class="k">&lt;Version&gt; (manifest)</div><div class="v">${MANIFEST_VERSION}</div></div>
+      <div class="result-row"><div class="k">Content-Disposition</div><div class="v">attachment; filename="lq-ai-word-addin-manifest.xml"</div></div>`;
+    return;
+  }
+  if (step === 1) {
+    el.innerHTML = `
+      <h2>Sideload posture</h2>
+      <div class="result-row"><div class="k">install path</div><div class="v">unsigned XML manifest (only path that ships in M3)</div></div>
+      <div class="result-row"><div class="k">manifest schema</div><div class="v">Office Add-in XML 1.1+ (Phase B Decision B-2; not JSON unified)</div></div>
+      <div class="result-row"><div class="k">M365 warning</div><div class="v">expected — code signing is DE-295</div></div>
+      <div class="result-row"><div class="k">&lt;AppDomain&gt;</div><div class="v">${escapeHtml(origin)} (single domain — install doesn't widen nav surface)</div></div>
+      <div class="result-row"><div class="k">&lt;Permissions&gt;</div><div class="v">ReadWriteDocument (declared ahead of DE-287; unused at v0.3.0)</div></div>`;
+    return;
+  }
+  if (step === 2) {
+    el.innerHTML = `
+      <h2>OAuth — Office.js Dialog API</h2>
+      <div class="result-row"><div class="k">primitive</div><div class="v">Office.context.ui.displayDialogAsync (no browser popup in sandboxed iframe)</div></div>
+      <div class="result-row"><div class="k">dialog URL</div><div class="v">${escapeHtml(origin)}/lq-ai/word-addin/oauth-start</div></div>
+      <div class="result-row"><div class="k">issuer</div><div class="v">deployment's existing JWT issuer (Decision B-3; no MSAL/WAM)</div></div>
+      <div class="result-row"><div class="k">callback</div><div class="v">messageParent → {type:"oauth-success", login} → storeSession()</div></div>
+      <div class="result-row"><div class="k">storage</div><div class="v">localStorage["lq-ai-word-addin-session"] (cross-document, not doc-scoped)</div></div>
+      <div class="result-row"><div class="k">refresh</div><div class="v">401 → single coalesced POST /api/v1/auth/refresh, then retry</div></div>
+      <div class="result-row"><div class="k">audience</div><div class="v">same bearer shape as web app — no aud:word-addin claim</div></div>`;
+    return;
+  }
+  // step 3
+  const installed = INSTALLED_BY_STATE[versionState];
+  const handshakeFailed = versionState === "unknown";
+  el.innerHTML = `
+    <h2>WordAddinVersionResponse · GET /api/v1/word-addin/version (unauthenticated)</h2>
+    <div class="result-row"><div class="k">deployment_version</div><div class="v">${handshakeFailed ? "— (no response)" : DEPLOYMENT_VERSION}</div></div>
+    <div class="result-row"><div class="k">addin_min_compatible_version</div><div class="v">${handshakeFailed ? "—" : ADDIN_MIN}</div></div>
+    <div class="result-row"><div class="k">addin_max_compatible_version</div><div class="v">${handshakeFailed ? "—" : ADDIN_MAX}</div></div>
+    <div class="result-row"><div class="k">taskpane_bundle_url</div><div class="v">${handshakeFailed ? "—" : escapeHtml(origin) + "/word-addin/taskpane.html"}</div></div>
+    <div class="result-row"><div class="k">taskpane_bundle_hash</div><div class="v">null (always null in M3-B8 — DE-295 would populate)</div></div>
+    <div class="result-row"><div class="k">installed (__ADDIN_VERSION__, baked-in)</div><div class="v">${installed}</div></div>
+    <div class="result-row"><div class="k">classifyVersion() →</div><div class="v">${versionState}</div></div>`;
+}
+
+function renderNarration() {
+  const el = document.getElementById("narration");
+  if (step === 0) {
+    el.innerHTML = `<strong>Step 1.</strong> <code>render_manifest()</code> is a pure function (unit-tested apart from the handler) that substitutes four <code>{{ TOKEN }}</code> placeholders. It <strong>raises <code>ValueError</code> on an unknown token</strong> so template drift fails loudly. The deployment origin resolves from an explicit param, then <code>X-Forwarded-Proto/Host</code>, then the request URL. The bundled template at <code>api/app/data/word_addin_manifest.xml</code> is asserted byte-for-byte equal to <code>word-addin/manifest.xml</code> by a sync test.`;
+  } else if (step === 1) {
+    el.innerHTML = `<strong>Step 2.</strong> Only the <strong>unsigned-manifest sideload path</strong> verifies in M3. The M365 unsigned warning is expected and correct — the trust decision rests with the admin uploading a manifest from their own deployment. A signed manifest + distribution package would let the admin verify provenance cryptographically; that is <code>DE-295</code>, community-led.`;
+  } else if (step === 2) {
+    el.innerHTML = `<strong>Step 3.</strong> The pane can't use a browser popup inside the sandboxed Office iframe, so it uses Office's Dialog API against the deployment's <strong>own</strong> login form — no third-party IdP, no MSAL. The dialog wrapper collapses Office's callback/error-code API into <code>success</code> / <code>error</code> / <code>cancelled</code>. Tokens live in <code>localStorage</code> (cross-document); refreshes coalesce around one in-flight promise.`;
+  } else {
+    if (versionState === "addin_outdated" || versionState === "deployment_outdated") {
+      el.innerHTML = `<strong>Step 4 — blocked.</strong> <code>classifyVersion()</code> put the installed version outside ${ADDIN_MIN}–${ADDIN_MAX}, so <code>App.tsx</code> renders the <strong>Update-needed overlay</strong> — one of three exclusive states. It sits ABOVE the sign-in gate so an out-of-date add-in can't proceed to a doomed OAuth handshake. The installed version is baked into the bundle (<code>__ADDIN_VERSION__</code>), so a tampered API response can't lie about it.`;
+    } else if (versionState === "unknown") {
+      el.innerHTML = `<strong>Step 4 — unknown.</strong> <code>fetchVersionInfo()</code> never throws; a network/parse failure yields <code>status="unknown"</code>. This is <strong>non-blocking</strong> — the pane still renders with a soft banner so an offline operator isn't locked out. The authenticated layout shows deep-link cards only — no in-pane features (DE-287).`;
+    } else {
+      el.innerHTML = `<strong>Step 4 — compatible.</strong> The installed version is within ${ADDIN_MIN}–${ADDIN_MAX}, so the pane renders the normal authenticated layout: header + tab strip + a <strong>deep-link card per tab</strong>. Remember the scope: the cards are placeholders pointing at the web app and the Tier badge is inert — in-pane chat/skills/playbooks are DE-287, not built.`;
+    }
+  }
+}
+
+// --- Wiring ----------------------------------------------------------------
+const presetsEl = document.getElementById("presets");
+PRESETS.forEach(p => {
+  const btn = document.createElement("button");
+  btn.className = "preset-btn" + (p.id === activePresetId ? " active" : "");
+  btn.dataset.id = p.id;
+  btn.innerHTML = `<span class="preset-label">${escapeHtml(p.label)}</span><span class="preset-desc">${escapeHtml(p.desc)}</span>`;
+  btn.addEventListener("click", () => {
+    activePresetId = p.id;
+    step = p.step;
+    versionState = p.versionState;
+    customBrand = p.customBrand;
+    document.querySelectorAll(".preset-btn").forEach(b => b.classList.toggle("active", b.dataset.id === p.id));
+    render();
+  });
+  presetsEl.appendChild(btn);
+});
+
+function clearPreset() {
+  activePresetId = null;
+  document.querySelectorAll(".preset-btn").forEach(b => b.classList.remove("active"));
+}
+
+document.getElementById("step-prev").addEventListener("click", () => {
+  if (step > 0) { step--; clearPreset(); render(); }
+});
+document.getElementById("step-next").addEventListener("click", () => {
+  if (step < 3) { step++; clearPreset(); render(); }
+});
+document.getElementById("version-state").addEventListener("change", (e) => {
+  versionState = e.target.value;
+  clearPreset();
+  render();
+});
+document.getElementById("custom-brand").addEventListener("change", (e) => {
+  customBrand = e.target.checked;
+  clearPreset();
+  render();
+});
+
+render();
+</script>
+</body>
+</html>

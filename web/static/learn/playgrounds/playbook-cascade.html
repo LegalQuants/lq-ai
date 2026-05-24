@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LQ.AI — Playbook executor 4-node cascade</title>
+<style>
+  :root {
+    --bg: #0c0f14;
+    --bg-elev: #151a23;
+    --bg-elev-2: #1d242f;
+    --border: #2a3340;
+    --border-hover: #3a4555;
+    --text: #e6ebf3;
+    --text-dim: #8a96a8;
+    --text-faint: #5a6578;
+    --accent: #7dd3fc;
+    --accent-dim: #38bdf8;
+    --verified: #86efac;
+    --verified-bg: rgba(134,239,172,0.08);
+    --verified-border: rgba(134,239,172,0.3);
+    --partial: #fcd34d;
+    --partial-bg: rgba(252,211,77,0.08);
+    --partial-border: rgba(252,211,77,0.3);
+    --unverified: #f87171;
+    --unverified-bg: rgba(248,113,113,0.08);
+    --unverified-border: rgba(248,113,113,0.3);
+    --pending: #5a6578;
+    --pending-bg: rgba(90,101,120,0.08);
+    --pending-border: rgba(90,101,120,0.25);
+    --shadow: rgba(0,0,0,0.4);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+  }
+  .app { display: grid; grid-template-rows: auto 1fr; height: 100vh; }
+  header {
+    padding: 12px 20px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 16px;
+  }
+  header h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
+  header .subtitle { color: var(--text-dim); font-size: 13px; }
+  header .spacer { flex: 1; }
+  header a {
+    color: var(--accent); text-decoration: none; font-size: 12px;
+    border: 1px solid var(--border); padding: 4px 10px; border-radius: 4px;
+  }
+  header a:hover { border-color: var(--border-hover); background: var(--bg-elev-2); }
+
+  .main { display: grid; grid-template-columns: 360px 1fr; overflow: hidden; }
+  .controls {
+    background: var(--bg-elev);
+    border-right: 1px solid var(--border);
+    padding: 16px; overflow-y: auto;
+  }
+  .controls h2 {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-dim); margin: 16px 0 8px;
+  }
+  .controls h2:first-child { margin-top: 0; }
+  .controls .hint { font-size: 11px; color: var(--text-faint); margin: 4px 0 8px; line-height: 1.4; }
+  .controls code { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--accent); }
+
+  .presets { display: grid; grid-template-columns: 1fr; gap: 5px; }
+  .preset-btn {
+    background: var(--bg-elev-2); border: 1px solid var(--border);
+    color: var(--text); padding: 7px 10px; border-radius: 4px;
+    cursor: pointer; font-size: 12px; text-align: left;
+    transition: all 0.1s; line-height: 1.4;
+  }
+  .preset-btn:hover { border-color: var(--border-hover); }
+  .preset-btn.active {
+    background: var(--accent); border-color: var(--accent);
+    color: var(--bg); font-weight: 600;
+  }
+  .preset-btn .preset-label { display: block; font-weight: 600; margin-bottom: 2px; }
+  .preset-btn .preset-desc { display: block; font-size: 11px; color: var(--text-dim); }
+  .preset-btn.active .preset-desc { color: rgba(12,15,20,0.7); }
+
+  select {
+    width: 100%;
+    background: var(--bg-elev-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 4px;
+    font: 13px -apple-system, system-ui, sans-serif;
+    cursor: pointer;
+  }
+  select:focus { border-color: var(--accent); outline: none; }
+
+  .toggle {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 8px 8px; border-radius: 4px; cursor: pointer;
+    user-select: none; transition: background 0.1s; font-size: 13px;
+  }
+  .toggle:hover { background: var(--bg-elev-2); }
+  .toggle input { margin: 3px 0 0; cursor: pointer; accent-color: var(--accent); flex-shrink: 0; }
+  .toggle .toggle-label { flex: 1; line-height: 1.4; }
+  .toggle .toggle-label span { display: block; color: var(--text-dim); font-size: 11px; margin-top: 2px; }
+
+  /* The 4-node cascade rail in the sidebar. */
+  .node-rail { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+  .node-step {
+    display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center;
+    padding: 8px 10px; border-radius: 4px;
+    background: var(--bg-elev-2); border: 1px solid var(--border);
+    transition: all 0.15s; cursor: pointer;
+  }
+  .node-step:hover { border-color: var(--border-hover); }
+  .node-step.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-dim); }
+  .node-step.done { opacity: 0.75; }
+  .node-step.pending { opacity: 0.4; }
+  .node-step .node-idx {
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; font-weight: 600;
+    width: 22px; height: 22px; line-height: 22px; text-align: center;
+    border-radius: 4px; background: var(--bg-elev); border: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+  .node-step.active .node-idx { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  .node-step.done .node-idx { color: var(--verified); border-color: var(--verified-border); }
+  .node-step .node-name { font-family: ui-monospace, Menlo, monospace; font-size: 12px; font-weight: 600; }
+  .node-step .node-sub { display: block; font-size: 10px; color: var(--text-faint); font-family: -apple-system, system-ui, sans-serif; font-weight: 400; }
+
+  .step-controls { display: flex; gap: 6px; margin: 8px 0; }
+  .step-controls button {
+    flex: 1; background: var(--bg-elev-2); border: 1px solid var(--border);
+    color: var(--text); padding: 7px 8px; border-radius: 4px; cursor: pointer;
+    font-size: 12px; transition: all 0.1s;
+  }
+  .step-controls button:hover { border-color: var(--border-hover); }
+  .step-controls button:disabled { opacity: 0.35; cursor: default; }
+  .step-controls button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
+
+  .preview-wrap {
+    overflow-y: auto;
+    padding: 20px;
+    background:
+      radial-gradient(circle at 20% 20%, rgba(125,211,252,0.03), transparent 55%),
+      radial-gradient(circle at 80% 80%, rgba(134,239,172,0.03), transparent 55%);
+  }
+
+  /* Summary card (mirrors UI summary card from the execution detail view). */
+  .summary {
+    max-width: 760px; margin: 0 auto 16px;
+    background: var(--bg-elev); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 18px;
+  }
+  .summary h2 {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-dim); margin: 0 0 4px;
+  }
+  .summary .doc-name { font-size: 13px; color: var(--text); margin-bottom: 10px; }
+  .summary .doc-name strong { font-family: ui-monospace, Menlo, monospace; }
+  .summary-counts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .count-cell {
+    background: var(--bg-elev-2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 10px; text-align: center;
+  }
+  .count-cell .num { font-size: 20px; font-weight: 700; font-family: ui-monospace, Menlo, monospace; }
+  .count-cell .lbl { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+  .count-cell.matches_standard .num { color: var(--verified); }
+  .count-cell.matches_fallback .num { color: var(--accent); }
+  .count-cell.deviates .num { color: var(--partial); }
+  .count-cell.missing .num { color: var(--unverified); }
+
+  .position-list { display: flex; flex-direction: column; gap: 10px; max-width: 760px; margin: 0 auto; }
+  .position {
+    background: var(--bg-elev);
+    border: 1px solid var(--pending-border);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: all 0.2s;
+  }
+  .position.matches_standard { border-color: var(--verified-border); }
+  .position.matches_fallback { border-color: var(--accent-dim); }
+  .position.deviates { border-color: var(--partial-border); }
+  .position.missing { border-color: var(--unverified-border); }
+  .position.unprocessed { opacity: 0.4; }
+
+  .pos-head {
+    display: grid; grid-template-columns: auto 1fr auto auto; gap: 12px;
+    align-items: center; padding: 12px 16px;
+  }
+  .pos-order {
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; font-weight: 600;
+    color: var(--text-dim); background: var(--bg-elev-2); border: 1px solid var(--border);
+    padding: 5px 9px; border-radius: 4px; min-width: 30px; text-align: center;
+  }
+  .pos-issue { font-size: 13px; font-weight: 600; }
+  .severity-pill {
+    font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 3px;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text-dim);
+  }
+  .severity-pill.critical { color: var(--unverified); border-color: var(--unverified-border); }
+  .severity-pill.high { color: var(--partial); border-color: var(--partial-border); }
+  .severity-pill.medium { color: var(--accent); border-color: var(--border); }
+  .verdict-pill {
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; font-weight: 600;
+    padding: 4px 10px; border-radius: 4px; min-width: 120px; text-align: center;
+    background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text-faint);
+  }
+  .verdict-pill.matches_standard { color: var(--verified); border-color: var(--verified-border); background: var(--verified-bg); }
+  .verdict-pill.matches_fallback { color: var(--accent); border-color: var(--accent-dim); background: rgba(125,211,252,0.06); }
+  .verdict-pill.deviates { color: var(--partial); border-color: var(--partial-border); background: var(--partial-bg); }
+  .verdict-pill.missing { color: var(--unverified); border-color: var(--unverified-border); background: var(--unverified-bg); }
+  .verdict-pill.pending { color: var(--text-faint); }
+
+  .pos-body { padding: 0 16px 14px; border-top: 1px dashed var(--border); }
+  .pos-body.hidden { display: none; }
+
+  .lane {
+    margin-top: 12px; padding: 10px 12px; border-radius: 6px;
+    background: var(--bg-elev-2); border: 1px solid var(--border);
+  }
+  .lane.hidden { display: none; }
+  .lane-label {
+    font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-dim); margin-bottom: 6px; display: flex; align-items: center; gap: 6px;
+  }
+  .lane-label .node-tag {
+    font-family: ui-monospace, Menlo, monospace; text-transform: none; letter-spacing: 0;
+    color: var(--accent); font-size: 10px; padding: 1px 6px; border-radius: 3px;
+    border: 1px solid var(--border); background: var(--bg-elev);
+  }
+  .chunk {
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--text-dim);
+    padding: 6px 8px; margin-top: 4px; border-radius: 4px;
+    background: var(--bg-elev); border: 1px solid var(--border);
+    border-left: 2px solid var(--accent-dim);
+  }
+  .chunk .chunk-id { color: var(--text-faint); font-size: 10px; }
+  .chunk.cited { border-left-color: var(--verified); }
+  .chunk .cited-tag { color: var(--verified); font-size: 9px; margin-left: 6px; }
+
+  .clause-quote {
+    font-family: Georgia, "Times New Roman", serif; font-size: 13px;
+    color: var(--text); line-height: 1.55; font-style: italic;
+    padding: 8px 12px; border-left: 3px solid var(--text-faint);
+    background: var(--bg-elev);
+  }
+  .classify-meta {
+    display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px;
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px;
+  }
+  .classify-meta .meta-k { color: var(--text-dim); }
+  .classify-meta .meta-v { color: var(--text); }
+  .classify-meta .meta-v.matches_standard { color: var(--verified); }
+  .classify-meta .meta-v.matches_fallback { color: var(--accent); }
+  .classify-meta .meta-v.deviates { color: var(--partial); }
+  .classify-meta .meta-v.missing { color: var(--unverified); }
+  .justification { font-size: 12px; color: var(--text-dim); margin-top: 8px; line-height: 1.45; }
+
+  .redline-block { margin-top: 6px; font-size: 12px; }
+  .redline-old, .redline-new {
+    font-family: Georgia, serif; padding: 6px 10px; border-radius: 4px; margin-top: 4px; line-height: 1.5;
+  }
+  .redline-old { background: var(--unverified-bg); border: 1px solid var(--unverified-border); color: var(--text); text-decoration: line-through; text-decoration-color: var(--unverified); }
+  .redline-new { background: var(--verified-bg); border: 1px solid var(--verified-border); color: var(--text); }
+  .redline-just { font-size: 11px; color: var(--text-dim); margin-top: 6px; font-style: italic; }
+  .redline-none { font-size: 11px; color: var(--text-faint); font-style: italic; }
+
+  .narration {
+    background: var(--bg-elev-2);
+    border-left: 3px solid var(--accent-dim);
+    padding: 10px 14px;
+    border-radius: 0 4px 4px 0;
+    font-size: 12px; color: var(--text-dim);
+    line-height: 1.5;
+    margin: 16px auto 0; max-width: 760px;
+  }
+  .narration strong { color: var(--text); }
+  .narration code { font-family: ui-monospace, Menlo, monospace; color: var(--accent); font-size: 11px; }
+
+  .caveat {
+    max-width: 760px; margin: 16px auto 0;
+    background: var(--partial-bg); border: 1px solid var(--partial-border);
+    border-radius: 8px; padding: 12px 16px; font-size: 12px; line-height: 1.55;
+    color: var(--text-dim);
+  }
+  .caveat strong { color: var(--partial); }
+  .caveat code { font-family: ui-monospace, Menlo, monospace; color: var(--text); font-size: 11px; }
+
+  .footer {
+    max-width: 760px; margin: 18px auto 0; padding-top: 12px;
+    border-top: 1px solid var(--border);
+    font-size: 11px; color: var(--text-faint); line-height: 1.6;
+  }
+  .footer a { color: var(--accent); text-decoration: none; }
+  .footer a:hover { text-decoration: underline; }
+  .footer .src-paths { font-family: ui-monospace, Menlo, monospace; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Playbook executor — 4-node cascade</h1>
+    <span class="subtitle">Pick an NDA. Step the LangGraph cascade — retrieve → classify → redline → compile — position by position.</span>
+    <span class="spacer"></span>
+    <a href="https://github.com/LegalQuants/lq-ai/blob/main/api/app/playbooks/executor.py" target="_blank">source: executor.py</a>
+    <a href="https://github.com/LegalQuants/lq-ai/blob/main/docs/playbooks.md" target="_blank">docs</a>
+  </header>
+  <div class="main">
+    <div class="controls">
+      <h2>Target contract</h2>
+      <p class="hint">A synthetic mutual NDA. The executor runs the built-in <code>NDA — Mutual</code> playbook (8 positions) against it.</p>
+      <select id="doc-select"></select>
+
+      <h2>The cascade</h2>
+      <p class="hint">Four LangGraph nodes run sequentially. Click a node or step forward to advance.</p>
+      <div class="node-rail" id="node-rail"></div>
+      <div class="step-controls">
+        <button id="btn-reset">Reset</button>
+        <button id="btn-step" class="primary">Step ▶</button>
+        <button id="btn-run">Run all</button>
+      </div>
+
+      <h2>Presets</h2>
+      <p class="hint">Snap the document + cascade position to an interesting case.</p>
+      <div class="presets" id="presets"></div>
+
+      <h2>Display</h2>
+      <label class="toggle">
+        <input type="checkbox" id="toggle-chunks" checked>
+        <div class="toggle-label">Show retrieved chunks
+          <span>The <code>retrieve</code> node's FTS hits over the document's chunks (top-4 per position).</span>
+        </div>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="toggle-redline" checked>
+        <div class="toggle-label">Show redline suggestions
+          <span>The <code>redline</code> node only drafts edits for <code>deviates</code> verdicts.</span>
+        </div>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="toggle-expand" checked>
+        <div class="toggle-label">Expand all positions
+          <span>Collapse to the summary table to see the at-a-glance verdict pills.</span>
+        </div>
+      </label>
+    </div>
+
+    <div class="preview-wrap">
+      <div class="summary" id="summary"></div>
+      <div class="position-list" id="position-list"></div>
+      <div class="narration" id="narration"></div>
+      <div class="caveat" id="caveat"></div>
+      <div class="footer" id="footer"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------------------------------------------------------------------------
+// The 8 built-in "NDA — Mutual" positions (skills/playbooks/nda/playbook.yaml,
+// seeded by migration 0032). issue + severity_if_missing are denormalized into
+// each per-position result by the classify node.
+// ---------------------------------------------------------------------------
+const POSITIONS = [
+  { order: 0, issue: "Definition of Confidential Information", severity: "critical",
+    keywords: ["confidential information", "proprietary information", "confidential", "means", "definition"],
+    redline_strategy: "If narrower than standard, add the \"circumstances reasonably indicating confidentiality\" prong and an oral-disclosure confirmation mechanism." },
+  { order: 1, issue: "Permitted Disclosures", severity: "high",
+    keywords: ["permitted disclosure", "disclose", "representatives", "need to know", "compelled disclosure", "court order"],
+    redline_strategy: "If the \"need to know\" qualifier or the prior-notice mechanism for compelled disclosure is missing, add it." },
+  { order: 2, issue: "Term", severity: "high",
+    keywords: ["term", "duration", "effective date", "expiration", "terminate", "commence"],
+    redline_strategy: "If the term is longer than three years, suggest shortening to two with a renewal mechanism." },
+  { order: 3, issue: "Survival of Confidentiality Obligations", severity: "high",
+    keywords: ["survive", "survival", "notwithstanding termination", "continue in effect", "perpetual", "trade secret"],
+    redline_strategy: "If survival is shorter than three years, push to five. If the trade-secret carveout is missing, add it." },
+  { order: 4, issue: "Carveouts", severity: "critical",
+    keywords: ["exclusions", "exceptions", "does not include", "public domain", "already known", "independently developed"],
+    redline_strategy: "If carveouts are missing, propose adding the standard four. Push hardest for the \"independently developed\" carveout." },
+  { order: 5, issue: "Remedies and Injunctive Relief", severity: "medium",
+    keywords: ["injunctive relief", "equitable relief", "specific performance", "irreparable harm", "remedies", "damages"],
+    redline_strategy: "If remedies are capped at monetary damages, push back — confidentiality cases typically need injunctive relief." },
+  { order: 6, issue: "Governing Law and Venue", severity: "medium",
+    keywords: ["governing law", "jurisdiction", "venue", "exclusive jurisdiction", "conflict of laws", "arbitration"],
+    redline_strategy: "If the contract specifies the counter-party's home jurisdiction, counter with a neutral one (Delaware or New York)." },
+  { order: 7, issue: "Return or Destruction of Confidential Information", severity: "medium",
+    keywords: ["return", "destroy", "destruction", "certify", "termination", "retention"],
+    redline_strategy: "If the contract lacks a destruction certification, add the 30-day written certification requirement." }
+];
+
+const NODE_DEFS = [
+  { idx: 1, name: "retrieve", sub: "Postgres FTS over chunks (lexical, top-4)" },
+  { idx: 2, name: "classify", sub: "1 structured-JSON LLM call / position" },
+  { idx: 3, name: "redline", sub: "1 LLM call / deviates verdict only" },
+  { idx: 4, name: "compile", sub: "assemble results JSONB + summary" }
+];
+
+// confidence: high/medium/low → 0.9/0.7/0.5 (_CONFIDENCE_NUMERIC in nodes.py)
+const CONF_NUM = { high: 0.9, medium: 0.7, low: 0.5 };
+
+// ---------------------------------------------------------------------------
+// Three synthetic mutual-NDA variants. Each per-position entry hardcodes what
+// a real run would produce: the retrieved chunks (FTS hits), the classifier's
+// verdict + confidence + verbatim matched_text + cited chunk indices, and a
+// drafted redline for `deviates` rows. Content drawn from the synthetic
+// 5-NDA corpus axes (docs/quickstart/sample-ndas/README.md). Offline-complete.
+// ---------------------------------------------------------------------------
+const DOCS = [
+  {
+    id: "nda-acme-beta",
+    label: "Acme ↔ Beta — compliant, market-standard",
+    desc: "Broad definition, 3yr term, 5yr survival, full carveouts. Mostly matches standard / fallback.",
+    positions: {
+      0: { chunks: [
+            { id: "chk_3f0a1", idx: 0, text: "1. Definitions. \"Confidential Information\" means any non-public information of either Party furnished to or learned by the other Party, whether in oral, written, electronic, or visual form, that is marked or identified as confidential, or that by its nature would reasonably be understood to be confidential, including business plans, financial information, and source code." },
+            { id: "chk_3f0a2", idx: 1, text: "Confidential Information includes information disclosed under circumstances reasonably indicating its confidentiality." } ],
+          verdict: "matches_standard", confidence: "high", fallback_rank: null, cited: [0, 1],
+          matched_text: "\"Confidential Information\" means any non-public information of either Party furnished to or learned by the other Party, whether in oral, written, electronic, or visual form, that is marked or identified as confidential, or that by its nature would reasonably be understood to be confidential, including business plans, financial information, and source code.",
+          justification: "Definition covers oral + written + the \"reasonably understood\" prong; materially equivalent to the standard position." },
+      1: { chunks: [
+            { id: "chk_3f0b1", idx: 0, text: "4. Permitted Disclosures. The Receiving Party may disclose Confidential Information to its employees, officers, and professional advisors who have a need to know for the Permitted Purpose and who are bound by confidentiality obligations no less protective than those in this Agreement, and as required by law with prompt prior written notice where legally permitted." } ],
+          verdict: "matches_standard", confidence: "high", fallback_rank: null, cited: [0],
+          matched_text: "The Receiving Party may disclose Confidential Information to its employees, officers, and professional advisors who have a need to know for the Permitted Purpose and who are bound by confidentiality obligations no less protective than those in this Agreement, and as required by law with prompt prior written notice where legally permitted.",
+          justification: "Includes the need-to-know qualifier and prior-notice mechanism for compelled disclosure; matches the standard." },
+      2: { chunks: [
+            { id: "chk_3f0c1", idx: 0, text: "7. Term. This Agreement shall commence on the Effective Date and continue for a period of three (3) years, unless earlier terminated by either Party upon thirty (30) days' prior written notice." } ],
+          verdict: "matches_fallback", confidence: "high", fallback_rank: 1, cited: [0],
+          matched_text: "This Agreement shall commence on the Effective Date and continue for a period of three (3) years, unless earlier terminated by either Party upon thirty (30) days' prior written notice.",
+          justification: "Three-year term matches fallback tier 1 (the standard is two years); acceptable for longer-running engagements." },
+      3: { chunks: [
+            { id: "chk_3f0d1", idx: 0, text: "8. Survival. Notwithstanding any termination, each Party's confidentiality obligations shall survive for five (5) years from the date of disclosure; provided that for any Confidential Information that constitutes a trade secret, such obligations shall survive for so long as it remains a trade secret." } ],
+          verdict: "matches_standard", confidence: "high", fallback_rank: null, cited: [0],
+          matched_text: "Notwithstanding any termination, each Party's confidentiality obligations shall survive for five (5) years from the date of disclosure; provided that for any Confidential Information that constitutes a trade secret, such obligations shall survive for so long as it remains a trade secret.",
+          justification: "Five-year survival from disclosure date with the trade-secret carveout — matches standard exactly." },
+      4: { chunks: [
+            { id: "chk_3f0e1", idx: 0, text: "3. Exclusions. Confidential Information does not include information that the Receiving Party can demonstrate by competent written evidence: (a) was already in its possession without obligation; (b) is or becomes public through no fault of the Receiving Party; (c) is received from a third party without obligation; or (d) is independently developed without use of the Disclosing Party's Confidential Information." } ],
+          verdict: "matches_standard", confidence: "high", fallback_rank: null, cited: [0],
+          matched_text: "Confidential Information does not include information that the Receiving Party can demonstrate by competent written evidence: (a) was already in its possession without obligation; (b) is or becomes public through no fault of the Receiving Party; (c) is received from a third party without obligation; or (d) is independently developed without use of the Disclosing Party's Confidential Information.",
+          justification: "All four standard carveouts present including independently-developed, with the competent-written-evidence standard." },
+      5: { chunks: [
+            { id: "chk_3f0f1", idx: 0, text: "10. Remedies. Each Party acknowledges that any breach may cause irreparable harm for which monetary damages would be inadequate, and the Disclosing Party shall be entitled to seek injunctive relief and specific performance, in addition to all other remedies at law or in equity, without the need to post a bond." } ],
+          verdict: "matches_standard", confidence: "medium", fallback_rank: null, cited: [0],
+          matched_text: "Each Party acknowledges that any breach may cause irreparable harm for which monetary damages would be inadequate, and the Disclosing Party shall be entitled to seek injunctive relief and specific performance, in addition to all other remedies at law or in equity, without the need to post a bond.",
+          justification: "Equitable-relief acknowledgment with bond waiver — matches standard; medium confidence as the irreparable-harm framing is \"may\" not \"will\"." },
+      6: { chunks: [
+            { id: "chk_3f0g1", idx: 0, text: "12. Governing Law. This Agreement shall be governed by the laws of the State of New York, without regard to conflict-of-laws principles, and the state and federal courts located in New York County shall have exclusive jurisdiction over any dispute." } ],
+          verdict: "matches_fallback", confidence: "high", fallback_rank: 1, cited: [0],
+          matched_text: "This Agreement shall be governed by the laws of the State of New York, without regard to conflict-of-laws principles, and the state and federal courts located in New York County shall have exclusive jurisdiction over any dispute.",
+          justification: "New York law + venue matches fallback tier 1 (standard is Delaware); a neutral, well-developed commercial forum." },
+      7: { chunks: [
+            { id: "chk_3f0h1", idx: 0, text: "9. Return or Destruction. Upon termination or the Disclosing Party's written request, the Receiving Party shall, at the Disclosing Party's option, return or destroy all Confidential Information and certify such return or destruction in writing within thirty (30) days, subject to a retention exception for automated backups and one archival legal copy." } ],
+          verdict: "matches_standard", confidence: "high", fallback_rank: null, cited: [0],
+          matched_text: "Upon termination or the Disclosing Party's written request, the Receiving Party shall, at the Disclosing Party's option, return or destroy all Confidential Information and certify such return or destruction in writing within thirty (30) days, subject to a retention exception for automated backups and one archival legal copy.",
+          justification: "Return-or-destroy at the Disclosing Party's option with a 30-day certification and bounded retention carveouts — matches standard." }
+    }
+  },
+  {
+    id: "nda-cypress-delta",
+    label: "Cypress ↔ Delta — deviating term + narrow definition",
+    desc: "2yr term (matches standard), but narrow marked-only definition and no separate survival → deviates.",
+    positions: {
+      0: { chunks: [
+            { id: "chk_7a1a1", idx: 0, text: "Section 1. \"Confidential Information\" means information disclosed by either Party in writing or other tangible form and marked or identified as \"Confidential\" at the time of disclosure. Oral disclosures shall be reduced to writing and so marked within thirty (30) days." } ],
+          verdict: "matches_fallback", confidence: "medium", fallback_rank: 2, cited: [0],
+          matched_text: "\"Confidential Information\" means information disclosed by either Party in writing or other tangible form and marked or identified as \"Confidential\" at the time of disclosure. Oral disclosures shall be reduced to writing and so marked within thirty (30) days.",
+          justification: "Marked-only definition with a 30-day oral cure period maps to fallback tier 2; tighter than standard but acceptable with reliable marking." },
+      1: { chunks: [
+            { id: "chk_7a1b1", idx: 0, text: "Section 4. The Receiving Party may disclose Confidential Information only to its employees who have a need to know for the Permitted Purpose, and as required by law with prompt prior written notice to the Disclosing Party where legally permitted." } ],
+          verdict: "matches_fallback", confidence: "medium", fallback_rank: 1, cited: [0],
+          matched_text: "The Receiving Party may disclose Confidential Information only to its employees who have a need to know for the Permitted Purpose, and as required by law with prompt prior written notice to the Disclosing Party where legally permitted.",
+          justification: "Employees-only disclosure (no advisors) is narrower than standard but retains need-to-know + prior notice; maps to a fallback tier." },
+      2: { chunks: [
+            { id: "chk_7a1c1", idx: 0, text: "Section 7. This Agreement shall commence on the Effective Date and continue for a period of two (2) years, unless earlier terminated by either Party upon thirty (30) days' prior written notice." } ],
+          verdict: "matches_standard", confidence: "high", fallback_rank: null, cited: [0],
+          matched_text: "This Agreement shall commence on the Effective Date and continue for a period of two (2) years, unless earlier terminated by either Party upon thirty (30) days' prior written notice.",
+          justification: "Two-year term with 30-day termination-for-convenience — matches the standard position exactly." },
+      3: { chunks: [
+            { id: "chk_7a1d1", idx: 0, text: "Section 7 (cont.). Upon expiration of the term, the obligations of the Parties under this Agreement shall cease." } ],
+          verdict: "deviates", confidence: "high", fallback_rank: null, cited: [0],
+          matched_text: "Upon expiration of the term, the obligations of the Parties under this Agreement shall cease.",
+          justification: "The contract has no separate survival clause — confidentiality obligations end at term expiration, worse than every fallback tier.",
+          redline: {
+            old_text: "Upon expiration of the term, the obligations of the Parties under this Agreement shall cease.",
+            new_text: "Notwithstanding any expiration or termination of this Agreement, each Party's confidentiality obligations with respect to Confidential Information disclosed prior to such expiration shall survive for five (5) years from the date of disclosure; provided that obligations with respect to trade secrets shall survive for so long as such information remains a trade secret.",
+            justification: "Adds a five-year post-term survival period and a perpetual trade-secret carveout so confidentiality protection does not evaporate at expiration." } },
+      4: { chunks: [
+            { id: "chk_7a1e1", idx: 0, text: "Section 3. The confidentiality obligations shall not apply to information that is publicly known or already in the Receiving Party's possession at the time of disclosure." } ],
+          verdict: "matches_fallback", confidence: "low", fallback_rank: 1, cited: [0],
+          matched_text: "The confidentiality obligations shall not apply to information that is publicly known or already in the Receiving Party's possession at the time of disclosure.",
+          justification: "Two of four carveouts present (public + prior possession); drops third-party and independently-developed. Low confidence — borderline between fallback and deviates." },
+      5: { chunks: [
+            { id: "chk_7a1f1", idx: 0, text: "Section 10. The remedies provided in this Agreement are cumulative and not exclusive of any other remedies available at law or in equity." } ],
+          verdict: "matches_fallback", confidence: "medium", fallback_rank: 2, cited: [0],
+          matched_text: "The remedies provided in this Agreement are cumulative and not exclusive of any other remedies available at law or in equity.",
+          justification: "No express equitable-relief acknowledgment but no waiver either; maps to fallback tier 2 for low-stakes engagements." },
+      6: { chunks: [
+            { id: "chk_7a1g1", idx: 0, text: "Section 12. This Agreement shall be governed by the laws of the State of Delaware, without giving effect to its conflict-of-laws principles. Each Party submits to the exclusive jurisdiction of the courts located in Wilmington, Delaware." } ],
+          verdict: "matches_standard", confidence: "high", fallback_rank: null, cited: [0],
+          matched_text: "This Agreement shall be governed by the laws of the State of Delaware, without giving effect to its conflict-of-laws principles. Each Party submits to the exclusive jurisdiction of the courts located in Wilmington, Delaware.",
+          justification: "Delaware law + Wilmington venue — matches the standard position exactly." },
+      7: { chunks: [
+            { id: "chk_7a1h1", idx: 0, text: "Section 9. Upon termination, the Receiving Party shall destroy all Confidential Information of the Disclosing Party and certify such destruction in writing within thirty (30) days, subject to the retention exception for automated backups." } ],
+          verdict: "matches_fallback", confidence: "high", fallback_rank: 2, cited: [0],
+          matched_text: "Upon termination, the Receiving Party shall destroy all Confidential Information of the Disclosing Party and certify such destruction in writing within thirty (30) days, subject to the retention exception for automated backups.",
+          justification: "Destruction-only (no return option) with a 30-day certification — maps to fallback tier 2." }
+    }
+  },
+  {
+    id: "nda-gamma-helix",
+    label: "Gamma ↔ Helix — missing carveouts",
+    desc: "1yr term, broad definition, but NO carveouts section and no remedies clause → two `missing` verdicts.",
+    positions: {
+      0: { chunks: [
+            { id: "chk_b2c1", idx: 0, text: "1. \"Confidential Information\" means any non-public information disclosed by either Party, whether oral or written and whether or not marked, that by its nature would reasonably be understood to be confidential." } ],
+          verdict: "matches_fallback", confidence: "high", fallback_rank: 1, cited: [0],
+          matched_text: "\"Confidential Information\" means any non-public information disclosed by either Party, whether oral or written and whether or not marked, that by its nature would reasonably be understood to be confidential.",
+          justification: "Broad catch-all without the \"circumstances reasonably indicating\" prong — maps to fallback tier 1." },
+      1: { chunks: [
+            { id: "chk_b2c2", idx: 0, text: "4. The Receiving Party may disclose Confidential Information only to its employees who have a need to know, and as required by law." } ],
+          verdict: "matches_fallback", confidence: "medium", fallback_rank: 1, cited: [0],
+          matched_text: "The Receiving Party may disclose Confidential Information only to its employees who have a need to know, and as required by law.",
+          justification: "Employees-only with need-to-know; lacks the prior-notice mechanism for compelled disclosure. Medium confidence; maps to a fallback." },
+      2: { chunks: [
+            { id: "chk_b2c3", idx: 0, text: "6. This Agreement shall commence on the Effective Date and continue for a period of one (1) year." } ],
+          verdict: "matches_fallback", confidence: "high", fallback_rank: 2, cited: [0],
+          matched_text: "This Agreement shall commence on the Effective Date and continue for a period of one (1) year.",
+          justification: "One-year term maps to fallback tier 2; appropriate for tightly scoped exploratory conversations." },
+      3: { chunks: [
+            { id: "chk_b2c4", idx: 0, text: "7. The obligations of confidentiality shall survive the termination of this Agreement for a period of three (3) years." } ],
+          verdict: "matches_fallback", confidence: "high", fallback_rank: 1, cited: [0],
+          matched_text: "The obligations of confidentiality shall survive the termination of this Agreement for a period of three (3) years.",
+          justification: "Three-year survival maps to fallback tier 1, though it lacks the perpetual trade-secret carveout the standard includes." },
+      4: { // No carveouts section in the document. FTS over carveout keywords
+            // returns no hits → _fetch_first_chunks defensive fallback → classifier says missing.
+          chunks: [
+            { id: "chk_b2c0", idx: 0, text: "1. \"Confidential Information\" means any non-public information disclosed by either Party, whether oral or written and whether or not marked, that by its nature would reasonably be understood to be confidential.", fallback_first: true } ],
+          verdict: "missing", confidence: "medium", fallback_rank: null, cited: [],
+          matched_text: "",
+          justification: "FTS over the carveout keywords returned no hits; the defensive first-chunk fallback showed the definition, which does not address exclusions. The contract has no carveouts section." },
+      5: { // No remedies clause → missing.
+          chunks: [
+            { id: "chk_b2c0", idx: 0, text: "1. \"Confidential Information\" means any non-public information disclosed by either Party, whether oral or written and whether or not marked, that by its nature would reasonably be understood to be confidential.", fallback_first: true } ],
+          verdict: "missing", confidence: "low", fallback_rank: null, cited: [],
+          matched_text: "",
+          justification: "No injunctive-relief / remedies language found. Biased toward `missing` on uncertainty per the classifier prompt — false positives do more damage in contract review." },
+      6: { chunks: [
+            { id: "chk_b2c7", idx: 0, text: "9. This Agreement shall be governed by the laws of the State of California, without regard to conflict-of-laws principles, and the courts located in San Francisco County shall have exclusive jurisdiction." } ],
+          verdict: "matches_fallback", confidence: "high", fallback_rank: 2, cited: [0],
+          matched_text: "This Agreement shall be governed by the laws of the State of California, without regard to conflict-of-laws principles, and the courts located in San Francisco County shall have exclusive jurisdiction.",
+          justification: "California law + venue maps to fallback tier 2; acceptable when one party is California-based." },
+      7: { chunks: [
+            { id: "chk_b2c8", idx: 0, text: "8. Upon termination of this Agreement, the Receiving Party shall return or destroy all Confidential Information of the Disclosing Party." } ],
+          verdict: "deviates", confidence: "medium", fallback_rank: null, cited: [0],
+          matched_text: "Upon termination of this Agreement, the Receiving Party shall return or destroy all Confidential Information of the Disclosing Party.",
+          justification: "Return-or-destroy is present but there is no written destruction certification and no time limit — worse than every fallback tier.",
+          redline: {
+            old_text: "Upon termination of this Agreement, the Receiving Party shall return or destroy all Confidential Information of the Disclosing Party.",
+            new_text: "Upon termination of this Agreement or the Disclosing Party's written request, the Receiving Party shall, at the Disclosing Party's option, return or destroy all Confidential Information of the Disclosing Party and certify such return or destruction in writing within thirty (30) days, subject to a retention exception for automated electronic backups.",
+            justification: "Adds the 30-day written certification requirement and a bounded backup-retention exception so cleanup is verifiable and time-limited." } }
+    }
+  }
+];
+
+const PRESETS = [
+  { id: "compliant", label: "Compliant NDA", desc: "Acme ↔ Beta, fully compiled. Mostly matches standard / fallback.", doc: "nda-acme-beta", node: 4 },
+  { id: "deviating", label: "Deviating term (no survival)", desc: "Cypress ↔ Delta at classify — watch survival flip to `deviates`.", doc: "nda-cypress-delta", node: 2 },
+  { id: "redline", label: "See the drafted redline", desc: "Cypress ↔ Delta after redline — the survival edit is drafted.", doc: "nda-cypress-delta", node: 3 },
+  { id: "missing", label: "Missing carveout", desc: "Gamma ↔ Helix, compiled — two `missing` verdicts from empty FTS.", doc: "nda-gamma-helix", node: 4 },
+  { id: "retrieve", label: "Just retrieved", desc: "Acme ↔ Beta at the retrieve node — chunks only, no verdicts yet.", doc: "nda-acme-beta", node: 1 }
+];
+
+// ---------------------------------------------------------------------------
+// State + rendering
+// ---------------------------------------------------------------------------
+let currentDocId = DOCS[0].id;
+let currentNode = 1; // 1=retrieve ran, 2=classify ran, 3=redline ran, 4=compile ran
+let activePresetId = null;
+
+function getDoc() { return DOCS.find(d => d.id === currentDocId); }
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+}
+
+const VERDICT_LABEL = {
+  matches_standard: "matches_standard",
+  matches_fallback: "matches_fallback",
+  deviates: "deviates",
+  missing: "missing"
+};
+
+function render() {
+  const doc = getDoc();
+  const showChunks = document.getElementById("toggle-chunks").checked;
+  const showRedline = document.getElementById("toggle-redline").checked;
+  const expandAll = document.getElementById("toggle-expand").checked;
+
+  renderNodeRail();
+  renderStepButtons();
+
+  // Summary card — counts only meaningful once classify (node 2) has run.
+  const summaryEl = document.getElementById("summary");
+  const counts = { matches_standard: 0, matches_fallback: 0, deviates: 0, missing: 0 };
+  if (currentNode >= 2) {
+    POSITIONS.forEach(p => { const r = doc.positions[p.order]; if (r) counts[r.verdict]++; });
+  }
+  const compiled = currentNode >= 4;
+  summaryEl.innerHTML = `
+    <h2>${compiled ? "playbook_executions.results · summary" : "execution in progress"}</h2>
+    <div class="doc-name">Playbook <strong>NDA — Mutual</strong> · 8 positions · target <strong>${escapeHtml(doc.label)}</strong>${compiled ? " · status <strong style=\"color:var(--verified)\">completed</strong>" : " · status <strong style=\"color:var(--accent)\">running</strong>"}</div>
+    <div class="summary-counts">
+      ${["matches_standard","matches_fallback","deviates","missing"].map(k => `
+        <div class="count-cell ${k}">
+          <div class="num">${currentNode >= 2 ? counts[k] : "—"}</div>
+          <div class="lbl">${k.replace("matches_","")}</div>
+        </div>`).join("")}
+    </div>`;
+
+  // Per-position cards.
+  const listEl = document.getElementById("position-list");
+  listEl.innerHTML = "";
+  POSITIONS.forEach(p => {
+    const r = doc.positions[p.order];
+    const classified = currentNode >= 2;
+    const cls = classified ? `position ${r.verdict}` : "position unprocessed";
+    const verdictPill = classified
+      ? `<div class="verdict-pill ${r.verdict}">${VERDICT_LABEL[r.verdict]}${r.verdict === "matches_fallback" && r.fallback_rank != null ? ` · tier ${r.fallback_rank}` : ""}</div>`
+      : `<div class="verdict-pill pending">pending</div>`;
+
+    // Retrieve lane.
+    let retrieveLane = "";
+    if (currentNode >= 1 && showChunks) {
+      const fallbackNote = r.chunks.some(c => c.fallback_first)
+        ? `<div style="font-size:10px;color:var(--text-faint);margin-bottom:4px;">FTS returned no hits → <code>_fetch_first_chunks</code> defensive fallback</div>` : "";
+      retrieveLane = `
+        <div class="lane">
+          <div class="lane-label"><span class="node-tag">1 · retrieve</span> FTS over detection_keywords → top-4 chunks</div>
+          ${fallbackNote}
+          ${r.chunks.map(c => {
+            const isCited = classified && r.cited.includes(c.idx);
+            return `<div class="chunk ${isCited ? "cited" : ""}"><span class="chunk-id">[chunk ${c.idx} · ${escapeHtml(c.id)}]</span>${isCited ? `<span class="cited-tag">★ cited_chunk_ids</span>` : ""}<br>${escapeHtml(c.text)}</div>`;
+          }).join("")}
+        </div>`;
+    }
+
+    // Classify lane.
+    let classifyLane = "";
+    if (currentNode >= 2) {
+      const matchedHtml = r.matched_text
+        ? `<div class="clause-quote">${escapeHtml(r.matched_text)}</div>`
+        : `<div class="redline-none">matched_text is empty (verdict = missing)</div>`;
+      classifyLane = `
+        <div class="lane">
+          <div class="lane-label"><span class="node-tag">2 · classify</span> structured-JSON verdict</div>
+          <div style="font-size:10px;color:var(--text-faint);margin-bottom:4px;">matched_text — the verbatim contract clause the classifier quoted:</div>
+          ${matchedHtml}
+          <div class="classify-meta">
+            <span><span class="meta-k">verdict:</span> <span class="meta-v ${r.verdict}">${r.verdict}</span></span>
+            <span><span class="meta-k">confidence:</span> <span class="meta-v">${(CONF_NUM[r.confidence]).toFixed(1)} (${r.confidence})</span></span>
+            <span><span class="meta-k">matched_fallback_rank:</span> <span class="meta-v">${r.fallback_rank == null ? "null" : r.fallback_rank}</span></span>
+            <span><span class="meta-k">cited_chunk_ids:</span> <span class="meta-v">${r.cited.length ? r.cited.map(i => escapeHtml(r.chunks[i].id)).join(", ") : "[]"}</span></span>
+          </div>
+          <div class="justification">${escapeHtml(r.justification)}</div>
+        </div>`;
+    }
+
+    // Redline lane — only for deviates, only once redline node ran.
+    let redlineLane = "";
+    if (currentNode >= 2 && showRedline) {
+      if (r.verdict === "deviates") {
+        if (currentNode >= 3 && r.redline) {
+          redlineLane = `
+            <div class="lane">
+              <div class="lane-label"><span class="node-tag">3 · redline</span> drafted edit (deviates only)</div>
+              <div class="redline-block">
+                <div style="font-size:10px;color:var(--text-faint);">old_text</div>
+                <div class="redline-old">${escapeHtml(r.redline.old_text)}</div>
+                <div style="font-size:10px;color:var(--text-faint);margin-top:6px;">new_text</div>
+                <div class="redline-new">${escapeHtml(r.redline.new_text)}</div>
+                <div class="redline-just">${escapeHtml(r.redline.justification)}</div>
+              </div>
+            </div>`;
+        } else {
+          redlineLane = `
+            <div class="lane">
+              <div class="lane-label"><span class="node-tag">3 · redline</span> deviates — awaiting redline node</div>
+              <div class="redline-none">This position is <code>deviates</code>; the redline node will draft an edit when step 3 runs.</div>
+            </div>`;
+        }
+      }
+    }
+
+    const bodyHidden = expandAll ? "" : "hidden";
+    listEl.innerHTML += `
+      <div class="${cls}">
+        <div class="pos-head">
+          <div class="pos-order">#${p.order}</div>
+          <div class="pos-issue">${escapeHtml(p.issue)}</div>
+          <div class="severity-pill ${p.severity}">${p.severity}</div>
+          ${verdictPill}
+        </div>
+        <div class="pos-body ${bodyHidden}">
+          ${retrieveLane}
+          ${classifyLane}
+          ${redlineLane}
+        </div>
+      </div>`;
+  });
+
+  renderNarration();
+  renderCaveat();
+  renderFooter();
+}
+
+function renderNodeRail() {
+  const railEl = document.getElementById("node-rail");
+  railEl.innerHTML = "";
+  NODE_DEFS.forEach(n => {
+    let stateCls;
+    if (n.idx < currentNode) stateCls = "done";
+    else if (n.idx === currentNode) stateCls = "active";
+    else stateCls = "pending";
+    const div = document.createElement("div");
+    div.className = `node-step ${stateCls}`;
+    div.innerHTML = `<div class="node-idx">${n.idx}</div><div><span class="node-name">${n.name}</span><span class="node-sub">${n.sub}</span></div>`;
+    div.addEventListener("click", () => { currentNode = n.idx; clearPreset(); render(); });
+    railEl.appendChild(div);
+  });
+}
+
+function renderStepButtons() {
+  document.getElementById("btn-step").disabled = currentNode >= 4;
+}
+
+function renderNarration() {
+  const el = document.getElementById("narration");
+  const map = {
+    1: `<strong>retrieve.</strong> For each of the 8 positions, the node runs Postgres FTS (<code>websearch_to_tsquery</code>) over the document's chunks using that position's <code>detection_keywords</code> — top-4 chunks each (<code>RETRIEVAL_TOP_K = 4</code>). No LLM calls; pure SQL. When FTS returns no hits, it falls back to the document's first chunks (you'll see this on a missing carveout).`,
+    2: `<strong>classify.</strong> One structured-JSON LLM call per position → <code>{verdict, confidence, matched_fallback_rank, matched_text, cited_chunk_indices, justification}</code>. Verdict is one of <code>matches_standard | matches_fallback | deviates | missing</code>. The prompt biases toward <code>low</code> confidence and toward <code>missing</code> on uncertainty — false positives do more damage in contract review than false negatives.`,
+    3: `<strong>redline.</strong> For <code>deviates</code> verdicts <em>only</em>, one more LLM call drafts <code>{old_text, new_text, justification}</code> per the position's <code>redline_strategy</code>. Every non-deviating row passes through unchanged — most positions skip this node entirely.`,
+    4: `<strong>compile.</strong> Assembles the per-position results into the <code>playbook_executions.results</code> JSONB (stamped <code>schema_version: "m3-a2-v1"</code>), computes the four-verdict summary, and flips the row to <code>completed</code>. No LLM calls. The graph reaches <code>END</code>.`
+  };
+  el.innerHTML = map[currentNode];
+}
+
+function renderCaveat() {
+  document.getElementById("caveat").innerHTML = `
+    <strong>Honest-state caveat.</strong> The per-position references shown here are the verbatim <code>matched_text</code> + <code>cited_chunk_ids</code> the classifier named via lexical FTS retrieval. They are <strong>NOT</strong> run through the M2 Citation Engine verification cascade (<code>exact_match → tolerant_match → paraphrase_judge</code>) — that integration is deferred (PRD §9 DE-309). No <code>message_citations</code> rows are written. Treat these as inspectable chunk references, not verified citations. &nbsp;Also: this playground shows the executor <em>running</em> a finished playbook. <strong>Easy Playbook</strong> (auto-generating a playbook from a corpus via extract → cluster → assemble) is a separate ARQ flow — not shown here.`;
+}
+
+function renderFooter() {
+  document.getElementById("footer").innerHTML = `
+    <div>Source (the four-node cascade simulated above):</div>
+    <div class="src-paths">
+      <a href="https://github.com/LegalQuants/lq-ai/blob/main/api/app/playbooks/executor.py" target="_blank">api/app/playbooks/executor.py</a> ·
+      <a href="https://github.com/LegalQuants/lq-ai/blob/main/api/app/playbooks/nodes.py" target="_blank">api/app/playbooks/nodes.py</a> ·
+      <a href="https://github.com/LegalQuants/lq-ai/blob/main/api/app/playbooks/state.py" target="_blank">api/app/playbooks/state.py</a>
+    </div>
+    <div style="margin-top:6px;">Built-in playbook content (filesystem-canonical): <span class="src-paths">skills/playbooks/nda/playbook.yaml</span> · synthetic corpus: <span class="src-paths">docs/quickstart/sample-ndas/README.md</span>. Synthetic clauses only — not real agreements.</div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Wiring
+// ---------------------------------------------------------------------------
+function clearPreset() {
+  activePresetId = null;
+  document.querySelectorAll(".preset-btn").forEach(b => b.classList.remove("active"));
+}
+
+// Document picker.
+const docSelect = document.getElementById("doc-select");
+DOCS.forEach(d => {
+  const opt = document.createElement("option");
+  opt.value = d.id;
+  opt.textContent = d.label;
+  docSelect.appendChild(opt);
+});
+docSelect.value = currentDocId;
+docSelect.addEventListener("change", () => { currentDocId = docSelect.value; currentNode = 1; clearPreset(); render(); });
+
+// Step controls.
+document.getElementById("btn-step").addEventListener("click", () => {
+  if (currentNode < 4) { currentNode++; clearPreset(); render(); }
+});
+document.getElementById("btn-run").addEventListener("click", () => { currentNode = 4; clearPreset(); render(); });
+document.getElementById("btn-reset").addEventListener("click", () => { currentNode = 1; clearPreset(); render(); });
+
+// Toggles.
+["toggle-chunks", "toggle-redline", "toggle-expand"].forEach(id => {
+  document.getElementById(id).addEventListener("change", render);
+});
+
+// Presets.
+const presetsEl = document.getElementById("presets");
+PRESETS.forEach(p => {
+  const btn = document.createElement("button");
+  btn.className = "preset-btn";
+  btn.dataset.id = p.id;
+  btn.innerHTML = `<span class="preset-label">${escapeHtml(p.label)}</span><span class="preset-desc">${escapeHtml(p.desc)}</span>`;
+  btn.addEventListener("click", () => {
+    activePresetId = p.id;
+    document.querySelectorAll(".preset-btn").forEach(b => b.classList.toggle("active", b.dataset.id === p.id));
+    currentDocId = p.doc;
+    currentNode = p.node;
+    docSelect.value = p.doc;
+    render();
+  });
+  presetsEl.appendChild(btn);
+});
+
+render();
+</script>
+</body>
+</html>
