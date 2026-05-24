@@ -99,4 +99,4 @@ Every autonomous flow, by construction, emits OTel domain spans (`autonomous.ses
 - [DE-289](../PRD.md#de-289) (this ADR is its Phase 1 deliverable), [DE-293](../PRD.md#de-293) (the R4/R5/R6 spec D3 discharges), [DE-294](../PRD.md#de-294) (deferred per D1), [DE-292](../PRD.md#de-292) (the Playbook-executor retrofit whose pattern D2 mirrors).
 - [`docs/security/boundary-registers.md`](../security/boundary-registers.md) (R4/R5/R6 flip to "shipped" when DE-293 lands).
 - [`docs/LQVern/agentic-flow-alignment-guide.md`](../LQVern/agentic-flow-alignment-guide.md) (the D6 contract, for contributors).
-- Provenance: [`docs/LQVern/HANDOFFlavernevaluation.md`](../LQVern/HANDOFFlavernevaluation.md). Note: `docs/LQVern/de265.patch` is **superseded** — its content is already on `main` as DE-289; do not apply it.
+- Provenance: [`docs/LQVern/HANDOFFlavernevaluation.md`](../LQVern/HANDOFFlavernevaluation.md). (This work began as a "DE-265" PRD patch, since re-landed and renumbered on `main` as DE-289.)

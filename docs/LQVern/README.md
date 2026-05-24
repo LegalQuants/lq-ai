@@ -13,7 +13,8 @@ Still to come (via the writing-plans step, after Kevin reviews the above): the p
 ## Provenance / source material
 
 - **`HANDOFFlavernevaluation.md`** — the original Lavern-evaluation handoff from a prior Claude Code web session (Lavern factual summary, the strategic "design reference, not dependency" conclusion, and the original Phase-1 deliverable structure). Useful reference; some of its scope framing is now superseded by ADR 0013 + the current PRD.
-- **`de265.patch`** — ⚠️ **SUPERSEDED — do not apply.** Its content (the original "DE-265") is already on `main` as **DE-289** (the entry was re-landed and renumbered during M2/M3, and expanded there with the boundary-register mapping). Applying the patch would create a duplicate DE. Kept only as provenance of how this work began.
+
+The work began as a "DE-265" PRD patch; that content was re-landed and renumbered on `main` as **DE-289** (expanded there with the boundary-register mapping), so the original patch is not carried here.
 
 ## Status
 
