@@ -63,6 +63,8 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
+
+# `trace` is for add_event() on the active span; spans use app.observability_helpers.
 from opentelemetry import trace
 from pydantic import BaseModel, ValidationError as PydanticValidationError
 from sqlalchemy import and_, func, or_, select

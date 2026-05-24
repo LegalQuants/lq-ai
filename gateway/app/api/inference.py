@@ -680,6 +680,9 @@ async def chat_completions(request: Request) -> JSONResponse | StreamingResponse
             )
             return _map_provider_error_to_response(wrapped.error)
         except NoAdapterAvailableError as exc:
+            # No model/tier here on purpose: when no adapter could be
+            # instantiated the resolved target carries no native model or
+            # tier, so only provider + outcome are meaningful.
             record_attributes(
                 dispatch_span,
                 **{

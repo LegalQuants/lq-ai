@@ -4279,6 +4279,26 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 **When to ship:** Opportunistically — a one-field addition; bundle with the next skill-schema change or the M3-close documentation pass.
 
+#### DE-317 — `inference.dispatch` span on the streaming path (OTel Deepening)
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** M3-F2 added the `inference.dispatch` span (provider/model/tier/tokens/cost/outcome) on the **non-streaming** `chat_completions` path only. The streaming path (`gateway/app/api/inference.py::_stream_with_fallback`) emits no `inference.dispatch` span, so an operator monitoring streaming chat requests sees no domain span for the dispatch (only the HTTP auto-instrumentation span). Distinct from DE-315, which covers streaming *anonymization-rehydration* spans, not inference dispatch.
+
+**Specific scope:** Wrap the streaming dispatch in an `inference.dispatch` span with the same attribute set. Tokens/cost arrive after the stream completes (in the routing-log write), so the span must stay open across the stream or set those attributes at flush; design the span lifecycle to cover the generator's lifetime.
+
+**When to ship:** Before v0.3.0 if streaming observability parity matters at tag; otherwise opportunistically with the streaming-rehydration spans (DE-315).
+
+#### DE-318 — `playbook.position` child spans on the redline node (OTel Deepening)
+
+**Priority:** P3 · **Effort:** XS
+
+**Context:** M3-F2 added `playbook.position` child spans in `classify_node`'s position loop, but not in `redline_node` (`api/app/playbooks/nodes.py`). `redline_node` dispatches a second gateway call per **deviating** position; those redline sub-calls currently produce no `playbook.position` span, so an operator can't separate classify latency from redline latency for deviating positions. `redline_node` iterates `per_position_results` (which carry `position_id` as a string ref), so the span is emittable.
+
+**Specific scope:** Wrap the redline per-position loop body in a `playbook.position` span keyed by `position_id` (optionally a distinct `playbook.position.redline` name to differentiate from the classify pass).
+
+**When to ship:** Opportunistically — small; bundle with the next playbook-executor change.
+
 ---
 
 ## 10. Appendices
