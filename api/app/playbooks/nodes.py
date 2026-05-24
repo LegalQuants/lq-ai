@@ -43,6 +43,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.clients.gateway import GatewayClient
 from app.models.document import DocumentChunk
 from app.models.playbook import PlaybookExecution
+from app.observability_helpers import get_tracer, record_attributes
 from app.playbooks.state import (
     PlaybookExecutionState,
     PositionVerdict,
@@ -281,45 +282,54 @@ def make_classify_node(
         }
         results: list[dict[str, Any]] = []
 
+        tracer = get_tracer()
         for pos in state.get("positions", []):
-            chunks = retrievals_by_position.get(pos["id"], [])
-            messages = _build_classify_messages(pos, chunks)
-            verdict_data = await _dispatch_structured_call(
-                gateway=gateway,
-                model=judge_model,
-                messages=messages,
-                max_tokens=CLASSIFY_MAX_TOKENS,
-            )
+            with tracer.start_as_current_span("playbook.position") as pos_span:
+                record_attributes(
+                    pos_span,
+                    **{
+                        "playbook.position.id": str(pos["id"]),
+                        "playbook.position.order": pos.get("position_order"),
+                    },
+                )
+                chunks = retrievals_by_position.get(pos["id"], [])
+                messages = _build_classify_messages(pos, chunks)
+                verdict_data = await _dispatch_structured_call(
+                    gateway=gateway,
+                    model=judge_model,
+                    messages=messages,
+                    max_tokens=CLASSIFY_MAX_TOKENS,
+                )
 
-            verdict = _coerce_verdict(verdict_data.get("verdict"))
-            confidence_str = _coerce_confidence(verdict_data.get("confidence"))
-            cited_indices = _coerce_chunk_indices(
-                verdict_data.get("cited_chunk_indices"), n_chunks=len(chunks)
-            )
-            cited_chunk_ids = [chunks[i]["id"] for i in cited_indices] if chunks else []
-            matched_text = str(verdict_data.get("matched_text") or "")
-            justification = str(verdict_data.get("justification") or "")
-            matched_fallback_rank_raw = verdict_data.get("matched_fallback_rank")
-            matched_fallback_rank: int | None
-            if verdict == "matches_fallback" and isinstance(matched_fallback_rank_raw, int):
-                matched_fallback_rank = matched_fallback_rank_raw
-            else:
-                matched_fallback_rank = None
+                verdict = _coerce_verdict(verdict_data.get("verdict"))
+                confidence_str = _coerce_confidence(verdict_data.get("confidence"))
+                cited_indices = _coerce_chunk_indices(
+                    verdict_data.get("cited_chunk_indices"), n_chunks=len(chunks)
+                )
+                cited_chunk_ids = [chunks[i]["id"] for i in cited_indices] if chunks else []
+                matched_text = str(verdict_data.get("matched_text") or "")
+                justification = str(verdict_data.get("justification") or "")
+                matched_fallback_rank_raw = verdict_data.get("matched_fallback_rank")
+                matched_fallback_rank: int | None
+                if verdict == "matches_fallback" and isinstance(matched_fallback_rank_raw, int):
+                    matched_fallback_rank = matched_fallback_rank_raw
+                else:
+                    matched_fallback_rank = None
 
-            results.append(
-                {
-                    "position_id": pos["id"],
-                    "issue": pos["issue"],
-                    "severity_if_missing": pos["severity_if_missing"],
-                    "verdict": verdict,
-                    "confidence": _CONFIDENCE_NUMERIC[confidence_str],
-                    "matched_fallback_rank": matched_fallback_rank,
-                    "cited_chunk_ids": cited_chunk_ids,
-                    "matched_text": matched_text,
-                    "redline": None,
-                    "justification": justification,
-                }
-            )
+                results.append(
+                    {
+                        "position_id": pos["id"],
+                        "issue": pos["issue"],
+                        "severity_if_missing": pos["severity_if_missing"],
+                        "verdict": verdict,
+                        "confidence": _CONFIDENCE_NUMERIC[confidence_str],
+                        "matched_fallback_rank": matched_fallback_rank,
+                        "cited_chunk_ids": cited_chunk_ids,
+                        "matched_text": matched_text,
+                        "redline": None,
+                        "justification": justification,
+                    }
+                )
 
         return {"per_position_results": results}
 

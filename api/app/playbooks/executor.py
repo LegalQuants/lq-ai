@@ -39,6 +39,7 @@ from sqlalchemy.orm import selectinload
 from app.clients.gateway import GatewayClient
 from app.models.document import Document
 from app.models.playbook import Playbook, PlaybookExecution
+from app.observability_helpers import get_tracer, record_attributes
 from app.playbooks.nodes import (
     make_classify_node,
     make_compile_node,
@@ -124,8 +125,19 @@ async def run_playbook_execution(
             "error": None,
         }
 
-        graph = _build_graph(db=db, gateway=gateway, judge_model=judge_model)
-        await graph.ainvoke(initial_state)
+        tracer = get_tracer()
+        with tracer.start_as_current_span("playbook.execute") as span:
+            record_attributes(
+                span,
+                **{
+                    "playbook.id": str(playbook.id),
+                    "playbook.contract_type": playbook.contract_type,
+                    "position.count": len(playbook.positions),
+                    "document.id": str(document.id),
+                },
+            )
+            graph = _build_graph(db=db, gateway=gateway, judge_model=judge_model)
+            await graph.ainvoke(initial_state)
 
     except PlaybookExecutorError:
         # The executor couldn't even start — flip the row to error
