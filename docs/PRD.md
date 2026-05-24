@@ -4271,6 +4271,8 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 #### DE-316 — Promote skill `author` to the `Skill` / `SkillSummary` wire shape (OTel Deepening, skill spans)
 
+**Status:** ✅ RESOLVED (M3-close). `author: str | None` added to `SkillSummary` and mapped from `lq.author` in `derive_summary()` (`api/app/skills/schema.py`); OpenAPI sketch + `_emit_skill_spans` docstring updated; `derive_summary` author-promotion regression test added. `skill.author` now populates from frontmatter automatically.
+
 **Priority:** P3 · **Effort:** XS
 
 **Context:** The M3-F2 `skill.execute` spans (`api/app/api/chats.py::_emit_skill_spans`) record `skill.author`, but `author` lives only on `LQAIFrontmatter` (`api/app/skills/schema.py`) and is NOT promoted to `SkillSummary` / `Skill` — the wire shape `SkillRegistry.get_skill()` returns. As a result `skill.author` is `None` (silently dropped) for every built-in skill. `skill.version` is unaffected (it is a real field on `SkillSummary`).

@@ -207,6 +207,10 @@ class SkillSummary(BaseModel):
     ``skills/community/skills/``. User/team-scope DB-backed skills carry
     ``"user"`` or ``"team"`` respectively."""
     description: str | None = None
+    author: str | None = None
+    """Attribution string from ``lq_ai.author`` (DE-316). Promoted to the
+    wire shape so the gateway's ``skill.execute`` OTel span can record
+    ``skill.author``; ``None`` when the frontmatter omits it."""
     tags: list[str] = Field(default_factory=list)
     jurisdiction: str | None = None
     minimum_inference_tier: int | None = None
@@ -389,6 +393,7 @@ def derive_summary(
         source=source,
         title=title,
         description=frontmatter.description,
+        author=lq.author,
         tags=list(lq.tags),
         jurisdiction=lq.jurisdiction,
         minimum_inference_tier=lq.minimum_inference_tier,

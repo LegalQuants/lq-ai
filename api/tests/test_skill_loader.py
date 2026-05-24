@@ -173,6 +173,36 @@ def test_derive_summary_defaults_when_lq_ai_sparse() -> None:
 
 
 @pytest.mark.unit
+def test_derive_summary_promotes_author() -> None:
+    """`lq_ai.author` is promoted to the SkillSummary wire shape (DE-316).
+
+    The `skill.execute` OTel span reads `skill.author`; before DE-316 it
+    was always None because `author` lived only on `LQAIFrontmatter` and
+    was never copied onto the wire shape the registry resolves.
+    """
+
+    fm = SkillFrontmatter.model_validate(
+        {
+            "name": "nda-review",
+            "description": "X.",
+            "lq_ai": {"author": "LQ.AI Core Team"},
+        }
+    )
+    summary = derive_summary("nda-review", fm)
+    assert summary.author == "LQ.AI Core Team"
+
+
+@pytest.mark.unit
+def test_derive_summary_author_none_when_absent() -> None:
+    """Sparse frontmatter leaves `author` None (dropped from the response)."""
+
+    fm = SkillFrontmatter.model_validate({"name": "x", "description": "Y."})
+    summary = derive_summary("x", fm)
+    assert summary.author is None
+    assert "author" not in filter_summary_for_response(summary)
+
+
+@pytest.mark.unit
 def test_filter_summary_drops_none_and_empty() -> None:
     """`None` values and empty tag lists are dropped from the wire shape."""
 

@@ -4951,6 +4951,12 @@ components:
         scope: {type: string, enum: [builtin, user, team]}
         title: {type: string}
         description: {type: string}
+        author:
+          type: string
+          description: >-
+            Attribution string from the skill's ``lq_ai.author`` frontmatter
+            (DE-316). Surfaced verbatim; absent when the frontmatter omits it.
+            Read by the gateway's ``skill.execute`` OTel span as ``skill.author``.
         tags: {type: array, items: {type: string}}
         jurisdiction:
           type: string

@@ -1432,12 +1432,11 @@ def _emit_skill_spans(
     actual prompt assembly + inference run in the gateway under the same
     trace. ``version`` comes from :attr:`Skill.version` when the
     registry resolves the slug. ``author`` comes from
-    :attr:`Skill.author` when present — note that ``author`` lives on
-    :class:`LQAIFrontmatter` and is NOT promoted to :class:`Skill` /
-    :class:`SkillSummary` in the current schema, so it will be ``None``
-    for built-in skills until that field is added to the wire shape
-    (DE-316). ``None`` attributes are silently dropped by
-    :func:`record_attributes` per the OTel attribute-hygiene contract.
+    :attr:`Skill.author`, promoted to the wire shape from
+    :class:`LQAIFrontmatter` (DE-316); it is ``None`` only when the
+    skill's frontmatter omits ``author``. ``None`` attributes are
+    silently dropped by :func:`record_attributes` per the OTel
+    attribute-hygiene contract.
 
     No-op when ``skill_slugs`` is empty. Safe to call before or after
     ``gw_request`` construction — it does not mutate any shared state.
