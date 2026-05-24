@@ -1,0 +1,46 @@
+# Grafana Tempo 2.6.x — minimal single-binary configuration for LQ.AI
+#
+# Runs in monolithic mode (all components in a single process).
+# Storage is local filesystem backed by the `tempo-data` Docker volume.
+# For production, switch storage.trace.backend to s3/gcs/azure and
+# configure the block/wal paths accordingly.
+
+server:
+  http_listen_port: 3200
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          # Listens on 4317 (standard OTLP gRPC port).
+          # The otel-collector's otlp/tempo exporter targets this.
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+ingester:
+  max_block_duration: 5m
+
+compactor:
+  compaction:
+    block_retention: 48h
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/blocks
+    wal:
+      path: /var/tempo/wal
+
+# Metrics-generator disabled in this minimal config.
+# Enable in production to derive RED metrics from traces.
+metrics_generator:
+  storage:
+    path: /var/tempo/generator/wal
+
+# Required for single-binary mode: disables the ring-based
+# memberlist that multi-binary deployments use.
+memberlist:
+  abort_if_cluster_join_fails: false

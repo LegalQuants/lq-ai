@@ -1,0 +1,12 @@
+# Grafana dashboard provisioning for LQ.AI
+# Points the file provider at the directory that holds the dashboard JSON files.
+
+apiVersion: 1
+
+providers:
+  - name: lq-ai
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards

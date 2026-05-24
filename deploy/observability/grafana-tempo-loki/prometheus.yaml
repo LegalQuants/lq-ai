@@ -1,0 +1,24 @@
+# Prometheus configuration for LQ.AI
+#
+# Scrapes /metrics from the API and Inference Gateway services.
+# Metric names (authoritative — from PRD / CLAUDE.md):
+#   lq_ai_api_http_requests_total         (labels: method, route, status)
+#   lq_ai_api_http_request_duration_seconds (labels: method, route, status)
+#   lq_ai_gateway_http_requests_total      (labels: method, route, status)
+#   lq_ai_gateway_http_request_duration_seconds (labels: method, route, status)
+#   lq_ai_gateway_inference_requests_total (labels: provider, tier, outcome)
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: lq-ai-api
+    static_configs:
+      - targets: ["api:8000"]
+    metrics_path: /metrics
+
+  - job_name: lq-ai-gateway
+    static_configs:
+      - targets: ["gateway:8001"]
+    metrics_path: /metrics
