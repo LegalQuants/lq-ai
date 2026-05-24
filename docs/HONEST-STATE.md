@@ -259,6 +259,7 @@ The deployment story in M1 is Docker Compose plus a drafted Helm chart. The supp
 | Reverse-proxy + TLS recipes (Caddy, Traefik, nginx) | not yet | [Mini-PRD open](contribute/mini-prds/reverse-proxy-tls-deployment-recipes.md) |
 | Backup + restore tooling (`pg_dump` + MinIO snapshot wrapper) | not yet | `ls scripts/` — no backup tooling |
 | Runbooks for operational tasks | not yet | `ls docs/` — no `runbooks/` directory |
+| OpenTelemetry instrumentation (traces + metrics) | M1 baseline + M3-F domain spans | [`docs/observability.md`](observability.md) — signal inventory, span names, attribute schema; deployment recipes at [`deploy/observability/`](../deploy/observability/) |
 | SLO / SLI publication | not yet | OpenTelemetry instrumentation ships at M1; service-level objectives are deferred |
 | Public status page (for any LegalQuants-hosted artifacts) | not yet | No hosted service in M1; the project ships as software the operator runs |
 | Public postmortem template + commitment | not yet | No incidents in operator-facing infrastructure yet; the publication commitment lands with the engineering-discipline roadmap |

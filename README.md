@@ -216,7 +216,7 @@ Inference Gateway:  http://localhost:8001/docs
 
 After login you land on the LQ.AI home. Three good starting points:
 
-- Click **Learn** in the top bar to take the interactive tour — six playgrounds walk through the architecture, the request lifecycle, the tier system, what the model sees, where your data lives, and how to author a skill. This is the fastest orientation for both evaluators and new contributors. (`http://localhost:3000/lq-ai/learn`)
+- Click **Learn** in the top bar to take the interactive tour — eleven playgrounds walk through the architecture, the request lifecycle, the tier system, what the model sees, where your data lives, and how to author a skill. This is the fastest orientation for both evaluators and new contributors. (`http://localhost:3000/lq-ai/learn`)
 - Click **Skills** to browse the 10 built-in skills. Each is inspectable: click any skill to read the `SKILL.md` driving it.
 - Click **+ New matter** to create your first project workspace and attach a document to try a skill against.
 
@@ -274,13 +274,13 @@ The trust model for a self-hosted, open-source project is that every claim termi
 - **Inference Gateway:** `gateway/app/router.py` — the only egress point, the security boundary, the place where routing decisions are made and logged.
 - **Audit log writer:** `api/app/audit.py` — what gets written to the `audit_log` table, and for which actions.
 - **Honest catalog:** [`docs/HONEST-STATE.md`](docs/HONEST-STATE.md) — the shipped-vs-deferred table with a verification path for every row. If you find a discrepancy between this document and the code, the code is canonical.
-- **Interactive architecture tour:** Navigate to `http://localhost:3000/lq-ai/learn` after logging in. The six playgrounds each point at the relevant source files for that topic.
+- **Interactive architecture tour:** Navigate to `http://localhost:3000/lq-ai/learn` after logging in. The eleven playgrounds each point at the relevant source files for that topic.
 
 ---
 
 ### First steps after login
 
-**The Learn page is the guided tour.** New users and procurement evaluators start at `http://localhost:3000/lq-ai/learn`. Six interactive playgrounds walk through the architecture, the full request lifecycle, the five-tier inference model, what the model actually sees (and what it doesn't), where data lives, and how to author your own skill. Each playground links to the relevant source file.
+**The Learn page is the guided tour.** New users and procurement evaluators start at `http://localhost:3000/lq-ai/learn`. Eleven interactive playgrounds walk through the architecture, the full request lifecycle, the five-tier inference model, what the model actually sees (and what it doesn't), where data lives, and how to author your own skill. Each playground links to the relevant source file.
 
 **The honest catalog.** [`docs/HONEST-STATE.md`](docs/HONEST-STATE.md) names what is shipped, what is deferred, and how to verify each. We publish this because the verification path for an open-source product terminates in code, not in claims. If anything in this README is inconsistent with what the code does, please [open an issue](https://github.com/LegalQuants/lq-ai/issues) — the code is canonical.
 
@@ -460,6 +460,7 @@ For security disclosures, see [`SECURITY.md`](SECURITY.md). The disclosure proce
 
 - [Product Requirements Document](docs/PRD.md) — the canonical specification (v0.2).
 - [`docs/HONEST-STATE.md`](docs/HONEST-STATE.md) — shipped-vs-deferred catalog with verification paths for every claim.
+- [`docs/observability.md`](docs/observability.md) — OpenTelemetry traces/metrics, deployment recipes, operator guide.
 - [`docs/contribute/EASIEST-CONTRIBUTIONS.md`](docs/contribute/EASIEST-CONTRIBUTIONS.md) — curated short-cycle contributions with mini-PRDs.
 - [`docs/skill-authoring-guide.md`](docs/skill-authoring-guide.md) — how to write a high-quality skill.
 - [`docs/playbook-authoring-guide.md`](docs/playbook-authoring-guide.md) — how to write a Playbook.
