@@ -875,7 +875,7 @@ The scope-as-shipped is narrower than the original "ensemble runs on the whole a
 
 **M1 status:** Deferred-M4. No `autonomous_tasks`, `autonomous_schedules`, or `autonomous_watches` table exists in `api/alembic/versions/`. No per-user memory store. The architectural slot is committed; detailed M4 design is deferred. See [HONEST-STATE.md §4](HONEST-STATE.md#4-capabilities-not-yet-started-in-source).
 
-**Description.** Long-running per-user agents that observe activity, learn patterns, take proactive actions, and create skills autonomously. Runs as OpenWebUI Pipelines, off by default, opt-in per user.
+**Description.** Long-running per-user agents that observe activity, learn patterns, take proactive actions, and create skills autonomously. **Off by default, opt-in per user.** The autonomous executor runs in `api/app/autonomous/` on the existing **arq-worker** as a LangGraph state machine mirroring the Playbook executor (`api/app/playbooks/`), calling the gateway for inference exactly as playbooks do; it is **not** an OpenWebUI Pipeline (an earlier framing — superseded by [ADR 0013](adr/0013-autonomous-layer-design-influences.md), which pins the substrate). The web layer renders the dashboard and the per-session receipts; it does not run the agent loop. The detailed M4 design is pinned in **[ADR 0013 — Autonomous Layer design influences](adr/0013-autonomous-layer-design-influences.md)** (the DE-289 Phase 1 study).
 
 **User stories.**
 - As a user, I opt in to "autonomous skill suggestions"; after I review my fifth SaaS DPA, the system asks if I'd like it to draft a custom DPA Playbook based on my reviews.
@@ -884,12 +884,23 @@ The scope-as-shipped is narrower than the original "ensemble runs on the whole a
 - As a user, I see a "memory" view showing what the autonomous agent has learned about my preferences.
 
 **Functional requirements.**
-- Autonomous agents run as background pipelines, not user-facing requests.
+- Autonomous agents run as background work on the arq-worker, not as user-facing requests; lower priority than interactive use.
+- **Single-agent per session** for M4 v1 (one agent per `autonomous_session`), designed so multi-agent orchestration can extend later without redesign ([ADR 0013](adr/0013-autonomous-layer-design-influences.md) D1; the cross-agent handoff facet stays deferred under DE-294).
 - Per-user persistent memory store (separate from chat history) tracks patterns, preferences, and past actions.
-- Memory is *user-curated* — the user can view, edit, delete entries.
-- Cron scheduling for periodic tasks.
-- Notifications via email, Slack, or in-app.
-- Hard isolation between users — no cross-user memory leakage.
+- **Memory model — *system-proposes, user-owns*.** The agent observes and proposes memory entries (system-derived), but every entry is user-visible, user-editable, user-deletable, and applied only after the user keeps it; proposals surface for review rather than silent write. This resolves the prior contradiction in this section (the system derives candidates; the user holds authority and ownership). See ADR 0013 D4.
+- Cron scheduling for periodic tasks; event-triggered runs ("watches") enqueued by the ingest pipeline on document arrival.
+- Notifications via email or in-app (an optional webhook to the §3.15 Slack/Teams bridge folds in once that bridge's send-path lands; DE-312 gates it).
+- Hard isolation between users — no cross-user memory or precedent leakage.
+
+**M4 v1 capability scope (the four primitives — each spawns an `autonomous_session` the single agent runs under the R4/R5/R6 brakes):**
+- **Watches** — new documents in a watched Knowledge Base trigger a configured Playbook/skill; findings are notified.
+- **Scheduled tasks** — cron-scheduled periodic runs (e.g., a weekly compliance scan against a contract repository).
+- **Per-user memory** — the observe-and-propose preference store above.
+- **Precedent board** — system-observed patterns about *documents/clauses across matters* (recurring counterparty positions, clause-language patterns), read-mostly and user-dismissable. **Distinct** from Project context (§3.11 — user-authored, per-matter) and from per-user memory (patterns about *the user's* behavior): the precedent board is patterns about *the documents*. The agent may propose promoting a precedent into a Project's context but never writes Project context directly. See ADR 0013 D5.
+
+**Data model (new tables, all per-user, hard-isolated).** `autonomous_sessions` (run record carrying the brakes: `max_cost_usd`, `cost_total_usd`, `halt_state` enum, `current_phase`, `idle_halt_minutes` — per DE-293), `autonomous_schedules` (cron specs), `autonomous_watches` (KB-trigger configs), `autonomous_memory` (proposed/kept preference entries), `precedent_entries` (cross-matter patterns).
+
+**Alignment contract (non-optional — [ADR 0013](adr/0013-autonomous-layer-design-influences.md) D6; contributor how-to in [`docs/LQVern/agentic-flow-alignment-guide.md`](LQVern/agentic-flow-alignment-guide.md)).** Every autonomous flow, by construction: (a) emits OTel domain spans (`autonomous.session` + `autonomous.tool_call` children; attributes = cost/halt/phase/tool/outcome — **counts and types only, never raw entity values**, extending the M2 anonymization-span guarantee); (b) writes a closed-enum audit trail (`autonomous_session.{started,phase_transition,tool_call,halted,cost_cap_reached,completed}`); (c) produces a human-readable per-session receipt ("what the agent did and why" — every tool call, the inputs it saw, the cost, the phase, the gates passed), the §1.3 transparency principle applied to actions. Autonomous code that does not emit these is not done.
 
 **Boundary-register obligations for autonomous flows (M4 design surface).** The autonomous layer is the LQ.AI surface where Tier 2 of the boundary-register catalog (R4 economic, R5 temporal, R6 contextual — see §1.8 and [`docs/security/boundary-registers.md`](security/boundary-registers.md)) first attaches to running code. M4 design must discharge each: a per-session hard cost cap with halt-on-overrun and a structured `cost_cap_reached` final state (R4); an external halt switch checked before every tool call, with an idle-halt timeout that auto-transitions a paused session rather than bleeding resources (R5); per-workflow-phase tool-grant modulation that strips intake-time tools at the ethics-gate or delivery-phase boundary (R6). The implementation specification is tracked by DE-293. The design study comparing Lavern's `Clawern` pipeline (the most concrete prior art for all three Tier 2 registers) to LQ.AI's planned approach is tracked by DE-289 Phase 1; the design-influences ADR it produces is the input to the M4 implementation plan. If M4 ships *multi-agent* autonomous flows rather than only single-agent ones, the R3-for-cross-agent-handoffs facet (an `orchestrate.py`-equivalent with closed intent allowlist + typed-template prompt rendering + JSONL audit log) attaches alongside the Tier 2 work, tracked by DE-294; the single-agent vs. multi-agent pin is the first deliverable of DE-289 Phase 1.
 
@@ -897,16 +908,21 @@ The scope-as-shipped is narrower than the original "ensemble runs on the whole a
 - Autonomous activity must not interfere with interactive use; runs at lower priority.
 
 **API surface.**
-- `GET/POST /api/v1/autonomous/memory` — view and edit user memory.
+- `GET/POST /api/v1/autonomous/memory` — view, keep/edit/delete proposed and kept memory entries.
 - `GET/POST /api/v1/autonomous/schedules` — manage scheduled tasks.
 - `GET/POST /api/v1/autonomous/watches` — manage watches.
+- `GET /api/v1/autonomous/sessions` + `GET /api/v1/autonomous/sessions/{id}` — list/inspect runs (the receipt trail).
+- `POST /api/v1/autonomous/sessions/{id}/halt` — the external halt switch (R5; ADR 0013 D3).
+- `GET/POST /api/v1/autonomous/precedents` — view + dismiss precedent-board entries.
 
 **Dependencies.** All other capabilities. OpenWebUI Pipelines framework.
 
-**Open questions.**
-- This is M4 territory; detailed design deferred. The PRD commits to the capability and the architectural slot, not to the full design.
-- **Distinction from Projects (§3.11).** Autonomous-layer memory is system-curated and observed; Project context is user-curated and matter-scoped. Both serve different purposes; one informs the other. The autonomous layer can *propose* additions to a Project's context, but the user owns the Project.
-- **Forward extension to M5+ (§8.5).** The autonomous layer's memory and scheduled-pipelines substrate is the foundation on which the M5+ workflow-intelligence direction extends. M4 design choices should anticipate that extension — particularly multi-step agents that take external-side-effecting actions with human approval gates, since retrofitting that into a memory-and-watches-only autonomous layer is harder than designing for it from the start.
+**Open questions — resolved in [ADR 0013](adr/0013-autonomous-layer-design-influences.md).** The detailed design is no longer deferred; the ADR + this build-out are the design, and the M4 implementation follows the writing-plans output on the `feat/lqvern-m4-autonomous` branch. The three prior open questions resolved as:
+- **Detailed design** — pinned (single-agent v1, api/arq executor, the four primitives, the brakes, the alignment contract). ADR 0013 D1–D6.
+- **Distinction from Projects (§3.11)** — the three-way memory model (Project context vs. autonomous memory vs. precedent board). ADR 0013 D5.
+- **Forward extension to M5+ (§8.5)** — the single-agent interfaces are designed so multi-agent orchestration (DE-294) and external-side-effecting actions with approval gates extend without redesign; the memory + scheduled-pipeline substrate is the M5+ workflow-intelligence foundation. ADR 0013 D1 + open question 3.
+
+Remaining implementation-level open questions (watch-trigger plumbing, notification surface, precedent-board per-user vs per-deployment scope) are carried in ADR 0013 "Open questions remaining" for the implementation plan.
 
 ---
 
