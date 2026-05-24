@@ -115,11 +115,18 @@ dependencies = [
     # M3-A2 — LangGraph powers the Playbook executor workflow (retrieve
     # → classify → redline → compile) per the M3 plan's M3-1 decision
     # ("LangGraph runtime lives in api/, not a separate service"). The
-    # same runtime is reused by the M3-C2 Tabular Review workflow, so
-    # the SBOM cost is amortized across two M3 features. MIT-licensed;
-    # transitive deps are mostly LangChain-core types (already permissive
-    # licenses, no new SBOM family beyond LangGraph + LangChain-core).
-    "langgraph>=0.2,<0.3",
+    # same runtime is reused by the M3-C2 Tabular Review workflow and the
+    # M4 autonomous executor (api/app/autonomous/), so the SBOM cost is
+    # amortized across three features. MIT-licensed; transitive deps are
+    # mostly LangChain-core types (already permissive licenses, no new
+    # SBOM family beyond LangGraph + LangChain-core).
+    # M4-0.1 — held at 0.2 for M4. langgraph 1.x re-types StateGraph as
+    # generic, so our `add_node` node factories (typed -> Awaitable[dict])
+    # fail mypy [call-overload] (this is what dependabot #68 tripped on).
+    # The break is type-only — every runtime API we use is unchanged — and
+    # the autonomous executor needs no 1.x-only API. Migration of all three
+    # executors deferred to DE-319. Floor pinned to the validated 0.2.76.
+    "langgraph>=0.2.76,<0.3",
     # M3-C4 — openpyxl powers the Tabular Review XLSX export
     # (GET /tabular/executions/{id}/export?format=xlsx). Each grid cell
     # gets a Comment with its citation source so operators can pivot
