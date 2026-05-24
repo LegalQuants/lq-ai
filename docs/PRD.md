@@ -4259,6 +4259,16 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 **When to ship:** After DE-299 (structured log correlation) and DE-300 (log-trace injection) have stabilized; streaming spans are most useful when they can be correlated to the surrounding request trace.
 
+#### DE-316 — Promote skill `author` to the `Skill` / `SkillSummary` wire shape (OTel Deepening, skill spans)
+
+**Priority:** P3 · **Effort:** XS
+
+**Context:** The M3-F2 `skill.execute` spans (`api/app/api/chats.py::_emit_skill_spans`) record `skill.author`, but `author` lives only on `LQAIFrontmatter` (`api/app/skills/schema.py`) and is NOT promoted to `SkillSummary` / `Skill` — the wire shape `SkillRegistry.get_skill()` returns. As a result `skill.author` is `None` (silently dropped) for every built-in skill. `skill.version` is unaffected (it is a real field on `SkillSummary`).
+
+**Specific scope:** Add `author: str | None = None` to `SkillSummary` and pass `lq.author` in `derive_summary()` (`api/app/skills/schema.py`). Update the OpenAPI sketch + any skill-summary schema-conformance tests. Once landed, `skill.author` populates automatically (the span code already reads it via `getattr`).
+
+**When to ship:** Opportunistically — a one-field addition; bundle with the next skill-schema change or the M3-close documentation pass.
+
 ---
 
 ## 10. Appendices
