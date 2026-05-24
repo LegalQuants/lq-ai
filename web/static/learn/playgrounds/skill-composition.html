@@ -694,7 +694,7 @@ const ORG_PROFILE_PLACEHOLDER = `# Organization Profile
 
 This section is populated by the deployment's Organization Profile — a singleton skill set by the operator at the deployment level that provides organization-wide voice, jurisdiction defaults, and institutional context for all downstream skills.
 
-The Organization Profile slot ships in M2 per the roadmap. It is not active in the current M1 deployment.`;
+The Organization Profile shipped in M2 and is active — an operator-configured singleton. This demo shows it unconfigured (the placeholder above).`;
 
 const USER_SKILL_CONTENT = `# Skill: company-style-guide (User skill)
 [Hypothetical user-authored skill — illustrating how user skills compose alongside built-in skills]
@@ -919,7 +919,7 @@ function renderPrompt() {
 
     const noteSpan = document.createElement('div');
     noteSpan.style.cssText = 'padding: 4px 14px 6px; font-size: 10px; color: var(--providers); font-family: -apple-system, sans-serif; background: var(--prompt-bg);';
-    noteSpan.textContent = 'Organization Profile — ships in M2, not active in M1. Shown here as a placeholder.';
+    noteSpan.textContent = 'Organization Profile — shipped in M2; an operator-configured singleton. Shown here as an unconfigured placeholder.';
     container.appendChild(noteSpan);
 
     const { element: orgEl, bodyText: orgText } = makeSection({
@@ -1097,7 +1097,7 @@ function renderOutput() {
     describeHtml += `<p style="margin-top:8px"><strong>Transparency:</strong> Every built-in skill body is open-source. Click any GitHub link in the "Verify in source" tab to read exactly what the skill instructs the model to do. If you don't like what a skill does, you can fork it — the full corpus is at <a class="file" href="https://github.com/LegalQuants/lq-ai/tree/main/skills" target="_blank" rel="noopener">github.com/LegalQuants/lq-ai/tree/main/skills</a> and the authoring guide at <a class="file" href="${REPO}docs/skill-authoring-guide.md" target="_blank" rel="noopener">docs/skill-authoring-guide.md</a>.</p>`;
 
     if (state.includeOrgProfile) {
-      describeHtml += `<p style="margin-top:8px;padding:8px;border-left:2px solid var(--providers);background:rgba(253,164,175,0.06)"><strong>Organization Profile note:</strong> This is an M2 feature, not active in the current M1 deployment. When shipped, the Organization Profile is a singleton skill set by the operator at the deployment level — it provides org-wide voice, default jurisdiction, and institutional context that shapes every downstream skill. It is the first section of the assembled prompt, rendered before any attached skills. <a class="file" href="${REPO}docs/PRD.md" target="_blank" rel="noopener">PRD §3.12</a></p>`;
+      describeHtml += `<p style="margin-top:8px;padding:8px;border-left:2px solid var(--providers);background:rgba(253,164,175,0.06)"><strong>Organization Profile note:</strong> This is an M2 feature, active in the current deployment. The Organization Profile is a singleton skill set by the operator at the deployment level — it provides org-wide voice, default jurisdiction, and institutional context that shapes every downstream skill. It is the first section of the assembled prompt, rendered before any attached skills. <a class="file" href="${REPO}docs/PRD.md" target="_blank" rel="noopener">PRD §3.12</a></p>`;
     }
 
     if (state.includeUserSkill) {

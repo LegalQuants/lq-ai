@@ -1066,7 +1066,7 @@ function renderOutput() {
 
   const privacyHonest = `
     <div class="warn">
-      <strong>Anonymization Layer (M2, not yet running):</strong> The PRD describes entity substitution on the request path — swapping named entities for stable placeholders before they leave the deployment. In M1, the config slot exists but the middleware does not run. Read <a class="file" href="${REPO}docs/HONEST-STATE.md" target="_blank" rel="noopener">docs/HONEST-STATE.md §3.2</a> and <a class="file" href="${REPO}gateway/app/api/admin.py" target="_blank" rel="noopener">gateway/app/api/admin.py:270-282</a> (returns 501) to verify.
+      <strong>Anonymization Layer (M2 — running):</strong> Entity substitution runs on the request path — named entities are swapped for stable pseudonyms before the payload leaves the deployment, and the response is rehydrated inside the deployment (wired at <a class="file" href="${REPO}gateway/app/main.py" target="_blank" rel="noopener">gateway/app/main.py</a>). Honest caveat: Presidio default-recognizer recall/precision on a legal corpus is empirically unmeasured — see <a class="file" href="${REPO}docs/security/anonymization.md#whats-validated-vs-whats-unvalidated" target="_blank" rel="noopener">anonymization.md</a> and DE-282 for the risk framing.
     </div>`;
 
   verifyHtml += gatewayBoundary + networkTopology + privacyHonest;
@@ -1102,7 +1102,7 @@ function renderOutput() {
 
   describeHtml += `<p><strong>No phone-home, analytics, or telemetry.</strong> Verify: <a class="file" href="${REPO}docker-compose.yml" target="_blank" rel="noopener">docker-compose.yml</a> defines no analytics services. The <a class="file" href="${REPO}gateway/app/router.py" target="_blank" rel="noopener">gateway/app/router.py</a> makes no calls except to the configured inference providers. The web bundle is served from the self-hosted container — no CDN fonts or scripts in an air-gapped deployment.</p>`;
 
-  describeHtml += `<p style="color:var(--api);font-size:11px"><strong>M2 note:</strong> The Anonymization Layer (PRD §4.7) will add entity substitution on the request path. In M1 it is not running — the config slot exists but the middleware is absent. See <a class="file" href="${REPO}docs/HONEST-STATE.md" target="_blank" rel="noopener">HONEST-STATE.md §3.2</a>.</p>`;
+  describeHtml += `<p style="color:var(--api);font-size:11px"><strong>Anonymization note:</strong> The Anonymization Layer (PRD §4.7) performs entity substitution on the request path and is running as of M2 (<a class="file" href="${REPO}gateway/app/main.py" target="_blank" rel="noopener">gateway/app/main.py</a>). For non-privileged chats the model sees pseudonyms; the mapping back to originals stays inside the deployment. See <a class="file" href="${REPO}docs/HONEST-STATE.md" target="_blank" rel="noopener">HONEST-STATE.md §3.2</a>.</p>`;
 
   if (state.selectedNode) {
     const n = findNode(state.selectedNode);
