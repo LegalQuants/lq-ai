@@ -1277,28 +1277,180 @@ M3-D3-4), so this table can hold rows for many tenants concurrently.
 
 `installer_oid` is audit-only and grants no LQ.AI permissions.
 
-## M4+ tables (sketched, land at the indicated milestone)
+## Autonomous layer (per [PRD §3.10](PRD.md#310-autonomous-layer-m4), M4)
 
-### `autonomous_tasks` (M4)
+The per-user Autonomous agent's data substrate (migration
+`0039_autonomous_layer.py`, M4-A1; see
+[ADR-0013](adr/0013-autonomous-layer-design-influences.md)). Five
+tables: the brake-bearing run record (`autonomous_sessions`) plus four
+primitive tables for triggers (`autonomous_schedules`,
+`autonomous_watches`), curated memory (`autonomous_memory`), and
+observed precedent (`precedent_entries`).
+
+**Hard per-user isolation.** Every table carries a non-null `user_id`
+FK with `ON DELETE CASCADE`. Unlike the playbook tables (which
+`SET NULL` to preserve shared audit history), autonomous state is
+private to the operator who ran it and carries no shared work product,
+so a user's deletion removes all of their autonomous state.
+
+### `autonomous_sessions` (M4)
+
+The run record carrying the brakes — cost cap, halt state, idle-halt
+window, and the phase machine the executor (later M4 tasks) walks.
+`halt_state` is orthogonal to `status`: `status` is the terminal-or-
+running lifecycle, `halt_state` is the brake the executor checks at
+every step.
 
 ```sql
-CREATE TABLE autonomous_tasks (
-    id                UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
-    user_id           UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    name              TEXT NOT NULL,
-    schedule          TEXT,                    -- cron expression
-    trigger_type      TEXT NOT NULL CHECK (trigger_type IN ('cron','watch_kb','watch_email','watch_calendar')),
-    trigger_config    JSONB NOT NULL,
-    skill_chain       TEXT[] NOT NULL,         -- ordered list of skills
-    enabled           BOOLEAN NOT NULL DEFAULT TRUE,
-    last_run_at       TIMESTAMPTZ,
-    next_run_at       TIMESTAMPTZ,
+CREATE TABLE autonomous_sessions (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id           UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,        -- fk_autonomous_sessions_user_id
+    project_id        UUID REFERENCES projects(id) ON DELETE SET NULL,             -- fk_autonomous_sessions_project_id
+    trigger_kind      TEXT NOT NULL CHECK (trigger_kind IN ('watch','schedule','suggestion','manual')),
+    trigger_ref       UUID,                                                        -- id of the schedule/watch/suggestion that started it
+    current_phase     TEXT NOT NULL DEFAULT 'intake'
+                          CHECK (current_phase IN ('intake','analysis','drafting','ethics_review','delivery')),
+    halt_state        TEXT NOT NULL DEFAULT 'running'
+                          CHECK (halt_state IN ('running','halt_requested','halted','paused')),
+    max_cost_usd      NUMERIC(10,4),                                               -- per-session cost cap; NULL = no cap
+    cost_total_usd    NUMERIC(10,4) NOT NULL DEFAULT 0,                            -- accumulates as the executor spends
+    cost_cap_reached  BOOLEAN NOT NULL DEFAULT FALSE,                              -- latches TRUE when the cap is hit
+    idle_halt_minutes INT NOT NULL DEFAULT 5,                                      -- self-halt after this much inactivity
+    last_activity_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    status            TEXT NOT NULL DEFAULT 'running'
+                          CHECK (status IN ('running','completed','halted','failed')),
+    result            JSONB,
+    error             TEXT,
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    completed_at      TIMESTAMPTZ
 );
 
-CREATE INDEX idx_autonomous_tasks_next_run ON autonomous_tasks(next_run_at) WHERE enabled = TRUE AND next_run_at IS NOT NULL;
+-- "My recent sessions" view for the UI.
+CREATE INDEX idx_autonomous_sessions_user_created ON autonomous_sessions(user_id, created_at DESC);
+-- The scheduler's "which running sessions need a halt/idle check?" scan (partial).
+CREATE INDEX idx_autonomous_sessions_active ON autonomous_sessions(halt_state, last_activity_at) WHERE status = 'running';
 ```
+
+### `autonomous_schedules` (M4)
+
+A cron-triggered run definition. `cron_expr` is a standard five-field
+cron string. `playbook_id` / `skill_ref` / `target_kb_id` describe what
+the triggered session runs. Soft-deleted via `deleted_at`.
+
+```sql
+CREATE TABLE autonomous_schedules (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,           -- fk_autonomous_schedules_user_id
+    project_id    UUID REFERENCES projects(id) ON DELETE SET NULL,                -- fk_autonomous_schedules_project_id
+    name          TEXT,
+    cron_expr     TEXT NOT NULL,
+    playbook_id   UUID REFERENCES playbooks(id) ON DELETE SET NULL,               -- fk_autonomous_schedules_playbook_id
+    skill_ref     TEXT,
+    target_kb_id  UUID REFERENCES knowledge_bases(id) ON DELETE SET NULL,         -- fk_autonomous_schedules_target_kb_id
+    enabled       BOOLEAN NOT NULL DEFAULT TRUE,
+    last_run_at   TIMESTAMPTZ,
+    next_run_at   TIMESTAMPTZ,
+    deleted_at    TIMESTAMPTZ,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+### `autonomous_watches` (M4)
+
+A KB-change-triggered run definition. When the watched
+`knowledge_base_id` changes (a new file ingested), the agent starts a
+session running `playbook_id` / `skill_ref` against the change.
+Soft-deleted via `deleted_at`.
+
+```sql
+CREATE TABLE autonomous_watches (
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id            UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,      -- fk_autonomous_watches_user_id
+    project_id         UUID REFERENCES projects(id) ON DELETE SET NULL,           -- fk_autonomous_watches_project_id
+    knowledge_base_id  UUID NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,  -- fk_autonomous_watches_knowledge_base_id
+    playbook_id        UUID REFERENCES playbooks(id) ON DELETE SET NULL,          -- fk_autonomous_watches_playbook_id
+    skill_ref          TEXT,
+    enabled            BOOLEAN NOT NULL DEFAULT TRUE,
+    deleted_at         TIMESTAMPTZ,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- The watch dispatcher's "which watches fire for this KB?" lookup; only live, enabled watches matter (partial).
+CREATE INDEX idx_autonomous_watches_kb_enabled ON autonomous_watches(knowledge_base_id) WHERE enabled AND deleted_at IS NULL;
+```
+
+### `autonomous_memory` (M4)
+
+Memory notes the agent proposes for user curation. `state` walks
+`proposed → kept | dismissed`. `category` is a free-form bucket (e.g.
+`drafting_preference`). `source_session_id` links back to the proposing
+session (`SET NULL` if that session is later deleted). Soft-deleted via
+`deleted_at`.
+
+```sql
+CREATE TABLE autonomous_memory (
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id            UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,      -- fk_autonomous_memory_user_id
+    state              TEXT NOT NULL CHECK (state IN ('proposed','kept','dismissed')),
+    category           TEXT NOT NULL,
+    content            TEXT NOT NULL,
+    source_session_id  UUID REFERENCES autonomous_sessions(id) ON DELETE SET NULL,  -- fk_autonomous_memory_source_session_id
+    kept_at            TIMESTAMPTZ,
+    deleted_at         TIMESTAMPTZ,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- The "show me my memory notes in state X" curation view.
+CREATE INDEX idx_autonomous_memory_user_state ON autonomous_memory(user_id, state);
+```
+
+### `precedent_entries` (M4)
+
+Observed precedent patterns across a user's sessions. `pattern_kind` is
+a free-form classifier; `observed_count` increments each time the
+pattern recurs. `source_session_id` links to the first observing
+session (`SET NULL` on delete). `dismissed_at` is set when the user
+dismisses the precedent.
+
+```sql
+CREATE TABLE precedent_entries (
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id            UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,      -- fk_precedent_entries_user_id
+    pattern_kind       TEXT NOT NULL,
+    summary            TEXT NOT NULL,
+    observed_count     INT NOT NULL DEFAULT 1,
+    source_session_id  UUID REFERENCES autonomous_sessions(id) ON DELETE SET NULL,  -- fk_precedent_entries_source_session_id
+    dismissed_at       TIMESTAMPTZ,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- The "my live precedents for pattern kind X" lookup; dismissed precedents drop out (partial).
+CREATE INDEX idx_precedent_entries_user_kind ON precedent_entries(user_id, pattern_kind) WHERE dismissed_at IS NULL;
+```
+
+> **Note (UUID default):** these tables use `gen_random_uuid()` (UUIDv4)
+> rather than the doc-aspirational `uuid_generate_v7()`, matching what
+> the migrations actually ship (see the Conventions note and the
+> `audit_log` / `inference_routing_log` precedent above).
+
+## M4+ tables (sketched, land at the indicated milestone)
+
+### `autonomous_tasks` (M4 — **superseded**)
+
+> **Superseded by `autonomous_sessions` + the four primitive tables
+> above.** `autonomous_tasks` was a single-table sketch that conflated
+> the run record with its triggers. Per [ADR-0013](adr/0013-autonomous-layer-design-influences.md)
+> the M4 design (landed in migration `0039`, M4-A1) split it into the
+> brake-bearing `autonomous_sessions` run record plus
+> `autonomous_schedules` / `autonomous_watches` (triggers),
+> `autonomous_memory`, and `precedent_entries`. This block is retained
+> only as a record of the original sketch; it is not created by any
+> migration.
 
 ### `contract_relationships` (M4 — Contract Repository auto-relationship detection)
 
@@ -1371,7 +1523,10 @@ CREATE INDEX idx_relationships_target ON contract_relationships(target_file_id);
 - M2 migrations add citation-engine fields.
 - M3 migrations add playbooks, tabular_executions (M3-C2), and the
   intake-bridge tables slack_workspaces (M3-D1) + teams_tenants (M3-D3).
-- M4 migrations add autonomous_tasks, contract_relationships.
+- M4 migrations add the autonomous layer (0039: autonomous_sessions,
+  autonomous_schedules, autonomous_watches, autonomous_memory,
+  precedent_entries — superseding the sketched autonomous_tasks) and
+  contract_relationships.
 
 Migration conventions:
 - Every migration is reversible (`downgrade()` always implemented).
