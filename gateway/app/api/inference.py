@@ -72,6 +72,7 @@ from app.clients.backend import BackendClient, Skill, get_backend_client
 from app.config import GatewayConfig
 from app.errors import LQAIError
 from app.model_discovery import ModelDiscoverer
+from app.observability_helpers import get_tracer, record_attributes
 from app.providers import (
     ChatCompletionChunk,
     ChatCompletionMessage,
@@ -96,6 +97,7 @@ from app.router import (
     RoutedProviderError,
     Router,
     estimate_cost,
+    outcome_label_from_error,
     resolve_alias_chain,
     synthesize_request_id,
 )
@@ -125,6 +127,19 @@ PROVIDER_HEADER: Final[str] = "X-LQ-AI-Routed-Provider"
 
 
 # --- Helpers ------------------------------------------------------------------
+
+
+def _cost_usd_float(cost_estimate: float | None) -> float | None:
+    """Return the cost estimate as a Python float suitable for an OTel attribute.
+
+    ``_annotate_response`` already converts the Decimal from ``estimate_cost``
+    to ``float`` via ``float(cost)`` before storing it on the response, so the
+    value arriving here is already ``float | None``.  The helper exists to make
+    the extraction intent explicit and to keep the span-instrumentation site
+    readable.
+    """
+
+    return cost_estimate
 
 
 def _not_implemented(
@@ -632,67 +647,104 @@ async def chat_completions(request: Request) -> JSONResponse | StreamingResponse
         )
 
     # --- Non-streaming path -------------------------------------------------
-    try:
-        result = await gw_router.chat_completion(chat_request)
-    except RoutedProviderError as wrapped:
-        # The router attributes the failure to the actual target that
-        # produced the error (rather than the last candidate). Unwrap
-        # here, write the routing-log row with that target, and map the
-        # underlying error to the right HTTP status.
-        await _write_failure(
+    # The span is created here (handler level) rather than inside the router
+    # so it can carry ``inference.cost_usd``, which is computed by
+    # ``_annotate_response`` on the success path — the router never sees cost.
+    # Streaming path is out of scope (deferred).
+    tracer = get_tracer()
+    with tracer.start_as_current_span("inference.dispatch") as dispatch_span:
+        try:
+            result = await gw_router.chat_completion(chat_request)
+        except RoutedProviderError as wrapped:
+            # The router attributes the failure to the actual target that
+            # produced the error (rather than the last candidate). Unwrap
+            # here, write the routing-log row with that target, and map the
+            # underlying error to the right HTTP status.
+            record_attributes(
+                dispatch_span,
+                **{
+                    "inference.provider": wrapped.target.provider.name,
+                    "inference.model": wrapped.target.native_model,
+                    "inference.tier": wrapped.target.routed_inference_tier,
+                    "inference.outcome": outcome_label_from_error(wrapped.error),
+                },
+            )
+            await _write_failure(
+                log_writer,
+                chat_request=chat_request,
+                target=wrapped.target,
+                request_id=request_id,
+                error=wrapped.error,
+                latency_ms=wrapped.latency_ms,
+                anonymization_applied=anon_mapper is not None,
+            )
+            return _map_provider_error_to_response(wrapped.error)
+        except NoAdapterAvailableError as exc:
+            record_attributes(
+                dispatch_span,
+                **{
+                    "inference.provider": candidates[0].provider.name,
+                    "inference.outcome": "unavailable",
+                },
+            )
+            await _write_unavailable(
+                log_writer,
+                chat_request=chat_request,
+                target=candidates[0],
+                request_id=request_id,
+                message=exc.message,
+                anonymization_applied=anon_mapper is not None,
+            )
+            return _gateway_error(
+                code="provider_unavailable",
+                message=exc.message,
+                http_status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                details={"provider": candidates[0].provider.name},
+            )
+
+        # --- Anonymization post-middleware (non-streaming) ----------------------
+        # When the pre-middleware fired (mapper is non-None), rehydrate the
+        # provider's response content back to the originals. The mapper is
+        # then dropped on function exit — never persisted, never logged.
+        if anon_mapper is not None:
+            post_anonymize_response(
+                response=result.response, mapper=anon_mapper, anonymizer=anonymizer
+            )
+
+        # --- Success: stamp tier on body, write log, return --------------------
+        annotated = _annotate_response(result.response, target=result.target, config=config)
+        if applied_skills:
+            annotated.lq_ai_applied_skills = list(applied_skills)
+        annotated.anonymization_applied = anon_mapper is not None
+        usage = result.response.usage
+        record_attributes(
+            dispatch_span,
+            **{
+                "inference.provider": result.target.provider.name,
+                "inference.model": result.target.native_model,
+                "inference.tier": result.target.routed_inference_tier,
+                "inference.outcome": "success",
+                "inference.tokens_in": usage.prompt_tokens if usage is not None else None,
+                "inference.tokens_out": usage.completion_tokens if usage is not None else None,
+                "inference.cost_usd": _cost_usd_float(annotated.cost_estimate),
+            },
+        )
+        await _write_success(
             log_writer,
             chat_request=chat_request,
-            target=wrapped.target,
+            result=result,
             request_id=request_id,
-            error=wrapped.error,
-            latency_ms=wrapped.latency_ms,
+            cost_estimate=annotated.cost_estimate,
             anonymization_applied=anon_mapper is not None,
         )
-        return _map_provider_error_to_response(wrapped.error)
-    except NoAdapterAvailableError as exc:
-        await _write_unavailable(
-            log_writer,
-            chat_request=chat_request,
-            target=candidates[0],
-            request_id=request_id,
-            message=exc.message,
-            anonymization_applied=anon_mapper is not None,
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content=annotated.model_dump(mode="json", exclude_none=True),
+            headers={
+                TIER_HEADER: str(result.target.routed_inference_tier),
+                PROVIDER_HEADER: result.target.provider.name,
+            },
         )
-        return _gateway_error(
-            code="provider_unavailable",
-            message=exc.message,
-            http_status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            details={"provider": candidates[0].provider.name},
-        )
-
-    # --- Anonymization post-middleware (non-streaming) ----------------------
-    # When the pre-middleware fired (mapper is non-None), rehydrate the
-    # provider's response content back to the originals. The mapper is
-    # then dropped on function exit — never persisted, never logged.
-    if anon_mapper is not None:
-        post_anonymize_response(response=result.response, mapper=anon_mapper, anonymizer=anonymizer)
-
-    # --- Success: stamp tier on body, write log, return --------------------
-    annotated = _annotate_response(result.response, target=result.target, config=config)
-    if applied_skills:
-        annotated.lq_ai_applied_skills = list(applied_skills)
-    annotated.anonymization_applied = anon_mapper is not None
-    await _write_success(
-        log_writer,
-        chat_request=chat_request,
-        result=result,
-        request_id=request_id,
-        cost_estimate=annotated.cost_estimate,
-        anonymization_applied=anon_mapper is not None,
-    )
-    return JSONResponse(
-        status_code=status.HTTP_200_OK,
-        content=annotated.model_dump(mode="json", exclude_none=True),
-        headers={
-            TIER_HEADER: str(result.target.routed_inference_tier),
-            PROVIDER_HEADER: result.target.provider.name,
-        },
-    )
 
 
 @router.post("/embeddings", response_model=None)

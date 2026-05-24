@@ -73,7 +73,7 @@ from app.providers import (
 logger = logging.getLogger(__name__)
 
 
-def _outcome_label_from_error(exc: ProviderAdapterError) -> str:
+def outcome_label_from_error(exc: ProviderAdapterError) -> str:
     """Pick a stable outcome label for the inference-dispatch metric.
 
     Keeps cardinality bounded — three buckets cover the operator
@@ -647,7 +647,7 @@ class Router:
                     # failure to the right upstream.
                     _record_inference_outcome(
                         target=target,
-                        outcome=_outcome_label_from_error(exc),
+                        outcome=outcome_label_from_error(exc),
                     )
                     raise RoutedProviderError(
                         target=target,
@@ -678,7 +678,7 @@ class Router:
         if last_error is not None and last_error_target is not None:
             _record_inference_outcome(
                 target=last_error_target,
-                outcome=_outcome_label_from_error(last_error),
+                outcome=outcome_label_from_error(last_error),
             )
             raise RoutedProviderError(
                 target=last_error_target,
