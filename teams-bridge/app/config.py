@@ -24,7 +24,7 @@ PRD §5.7's "no telemetry by default" promise) and the log level
 
 from __future__ import annotations
 
-from pydantic import Field
+from pydantic import Field, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -82,6 +82,31 @@ class Settings(BaseSettings):
         default="INFO",
         description="Python logging level for the bridge process.",
     )
+
+    @field_validator(
+        "microsoft_app_id",
+        "microsoft_app_password",
+        "lq_ai_bridge_token",
+        "lq_ai_teams_bridge_public_url",
+    )
+    @classmethod
+    def _required_when_teams_enabled(cls, value: str, info: ValidationInfo) -> str:
+        """Reject empty operator credentials at bridge startup.
+
+        These vars use the ``${VAR:-}`` (empty-default) form in
+        ``docker-compose.yml`` so a default ``docker compose up`` with the
+        ``teams`` profile inactive does not abort at interpolation time
+        (DE-305 — Compose interpolates every service before profile
+        filtering). The "required when the profile is active" guarantee
+        moves here: the bridge only constructs ``Settings`` when its
+        container starts (i.e. when the ``teams`` profile is enabled), so
+        an empty value fails fast with a clear message instead of starting
+        a broken bridge that only errors later at OAuth time.
+        """
+
+        if not value or not value.strip():
+            raise ValueError(f"{info.field_name} is required when the teams profile is enabled")
+        return value
 
 
 _settings: Settings | None = None

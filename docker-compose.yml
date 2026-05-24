@@ -430,13 +430,13 @@ services:
         condition: service_healthy
     environment:
       # Slack-side credentials (operator obtains from Slack App admin UI)
-      SLACK_CLIENT_ID: ${SLACK_CLIENT_ID:?SLACK_CLIENT_ID is required when slack profile is enabled}
-      SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET:?SLACK_CLIENT_SECRET is required when slack profile is enabled}
-      SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:?SLACK_SIGNING_SECRET is required when slack profile is enabled}
+      SLACK_CLIENT_ID: ${SLACK_CLIENT_ID:-}
+      SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET:-}
+      SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:-}
       # LQ.AI-side coordinates
       LQ_AI_BACKEND_URL: ${LQ_AI_BACKEND_URL:-http://api:8000}
-      LQ_AI_BRIDGE_TOKEN: ${LQ_AI_BRIDGE_TOKEN:?LQ_AI_BRIDGE_TOKEN is required when slack profile is enabled}
-      LQ_AI_BRIDGE_PUBLIC_URL: ${LQ_AI_BRIDGE_PUBLIC_URL:?LQ_AI_BRIDGE_PUBLIC_URL is required when slack profile is enabled}
+      LQ_AI_BRIDGE_TOKEN: ${LQ_AI_BRIDGE_TOKEN:-}
+      LQ_AI_BRIDGE_PUBLIC_URL: ${LQ_AI_BRIDGE_PUBLIC_URL:-}
       # Observability (opt-in)
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-lq-ai-slack-bridge}
@@ -473,12 +473,12 @@ services:
         condition: service_healthy
     environment:
       # Microsoft-side credentials (Azure AD multi-tenant app)
-      MICROSOFT_APP_ID: ${MICROSOFT_APP_ID:?MICROSOFT_APP_ID is required when teams profile is enabled}
-      MICROSOFT_APP_PASSWORD: ${MICROSOFT_APP_PASSWORD:?MICROSOFT_APP_PASSWORD is required when teams profile is enabled}
+      MICROSOFT_APP_ID: ${MICROSOFT_APP_ID:-}
+      MICROSOFT_APP_PASSWORD: ${MICROSOFT_APP_PASSWORD:-}
       # LQ.AI-side coordinates
       LQ_AI_BACKEND_URL: ${LQ_AI_BACKEND_URL:-http://api:8000}
-      LQ_AI_BRIDGE_TOKEN: ${LQ_AI_BRIDGE_TOKEN:?LQ_AI_BRIDGE_TOKEN is required when teams profile is enabled}
-      LQ_AI_TEAMS_BRIDGE_PUBLIC_URL: ${LQ_AI_TEAMS_BRIDGE_PUBLIC_URL:?LQ_AI_TEAMS_BRIDGE_PUBLIC_URL is required when teams profile is enabled}
+      LQ_AI_BRIDGE_TOKEN: ${LQ_AI_BRIDGE_TOKEN:-}
+      LQ_AI_TEAMS_BRIDGE_PUBLIC_URL: ${LQ_AI_TEAMS_BRIDGE_PUBLIC_URL:-}
       # Observability (opt-in)
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-lq-ai-teams-bridge}

@@ -4143,6 +4143,8 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 #### DE-305 — Bridge env vars use `${VAR:?}` and break all Compose commands when unset (M3-E1 finding F1)
 
+**Status:** ✅ RESOLVED (2026-05-24) — independently reported by a community contributor as [issue #92](https://github.com/LegalQuants/lq-ai/issues/92). Fix: the 8 opt-in bridge vars in `docker-compose.yml` changed from `${VAR:?msg}` to `${VAR:-}` (the 4 core secrets keep `${VAR:?}`); the "required when the profile is active" guarantee moved into each bridge's `Settings` via a `field_validator` that rejects empty/whitespace credentials at startup (runs only when the profile is active). A default `docker compose up` with only the 4 core vars now succeeds. Regression tests: `slack-bridge/tests/test_config.py`, `teams-bridge/tests/test_config.py`.
+
 **Priority:** P2 (degrades the fresh-install / non-bridge-operator experience) · **Effort:** S (~1–2 hr)
 
 **Context:** Surfaced during M3-E1 fresh-install verification. `docker-compose.yml` declares the slack-bridge and teams-bridge env vars (`LQ_AI_BRIDGE_TOKEN`, `SLACK_CLIENT_ID`, `MICROSOFT_APP_ID`, etc.) with the required-error `${VAR:?msg}` interpolation form. Docker Compose interpolates **every** service definition at parse time regardless of the active `--profile`, so any `docker compose` command (`up`, `down`, `config`, `ps`) fails with `"required variable LQ_AI_BRIDGE_TOKEN is missing a value"` for an operator who has not set the bridge vars — **even one who never enables the `slack`/`teams` profiles.** This directly contradicts `.env.example` (~L297-300): "Operators who don't use Slack can leave all of the variables below unset."
