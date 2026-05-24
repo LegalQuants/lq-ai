@@ -33,6 +33,7 @@ from langgraph.graph import END, StateGraph
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tabular import TabularExecution
+from app.observability_helpers import get_tracer, record_attributes
 from app.tabular.nodes import (
     make_aggregate_node,
     make_extract_cells_node,
@@ -120,7 +121,16 @@ async def run_tabular_execution(
             document_ids=document_ids,
             judge_model=judge_model,
         )
-        await graph.ainvoke(initial_state)
+        tracer = get_tracer()
+        with tracer.start_as_current_span("tabular.execute") as span:
+            record_attributes(
+                span,
+                **{
+                    "tabular.document_count": len(document_ids),
+                    "tabular.column_count": len(columns_state),
+                },
+            )
+            await graph.ainvoke(initial_state)
 
     except TabularExecutorError:
         # Pre-start failure — flip the row to failed and re-raise.

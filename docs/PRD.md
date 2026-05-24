@@ -4249,6 +4249,16 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 **When to ship:** With the SOC2/ISO27001 alignment-doc authoring effort (community-led, counsel-reviewed). Filing now so the M3 boundaries aren't forgotten when that work happens.
 
+#### DE-314 — Tabular executions have no skill linkage for the `tabular.skill_id` span attribute (OTel Deepening)
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** The M3-F2 OTel-deepening plan proposed a `tabular.skill_id` attribute on the `tabular.execute` span, but `TabularExecution` (`api/app/models/tabular.py`) has no `skill_id`/`skill_ids` column — tabular columns each carry their own query, and the execution row is not associated with a single skill. So `tabular.skill_id` cannot be emitted; the span carries `tabular.document_count` + `tabular.column_count` instead.
+
+**Specific scope:** Decide whether tabular executions should carry a skill association (and add the column + emit `tabular.skill_id`), or document that columns — not executions — carry the skill reference and add a per-column `tabular.column.skill` attribute instead.
+
+**When to ship:** Opportunistically, alongside the next tabular-schema change.
+
 #### DE-315 — Streaming-rehydration per-chunk spans (OTel Deepening, anonymization)
 
 **Priority:** P3 · **Effort:** S

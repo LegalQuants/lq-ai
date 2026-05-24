@@ -45,6 +45,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.document import Document, DocumentChunk
 from app.models.file import File
 from app.models.tabular import TabularExecution
+from app.observability_helpers import get_tracer, record_attributes
 from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
 from app.schemas.tabular import ColumnSpec
 from app.tabular.cost import TABULAR_EXTRACTION_PURPOSE
@@ -187,25 +188,34 @@ def make_extract_cells_node(
 
         per_cell_results: list[dict[str, Any]] = []
 
+        tracer = get_tracer()
         for document in documents:
             document_id = uuid.UUID(document["id"])
             for column in columns:
-                chunks = await _fts_over_document(
-                    db,
-                    document_id=document_id,
-                    query=column.query,
-                    limit=RETRIEVAL_TOP_K,
-                )
-                cell = await extract_cell(
-                    gateway=gateway,
-                    judge_model=judge_model,
-                    document_name=document["name"],
-                    chunks=chunks,
-                    column=column,
-                )
-                cell["document_id"] = str(document_id)
-                cell["column_name"] = column.name
-                per_cell_results.append(cell)
+                with tracer.start_as_current_span("tabular.cell") as cell_span:
+                    record_attributes(
+                        cell_span,
+                        **{
+                            "tabular.document.id": document["id"],
+                            "tabular.column.name": column.name,
+                        },
+                    )
+                    chunks = await _fts_over_document(
+                        db,
+                        document_id=document_id,
+                        query=column.query,
+                        limit=RETRIEVAL_TOP_K,
+                    )
+                    cell = await extract_cell(
+                        gateway=gateway,
+                        judge_model=judge_model,
+                        document_name=document["name"],
+                        chunks=chunks,
+                        column=column,
+                    )
+                    cell["document_id"] = str(document_id)
+                    cell["column_name"] = column.name
+                    per_cell_results.append(cell)
 
         return {"per_cell_results": per_cell_results}
 
