@@ -1,0 +1,53 @@
+# LQ.AI — Observability overlay: standalone OpenTelemetry Collector
+#
+# Usage (from repo root):
+#   docker compose \
+#     -f docker-compose.yml \
+#     -f deploy/observability/otel-collector-standalone/docker-compose.observability.yml \
+#     up -d
+#
+# This overlay is the LEAN variant for operators who already have a tracing
+# backend (Honeycomb, Datadog, Lightstep, or any OTLP-compatible endpoint).
+# It adds only the collector; no Grafana, Tempo, Loki, or Prometheus are
+# bundled here.  Configure your backend in otel-collector-config.yaml before
+# bringing the stack up.
+#
+# Compose merges environment maps, so base-service env vars are preserved.
+#
+# See deploy/observability/otel-collector-standalone/.env.example for tunable vars.
+
+name: lq-ai
+
+services:
+  # ============================================================
+  # Override existing services — enable OTLP export to collector
+  # ============================================================
+
+  api:
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_SERVICE_NAME: lq-ai-api
+      OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parentbased_always_on}
+
+  gateway:
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_SERVICE_NAME: lq-ai-gateway
+      OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parentbased_always_on}
+
+  # ============================================================
+  # Standalone collector — stateless, forwards to operator backend
+  # ============================================================
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.109.0
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./deploy/observability/otel-collector-standalone/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      # Expose on loopback only — no host binding needed for in-stack use.
+      # 4317 = gRPC, 4318 = HTTP/protobuf.  Both exposed so operators can
+      # also forward host-side instrumented processes without config changes.
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+    restart: unless-stopped

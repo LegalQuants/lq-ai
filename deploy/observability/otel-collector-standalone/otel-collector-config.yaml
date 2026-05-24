@@ -1,0 +1,85 @@
+# OpenTelemetry Collector configuration for LQ.AI — standalone / forward-to-backend variant
+#
+# This configuration runs out-of-the-box with the `debug` exporter so the
+# collector starts and validates cleanly.  To forward traces to your backend,
+# uncomment the relevant exporter block below and update the pipeline's
+# exporters list from [debug] to your backend (e.g. [otlp/honeycomb]).
+#
+# Receiver: OTLP over HTTP (4318) and gRPC (4317).
+# Processors: batch — buffers spans before export to reduce round-trips.
+# Exporters: debug (active, always on) + commented backend blocks.
+#
+# gRPC vs HTTP per backend:
+#   Honeycomb  — OTLP/gRPC on port 443 (TLS).
+#   Datadog    — uses the native datadog exporter (contrib image required; we use it).
+#   Lightstep  — OTLP/gRPC on port 443 (TLS).
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+
+exporters:
+  # ------------------------------------------------------------------
+  # debug — ACTIVE.  Logs span summaries to collector stdout so you
+  # can confirm traces are flowing before wiring a real backend.
+  # Safe to leave enabled alongside a backend exporter.
+  # ------------------------------------------------------------------
+  debug:
+    verbosity: basic
+
+  # ------------------------------------------------------------------
+  # Honeycomb — OTLP/gRPC on port 443 with TLS.
+  # Requires env var: HONEYCOMB_API_KEY
+  # Uncomment this block, then set exporters in the pipeline to
+  # [otlp/honeycomb] (or [debug, otlp/honeycomb] to keep logging).
+  # ------------------------------------------------------------------
+  # otlp/honeycomb:
+  #   endpoint: api.honeycomb.io:443
+  #   headers:
+  #     x-honeycomb-team: ${HONEYCOMB_API_KEY}
+  #   tls:
+  #     insecure: false   # port 443 uses TLS — do NOT set insecure: true
+
+  # ------------------------------------------------------------------
+  # Datadog — uses the native datadog exporter (contrib image, which
+  # this recipe already uses).  No OTLP relay needed.
+  # Requires env vars: DD_API_KEY, DD_SITE (default: datadoghq.com)
+  # Uncomment this block, then set exporters in the pipeline to
+  # [datadog] (or [debug, datadog]).
+  # ------------------------------------------------------------------
+  # datadog:
+  #   api:
+  #     key: ${DD_API_KEY}
+  #     site: ${DD_SITE:-datadoghq.com}
+
+  # ------------------------------------------------------------------
+  # Lightstep — OTLP/gRPC on port 443 with TLS.
+  # Requires env var: LS_ACCESS_TOKEN
+  # Uncomment this block, then set exporters in the pipeline to
+  # [otlp/lightstep] (or [debug, otlp/lightstep]).
+  # ------------------------------------------------------------------
+  # otlp/lightstep:
+  #   endpoint: ingest.lightstep.com:443
+  #   headers:
+  #     lightstep-access-token: ${LS_ACCESS_TOKEN}
+  #   tls:
+  #     insecure: false   # port 443 uses TLS — do NOT set insecure: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      # To forward to your backend, replace [debug] with your exporter, e.g.:
+      #   exporters: [otlp/honeycomb]
+      #   exporters: [datadog]
+      #   exporters: [otlp/lightstep]
+      # You can also combine: exporters: [debug, otlp/honeycomb]
+      exporters: [debug]
