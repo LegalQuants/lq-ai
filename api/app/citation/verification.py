@@ -45,6 +45,7 @@ from rapidfuzz import fuzz
 
 from app.citation.judge_prompts import build_judge_prompt
 from app.citation.normalization import normalize
+from app.observability_helpers import get_tracer, record_attributes
 from app.schemas.gateway import ChatCompletionRequest
 
 logger = logging.getLogger(__name__)
@@ -520,6 +521,27 @@ async def verify_ensemble(
 # --- Cascade router ----------------------------------------------------------
 
 
+def _set_result_attrs(span: object, result: VerificationResult) -> None:
+    """Copy verification outcome fields onto a span as OTel attributes.
+
+    Called on every return path from :func:`verify` so the top-level
+    ``citation.verify`` span always carries the final outcome regardless
+    of which stage short-circuited. ``record_attributes`` drops None
+    values (method/confidence are None on MISS) and no-ops when the
+    span is not recording (OTel disabled).
+    """
+
+    record_attributes(
+        span,  # type: ignore[arg-type]
+        **{
+            "citation.method": result.method,
+            "citation.confidence": result.confidence,
+            "citation.partial": result.partial,
+            "citation.tier_envelope": result.tier_envelope,
+        },
+    )
+
+
 async def verify(
     candidate: _CandidateProtocol,
     document: _DocumentProtocol,
@@ -564,23 +586,73 @@ async def verify(
     drops the kwarg, falling the cascade back to Stage 3.
     """
 
-    result = verify_exact_match(candidate, document)
-    if result.verified:
+    tracer = get_tracer()
+    with tracer.start_as_current_span("citation.verify") as top:
+        record_attributes(top, **{"document.id": str(document.id)})
+
+        with tracer.start_as_current_span("citation.stage.exact_match") as s:
+            result = verify_exact_match(candidate, document)
+            record_attributes(
+                s,
+                **{
+                    "citation.stage.verified": result.verified,
+                    "citation.stage.confidence": result.confidence,
+                },
+            )
+        if result.verified:
+            top.add_event("exact_match.hit")
+            _set_result_attrs(top, result)
+            return result
+
+        with tracer.start_as_current_span("citation.stage.tolerant_match") as s:
+            result = verify_tolerant_match(candidate, document)
+            record_attributes(
+                s,
+                **{
+                    "citation.stage.verified": result.verified,
+                    "citation.stage.confidence": result.confidence,
+                },
+            )
+        if result.verified:
+            top.add_event("tolerant_match.hit")
+            _set_result_attrs(top, result)
+            return result
+
+        if gateway is None:
+            _set_result_attrs(top, _MISS)
+            return _MISS
+
+        if ensemble_config is not None:
+            with tracer.start_as_current_span("citation.stage.ensemble") as s:
+                result = await verify_ensemble(
+                    candidate,
+                    document,
+                    gateway=gateway,
+                    ensemble_config=ensemble_config,
+                )
+                record_attributes(
+                    s,
+                    **{
+                        "citation.stage.verified": result.verified,
+                        "citation.stage.confidence": result.confidence,
+                        "citation.ensemble.n_judges": len(ensemble_config.judge_models),
+                        "citation.ensemble.rule": ensemble_config.aggregation_rule,
+                    },
+                )
+        else:
+            with tracer.start_as_current_span("citation.stage.paraphrase_judge") as s:
+                result = await verify_paraphrase(
+                    candidate,
+                    document,
+                    gateway=gateway,
+                    judge_model=judge_model,
+                )
+                record_attributes(
+                    s,
+                    **{
+                        "citation.stage.verified": result.verified,
+                        "citation.stage.confidence": result.confidence,
+                    },
+                )
+        _set_result_attrs(top, result)
         return result
-
-    result = verify_tolerant_match(candidate, document)
-    if result.verified:
-        return result
-
-    if gateway is None:
-        return _MISS
-
-    if ensemble_config is not None:
-        return await verify_ensemble(
-            candidate,
-            document,
-            gateway=gateway,
-            ensemble_config=ensemble_config,
-        )
-
-    return await verify_paraphrase(candidate, document, gateway=gateway, judge_model=judge_model)

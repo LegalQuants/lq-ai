@@ -63,6 +63,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
+from opentelemetry import trace
 from pydantic import BaseModel, ValidationError as PydanticValidationError
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1481,6 +1482,13 @@ async def _resolve_ensemble_config(
                 "estimated_usd": round(estimated_usd, 4),
                 "max_cost_per_message_usd": config.max_cost_per_message_usd,
                 "per_judge_usd": [float(c) for c in per_judge_costs],
+            },
+        )
+        trace.get_current_span().add_event(
+            "ensemble.budget_fallback",
+            attributes={
+                "estimated_usd": float(estimated_usd),
+                "budget_usd": float(config.max_cost_per_message_usd),
             },
         )
         return None
