@@ -80,6 +80,15 @@ class PseudonymMapper:
         self._assignments[key] = pseudonym
         return pseudonym
 
+    def entity_counts(self) -> dict[str, int]:
+        """Return a copy of per-entity-type replacement counts.
+
+        Counts + type names only — never the original entity text (which
+        lives in ``self._assignments`` keys and must never be exported).
+        """
+
+        return dict(self._counters)
+
     def reverse(self) -> dict[str, str]:
         """Return a fresh ``pseudonym → original`` mapping for rehydration.
 

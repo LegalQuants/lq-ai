@@ -4249,6 +4249,16 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 **When to ship:** With the SOC2/ISO27001 alignment-doc authoring effort (community-led, counsel-reviewed). Filing now so the M3 boundaries aren't forgotten when that work happens.
 
+#### DE-315 — Streaming-rehydration per-chunk spans (OTel Deepening, anonymization)
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** The `StreamingRehydrator.process()` / `flush()` path (`gateway/app/anonymization/middleware.py`) is not yet instrumented with OTel spans. The M3-F2 anonymization-span work (`anonymization.pre` / `anonymization.post`) deliberately excluded per-chunk spans: each SSE chunk is a high-frequency call and naive per-chunk span emission would produce unbounded span volume under a long streaming response.
+
+**Specific scope:** Add a single span around the rehydrator lifecycle (wrapping the first `process()` call through `flush()`) or sampled per-chunk events so operators can see streaming anonymization overhead without flooding the trace backend. A sampling/aggregation strategy (e.g., record only on the `flush()` call with a byte-count + chunk-count summary) should be designed before implementation. The invariant — that raw entity text never appears in any span attribute — extends to this work.
+
+**When to ship:** After DE-299 (structured log correlation) and DE-300 (log-trace injection) have stabilized; streaming spans are most useful when they can be correlated to the surrounding request trace.
+
 ---
 
 ## 10. Appendices

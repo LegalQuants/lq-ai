@@ -43,6 +43,7 @@ from typing import Any
 from app.anonymization.engine import Anonymizer
 from app.anonymization.mapper import PseudonymMapper
 from app.config import AnonymizationConfig
+from app.observability_helpers import get_tracer, record_attributes, traced
 from app.providers.openai_schema import ChatCompletionRequest, ChatCompletionResponse
 
 __all__ = [
@@ -78,40 +79,67 @@ def pre_anonymize_request(
     unchanged.
     """
 
-    if not config.enabled:
-        return None
-    if routed_tier not in config.apply_at_tiers:
-        return None
-    if chat_request.lq_ai_privileged:
-        return None
-    if not chat_request.anonymize:
-        return None
+    tracer = get_tracer()
+    with tracer.start_as_current_span("anonymization.pre") as span:
+        record_attributes(
+            span,
+            **{"anonymization.enabled": config.enabled, "anonymization.tier": routed_tier},
+        )
 
-    mapper = PseudonymMapper()
+        skip_reason: str | None = None
+        if not config.enabled:
+            skip_reason = "disabled"
+        elif routed_tier not in config.apply_at_tiers:
+            skip_reason = "tier_floor"
+        elif chat_request.lq_ai_privileged:
+            skip_reason = "privileged"
+        elif not chat_request.anonymize:
+            skip_reason = "request_opt_out"
 
-    for message in chat_request.messages:
-        if message.role not in _ANONYMIZED_ROLES:
-            continue
-        if message.content is None:
-            continue
-        # M2-D2: per Decision M2-1, retrieved source documents stay
-        # un-pseudonymized so the model sees intact source quotes for
-        # citation grounding. The api/ marks the retrieval-context
-        # system message with ``lq_ai_skip_anonymization=True``; the
-        # middleware honors the flag here. Other system messages (the
-        # chat's own system instructions, skill-assembled prompts)
-        # still get pseudonymized normally.
-        if getattr(message, "lq_ai_skip_anonymization", False):
-            continue
-        message.content = anonymizer.pseudonymize_into(message.content, mapper)
-
-    if chat_request.lq_ai_skill_inputs:
-        for skill_name, inputs in chat_request.lq_ai_skill_inputs.items():
-            chat_request.lq_ai_skill_inputs[skill_name] = _pseudonymize_strings(
-                inputs, anonymizer=anonymizer, mapper=mapper
+        if skip_reason is not None:
+            record_attributes(
+                span,
+                **{
+                    "anonymization.skip_reason": skip_reason,
+                    "anonymization.entity_count": 0,
+                },
             )
+            span.add_event(f"anonymization.skip.{skip_reason}")
+            return None
 
-    return mapper
+        mapper = PseudonymMapper()
+
+        for message in chat_request.messages:
+            if message.role not in _ANONYMIZED_ROLES:
+                continue
+            if message.content is None:
+                continue
+            # M2-D2: per Decision M2-1, retrieved source documents stay
+            # un-pseudonymized so the model sees intact source quotes for
+            # citation grounding. The api/ marks the retrieval-context
+            # system message with ``lq_ai_skip_anonymization=True``; the
+            # middleware honors the flag here. Other system messages (the
+            # chat's own system instructions, skill-assembled prompts)
+            # still get pseudonymized normally.
+            if getattr(message, "lq_ai_skip_anonymization", False):
+                continue
+            message.content = anonymizer.pseudonymize_into(message.content, mapper)
+
+        if chat_request.lq_ai_skill_inputs:
+            for skill_name, inputs in chat_request.lq_ai_skill_inputs.items():
+                chat_request.lq_ai_skill_inputs[skill_name] = _pseudonymize_strings(
+                    inputs, anonymizer=anonymizer, mapper=mapper
+                )
+
+        counts = mapper.entity_counts()
+        record_attributes(
+            span,
+            **{
+                "anonymization.entity_count": sum(counts.values()),
+                "anonymization.entity_types": sorted(counts.keys()),
+            },
+        )
+        return mapper
 
 
 # Anchored to end of buffer: a sequence that starts with an uppercase
@@ -197,6 +225,7 @@ class StreamingRehydrator:
         return out
 
 
+@traced("anonymization.post")
 def post_anonymize_response(
     *,
     response: ChatCompletionResponse,
