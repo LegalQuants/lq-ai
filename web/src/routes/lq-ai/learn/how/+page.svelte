@@ -1,11 +1,11 @@
 <!--
   /lq-ai/learn/how — "How It Works" visualization page.
 
-  Ten interactive playground iframes in narrative order: system map →
+  Eleven interactive playground iframes in narrative order: system map →
   request lifecycle → tier system → skill composition → citation engine →
   anonymization layer → data residency → playbook cascade → tabular review →
-  word add-in flow. Each section has: a heading, a 2-3 sentence framing
-  paragraph, the embedded iframe, and an "Open full-screen" link.
+  word add-in flow → observability trace. Each section has: a heading, a 2-3
+  sentence framing paragraph, the embedded iframe, and an "Open full-screen" link.
 
   Iframes load the static HTML playgrounds at /learn/playgrounds/*.html
   served directly by the web container from web/static/learn/playgrounds/.

@@ -160,12 +160,32 @@
 			</div>
 		</section>
 
+		<!-- 3b: Dev-facing visualizations -->
+		<section class="lq-build-section" data-testid="lq-ai-learn-build-section-dev-viz">
+			<h2 class="lq-section-h">Before you open a PR: what must pass, and how to trace it</h2>
+			<p class="lq-text-body">
+				Two interactive maps help you ship a change that merges cleanly. The test landscape shows
+				every gate a PR must clear before merge — unit, integration, end-to-end, lint, type-check,
+				and coverage — and where each one lives. The observability trace shows the OpenTelemetry
+				span tree a single chat-send produces, so you can see exactly where to add instrumentation
+				for a new surface.
+			</p>
+			<div class="lq-build-links">
+				<a href="/learn/playgrounds/test-landscape.html" class="lq-link" target="_blank" rel="noopener noreferrer">Test landscape: what must pass before merge ↗</a>
+				<span class="lq-sep">·</span>
+				<a href="/learn/playgrounds/otel-eval.html" class="lq-link" target="_blank" rel="noopener noreferrer">Observability trace explorer ↗</a>
+				<span class="lq-sep">·</span>
+				<a href="https://github.com/LegalQuants/lq-ai/blob/main/docs/observability.md" class="lq-link" target="_blank" rel="noopener noreferrer">docs/observability.md</a>
+			</div>
+		</section>
+
 		<!-- 4: Roadmap -->
 		<section class="lq-build-section" data-testid="lq-ai-learn-build-section-roadmap">
 			<h2 class="lq-section-h">The roadmap</h2>
 			<p class="lq-text-body">
-				LQ.AI follows a milestone-based roadmap. M1 ships the foundation. Each subsequent
-				milestone adds a named capability layer on top.
+				LQ.AI follows a milestone-based roadmap. M1 shipped the foundation; M2 and M3 each added a
+				named capability layer on top. M1, M2, and M3 are all shipped as of v0.3.0; M4 is the next
+				milestone.
 			</p>
 			<div class="lq-roadmap-list">
 				<div class="lq-roadmap-item lq-roadmap-item--shipped">
@@ -177,20 +197,20 @@
 						Three provider adapters: Anthropic, OpenAI, Ollama.
 					</div>
 				</div>
-				<div class="lq-roadmap-item">
-					<div class="lq-roadmap-pill lq-roadmap-pill--future">M2</div>
+				<div class="lq-roadmap-item lq-roadmap-item--shipped">
+					<div class="lq-roadmap-pill">M2</div>
 					<div>
-						<strong>Citation Engine + Anonymization Layer + Playbooks.</strong>
-						Character-level citation verification, personal-data pseudonymization
-						before inference, multi-step playbook execution. Vertex AI and AWS
-						Bedrock provider adapters.
+						<strong>Citation Engine + Anonymization Layer.</strong>
+						Character-level citation verification and personal-data pseudonymization
+						before inference, plus the Azure OpenAI provider adapter.
 					</div>
 				</div>
-				<div class="lq-roadmap-item">
-					<div class="lq-roadmap-pill lq-roadmap-pill--future">M3</div>
+				<div class="lq-roadmap-item lq-roadmap-item--shipped">
+					<div class="lq-roadmap-pill">M3</div>
 					<div>
-						<strong>Integrations.</strong> Microsoft Word add-in (Office.js), Slack/Teams
-						bridge, Tabular Review surface.
+						<strong>Capability surfaces + integrations.</strong> Playbooks, Tabular Review,
+						Slack/Teams intake bridges, OpenTelemetry observability, and the Microsoft Word
+						add-in (Office.js — plumbing only at v0.3.0; the in-pane feature surface is deferred).
 					</div>
 				</div>
 				<div class="lq-roadmap-item">

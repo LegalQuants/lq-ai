@@ -1,7 +1,7 @@
 <!--
   /lq-ai/learn/use — "How to Use" feature tour.
 
-  Ten sections covering every M1 user-facing capability. Each section has:
+  Sections covering every user-facing capability across M1–M3. Each section has:
   - A heading
   - A plain-language description
   - A <details> foldout linking to the relevant source file paths, E2E
@@ -15,8 +15,9 @@
 		<a href="/lq-ai/learn" class="lq-back-link">← Learn</a>
 		<h1 class="lq-text-page-h">How to Use LQ.AI</h1>
 		<p class="lq-text-body lq-page-intro">
-			A plain-language tour of every M1 feature. Each section names the file paths and test
-			that exercise the behavior described, so you can verify any claim against the source.
+			A plain-language tour of every user-facing feature across M1–M3. Each section names the
+			file paths and test that exercise the behavior described, so you can verify any claim
+			against the source.
 		</p>
 	</header>
 
@@ -222,7 +223,7 @@
 				in the composer toolbar to open the receipts drawer. Each receipt entry shows: the
 				request timestamp, the model and provider used, the tier in effect, the full
 				assembled prompt (including any skill system prompt and KB chunks), and — when a
-				skill was invoked — "via slash command /<alias>". Receipts are read-only audit
+				skill was invoked — "via slash command /&lt;alias&gt;". Receipts are read-only audit
 				artifacts; they cannot be edited or deleted through the UI.
 			</p>
 			<details class="lq-verify">
@@ -291,12 +292,146 @@
 			</details>
 		</section>
 
+		<!-- 11 -->
+		<section class="lq-use-section" data-testid="lq-ai-learn-use-section-citations">
+			<h2 class="lq-section-h">11. Read verified citations</h2>
+			<p class="lq-text-body">
+				When a model reply quotes a source in the form <code>"&lt;quote&gt;" (Source: [N])</code>,
+				the Citation Engine verifies each quote against the cited source before it counts. Verified
+				quotes render as a green chip in the chat message; quotes the model emitted but that could
+				not be matched render as a grey <code>[unverified]</code> chip. There are four chip states —
+				verified by exact match, verified by tolerant match, verified by paraphrase judge, and
+				unverified — so you see not just whether a citation checked out but how strong the match was.
+				Click a verified chip to jump to the matched span in the source.
+			</p>
+			<details class="lq-verify">
+				<summary class="lq-verify-summary">Dig deeper / verify</summary>
+				<div class="lq-verify-body">
+					<p><strong>Source:</strong>
+						<a href="https://github.com/LegalQuants/lq-ai/blob/main/api/app/citation/verification.py" class="lq-link" target="_blank" rel="noopener noreferrer">api/app/citation/verification.py</a>
+						— four-stage cascade;
+						<a href="https://github.com/LegalQuants/lq-ai/blob/main/web/src/lib/lq-ai/components/M2Citations.svelte" class="lq-link" target="_blank" rel="noopener noreferrer">web/src/lib/lq-ai/components/M2Citations.svelte</a>
+						— chip rendering.
+					</p>
+					<p><strong>E2E test:</strong>
+						<a href="https://github.com/LegalQuants/lq-ai/blob/main/web/cypress/e2e/m2-c2-citation-states.cy.ts" class="lq-link" target="_blank" rel="noopener noreferrer">web/cypress/e2e/m2-c2-citation-states.cy.ts</a>
+					</p>
+				</div>
+			</details>
+		</section>
+
+		<!-- 12 -->
+		<section class="lq-use-section" data-testid="lq-ai-learn-use-section-playbooks">
+			<h2 class="lq-section-h">12. Run a playbook against a document</h2>
+			<p class="lq-text-body">
+				A playbook codifies your organization's standard positions on common contract issues. From
+				<a href="/lq-ai/playbooks" class="lq-link">Playbooks</a>, pick a playbook, choose the document
+				to review, preview the cost, and run it. Execution walks each position through a four-node
+				cascade — retrieve the matching clause, classify it against your standard, draft a redline
+				where it deviates, and compile the result. Each position lands on one of four verdicts so you
+				can triage at a glance. Completed runs are saved and re-openable from
+				<a href="/lq-ai/playbook-executions" class="lq-link">playbook executions</a>.
+			</p>
+			<details class="lq-verify">
+				<summary class="lq-verify-summary">Dig deeper / verify</summary>
+				<div class="lq-verify-body">
+					<p><strong>Source:</strong>
+						<a href="https://github.com/LegalQuants/lq-ai/blob/main/api/app/playbooks/nodes.py" class="lq-link" target="_blank" rel="noopener noreferrer">api/app/playbooks/nodes.py</a>
+						— cascade nodes;
+						<a href="https://github.com/LegalQuants/lq-ai/blob/main/api/app/api/playbooks.py" class="lq-link" target="_blank" rel="noopener noreferrer">api/app/api/playbooks.py</a>
+						— endpoints.
+					</p>
+					<p><strong>E2E test:</strong>
+						<a href="https://github.com/LegalQuants/lq-ai/blob/main/web/cypress/e2e/m3-a4-playbook-execution.cy.ts" class="lq-link" target="_blank" rel="noopener noreferrer">web/cypress/e2e/m3-a4-playbook-execution.cy.ts</a>
+					</p>
+					<p><strong>Audit action:</strong> <code>playbook.created</code>, <code>playbook.updated</code>, <code>playbook.deleted</code></p>
+				</div>
+			</details>
+		</section>
+
+		<!-- 13 -->
+		<section class="lq-use-section" data-testid="lq-ai-learn-use-section-tabular">
+			<h2 class="lq-section-h">13. Compare many documents in a grid</h2>
+			<p class="lq-text-body">
+				Tabular Review asks the same set of questions across a set of documents and lays the answers
+				out in a grid — one row per document, one column per question. From
+				<a href="/lq-ai/tabular" class="lq-link">Tabular Review</a>, a four-step wizard collects the
+				documents, the questions, and a cost preview, then runs the extraction. Each cell is grounded
+				in the chunks the model cited; click a cell to open its citation drawer. Finished grids export
+				to XLSX or CSV.
+			</p>
+			<details class="lq-verify">
+				<summary class="lq-verify-summary">Dig deeper / verify</summary>
+				<div class="lq-verify-body">
+					<p><strong>Source:</strong>
+						<a href="https://github.com/LegalQuants/lq-ai/blob/main/api/app/tabular/nodes.py" class="lq-link" target="_blank" rel="noopener noreferrer">api/app/tabular/nodes.py</a>
+						— extraction nodes;
+						<a href="https://github.com/LegalQuants/lq-ai/blob/main/api/app/api/tabular.py" class="lq-link" target="_blank" rel="noopener noreferrer">api/app/api/tabular.py</a>
+						— endpoints + export.
+					</p>
+					<p><strong>E2E test:</strong>
+						<a href="https://github.com/LegalQuants/lq-ai/blob/main/web/cypress/e2e/m3-c-tabular-review.cy.ts" class="lq-link" target="_blank" rel="noopener noreferrer">web/cypress/e2e/m3-c-tabular-review.cy.ts</a>
+					</p>
+					<p><strong>Audit action:</strong> <code>tabular.execution_started</code>, <code>tabular.execution_exported</code></p>
+				</div>
+			</details>
+		</section>
+
+		<!-- 14 -->
+		<section class="lq-use-section" data-testid="lq-ai-learn-use-section-word-addin">
+			<h2 class="lq-section-h">14. Word add-in (plumbing only at v0.3.0)</h2>
+			<p class="lq-text-body">
+				The Microsoft Word add-in is an Office.js task pane that installs against your own deployment.
+				At v0.3.0, only the plumbing has shipped: an admin generates a per-deployment manifest, the
+				operator sideloads the unsigned manifest (Microsoft 365 warns about the unsigned package —
+				expected), the pane completes OAuth against the deployment, and a version handshake confirms
+				compatibility. The in-pane feature surface — chat, skills, playbooks — is deferred (DE-287),
+				and a signed distribution package is community-led (DE-295). We call this out plainly rather
+				than implying the editor experience is finished.
+			</p>
+			<details class="lq-verify">
+				<summary class="lq-verify-summary">Dig deeper / verify</summary>
+				<div class="lq-verify-body">
+					<p><strong>Source:</strong>
+						<a href="https://github.com/LegalQuants/lq-ai/blob/main/api/app/api/word_addin.py" class="lq-link" target="_blank" rel="noopener noreferrer">api/app/api/word_addin.py</a>;
+						<a href="https://github.com/LegalQuants/lq-ai/blob/main/docs/word-addin.md" class="lq-link" target="_blank" rel="noopener noreferrer">docs/word-addin.md</a>
+					</p>
+					<p><strong>E2E test:</strong>
+						<a href="https://github.com/LegalQuants/lq-ai/blob/main/web/cypress/e2e/m3-b2-word-addin-oauth.cy.ts" class="lq-link" target="_blank" rel="noopener noreferrer">web/cypress/e2e/m3-b2-word-addin-oauth.cy.ts</a>
+					</p>
+				</div>
+			</details>
+		</section>
+
+		<!-- 15 -->
+		<section class="lq-use-section" data-testid="lq-ai-learn-use-section-intake-bridges">
+			<h2 class="lq-section-h">15. Intake bridges: Slack + Teams (admin)</h2>
+			<p class="lq-text-body">
+				Intake bridges let a legal team take in requests from Slack and Microsoft Teams. This is an
+				admin-facing surface: from <a href="/lq-ai/admin/intake-bridges" class="lq-link">Admin →
+				Intake bridges</a>, an administrator connects a workspace over OAuth, lists the configured
+				bridges, and soft-deletes ones that are no longer needed. The bridge services run as separate
+				deployments. Honest state: the admin shell and backend persistence have shipped; end-to-end
+				OAuth against live Slack and Teams workspaces is not yet validated in CI (DE-312).
+			</p>
+			<details class="lq-verify">
+				<summary class="lq-verify-summary">Dig deeper / verify</summary>
+				<div class="lq-verify-body">
+					<p><strong>Source:</strong>
+						<a href="https://github.com/LegalQuants/lq-ai/blob/main/api/app/api/admin_intake_bridges.py" class="lq-link" target="_blank" rel="noopener noreferrer">api/app/api/admin_intake_bridges.py</a>;
+						<a href="https://github.com/LegalQuants/lq-ai/blob/main/slack-bridge/" class="lq-link" target="_blank" rel="noopener noreferrer">slack-bridge/</a>;
+						<a href="https://github.com/LegalQuants/lq-ai/blob/main/teams-bridge/" class="lq-link" target="_blank" rel="noopener noreferrer">teams-bridge/</a>
+					</p>
+				</div>
+			</details>
+		</section>
+
 	</div>
 
 	<footer class="lq-use-footer">
 		<p class="lq-text-body">
 			<a href="/lq-ai/learn/how" class="lq-link">Want to see how this all fits together?</a>
-			— Five interactive playgrounds that show the system from request to response.
+			— Eleven interactive playgrounds that show the system from request to response.
 		</p>
 		<p class="lq-text-body">
 			For the full shipped/deferred capability catalog, read
