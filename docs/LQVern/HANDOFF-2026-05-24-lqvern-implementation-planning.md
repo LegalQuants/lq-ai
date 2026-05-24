@@ -84,7 +84,7 @@ The design docs (ADR 0013 + PRD §3.10 build-out + alignment guide) currently li
 
 ## 7. Loose ends (not blocking, for awareness)
 
-- **PR #96** — the DE-305 fix (bridge `${VAR:?}` install-blocker, community issue #92). If merged, a **v0.3.1** patch tag + Tucuxi mirror is worth considering (it's a docs-stated install-blocker). Move-tag-for-green-release pattern: see how v0.3.0 was handled (memory `project_lq_ai_status`).
+- **PR #96 (DE-305 / #92) is MERGED** → `main` `8b8e549`. The **v0.3.1 patch is in flight**: version-bump PR **#97** (api+gateway `__version__` 0.3.0→0.3.1) is open (protected main needs it merged before tagging). Once #97 merges, cut the tag: `git tag -a v0.3.1 <main HEAD> -m "v0.3.1 — DE-305 default-install fix"` + `git push origin v0.3.1` (Release workflow runs green: images + SBOM + cosign) + `git push tucuxi v0.3.1` + `gh release create v0.3.1 --latest` (the workflow does NOT auto-create the GitHub Release). Same flow as v0.3.0 (memory `project_lq_ai_status`).
 - **Open dependabot:** #66 (docling→3), #69 (html2canvas→2), #72 (marked 9→18) — held majors awaiting eval; #68 (langgraph→1.3) fails CI (breaking) — **note: langgraph is what the executor uses, so the langgraph major bump intersects M4; evaluate it as part of M4 dep work**; #73 (fastapi) may have auto-merged.
 - The bridge test suites (`slack-bridge/`, `teams-bridge/`) and the repo-root `tests/` are **not in the main CI matrix** — a known gap.
 
