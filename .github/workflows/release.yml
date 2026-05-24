@@ -104,6 +104,18 @@ jobs:
             echo "tag=dryrun-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           fi
 
+      # syft pulls the just-pushed image from GHCR, which is private — without
+      # an authenticated docker login the pull fails with `UNAUTHORIZED` and the
+      # SBOM step errors out (the build-and-push and sign jobs already log in;
+      # this job was missing the equivalent step). packages:read on this job is
+      # sufficient for the pull.
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Generate SBOM (SPDX JSON)
         uses: anchore/sbom-action@v0
         with:
