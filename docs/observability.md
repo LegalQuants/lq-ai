@@ -68,6 +68,13 @@ each stage that runs.
 | `citation.stage.paraphrase_judge` | Stage 2 misses (single-judge path) |
 | `citation.stage.ensemble` | Ensemble path active (replaces paraphrase_judge) |
 
+**Attributes on each `citation.stage.*` child span:**
+
+| Attribute | Description |
+|---|---|
+| `citation.stage.verified` | Boolean; whether this stage verified the candidate |
+| `citation.stage.confidence` | Float 0.0–1.0; this stage's confidence for the candidate |
+
 **Attributes on `citation.verify`:**
 
 | Attribute | Description |
@@ -106,10 +113,16 @@ entity-detection + pseudonymization pass before the model call;
 | Attribute | Description |
 |---|---|
 | `anonymization.enabled` | Boolean; `false` when the tier or project configuration skips anonymization |
-| `anonymization.skip_reason` | Present when `enabled=false`; values include `tier_below_threshold`, `privileged_project`, `retrieval_context` |
+| `anonymization.skip_reason` | Present when `enabled=false`; one of `disabled`, `tier_floor`, `privileged`, `request_opt_out` |
 | `anonymization.entity_count` | Integer count of entities detected (pre) or rehydrated (post) |
-| `anonymization.entity_types` | Comma-separated list of entity type labels (e.g., `PERSON,MATTER_NUMBER`). **Never raw entity values** — see [§4](#4-anonymization-and-telemetry). |
+| `anonymization.entity_types` | Array of distinct entity type labels, sorted (e.g., `["MATTER_NUMBER", "PERSON"]`). **Never raw entity values** — see [§4](#4-anonymization-and-telemetry). |
 | `anonymization.tier` | Inference tier at the time of the anonymization decision |
+
+**Span events:**
+
+| Event | Meaning |
+|---|---|
+| `anonymization.skip.{skip_reason}` | Emitted when anonymization is skipped; the suffix is the `skip_reason` value (`disabled`, `tier_floor`, `privileged`, or `request_opt_out`) |
 
 ---
 
@@ -139,10 +152,12 @@ this span — tracked at [DE-317](PRD.md#de-317--inferencedispatch-span-on-the-s
 | `inference.provider` | Provider name: `anthropic`, `openai`, `azure_openai`, `ollama` |
 | `inference.model` | Model ID as sent to the provider |
 | `inference.tier` | Routed inference tier (1–5) |
-| `inference.outcome` | `success`, `fallback`, or `error` |
+| `inference.outcome` | `success`, `unavailable`, `network_error`, or `provider_error` |
 | `inference.tokens_in` | Prompt token count |
 | `inference.tokens_out` | Completion token count |
 | `inference.cost_usd` | Computed cost in USD at configured per-model rates |
+
+On the `unavailable` path (no adapter could be instantiated for the resolved target), only `inference.provider` and `inference.outcome` are set — `inference.model`, `inference.tier`, `inference.tokens_in`/`inference.tokens_out`, and `inference.cost_usd` are absent, because no native model or tier was resolved.
 
 ---
 
@@ -171,7 +186,7 @@ not exposed on a public interface by default.
 | `lq_ai_api_http_request_duration_seconds` | Histogram | `method`, `route`, `status` | Request latency distribution on the api service |
 | `lq_ai_gateway_http_requests_total` | Counter | `method`, `route`, `status` | Total HTTP requests handled by the gateway service |
 | `lq_ai_gateway_http_request_duration_seconds` | Histogram | `method`, `route`, `status` | Request latency distribution on the gateway service |
-| `lq_ai_gateway_inference_requests_total` | Counter | `provider`, `tier`, `outcome` | Inference dispatches by provider, tier, and outcome (success / fallback / error) |
+| `lq_ai_gateway_inference_requests_total` | Counter | `provider`, `tier`, `outcome` | Inference dispatches by provider, tier, and outcome (`success`, `network_error`, or `provider_error`). The no-adapter `unavailable` case is a span-only outcome and does not increment this counter. |
 
 ---
 
@@ -228,7 +243,7 @@ entity values.**
 
 Concretely: if a request triggers anonymization of three person names and one matter
 number, the `anonymization.entity_count` attribute is `4` and
-`anonymization.entity_types` is `PERSON,MATTER_NUMBER`. The actual names and the
+`anonymization.entity_types` is the sorted array `["MATTER_NUMBER", "PERSON"]`. The actual names and the
 matter number do not appear in any span attribute, span event, or metric label.
 
 This invariant is enforced by `gateway/tests/test_anonymization_observability.py`.
