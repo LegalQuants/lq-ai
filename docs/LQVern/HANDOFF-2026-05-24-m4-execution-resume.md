@@ -43,6 +43,10 @@ Full Scope/Verification: `docs/M4-IMPLEMENTATION-PLAN.md` → Task M4-A2.
 - `project_id` FK is **`ON DELETE SET NULL`** across sessions/schedules/watches.
 - `autonomous_schedules` index is **deferred to M4-B3** (when the scheduler's `next_run_at` scan query shape is concrete) — noted in the migration.
 - langgraph stays **`>=0.2.76,<0.3`** for all of M4 (migration is DE-319, post-M4).
+- **M4-A2 DONE** (`dad059e`): executor skeleton — LangGraph phase machine + typed state + `ToolIntent`/`PHASE_GRANTS` + `run_phase_transition`; `guarded_tool_call` stubbed (→ A3); arq `autonomous_session_job` on the shared `M3_PLAYBOOK_QUEUE_NAME`. Two-stage review fixed a real data-loss bug (happy path never committed → worker's `async with factory()` rolled back every successful run; row stuck at `running`) + the state-dict error path + `completed_at`. 37 tests pass. Pushed origin + tucuxi.
+- **M4-A3 `_dispatch` scope = WIRE EVERYTHING REAL** (Kevin's call): all six `ToolIntent` handlers route to real downstreams in A3, not stubs — `retrieve_chunks`→`app.knowledge.hybrid_search`, `run_skill`/`run_playbook`→`GatewayClient`, `propose_memory`→real `autonomous_memory` row write (ahead of B1's API), `emit_finding`→session state/result.
+- **`notify` in A3 = REAL IN-APP ONLY** (Kevin's call): A3 builds a notifications table + migration `0040` + model + an in-app persist handler so `notify` writes a durable artifact. **Email/SMTP transport + the read/dismiss API + web surface stay in M4-C1.** This is a deliberate, bounded C1 pull-forward (the in-app data model + write side only). C1's scope shrinks accordingly.
+- **A3 is being executed as three reviewed sub-dispatches** (A3.1 errors+cost+audit, A3.2 notifications model+migration 0040, A3.3 chokepoint+_dispatch+acceptance bar) — execution mechanics for an over-large task; the plan still treats A3 as one task.
 
 ## 4. How to execute (the workflow Kevin chose)
 
