@@ -1,33 +1,29 @@
-"""LangGraph nodes for the Autonomous executor — M4-A2.
+"""LangGraph nodes for the Autonomous executor — M4-A2/A3.
 
 Five phase nodes run sequentially:
 
-1. :func:`make_intake_node` — intake phase: orient the session,
-   retrieve any immediately needed context.
+1. :func:`make_intake_node` — intake phase: retrieve context from KB
+   when ``kb_id`` is provided in state.
 2. :func:`make_analysis_node` — analysis phase: evaluate the
    incoming trigger against retrieved chunks, run skills / playbooks.
-3. :func:`make_drafting_node` — drafting phase: produce work product
-   (findings, proposed edits, memory proposals).
+3. :func:`make_drafting_node` — drafting phase: emit an orientation
+   finding via the chokepoint.
 4. :func:`make_ethics_review_node` — ethics-review phase: validate
    the proposed output for privilege sensitivity, scope creep, etc.
 5. :func:`make_delivery_node` — delivery phase: notify the user /
    downstream system and wrap up the session.
 
-**Skeleton scope (M4-A2):** the nodes advance the phase machine and
-write audit rows via :func:`~app.autonomous.phases.run_phase_transition`,
-but they do NOT invoke any real tools. Every code path that would invoke
-a tool MUST go through :func:`guarded_tool_call`. The stub defined in
-this module raises :exc:`NotImplementedError` to prove no tool path
-bypasses the chokepoint-to-be (which lands in M4-A3).
+**A3.3b wiring:** nodes call the real
+:func:`~app.autonomous.guard.guarded_tool_call` from
+:mod:`app.autonomous.guard`. The old stub in this module is removed.
 
-**Brake-commit contract (A3.3b):** when A3.3b wires these nodes to call
-:func:`app.autonomous.guard.guarded_tool_call`, an
-:exc:`~app.errors.AutonomousBrake` (SessionHalted / CostCapReached /
-ToolNotGranted) must be allowed to **propagate to the executor's terminal
-handler**, which commits and persists the halt-state latch + audit rows
-the chokepoint flushed. A node that catches a brake locally MUST commit
-before returning, or the latch and audit row are silently lost (the A2
-data-loss class — see :mod:`app.autonomous.guard`).
+**Brake-commit contract:** :exc:`~app.errors.AutonomousBrake`
+(SessionHalted / CostCapReached / ToolNotGranted) propagates from
+:func:`~app.autonomous.guard.guarded_tool_call` to the executor's
+terminal handler, which commits and persists the halt-state latch +
+audit rows the chokepoint flushed. A node that catches a brake locally
+MUST commit before returning, or the latch and audit row are silently
+lost (the A2 data-loss class — see :mod:`app.autonomous.guard`).
 
 Factory-closure style: each ``make_*_node`` function returns an async
 callable bound to the resources it needs (``db``, ``gateway``) so the
@@ -38,12 +34,15 @@ LangGraph node functions remain pure-ish over the state dict and
 from __future__ import annotations
 
 import logging
+import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.autonomous.enums import ToolIntent
+from app.autonomous.guard import guarded_tool_call
 from app.autonomous.phases import run_phase_transition
 from app.autonomous.state import AutonomousSessionState
 from app.models.autonomous import AutonomousSession
@@ -53,51 +52,24 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Chokepoint stub — replaced by the real implementation in M4-A3
-# ---------------------------------------------------------------------------
-
-
-def guarded_tool_call(
-    intent: str,
-    /,
-    **kwargs: Any,
-) -> Any:
-    """Chokepoint for all autonomous tool invocations.
-
-    Every tool path in the executor MUST route through this function.
-    In M4-A2 it is a stub that raises :exc:`NotImplementedError` to
-    prove no tool path bypasses the gate. M4-A3 replaces the body with
-    the real phase-grant check + brake check + call dispatch.
-
-    Args:
-        intent: A :class:`~app.autonomous.enums.ToolIntent` member (or
-            its string value) identifying the requested operation.
-        **kwargs: Tool-specific arguments (forwarded in M4-A3).
-
-    Raises:
-        NotImplementedError: Always — this is a stub.
-    """
-
-    raise NotImplementedError("guarded_tool_call lands in M4-A3")
-
-
-# ---------------------------------------------------------------------------
 # Phase node factories
 # ---------------------------------------------------------------------------
 
 
 def make_intake_node(
     db: AsyncSession,
+    gateway: Any = None,
 ) -> Callable[[AutonomousSessionState], Awaitable[dict[str, Any]]]:
     """Build the intake-phase node bound to a DB session.
 
     The intake node transitions the session to :attr:`Phase.intake`
-    (it is already there at graph entry, but the transition audit row
-    documents when the graph first ran this phase). Any tool calls in
-    the intake phase MUST go through :func:`guarded_tool_call` with
-    :attr:`~app.autonomous.enums.ToolIntent.retrieve_chunks`.
+    and, when ``kb_id`` is present in state, calls
+    :func:`~app.autonomous.guard.guarded_tool_call` with
+    :attr:`~app.autonomous.enums.ToolIntent.retrieve_chunks` to
+    orient the session with relevant KB context.
 
-    In the M4-A2 skeleton no tools are actually called.
+    Brakes (:exc:`~app.errors.AutonomousBrake`) propagate to the
+    executor's terminal handler per the brake-commit contract.
     """
 
     async def intake_node(state: AutonomousSessionState) -> dict[str, Any]:
@@ -117,22 +89,48 @@ def make_intake_node(
         await run_phase_transition(session, Phase.intake, db)
         await db.flush()
 
-        return {"current_phase": str(Phase.intake)}
+        updates: dict[str, Any] = {"current_phase": str(Phase.intake)}
+
+        # If a KB id and query are in state, retrieve orientation chunks.
+        kb_id_raw = state.get("kb_id")
+        query = state.get("query")
+        if kb_id_raw and query:
+            try:
+                uuid.UUID(str(kb_id_raw))  # validate before forwarding
+            except ValueError:
+                logger.warning(
+                    "autonomous.intake_node: invalid kb_id in state, skipping retrieve_chunks",
+                    extra={"event": "autonomous_intake_invalid_kb_id"},
+                )
+            else:
+                result = await guarded_tool_call(
+                    session,
+                    ToolIntent.retrieve_chunks,
+                    {"kb_id": str(kb_id_raw), "query": str(query)},
+                    db,
+                    gateway,
+                )
+                updates["retrieved_chunks"] = result.data
+
+        return updates
 
     return intake_node
 
 
 def make_analysis_node(
     db: AsyncSession,
+    gateway: Any = None,
 ) -> Callable[[AutonomousSessionState], Awaitable[dict[str, Any]]]:
     """Build the analysis-phase node bound to a DB session.
 
     The analysis node transitions the session to :attr:`Phase.analysis`.
-    Any tool calls in this phase MUST go through :func:`guarded_tool_call`
-    with one of the analysis-phase grants:
-    ``retrieve_chunks``, ``run_skill``, ``run_playbook``.
+    Any tool calls in this phase MUST go through
+    :func:`~app.autonomous.guard.guarded_tool_call` with one of the
+    analysis-phase grants: ``retrieve_chunks``, ``run_skill``,
+    ``run_playbook``.
 
-    In the M4-A2 skeleton no tools are actually called.
+    In the current skeleton no inference tools are called; the node
+    advances the phase machine and records the audit row.
     """
 
     async def analysis_node(state: AutonomousSessionState) -> dict[str, Any]:
@@ -158,15 +156,17 @@ def make_analysis_node(
 
 def make_drafting_node(
     db: AsyncSession,
+    gateway: Any = None,
 ) -> Callable[[AutonomousSessionState], Awaitable[dict[str, Any]]]:
     """Build the drafting-phase node bound to a DB session.
 
-    The drafting node transitions the session to :attr:`Phase.drafting`.
-    Any tool calls in this phase MUST go through :func:`guarded_tool_call`
-    with one of the drafting-phase grants:
-    ``run_skill``, ``emit_finding``, ``propose_memory``.
+    The drafting node transitions the session to :attr:`Phase.drafting`
+    and emits an orientation finding via
+    :func:`~app.autonomous.guard.guarded_tool_call` with
+    :attr:`~app.autonomous.enums.ToolIntent.emit_finding`.
 
-    In the M4-A2 skeleton no tools are actually called.
+    Brakes propagate to the executor's terminal handler per the
+    brake-commit contract.
     """
 
     async def drafting_node(state: AutonomousSessionState) -> dict[str, Any]:
@@ -185,13 +185,28 @@ def make_drafting_node(
         await run_phase_transition(session, Phase.drafting, db)
         await db.flush()
 
-        return {"current_phase": str(Phase.drafting)}
+        # Emit an orientation finding through the chokepoint so the
+        # drafting phase always exercises the chokepoint path — no tool
+        # call bypasses the gate.
+        finding_result = await guarded_tool_call(
+            session,
+            ToolIntent.emit_finding,
+            {"finding": {"phase": "drafting", "status": "oriented"}},
+            db,
+            gateway,
+        )
+        findings = list(state.get("findings") or [])
+        if finding_result.data is not None:
+            findings.append(finding_result.data)
+
+        return {"current_phase": str(Phase.drafting), "findings": findings}
 
     return drafting_node
 
 
 def make_ethics_review_node(
     db: AsyncSession,
+    gateway: Any = None,
 ) -> Callable[[AutonomousSessionState], Awaitable[dict[str, Any]]]:
     """Build the ethics-review-phase node bound to a DB session.
 
@@ -199,7 +214,8 @@ def make_ethics_review_node(
     :attr:`Phase.ethics_review`. The only tool intent permitted in this
     phase is ``emit_finding``.
 
-    In the M4-A2 skeleton no tools are actually called.
+    In the current skeleton no tools are called; the node advances the
+    phase machine and records the audit row.
     """
 
     async def ethics_review_node(state: AutonomousSessionState) -> dict[str, Any]:
@@ -225,14 +241,18 @@ def make_ethics_review_node(
 
 def make_delivery_node(
     db: AsyncSession,
+    gateway: Any = None,
 ) -> Callable[[AutonomousSessionState], Awaitable[dict[str, Any]]]:
     """Build the delivery-phase node bound to a DB session.
 
-    The delivery node transitions the session to :attr:`Phase.delivery`
-    and marks the session row as completed. The only tool intent
-    permitted in this phase is ``notify``.
+    The delivery node transitions the session to :attr:`Phase.delivery`,
+    calls :func:`~app.autonomous.guard.guarded_tool_call` with
+    :attr:`~app.autonomous.enums.ToolIntent.notify` to write the
+    in-app notification row, then marks the session as completed and
+    commits.
 
-    In the M4-A2 skeleton no tools are actually called.
+    Brakes propagate to the executor's terminal handler per the
+    brake-commit contract.
     """
 
     async def delivery_node(state: AutonomousSessionState) -> dict[str, Any]:
@@ -249,6 +269,22 @@ def make_delivery_node(
             extra={"event": "autonomous_delivery_enter", "session_id": session_id},
         )
         await run_phase_transition(session, Phase.delivery, db)
+
+        # Notify the user via the chokepoint — this is the canonical tool
+        # call in the delivery phase; it must not bypass the gate.
+        finding_count = len(state.get("findings") or [])
+        await guarded_tool_call(
+            session,
+            ToolIntent.notify,
+            {
+                "title": "Autonomous session complete",
+                "body": f"Session completed with {finding_count} finding(s).",
+                "payload": {"finding_count": finding_count},
+            },
+            db,
+            gateway,
+        )
+
         session.status = "completed"
         session.completed_at = datetime.now(UTC)
         await db.commit()

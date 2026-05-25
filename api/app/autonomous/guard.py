@@ -1,4 +1,4 @@
-"""The guarded_tool_call chokepoint — M4-A3.3a.
+"""The guarded_tool_call chokepoint — M4-A3.3a/b.
 
 Every tool invocation in the autonomous executor MUST flow through
 :func:`guarded_tool_call`.  It enforces three brakes in a load-bearing
@@ -45,16 +45,28 @@ Local handlers implemented here (A3.3a)
                       :class:`~app.models.autonomous.AutonomousNotification` row;
                       zero cost.
 
-Deferred to A3.3b
-------------------
-``retrieve_chunks``, ``run_skill``, ``run_playbook`` — real inference /
-retrieval handlers, executor wiring, and the privacy-guard test all land
-in M4-A3.3b.  Calling any of these intents currently raises
-:exc:`NotImplementedError`.
+Inference/retrieval handlers (A3.3b)
+--------------------------------------
+``retrieve_chunks`` — calls :func:`~app.knowledge.retrieval.hybrid_search`;
+                      zero cost (local retrieval); returns IDs/counts/offsets
+                      in ``data`` (never raw chunk text).
+``run_skill``       — gateway chat-completion call; cost = the single M2-E2
+                      estimate computed for R4 (no double-charge);
+                      ``anonymize=True`` by default.
+``run_playbook``    — same gateway pattern as ``run_skill``.
+
+Cost contract (A3.3b)
+----------------------
+The ``estimated_cost`` kwarg is forwarded from the chokepoint into
+``_dispatch`` so inference handlers use the SAME ``Decimal`` value that
+R4 already computed — preventing any divergence between what R4 checked
+and what the session is charged.
 """
 
 from __future__ import annotations
 
+import logging
+import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -73,7 +85,12 @@ from app.models.autonomous import (
 )
 from app.observability_helpers import get_tracer, record_attributes
 
+log = logging.getLogger(__name__)
+
 _tracer = get_tracer(__name__)
+
+_DEFAULT_RETRIEVE_TOP_K: int = 4
+_DEFAULT_RETRIEVE_ALPHA: float = 0.5
 
 
 @dataclass
@@ -88,6 +105,12 @@ class ToolResult:
 
     cost_usd: Decimal = field(default_factory=lambda: Decimal("0"))
     data: Any = None
+    outcome: str = "success"
+    """The audit/span outcome label for the dispatch. Defaults to
+    ``"success"``; an inference handler that attempted the call but hit a
+    gateway transport/parse failure sets ``"gateway_error"`` so the audit
+    trail does not record a failed inference as a success (the call is still
+    charged the R4 estimate, but its outcome is honest)."""
 
 
 async def guarded_tool_call(
@@ -126,9 +149,6 @@ async def guarded_tool_call(
             for the current phase (R6).
         CostCapReached: If the projected cost would exceed
             ``max_cost_usd`` (R4).
-        NotImplementedError: If ``intent`` is one of the A3.3b deferred
-            handlers (``retrieve_chunks``, ``run_skill``,
-            ``run_playbook``).
     """
     with _tracer.start_as_current_span("autonomous.tool_call") as span:
         # COUNTS + TYPES ONLY — never raw values or document text
@@ -172,9 +192,12 @@ async def guarded_tool_call(
             )
 
         # ── R4 economic ─────────────────────────────────────────────────────
-        # Estimate cost BEFORE dispatch — unconditional estimate, but the cap
-        # COMPARISON is gated on max_cost_usd is not None (no cap → never trips).
-        projected = session.cost_total_usd + await estimate_tool_cost(intent, params, db)
+        # Estimate cost ONCE here — used both for the cap check AND passed
+        # into _dispatch so inference handlers use the same Decimal value
+        # that R4 checked.  This prevents any divergence between what R4
+        # permitted and what the session is charged (no double-charge).
+        estimate = await estimate_tool_cost(intent, params, db)
+        projected = session.cost_total_usd + estimate
         if session.max_cost_usd is not None and projected > session.max_cost_usd:
             session.cost_cap_reached = True
             session.halt_state = str(HaltState.halted)
@@ -192,7 +215,9 @@ async def guarded_tool_call(
 
         # ── dispatch ────────────────────────────────────────────────────────
         await autonomous_audit(db, session, "tool_call", tool=str(intent), outcome="started")
-        result = await _dispatch(intent, params, gateway=gateway, db=db, session=session)
+        result = await _dispatch(
+            intent, params, gateway=gateway, db=db, session=session, estimated_cost=estimate
+        )
 
         # ── record cost + outcome ────────────────────────────────────────────
         session.cost_total_usd += result.cost_usd
@@ -201,7 +226,7 @@ async def guarded_tool_call(
             span,
             **{
                 "autonomous.cost_usd": float(result.cost_usd),
-                "autonomous.outcome": "success",
+                "autonomous.outcome": result.outcome,
             },
         )
         await autonomous_audit(
@@ -209,7 +234,7 @@ async def guarded_tool_call(
             session,
             "tool_call",
             tool=str(intent),
-            outcome="success",
+            outcome=result.outcome,
             cost_usd=float(result.cost_usd),
         )
         return result
@@ -222,29 +247,31 @@ async def _dispatch(
     gateway: Any,
     db: AsyncSession,
     session: AutonomousSession,
+    estimated_cost: Decimal,
 ) -> ToolResult:
     """Route a granted, in-budget tool intent to its handler.
 
     Local intents (``emit_finding``, ``propose_memory``, ``notify``) are
-    fully implemented here.
+    zero-cost and return ``cost_usd=Decimal("0")``.
 
-    Inference/retrieval intents (``retrieve_chunks``, ``run_skill``,
-    ``run_playbook``) raise :exc:`NotImplementedError`; their handlers,
-    executor wiring, and the privacy-guard test land in M4-A3.3b.
+    Inference/retrieval intents use the ``estimated_cost`` kwarg forwarded
+    from the chokepoint — the SAME ``Decimal`` value that R4 already
+    checked — so there is no double-charge and no divergence between what
+    R4 permitted and what the session is charged.
 
     Args:
         intent: The :class:`~app.autonomous.enums.ToolIntent`.
         params: Tool-specific keyword arguments.
-        gateway: Inference Gateway client (unused for local intents).
+        gateway: Inference Gateway client (used for ``run_skill`` /
+            ``run_playbook`` gateway chat-completion calls).
         db: An open :class:`~sqlalchemy.ext.asyncio.AsyncSession`.
         session: The active :class:`~app.models.autonomous.AutonomousSession`.
+        estimated_cost: The cost projected by R4 for this call; inference
+            handlers return this value as ``cost_usd`` so the session is
+            charged exactly what R4 approved.
 
     Returns:
         A :class:`ToolResult` with ``cost_usd`` and tool-specific ``data``.
-
-    Raises:
-        NotImplementedError: For ``retrieve_chunks``, ``run_skill``,
-            ``run_playbook`` (A3.3b).
     """
     if intent == ToolIntent.emit_finding:
         # Local, zero-cost: echo the finding payload back as data.
@@ -283,5 +310,204 @@ async def _dispatch(
         await db.flush()
         return ToolResult(cost_usd=Decimal("0"), data={"notification_id": str(note.id)})
 
-    # retrieve_chunks / run_skill / run_playbook — real handlers land in A3.3b
-    raise NotImplementedError(f"_dispatch for {intent!r} lands in M4-A3.3b")
+    if intent == ToolIntent.retrieve_chunks:
+        return await _handle_retrieve_chunks(params, db=db)
+
+    if intent in (ToolIntent.run_skill, ToolIntent.run_playbook):
+        return await _handle_gateway_inference(
+            intent, params, gateway=gateway, estimated_cost=estimated_cost
+        )
+
+    # Should be unreachable: PHASE_GRANTS + R6 prevent unknown intents.
+    raise ValueError(f"_dispatch: unhandled intent {intent!r}")
+
+
+async def _handle_retrieve_chunks(
+    params: dict[str, Any],
+    *,
+    db: AsyncSession,
+) -> ToolResult:
+    """Handle ``retrieve_chunks`` — hybrid KB search, zero cost.
+
+    Returns IDs/counts/offsets in ``data["summary"]`` for span/audit
+    safety, and full chunk text in ``data["chunks"]`` for the node's
+    LLM use (audit code only logs ``data["summary"]`` — never raw text).
+
+    Args:
+        params: Must contain ``kb_id`` (str | UUID) and ``query`` (str).
+            Optional: ``top_k`` (int, default 4), ``alpha`` (float,
+            default 0.5), ``query_embedding`` (list[float] | None).
+        db: Active async ORM session.
+    """
+    from app.knowledge.retrieval import hybrid_search
+
+    kb_id_raw = params["kb_id"]
+    kb_id = uuid.UUID(str(kb_id_raw))
+    query: str = params["query"]
+    top_k: int = int(params.get("top_k", _DEFAULT_RETRIEVE_TOP_K))
+    alpha: float = float(params.get("alpha", _DEFAULT_RETRIEVE_ALPHA))
+    query_embedding: list[float] | None = params.get("query_embedding")
+
+    results = await hybrid_search(
+        db,
+        kb_id=kb_id,
+        query=query,
+        query_embedding=query_embedding,
+        top_k=top_k,
+        alpha=alpha,
+    )
+
+    # Build a privacy-safe summary for audit/spans: IDs, counts, offsets.
+    # Full text goes under "chunks" for the node's LLM use only — the
+    # chokepoint's audit rows only log counts/types/cost (never data.chunks).
+    summary = {
+        "chunk_count": len(results),
+        "chunk_ids": [str(r.chunk_id) for r in results],
+        "offsets": [
+            {
+                "chunk_id": str(r.chunk_id),
+                "char_offset_start": r.char_offset_start,
+                "char_offset_end": r.char_offset_end,
+                "page_start": r.page_start,
+                "page_end": r.page_end,
+            }
+            for r in results
+        ],
+    }
+    # Full chunk text for the node to pass into its LLM context.
+    chunks = [
+        {
+            "chunk_id": str(r.chunk_id),
+            "document_id": str(r.document_id),
+            "file_name": r.file_name,
+            "content": r.content,
+            "hybrid_score": r.hybrid_score,
+            "char_offset_start": r.char_offset_start,
+            "char_offset_end": r.char_offset_end,
+        }
+        for r in results
+    ]
+    return ToolResult(
+        cost_usd=Decimal("0"),
+        data={
+            "summary": summary,
+            "chunks": chunks,
+        },
+    )
+
+
+async def _handle_gateway_inference(
+    intent: ToolIntent,
+    params: dict[str, Any],
+    *,
+    gateway: Any,
+    estimated_cost: Decimal,
+) -> ToolResult:
+    """Handle ``run_skill`` and ``run_playbook`` via a gateway chat-completion.
+
+    Mirrors :func:`app.playbooks.nodes._dispatch_structured_call`.
+
+    ``anonymize`` defaults ``True`` — the autonomous flow may carry
+    privileged context; routing through the gateway with anonymize=True
+    gets pseudonymization + tier-floor for free.  Override only by
+    passing ``anonymize=False`` explicitly in ``params`` (e.g. for a
+    session that has already stripped PII upstream).
+
+    Cost = ``estimated_cost`` from the chokepoint (the SAME value R4
+    checked); no re-estimation, no double-charge.
+
+    Args:
+        intent: ``run_skill`` or ``run_playbook``.
+        params: Must contain ``model`` (str) and ``messages``
+            (list[dict] with ``role``/``content``).  Optional:
+            ``max_tokens`` (int), ``anonymize`` (bool, default True).
+        gateway: Gateway client.
+        estimated_cost: Pre-computed R4 estimate; returned as cost_usd.
+
+    Returns:
+        :class:`ToolResult` with ``cost_usd=estimated_cost`` and
+        ``data`` carrying ``content`` (text for node), ``token_counts``
+        (prompt + completion), and ``intent`` (for routing logs).
+        On gateway transport error, ``data["error"]`` is set and the
+        call is still charged ``estimated_cost`` (the call was attempted).
+    """
+    from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
+
+    model: str = params["model"]
+    raw_messages: list[dict[str, Any]] = params["messages"]
+    max_tokens: int | None = params.get("max_tokens")
+    anonymize: bool = bool(params.get("anonymize", True))
+
+    messages = [ChatCompletionMessage(role=m["role"], content=m["content"]) for m in raw_messages]
+
+    request = ChatCompletionRequest(
+        model=model,
+        messages=messages,
+        max_tokens=max_tokens,
+        anonymize=anonymize,
+        lq_ai_purpose="autonomous_executor",
+    )
+
+    try:
+        response = await gateway.chat_completion(request)
+    except Exception as exc:
+        log.warning(
+            "autonomous gateway inference error for %s: %s",
+            intent,
+            exc,
+            extra={
+                "event": "autonomous_gateway_inference_error",
+                "intent": str(intent),
+                "error_type": type(exc).__name__,
+            },
+        )
+        # The call was attempted — charge the estimate so R4's budget
+        # accounting is not gamed by a flaky gateway.
+        return ToolResult(
+            cost_usd=estimated_cost,
+            outcome="gateway_error",
+            data={
+                "intent": str(intent),
+                "error": f"{type(exc).__name__}: {exc}",
+                "content": None,
+                "token_counts": {"prompt_tokens": 0, "completion_tokens": 0},
+            },
+        )
+
+    try:
+        choices = response.choices
+        content = choices[0].message.content if choices else None
+        usage = response.usage
+        token_counts = {
+            "prompt_tokens": usage.prompt_tokens,
+            "completion_tokens": usage.completion_tokens,
+        }
+    except (AttributeError, IndexError) as exc:
+        log.warning(
+            "autonomous gateway inference: malformed response for %s: %s",
+            intent,
+            exc,
+            extra={
+                "event": "autonomous_gateway_inference_parse_error",
+                "intent": str(intent),
+            },
+        )
+        return ToolResult(
+            cost_usd=estimated_cost,
+            outcome="gateway_error",
+            data={
+                "intent": str(intent),
+                "error": f"malformed_response: {exc}",
+                "content": None,
+                "token_counts": {"prompt_tokens": 0, "completion_tokens": 0},
+            },
+        )
+
+    return ToolResult(
+        cost_usd=estimated_cost,
+        data={
+            "intent": str(intent),
+            "content": content,
+            "token_counts": token_counts,
+        },
+    )

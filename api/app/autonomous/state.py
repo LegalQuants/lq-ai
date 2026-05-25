@@ -52,3 +52,12 @@ class AutonomousSessionState(TypedDict, total=False):
     findings: list[dict]
     proposed_memory: list[dict]
     error: str | None
+
+    # A3.3b: optional KB retrieval inputs (set by caller when a KB is
+    # relevant to the session).  When both are present the intake node
+    # calls retrieve_chunks through the chokepoint.
+    kb_id: str | None
+    query: str | None
+    # A3.3b: output of retrieve_chunks — carries "summary" (IDs/counts/
+    # offsets, safe for audit) and "chunks" (full text, for LLM use only).
+    retrieved_chunks: dict | None

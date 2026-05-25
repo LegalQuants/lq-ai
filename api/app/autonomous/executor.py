@@ -44,6 +44,7 @@ from app.autonomous.nodes import (
 )
 from app.autonomous.state import AutonomousSessionState
 from app.clients.gateway import GatewayClient
+from app.errors import AutonomousBrake, ToolNotGranted
 from app.models.autonomous import AutonomousSession
 from app.observability_helpers import get_tracer, record_attributes
 
@@ -105,6 +106,9 @@ async def run_autonomous_session(
             "findings": [],
             "proposed_memory": [],
             "error": None,
+            "kb_id": None,
+            "query": None,
+            "retrieved_chunks": None,
         }
 
         tracer = get_tracer()
@@ -130,17 +134,35 @@ async def run_autonomous_session(
             session.completed_at = datetime.now(UTC)
             await db.commit()
 
+    except AutonomousBrake as brake:
+        # AutonomousBrake subclasses (SessionHalted / CostCapReached /
+        # ToolNotGranted) propagate here.  The chokepoint already flushed
+        # the halt-state latch + audit row; db.commit() below persists them.
+        #
+        # Terminal-status mapping (A3.3b):
+        # - SessionHalted / CostCapReached → "halted"  (expected stop)
+        # - ToolNotGranted                 → "failed"  (programming error:
+        #     a node requested an intent not in its phase-grant set)
+        status = "failed" if isinstance(brake, ToolNotGranted) else "halted"
+        logger.warning(
+            "autonomous executor brake: %s → %s",
+            type(brake).__name__,
+            status,
+            extra={
+                "event": "autonomous_executor_brake",
+                "session_id": str(session_id),
+                "brake_type": type(brake).__name__,
+                "terminal_status": status,
+            },
+        )
+        session.status = status
+        session.error = f"{type(brake).__name__}: {brake}"[:2000]
+        session.completed_at = datetime.now(UTC)
+        await db.commit()
+
     except Exception as exc:
         # Any in-graph exception: persist the failure and don't re-raise.
         # The arq worker already accepted the job; the caller polls the row.
-        #
-        # NOTE (A3.3b): AutonomousBrake subclasses (SessionHalted /
-        # CostCapReached / ToolNotGranted) propagate here too. The
-        # ``db.commit()`` below is what persists the halt-state latch +
-        # audit rows the chokepoint flushed before raising. A future node
-        # that catches a brake locally MUST commit before returning, or the
-        # latch and audit row are lost (the A2 data-loss class). Brake →
-        # terminal-status mapping (halted vs failed) is wired in A3.3b.
         logger.exception(
             "autonomous executor crashed mid-graph",
             extra={
@@ -165,17 +187,17 @@ def _build_graph(
     Returns the compiled ``StateGraph``; its ``ainvoke`` method runs the
     five phase nodes sequentially against the initial state.
 
-    ``gateway`` is passed through to node factories for M4-A3+ tool
-    dispatch; it is not used in the M4-A2 skeleton.
+    ``gateway`` is passed to all node factories so inference tool calls
+    route through the gateway client.
     """
 
     graph = StateGraph(AutonomousSessionState)
 
-    graph.add_node("intake", make_intake_node(db))
-    graph.add_node("analysis", make_analysis_node(db))
-    graph.add_node("drafting", make_drafting_node(db))
-    graph.add_node("ethics_review", make_ethics_review_node(db))
-    graph.add_node("delivery", make_delivery_node(db))
+    graph.add_node("intake", make_intake_node(db, gateway))
+    graph.add_node("analysis", make_analysis_node(db, gateway))
+    graph.add_node("drafting", make_drafting_node(db, gateway))
+    graph.add_node("ethics_review", make_ethics_review_node(db, gateway))
+    graph.add_node("delivery", make_delivery_node(db, gateway))
 
     graph.add_edge("intake", "analysis")
     graph.add_edge("analysis", "drafting")

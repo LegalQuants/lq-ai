@@ -638,3 +638,70 @@ async def test_r6_fires_before_r4(db_session: AsyncSession) -> None:
             db_session,
             gateway,
         )
+
+
+class _RaisingGateway:
+    """Gateway whose chat_completion always raises a transport error."""
+
+    async def chat_completion(self, request: object) -> object:
+        from app.errors import GatewayTimeout
+
+        raise GatewayTimeout("gateway did not respond")
+
+
+@pytest.mark.integration
+async def test_gateway_error_audited_as_gateway_error_not_success(
+    db_session: AsyncSession,
+) -> None:
+    """An inference call that hits a gateway transport error is charged the R4
+    estimate but audited with ``outcome="gateway_error"`` — never ``"success"``.
+
+    Guards the transparency contract: the audit trail must not record a failed
+    inference as a success.
+    """
+    from app.autonomous import guard as guard_mod
+    from app.autonomous.guard import ToolResult
+
+    user = await _make_user(db_session)
+    sess = await _make_session(
+        db_session,
+        user=user,
+        current_phase="analysis",  # grants run_skill
+        halt_state="running",
+        max_cost_usd=None,  # no cap → R4 never trips; the call reaches dispatch
+        cost_total_usd=Decimal("0"),
+    )
+    gateway = _RaisingGateway()
+    mock_estimate = AsyncMock(return_value=Decimal("0.02"))
+
+    with patch.object(guard_mod, "estimate_tool_cost", mock_estimate):
+        result = await guard_mod.guarded_tool_call(
+            sess,
+            ToolIntent.run_skill,
+            {"model": "smart", "messages": [{"role": "user", "content": "hi"}]},
+            db_session,
+            gateway,
+        )
+
+    # The call was attempted: charged the estimate, but outcome is honest.
+    assert isinstance(result, ToolResult)
+    assert result.outcome == "gateway_error"
+    assert result.cost_usd == Decimal("0.02")
+    assert sess.cost_total_usd == Decimal("0.02")
+
+    # The success-side audit row records gateway_error, not success.
+    audit_rows = (
+        (
+            await db_session.execute(
+                select(AuditLog)
+                .where(AuditLog.action == "autonomous_session.tool_call")
+                .where(AuditLog.resource_id == str(sess.id))
+                .order_by(AuditLog.timestamp)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    outcomes = [r.details["outcome"] for r in audit_rows]  # type: ignore[index]
+    assert outcomes == ["started", "gateway_error"]
+    assert "success" not in outcomes

@@ -1,4 +1,4 @@
-"""Executor skeleton tests for the M4-A2 LangGraph phase machine.
+"""Executor skeleton tests for the M4-A2/A3.3b LangGraph phase machine.
 
 Five contracts under test:
 
@@ -8,9 +8,9 @@ Five contracts under test:
 2. Each phase transition writes an ``autonomous_session.phase_transition``
    audit row — five rows per full run, in phase order.
 
-3. The :func:`~app.autonomous.nodes.guarded_tool_call` stub raises
-   :exc:`NotImplementedError`, proving no tool path bypasses the
-   chokepoint-to-be (M4-A3).
+3. (A3.3b) The real :func:`~app.autonomous.guard.guarded_tool_call` is
+   importable from :mod:`app.autonomous.guard`; the old stub is removed
+   from :mod:`app.autonomous.nodes`.
 
 4. :data:`~app.autonomous.enums.PHASE_GRANTS` contains exactly the
    grants specified in the M4-A2 task (pure unit test, no DB required).
@@ -33,7 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.autonomous.enums import PHASE_GRANTS, ToolIntent
 from app.autonomous.executor import AutonomousExecutorError, run_autonomous_session
-from app.autonomous.nodes import guarded_tool_call
+from app.autonomous.guard import guarded_tool_call
 from app.models.audit import AuditLog
 from app.models.autonomous import AutonomousSession
 from app.models.user import User
@@ -69,10 +69,19 @@ class _StubGateway:
 
 
 @pytest.mark.unit
-def test_guarded_tool_call_stub_raises_not_implemented() -> None:
-    """guarded_tool_call must raise NotImplementedError — M4-A3 replaces it."""
-    with pytest.raises(NotImplementedError, match="guarded_tool_call lands in M4-A3"):
-        guarded_tool_call("retrieve_chunks", document_id="some-id")
+def test_guarded_tool_call_importable_from_guard() -> None:
+    """guarded_tool_call is the real implementation from app.autonomous.guard.
+
+    A3.3b replaced the M4-A2 stub in nodes.py with an import of the real
+    chokepoint from guard.py.  Verify the callable is importable and is a
+    coroutine function (i.e. the real async implementation, not the old
+    sync stub).
+    """
+    import inspect
+
+    assert inspect.iscoroutinefunction(guarded_tool_call), (
+        "guarded_tool_call must be an async coroutine function (the real A3.3b implementation)"
+    )
 
 
 @pytest.mark.unit
@@ -289,7 +298,7 @@ async def test_executor_persists_failed_status_on_mid_graph_error(
 
     original_make_intake = executor_mod.make_intake_node
 
-    def _exploding_intake(db):  # type: ignore[no-untyped-def]
+    def _exploding_intake(db, gateway=None):  # type: ignore[no-untyped-def]
         async def _node(state):  # type: ignore[no-untyped-def]
             raise RuntimeError("injected failure")
 
@@ -335,7 +344,7 @@ async def test_executor_persists_failed_status_on_state_dict_error(
 
     original_make_intake = executor_mod.make_intake_node
 
-    def _error_state_intake(db):  # type: ignore[no-untyped-def]
+    def _error_state_intake(db, gateway=None):  # type: ignore[no-untyped-def]
         """Returns an error via state dict — does NOT raise."""
 
         async def _node(state):  # type: ignore[no-untyped-def]
