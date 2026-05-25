@@ -1207,9 +1207,14 @@ async def _stream_openai_sse(
             payload = terminal.model_dump(mode="json", exclude_none=True)
             yield f"data: {json.dumps(payload, separators=(',', ':'))}\n\n".encode()
 
-    yield b"data: [DONE]\n\n"
-
     # Persist the routing-log row using the final chunk's usage block.
+    # This MUST precede the `[DONE]` yield: the api-side consumer stops
+    # iterating on `[DONE]` and closes the stream context, which cancels
+    # this generator (throws GeneratorExit at the next suspended `yield`).
+    # Anything awaited after the `[DONE]` yield never runs — so every
+    # streamed success turn would persist zero routing-log rows. The
+    # failure path above writes before its `[DONE]` for the same reason;
+    # mirror that here.
     usage = (last_chunk.usage if last_chunk is not None else None) or None
     cost = (
         estimate_cost(
@@ -1239,6 +1244,8 @@ async def _stream_openai_sse(
             purpose=_purpose_from_request(chat_request),
         )
     )
+
+    yield b"data: [DONE]\n\n"
 
 
 async def _single_error_sse(*, code: str, message: str) -> AsyncIterator[bytes]:
