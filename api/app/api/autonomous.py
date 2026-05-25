@@ -44,10 +44,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import ActiveUser
 from app.audit import audit_action
 from app.autonomous.audit import autonomous_audit
+from app.autonomous.cron import next_run_after, validate_cron_expr
 from app.autonomous.receipt import build_receipt
 from app.db.session import get_db
 from app.models.autonomous import (
     AutonomousMemory,
+    AutonomousSchedule,
     AutonomousSession,
     PrecedentEntry,
     ProjectContextProposal,
@@ -56,6 +58,10 @@ from app.models.project import Project
 from app.schemas.autonomous import (
     AutonomousMemoryListResponse,
     AutonomousMemoryRead,
+    AutonomousScheduleCreate,
+    AutonomousScheduleListResponse,
+    AutonomousScheduleRead,
+    AutonomousScheduleUpdate,
     AutonomousSessionDetailResponse,
     AutonomousSessionListResponse,
     AutonomousSessionRead,
@@ -234,6 +240,37 @@ async def _load_owned_session(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="autonomous session not found",
+        )
+    return row
+
+
+async def _load_owned_schedule(
+    db: AsyncSession,
+    *,
+    schedule_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> AutonomousSchedule:
+    """Fetch a schedule by id; 404 if missing, soft-deleted, or another user's.
+
+    Conflates "doesn't exist", "soft-deleted", and "belongs to someone
+    else" to avoid leaking the existence of other users' schedules via
+    id-probing. Mirrors :func:`_load_owned_memory` (filters
+    ``deleted_at IS NULL``).
+
+    Raises:
+        HTTPException: 404 if the row is absent, soft-deleted, or owned
+            by a different user.
+    """
+    stmt = select(AutonomousSchedule).where(
+        AutonomousSchedule.id == schedule_id,
+        AutonomousSchedule.user_id == user_id,
+        AutonomousSchedule.deleted_at.is_(None),
+    )
+    row = (await db.execute(stmt)).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="autonomous schedule not found",
         )
     return row
 
@@ -906,3 +943,240 @@ async def reject_project_context_proposal(
     await db.refresh(proposal)
 
     return ProjectContextProposalRead.model_validate(proposal)
+
+
+# ---------------------------------------------------------------------------
+# Scheduled-tasks endpoints (M4-B3)
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/schedules",
+    response_model=AutonomousScheduleRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create an autonomous schedule (cron-triggered run definition)",
+    responses={
+        201: {"description": "Schedule created"},
+        422: {"description": "Invalid cron expression"},
+        401: {"description": "Not authenticated"},
+    },
+)
+async def create_schedule(
+    body: AutonomousScheduleCreate,
+    request: Request,
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AutonomousScheduleRead:
+    """POST /api/v1/autonomous/schedules
+
+    Validates ``cron_expr`` via :func:`~app.autonomous.cron.validate_cron_expr`
+    (invalid → 422), creates the schedule row, and seeds
+    ``next_run_at = next_run_after(cron_expr, now(UTC))`` so the
+    dispatcher's first eligible tick can pick it up.  Returns the created
+    :class:`~app.schemas.autonomous.AutonomousScheduleRead` (201).
+
+    Audited.
+    """
+    try:
+        validate_cron_expr(body.cron_expr)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"invalid cron expression: {exc}",
+        ) from exc
+
+    now = datetime.now(UTC)
+    schedule = AutonomousSchedule(
+        user_id=user.id,
+        project_id=body.project_id,
+        name=body.name,
+        cron_expr=body.cron_expr,
+        playbook_id=body.playbook_id,
+        skill_ref=body.skill_ref,
+        target_kb_id=body.target_kb_id,
+        enabled=body.enabled,
+        next_run_at=next_run_after(body.cron_expr, now),
+    )
+    db.add(schedule)
+    await db.flush()
+
+    await audit_action(
+        db,
+        user_id=user.id,
+        action="autonomous_schedule.create",
+        resource_type="autonomous_schedule",
+        resource_id=str(schedule.id),
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(schedule)
+
+    return AutonomousScheduleRead.model_validate(schedule)
+
+
+@router.get(
+    "/schedules",
+    response_model=AutonomousScheduleListResponse,
+    summary="List the calling user's autonomous schedules (non-deleted, newest first)",
+    responses={
+        401: {"description": "Not authenticated"},
+    },
+)
+async def list_schedules(
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    enabled: Annotated[bool | None, Query()] = None,
+    limit: int = _LIMIT_DEFAULT,
+    offset: int = 0,
+) -> AutonomousScheduleListResponse:
+    """GET /api/v1/autonomous/schedules
+
+    Returns the caller's non-deleted schedules ordered by
+    ``created_at DESC``.  Pass ``?enabled=true|false`` to filter; omitting
+    it returns all non-deleted schedules.  ``limit`` is clamped to
+    [1, 200]; ``offset`` to [0, ∞).
+    """
+    limit = max(1, min(limit, _LIMIT_MAX))
+    offset = max(0, offset)
+
+    base_where = [
+        AutonomousSchedule.user_id == user.id,
+        AutonomousSchedule.deleted_at.is_(None),
+    ]
+    if enabled is not None:
+        base_where.append(AutonomousSchedule.enabled.is_(enabled))
+
+    count_stmt = select(func.count()).select_from(AutonomousSchedule).where(*base_where)
+    total_count: int = (await db.execute(count_stmt)).scalar_one()
+
+    rows_stmt = (
+        select(AutonomousSchedule)
+        .where(*base_where)
+        .order_by(AutonomousSchedule.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    rows = (await db.execute(rows_stmt)).scalars().all()
+
+    return AutonomousScheduleListResponse(
+        schedules=[AutonomousScheduleRead.model_validate(r) for r in rows],
+        total_count=total_count,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.patch(
+    "/schedules/{schedule_id}",
+    response_model=AutonomousScheduleRead,
+    summary="Partially update an autonomous schedule (edit / enable / disable)",
+    responses={
+        404: {"description": "Schedule not found"},
+        422: {"description": "Invalid cron expression"},
+        401: {"description": "Not authenticated"},
+    },
+)
+async def update_schedule(
+    schedule_id: uuid.UUID,
+    body: AutonomousScheduleUpdate,
+    request: Request,
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AutonomousScheduleRead:
+    """PATCH /api/v1/autonomous/schedules/{schedule_id}
+
+    Partial update — only the provided fields change.  If ``cron_expr``
+    changes it is re-validated (invalid → 422) and ``next_run_at`` is
+    recomputed from ``now(UTC)``.  Toggling ``enabled`` is allowed.
+
+    Another user's ``schedule_id`` returns 404.  Returns the updated
+    schedule (200).  Audited.
+    """
+    schedule = await _load_owned_schedule(db, schedule_id=schedule_id, user_id=user.id)
+
+    fields = body.model_dump(exclude_unset=True)
+
+    if "cron_expr" in fields:
+        new_cron = fields["cron_expr"]
+        try:
+            validate_cron_expr(new_cron)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"invalid cron expression: {exc}",
+            ) from exc
+        schedule.cron_expr = new_cron
+        schedule.next_run_at = next_run_after(new_cron, datetime.now(UTC))
+
+    if "name" in fields:
+        schedule.name = fields["name"]
+    if "enabled" in fields:
+        schedule.enabled = fields["enabled"]
+    if "playbook_id" in fields:
+        schedule.playbook_id = fields["playbook_id"]
+    if "skill_ref" in fields:
+        schedule.skill_ref = fields["skill_ref"]
+    if "target_kb_id" in fields:
+        schedule.target_kb_id = fields["target_kb_id"]
+
+    schedule.updated_at = datetime.now(UTC)
+
+    await audit_action(
+        db,
+        user_id=user.id,
+        action="autonomous_schedule.update",
+        resource_type="autonomous_schedule",
+        resource_id=str(schedule.id),
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(schedule)
+
+    return AutonomousScheduleRead.model_validate(schedule)
+
+
+@router.delete(
+    "/schedules/{schedule_id}",
+    response_model=AutonomousScheduleRead,
+    summary="Soft-delete an autonomous schedule (returns 200 with updated entity)",
+    responses={
+        404: {"description": "Schedule not found"},
+        401: {"description": "Not authenticated"},
+    },
+)
+async def delete_schedule(
+    schedule_id: uuid.UUID,
+    request: Request,
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AutonomousScheduleRead:
+    """DELETE /api/v1/autonomous/schedules/{schedule_id}
+
+    Soft-deletes the schedule by setting ``deleted_at=now(UTC)``.  Returns
+    **200** with the updated (deleted) entity rather than 204 to avoid the
+    FastAPI ``JSONResponse``/204 assertion pitfall (documented in
+    CLAUDE.md).
+
+    A subsequent GET excludes the schedule; patch/delete on a deleted
+    schedule return 404 (``_load_owned_schedule`` filters
+    ``deleted_at IS NULL``).  The dispatcher also skips soft-deleted rows.
+
+    Another user's ``schedule_id`` returns 404.  Audited.
+    """
+    schedule = await _load_owned_schedule(db, schedule_id=schedule_id, user_id=user.id)
+
+    schedule.deleted_at = datetime.now(UTC)
+    schedule.updated_at = datetime.now(UTC)
+
+    await audit_action(
+        db,
+        user_id=user.id,
+        action="autonomous_schedule.delete",
+        resource_type="autonomous_schedule",
+        resource_id=str(schedule.id),
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(schedule)
+
+    return AutonomousScheduleRead.model_validate(schedule)

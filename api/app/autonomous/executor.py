@@ -106,8 +106,13 @@ async def run_autonomous_session(
             "findings": [],
             "proposed_memory": [],
             "error": None,
-            "kb_id": None,
-            "query": None,
+            # Trigger→target seam (M4-B3): the kb_id/query for this run come
+            # from session.params, populated by whichever trigger created the
+            # session (schedule dispatcher, watch enqueue, manual). Other
+            # param keys (playbook_id, skill_ref) stay in session.params for
+            # the nodes to consume — they are not AutonomousSessionState keys.
+            "kb_id": session.params.get("kb_id"),
+            "query": session.params.get("query"),
             "retrieved_chunks": None,
         }
 

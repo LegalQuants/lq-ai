@@ -118,6 +118,7 @@ class AutonomousSessionRead(BaseModel):
     idle_halt_minutes: int
     last_activity_at: datetime
     status: SessionStatus
+    params: dict[str, Any] = {}
     result: dict[str, Any] | None = None
     error: str | None = None
     created_at: datetime
@@ -144,6 +145,54 @@ class AutonomousScheduleRead(BaseModel):
     deleted_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class AutonomousScheduleCreate(BaseModel):
+    """Request body for ``POST /autonomous/schedules`` (M4-B3).
+
+    ``cron_expr`` is required and validated by
+    :func:`app.autonomous.cron.validate_cron_expr` (invalid → 422). The
+    target (``playbook_id`` / ``skill_ref`` / ``target_kb_id``) and
+    ``project_id`` are optional; ``enabled`` defaults to True.
+    """
+
+    cron_expr: str
+    name: str | None = None
+    playbook_id: uuid.UUID | None = None
+    skill_ref: str | None = None
+    target_kb_id: uuid.UUID | None = None
+    project_id: uuid.UUID | None = None
+    enabled: bool = True
+
+
+class AutonomousScheduleUpdate(BaseModel):
+    """Request body for ``PATCH /autonomous/schedules/{id}`` (M4-B3).
+
+    All fields optional — a partial update. If ``cron_expr`` is provided
+    it is re-validated (invalid → 422) and ``next_run_at`` is recomputed.
+    Toggling ``enabled`` is allowed.
+    """
+
+    name: str | None = None
+    cron_expr: str | None = None
+    enabled: bool | None = None
+    playbook_id: uuid.UUID | None = None
+    skill_ref: str | None = None
+    target_kb_id: uuid.UUID | None = None
+
+
+class AutonomousScheduleListResponse(BaseModel):
+    """Paginated list of :class:`AutonomousScheduleRead` items (M4-B3).
+
+    Mirrors ``AutonomousMemoryListResponse`` — total_count / limit /
+    offset envelope. Excludes soft-deleted schedules (``deleted_at IS
+    NULL``).
+    """
+
+    schedules: list[AutonomousScheduleRead]
+    total_count: int
+    limit: int
+    offset: int
 
 
 class AutonomousWatchRead(BaseModel):

@@ -49,6 +49,11 @@ Registered cron jobs:
   (M4-A4-ii) — Idle-halt watchdog; runs at the top of every minute
   (``second=0``). Reaps sessions that have gone idle via a two-tick
   ``running → paused → halted`` lifecycle.
+* :func:`app.workers.autonomous_worker.autonomous_schedule_dispatcher`
+  (M4-B3) — Schedule dispatcher; runs at the top of every minute
+  (``second=0``). Spawns one session per due schedule
+  (``enabled AND deleted_at IS NULL AND next_run_at <= now()``) and
+  advances ``next_run_at`` from the schedule's ``cron_expr``.
 
 Discovered by the ``arq`` CLI via::
 
@@ -65,7 +70,11 @@ from typing import Any, ClassVar
 
 from app.config import get_settings
 from app.db.session import dispose_engine
-from app.workers.autonomous_worker import autonomous_idle_watchdog, autonomous_session_job
+from app.workers.autonomous_worker import (
+    autonomous_idle_watchdog,
+    autonomous_schedule_dispatcher,
+    autonomous_session_job,
+)
 from app.workers.easy_playbook_worker import easy_playbook_generation_job
 from app.workers.tabular_worker import tabular_execution_job
 
@@ -178,6 +187,9 @@ def _build_cron_jobs() -> list[Any]:
         # Every minute at second=0: reap idle autonomous sessions via
         # the two-tick running→paused→halted lifecycle (M4-A4-ii).
         cron(autonomous_idle_watchdog, second=0),
+        # Every minute at second=0: spawn sessions for due schedules and
+        # advance next_run_at from each schedule's cron_expr (M4-B3).
+        cron(autonomous_schedule_dispatcher, second=0),
     ]
 
 

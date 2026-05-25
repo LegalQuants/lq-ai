@@ -32,15 +32,18 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select, update
 
 from app.autonomous.audit import autonomous_audit
+from app.autonomous.cron import next_run_after
 from app.autonomous.executor import run_autonomous_session
 from app.db.session import get_session_factory
-from app.models.autonomous import AutonomousSession
+from app.models.autonomous import AutonomousSchedule, AutonomousSession
+from app.workers.queue import enqueue_autonomous_session_job
 
 if TYPE_CHECKING:
     from app.clients.gateway import GatewayClient
@@ -281,6 +284,128 @@ async def autonomous_idle_watchdog(ctx: dict[str, Any]) -> dict[str, Any]:
             "event": "autonomous_idle_watchdog_done",
             "paused": result["paused"],
             "halted": result["halted"],
+        },
+    )
+    return result
+
+
+async def _run_schedule_sweep(
+    db: Any,  # AsyncSession — typed as Any to avoid heavy import at call sites
+    *,
+    now: datetime | None = None,
+    enqueue: Callable[[uuid.UUID], Awaitable[bool]] | None = None,
+) -> dict[str, int]:
+    """Core schedule-dispatch logic — testable without arq context (M4-B3).
+
+    Called both by :func:`autonomous_schedule_dispatcher` (with a
+    factory-owned session) and directly by tests (with the conftest
+    SAVEPOINT session, ``now`` and ``enqueue`` injected).
+
+    For each schedule with ``enabled AND deleted_at IS NULL AND
+    next_run_at <= effective_now`` (the scan the partial index
+    ``idx_autonomous_schedules_due`` serves), it:
+
+    1. Creates an :class:`~app.models.autonomous.AutonomousSession` with
+       ``trigger_kind='schedule'``, ``trigger_ref`` = the schedule id,
+       ``status='running'``, ``current_phase='intake'``, and ``params``
+       carrying the non-null subset of the schedule's target
+       (``kb_id`` ← ``target_kb_id``, ``playbook_id``, ``skill_ref``).
+    2. Flushes to obtain the session id, then ``await enqueue(id)`` —
+       best-effort; a failed enqueue leaves the row at ``running`` for
+       manual re-enqueue (matching the queue-helper posture).
+    3. Advances ``schedule.last_run_at = effective_now`` and
+       ``schedule.next_run_at = next_run_after(cron_expr, effective_now)``.
+
+    Returns ``{"spawned": n}`` for the arq result log. ``next_run_at IS
+    NULL`` schedules are not picked up (the ``<=`` predicate excludes
+    NULL) — a freshly-created schedule always has ``next_run_at`` set by
+    the create endpoint, so this only excludes legacy rows.
+    """
+
+    effective_now: datetime = now if now is not None else datetime.now(UTC)
+    enqueue_fn = enqueue if enqueue is not None else enqueue_autonomous_session_job
+
+    due_stmt = select(AutonomousSchedule).where(
+        AutonomousSchedule.enabled.is_(True),
+        AutonomousSchedule.deleted_at.is_(None),
+        AutonomousSchedule.next_run_at.is_not(None),
+        AutonomousSchedule.next_run_at <= effective_now,
+    )
+    due = (await db.execute(due_stmt)).scalars().all()
+
+    spawned = 0
+    for schedule in due:
+        # Build the trigger→target params carrying only the non-null keys
+        # (Decision B3-a). target_kb_id maps to the executor's kb_id state.
+        params: dict[str, Any] = {}
+        if schedule.target_kb_id is not None:
+            params["kb_id"] = str(schedule.target_kb_id)
+        if schedule.playbook_id is not None:
+            params["playbook_id"] = str(schedule.playbook_id)
+        if schedule.skill_ref is not None:
+            params["skill_ref"] = schedule.skill_ref
+
+        session = AutonomousSession(
+            user_id=schedule.user_id,
+            project_id=schedule.project_id,
+            trigger_kind="schedule",
+            trigger_ref=schedule.id,
+            status="running",
+            current_phase="intake",
+            params=params,
+        )
+        db.add(session)
+        await db.flush()
+
+        await enqueue_fn(session.id)
+
+        schedule.last_run_at = effective_now
+        schedule.next_run_at = next_run_after(schedule.cron_expr, effective_now)
+        db.add(schedule)
+        spawned += 1
+
+    await db.flush()
+
+    logger.info(
+        "autonomous_schedule_dispatcher: sweep complete",
+        extra={
+            "event": "autonomous_schedule_dispatcher_sweep",
+            "spawned": spawned,
+        },
+    )
+    return {"spawned": spawned}
+
+
+async def autonomous_schedule_dispatcher(ctx: dict[str, Any]) -> dict[str, Any]:
+    """ARQ cron job — spawn sessions for due schedules every minute (M4-B3).
+
+    Registered on :attr:`~app.workers.arq_setup.WorkerSettings.cron_jobs`
+    via ``cron(autonomous_schedule_dispatcher, second=0)`` (top of every
+    minute).
+
+    Opens its own DB session via :func:`~app.db.session.get_session_factory`
+    (mirrors :func:`autonomous_idle_watchdog`), delegates to
+    :func:`_run_schedule_sweep`, commits, and returns a summary dict for
+    arq's result-tracking. The core logic lives in
+    :func:`_run_schedule_sweep` so unit tests can drive it directly inside
+    the conftest SAVEPOINT without needing a factory.
+    """
+
+    logger.info(
+        "autonomous_schedule_dispatcher: starting sweep",
+        extra={"event": "autonomous_schedule_dispatcher_start"},
+    )
+
+    factory = get_session_factory()
+    async with factory() as db:
+        result = await _run_schedule_sweep(db)
+        await db.commit()
+
+    logger.info(
+        "autonomous_schedule_dispatcher: done",
+        extra={
+            "event": "autonomous_schedule_dispatcher_done",
+            "spawned": result["spawned"],
         },
     )
     return result

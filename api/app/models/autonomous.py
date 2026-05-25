@@ -66,6 +66,11 @@ class AutonomousSession(Base):
     ``cost_cap_reached`` latches true when the cap is hit. Idle brake:
     if no activity for ``idle_halt_minutes`` past ``last_activity_at``,
     the session self-halts.
+
+    ``params`` is the trigger→target seam (M4-B3, migration 0042): every
+    trigger source populates the non-null subset of ``{"kb_id",
+    "playbook_id", "skill_ref", "query"}`` and the executor reads it into
+    ``initial_state`` — uniform across schedule / watch / manual triggers.
     """
 
     __tablename__ = "autonomous_sessions"
@@ -105,6 +110,9 @@ class AutonomousSession(Base):
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'running'"))
+    params: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
     result: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

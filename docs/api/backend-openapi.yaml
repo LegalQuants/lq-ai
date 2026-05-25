@@ -4129,6 +4129,129 @@ paths:
         '404':
           description: Proposal not found
 
+  # ------------------------------------------------------------
+  # M4-B3 — Scheduled autonomous tasks
+  # ------------------------------------------------------------
+  /api/v1/autonomous/schedules:
+    post:
+      tags: [autonomous]
+      summary: Create an autonomous schedule (cron-triggered run definition)
+      description: |
+        Validates ``cron_expr`` (a five-field cron string); invalid
+        expressions return 422.  Seeds ``next_run_at`` from the cron
+        expression so the dispatcher can pick it up.  Per-user isolated.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutonomousScheduleCreate'
+      responses:
+        '201':
+          description: Schedule created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutonomousScheduleRead'
+        '401':
+          description: Not authenticated
+        '422':
+          description: Invalid cron expression
+    get:
+      tags: [autonomous]
+      summary: List the calling user's autonomous schedules (non-deleted, newest first)
+      description: |
+        Returns the caller's non-deleted schedules ordered by
+        ``created_at DESC``.  Optional ``?enabled=`` filter.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: enabled
+          in: query
+          required: false
+          schema: {type: boolean}
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+        - name: offset
+          in: query
+          required: false
+          schema: {type: integer, minimum: 0, default: 0}
+      responses:
+        '200':
+          description: Paginated list of schedules
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutonomousScheduleListResponse'
+        '401':
+          description: Not authenticated
+
+  /api/v1/autonomous/schedules/{schedule_id}:
+    patch:
+      tags: [autonomous]
+      summary: Partially update an autonomous schedule (edit / enable / disable)
+      description: |
+        Partial update.  If ``cron_expr`` changes it is re-validated (422
+        on invalid) and ``next_run_at`` is recomputed.  Another user's
+        ``schedule_id`` returns 404.  Audited.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: schedule_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutonomousScheduleUpdate'
+      responses:
+        '200':
+          description: Updated schedule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutonomousScheduleRead'
+        '401':
+          description: Not authenticated
+        '404':
+          description: Schedule not found
+        '422':
+          description: Invalid cron expression
+    delete:
+      tags: [autonomous]
+      summary: Soft-delete an autonomous schedule (returns 200 with updated entity)
+      description: |
+        Soft-deletes by setting ``deleted_at``.  Returns 200 with the
+        updated entity (NOT 204 — FastAPI JSONResponse/204 pitfall).
+        A deleted schedule is excluded from list and the dispatcher;
+        re-delete returns 404.  Another user's ``schedule_id`` returns 404.
+        Audited.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: schedule_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Updated schedule (now soft-deleted)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutonomousScheduleRead'
+        '401':
+          description: Not authenticated
+        '404':
+          description: Schedule not found
+
 # ============================================================
 # COMPONENTS
 # ============================================================
@@ -4975,6 +5098,79 @@ components:
         limit: {type: integer, minimum: 1, maximum: 200}
         offset: {type: integer, minimum: 0}
 
+    # M4-B3 — Scheduled-tasks schemas
+
+    AutonomousScheduleRead:
+      type: object
+      description: |
+        Read-only view of an ``autonomous_schedules`` row — a cron-triggered
+        run definition.
+      required:
+        - id
+        - user_id
+        - cron_expr
+        - enabled
+        - created_at
+        - updated_at
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid, nullable: true}
+        name: {type: string, nullable: true}
+        cron_expr: {type: string}
+        playbook_id: {type: string, format: uuid, nullable: true}
+        skill_ref: {type: string, nullable: true}
+        target_kb_id: {type: string, format: uuid, nullable: true}
+        enabled: {type: boolean}
+        last_run_at: {type: string, format: date-time, nullable: true}
+        next_run_at: {type: string, format: date-time, nullable: true}
+        deleted_at: {type: string, format: date-time, nullable: true}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+
+    AutonomousScheduleCreate:
+      type: object
+      description: |
+        Request body for ``POST /autonomous/schedules``.  ``cron_expr`` is a
+        five-field cron string (minute hour day-of-month month day-of-week)
+        supporting ``*``, lists, ranges, and steps; invalid expressions
+        return 422.
+      required: [cron_expr]
+      properties:
+        cron_expr: {type: string}
+        name: {type: string, nullable: true}
+        playbook_id: {type: string, format: uuid, nullable: true}
+        skill_ref: {type: string, nullable: true}
+        target_kb_id: {type: string, format: uuid, nullable: true}
+        project_id: {type: string, format: uuid, nullable: true}
+        enabled: {type: boolean, default: true}
+
+    AutonomousScheduleUpdate:
+      type: object
+      description: |
+        Request body for ``PATCH /autonomous/schedules/{id}``.  All fields
+        optional.  Changing ``cron_expr`` re-validates (422) and recomputes
+        ``next_run_at``.
+      properties:
+        name: {type: string, nullable: true}
+        cron_expr: {type: string, nullable: true}
+        enabled: {type: boolean, nullable: true}
+        playbook_id: {type: string, format: uuid, nullable: true}
+        skill_ref: {type: string, nullable: true}
+        target_kb_id: {type: string, format: uuid, nullable: true}
+
+    AutonomousScheduleListResponse:
+      type: object
+      description: Paginated list of autonomous schedules (newest first).
+      required: [schedules, total_count, limit, offset]
+      properties:
+        schedules:
+          type: array
+          items: {$ref: '#/components/schemas/AutonomousScheduleRead'}
+        total_count: {type: integer, minimum: 0}
+        limit: {type: integer, minimum: 1, maximum: 200}
+        offset: {type: integer, minimum: 0}
+
     # M4-A4-i — Autonomous session response schemas
 
     AutonomousSessionRead:
@@ -5017,6 +5213,7 @@ components:
         status:
           type: string
           enum: [running, completed, halted, failed]
+        params: {type: object, additionalProperties: true}
         result: {type: object, additionalProperties: true, nullable: true}
         error: {type: string, nullable: true}
         created_at: {type: string, format: date-time}

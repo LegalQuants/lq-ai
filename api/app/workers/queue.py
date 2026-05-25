@@ -51,6 +51,13 @@ playbook worker (see :mod:`app.workers.arq_setup`) consumes from the
 shared playbook queue, walks the document corpus, and writes the
 assembled draft playbook back to the ``easy_playbook_generations`` row."""
 
+AUTONOMOUS_SESSION_JOB_NAME = "autonomous_session_job"
+"""M4-A2 / M4-B3 — Autonomous Session execution pipeline. Enqueued by the
+B3 schedule dispatcher (and future watch/manual triggers) onto the shared
+playbook queue; the playbook worker consumes it and runs the session via
+the LangGraph executor under the brakes. Must match
+:data:`app.workers.autonomous_worker.AUTONOMOUS_SESSION_JOB_NAME`."""
+
 TABULAR_JOB_NAME = "tabular_execution_job"
 """M3-C2 — Tabular Review execution pipeline. Triggered by the API
 when a user calls ``POST /api/v1/tabular/execute``; the playbook
@@ -265,6 +272,43 @@ async def enqueue_tabular_execution_job(execution_id: uuid.UUID) -> bool:
             extra={
                 "event": "tabular_execution_enqueue_failed",
                 "execution_id": str(execution_id),
+                "error": str(exc),
+            },
+        )
+        return False
+
+
+async def enqueue_autonomous_session_job(session_id: uuid.UUID) -> bool:
+    """Enqueue an Autonomous Session job onto the shared playbook queue.
+
+    Shares the M3-A6-original queue with Easy Playbook + Tabular (per
+    Decision C-3 and the autonomous-worker queue note). Triggered by the
+    B3 schedule dispatcher (and future watch/manual triggers) after the
+    :class:`~app.models.autonomous.AutonomousSession` row is flushed.
+
+    Returns True on success, False on transport / import failure
+    (best-effort posture matching the other ``enqueue_*`` helpers). The
+    caller logs at WARNING on failure but does NOT roll back the row — an
+    operator can re-enqueue a stuck ``running`` session manually.
+    """
+
+    try:
+        pool = await _get_m3a6_pool()
+        await pool.enqueue_job(AUTONOMOUS_SESSION_JOB_NAME, str(session_id))
+        log.info(
+            "enqueue_autonomous_session_job: enqueued",
+            extra={
+                "event": "autonomous_session_enqueue",
+                "session_id": str(session_id),
+            },
+        )
+        return True
+    except Exception as exc:
+        log.warning(
+            "enqueue_autonomous_session_job: failed; session stays running",
+            extra={
+                "event": "autonomous_session_enqueue_failed",
+                "session_id": str(session_id),
                 "error": str(exc),
             },
         )

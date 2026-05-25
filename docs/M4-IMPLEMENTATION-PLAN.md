@@ -416,6 +416,12 @@ With the brake-guarded executor proven, Phase B adds the four v1 primitives. Eac
 
 **References:** ADR 0013 D2; [PRD §3.10 user story 3](PRD.md#310-autonomous-layer-m4); arq cron pattern — `api/app/workers/document_pipeline.py::_build_cron_jobs`.
 
+**Resolved at execution (2026-05-25, Kevin — do not re-litigate):**
+- **B3-a — Trigger→target param seam = a `params` JSONB column on `autonomous_sessions`** (the recommended option). Migration **0042** adds `params JSONB NOT NULL DEFAULT '{}'`. Every trigger source populates it: the **B3 dispatcher** sets `session.params = {"kb_id": target_kb_id, "playbook_id": playbook_id, "skill_ref": skill_ref}` (only the non-null keys); B4's watch-enqueue and any manual/suggestion trigger do the same. The **executor** (`executor.py`) reads `session.params` into `initial_state` (replacing the hardcoded `kb_id=None`/`query=None`) — uniform across all trigger kinds, decoupled from the schedule/watch tables. This lands in B3 as shared infra; B4 reuses it. (Touches the load-bearing executor — keep the change minimal: read `params` into the existing state keys; the brake/commit contract is unchanged.)
+- **B3-b — `autonomous_schedules` dispatcher index lands in migration 0042** (the A1-deferred index). Shape keyed to the dispatcher scan `WHERE enabled AND deleted_at IS NULL AND next_run_at <= now()`: a partial index `idx_autonomous_schedules_due (next_run_at) WHERE enabled AND deleted_at IS NULL`. Document the scan query the index serves in the migration comment.
+- **B3-c — Cron parsing = a minimal in-repo helper, NO new dependency** (the plan's guidance: a full cron lib for five fields is not warranted; CLAUDE.md SBOM posture). Add `app/autonomous/cron.py` with `next_run_after(cron_expr: str, after: datetime) -> datetime` supporting the standard 5 fields (minute, hour, day-of-month, month, day-of-week) with `*`, lists (`1,2`), ranges (`1-5`), and steps (`*/5`); validate on schedule create/update (reject invalid `cron_expr` with 422). Unit-test the helper directly (next-run math + validation) alongside the dispatcher integration tests. Document the determination (why no dep) in the PR/commit.
+- **B3-d — DELETE returns 200 with the soft-deleted entity** (never 204 — CLAUDE.md FastAPI pitfall), mirroring the memory/precedent DELETEs.
+
 ---
 
 ### Task M4-B4 — Watches (KB-arrival trigger, direct arq-enqueue from ingest) + `/autonomous/watches` API
