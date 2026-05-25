@@ -62,14 +62,18 @@ class ToolIntent(StrEnum):
     run_skill = "run_skill"
     run_playbook = "run_playbook"
     propose_memory = "propose_memory"
+    propose_precedent = "propose_precedent"   # M4-B2: write/increment precedent_entries
     emit_finding = "emit_finding"
     notify = "notify"
 
 # Per-phase grants: phase -> allowed intents (R6).
+# M4-B2 (Decision B2-b): propose_precedent granted at BOTH analysis and drafting
+# — patterns are observed while reading docs (analysis) AND recognized as
+# recurring during synthesis (drafting).
 PHASE_GRANTS: dict[Phase, set[ToolIntent]] = {
     Phase.intake:        {ToolIntent.retrieve_chunks},
-    Phase.analysis:      {ToolIntent.retrieve_chunks, ToolIntent.run_skill, ToolIntent.run_playbook},
-    Phase.drafting:      {ToolIntent.run_skill, ToolIntent.emit_finding, ToolIntent.propose_memory},
+    Phase.analysis:      {ToolIntent.retrieve_chunks, ToolIntent.run_skill, ToolIntent.run_playbook, ToolIntent.propose_precedent},
+    Phase.drafting:      {ToolIntent.run_skill, ToolIntent.emit_finding, ToolIntent.propose_memory, ToolIntent.propose_precedent},
     Phase.ethics_review: {ToolIntent.emit_finding},          # retrieval/skills stripped here
     Phase.delivery:      {ToolIntent.notify},
 }

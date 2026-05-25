@@ -3915,6 +3915,220 @@ paths:
         '404':
           description: Memory entry not found
 
+  # ── M4-B2 — precedent board + promote-to-Project proposal lifecycle ──
+
+  /api/v1/autonomous/precedents:
+    get:
+      tags: [autonomous]
+      summary: List the calling user's precedent entries (non-dismissed, newest first)
+      description: |
+        Returns the caller's non-dismissed precedent entries
+        (``dismissed_at IS NULL``) ordered by ``created_at DESC``.  Pass
+        ``?pattern_kind=`` to filter to one classifier; omitting it returns
+        all non-dismissed entries.  ``limit`` is clamped to [1, 200];
+        ``offset`` to [0, ∞).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: pattern_kind
+          in: query
+          required: false
+          schema: {type: string}
+          description: Filter by precedent classifier; omit to return all non-dismissed entries.
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, default: 50, minimum: 1, maximum: 200}
+          description: Maximum number of entries to return (clamped to [1, 200]).
+        - name: offset
+          in: query
+          required: false
+          schema: {type: integer, default: 0, minimum: 0}
+          description: Zero-based index of the first result to return.
+      responses:
+        '200':
+          description: Paginated list of precedent entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrecedentEntryListResponse'
+        '401':
+          description: Not authenticated
+
+  /api/v1/autonomous/precedents/{precedent_id}/dismiss:
+    post:
+      tags: [autonomous]
+      summary: Dismiss a precedent entry (idempotent)
+      description: |
+        Sets ``dismissed_at=now(UTC)`` so the entry drops out of the board.
+        Re-dismissing leaves the original ``dismissed_at`` untouched.
+
+        Another user's ``precedent_id`` returns 404.  Audited.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: precedent_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Updated precedent entry (now dismissed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrecedentEntryRead'
+        '401':
+          description: Not authenticated
+        '404':
+          description: Precedent entry not found
+
+  /api/v1/autonomous/precedents/{precedent_id}/promote:
+    post:
+      tags: [autonomous]
+      summary: Propose promoting a precedent into a Project's context (proposal only)
+      description: |
+        Creates a ``proposed`` project-context proposal linking the
+        precedent to ``project_id``.  The ``suggested_md`` snippet is
+        derived server-side from the precedent's ``summary``.
+
+        This endpoint does **NOT** mutate ``projects.context_md`` —
+        promotion is a proposal only; the user accepting it performs the
+        authorized write (ADR 0013 D5).
+
+        Another user's ``precedent_id`` — or a ``project_id`` the caller
+        does not own — returns 404.  Audited.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: precedent_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromotePrecedentRequest'
+      responses:
+        '201':
+          description: Proposal created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectContextProposalRead'
+        '401':
+          description: Not authenticated
+        '404':
+          description: Precedent or target project not found
+
+  /api/v1/autonomous/project-context-proposals:
+    get:
+      tags: [autonomous]
+      summary: List the calling user's project-context proposals (newest first)
+      description: |
+        Returns the caller's project-context proposals ordered by
+        ``created_at DESC``.  Pass ``?state=proposed|accepted|rejected``
+        and/or ``?project_id=`` to filter.  ``limit`` is clamped to
+        [1, 200]; ``offset`` to [0, ∞).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [proposed, accepted, rejected]
+          description: Filter by proposal state.
+        - name: project_id
+          in: query
+          required: false
+          schema: {type: string, format: uuid}
+          description: Filter to proposals targeting one Project.
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, default: 50, minimum: 1, maximum: 200}
+          description: Maximum number of proposals to return (clamped to [1, 200]).
+        - name: offset
+          in: query
+          required: false
+          schema: {type: integer, default: 0, minimum: 0}
+          description: Zero-based index of the first result to return.
+      responses:
+        '200':
+          description: Paginated list of project-context proposals
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectContextProposalListResponse'
+        '401':
+          description: Not authenticated
+
+  /api/v1/autonomous/project-context-proposals/{proposal_id}/accept:
+    post:
+      tags: [autonomous]
+      summary: Accept a proposal — append the suggested context to the Project (user-authorized write)
+      description: |
+        The user-authorized write (ADR 0013 D5): appends the proposal's
+        ``suggested_md`` to the target Project's ``context_md``
+        (initializing it if NULL), sets ``state='accepted'`` and
+        ``accepted_at``.
+
+        Idempotent on re-accept: if already ``accepted``, returns the
+        current state without re-appending.  A ``rejected`` proposal may be
+        accepted (rejected→accepted) and the append occurs.
+
+        Another user's ``proposal_id`` returns 404.  Audited.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: proposal_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Updated proposal (now accepted)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectContextProposalRead'
+        '401':
+          description: Not authenticated
+        '404':
+          description: Proposal not found
+
+  /api/v1/autonomous/project-context-proposals/{proposal_id}/reject:
+    post:
+      tags: [autonomous]
+      summary: Reject a proposal (does not touch Project context)
+      description: |
+        Sets ``state='rejected'`` and ``rejected_at``.  Does NOT touch
+        ``projects.context_md``.
+
+        Another user's ``proposal_id`` returns 404.  Audited.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: proposal_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Updated proposal (now rejected)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectContextProposalRead'
+        '401':
+          description: Not authenticated
+        '404':
+          description: Proposal not found
+
 # ============================================================
 # COMPONENTS
 # ============================================================
@@ -4672,6 +4886,94 @@ components:
         on keep (edit-on-keep).
       properties:
         content: {type: string, nullable: true}
+
+    # M4-B2 — precedent board + promote-to-Project proposal schemas
+
+    PrecedentEntryRead:
+      type: object
+      description: |
+        Read-only view of a ``precedent_entries`` row.  Returned by the
+        list, dismiss endpoints.
+      required:
+        - id
+        - user_id
+        - pattern_kind
+        - summary
+        - observed_count
+        - created_at
+        - updated_at
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        pattern_kind: {type: string}
+        summary: {type: string}
+        observed_count: {type: integer, minimum: 1}
+        source_session_id: {type: string, format: uuid, nullable: true}
+        dismissed_at: {type: string, format: date-time, nullable: true}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+
+    PrecedentEntryListResponse:
+      type: object
+      description: Paginated list of precedent entries (non-dismissed, newest first).
+      required: [entries, total_count, limit, offset]
+      properties:
+        entries:
+          type: array
+          items: {$ref: '#/components/schemas/PrecedentEntryRead'}
+        total_count: {type: integer, minimum: 0}
+        limit: {type: integer, minimum: 1, maximum: 200}
+        offset: {type: integer, minimum: 0}
+
+    PromotePrecedentRequest:
+      type: object
+      description: |
+        Request body for ``POST /autonomous/precedents/{id}/promote``.
+        ``project_id`` is the target Project; the caller must own it.
+      required: [project_id]
+      properties:
+        project_id: {type: string, format: uuid}
+
+    ProjectContextProposalRead:
+      type: object
+      description: |
+        Read-only view of a ``project_context_proposals`` row — a proposal
+        to promote a precedent into a Project's context document.  Only the
+        user accepting a proposal writes ``projects.context_md`` (ADR 0013 D5).
+      required:
+        - id
+        - user_id
+        - precedent_id
+        - project_id
+        - suggested_md
+        - state
+        - created_at
+        - updated_at
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        precedent_id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid}
+        suggested_md: {type: string}
+        state:
+          type: string
+          enum: [proposed, accepted, rejected]
+        accepted_at: {type: string, format: date-time, nullable: true}
+        rejected_at: {type: string, format: date-time, nullable: true}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+
+    ProjectContextProposalListResponse:
+      type: object
+      description: Paginated list of project-context proposals (newest first).
+      required: [proposals, total_count, limit, offset]
+      properties:
+        proposals:
+          type: array
+          items: {$ref: '#/components/schemas/ProjectContextProposalRead'}
+        total_count: {type: integer, minimum: 0}
+        limit: {type: integer, minimum: 1, maximum: 200}
+        offset: {type: integer, minimum: 0}
 
     # M4-A4-i — Autonomous session response schemas
 

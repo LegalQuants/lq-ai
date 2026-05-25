@@ -88,6 +88,18 @@ class MemoryState(StrEnum):
     dismissed = "dismissed"
 
 
+class ProposalState(StrEnum):
+    """Lifecycle state of a project-context promotion proposal.
+
+    Matches the CHECK constraint on ``project_context_proposals.state``
+    (migration ``0041_project_context_proposals.py``).
+    """
+
+    proposed = "proposed"
+    accepted = "accepted"
+    rejected = "rejected"
+
+
 class AutonomousSessionRead(BaseModel):
     """ORM-read view of an :class:`~app.models.autonomous.AutonomousSession`."""
 
@@ -182,6 +194,65 @@ class PrecedentEntryRead(BaseModel):
     dismissed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class PrecedentEntryListResponse(BaseModel):
+    """Paginated list of :class:`PrecedentEntryRead` items (M4-B2).
+
+    Mirrors ``AutonomousMemoryListResponse`` — total_count / limit /
+    offset envelope. Excludes dismissed entries (``dismissed_at IS NULL``).
+    """
+
+    entries: list[PrecedentEntryRead]
+    total_count: int
+    limit: int
+    offset: int
+
+
+class ProjectContextProposalRead(BaseModel):
+    """ORM-read view of a :class:`~app.models.autonomous.ProjectContextProposal`.
+
+    A proposal to promote a precedent into a Project's context document.
+    ``state`` walks ``proposed → accepted | rejected``; only the user
+    accepting a proposal writes ``projects.context_md`` (ADR 0013 D5).
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    user_id: uuid.UUID
+    precedent_id: uuid.UUID
+    project_id: uuid.UUID
+    suggested_md: str
+    state: ProposalState
+    accepted_at: datetime | None = None
+    rejected_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ProjectContextProposalListResponse(BaseModel):
+    """Paginated list of :class:`ProjectContextProposalRead` items (M4-B2).
+
+    Mirrors ``AutonomousMemoryListResponse`` — total_count / limit /
+    offset envelope.
+    """
+
+    proposals: list[ProjectContextProposalRead]
+    total_count: int
+    limit: int
+    offset: int
+
+
+class PromotePrecedentRequest(BaseModel):
+    """Request body for ``POST /autonomous/precedents/{id}/promote``.
+
+    ``project_id`` is the target Project; the caller must own it (404
+    otherwise). The ``suggested_md`` snippet is derived server-side from
+    the precedent's ``summary`` — the client does not supply it.
+    """
+
+    project_id: uuid.UUID
 
 
 class NotificationChannel(StrEnum):

@@ -165,6 +165,13 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/autonomous/memory/{memory_id}/keep",
         "/api/v1/autonomous/memory/{memory_id}/dismiss",
         "/api/v1/autonomous/memory/{memory_id}",
+        # M4-B2 — precedent board + promote-to-Project proposal lifecycle
+        "/api/v1/autonomous/precedents",
+        "/api/v1/autonomous/precedents/{precedent_id}/dismiss",
+        "/api/v1/autonomous/precedents/{precedent_id}/promote",
+        "/api/v1/autonomous/project-context-proposals",
+        "/api/v1/autonomous/project-context-proposals/{proposal_id}/accept",
+        "/api/v1/autonomous/project-context-proposals/{proposal_id}/reject",
     }
 )
 
@@ -237,7 +244,14 @@ async def test_openapi_paths_match_sketch() -> None:
     # /api/v1/autonomous/memory/{memory_id}/keep
     # /api/v1/autonomous/memory/{memory_id}/dismiss
     # /api/v1/autonomous/memory/{memory_id}
-    assert len(actual) == 101
+    # M4-B2 adds six new paths:
+    # /api/v1/autonomous/precedents
+    # /api/v1/autonomous/precedents/{precedent_id}/dismiss
+    # /api/v1/autonomous/precedents/{precedent_id}/promote
+    # /api/v1/autonomous/project-context-proposals
+    # /api/v1/autonomous/project-context-proposals/{proposal_id}/accept
+    # /api/v1/autonomous/project-context-proposals/{proposal_id}/reject
+    assert len(actual) == 107
 
 
 @pytest.mark.unit

@@ -10,9 +10,9 @@ Cost model (per M4 implementation plan)
 * ``run_skill`` / ``run_playbook`` — inference-bearing; delegate to
   :func:`~app.citation.cost.estimate_judge_call_cost_usd` which uses a
   per-model rolling average over the last 100 judge calls.
-* ``retrieve_chunks`` / ``propose_memory`` / ``emit_finding`` /
-  ``notify`` — local operations with no provider inference; marginal
-  cost is zero for R4 pre-flight purposes.
+* ``retrieve_chunks`` / ``propose_memory`` / ``propose_precedent`` /
+  ``emit_finding`` / ``notify`` — local operations with no provider
+  inference; marginal cost is zero for R4 pre-flight purposes.
 
 Usage::
 
@@ -52,9 +52,9 @@ async def estimate_tool_cost(
     ``"judge_model"`` (preferred) or ``"model"`` for these intents.
 
     All other intents (``retrieve_chunks``, ``propose_memory``,
-    ``emit_finding``, ``notify``) are local-only operations with no provider
-    inference; this function returns :data:`decimal.Decimal` ``"0"`` for
-    them without querying the DB.
+    ``propose_precedent``, ``emit_finding``, ``notify``) are local-only
+    operations with no provider inference; this function returns
+    :data:`decimal.Decimal` ``"0"`` for them without querying the DB.
 
     Args:
         intent: The :class:`~app.autonomous.enums.ToolIntent` being considered.

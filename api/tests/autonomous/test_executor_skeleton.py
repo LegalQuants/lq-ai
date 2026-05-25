@@ -94,6 +94,9 @@ def test_phase_grants_exact_membership() -> None:
             ToolIntent.retrieve_chunks,
             ToolIntent.run_skill,
             ToolIntent.run_playbook,
+            # M4-B2: propose_precedent granted at analysis (patterns observed
+            # while reading docs).
+            ToolIntent.propose_precedent,
         }
     )
 
@@ -102,6 +105,9 @@ def test_phase_grants_exact_membership() -> None:
             ToolIntent.run_skill,
             ToolIntent.emit_finding,
             ToolIntent.propose_memory,
+            # M4-B2: propose_precedent granted at drafting (patterns recognized
+            # during synthesis).
+            ToolIntent.propose_precedent,
         }
     )
 
@@ -119,12 +125,13 @@ def test_phase_grants_covers_all_phases() -> None:
 
 @pytest.mark.unit
 def test_tool_intent_members() -> None:
-    """ToolIntent has exactly the six members specified."""
+    """ToolIntent has exactly the seven members specified (M4-B2 adds propose_precedent)."""
     expected = {
         "retrieve_chunks",
         "run_skill",
         "run_playbook",
         "propose_memory",
+        "propose_precedent",
         "emit_finding",
         "notify",
     }

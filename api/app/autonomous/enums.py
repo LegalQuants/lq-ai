@@ -45,6 +45,7 @@ class ToolIntent(StrEnum):
     run_skill = "run_skill"
     run_playbook = "run_playbook"
     propose_memory = "propose_memory"
+    propose_precedent = "propose_precedent"
     emit_finding = "emit_finding"
     notify = "notify"
 
@@ -56,6 +57,9 @@ PHASE_GRANTS: dict[Phase, frozenset[ToolIntent]] = {
             ToolIntent.retrieve_chunks,
             ToolIntent.run_skill,
             ToolIntent.run_playbook,
+            # propose_precedent at analysis: document/clause patterns are
+            # observed while reading docs (M4-B2, Decision B2-b).
+            ToolIntent.propose_precedent,
         }
     ),
     Phase.drafting: frozenset(
@@ -63,6 +67,9 @@ PHASE_GRANTS: dict[Phase, frozenset[ToolIntent]] = {
             ToolIntent.run_skill,
             ToolIntent.emit_finding,
             ToolIntent.propose_memory,
+            # propose_precedent at drafting: recurring patterns recognized
+            # during synthesis (M4-B2, Decision B2-b).
+            ToolIntent.propose_precedent,
         }
     ),
     Phase.ethics_review: frozenset({ToolIntent.emit_finding}),

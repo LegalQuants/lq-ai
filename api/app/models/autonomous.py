@@ -18,6 +18,9 @@ Five tables (migration ``0039_autonomous_layer.py``) + one from 0040:
   the agent surfaces for user curation.
 * :class:`PrecedentEntry` — observed precedent patterns across a user's
   sessions.
+* :class:`ProjectContextProposal` — a proposal to promote a precedent
+  into a Project's context (migration 0041); the user accepting it is
+  the authorized ``context_md`` write (ADR 0013 D5).
 * :class:`AutonomousNotification` — durable in-app notification written
   by the ``notify`` chokepoint handler (A3.3); migration 0040.
 
@@ -334,6 +337,79 @@ class PrecedentEntry(Base):
         return (
             f"<PrecedentEntry id={self.id} user_id={self.user_id} "
             f"pattern_kind={self.pattern_kind!r} observed={self.observed_count}>"
+        )
+
+
+class ProjectContextProposal(Base):
+    """A proposal to promote a precedent into a Project's context document.
+
+    The autonomous agent (or a user) may surface "promote this recurring
+    precedent into Project X's context", but the agent NEVER writes a
+    Project's ``context_md`` directly (ADR 0013 D5). This row records the
+    *proposal*; the user accepting it (``POST …/accept``) is the
+    authorized write that appends ``suggested_md`` to
+    ``projects.context_md``.
+
+    ``state`` walks ``proposed → accepted | rejected`` (CHECK
+    ``chk_project_context_proposals_state``). ``suggested_md`` is the
+    server-derived context snippet. ``accepted_at`` / ``rejected_at``
+    timestamp the terminal transitions.
+
+    All three FKs (``user_id``, ``precedent_id``, ``project_id``) are
+    ``ON DELETE CASCADE`` — the autonomous layer is hard per-user isolated
+    and a proposal is meaningless without its precedent or target project.
+    Migration ``0041_project_context_proposals.py``.
+    """
+
+    __tablename__ = "project_context_proposals"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "users.id",
+            ondelete="CASCADE",
+            name="fk_project_context_proposals_user_id",
+        ),
+        nullable=False,
+    )
+    precedent_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "precedent_entries.id",
+            ondelete="CASCADE",
+            name="fk_project_context_proposals_precedent_id",
+        ),
+        nullable=False,
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "projects.id",
+            ondelete="CASCADE",
+            name="fk_project_context_proposals_project_id",
+        ),
+        nullable=False,
+    )
+    suggested_md: Mapped[str] = mapped_column(Text, nullable=False)
+    state: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'proposed'"))
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<ProjectContextProposal id={self.id} user_id={self.user_id} "
+            f"project_id={self.project_id} state={self.state!r}>"
         )
 
 

@@ -41,6 +41,9 @@ Local handlers implemented here (A3.3a)
                       DB row.
 ``propose_memory``  — writes a ``proposed`` :class:`~app.models.autonomous.AutonomousMemory`
                       row; zero cost.
+``propose_precedent`` — upserts a :class:`~app.models.autonomous.PrecedentEntry`
+                      row (increments ``observed_count`` on recurrence,
+                      else inserts); zero cost. Never touches ``projects``.
 ``notify``          — writes an ``in_app``
                       :class:`~app.models.autonomous.AutonomousNotification` row;
                       zero cost.
@@ -72,6 +75,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.autonomous.audit import autonomous_audit
@@ -82,6 +86,7 @@ from app.models.autonomous import (
     AutonomousMemory,
     AutonomousNotification,
     AutonomousSession,
+    PrecedentEntry,
 )
 from app.observability_helpers import get_tracer, record_attributes
 
@@ -251,8 +256,9 @@ async def _dispatch(
 ) -> ToolResult:
     """Route a granted, in-budget tool intent to its handler.
 
-    Local intents (``emit_finding``, ``propose_memory``, ``notify``) are
-    zero-cost and return ``cost_usd=Decimal("0")``.
+    Local intents (``emit_finding``, ``propose_memory``,
+    ``propose_precedent``, ``notify``) are zero-cost and return
+    ``cost_usd=Decimal("0")``.
 
     Inference/retrieval intents use the ``estimated_cost`` kwarg forwarded
     from the chokepoint — the SAME ``Decimal`` value that R4 already
@@ -294,6 +300,43 @@ async def _dispatch(
         db.add(mem)
         await db.flush()
         return ToolResult(cost_usd=Decimal("0"), data={"memory_id": str(mem.id)})
+
+    if intent == ToolIntent.propose_precedent:
+        # Local, zero-cost: upsert-on-recurrence into precedent_entries.
+        # Find the caller's non-dismissed row with the same pattern_kind AND
+        # summary; if present, increment observed_count (a recurring pattern),
+        # else insert a fresh row with observed_count=1.
+        #
+        # This handler MUST NEVER touch the `projects` table — promotion into a
+        # Project's context is a separate, user-authorized proposal lifecycle
+        # (M4-B2, ADR 0013 D5). Missing required params raise KeyError, the
+        # accepted failure mode consistent with propose_memory.
+        pattern_kind: str = params["pattern_kind"]
+        summary: str = params["summary"]
+        existing_stmt = select(PrecedentEntry).where(
+            PrecedentEntry.user_id == session.user_id,
+            PrecedentEntry.pattern_kind == pattern_kind,
+            PrecedentEntry.summary == summary,
+            PrecedentEntry.dismissed_at.is_(None),
+        )
+        row = (await db.execute(existing_stmt)).scalar_one_or_none()
+        if row is not None:
+            row.observed_count += 1
+            row.updated_at = datetime.now(UTC)
+        else:
+            row = PrecedentEntry(
+                user_id=session.user_id,
+                pattern_kind=pattern_kind,
+                summary=summary,
+                observed_count=1,
+                source_session_id=session.id,
+            )
+            db.add(row)
+        await db.flush()
+        return ToolResult(
+            cost_usd=Decimal("0"),
+            data={"precedent_id": str(row.id), "observed_count": row.observed_count},
+        )
 
     if intent == ToolIntent.notify:
         # Local, zero-cost: write an in-app autonomous_notifications row.
