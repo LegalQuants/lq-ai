@@ -1,4 +1,4 @@
-"""ARQ worker function for the Autonomous Session execution pipeline — M4-A2.
+"""ARQ worker functions for the Autonomous Session pipeline — M4-A2 + M4-A4-ii.
 
 The autonomous session API endpoint (future M4 task) will create an
 :class:`~app.models.autonomous.AutonomousSession` row and enqueue this
@@ -21,6 +21,11 @@ mechanism is not a standard arq 0.25 feature; if autonomous sessions
 routinely exceed 900s in production, the right fix is raising the shared
 timeout or splitting autonomous work onto its own worker container.
 This is a known concern deferred to post-M4-A2.
+
+M4-A4-ii adds :func:`autonomous_idle_watchdog`, a per-minute arq cron
+that reaps sessions that have gone idle. The core transition logic lives
+in :func:`_run_idle_sweep` so tests can drive it directly via the
+conftest ``db_session`` fixture without opening a separate factory session.
 """
 
 from __future__ import annotations
@@ -30,8 +35,9 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import update
+from sqlalchemy import func, select, update
 
+from app.autonomous.audit import autonomous_audit
 from app.autonomous.executor import run_autonomous_session
 from app.db.session import get_session_factory
 from app.models.autonomous import AutonomousSession
@@ -140,6 +146,144 @@ async def autonomous_session_job(ctx: dict[str, Any], session_id: str) -> dict[s
         },
     )
     return {"session_id": session_id, "status": "completed"}
+
+
+async def _run_idle_sweep(
+    db: Any,  # AsyncSession — typed as Any to avoid heavy import at call sites
+    *,
+    now: datetime | None = None,
+) -> dict[str, int]:
+    """Core idle-halt transition logic — testable without arq context.
+
+    Called both by :func:`autonomous_idle_watchdog` (with a factory-owned
+    session) and directly by tests (with the conftest SAVEPOINT session).
+
+    Two-tick semantics (order is intentional — paused→halted FIRST):
+
+    1. **paused → halted**: sessions with ``status='running'``,
+       ``halt_state='paused'``, and
+       ``last_activity_at < now - (2 * idle_halt_minutes) minutes``.
+       Sets ``halt_state='halted'``, ``status='halted'``,
+       ``completed_at=now``, and writes a ``halted`` audit row with
+       ``reason='idle_timeout'``.
+
+    2. **running → paused**: sessions with ``status='running'``,
+       ``halt_state='running'``, and
+       ``last_activity_at < now - idle_halt_minutes minutes``.
+       Sets ``halt_state='paused'``.
+
+    Doing (1) before (2) guarantees a session freshly paused in step (2)
+    is NOT also halted in step (1) within the same tick — it would need
+    to survive a *later* sweep with the 2x threshold still exceeded.
+
+    Per-session ``idle_halt_minutes`` is used for both thresholds via
+    ``func.make_interval(0, 0, 0, 0, 0, idle_halt_minutes)`` (positional
+    Postgres ``make_interval(years, months, weeks, days, hours, mins)``)
+    so the Postgres planner can use the partial index
+    ``idx_autonomous_sessions_active``.
+
+    Returns a summary dict ``{"paused": n, "halted": n}`` for the arq
+    result log.
+    """
+
+    effective_now: datetime = now if now is not None else datetime.now(UTC)
+
+    halted_count = 0
+    paused_count = 0
+
+    # ------------------------------------------------------------------
+    # Tick 1: paused → halted (must run BEFORE running → paused)
+    # ------------------------------------------------------------------
+    # Candidate: status='running', halt_state='paused',
+    #             last_activity_at < now - (2 * idle_halt_minutes minutes)
+    # make_interval positional: (years, months, weeks, days, hours, mins)
+    # SQLAlchemy's func proxy passes kwargs directly to the SQL function which
+    # Postgres supports as named args only in its own SQL syntax — use positional
+    # form instead so the expression compiles correctly across all SA versions.
+    paused_candidates_stmt = select(AutonomousSession).where(
+        AutonomousSession.status == "running",
+        AutonomousSession.halt_state == "paused",
+        AutonomousSession.last_activity_at
+        < effective_now
+        - func.make_interval(0, 0, 0, 0, 0, AutonomousSession.idle_halt_minutes * 2),
+    )
+    paused_result = await db.execute(paused_candidates_stmt)
+    paused_candidates = paused_result.scalars().all()
+
+    for sess in paused_candidates:
+        sess.halt_state = "halted"
+        sess.status = "halted"
+        sess.completed_at = effective_now
+        db.add(sess)
+        await autonomous_audit(db, sess, "halted", reason="idle_timeout")
+        halted_count += 1
+
+    # ------------------------------------------------------------------
+    # Tick 2: running → paused
+    # ------------------------------------------------------------------
+    # Candidate: status='running', halt_state='running',
+    #             last_activity_at < now - idle_halt_minutes minutes
+    running_candidates_stmt = select(AutonomousSession).where(
+        AutonomousSession.status == "running",
+        AutonomousSession.halt_state == "running",
+        AutonomousSession.last_activity_at
+        < effective_now - func.make_interval(0, 0, 0, 0, 0, AutonomousSession.idle_halt_minutes),
+    )
+    running_result = await db.execute(running_candidates_stmt)
+    running_candidates = running_result.scalars().all()
+
+    for sess in running_candidates:
+        sess.halt_state = "paused"
+        db.add(sess)
+        paused_count += 1
+
+    await db.flush()
+
+    logger.info(
+        "autonomous_idle_watchdog: sweep complete",
+        extra={
+            "event": "autonomous_idle_watchdog_sweep",
+            "paused": paused_count,
+            "halted": halted_count,
+        },
+    )
+    return {"paused": paused_count, "halted": halted_count}
+
+
+async def autonomous_idle_watchdog(ctx: dict[str, Any]) -> dict[str, Any]:
+    """ARQ cron job — reap idle autonomous sessions every minute.
+
+    Registered on :attr:`~app.workers.arq_setup.WorkerSettings.cron_jobs`
+    via ``cron(autonomous_idle_watchdog, second=0)`` (top of every minute).
+
+    Opens its own DB session via :func:`~app.db.session.get_session_factory`
+    (mirrors the pattern in :func:`autonomous_session_job`), delegates to
+    :func:`_run_idle_sweep`, commits, and returns a summary dict for arq's
+    result-tracking.
+
+    The core logic lives in :func:`_run_idle_sweep` so unit tests can drive
+    it directly inside the conftest SAVEPOINT without needing a factory.
+    """
+
+    logger.info(
+        "autonomous_idle_watchdog: starting sweep",
+        extra={"event": "autonomous_idle_watchdog_start"},
+    )
+
+    factory = get_session_factory()
+    async with factory() as db:
+        result = await _run_idle_sweep(db)
+        await db.commit()
+
+    logger.info(
+        "autonomous_idle_watchdog: done",
+        extra={
+            "event": "autonomous_idle_watchdog_done",
+            "paused": result["paused"],
+            "halted": result["halted"],
+        },
+    )
+    return result
 
 
 def _gateway_from_ctx(ctx: dict[str, Any]) -> GatewayClient:
