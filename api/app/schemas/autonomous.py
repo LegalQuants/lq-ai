@@ -198,6 +198,31 @@ class NotificationChannel(StrEnum):
     webhook = "webhook"  # RESERVED — dispatch lands in M4-C1 (DE-312)
 
 
+class MemoryKeepRequest(BaseModel):
+    """Optional request body for ``POST /autonomous/memory/{id}/keep``.
+
+    If ``content`` is provided, the memory entry's text is overwritten on
+    keep (edit-on-keep).  Omitting the body entirely (or sending ``{}``
+    or ``{"content": null}``) leaves the existing content unchanged.
+    """
+
+    content: str | None = None
+
+
+class AutonomousMemoryListResponse(BaseModel):
+    """Paginated list of :class:`AutonomousMemoryRead` items (M4-B1).
+
+    Mirrors ``AutonomousSessionListResponse`` — total_count / limit /
+    offset envelope for consistent pagination conventions across the API.
+    Excludes soft-deleted entries (``deleted_at IS NULL``).
+    """
+
+    entries: list[AutonomousMemoryRead]
+    total_count: int
+    limit: int
+    offset: int
+
+
 class AutonomousSessionListResponse(BaseModel):
     """Paginated list of :class:`AutonomousSessionRead` items.
 

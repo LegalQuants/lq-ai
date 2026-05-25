@@ -160,6 +160,11 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/autonomous/sessions",
         "/api/v1/autonomous/sessions/{session_id}",
         "/api/v1/autonomous/sessions/{session_id}/halt",
+        # M4-B1 — per-user memory curation API (list, keep, dismiss, delete)
+        "/api/v1/autonomous/memory",
+        "/api/v1/autonomous/memory/{memory_id}/keep",
+        "/api/v1/autonomous/memory/{memory_id}/dismiss",
+        "/api/v1/autonomous/memory/{memory_id}",
     }
 )
 
@@ -227,7 +232,12 @@ async def test_openapi_paths_match_sketch() -> None:
     # /api/v1/autonomous/sessions
     # /api/v1/autonomous/sessions/{session_id}
     # /api/v1/autonomous/sessions/{session_id}/halt
-    assert len(actual) == 97
+    # M4-B1 adds four new paths:
+    # /api/v1/autonomous/memory
+    # /api/v1/autonomous/memory/{memory_id}/keep
+    # /api/v1/autonomous/memory/{memory_id}/dismiss
+    # /api/v1/autonomous/memory/{memory_id}
+    assert len(actual) == 101
 
 
 @pytest.mark.unit

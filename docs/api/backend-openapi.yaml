@@ -3776,6 +3776,145 @@ paths:
         '404':
           description: Session not found
 
+  # M4-B1 — per-user memory curation API
+
+  /api/v1/autonomous/memory:
+    get:
+      tags: [autonomous]
+      summary: List the calling user's autonomous memory entries (non-deleted, newest first)
+      description: |
+        Returns the caller's non-deleted memory entries ordered by
+        ``created_at DESC``.  Pass ``?state=proposed|kept|dismissed`` to
+        filter by review state; omitting ``state`` returns all non-deleted
+        entries.  ``limit`` is clamped to [1, 200]; ``offset`` to [0, ∞).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [proposed, kept, dismissed]
+          description: Filter by review state; omit to return all non-deleted entries.
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, default: 50, minimum: 1, maximum: 200}
+          description: Maximum number of entries to return (clamped to [1, 200]).
+        - name: offset
+          in: query
+          required: false
+          schema: {type: integer, default: 0, minimum: 0}
+          description: Zero-based index of the first result to return.
+      responses:
+        '200':
+          description: Paginated list of autonomous memory entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutonomousMemoryListResponse'
+        '401':
+          description: Not authenticated
+
+  /api/v1/autonomous/memory/{memory_id}/keep:
+    post:
+      tags: [autonomous]
+      summary: Keep (approve) an autonomous memory entry; optional edit-on-keep
+      description: |
+        Transitions ``proposed`` or ``dismissed`` → ``kept``.  If the
+        optional body supplies ``content``, the entry's text is overwritten
+        (edit-on-keep).
+
+        **Re-keep semantics:** if the entry is already ``kept``, the action
+        is allowed — content is updated if provided; ``kept_at`` is
+        preserved.
+
+        Another user's ``memory_id`` returns 404.  Audited.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: memory_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemoryKeepRequest'
+      responses:
+        '200':
+          description: Updated memory entry (now kept)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutonomousMemoryRead'
+        '401':
+          description: Not authenticated
+        '404':
+          description: Memory entry not found
+
+  /api/v1/autonomous/memory/{memory_id}/dismiss:
+    post:
+      tags: [autonomous]
+      summary: Dismiss an autonomous memory entry
+      description: |
+        Transitions ``proposed`` or ``kept`` → ``dismissed``.
+
+        Another user's ``memory_id`` returns 404.  Audited.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: memory_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Updated memory entry (now dismissed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutonomousMemoryRead'
+        '401':
+          description: Not authenticated
+        '404':
+          description: Memory entry not found
+
+  /api/v1/autonomous/memory/{memory_id}:
+    delete:
+      tags: [autonomous]
+      summary: Soft-delete an autonomous memory entry (returns 200 with updated entry)
+      description: |
+        Soft-deletes the entry by setting ``deleted_at=now(UTC)``.
+        Returns **200** with the updated (deleted) entry — not 204 — to
+        avoid the FastAPI JSONResponse/204 assertion pitfall.
+
+        A subsequent GET excludes the entry; keep/dismiss/delete on a
+        deleted entry return 404.
+
+        Another user's ``memory_id`` returns 404.  Audited.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: memory_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Soft-deleted memory entry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutonomousMemoryRead'
+        '401':
+          description: Not authenticated
+        '404':
+          description: Memory entry not found
+
 # ============================================================
 # COMPONENTS
 # ============================================================
@@ -4483,6 +4622,56 @@ components:
         created_at: {type: string, format: date-time}
         last_login_at: {type: string, format: date-time, nullable: true}
         deletion_scheduled_at: {type: string, format: date-time, nullable: true}
+
+    # M4-B1 — Autonomous memory curation schemas
+
+    AutonomousMemoryRead:
+      type: object
+      description: |
+        Read-only view of an ``autonomous_memory`` row.  Returned by the
+        list, keep, dismiss, and delete endpoints.
+      required:
+        - id
+        - user_id
+        - state
+        - category
+        - content
+        - created_at
+        - updated_at
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        state:
+          type: string
+          enum: [proposed, kept, dismissed]
+        category: {type: string}
+        content: {type: string}
+        source_session_id: {type: string, format: uuid, nullable: true}
+        kept_at: {type: string, format: date-time, nullable: true}
+        deleted_at: {type: string, format: date-time, nullable: true}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+
+    AutonomousMemoryListResponse:
+      type: object
+      description: Paginated list of autonomous memory entries (non-deleted, newest first).
+      required: [entries, total_count, limit, offset]
+      properties:
+        entries:
+          type: array
+          items: {$ref: '#/components/schemas/AutonomousMemoryRead'}
+        total_count: {type: integer, minimum: 0}
+        limit: {type: integer, minimum: 1, maximum: 200}
+        offset: {type: integer, minimum: 0}
+
+    MemoryKeepRequest:
+      type: object
+      description: |
+        Optional request body for ``POST /autonomous/memory/{id}/keep``.
+        If ``content`` is provided, the memory entry's text is overwritten
+        on keep (edit-on-keep).
+      properties:
+        content: {type: string, nullable: true}
 
     # M4-A4-i — Autonomous session response schemas
 
