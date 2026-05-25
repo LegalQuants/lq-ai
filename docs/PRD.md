@@ -4321,6 +4321,18 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 ---
 
+#### DE-320 — Scanned-PDF OCR for the ingestion pipeline
+
+**Priority:** P2 · **Effort:** M
+
+**Context:** The ingestion pipeline (`api/app/pipeline/ingest.py`, `api/app/pipeline/parsers.py`) parses text-bearing PDFs via PyMuPDF (the canonical character stream) plus Docling (structure), and sets `was_ocrd=False` unconditionally — image-only / scanned PDFs yield no extractable text and so cannot be chunked or cited. A `paddleocr` sidecar referencing `legalquants/paddleocr-vl:latest` was sketched in `docker-compose.yml` under the `local` profile but was never implemented: the image was never published and the placeholder entrypoint only echoed "lands in M2". Worse, its presence forced `docker compose --profile local up` to attempt the missing pull and abort the whole profile — including the Ollama sidecar local inference actually needs (issue #99). The dead placeholder was removed and the README / `HONEST-STATE` claims of a PaddleOCR scanned-PDF fallback were corrected; this DE tracks the genuine capability.
+
+**Specific scope:** Add a scanned-PDF OCR path so image-only PDFs produce a normalized character stream with `was_ocrd=True`. The Citation Engine's tolerant-match already gates OCR-confusion normalization on that flag (`app.citation.normalization.normalize`, see `docs/HONEST-STATE.md` §Citation Engine), so the downstream consumer is ready. Preferred approach: Docling's built-in OCR backend (EasyOCR is already cached in the `ingest-easyocr-cache` volume — no new sidecar, no new SBOM surface) rather than a separate OCR service, unless throughput demands process isolation. Re-confirm the air-gapped story end-to-end (OCR models present in the image / cached volume, no outbound calls). Update the README ingestion description and `HONEST-STATE` when shipped.
+
+**When to ship:** When a real scanned-PDF corpus is in scope; not blocking for text-bearing PDFs (the common case today).
+
+---
+
 ## 10. Appendices
 
 ### Appendix A — Glossary

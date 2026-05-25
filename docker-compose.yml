@@ -1,7 +1,7 @@
 # LQ.AI — development docker-compose
 #
 # Default profile (no --profile flag): Mode 1 (cloud LLM keys via Inference Gateway).
-# Local-inference profile (--profile local): adds ollama and paddleocr containers.
+# Local-inference profile (--profile local): adds the ollama container for local (Tier 1) inference.
 #
 # Per PRD §6.1 and ADR 0001 (OpenWebUI fork pin v0.9.2).
 #
@@ -393,14 +393,16 @@ services:
     #           count: all
     #           capabilities: [gpu]
 
-  paddleocr:
-    # Local OCR for Mode 2 / air-gapped deployments (per PRD §2.2).
-    # Image landed when M2 Document Pipeline implementation begins.
-    profiles: ["local"]
-    image: legalquants/paddleocr-vl:latest
-    restart: "no"
-    # Disabled in M1; placeholder so Mode 2 ops know where it goes.
-    entrypoint: ["sh", "-c", "echo 'PaddleOCR-VL service lands in M2.'; sleep 1"]
+  # NOTE: a `paddleocr` sidecar (image `legalquants/paddleocr-vl:latest`) was
+  # previously sketched here under the `local` profile for scanned-PDF OCR.
+  # It was never implemented: the image was never published and the
+  # placeholder entrypoint only printed "lands in M2", yet its presence forced
+  # `docker compose --profile local up` to attempt the (missing) pull and abort
+  # the whole profile — including the ollama sidecar (issue #99). Scanned-PDF
+  # OCR is genuinely not implemented; the ingestion pipeline is PyMuPDF +
+  # Docling and sets `was_ocrd=False` (api/app/pipeline/ingest.py). The sidecar
+  # has been removed; real OCR is tracked as DE-320. `--profile local` now adds
+  # only the `ollama` sidecar.
 
   # ============================================================
   # Integration bridges (PRD §3.15 — opt-in by Compose profile)

@@ -254,7 +254,7 @@ The deployment story in M1 is Docker Compose plus a drafted Helm chart. The supp
 | Surface | Status | Verification |
 |---|---|---|
 | Docker Compose reference deployment | M1 | [`docker-compose.yml`](../docker-compose.yml) — 7 services in the default profile |
-| Local-only profile (Ollama + PaddleOCR) | M1 | `docker compose --profile local up` |
+| Local-only profile (Ollama) | M1 | `docker compose --profile local up` — adds the Ollama sidecar. (Scanned-PDF OCR / PaddleOCR is not implemented; see DE-320.) |
 | Helm chart for Kubernetes | drafted (M1) | [`deploy/helm/lq-ai/`](../deploy/helm/lq-ai/) |
 | Reverse-proxy + TLS recipes (Caddy, Traefik, nginx) | not yet | [Mini-PRD open](contribute/mini-prds/reverse-proxy-tls-deployment-recipes.md) |
 | Backup + restore tooling (`pg_dump` + MinIO snapshot wrapper) | not yet | `ls scripts/` — no backup tooling |
