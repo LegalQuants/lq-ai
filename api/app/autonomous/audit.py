@@ -44,6 +44,12 @@ _ACTIONS: frozenset[str] = frozenset(
         "halted",
         "cost_cap_reached",
         "completed",
+        # M4-A4-i: user-initiated halt request via POST /sessions/{id}/halt.
+        # The executor's ``halted`` event remains the actual stop written at
+        # the R5 brake; ``halt_requested`` is the API-layer request that
+        # precedes it.  These are logically distinct events in the audit
+        # trail and in the receipt's terminal-reason chain.
+        "halt_requested",
     }
 )
 """Closed set of audit event names for autonomous sessions.

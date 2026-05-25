@@ -44,6 +44,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.autonomous.enums import ToolIntent
 from app.autonomous.guard import guarded_tool_call
 from app.autonomous.phases import run_phase_transition
+from app.autonomous.receipt import build_receipt
 from app.autonomous.state import AutonomousSessionState
 from app.models.autonomous import AutonomousSession
 from app.schemas.autonomous import Phase
@@ -287,6 +288,11 @@ def make_delivery_node(
 
         session.status = "completed"
         session.completed_at = datetime.now(UTC)
+        # Persist the receipt into result BEFORE the commit so the JSONB
+        # column is populated atomically with the terminal status update.
+        # build_receipt reads audit rows that were flushed during the run
+        # and are visible in the same session/transaction.
+        session.result = await build_receipt(session, db)
         await db.commit()
 
         return {"current_phase": str(Phase.delivery)}

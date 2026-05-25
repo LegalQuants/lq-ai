@@ -26,6 +26,7 @@ from app.api import (
     admin,
     admin_intake_bridges,
     auth,
+    autonomous,
     bootstrap,
     chat_receipts,
     chats,
@@ -110,6 +111,8 @@ api_router.include_router(admin.router, dependencies=_active)
 # AdminUser dependency; mounted under the `_active` group so the
 # bearer-token + must-change-password gates fire first.
 api_router.include_router(admin_intake_bridges.router, dependencies=_active)
+# M4-A4-i: Autonomous sessions read/halt API — per-user isolated, bearer-auth.
+api_router.include_router(autonomous.router, dependencies=_active)
 # M3-A2: Playbook executor — two endpoints under different prefixes
 # (``/playbooks/{id}/execute`` and ``/playbook-executions/{id}``) so
 # they live alongside the M3-A4 list/CRUD endpoints in the same module.

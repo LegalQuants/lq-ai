@@ -198,6 +198,31 @@ class NotificationChannel(StrEnum):
     webhook = "webhook"  # RESERVED — dispatch lands in M4-C1 (DE-312)
 
 
+class AutonomousSessionListResponse(BaseModel):
+    """Paginated list of :class:`AutonomousSessionRead` items.
+
+    Mirrors ``AdminUserListResponse`` (total_count / limit / offset
+    envelope) for consistent pagination conventions across the API.
+    """
+
+    sessions: list[AutonomousSessionRead]
+    total_count: int
+    limit: int
+    offset: int
+
+
+class AutonomousSessionDetailResponse(BaseModel):
+    """Session detail view including the live-reconstructed receipt.
+
+    ``receipt`` is built by :func:`~app.autonomous.receipt.build_receipt`
+    on every request — it works for running and completed sessions alike.
+    A completed session also has the receipt persisted in ``result``.
+    """
+
+    session: AutonomousSessionRead
+    receipt: dict[str, Any]
+
+
 class AutonomousNotificationRead(BaseModel):
     """ORM-read view of an :class:`~app.models.autonomous.AutonomousNotification`.
 

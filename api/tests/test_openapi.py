@@ -156,6 +156,10 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/admin/intake-bridges",
         "/api/v1/admin/intake-bridges/slack/{workspace_id}",
         "/api/v1/admin/intake-bridges/teams/{tenant_id}",
+        # M4-A4-i — Autonomous sessions read/halt API (per-user)
+        "/api/v1/autonomous/sessions",
+        "/api/v1/autonomous/sessions/{session_id}",
+        "/api/v1/autonomous/sessions/{session_id}/halt",
     }
 )
 
@@ -219,7 +223,11 @@ async def test_openapi_paths_match_sketch() -> None:
     # + M3-D4's three NEW paths for the admin intake-bridges surface
     #   (GET /admin/intake-bridges, DELETE /admin/intake-bridges/slack/{id},
     #   DELETE /admin/intake-bridges/teams/{id}). Admin-only.
-    assert len(actual) == 94
+    # M4-A4-i adds three new paths:
+    # /api/v1/autonomous/sessions
+    # /api/v1/autonomous/sessions/{session_id}
+    # /api/v1/autonomous/sessions/{session_id}/halt
+    assert len(actual) == 97
 
 
 @pytest.mark.unit

@@ -62,6 +62,8 @@ tags:
     description: Inference tier policy configuration (admin only)
   - name: word-addin
     description: Word add-in unauthenticated handshake surfaces (M3-B8)
+  - name: autonomous
+    description: Per-user autonomous agent session management — read, halt (M4-A4-i)
 
 # ============================================================
 # PATHS
@@ -3674,6 +3676,107 @@ paths:
           description: Tenant not found or already disconnected
 
 # ============================================================
+# M4-A4-i — Autonomous sessions read/halt API
+# ============================================================
+
+  /api/v1/autonomous/sessions:
+    get:
+      tags: [autonomous]
+      summary: List the calling user's autonomous sessions (newest first, paginated)
+      description: |
+        Returns the caller's sessions ordered by ``created_at DESC``.
+        ``limit`` is clamped to [1, 200]; ``offset`` to [0, ∞).
+        Only the caller's own sessions are returned — cross-user isolation
+        is enforced at the query level.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, default: 50, minimum: 1, maximum: 200}
+          description: Maximum number of sessions to return (clamped to [1, 200]).
+        - name: offset
+          in: query
+          required: false
+          schema: {type: integer, default: 0, minimum: 0}
+          description: Zero-based index of the first result to return.
+      responses:
+        '200':
+          description: Paginated list of autonomous sessions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutonomousSessionListResponse'
+        '401':
+          description: Not authenticated
+
+  /api/v1/autonomous/sessions/{session_id}:
+    get:
+      tags: [autonomous]
+      summary: Fetch a single autonomous session with its full receipt
+      description: |
+        Returns the session plus a live-reconstructed receipt built from
+        audit rows (works for running and completed sessions).  A completed
+        session also has the receipt persisted in ``result``.
+
+        Another user's ``session_id`` returns 404 (not 403) to avoid
+        existence disclosure.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Session detail with receipt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutonomousSessionDetailResponse'
+        '401':
+          description: Not authenticated
+        '404':
+          description: Session not found
+
+  /api/v1/autonomous/sessions/{session_id}/halt:
+    post:
+      tags: [autonomous]
+      summary: Request an immediate halt for an autonomous session (idempotent)
+      description: |
+        Sets ``halt_state = 'halt_requested'`` so the executor's R5 temporal
+        brake trips on the next tool call and transitions the session to
+        ``halted``.
+
+        **Idempotent:** if ``halt_state`` is already ``halt_requested`` or
+        ``halted``, the endpoint returns the current session state with 200
+        and writes no duplicate audit row.
+
+        Another user's ``session_id`` returns 404 (not 403).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: false
+      responses:
+        '200':
+          description: Updated session (halt requested or already halted)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutonomousSessionRead'
+        '401':
+          description: Not authenticated
+        '404':
+          description: Session not found
+
+# ============================================================
 # COMPONENTS
 # ============================================================
 components:
@@ -4380,6 +4483,87 @@ components:
         created_at: {type: string, format: date-time}
         last_login_at: {type: string, format: date-time, nullable: true}
         deletion_scheduled_at: {type: string, format: date-time, nullable: true}
+
+    # M4-A4-i — Autonomous session response schemas
+
+    AutonomousSessionRead:
+      type: object
+      description: |
+        Read-only view of an ``autonomous_sessions`` row.  Returned by the
+        halt, list, and detail endpoints.
+      required:
+        - id
+        - user_id
+        - trigger_kind
+        - current_phase
+        - halt_state
+        - cost_total_usd
+        - cost_cap_reached
+        - idle_halt_minutes
+        - last_activity_at
+        - status
+        - created_at
+        - updated_at
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid, nullable: true}
+        trigger_kind:
+          type: string
+          enum: [watch, schedule, suggestion, manual]
+        trigger_ref: {type: string, format: uuid, nullable: true}
+        current_phase:
+          type: string
+          enum: [intake, analysis, drafting, ethics_review, delivery]
+        halt_state:
+          type: string
+          enum: [running, halt_requested, halted, paused]
+        max_cost_usd: {type: number, format: decimal, nullable: true}
+        cost_total_usd: {type: number, format: decimal}
+        cost_cap_reached: {type: boolean}
+        idle_halt_minutes: {type: integer, minimum: 1}
+        last_activity_at: {type: string, format: date-time}
+        status:
+          type: string
+          enum: [running, completed, halted, failed]
+        result: {type: object, additionalProperties: true, nullable: true}
+        error: {type: string, nullable: true}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        completed_at: {type: string, format: date-time, nullable: true}
+
+    AutonomousSessionListResponse:
+      type: object
+      description: Paginated list of autonomous sessions (newest first).
+      required: [sessions, total_count, limit, offset]
+      properties:
+        sessions:
+          type: array
+          items: {$ref: '#/components/schemas/AutonomousSessionRead'}
+        total_count: {type: integer, minimum: 0}
+        limit: {type: integer, minimum: 1, maximum: 200}
+        offset: {type: integer, minimum: 0}
+
+    AutonomousSessionDetailResponse:
+      type: object
+      description: |
+        Session detail view with live-reconstructed receipt.
+        The receipt is built from audit rows on every request and contains
+        phase transitions, tool calls, terminal reason, and session metadata.
+        No raw document text or entity values are included.
+      required: [session, receipt]
+      properties:
+        session:
+          $ref: '#/components/schemas/AutonomousSessionRead'
+        receipt:
+          type: object
+          additionalProperties: true
+          description: |
+            Audit-derived receipt: session_id, trigger_kind, status,
+            halt_state, current_phase, cost_total_usd, max_cost_usd,
+            cost_cap_reached, created_at, completed_at,
+            phase_transitions (list), tool_calls (list),
+            terminal_reason (string | null).
 
     AdminUserListResponse:
       type: object
