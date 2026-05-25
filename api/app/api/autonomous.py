@@ -51,9 +51,11 @@ from app.models.autonomous import (
     AutonomousMemory,
     AutonomousSchedule,
     AutonomousSession,
+    AutonomousWatch,
     PrecedentEntry,
     ProjectContextProposal,
 )
+from app.models.knowledge import KnowledgeBase
 from app.models.project import Project
 from app.schemas.autonomous import (
     AutonomousMemoryListResponse,
@@ -65,6 +67,10 @@ from app.schemas.autonomous import (
     AutonomousSessionDetailResponse,
     AutonomousSessionListResponse,
     AutonomousSessionRead,
+    AutonomousWatchCreate,
+    AutonomousWatchListResponse,
+    AutonomousWatchRead,
+    AutonomousWatchUpdate,
     MemoryKeepRequest,
     MemoryState,
     PrecedentEntryListResponse,
@@ -271,6 +277,37 @@ async def _load_owned_schedule(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="autonomous schedule not found",
+        )
+    return row
+
+
+async def _load_owned_watch(
+    db: AsyncSession,
+    *,
+    watch_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> AutonomousWatch:
+    """Fetch a watch by id; 404 if missing, soft-deleted, or another user's.
+
+    Conflates "doesn't exist", "soft-deleted", and "belongs to someone
+    else" to avoid leaking the existence of other users' watches via
+    id-probing. Mirrors :func:`_load_owned_schedule` (filters
+    ``deleted_at IS NULL``).
+
+    Raises:
+        HTTPException: 404 if the row is absent, soft-deleted, or owned
+            by a different user.
+    """
+    stmt = select(AutonomousWatch).where(
+        AutonomousWatch.id == watch_id,
+        AutonomousWatch.user_id == user_id,
+        AutonomousWatch.deleted_at.is_(None),
+    )
+    row = (await db.execute(stmt)).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="autonomous watch not found",
         )
     return row
 
@@ -1180,3 +1217,229 @@ async def delete_schedule(
     await db.refresh(schedule)
 
     return AutonomousScheduleRead.model_validate(schedule)
+
+
+# ---------------------------------------------------------------------------
+# KB-arrival watch endpoints (M4-B4)
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/watches",
+    response_model=AutonomousWatchRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create an autonomous watch (KB-arrival-triggered run definition)",
+    responses={
+        201: {"description": "Watch created"},
+        404: {"description": "Target knowledge base not found"},
+        401: {"description": "Not authenticated"},
+    },
+)
+async def create_watch(
+    body: AutonomousWatchCreate,
+    request: Request,
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AutonomousWatchRead:
+    """POST /api/v1/autonomous/watches
+
+    Validates the caller **owns** the target ``knowledge_base_id``
+    (``KnowledgeBase.owner_id == user.id``) — a KB the caller cannot see
+    returns 404 (conservative per-user isolation; KB-sharing is out of
+    scope). Creates the watch row. Returns the created
+    :class:`~app.schemas.autonomous.AutonomousWatchRead` (201).
+
+    Audited.
+    """
+    # Validate KB ownership — 404 (not 403) on a KB the caller doesn't own,
+    # same existence-disclosure posture as the autonomous loaders.
+    kb_stmt = select(KnowledgeBase).where(
+        KnowledgeBase.id == body.knowledge_base_id,
+        KnowledgeBase.owner_id == user.id,
+    )
+    kb = (await db.execute(kb_stmt)).scalar_one_or_none()
+    if kb is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="knowledge base not found",
+        )
+
+    watch = AutonomousWatch(
+        user_id=user.id,
+        project_id=body.project_id,
+        knowledge_base_id=body.knowledge_base_id,
+        playbook_id=body.playbook_id,
+        skill_ref=body.skill_ref,
+        enabled=body.enabled,
+    )
+    db.add(watch)
+    await db.flush()
+
+    await audit_action(
+        db,
+        user_id=user.id,
+        action="autonomous_watch.create",
+        resource_type="autonomous_watch",
+        resource_id=str(watch.id),
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(watch)
+
+    return AutonomousWatchRead.model_validate(watch)
+
+
+@router.get(
+    "/watches",
+    response_model=AutonomousWatchListResponse,
+    summary="List the calling user's autonomous watches (non-deleted, newest first)",
+    responses={
+        401: {"description": "Not authenticated"},
+    },
+)
+async def list_watches(
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    enabled: Annotated[bool | None, Query()] = None,
+    knowledge_base_id: Annotated[uuid.UUID | None, Query()] = None,
+    limit: int = _LIMIT_DEFAULT,
+    offset: int = 0,
+) -> AutonomousWatchListResponse:
+    """GET /api/v1/autonomous/watches
+
+    Returns the caller's non-deleted watches ordered by
+    ``created_at DESC``.  Pass ``?enabled=true|false`` and/or
+    ``?knowledge_base_id=`` to filter; omitting them returns all
+    non-deleted watches.  ``limit`` is clamped to [1, 200]; ``offset`` to
+    [0, ∞).
+    """
+    limit = max(1, min(limit, _LIMIT_MAX))
+    offset = max(0, offset)
+
+    base_where = [
+        AutonomousWatch.user_id == user.id,
+        AutonomousWatch.deleted_at.is_(None),
+    ]
+    if enabled is not None:
+        base_where.append(AutonomousWatch.enabled.is_(enabled))
+    if knowledge_base_id is not None:
+        base_where.append(AutonomousWatch.knowledge_base_id == knowledge_base_id)
+
+    count_stmt = select(func.count()).select_from(AutonomousWatch).where(*base_where)
+    total_count: int = (await db.execute(count_stmt)).scalar_one()
+
+    rows_stmt = (
+        select(AutonomousWatch)
+        .where(*base_where)
+        .order_by(AutonomousWatch.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    rows = (await db.execute(rows_stmt)).scalars().all()
+
+    return AutonomousWatchListResponse(
+        watches=[AutonomousWatchRead.model_validate(r) for r in rows],
+        total_count=total_count,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.patch(
+    "/watches/{watch_id}",
+    response_model=AutonomousWatchRead,
+    summary="Partially update an autonomous watch (enable / disable / retarget)",
+    responses={
+        404: {"description": "Watch not found"},
+        401: {"description": "Not authenticated"},
+    },
+)
+async def update_watch(
+    watch_id: uuid.UUID,
+    body: AutonomousWatchUpdate,
+    request: Request,
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AutonomousWatchRead:
+    """PATCH /api/v1/autonomous/watches/{watch_id}
+
+    Partial update — only the provided fields change (``enabled`` /
+    ``playbook_id`` / ``skill_ref``). The watch's ``knowledge_base_id``
+    is immutable: a watch is bound to its KB, so retargeting to a
+    different KB means creating a new watch.
+
+    Another user's ``watch_id`` returns 404.  Returns the updated watch
+    (200).  Audited.
+    """
+    watch = await _load_owned_watch(db, watch_id=watch_id, user_id=user.id)
+
+    fields = body.model_dump(exclude_unset=True)
+
+    if "enabled" in fields:
+        watch.enabled = fields["enabled"]
+    if "playbook_id" in fields:
+        watch.playbook_id = fields["playbook_id"]
+    if "skill_ref" in fields:
+        watch.skill_ref = fields["skill_ref"]
+
+    watch.updated_at = datetime.now(UTC)
+
+    await audit_action(
+        db,
+        user_id=user.id,
+        action="autonomous_watch.update",
+        resource_type="autonomous_watch",
+        resource_id=str(watch.id),
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(watch)
+
+    return AutonomousWatchRead.model_validate(watch)
+
+
+@router.delete(
+    "/watches/{watch_id}",
+    response_model=AutonomousWatchRead,
+    summary="Soft-delete an autonomous watch (returns 200 with updated entity)",
+    responses={
+        404: {"description": "Watch not found"},
+        401: {"description": "Not authenticated"},
+    },
+)
+async def delete_watch(
+    watch_id: uuid.UUID,
+    request: Request,
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AutonomousWatchRead:
+    """DELETE /api/v1/autonomous/watches/{watch_id}
+
+    Soft-deletes the watch by setting ``deleted_at=now(UTC)``.  Returns
+    **200** with the updated (deleted) entity rather than 204 to avoid the
+    FastAPI ``JSONResponse``/204 assertion pitfall (documented in
+    CLAUDE.md).
+
+    A subsequent GET excludes the watch; patch/delete on a deleted watch
+    return 404 (``_load_owned_watch`` filters ``deleted_at IS NULL``). The
+    KB-arrival trigger also skips soft-deleted rows.
+
+    Another user's ``watch_id`` returns 404.  Audited.
+    """
+    watch = await _load_owned_watch(db, watch_id=watch_id, user_id=user.id)
+
+    watch.deleted_at = datetime.now(UTC)
+    watch.updated_at = datetime.now(UTC)
+
+    await audit_action(
+        db,
+        user_id=user.id,
+        action="autonomous_watch.delete",
+        resource_type="autonomous_watch",
+        resource_id=str(watch.id),
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(watch)
+
+    return AutonomousWatchRead.model_validate(watch)

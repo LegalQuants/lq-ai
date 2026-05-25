@@ -212,6 +212,53 @@ class AutonomousWatchRead(BaseModel):
     updated_at: datetime
 
 
+class AutonomousWatchCreate(BaseModel):
+    """Request body for ``POST /autonomous/watches`` (M4-B4).
+
+    ``knowledge_base_id`` is required — the KB whose document arrivals
+    trigger a session. The caller must own that KB (404 otherwise;
+    KB-sharing is out of scope). The target (``playbook_id`` /
+    ``skill_ref``) and ``project_id`` are optional; ``enabled`` defaults
+    to True. The watch is bound to its KB — there is no
+    ``knowledge_base_id`` on the update schema (create a new watch for a
+    different KB).
+    """
+
+    knowledge_base_id: uuid.UUID
+    playbook_id: uuid.UUID | None = None
+    skill_ref: str | None = None
+    project_id: uuid.UUID | None = None
+    enabled: bool = True
+
+
+class AutonomousWatchUpdate(BaseModel):
+    """Request body for ``PATCH /autonomous/watches/{id}`` (M4-B4).
+
+    All fields optional — a partial update. Toggling ``enabled`` is
+    allowed; ``playbook_id`` / ``skill_ref`` may be retargeted. The
+    watch's ``knowledge_base_id`` is immutable (not present here) — a
+    watch is bound to its KB.
+    """
+
+    enabled: bool | None = None
+    playbook_id: uuid.UUID | None = None
+    skill_ref: str | None = None
+
+
+class AutonomousWatchListResponse(BaseModel):
+    """Paginated list of :class:`AutonomousWatchRead` items (M4-B4).
+
+    Mirrors ``AutonomousScheduleListResponse`` — total_count / limit /
+    offset envelope. Excludes soft-deleted watches (``deleted_at IS
+    NULL``).
+    """
+
+    watches: list[AutonomousWatchRead]
+    total_count: int
+    limit: int
+    offset: int
+
+
 class AutonomousMemoryRead(BaseModel):
     """ORM-read view of an :class:`~app.models.autonomous.AutonomousMemory`."""
 

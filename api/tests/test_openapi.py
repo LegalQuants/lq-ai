@@ -175,6 +175,9 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         # M4-B3 — scheduled autonomous tasks (create/list/patch/delete)
         "/api/v1/autonomous/schedules",
         "/api/v1/autonomous/schedules/{schedule_id}",
+        # M4-B4 — KB-arrival watches (create/list/patch/delete)
+        "/api/v1/autonomous/watches",
+        "/api/v1/autonomous/watches/{watch_id}",
     }
 )
 
@@ -257,7 +260,10 @@ async def test_openapi_paths_match_sketch() -> None:
     # M4-B3 adds two new paths:
     # /api/v1/autonomous/schedules
     # /api/v1/autonomous/schedules/{schedule_id}
-    assert len(actual) == 109
+    # M4-B4 adds two new paths:
+    # /api/v1/autonomous/watches
+    # /api/v1/autonomous/watches/{watch_id}
+    assert len(actual) == 111
 
 
 @pytest.mark.unit

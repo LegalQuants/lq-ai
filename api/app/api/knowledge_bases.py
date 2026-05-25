@@ -531,6 +531,25 @@ async def attach_file(
                 },
             )
 
+    # Fire any autonomous watches on this KB (M4-B4). Best-effort and
+    # non-blocking — a watch-trigger failure MUST NOT fail or roll back the
+    # attach (the join is already committed above). Mirrors the embed-enqueue
+    # best-effort idiom.
+    try:
+        from app.autonomous.watch_trigger import fire_watches_for_kb
+
+        await fire_watches_for_kb(db, kb_id=kb_uuid, file_id=file_uuid)
+    except Exception as exc:
+        log.warning(
+            "kb attach: watch trigger failed (non-fatal; attach already committed)",
+            extra={
+                "event": "kb_attach_watch_trigger_failed",
+                "kb_id": str(kb_uuid),
+                "file_id": str(file_uuid),
+                "error": str(exc),
+            },
+        )
+
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

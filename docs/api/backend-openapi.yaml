@@ -4252,6 +4252,130 @@ paths:
         '404':
           description: Schedule not found
 
+  /api/v1/autonomous/watches:
+    post:
+      tags: [autonomous]
+      summary: Create an autonomous watch (KB-arrival-triggered run definition)
+      description: |
+        Creates a watch on a knowledge base the caller owns; document
+        arrivals (KB attach) then spawn an autonomous session. The caller
+        must own the target ``knowledge_base_id`` — a KB they cannot see
+        returns 404 (KB-sharing is out of scope). Per-user isolated.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutonomousWatchCreate'
+      responses:
+        '201':
+          description: Watch created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutonomousWatchRead'
+        '401':
+          description: Not authenticated
+        '404':
+          description: Target knowledge base not found
+    get:
+      tags: [autonomous]
+      summary: List the calling user's autonomous watches (non-deleted, newest first)
+      description: |
+        Returns the caller's non-deleted watches ordered by
+        ``created_at DESC``.  Optional ``?enabled=`` and
+        ``?knowledge_base_id=`` filters.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: enabled
+          in: query
+          required: false
+          schema: {type: boolean}
+        - name: knowledge_base_id
+          in: query
+          required: false
+          schema: {type: string, format: uuid}
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+        - name: offset
+          in: query
+          required: false
+          schema: {type: integer, minimum: 0, default: 0}
+      responses:
+        '200':
+          description: Paginated list of watches
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutonomousWatchListResponse'
+        '401':
+          description: Not authenticated
+
+  /api/v1/autonomous/watches/{watch_id}:
+    patch:
+      tags: [autonomous]
+      summary: Partially update an autonomous watch (enable / disable / retarget)
+      description: |
+        Partial update of ``enabled`` / ``playbook_id`` / ``skill_ref``.
+        The watch's ``knowledge_base_id`` is immutable. Another user's
+        ``watch_id`` returns 404.  Audited.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: watch_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutonomousWatchUpdate'
+      responses:
+        '200':
+          description: Updated watch
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutonomousWatchRead'
+        '401':
+          description: Not authenticated
+        '404':
+          description: Watch not found
+    delete:
+      tags: [autonomous]
+      summary: Soft-delete an autonomous watch (returns 200 with updated entity)
+      description: |
+        Soft-deletes by setting ``deleted_at``.  Returns 200 with the
+        updated entity (NOT 204 — FastAPI JSONResponse/204 pitfall).
+        A deleted watch is excluded from list and the KB-arrival trigger;
+        re-delete returns 404.  Another user's ``watch_id`` returns 404.
+        Audited.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: watch_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Updated watch (now soft-deleted)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutonomousWatchRead'
+        '401':
+          description: Not authenticated
+        '404':
+          description: Watch not found
+
 # ============================================================
 # COMPONENTS
 # ============================================================
@@ -5167,6 +5291,71 @@ components:
         schedules:
           type: array
           items: {$ref: '#/components/schemas/AutonomousScheduleRead'}
+        total_count: {type: integer, minimum: 0}
+        limit: {type: integer, minimum: 1, maximum: 200}
+        offset: {type: integer, minimum: 0}
+
+    # M4-B4 — KB-arrival watch schemas
+
+    AutonomousWatchRead:
+      type: object
+      description: |
+        Read-only view of an ``autonomous_watches`` row — a KB-arrival-
+        triggered run definition. When a file is attached to
+        ``knowledge_base_id``, an autonomous session spawns.
+      required:
+        - id
+        - user_id
+        - knowledge_base_id
+        - enabled
+        - created_at
+        - updated_at
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        project_id: {type: string, format: uuid, nullable: true}
+        knowledge_base_id: {type: string, format: uuid}
+        playbook_id: {type: string, format: uuid, nullable: true}
+        skill_ref: {type: string, nullable: true}
+        enabled: {type: boolean}
+        deleted_at: {type: string, format: date-time, nullable: true}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+
+    AutonomousWatchCreate:
+      type: object
+      description: |
+        Request body for ``POST /autonomous/watches``.  ``knowledge_base_id``
+        is required and must be owned by the caller (404 otherwise; KB-sharing
+        is out of scope).  The target (``playbook_id`` / ``skill_ref``) and
+        ``project_id`` are optional; ``enabled`` defaults to true.
+      required: [knowledge_base_id]
+      properties:
+        knowledge_base_id: {type: string, format: uuid}
+        playbook_id: {type: string, format: uuid, nullable: true}
+        skill_ref: {type: string, nullable: true}
+        project_id: {type: string, format: uuid, nullable: true}
+        enabled: {type: boolean, default: true}
+
+    AutonomousWatchUpdate:
+      type: object
+      description: |
+        Request body for ``PATCH /autonomous/watches/{id}``.  All fields
+        optional.  The watch's ``knowledge_base_id`` is immutable (not
+        present here) — a watch is bound to its KB.
+      properties:
+        enabled: {type: boolean, nullable: true}
+        playbook_id: {type: string, format: uuid, nullable: true}
+        skill_ref: {type: string, nullable: true}
+
+    AutonomousWatchListResponse:
+      type: object
+      description: Paginated list of autonomous watches (newest first).
+      required: [watches, total_count, limit, offset]
+      properties:
+        watches:
+          type: array
+          items: {$ref: '#/components/schemas/AutonomousWatchRead'}
         total_count: {type: integer, minimum: 0}
         limit: {type: integer, minimum: 1, maximum: 200}
         offset: {type: integer, minimum: 0}
