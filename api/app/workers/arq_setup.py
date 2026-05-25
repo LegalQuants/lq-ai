@@ -40,6 +40,8 @@ Registered functions:
   (M3-A6) — Easy Playbook generation pipeline.
 * :func:`app.workers.tabular_worker.tabular_execution_job`
   (M3-C2) — Tabular Review execution pipeline.
+* :func:`app.workers.autonomous_worker.autonomous_session_job`
+  (M4-A2) — Autonomous Session execution pipeline.
 
 Discovered by the ``arq`` CLI via::
 
@@ -56,6 +58,7 @@ from typing import Any, ClassVar
 
 from app.config import get_settings
 from app.db.session import dispose_engine
+from app.workers.autonomous_worker import autonomous_session_job
 from app.workers.easy_playbook_worker import easy_playbook_generation_job
 from app.workers.tabular_worker import tabular_execution_job
 
@@ -166,6 +169,7 @@ class WorkerSettings:
         noop_job,
         easy_playbook_generation_job,
         tabular_execution_job,
+        autonomous_session_job,
     ]
     queue_name: ClassVar[str] = M3_PLAYBOOK_QUEUE_NAME
     # PRD §3.7 NFR caps generation at 10 min for a 10-doc corpus on the
