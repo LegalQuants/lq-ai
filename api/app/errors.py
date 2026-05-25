@@ -85,6 +85,14 @@ CODE_SKILL_NOT_FOUND = "skill_not_found"
 CODE_SKILL_FETCH_FAILED = "skill_fetch_failed"
 CODE_SKILL_INPUT_MISSING = "skill_input_missing"
 
+# M4 autonomous-layer control-flow codes. These are BACKEND-ONLY and do
+# NOT cross the gateway boundary. They are raised inside the autonomous
+# executor to halt the LangGraph run; the executor catches them so they
+# rarely surface on the HTTP wire.
+CODE_AUTONOMOUS_HALTED = "autonomous_halted"
+CODE_AUTONOMOUS_TOOL_NOT_GRANTED = "autonomous_tool_not_granted"
+CODE_AUTONOMOUS_COST_CAP_REACHED = "autonomous_cost_cap_reached"
+
 
 # --- Base class --------------------------------------------------------------
 
@@ -263,6 +271,105 @@ class Conflict(LQAIError):
     http_status = status.HTTP_409_CONFLICT
 
 
+# --- M4 autonomous-layer brake exceptions ------------------------------------
+# Raised inside the autonomous executor to halt the LangGraph run.
+# The executor catches them; they do NOT normally surface on the HTTP wire.
+# They follow the LQAIError pattern so the canonical handler can serialise
+# them if they do reach the wire (e.g., during development or in tests).
+
+
+class AutonomousBrake(LQAIError):
+    """Base for all autonomous-executor halt exceptions.
+
+    Raised by the chokepoint (:func:`~app.autonomous.nodes.guarded_tool_call`,
+    M4-A3) to stop a LangGraph run. The executor catches subclasses of this
+    class and persists the appropriate halt state on the session row.
+
+    HTTP status defaults to 409 CONFLICT — a brake is a state conflict —
+    but these rarely reach the wire.
+    """
+
+    code: ClassVar[str] = CODE_AUTONOMOUS_HALTED
+    http_status: ClassVar[int] = status.HTTP_409_CONFLICT
+
+
+class SessionHalted(AutonomousBrake):
+    """The session was halted externally or by an idle-timeout (M4 R1/R2).
+
+    ``reason`` is a short slug (``"external_halt"``, ``"idle_timeout"``)
+    stored in ``details`` so the executor audit row and the wire envelope
+    carry it without parsing the message string.
+    """
+
+    code = CODE_AUTONOMOUS_HALTED
+    http_status = status.HTTP_409_CONFLICT
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        reason: str = "external_halt",
+        details: dict[str, Any] | None = None,
+        http_status: int | None = None,
+        code: str | None = None,
+    ) -> None:
+        merged: dict[str, Any] = dict(details) if details else {}
+        merged["reason"] = reason
+        super().__init__(message, details=merged, http_status=http_status, code=code)
+
+
+class ToolNotGranted(AutonomousBrake):
+    """The requested tool intent is not in the phase-grant set (M4 R3).
+
+    ``intent`` is the :class:`~app.autonomous.enums.ToolIntent` value
+    (as a string) and ``phase`` is the current
+    :class:`~app.schemas.autonomous.Phase` value (as a string). Both
+    land in ``details`` for the audit envelope.
+    """
+
+    code = CODE_AUTONOMOUS_TOOL_NOT_GRANTED
+    http_status = status.HTTP_409_CONFLICT
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        intent: str = "",
+        phase: str = "",
+        details: dict[str, Any] | None = None,
+        http_status: int | None = None,
+        code: str | None = None,
+    ) -> None:
+        merged: dict[str, Any] = dict(details) if details else {}
+        merged["intent"] = intent
+        merged["phase"] = phase
+        super().__init__(message, details=merged, http_status=http_status, code=code)
+
+
+class CostCapReached(AutonomousBrake):
+    """The projected cost of the next tool call would exceed the session cap (M4 R4).
+
+    ``projected_usd`` is a float carrying the pre-flight cost estimate
+    that tripped the cap, stored in ``details`` for the audit envelope.
+    """
+
+    code = CODE_AUTONOMOUS_COST_CAP_REACHED
+    http_status = status.HTTP_409_CONFLICT
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        projected_usd: float = 0.0,
+        details: dict[str, Any] | None = None,
+        http_status: int | None = None,
+        code: str | None = None,
+    ) -> None:
+        merged: dict[str, Any] = dict(details) if details else {}
+        merged["projected_usd"] = projected_usd
+        super().__init__(message, details=merged, http_status=http_status, code=code)
+
+
 # --- Gateway-crossing subclasses ---------------------------------------------
 # Raised by the GatewayClient (or by handlers that translate gateway
 # responses) when the backend↔gateway hop fails or surfaces a structured
@@ -410,6 +517,9 @@ def map_gateway_error_code(code: str) -> type[LQAIError]:
 # --- Public re-exports -------------------------------------------------------
 # Keep this list explicit so ``from app.errors import *`` is well-defined.
 __all__ = [
+    "CODE_AUTONOMOUS_COST_CAP_REACHED",
+    "CODE_AUTONOMOUS_HALTED",
+    "CODE_AUTONOMOUS_TOOL_NOT_GRANTED",
     "CODE_CONFLICT",
     "CODE_FORBIDDEN",
     "CODE_GATEWAY_INVALID_RESPONSE",
@@ -429,7 +539,9 @@ __all__ = [
     "CODE_TIER_BELOW_MINIMUM",
     "CODE_UNAUTHORIZED",
     "CODE_VALIDATION_ERROR",
+    "AutonomousBrake",
     "Conflict",
+    "CostCapReached",
     "Forbidden",
     "GatewayInvalidResponse",
     "GatewayTimeout",
@@ -443,10 +555,12 @@ __all__ = [
     "PayloadTooLarge",
     "ProviderUnavailable",
     "RateLimited",
+    "SessionHalted",
     "SkillFetchFailed",
     "SkillInputMissing",
     "SkillNotFound",
     "TierBelowMinimum",
+    "ToolNotGranted",
     "Unauthorized",
     "ValidationError",
     "map_gateway_error_code",

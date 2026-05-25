@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.audit import audit_action
+from app.autonomous.audit import autonomous_audit
 from app.models.autonomous import AutonomousSession
 from app.schemas.autonomous import Phase
 
@@ -32,13 +32,15 @@ async def run_phase_transition(
     """Advance ``session`` to ``to_phase`` and write an audit row.
 
     Sets ``session.current_phase`` to ``to_phase`` then calls
-    :func:`~app.audit.audit_action` with:
+    :func:`~app.autonomous.audit.autonomous_audit` with event
+    ``"phase_transition"`` and ``to_phase`` in the details dict.
+    This routes through the closed-enum audit wrapper so all autonomous
+    session audit writes share one path (M4-A3.1 refactor).
 
     * ``action = "autonomous_session.phase_transition"``
     * ``resource_type = "autonomous_session"``
     * ``resource_id = str(session.id)``
-    * ``details = {"to_phase": to_phase}`` — the StrEnum serializes
-      to the plain string the DB stores.
+    * ``details = {"to_phase": str(to_phase)}``
     * ``user_id = session.user_id``
     * No project context (the transition audit row is not
       privilege-bearing by itself).
@@ -48,11 +50,4 @@ async def run_phase_transition(
     """
 
     session.current_phase = str(to_phase)
-    await audit_action(
-        db,
-        user_id=session.user_id,
-        action="autonomous_session.phase_transition",
-        resource_type="autonomous_session",
-        resource_id=str(session.id),
-        details={"to_phase": str(to_phase)},
-    )
+    await autonomous_audit(db, session, "phase_transition", to_phase=str(to_phase))
