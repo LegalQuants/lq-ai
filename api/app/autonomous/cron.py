@@ -32,6 +32,7 @@ matches; hitting it raises ``ValueError``.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import NamedTuple
 
 # Field bounds: (min, max) inclusive for each of the five positions.
 # day-of-week uses the standard cron convention: Sunday=0 .. Saturday=6,
@@ -105,8 +106,24 @@ def _parse_field(spec: str, lo: int, hi: int, *, field_name: str) -> set[int]:
     return matched
 
 
-def _parse_cron_expr(cron_expr: str) -> tuple[set[int], ...]:
-    """Parse a five-field cron string into per-field match sets.
+class _ParsedCron(NamedTuple):
+    """Parsed five-field cron expression.
+
+    ``sets`` holds the per-field explicit match sets (minute, hour,
+    day-of-month, month, day-of-week). ``dom_restricted`` and
+    ``dow_restricted`` record whether the raw day-of-month / day-of-week
+    field was something other than ``*`` — needed to implement the
+    Vixie/POSIX rule that a *both-restricted* day pair matches on EITHER
+    field (see :func:`_matches`).
+    """
+
+    sets: tuple[set[int], ...]
+    dom_restricted: bool
+    dow_restricted: bool
+
+
+def _parse_cron_expr(cron_expr: str) -> _ParsedCron:
+    """Parse a five-field cron string into a :class:`_ParsedCron`.
 
     Raises :class:`ValueError` if the expression does not have exactly
     five whitespace-separated fields or any field is malformed.
@@ -117,9 +134,16 @@ def _parse_cron_expr(cron_expr: str) -> tuple[set[int], ...]:
         raise ValueError(
             f"cron expression must have exactly 5 fields, got {len(fields)}: {cron_expr!r}"
         )
-    return tuple(
+    sets = tuple(
         _parse_field(spec, lo, hi, field_name=name)
         for spec, (lo, hi), name in zip(fields, _FIELD_BOUNDS, _FIELD_NAMES, strict=True)
+    )
+    # Index 2 = day-of-month, index 4 = day-of-week. A field is "restricted"
+    # when its raw spec is not the bare wildcard ``*``.
+    return _ParsedCron(
+        sets=sets,
+        dom_restricted=fields[2].strip() != "*",
+        dow_restricted=fields[4].strip() != "*",
     )
 
 
@@ -128,25 +152,49 @@ def validate_cron_expr(cron_expr: str) -> None:
 
     Thin wrapper over :func:`_parse_cron_expr` for the API layer, which
     catches the ``ValueError`` and returns 422.
+
+    Beyond per-field bounds, this also rejects expressions that are
+    in-bounds but *unsatisfiable* — e.g. ``0 0 30 2 *`` (Feb 30 never
+    occurs) or ``0 0 31 4 *`` (Apr 31). Such an expression would pass the
+    field checks, enter the DB, then make :func:`next_run_after` scan the
+    whole horizon and raise — wedging the dispatcher when it came due. We
+    probe :func:`next_run_after` here and re-raise as a validation error so
+    these never reach the DB. Normal expressions resolve in a handful of
+    iterations, so create/patch latency is unaffected; only genuinely-never
+    expressions pay the full-scan cost and are correctly rejected. Feb 29
+    (``0 0 29 2 *``) IS satisfiable — a leap year falls within the scan
+    horizon — and is therefore accepted.
     """
 
     _parse_cron_expr(cron_expr)
+    next_run_after(cron_expr, datetime.now(UTC))
 
 
-def _matches(moment: datetime, sets: tuple[set[int], ...]) -> bool:
-    """True if ``moment`` (minute-resolution) satisfies the parsed sets."""
+def _matches(moment: datetime, parsed: _ParsedCron) -> bool:
+    """True if ``moment`` (minute-resolution) satisfies ``parsed``.
 
-    minute_set, hour_set, dom_set, month_set, dow_set = sets
+    Day-of-month / day-of-week follow the Vixie/POSIX rule: when BOTH
+    fields are restricted (neither was ``*``), the day matches on EITHER
+    (``dom OR dow``); when only one is restricted, normal AND applies.
+    """
+
+    minute_set, hour_set, dom_set, month_set, dow_set = parsed.sets
     # Map Python's weekday() (Mon=0 .. Sun=6) to cron dow (Sun=0 .. Sat=6).
     # Sunday: Python 6 → cron 0; both 0 and 7 in the set mean Sunday.
     cron_dow = (moment.weekday() + 1) % 7
-    dow_match = cron_dow in dow_set or (cron_dow == 0 and 7 in dow_set)
+    dom_ok = moment.day in dom_set
+    dow_ok = cron_dow in dow_set or (cron_dow == 0 and 7 in dow_set)
+
+    if parsed.dom_restricted and parsed.dow_restricted:
+        day_ok = dom_ok or dow_ok
+    else:
+        day_ok = dom_ok and dow_ok
+
     return (
         moment.minute in minute_set
         and moment.hour in hour_set
-        and moment.day in dom_set
         and moment.month in month_set
-        and dow_match
+        and day_ok
     )
 
 
@@ -162,7 +210,7 @@ def next_run_after(cron_expr: str, after: datetime) -> datetime:
     expression).
     """
 
-    sets = _parse_cron_expr(cron_expr)
+    parsed = _parse_cron_expr(cron_expr)
 
     after = after.replace(tzinfo=UTC) if after.tzinfo is None else after.astimezone(UTC)
 
@@ -171,7 +219,7 @@ def next_run_after(cron_expr: str, after: datetime) -> datetime:
     candidate = after.replace(second=0, microsecond=0) + timedelta(minutes=1)
 
     for _ in range(_MAX_SCAN_MINUTES):
-        if _matches(candidate, sets):
+        if _matches(candidate, parsed):
             return candidate
         candidate += timedelta(minutes=1)
 

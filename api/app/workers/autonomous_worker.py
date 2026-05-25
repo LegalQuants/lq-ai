@@ -335,34 +335,53 @@ async def _run_schedule_sweep(
 
     spawned = 0
     for schedule in due:
-        # Build the trigger→target params carrying only the non-null keys
-        # (Decision B3-a). target_kb_id maps to the executor's kb_id state.
-        params: dict[str, Any] = {}
-        if schedule.target_kb_id is not None:
-            params["kb_id"] = str(schedule.target_kb_id)
-        if schedule.playbook_id is not None:
-            params["playbook_id"] = str(schedule.playbook_id)
-        if schedule.skill_ref is not None:
-            params["skill_ref"] = schedule.skill_ref
+        # Defense-in-depth: isolate each schedule so one bad/pre-existing row
+        # (e.g. an unsatisfiable cron whose next_run_after raises, or an
+        # enqueue failure) cannot abort the whole tick. validate_cron_expr now
+        # keeps poison out of the DB at create/patch time; this is the safety
+        # net for any pre-existing row. On error we log and `continue` —
+        # leaving the schedule enabled. An orphaned 'running' session (created
+        # before the error) is reaped by the idle watchdog; what matters is
+        # that the other due schedules still dispatch.
+        try:
+            # Build the trigger→target params carrying only the non-null keys
+            # (Decision B3-a). target_kb_id maps to the executor's kb_id state.
+            params: dict[str, Any] = {}
+            if schedule.target_kb_id is not None:
+                params["kb_id"] = str(schedule.target_kb_id)
+            if schedule.playbook_id is not None:
+                params["playbook_id"] = str(schedule.playbook_id)
+            if schedule.skill_ref is not None:
+                params["skill_ref"] = schedule.skill_ref
 
-        session = AutonomousSession(
-            user_id=schedule.user_id,
-            project_id=schedule.project_id,
-            trigger_kind="schedule",
-            trigger_ref=schedule.id,
-            status="running",
-            current_phase="intake",
-            params=params,
-        )
-        db.add(session)
-        await db.flush()
+            session = AutonomousSession(
+                user_id=schedule.user_id,
+                project_id=schedule.project_id,
+                trigger_kind="schedule",
+                trigger_ref=schedule.id,
+                status="running",
+                current_phase="intake",
+                params=params,
+            )
+            db.add(session)
+            await db.flush()
 
-        await enqueue_fn(session.id)
+            await enqueue_fn(session.id)
 
-        schedule.last_run_at = effective_now
-        schedule.next_run_at = next_run_after(schedule.cron_expr, effective_now)
-        db.add(schedule)
-        spawned += 1
+            schedule.last_run_at = effective_now
+            schedule.next_run_at = next_run_after(schedule.cron_expr, effective_now)
+            db.add(schedule)
+            spawned += 1
+        except Exception as exc:
+            logger.warning(
+                "autonomous_schedule_dispatcher: schedule dispatch failed; skipping",
+                extra={
+                    "event": "autonomous_schedule_dispatch_error",
+                    "schedule_id": str(schedule.id),
+                    "error_type": type(exc).__name__,
+                },
+            )
+            continue
 
     await db.flush()
 

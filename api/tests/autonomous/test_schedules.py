@@ -205,6 +205,66 @@ def test_cron_invalid_raises(bad: str) -> None:
         next_run_after(bad, datetime.now(UTC))
 
 
+# --- I-1: DoM/DoW OR semantics (Vixie/POSIX) -------------------------------
+
+
+@pytest.mark.unit
+def test_cron_dom_and_dow_both_restricted_uses_or() -> None:
+    """When BOTH day-of-month and day-of-week are restricted, fire on EITHER.
+
+    ``0 0 13 * 5`` from 2026-05-25: the next Friday (2026-05-29) comes before
+    the next 13th (2026-06-13), so OR semantics must return the Friday — NOT
+    require both (Friday-the-13th, which would be 2026-11-13).
+    """
+    from app.autonomous.cron import next_run_after
+
+    after = datetime(2026, 5, 25, 0, 0, 0, tzinfo=UTC)
+    nxt = next_run_after("0 0 13 * 5", after)
+    assert nxt == datetime(2026, 5, 29, 0, 0, 0, tzinfo=UTC)
+    assert nxt.weekday() == 4  # Friday
+
+
+@pytest.mark.unit
+def test_cron_dom_only_restricted_unchanged() -> None:
+    """Only day-of-month restricted (dow=*) → plain AND: the next 13th."""
+    from app.autonomous.cron import next_run_after
+
+    after = datetime(2026, 5, 25, 0, 0, 0, tzinfo=UTC)
+    nxt = next_run_after("0 0 13 * *", after)
+    assert nxt == datetime(2026, 6, 13, 0, 0, 0, tzinfo=UTC)
+
+
+@pytest.mark.unit
+def test_cron_dow_only_restricted_unchanged() -> None:
+    """Only day-of-week restricted (dom=*) → plain AND: the next Friday."""
+    from app.autonomous.cron import next_run_after
+
+    after = datetime(2026, 5, 25, 0, 0, 0, tzinfo=UTC)
+    nxt = next_run_after("0 0 * * 5", after)
+    assert nxt == datetime(2026, 5, 29, 0, 0, 0, tzinfo=UTC)
+    assert nxt.weekday() == 4  # Friday
+
+
+# --- I-2: unsatisfiable-but-in-bounds exprs rejected at validation ---------
+
+
+@pytest.mark.unit
+def test_cron_unsatisfiable_feb30_rejected() -> None:
+    """Feb 30 never occurs: in-bounds per field but unsatisfiable → ValueError."""
+    from app.autonomous.cron import validate_cron_expr
+
+    with pytest.raises(ValueError):
+        validate_cron_expr("0 0 30 2 *")
+
+
+@pytest.mark.unit
+def test_cron_feb29_is_satisfiable_and_accepted() -> None:
+    """Feb 29 occurs on leap years (within the ~4y horizon) → must NOT raise."""
+    from app.autonomous.cron import validate_cron_expr
+
+    validate_cron_expr("0 0 29 2 *")  # no raise
+
+
 # ===========================================================================
 # Dispatcher core — _run_schedule_sweep
 # ===========================================================================
@@ -344,6 +404,75 @@ async def test_dispatcher_two_due_schedules_two_sessions(
     assert total == 2
 
 
+@pytest.mark.integration
+async def test_dispatcher_one_bad_schedule_does_not_abort_sweep(
+    db_session: AsyncSession,
+    user_a: User,
+    user_b: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A schedule whose next_run_after raises must not block other due schedules.
+
+    Validation now blocks poison exprs at create time, so drive the failure by
+    monkeypatching the module's ``next_run_after`` symbol to raise for one
+    schedule's cron and succeed for the other. The good schedule must still
+    spawn + enqueue; the sweep must return without propagating.
+    """
+    import app.workers.autonomous_worker as worker_mod
+
+    now = datetime(2026, 5, 25, 10, 0, 0, tzinfo=UTC)
+    good = await _make_schedule(
+        db_session,
+        user=user_a,
+        cron_expr="*/5 * * * *",
+        next_run_at=now - timedelta(minutes=1),
+        skill_ref="nda-review",
+    )
+    bad = await _make_schedule(
+        db_session,
+        user=user_b,
+        cron_expr="0 0 30 2 *",  # pretend-poison row
+        next_run_at=now - timedelta(minutes=2),
+    )
+
+    real_next = worker_mod.next_run_after
+
+    def _fake_next(cron_expr: str, after: datetime) -> datetime:
+        if cron_expr == bad.cron_expr:
+            raise ValueError("no run time within the scan window")
+        return real_next(cron_expr, after)
+
+    monkeypatch.setattr(worker_mod, "next_run_after", _fake_next)
+
+    enqueue = AsyncMock(return_value=True)
+    # Must NOT raise even though one schedule's next_run_after raises.
+    result = await _run_schedule_sweep_safe(db_session, now=now, enqueue=enqueue)
+
+    # The good schedule spawned + enqueued.
+    good_sessions = (
+        (
+            await db_session.execute(
+                select(AutonomousSession).where(AutonomousSession.user_id == user_a.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(good_sessions) == 1
+    enqueue.assert_any_await(good_sessions[0].id)
+    assert result["spawned"] >= 1
+
+    await db_session.refresh(good)
+    assert good.next_run_at is not None and good.next_run_at > now
+
+
+async def _run_schedule_sweep_safe(db_session, *, now, enqueue):  # type: ignore[no-untyped-def]
+    """Helper: call the sweep and assert it returns rather than propagating."""
+    from app.workers.autonomous_worker import _run_schedule_sweep
+
+    return await _run_schedule_sweep(db_session, now=now, enqueue=enqueue)
+
+
 # ===========================================================================
 # Executor seam — initial_state reads from session.params
 # ===========================================================================
@@ -438,6 +567,20 @@ async def test_create_schedule_invalid_cron_returns_422(
         "/api/v1/autonomous/schedules",
         headers=_bearer(user_a),
         json={"cron_expr": "not a cron"},
+    )
+    assert resp.status_code == 422, resp.text
+
+
+@pytest.mark.integration
+async def test_create_schedule_unsatisfiable_cron_returns_422(
+    client: AsyncClient,
+    user_a: User,
+) -> None:
+    """An in-bounds-but-unsatisfiable expr (Feb 30) is rejected at create → 422."""
+    resp = await client.post(
+        "/api/v1/autonomous/schedules",
+        headers=_bearer(user_a),
+        json={"cron_expr": "0 0 30 2 *"},
     )
     assert resp.status_code == 422, resp.text
 
