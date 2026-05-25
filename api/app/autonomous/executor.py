@@ -133,6 +133,14 @@ async def run_autonomous_session(
     except Exception as exc:
         # Any in-graph exception: persist the failure and don't re-raise.
         # The arq worker already accepted the job; the caller polls the row.
+        #
+        # NOTE (A3.3b): AutonomousBrake subclasses (SessionHalted /
+        # CostCapReached / ToolNotGranted) propagate here too. The
+        # ``db.commit()`` below is what persists the halt-state latch +
+        # audit rows the chokepoint flushed before raising. A future node
+        # that catches a brake locally MUST commit before returning, or the
+        # latch and audit row are lost (the A2 data-loss class). Brake →
+        # terminal-status mapping (halted vs failed) is wired in A3.3b.
         logger.exception(
             "autonomous executor crashed mid-graph",
             extra={

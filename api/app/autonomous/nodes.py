@@ -20,6 +20,15 @@ a tool MUST go through :func:`guarded_tool_call`. The stub defined in
 this module raises :exc:`NotImplementedError` to prove no tool path
 bypasses the chokepoint-to-be (which lands in M4-A3).
 
+**Brake-commit contract (A3.3b):** when A3.3b wires these nodes to call
+:func:`app.autonomous.guard.guarded_tool_call`, an
+:exc:`~app.errors.AutonomousBrake` (SessionHalted / CostCapReached /
+ToolNotGranted) must be allowed to **propagate to the executor's terminal
+handler**, which commits and persists the halt-state latch + audit rows
+the chokepoint flushed. A node that catches a brake locally MUST commit
+before returning, or the latch and audit row are silently lost (the A2
+data-loss class — see :mod:`app.autonomous.guard`).
+
 Factory-closure style: each ``make_*_node`` function returns an async
 callable bound to the resources it needs (``db``, ``gateway``) so the
 LangGraph node functions remain pure-ish over the state dict and
