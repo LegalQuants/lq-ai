@@ -1438,6 +1438,48 @@ CREATE INDEX idx_precedent_entries_user_kind ON precedent_entries(user_id, patte
 > the migrations actually ship (see the Conventions note and the
 > `audit_log` / `inference_routing_log` precedent above).
 
+### `autonomous_notifications` (M4-A3.2)
+
+In-app notification substrate written by the `notify` chokepoint handler
+(A3.3). Pulled forward from M4-C1 so A3.3 has a durable write target.
+M4-C1 adds email/SMTP transport, the read/dismiss API, the web surface,
+and webhook dispatch.
+
+**Hard per-user isolation.** Both `user_id` and `session_id` carry `ON
+DELETE CASCADE` — notifications cascade with their parent session and
+their owner user.
+
+**Channel enum.** `channel` allows `('in_app','email','webhook')`. The
+`webhook` value is **RESERVED** (not dispatched until DE-312, Decision
+M4-8); its presence means M4-C1's fold-in is purely additive.
+
+**Body contract.** `body` carries counts/types/IDs + a link to the
+receipt — **never raw entity values**. `payload` is optional structured
+JSONB the web renders (same constraint).
+
+**Read index deferred to M4-C1.** Following the locked Phase-A pattern
+(cf. `autonomous_schedules` index comment in migration 0039), the read
+index (likely `user_id, read_at, created_at DESC`) is deferred until the
+read-API query shape is concrete.
+
+```sql
+CREATE TABLE autonomous_notifications (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,               -- fk_autonomous_notifications_user_id
+    session_id  UUID NOT NULL REFERENCES autonomous_sessions(id) ON DELETE CASCADE, -- fk_autonomous_notifications_session_id
+    channel     TEXT NOT NULL DEFAULT 'in_app'
+                    CHECK (channel IN ('in_app','email','webhook')),                 -- chk_autonomous_notifications_channel
+    title       TEXT NOT NULL,
+    body        TEXT NOT NULL,  -- counts/types/IDs + receipt link; NO raw entity values
+    payload     JSONB,          -- optional structured counts/IDs for the web (no raw values)
+    read_at     TIMESTAMPTZ,    -- NULL = unread; set by M4-C1 read/dismiss API
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Read index deferred to M4-C1 when the query shape (unread filter? ordering?) is concrete.
+```
+
 ## M4+ tables (sketched, land at the indicated milestone)
 
 ### `autonomous_tasks` (M4 — **superseded**)

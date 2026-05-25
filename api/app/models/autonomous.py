@@ -1,13 +1,14 @@
-"""Autonomous-layer ORM models — M4-A1.
+"""Autonomous-layer ORM models — M4-A1, M4-A3.2.
 
 Data substrate for the per-user Autonomous agent
 ([PRD §3.10](docs/PRD.md#310-autonomous-layer-m4),
 [ADR-0013](docs/adr/0013-autonomous-layer-design-influences.md)). The
 agent runs scheduled / triggered work under cost, halt, and phase
 brakes. M4-A1 lands only the tables, models, and schemas — no executor,
-no API endpoints, no business logic.
+no API endpoints, no business logic. M4-A3.2 adds the in-app
+notification substrate (``autonomous_notifications``).
 
-Five tables (migration ``0039_autonomous_layer.py``):
+Five tables (migration ``0039_autonomous_layer.py``) + one from 0040:
 
 * :class:`AutonomousSession` — the run record carrying the brakes
   (cost cap, halt state, idle-halt window, phase machine).
@@ -17,6 +18,8 @@ Five tables (migration ``0039_autonomous_layer.py``):
   the agent surfaces for user curation.
 * :class:`PrecedentEntry` — observed precedent patterns across a user's
   sessions.
+* :class:`AutonomousNotification` — durable in-app notification written
+  by the ``notify`` chokepoint handler (A3.3); migration 0040.
 
 Every table carries a non-null ``user_id`` FK with ``ON DELETE
 CASCADE`` — the autonomous layer is **hard per-user isolated**. A
@@ -331,4 +334,68 @@ class PrecedentEntry(Base):
         return (
             f"<PrecedentEntry id={self.id} user_id={self.user_id} "
             f"pattern_kind={self.pattern_kind!r} observed={self.observed_count}>"
+        )
+
+
+class AutonomousNotification(Base):
+    """A durable in-app notification written by the autonomous agent.
+
+    Written by the ``notify`` chokepoint handler (A3.3) when a session
+    completes or reaches a notable state. ``channel`` defaults to
+    ``'in_app'``; ``'email'`` and ``'webhook'`` are in the CHECK so
+    M4-C1's fold-in (email transport, webhook dispatch per DE-312) is
+    purely additive. ``webhook`` is RESERVED until DE-312.
+
+    ``body`` carries counts/types/IDs + a link to the receipt — **never
+    raw entity values**. ``payload`` is optional structured JSONB the
+    web renders (same constraint: no raw values).
+
+    ``read_at`` IS NULL = unread. The read/dismiss API that marks this
+    column lands in M4-C1.
+
+    Both ``user_id`` and ``session_id`` FK with ``ON DELETE CASCADE`` —
+    notifications cascade with their parent session and their owner user.
+    """
+
+    __tablename__ = "autonomous_notifications"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "users.id",
+            ondelete="CASCADE",
+            name="fk_autonomous_notifications_user_id",
+        ),
+        nullable=False,
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "autonomous_sessions.id",
+            ondelete="CASCADE",
+            name="fk_autonomous_notifications_session_id",
+        ),
+        nullable=False,
+    )
+    channel: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'in_app'"))
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<AutonomousNotification id={self.id} user_id={self.user_id} "
+            f"channel={self.channel!r} title={self.title!r}>"
         )

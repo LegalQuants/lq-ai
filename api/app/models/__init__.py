@@ -13,6 +13,7 @@ from __future__ import annotations
 from app.models.audit import AuditLog
 from app.models.autonomous import (
     AutonomousMemory,
+    AutonomousNotification,
     AutonomousSchedule,
     AutonomousSession,
     AutonomousWatch,
@@ -41,6 +42,7 @@ from app.models.work_product import WorkProductAttribution
 __all__ = [
     "AuditLog",
     "AutonomousMemory",
+    "AutonomousNotification",
     "AutonomousSchedule",
     "AutonomousSession",
     "AutonomousWatch",

@@ -1,4 +1,4 @@
-"""Pydantic schemas + shared enums for the Autonomous layer — M4-A1.
+"""Pydantic schemas + shared enums for the Autonomous layer — M4-A1, M4-A3.2.
 
 Wire shapes and the canonical ``StrEnum`` definitions for the per-user
 autonomous agent ([PRD §3.10](docs/PRD.md#310-autonomous-layer-m4),
@@ -9,10 +9,12 @@ models, the executor (later M4 tasks), and future endpoints all share
 one definition.
 
 The enums are ``StrEnum`` so their members serialize to the plain
-string the CHECK constraints in migration ``0039_autonomous_layer.py``
-enforce — ``Phase.intake == "intake"`` etc. Request schemas for the API
-surfaces land with their respective API tasks; M4-A1 only adds the
-enums plus ORM-read models the migration/models justify.
+string the CHECK constraints in migrations ``0039_autonomous_layer.py``
+and ``0040_autonomous_notifications.py`` enforce — ``Phase.intake ==
+"intake"`` etc. Request schemas for the API surfaces land with their
+respective API tasks; M4-A1 only adds the enums plus ORM-read models
+the migration/models justify. M4-A3.2 adds :class:`NotificationChannel`
+and :class:`AutonomousNotificationRead`.
 """
 
 from __future__ import annotations
@@ -178,5 +180,41 @@ class PrecedentEntryRead(BaseModel):
     observed_count: int
     source_session_id: uuid.UUID | None = None
     dismissed_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class NotificationChannel(StrEnum):
+    """Delivery channel for an autonomous notification.
+
+    Matches the CHECK constraint on ``autonomous_notifications.channel``
+    (migration ``0040_autonomous_notifications.py``). ``webhook`` is
+    RESERVED — present in the enum so M4-C1's fold-in is purely additive,
+    but not dispatched until DE-312 (Decision M4-8).
+    """
+
+    in_app = "in_app"
+    email = "email"
+    webhook = "webhook"  # RESERVED — dispatch lands in M4-C1 (DE-312)
+
+
+class AutonomousNotificationRead(BaseModel):
+    """ORM-read view of an :class:`~app.models.autonomous.AutonomousNotification`.
+
+    Written by the ``notify`` chokepoint handler (A3.3). ``read_at`` IS
+    NULL = unread. The read/dismiss API that marks this column, plus email
+    transport and webhook dispatch, land in M4-C1.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    user_id: uuid.UUID
+    session_id: uuid.UUID
+    channel: NotificationChannel
+    title: str
+    body: str
+    payload: dict[str, Any] | None = None
+    read_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
