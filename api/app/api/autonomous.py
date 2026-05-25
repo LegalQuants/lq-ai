@@ -814,28 +814,40 @@ async def accept_project_context_proposal(
     ``suggested_md`` to the target Project's ``context_md`` (initializing
     it if NULL), sets ``state='accepted'`` and ``accepted_at=now(UTC)``.
 
-    **Idempotent on re-accept:** if already ``accepted``, returns the
-    current state without re-appending (guards against double-append).
-    A ``rejected`` proposal MAY be accepted (rejected→accepted) and the
-    append occurs.
+    **One-shot context append (guarded by ``accepted_at``):** the
+    ``context_md`` write fires at most once per proposal lifetime —
+    gated on whether the proposal has EVER been accepted
+    (``accepted_at IS NULL``), NOT on its current ``state``. This is what
+    makes accept→reject→accept safe: a ``rejected → accepted`` transition
+    re-records ``state='accepted'`` but does **NOT** re-append (C1 fix).
+    On a re-accept the project-ownership load is skipped because no write
+    happens — there is nothing to authorize.
+
+    **``reject`` does NOT retroactively remove already-appended context:**
+    an accepted-then-rejected proposal leaves its text in ``context_md``;
+    removal/undo is out of scope here.
 
     Another user's ``proposal_id`` returns 404.  Audited.
     """
     proposal = await _load_owned_proposal(db, proposal_id=proposal_id, user_id=user.id)
 
-    if proposal.state != str(ProposalState.accepted):
-        # The authorized append — load the target project (must still be the
-        # caller's; 404 if it vanished or ownership changed).
+    if proposal.accepted_at is None:
+        # The authorized append — fires at most once per proposal lifetime.
+        # Load the target project (must still be the caller's; 404 if it
+        # vanished or ownership changed).
         project = await _load_owned_project(db, project_id=proposal.project_id, user_id=user.id)
         if project.context_md is None:
             project.context_md = proposal.suggested_md
         else:
             project.context_md = f"{project.context_md}\n{proposal.suggested_md}"
         project.updated_at = datetime.now(UTC)
-
-        proposal.state = str(ProposalState.accepted)
         proposal.accepted_at = datetime.now(UTC)
-        proposal.updated_at = datetime.now(UTC)
+
+    # Always (re)record the accepted state so rejected→accepted still lands
+    # on 'accepted', but the context write above fires at most once per
+    # proposal lifetime (guarded by accepted_at).
+    proposal.state = str(ProposalState.accepted)
+    proposal.updated_at = datetime.now(UTC)
 
     await audit_action(
         db,

@@ -118,8 +118,32 @@ def upgrade() -> None:
         ["user_id", "state"],
     )
 
+    # ---------------------------------------------------------------
+    # precedent_entries: partial unique index backing the race-safe
+    # propose_precedent upsert (INSERT ... ON CONFLICT). M4-B2 (I1).
+    # ---------------------------------------------------------------
+    # The recurrence upsert keys on (user_id, pattern_kind, summary), but
+    # `summary` is unbounded TEXT and a btree index tuple has a ~2704-byte
+    # limit — a long summary in a plain composite btree would raise at
+    # runtime. Hash `summary` with md5() to sidestep the size limit (the
+    # md5 of any TEXT is a fixed 32-char digest). The partial
+    # `WHERE dismissed_at IS NULL` preserves "a dismissed precedent is not
+    # reused": a new observation after dismissal does not conflict and
+    # correctly inserts a fresh row.
+    op.create_index(
+        "uq_precedent_entries_user_kind_summary_active",
+        "precedent_entries",
+        ["user_id", "pattern_kind", sa.text("md5(summary)")],
+        unique=True,
+        postgresql_where=sa.text("dismissed_at IS NULL"),
+    )
+
 
 def downgrade() -> None:
+    op.drop_index(
+        "uq_precedent_entries_user_kind_summary_active",
+        table_name="precedent_entries",
+    )
     op.drop_index(
         "idx_project_context_proposals_user_state",
         table_name="project_context_proposals",

@@ -991,6 +991,59 @@ async def test_accept_double_does_not_double_append(
 
 
 @pytest.mark.integration
+async def test_accept_reject_accept_does_not_double_append(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    user_a: User,
+) -> None:
+    """accept→reject→accept must append the suggested_md EXACTLY once.
+
+    Regression for C1: the append was gated on the *current* state
+    (``state != 'accepted'``), but reject permits accepted→rejected. So
+    accept→reject→accept saw ``state != 'accepted'`` on the second accept
+    and re-appended, corrupting projects.context_md (the ADR 0013 D5
+    boundary). The fix gates the append on ``accepted_at`` (one-shot per
+    proposal lifetime), so a rejected→accepted transition re-records the
+    'accepted' state but does NOT re-append.
+    """
+    prec = await _make_precedent(db_session, user=user_a)
+    project = await _make_project(db_session, user=user_a, context_md="base")
+    proposal = await _make_proposal(
+        db_session, user=user_a, project=project, precedent=prec, suggested_md="- once-only"
+    )
+
+    # First accept — appends once.
+    resp1 = await client.post(
+        f"/api/v1/autonomous/project-context-proposals/{proposal.id}/accept",
+        headers=_bearer(user_a),
+    )
+    assert resp1.status_code == 200, resp1.text
+    await db_session.refresh(project)
+    assert project.context_md == "base\n- once-only"
+
+    # Reject (accepted → rejected is permitted).
+    resp2 = await client.post(
+        f"/api/v1/autonomous/project-context-proposals/{proposal.id}/reject",
+        headers=_bearer(user_a),
+    )
+    assert resp2.status_code == 200, resp2.text
+
+    # Accept again — must re-record 'accepted' but NOT re-append.
+    resp3 = await client.post(
+        f"/api/v1/autonomous/project-context-proposals/{proposal.id}/accept",
+        headers=_bearer(user_a),
+    )
+    assert resp3.status_code == 200, resp3.text
+    assert resp3.json()["state"] == "accepted"
+
+    await db_session.refresh(project)
+    assert project.context_md.count("- once-only") == 1, (
+        "accept→reject→accept must not double-append suggested_md"
+    )
+    assert project.context_md == "base\n- once-only"
+
+
+@pytest.mark.integration
 async def test_accept_cross_user_returns_404(
     client: AsyncClient,
     db_session: AsyncSession,

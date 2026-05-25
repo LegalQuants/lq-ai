@@ -75,7 +75,8 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import select
+import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.autonomous.audit import autonomous_audit
@@ -302,36 +303,48 @@ async def _dispatch(
         return ToolResult(cost_usd=Decimal("0"), data={"memory_id": str(mem.id)})
 
     if intent == ToolIntent.propose_precedent:
-        # Local, zero-cost: upsert-on-recurrence into precedent_entries.
-        # Find the caller's non-dismissed row with the same pattern_kind AND
-        # summary; if present, increment observed_count (a recurring pattern),
-        # else insert a fresh row with observed_count=1.
+        # Local, zero-cost: race-safe upsert-on-recurrence into
+        # precedent_entries via INSERT ... ON CONFLICT. The arq worker runs
+        # up to 10 concurrent jobs with no per-user single-flight, so a
+        # SELECT-then-INSERT-or-increment would race (two sessions both miss
+        # the SELECT → two INSERTs → split observed_count). The atomic
+        # ON CONFLICT against the partial unique index
+        # `uq_precedent_entries_user_kind_summary_active`
+        # (user_id, pattern_kind, md5(summary)) WHERE dismissed_at IS NULL
+        # collapses that to one row: a recurrence increments observed_count;
+        # a dismissed precedent does NOT conflict (a post-dismissal
+        # observation inserts a fresh row). index_elements + index_where
+        # below MUST match that index exactly or Postgres won't infer the
+        # arbiter.
         #
         # This handler MUST NEVER touch the `projects` table — promotion into a
         # Project's context is a separate, user-authorized proposal lifecycle
         # (M4-B2, ADR 0013 D5). Missing required params raise KeyError, the
         # accepted failure mode consistent with propose_memory.
-        pattern_kind: str = params["pattern_kind"]
-        summary: str = params["summary"]
-        existing_stmt = select(PrecedentEntry).where(
-            PrecedentEntry.user_id == session.user_id,
-            PrecedentEntry.pattern_kind == pattern_kind,
-            PrecedentEntry.summary == summary,
-            PrecedentEntry.dismissed_at.is_(None),
-        )
-        row = (await db.execute(existing_stmt)).scalar_one_or_none()
-        if row is not None:
-            row.observed_count += 1
-            row.updated_at = datetime.now(UTC)
-        else:
-            row = PrecedentEntry(
+        stmt = (
+            pg_insert(PrecedentEntry)
+            .values(
                 user_id=session.user_id,
-                pattern_kind=pattern_kind,
-                summary=summary,
+                pattern_kind=params["pattern_kind"],
+                summary=params["summary"],
                 observed_count=1,
                 source_session_id=session.id,
             )
-            db.add(row)
+            .on_conflict_do_update(
+                index_elements=[
+                    PrecedentEntry.user_id,
+                    PrecedentEntry.pattern_kind,
+                    sa.text("md5(summary)"),
+                ],
+                index_where=PrecedentEntry.dismissed_at.is_(None),
+                set_={
+                    "observed_count": PrecedentEntry.observed_count + 1,
+                    "updated_at": sa.text("now()"),
+                },
+            )
+            .returning(PrecedentEntry.id, PrecedentEntry.observed_count)
+        )
+        row = (await db.execute(stmt)).one()
         await db.flush()
         return ToolResult(
             cost_usd=Decimal("0"),
