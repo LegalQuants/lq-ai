@@ -260,6 +260,56 @@ async def test_receipts_inference_refused_renders_as_error(
     assert error_events[0]["detail"]["refused"] is True
 
 
+async def test_receipts_inference_detail_includes_anonymization_and_message_id(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    owner_user: User,
+) -> None:
+    """The inference event's detail surfaces ``anonymization_applied`` (the UI
+    indicator's source of truth) and the assistant ``message_id`` (so the
+    frontend can pin the indicator to the right message bubble)."""
+    chat = Chat(owner_id=owner_user.id, title="anon chat")
+    db_session.add(chat)
+    await db_session.flush()
+    ai_msg = Message(
+        chat_id=chat.id,
+        role="assistant",
+        kind="ai",
+        content="Hi there",
+        applied_skills=[],
+        created_at=datetime.now(tz=UTC),
+    )
+    db_session.add(ai_msg)
+    await db_session.flush()
+    log = InferenceRoutingLog(
+        chat_id=chat.id,
+        message_id=ai_msg.id,
+        routed_provider="anthropic",
+        routed_model="claude-opus-4-7",
+        routed_inference_tier=2,
+        refused=False,
+        anonymization_applied=True,
+        timestamp=datetime.now(tz=UTC),
+    )
+    db_session.add(log)
+    await db_session.flush()
+
+    response = await client.get(
+        f"/api/v1/chats/{chat.id}/receipts",
+        headers=_h(owner_user),
+    )
+    assert response.status_code == 200, response.text
+    events = response.json()
+    inference_events = [e for e in events if e["kind"] == "inference"]
+    assert len(inference_events) == 1
+    detail = inference_events[0]["detail"]
+    # anonymization_applied is a real bool (not a string/None) — the indicator
+    # reads it directly.
+    assert detail["anonymization_applied"] is True
+    # message_id pins the indicator to the assistant message bubble.
+    assert detail["message_id"] == str(ai_msg.id)
+
+
 # ----------------------------------------------------------------
 # Wave D.1 T6 — JSONL export sibling route
 # ----------------------------------------------------------------
