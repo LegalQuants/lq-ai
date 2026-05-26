@@ -1624,10 +1624,16 @@ paths:
                         created: {type: integer}
                         owned_by: {type: string}
                         lq_ai_kind: {type: string, enum: [alias, provider_native]}
+                        # routed_inference_tier is present on provider_native rows AND on
+                        # alias rows (the tier of the alias's primary resolution).
                         routed_inference_tier: {type: integer, enum: [1, 2, 3, 4, 5]}
                         provider_type:
                           type: string
                           enum: [anthropic, openai, vertex, cohere, azure_openai, bedrock, ollama, vllm, openai_compatible]
+                        # alias rows only (absent on provider_native):
+                        lq_ai_resolves_to: {type: string}
+                        # alias rows, present only when > 0 (absent otherwise / on provider_native):
+                        lq_ai_fallback_count: {type: integer}
         '401':
           description: Missing or invalid bearer token
           content:

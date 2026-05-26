@@ -687,3 +687,51 @@ def test_to_payload_includes_resolves_to_for_alias() -> None:
     payload = row.to_payload()
     assert payload["lq_ai_resolves_to"] == "anthropic-prod/claude-opus-4-7"
     assert payload["lq_ai_fallback_count"] == 2
+
+
+@pytest.mark.unit
+def test_to_payload_keys_declared_in_openapi_modelentry() -> None:
+    """Every key the live ``GET /v1/models`` emits is a declared property
+    on the ``ModelEntry`` schema in ``docs/api/gateway-openapi.yaml``.
+
+    Pins the hand-written OpenAPI sketch to the live ``to_payload`` shape so
+    the doc can't silently drift behind the gateway (the inverse of the
+    field-presence tests above, which pin the live side). This is a
+    property-*superset* check rather than ``additionalProperties: false`` on
+    the schema, so the contract still tolerates other valid runtime fields.
+    """
+    from pathlib import Path
+
+    import yaml
+
+    repo_root = Path(__file__).resolve().parents[2]
+    spec = yaml.safe_load(
+        (repo_root / "docs" / "api" / "gateway-openapi.yaml").read_text(encoding="utf-8")
+    )
+    declared = set(spec["components"]["schemas"]["ModelEntry"]["properties"].keys())
+
+    # Both row kinds the gateway emits, with every optional field populated.
+    alias = DiscoveredModel(
+        id="smart",
+        owned_by="lq-ai-gateway",
+        lq_ai_kind="alias",
+        routed_inference_tier=4,
+        resolves_to="anthropic-prod/claude-opus-4-7",
+        fallback_count=2,
+    ).to_payload()
+    native = DiscoveredModel(
+        id="anthropic-prod/claude-opus-4-7",
+        owned_by="anthropic-prod",
+        lq_ai_kind="provider_native",
+        provider_type="anthropic",
+        routed_inference_tier=4,
+    ).to_payload()
+
+    for payload in (alias, native):
+        undeclared = set(payload) - declared
+        assert not undeclared, (
+            "GET /v1/models emits keys not declared on ModelEntry in "
+            f"docs/api/gateway-openapi.yaml: {sorted(undeclared)}"
+        )
+    # The alias-only extensions added in this doc fix are explicitly declared.
+    assert {"lq_ai_resolves_to", "lq_ai_fallback_count"} <= declared
