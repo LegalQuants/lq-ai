@@ -318,6 +318,42 @@ class Settings(BaseSettings):
         description="When true, relax some safety checks for local development.",
     )
 
+    # ----- SMTP / email transport (M4-C1) -----
+    # Optional best-effort email transport for autonomous notifications.
+    # Email is enabled IFF ``smtp_host`` is set; with it unset the notify
+    # handler's email step is a clean no-op (the durable in-app row is the
+    # record regardless). No new dependency — the sender uses stdlib
+    # ``smtplib`` run via ``asyncio.to_thread`` (CLAUDE.md SBOM posture).
+    smtp_host: str | None = Field(
+        default=None,
+        description=(
+            "SMTP server hostname for autonomous-notification email. "
+            "Unset disables email transport (in-app notifications still work)."
+        ),
+    )
+    smtp_port: int = Field(
+        default=587,
+        description="SMTP server port. Default 587 (STARTTLS submission).",
+    )
+    smtp_username: str | None = Field(
+        default=None,
+        description="SMTP auth username. Unset skips login (open relay / no auth).",
+    )
+    smtp_password: str | None = Field(
+        default=None,
+        description="SMTP auth password. Unset skips login.",
+    )
+    smtp_from: str | None = Field(
+        default=None,
+        description=(
+            "From address for notification email. Falls back to ``smtp_username`` when unset."
+        ),
+    )
+    smtp_use_tls: bool = Field(
+        default=True,
+        description="Issue STARTTLS after connecting. Default True.",
+    )
+
     # ----- CORS -----
     # Comma-separated list of origins allowed to call the api from the
     # browser. Production deployments typically front web + api at the

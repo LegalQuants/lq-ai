@@ -49,6 +49,7 @@ from app.autonomous.receipt import build_receipt
 from app.db.session import get_db
 from app.models.autonomous import (
     AutonomousMemory,
+    AutonomousNotification,
     AutonomousSchedule,
     AutonomousSession,
     AutonomousWatch,
@@ -60,6 +61,8 @@ from app.models.project import Project
 from app.schemas.autonomous import (
     AutonomousMemoryListResponse,
     AutonomousMemoryRead,
+    AutonomousNotificationListResponse,
+    AutonomousNotificationRead,
     AutonomousScheduleCreate,
     AutonomousScheduleListResponse,
     AutonomousScheduleRead,
@@ -308,6 +311,36 @@ async def _load_owned_watch(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="autonomous watch not found",
+        )
+    return row
+
+
+async def _load_owned_notification(
+    db: AsyncSession,
+    *,
+    notification_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> AutonomousNotification:
+    """Fetch a notification by id; 404 if missing OR owned by another user.
+
+    Conflates "doesn't exist" and "belongs to someone else" to avoid
+    leaking the existence of other users' notifications via id-probing.
+    Mirrors :func:`_load_owned_precedent` — there is no soft-delete column
+    on notifications (``read_at`` is the dismiss action, and a read
+    notification is still loadable so re-read is idempotent).
+
+    Raises:
+        HTTPException: 404 if the row is absent or owned by a different user.
+    """
+    stmt = select(AutonomousNotification).where(
+        AutonomousNotification.id == notification_id,
+        AutonomousNotification.user_id == user_id,
+    )
+    row = (await db.execute(stmt)).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="autonomous notification not found",
         )
     return row
 
@@ -1443,3 +1476,102 @@ async def delete_watch(
     await db.refresh(watch)
 
     return AutonomousWatchRead.model_validate(watch)
+
+
+# ---------------------------------------------------------------------------
+# Notification read/dismiss endpoints (M4-C1)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/notifications",
+    response_model=AutonomousNotificationListResponse,
+    summary="List the calling user's autonomous notifications (newest first)",
+    responses={
+        401: {"description": "Not authenticated"},
+    },
+)
+async def list_notifications(
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    unread: Annotated[bool | None, Query()] = None,
+    limit: int = _LIMIT_DEFAULT,
+    offset: int = 0,
+) -> AutonomousNotificationListResponse:
+    """GET /api/v1/autonomous/notifications
+
+    Returns the caller's notifications ordered by ``created_at DESC``.
+    Pass ``?unread=true`` to narrow to unread rows (``read_at IS NULL``);
+    omitting it returns all the caller's notifications. ``limit`` is
+    clamped to [1, 200]; ``offset`` to [0, ∞).
+    """
+    limit = max(1, min(limit, _LIMIT_MAX))
+    offset = max(0, offset)
+
+    base_where = [AutonomousNotification.user_id == user.id]
+    if unread:
+        base_where.append(AutonomousNotification.read_at.is_(None))
+
+    count_stmt = select(func.count()).select_from(AutonomousNotification).where(*base_where)
+    total_count: int = (await db.execute(count_stmt)).scalar_one()
+
+    rows_stmt = (
+        select(AutonomousNotification)
+        .where(*base_where)
+        .order_by(AutonomousNotification.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    rows = (await db.execute(rows_stmt)).scalars().all()
+
+    return AutonomousNotificationListResponse(
+        notifications=[AutonomousNotificationRead.model_validate(r) for r in rows],
+        total_count=total_count,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.post(
+    "/notifications/{notification_id}/read",
+    response_model=AutonomousNotificationRead,
+    summary="Mark an autonomous notification read (the dismiss action; idempotent)",
+    responses={
+        404: {"description": "Notification not found"},
+        401: {"description": "Not authenticated"},
+    },
+)
+async def read_notification(
+    notification_id: uuid.UUID,
+    request: Request,
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AutonomousNotificationRead:
+    """POST /api/v1/autonomous/notifications/{notification_id}/read
+
+    Sets ``read_at=now(UTC)`` if currently NULL. **Idempotent:** re-reading
+    an already-read notification preserves the original ``read_at``. "Read"
+    IS the dismiss action — the model has no ``dismissed_at``; a read
+    notification drops out of the ``?unread=true`` list.
+
+    Another user's ``notification_id`` returns 404 (not 403) to avoid
+    existence disclosure. Audited.
+    """
+    note = await _load_owned_notification(db, notification_id=notification_id, user_id=user.id)
+
+    if note.read_at is None:
+        note.read_at = datetime.now(UTC)
+        note.updated_at = datetime.now(UTC)
+
+    await audit_action(
+        db,
+        user_id=user.id,
+        action="autonomous_notification.read",
+        resource_type="autonomous_notification",
+        resource_id=str(note.id),
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(note)
+
+    return AutonomousNotificationRead.model_validate(note)

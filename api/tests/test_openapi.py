@@ -178,6 +178,9 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         # M4-B4 — KB-arrival watches (create/list/patch/delete)
         "/api/v1/autonomous/watches",
         "/api/v1/autonomous/watches/{watch_id}",
+        # M4-C1 — notification read/dismiss API (list + mark-read)
+        "/api/v1/autonomous/notifications",
+        "/api/v1/autonomous/notifications/{notification_id}/read",
     }
 )
 
@@ -263,7 +266,10 @@ async def test_openapi_paths_match_sketch() -> None:
     # M4-B4 adds two new paths:
     # /api/v1/autonomous/watches
     # /api/v1/autonomous/watches/{watch_id}
-    assert len(actual) == 111
+    # M4-C1 adds two new paths:
+    # /api/v1/autonomous/notifications
+    # /api/v1/autonomous/notifications/{notification_id}/read
+    assert len(actual) == 113
 
 
 @pytest.mark.unit

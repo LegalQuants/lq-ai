@@ -435,3 +435,17 @@ class AutonomousNotificationRead(BaseModel):
     read_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class AutonomousNotificationListResponse(BaseModel):
+    """Paginated list of :class:`AutonomousNotificationRead` items (M4-C1).
+
+    Mirrors ``AutonomousMemoryListResponse`` — total_count / limit /
+    offset envelope. ``read_at IS NULL`` = unread; the ``?unread=true``
+    filter on ``GET /autonomous/notifications`` narrows to unread rows.
+    """
+
+    notifications: list[AutonomousNotificationRead]
+    total_count: int
+    limit: int
+    offset: int

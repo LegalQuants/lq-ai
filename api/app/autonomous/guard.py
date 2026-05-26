@@ -82,6 +82,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.autonomous.audit import autonomous_audit
 from app.autonomous.cost import estimate_tool_cost
 from app.autonomous.enums import PHASE_GRANTS, HaltState, Phase, ToolIntent
+from app.autonomous.notify_email import send_notification_email
 from app.errors import CostCapReached, SessionHalted, ToolNotGranted
 from app.models.autonomous import (
     AutonomousMemory,
@@ -89,6 +90,7 @@ from app.models.autonomous import (
     AutonomousSession,
     PrecedentEntry,
 )
+from app.models.user import User
 from app.observability_helpers import get_tracer, record_attributes
 
 log = logging.getLogger(__name__)
@@ -352,8 +354,9 @@ async def _dispatch(
         )
 
     if intent == ToolIntent.notify:
-        # Local, zero-cost: write an in-app autonomous_notifications row.
-        # Email transport and webhook dispatch are reserved for M4-C1 (DE-312).
+        # Local, zero-cost: write a durable in-app autonomous_notifications
+        # row — this is the RECORD OF TRUTH. Email is a best-effort transport
+        # copy (M4-C1); webhook dispatch stays reserved for DE-312.
         note = AutonomousNotification(
             user_id=session.user_id,
             session_id=session.id,
@@ -364,6 +367,27 @@ async def _dispatch(
         )
         db.add(note)
         await db.flush()
+
+        # Best-effort email transport (M4-C1): send the SAME counts/IDs/
+        # receipt-link body to the session user. A clean no-op when SMTP is
+        # unconfigured; the whole attempt is wrapped so a transport failure
+        # NEVER breaks the handler or the session. No second notification row
+        # is written — the one in-app row above is the record; email/webhook
+        # channel values remain the reserved seam.
+        try:
+            user = await db.get(User, session.user_id)
+            await send_notification_email(
+                to_addr=user.email if user else None,
+                subject=params["title"],
+                body=params["body"],
+            )
+        except Exception:
+            log.warning(
+                "autonomous_notify_email_error",
+                extra={"event": "autonomous_notify_email_error"},
+                exc_info=True,
+            )
+
         return ToolResult(cost_usd=Decimal("0"), data={"notification_id": str(note.id)})
 
     if intent == ToolIntent.retrieve_chunks:

@@ -476,6 +476,13 @@ With the brake-guarded executor proven, Phase B adds the four v1 primitives. Eac
 
 **References:** ADR 0013 open-Q2 + Decision M4-8; alignment guide §3 (`notify` at delivery).
 
+**Resolved at execution (2026-05-25, Claude — defensible defaults anchored in the plan + CLAUDE.md; flag to Kevin, not blocking):**
+- **C1-a — Email transport = stdlib `smtplib` via `asyncio.to_thread`, NO new dependency.** The api has no existing email path (no SMTP settings, no mailer). CLAUDE.md's dependency-justification + SBOM posture rules out `aiosmtplib` ("slightly more elegant" is not justification) when stdlib `smtplib` + `email.message.EmailMessage` run in a thread does the job. Add an `app/autonomous/notify_email.py` sender that is a **clean no-op when SMTP is unconfigured** (returns without error) — honest "not configured", never a hard failure.
+- **C1-b — SMTP config = new api `Settings` fields** (`smtp_host`, `smtp_port`, `smtp_username`, `smtp_password`, `smtp_from`, `smtp_use_tls`), all optional; email is enabled iff `smtp_host` is set. (api-side, not gateway.yaml — the `notify` handler is api-side.)
+- **C1-c — One in-app row is the durable record; email is a best-effort TRANSPORT of it, not a second row.** The `notify` chokepoint handler (`guard.py`) keeps writing the single `autonomous_notifications` row (`channel='in_app'`); C1 adds a best-effort email send of that same counts/IDs/receipt-link body to the session user's `User.email` when SMTP is configured, wrapped so a send failure never breaks the session (logged + OTel event). `channel`'s `email`/`webhook` enum values stay the reserved seam (webhook = DE-312).
+- **C1-d — Read/dismiss API uses the existing `read_at` column** (no schema change; `autonomous_notifications` has no `dismissed_at`). `GET /autonomous/notifications` (caller's, `?unread=true` filter, paginated, newest-first), `POST /autonomous/notifications/{id}/read` (sets `read_at`; idempotent) — "read" IS the dismiss action. Per-user 404-not-403; +2 OpenAPI paths (count 111 → 113). The deferred notifications read-index (0040's deferred `user_id, read_at, created_at` index) lands here now that the read query shape is concrete.
+- **C1-e — R6 regression:** assert `notify` is rejected (`ToolNotGranted`) at every phase other than `delivery` (it's only in `PHASE_GRANTS[Phase.delivery]`).
+
 ---
 
 ### Task M4-C2 — Web dashboard: sessions + receipts + memory review + precedent board + schedule/watch config

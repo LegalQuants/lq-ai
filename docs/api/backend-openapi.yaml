@@ -4376,6 +4376,67 @@ paths:
         '404':
           description: Watch not found
 
+  /api/v1/autonomous/notifications:
+    get:
+      tags: [autonomous]
+      summary: List the calling user's autonomous notifications (newest first)
+      description: |
+        Returns the caller's notifications ordered by ``created_at DESC``.
+        Pass ``?unread=true`` to narrow to unread rows (``read_at IS
+        NULL``). Per-user isolated.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: unread
+          in: query
+          required: false
+          schema: {type: boolean}
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+        - name: offset
+          in: query
+          required: false
+          schema: {type: integer, minimum: 0, default: 0}
+      responses:
+        '200':
+          description: Paginated list of notifications
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutonomousNotificationListResponse'
+        '401':
+          description: Not authenticated
+
+  /api/v1/autonomous/notifications/{notification_id}/read:
+    post:
+      tags: [autonomous]
+      summary: Mark an autonomous notification read (the dismiss action; idempotent)
+      description: |
+        Sets ``read_at`` if currently NULL; idempotent (re-read preserves
+        the original timestamp). "Read" IS the dismiss action — a read
+        notification drops out of ``?unread=true``. Another user's
+        ``notification_id`` returns 404.  Audited.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: notification_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Updated notification (now read)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutonomousNotificationRead'
+        '401':
+          description: Not authenticated
+        '404':
+          description: Notification not found
+
 # ============================================================
 # COMPONENTS
 # ============================================================
@@ -5356,6 +5417,50 @@ components:
         watches:
           type: array
           items: {$ref: '#/components/schemas/AutonomousWatchRead'}
+        total_count: {type: integer, minimum: 0}
+        limit: {type: integer, minimum: 1, maximum: 200}
+        offset: {type: integer, minimum: 0}
+
+    # M4-C1 — Autonomous notification read/dismiss schemas
+
+    AutonomousNotificationRead:
+      type: object
+      description: |
+        Read-only view of an ``autonomous_notifications`` row. Written by
+        the ``notify`` chokepoint handler. ``read_at`` IS NULL = unread;
+        marking read is the dismiss action. ``channel`` is one of
+        ``in_app`` / ``email`` / ``webhook`` (``webhook`` reserved).
+        ``body``/``payload`` carry counts/IDs + a receipt link — never raw
+        entity values.
+      required:
+        - id
+        - user_id
+        - session_id
+        - channel
+        - title
+        - body
+        - created_at
+        - updated_at
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        session_id: {type: string, format: uuid}
+        channel: {type: string, enum: [in_app, email, webhook]}
+        title: {type: string}
+        body: {type: string}
+        payload: {type: object, nullable: true, additionalProperties: true}
+        read_at: {type: string, format: date-time, nullable: true}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+
+    AutonomousNotificationListResponse:
+      type: object
+      description: Paginated list of autonomous notifications (newest first).
+      required: [notifications, total_count, limit, offset]
+      properties:
+        notifications:
+          type: array
+          items: {$ref: '#/components/schemas/AutonomousNotificationRead'}
         total_count: {type: integer, minimum: 0}
         limit: {type: integer, minimum: 1, maximum: 200}
         offset: {type: integer, minimum: 0}
