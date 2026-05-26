@@ -75,6 +75,13 @@ class User(Base):
         String, nullable=False, server_default=text("'always'")
     )
 
+    # M4-C2 — Autonomous Layer per-user opt-in (PRD §3.10: off by default).
+    # Gates the /autonomous/* mutate surface + the spawn paths
+    # (watch_trigger, schedule sweep). Read+halt stay reachable when off.
+    autonomous_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
