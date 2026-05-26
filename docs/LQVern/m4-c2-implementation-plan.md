@@ -16,6 +16,7 @@
 
 - **Local test DB:** read `POSTGRES_PASSWORD` from repo-root `.env`, then:
   `cd api && DATABASE_URL="postgresql+asyncpg://lq_ai:<pw>@127.0.0.1:15432/lq_ai" ./.venv/bin/pytest <paths> -q` (conftest spins a throwaway DB — safe).
+- **⚠️ NEVER run `alembic upgrade head` / `downgrade` directly against `127.0.0.1:15432/lq_ai`.** That host port maps to `lq-ai-postgres-1` — the **live dev DB shared with the running Docker stack**. Host-side alembic against it desyncs the running containers: if their image predates the migration, their startup `alembic upgrade head` then fails with "Can't locate revision …" and the api + arq-worker + ingest-worker crash-loop (→ login `ERR_CONNECTION_REFUSED` on `:8000`). Migration correctness is validated by **pytest only** (conftest builds + tears down its own throwaway DB). To run the new migration in the dev stack, **rebuild the api+arq-worker+ingest-worker trio together** (`docker compose build … && docker compose up -d …`) and let their entrypoint apply it. See [[feedback-no-host-alembic-on-dev-db]].
 - **Backend gates:** `cd api && ./.venv/bin/ruff format . && ./.venv/bin/ruff check . && ./.venv/bin/mypy app` (run `ruff format` AND `ruff check` separately — CI runs both).
 - **Web gates:** `cd web && npm run check && npm run lint`.
 - **Commits:** `git commit -s` (DCO) with trailer `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>`. One commit per task (or per red→green cycle).
@@ -153,10 +154,10 @@ def downgrade() -> None:
 Run: same pytest command as Step 2.
 Expected: PASS (2 tests).
 
-- [ ] **Step 6: Verify the migration round-trips**
+- [ ] **Step 6: Verify the migration round-trips — via the throwaway test DB ONLY**
 
-Run: `cd api && DATABASE_URL=... ./.venv/bin/alembic upgrade head && ./.venv/bin/alembic downgrade -1 && ./.venv/bin/alembic upgrade head`
-Expected: no errors; `0044` applies and reverts cleanly.
+The conftest-driven pytest in Step 5 already applies `0044` to its throwaway DB, which is the safe round-trip proof. **Do NOT** run `alembic upgrade head`/`downgrade` against `127.0.0.1:15432/lq_ai` (the live dev DB — see the ⚠️ in Conventions; doing so crash-loops the running stack). If you want an explicit up/down/up check, point alembic at a *scratch* database you create and drop yourself (e.g. `lq_ai_migtest`), never the dev DB.
+Expected: pytest green ⇒ `0044` applies cleanly on a fresh DB.
 
 - [ ] **Step 7: Gates + commit**
 
