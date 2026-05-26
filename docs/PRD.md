@@ -4331,6 +4331,30 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 ---
 
+#### DE-321 — Watch firing under a future KB-sharing model (M4-B4 finding)
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** M4-B4 added KB-arrival watches: attaching a file to a watched KB spawns an autonomous session owned by the watch's user (`watch.user_id`). Today the knowledge-base model is strictly single-owner — `_load_visible_kb` / `_load_visible_file_for_kb` / `_load_visible_project_for_kb` (`api/app/api/knowledge_bases.py`) all filter `owner_id == user.id`, and `create_watch` validates KB ownership — so the attacher, KB owner, file owner, and watch owner are always the same user, and no cross-tenant path exists. **If** a KB-sharing / project-shared-write model is ever introduced (a plausible M4+ feature), this code would let watch-owner A's autonomous session retrieve a document that user B introduced into a shared KB — a cross-tenant retrieval the watch owner may not be entitled to.
+
+**Specific scope:** When/if shared-write KBs land, gate watch-firing on the *attacher's* (document introducer's) visibility, or scope the spawned session's `retrieve_chunks` to the watch owner's own files, rather than firing unconditionally for every enabled watch on the KB. Add a cross-tenant isolation test.
+
+**When to ship:** Only when a KB-sharing model is on the roadmap; no action while KBs remain single-owner.
+
+---
+
+#### DE-322 — Validate playbook/project FK ownership on schedule + watch create (M4-B3/B4 finding)
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** `create_schedule` (M4-B3) and `create_watch` (M4-B4) in `api/app/api/autonomous.py` validate ownership of the target knowledge base (watch) but do **not** validate that a supplied `playbook_id` / `project_id` (and the schedule's `target_kb_id`) is owned by the caller. A user could attach an FK they don't own to a schedule/watch. Low impact today — the autonomous executor routes through the gateway/chokepoint which re-checks downstream, and the per-user session isolation holds — but the create surfaces should reject unowned FKs for defense-in-depth and a clearer 404/422 at write time.
+
+**Specific scope:** Add owner checks for `playbook_id`, `project_id`, and `target_kb_id` (schedules) / `playbook_id`, `project_id` (watches) in the two create handlers, mirroring the existing KB-ownership check; return 404 on an unowned FK (consistent with the 404-not-403 idiom). Add tests. Apply consistently across both primitives in one PR.
+
+**When to ship:** Post-Phase-B cleanup, low priority.
+
+---
+
 ## 10. Appendices
 
 ### Appendix A — Glossary
