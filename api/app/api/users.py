@@ -103,6 +103,8 @@ class UserPreferencesUpdate(BaseModel):
     workspace_layout: WorkspaceLayout | None = None
     trust_pills: TrustPills | None = None
     provenance_pills: ProvenancePills | None = None
+    # M4-C2 — Autonomous Layer opt-in (off by default)
+    autonomous_enabled: bool | None = None
 
 
 class UserPreferencesResponse(BaseModel):
@@ -118,6 +120,8 @@ class UserPreferencesResponse(BaseModel):
     workspace_layout: WorkspaceLayout
     trust_pills: TrustPills
     provenance_pills: ProvenancePills
+    # M4-C2 — Autonomous Layer opt-in (off by default)
+    autonomous_enabled: bool
 
 
 # ---------------------------------------------------------------------------
@@ -160,6 +164,7 @@ async def get_me_preferences(user: ActiveUser) -> UserPreferencesResponse:
         workspace_layout=getattr(user, "workspace_layout", "three_pane"),
         trust_pills=getattr(user, "trust_pills", "labels"),
         provenance_pills=getattr(user, "provenance_pills", "always"),
+        autonomous_enabled=getattr(user, "autonomous_enabled", False),
     )
 
 
@@ -235,6 +240,13 @@ async def patch_me_preferences(
             row.provenance_pills = after
             changed["provenance_pills"] = {"before": before, "after": after}
 
+    if payload.autonomous_enabled is not None:
+        before = str(row.autonomous_enabled)
+        after = str(payload.autonomous_enabled)
+        if before != after:
+            row.autonomous_enabled = payload.autonomous_enabled
+            changed["autonomous_enabled"] = {"before": before, "after": after}
+
     if not changed:
         return UserPreferencesResponse(
             reasoning_visibility=row.reasoning_visibility,
@@ -242,6 +254,7 @@ async def patch_me_preferences(
             workspace_layout=row.workspace_layout,
             trust_pills=row.trust_pills,
             provenance_pills=row.provenance_pills,
+            autonomous_enabled=row.autonomous_enabled,
         )
 
     await audit_action(
@@ -262,6 +275,7 @@ async def patch_me_preferences(
         workspace_layout=row.workspace_layout,
         trust_pills=row.trust_pills,
         provenance_pills=row.provenance_pills,
+        autonomous_enabled=row.autonomous_enabled,
     )
 
 
