@@ -7,13 +7,14 @@ the read-API query shape to be concrete). The shape is now known:
         WHERE user_id = :user_id [AND read_at IS NULL]   -- ?unread=true
         ORDER BY created_at DESC
 
-The composite ``(user_id, read_at, created_at DESC)`` serves both the
-all-notifications list (leading ``user_id`` + ``created_at DESC`` order)
-and the ``?unread=true`` variant (the ``read_at`` predicate). The
+A **partial index** on ``(user_id, created_at DESC) WHERE read_at IS NULL``
+cleanly serves the hot ``?unread=true`` query: the partial predicate matches
+``read_at IS NULL`` exactly (no wasted index entries for read rows), and the
 ``created_at DESC`` trailing column matches the newest-first sort so the
-planner can read the index in order. Mirrors the
-``idx_autonomous_sessions_user_created`` DESC-column idiom from migration
-0039.
+planner can read the index in order. The all-notifications list (no
+``?unread`` filter) is low-volume per user and is fine on the ``user_id``
+prefix. Mirrors the ``idx_autonomous_sessions_user_created`` DESC-column
+idiom from migration 0039.
 
 Revision ID: 0043
 Revises: 0042
@@ -32,12 +33,13 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Serves GET /autonomous/notifications:
-    #   WHERE user_id = :u [AND read_at IS NULL] ORDER BY created_at DESC
+    # Partial index serving GET /autonomous/notifications?unread=true:
+    #   WHERE user_id = :u AND read_at IS NULL ORDER BY created_at DESC
     op.create_index(
         "idx_autonomous_notifications_user_unread",
         "autonomous_notifications",
-        ["user_id", "read_at", sa.text("created_at DESC")],
+        ["user_id", sa.text("created_at DESC")],
+        postgresql_where=sa.text("read_at IS NULL"),
     )
 
 

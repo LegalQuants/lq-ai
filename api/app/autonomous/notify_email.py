@@ -48,12 +48,15 @@ def _send_sync(
     to_addr: str,
     subject: str,
     body: str,
+    timeout: int,
 ) -> None:
     """Blocking SMTP send — runs in a worker thread via ``asyncio.to_thread``.
 
     Builds a plain-text :class:`EmailMessage`, connects, optionally issues
-    STARTTLS, optionally logs in, and sends. Raises on any failure; the
-    async wrapper catches and logs.
+    STARTTLS, optionally logs in, and sends. The ``timeout`` bounds connect
+    AND subsequent socket ops (STARTTLS / send) so a hung mail server can't
+    tie up the worker thread indefinitely. Raises on any failure (including
+    a :class:`TimeoutError`); the async wrapper catches and logs.
     """
     msg = EmailMessage()
     msg["From"] = from_addr
@@ -61,7 +64,7 @@ def _send_sync(
     msg["Subject"] = subject
     msg.set_content(body)
 
-    with smtplib.SMTP(host, port) as smtp:
+    with smtplib.SMTP(host, port, timeout=timeout) as smtp:
         if use_tls:
             smtp.starttls()
         if username and password:
@@ -127,6 +130,7 @@ async def send_notification_email(
             to_addr=to_addr,
             subject=subject,
             body=body,
+            timeout=settings.smtp_timeout,
         )
     except Exception:
         # Best-effort: a transport/auth/parse failure must NEVER propagate.

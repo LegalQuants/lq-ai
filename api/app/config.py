@@ -353,6 +353,14 @@ class Settings(BaseSettings):
         default=True,
         description="Issue STARTTLS after connecting. Default True.",
     )
+    smtp_timeout: int = Field(
+        default=10,
+        description=(
+            "Socket timeout (seconds) for the SMTP connection — applies to "
+            "connect, STARTTLS, and send. Bounds the best-effort send so a "
+            "hung/black-holing mail server can't tie up a worker thread."
+        ),
+    )
 
     # ----- CORS -----
     # Comma-separated list of origins allowed to call the api from the

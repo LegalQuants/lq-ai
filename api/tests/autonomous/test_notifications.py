@@ -266,9 +266,10 @@ async def test_notify_email_sent_when_configured(
     sent_messages: list[dict[str, str]] = []
 
     class _FakeSMTP:
-        def __init__(self, host: str, port: int) -> None:
+        def __init__(self, host: str, port: int, timeout: int | None = None) -> None:
             self.host = host
             self.port = port
+            self.timeout = timeout
 
         def __enter__(self) -> _FakeSMTP:
             return self
@@ -336,6 +337,151 @@ async def test_notify_email_failure_does_not_break_handler(
         )
     ).scalar_one()
     assert row.title == "Run complete"
+
+
+@pytest.mark.integration
+async def test_send_notification_email_smtp_timeout_degrades_to_noop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A connect TimeoutError is caught best-effort: returns False, never raises.
+
+    Also asserts the configured ``smtp_timeout`` is forwarded to the SMTP
+    constructor — a hung mail server must not tie up the worker thread.
+    """
+    from app.autonomous.notify_email import send_notification_email
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "smtp_host", "smtp.example.com")
+    monkeypatch.setattr(settings, "smtp_port", 587)
+    monkeypatch.setattr(settings, "smtp_from", "noreply@lq.ai")
+    monkeypatch.setattr(settings, "smtp_timeout", 7)
+
+    captured: dict[str, object] = {}
+
+    class _HangSMTP:
+        def __init__(self, host: str, port: int, timeout: int | None = None) -> None:
+            captured["host"] = host
+            captured["port"] = port
+            captured["timeout"] = timeout
+            # socket.timeout is an alias of the builtin TimeoutError.
+            raise TimeoutError("timed out")
+
+    monkeypatch.setattr("app.autonomous.notify_email.smtplib.SMTP", _HangSMTP)
+
+    sent = await send_notification_email(to_addr="x@example.com", subject="hi", body="body")
+    assert sent is False
+    # The configured timeout was forwarded to the SMTP constructor.
+    assert captured["timeout"] == 7
+
+
+@pytest.mark.integration
+async def test_notify_handles_missing_user_email_through_handler(
+    db_session: AsyncSession,
+    user_a: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A session whose user is gone (email None) still writes the in-app row.
+
+    Drives the notify chokepoint handler with SMTP configured but the user
+    lookup returning None (a deleted user). The ``user.email if user else
+    None`` no-op path is exercised end-to-end through the handler: the email
+    send is a no-op (no recipient), the in-app row still lands, no raise.
+    """
+    settings = get_settings()
+    monkeypatch.setattr(settings, "smtp_host", "smtp.example.com")
+    monkeypatch.setattr(settings, "smtp_from", "noreply@lq.ai")
+
+    sent_messages: list[dict[str, str]] = []
+
+    class _FakeSMTP:
+        def __init__(self, host: str, port: int, timeout: int | None = None) -> None:
+            pass
+
+        def __enter__(self) -> _FakeSMTP:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def starttls(self) -> None:  # pragma: no cover - tls disabled here
+            pass
+
+        def login(self, username: str, password: str) -> None:  # pragma: no cover
+            pass
+
+        def send_message(self, msg: object) -> None:  # pragma: no cover - never sent
+            sent_messages.append({"to": msg["To"]})  # type: ignore[index]
+
+    monkeypatch.setattr("app.autonomous.notify_email.smtplib.SMTP", _FakeSMTP)
+
+    sess = await _make_session(db_session, user=user_a, phase=str(Phase.delivery))
+
+    # Simulate a deleted user: the handler's db.get(User, ...) returns None.
+    real_get = db_session.get
+
+    async def _get_none(entity: object, ident: object, *a: object, **k: object):
+        if entity is User:
+            return None
+        return await real_get(entity, ident, *a, **k)
+
+    monkeypatch.setattr(db_session, "get", _get_none)
+
+    result = await guarded_tool_call(
+        sess,
+        ToolIntent.notify,
+        {"title": "Run complete", "body": "1 finding; receipt: /x"},
+        db_session,
+        _StubGateway(),
+    )
+
+    note_id = uuid.UUID(result.data["notification_id"])
+    row = (
+        await db_session.execute(
+            select(AutonomousNotification).where(AutonomousNotification.id == note_id)
+        )
+    ).scalar_one()
+    assert row.title == "Run complete"
+    # No recipient → email was a no-op; no send was attempted.
+    assert sent_messages == []
+
+
+@pytest.mark.integration
+async def test_send_notification_email_newline_title_cannot_inject_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A newline in the subject cannot inject a header — degrades to False.
+
+    EmailMessage's header-set rejects an embedded newline, raising inside
+    _send_sync. The best-effort except catches it: no header injection, no
+    raise, returns False.
+    """
+    from app.autonomous.notify_email import send_notification_email
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "smtp_host", "smtp.example.com")
+    monkeypatch.setattr(settings, "smtp_from", "noreply@lq.ai")
+
+    class _FakeSMTP:
+        def __init__(self, host: str, port: int, timeout: int | None = None) -> None:
+            pass
+
+        def __enter__(self) -> _FakeSMTP:  # pragma: no cover - never reached
+            return self
+
+        def __exit__(self, *args: object) -> None:  # pragma: no cover
+            return None
+
+        def send_message(self, msg: object) -> None:  # pragma: no cover
+            pass
+
+    monkeypatch.setattr("app.autonomous.notify_email.smtplib.SMTP", _FakeSMTP)
+
+    sent = await send_notification_email(
+        to_addr="x@example.com",
+        subject="line1\nInjected: header",
+        body="b",
+    )
+    assert sent is False
 
 
 @pytest.mark.integration
