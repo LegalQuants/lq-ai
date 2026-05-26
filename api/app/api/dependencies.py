@@ -158,6 +158,30 @@ top of :data:`ActiveUser` (so it inherits the bearer-token + must-change-
 password gate) and adds the admin check."""
 
 
+async def get_autonomous_enabled_user(user: ActiveUser) -> User:
+    """`ActiveUser` plus the per-user Autonomous Layer opt-in gate.
+
+    The /autonomous/* mutate surface requires the user to have opted in
+    (PRD §3.10, off by default). Read + halt endpoints intentionally stay
+    on plain `ActiveUser` so a user who opts out never loses access to the
+    audit trail of what already ran (M4-C2 opt-out split).
+    """
+    if not getattr(user, "autonomous_enabled", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Autonomous Layer is not enabled for this user.",
+        )
+    return user
+
+
+AutonomousEnabledUser = Annotated[User, Depends(get_autonomous_enabled_user)]
+"""Type alias for /autonomous mutate endpoints that require the per-user
+opt-in flag (``autonomous_enabled = true``). Stacks on :data:`ActiveUser`
+(bearer-token + must-change-password gate) and adds the autonomous opt-in
+check. Read + halt endpoints stay on :data:`ActiveUser` per the M4-C2
+opt-out split."""
+
+
 # PRD §5.2 RBAC three-role system (Wave C). ``viewer`` users can read
 # resources they own but cannot mutate; ``admin`` and ``member`` can
 # both mutate. Backed by ``users.role`` (migration 0017) with a

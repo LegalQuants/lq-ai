@@ -41,7 +41,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import ActiveUser
+from app.api.dependencies import ActiveUser, AutonomousEnabledUser
 from app.audit import audit_action
 from app.autonomous.audit import autonomous_audit
 from app.autonomous.cron import next_run_after, validate_cron_expr
@@ -554,7 +554,7 @@ async def list_memory(
 async def keep_memory(
     memory_id: uuid.UUID,
     request: Request,
-    user: ActiveUser,
+    user: AutonomousEnabledUser,
     db: Annotated[AsyncSession, Depends(get_db)],
     body: MemoryKeepRequest | None = None,
 ) -> AutonomousMemoryRead:
@@ -607,7 +607,7 @@ async def keep_memory(
 async def dismiss_memory(
     memory_id: uuid.UUID,
     request: Request,
-    user: ActiveUser,
+    user: AutonomousEnabledUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AutonomousMemoryRead:
     """POST /api/v1/autonomous/memory/{memory_id}/dismiss
@@ -647,7 +647,7 @@ async def dismiss_memory(
 async def delete_memory(
     memory_id: uuid.UUID,
     request: Request,
-    user: ActiveUser,
+    user: AutonomousEnabledUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AutonomousMemoryRead:
     """DELETE /api/v1/autonomous/memory/{memory_id}
@@ -750,7 +750,7 @@ async def list_precedents(
 async def dismiss_precedent(
     precedent_id: uuid.UUID,
     request: Request,
-    user: ActiveUser,
+    user: AutonomousEnabledUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PrecedentEntryRead:
     """POST /api/v1/autonomous/precedents/{precedent_id}/dismiss
@@ -798,7 +798,7 @@ async def promote_precedent(
     precedent_id: uuid.UUID,
     body: PromotePrecedentRequest,
     request: Request,
-    user: ActiveUser,
+    user: AutonomousEnabledUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ProjectContextProposalRead:
     """POST /api/v1/autonomous/precedents/{precedent_id}/promote
@@ -912,7 +912,7 @@ async def list_project_context_proposals(
 async def accept_project_context_proposal(
     proposal_id: uuid.UUID,
     request: Request,
-    user: ActiveUser,
+    user: AutonomousEnabledUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ProjectContextProposalRead:
     """POST /api/v1/autonomous/project-context-proposals/{proposal_id}/accept
@@ -983,7 +983,7 @@ async def accept_project_context_proposal(
 async def reject_project_context_proposal(
     proposal_id: uuid.UUID,
     request: Request,
-    user: ActiveUser,
+    user: AutonomousEnabledUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ProjectContextProposalRead:
     """POST /api/v1/autonomous/project-context-proposals/{proposal_id}/reject
@@ -1034,7 +1034,7 @@ async def reject_project_context_proposal(
 async def create_schedule(
     body: AutonomousScheduleCreate,
     request: Request,
-    user: ActiveUser,
+    user: AutonomousEnabledUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AutonomousScheduleRead:
     """POST /api/v1/autonomous/schedules
@@ -1150,7 +1150,7 @@ async def update_schedule(
     schedule_id: uuid.UUID,
     body: AutonomousScheduleUpdate,
     request: Request,
-    user: ActiveUser,
+    user: AutonomousEnabledUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AutonomousScheduleRead:
     """PATCH /api/v1/autonomous/schedules/{schedule_id}
@@ -1217,7 +1217,7 @@ async def update_schedule(
 async def delete_schedule(
     schedule_id: uuid.UUID,
     request: Request,
-    user: ActiveUser,
+    user: AutonomousEnabledUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AutonomousScheduleRead:
     """DELETE /api/v1/autonomous/schedules/{schedule_id}
@@ -1271,7 +1271,7 @@ async def delete_schedule(
 async def create_watch(
     body: AutonomousWatchCreate,
     request: Request,
-    user: ActiveUser,
+    user: AutonomousEnabledUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AutonomousWatchRead:
     """POST /api/v1/autonomous/watches
@@ -1391,7 +1391,7 @@ async def update_watch(
     watch_id: uuid.UUID,
     body: AutonomousWatchUpdate,
     request: Request,
-    user: ActiveUser,
+    user: AutonomousEnabledUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AutonomousWatchRead:
     """PATCH /api/v1/autonomous/watches/{watch_id}
@@ -1443,7 +1443,7 @@ async def update_watch(
 async def delete_watch(
     watch_id: uuid.UUID,
     request: Request,
-    user: ActiveUser,
+    user: AutonomousEnabledUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AutonomousWatchRead:
     """DELETE /api/v1/autonomous/watches/{watch_id}
@@ -1544,7 +1544,7 @@ async def list_notifications(
 async def read_notification(
     notification_id: uuid.UUID,
     request: Request,
-    user: ActiveUser,
+    user: AutonomousEnabledUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AutonomousNotificationRead:
     """POST /api/v1/autonomous/notifications/{notification_id}/read

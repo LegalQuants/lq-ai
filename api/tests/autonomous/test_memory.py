@@ -61,6 +61,7 @@ async def _make_user(db: AsyncSession, *, suffix: str = "") -> User:
         is_admin=False,
         mfa_enabled=False,
         must_change_password=False,
+        autonomous_enabled=True,  # M4-C2: mutate endpoints require opt-in
     )
     db.add(user)
     await db.flush()
