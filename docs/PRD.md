@@ -4355,6 +4355,30 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 ---
 
+#### DE-323 — Surface autonomous context proposals on the Matter detail page (M4-C2 finding)
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** M4-C2 built the precedent→Project promote loop entirely inside the Autonomous area: promoting a precedent creates a `project_context_proposals` row, which the user accepts/rejects on `/lq-ai/autonomous/proposals`. Accept appends the proposed text to the target Project's `context_md`. This is self-contained and shippable, but the *contextually honest* place to review a proposed addition to a matter's context is the matter itself — the user decides where context lands while looking at that matter.
+
+**Specific scope:** Surface pending `project_context_proposals` for a project as an inbox banner on the Matter detail page (`web/src/routes/lq-ai/matters/[id]/+page.svelte`) — "N proposed context additions" with inline Accept/Reject driving the same `/autonomous/project-context-proposals/{id}/{accept,reject}` endpoints. Complements (does not replace) the in-Autonomous Proposals surface. Gated on the per-user autonomous opt-in so it stays hidden for non-opted-in users.
+
+**When to ship:** A clean follow-on once C2 ships; it touches the Matters route on its own time.
+
+---
+
+#### DE-324 — Global-chrome notification bell for autonomous notifications (M4-C2 finding)
+
+**Priority:** P3 · **Effort:** M
+
+**Context:** M4-C2 surfaces autonomous in-app notifications as a rail page (`/lq-ai/autonomous/notifications`) with an unread badge on the rail item. Email is already sent server-side (M4-C1). A bell + unread badge in the shared OpenWebUI top chrome would make notifications glanceable from anywhere, not only inside the Autonomous area — but it is a cross-cutting change to chrome shown to ALL users (including non-opted-in), so it needs its own opt-in gating in the shell and must coexist with OpenWebUI's own conventions.
+
+**Specific scope:** Add a bell + unread-count indicator to the global `/lq-ai` shell chrome that derives the autonomous unread count (reusing `GET /autonomous/notifications?unread=true`), opens a recent-items dropdown, and links into the rail Notifications page. Gate its visibility on `autonomous_enabled`. Reconcile with the §3.15 Slack/Teams bridge webhook channel (DE-312) so the surfaces don't duplicate.
+
+**When to ship:** A later cross-cutting chrome pass; deferred from C2 to keep that task contained.
+
+---
+
 ## 10. Appendices
 
 ### Appendix A — Glossary
