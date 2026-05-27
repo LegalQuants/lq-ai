@@ -43,6 +43,7 @@ from app.autonomous.cron import next_run_after
 from app.autonomous.executor import run_autonomous_session
 from app.db.session import get_session_factory
 from app.models.autonomous import AutonomousSchedule, AutonomousSession
+from app.models.user import User
 from app.workers.queue import enqueue_autonomous_session_job
 
 if TYPE_CHECKING:
@@ -325,11 +326,16 @@ async def _run_schedule_sweep(
     effective_now: datetime = now if now is not None else datetime.now(UTC)
     enqueue_fn = enqueue if enqueue is not None else enqueue_autonomous_session_job
 
-    due_stmt = select(AutonomousSchedule).where(
-        AutonomousSchedule.enabled.is_(True),
-        AutonomousSchedule.deleted_at.is_(None),
-        AutonomousSchedule.next_run_at.is_not(None),
-        AutonomousSchedule.next_run_at <= effective_now,
+    due_stmt = (
+        select(AutonomousSchedule)
+        .join(User, User.id == AutonomousSchedule.user_id)
+        .where(
+            AutonomousSchedule.enabled.is_(True),
+            AutonomousSchedule.deleted_at.is_(None),
+            AutonomousSchedule.next_run_at.is_not(None),
+            AutonomousSchedule.next_run_at <= effective_now,
+            User.autonomous_enabled.is_(True),
+        )
     )
     due = (await db.execute(due_stmt)).scalars().all()
 

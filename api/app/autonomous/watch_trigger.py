@@ -32,6 +32,7 @@ from typing import Any
 from sqlalchemy import select
 
 from app.models.autonomous import AutonomousSession, AutonomousWatch
+from app.models.user import User
 from app.workers.queue import enqueue_autonomous_session_job
 
 logger = logging.getLogger(__name__)
@@ -71,10 +72,15 @@ async def fire_watches_for_kb(
 
     enqueue_fn = enqueue if enqueue is not None else enqueue_autonomous_session_job
 
-    watches_stmt = select(AutonomousWatch).where(
-        AutonomousWatch.knowledge_base_id == kb_id,
-        AutonomousWatch.enabled.is_(True),
-        AutonomousWatch.deleted_at.is_(None),
+    watches_stmt = (
+        select(AutonomousWatch)
+        .join(User, User.id == AutonomousWatch.user_id)
+        .where(
+            AutonomousWatch.knowledge_base_id == kb_id,
+            AutonomousWatch.enabled.is_(True),
+            AutonomousWatch.deleted_at.is_(None),
+            User.autonomous_enabled.is_(True),
+        )
     )
     watches = (await db.execute(watches_stmt)).scalars().all()
 
