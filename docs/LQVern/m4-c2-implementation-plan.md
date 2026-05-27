@@ -947,9 +947,12 @@ export function statusPillClass(status: SessionStatus): string {
 		default: return 'lq-pill';
 	}
 }
-export function formatCost(total: number, cap: number | null): string {
-	const t = `$${total.toFixed(2)}`;
-	return cap != null ? `${t} / $${cap.toFixed(2)}` : t;
+// NOTE: SessionSummary.cost_total_usd / max_cost_usd arrive as STRINGS
+// (Pydantic Decimal→string in JSON), unlike the receipt's number fields —
+// coerce with Number() before formatting.
+export function formatCost(total: string | number, cap: string | number | null): string {
+	const t = `$${Number(total).toFixed(2)}`;
+	return cap != null ? `${t} / $${Number(cap).toFixed(2)}` : t;
 }
 export function isHaltable(status: SessionStatus): boolean {
 	return status === 'running' || status === 'paused';
