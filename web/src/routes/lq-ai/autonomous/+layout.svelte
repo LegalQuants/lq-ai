@@ -3,8 +3,11 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { preferences, initPreferences } from '$lib/lq-ai/stores/preferences';
+	import { autonomousApi } from '$lib/lq-ai/api';
 
 	$: pathname = $page.url.pathname;
+
+	const NOTIFICATIONS_HREF = '/lq-ai/autonomous/notifications';
 
 	const navLinks = [
 		{ href: '/lq-ai/autonomous',               label: 'Sessions',      exact: true  },
@@ -13,7 +16,7 @@
 		{ href: '/lq-ai/autonomous/proposals',      label: 'Proposals',     exact: false },
 		{ href: '/lq-ai/autonomous/schedules',      label: 'Schedules',     exact: false },
 		{ href: '/lq-ai/autonomous/watches',        label: 'Watches',       exact: false },
-		{ href: '/lq-ai/autonomous/notifications',  label: 'Notifications', exact: false }
+		{ href: NOTIFICATIONS_HREF,                 label: 'Notifications', exact: false }
 	];
 
 	function isActive(href: string, exact: boolean): boolean {
@@ -21,12 +24,46 @@
 		return pathname === href || pathname.startsWith(href + '/');
 	}
 
+	/** Unread notification count — best-effort; errors are silently swallowed. */
+	let unreadCount = 0;
+
+	async function fetchUnreadCount(): Promise<void> {
+		try {
+			const resp = await autonomousApi.listNotifications(true);
+			unreadCount = resp.notifications.length;
+		} catch {
+			// Best-effort badge — do not surface errors here.
+		}
+	}
+
 	onMount(async () => {
 		await initPreferences();
 		if (!$preferences.autonomous_enabled) {
 			goto('/lq-ai/settings/autonomous');
+			return;
 		}
+		// Initial unread count fetch (opt-in already confirmed above).
+		await fetchUnreadCount();
 	});
+
+	/**
+	 * Re-fetch unread count whenever the user navigates away FROM the notifications
+	 * page (they may have marked items read while there). Using $page reactivity is
+	 * lighter than a cross-component store and sufficient for this best-effort badge.
+	 */
+	let prevPathname = '';
+	$: {
+		const current = $page.url.pathname;
+		if (
+			prevPathname !== current &&
+			prevPathname.startsWith(NOTIFICATIONS_HREF) &&
+			!current.startsWith(NOTIFICATIONS_HREF) &&
+			$preferences.autonomous_enabled
+		) {
+			fetchUnreadCount();
+		}
+		prevPathname = current;
+	}
 </script>
 
 {#if $preferences.autonomous_enabled}
@@ -42,6 +79,11 @@
 							aria-current={isActive(link.href, link.exact) ? 'page' : undefined}
 						>
 							{link.label}
+							{#if link.href === NOTIFICATIONS_HREF && unreadCount > 0}
+								<span class="nav-unread-badge" aria-label="{unreadCount} unread">
+									{unreadCount > 99 ? '99+' : unreadCount}
+								</span>
+							{/if}
 						</a>
 					</li>
 				{/each}
@@ -96,6 +138,25 @@
 	.admin-nav-link--active {
 		color: var(--lq-accent);
 		border-bottom-color: var(--lq-accent);
+	}
+
+	.nav-unread-badge {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 18px;
+		height: 18px;
+		padding: 0 5px;
+		margin-left: 6px;
+		border-radius: 9px;
+		font-size: 11px;
+		font-weight: 600;
+		line-height: 1;
+		background: var(--lq-accent);
+		color: white;
+		vertical-align: middle;
+		/* Prevent badge from inheriting the link's text decoration / underline */
+		text-decoration: none;
 	}
 
 	.admin-content {
