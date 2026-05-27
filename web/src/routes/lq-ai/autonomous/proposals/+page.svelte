@@ -106,6 +106,7 @@
 		activeTab = tab;
 		actionError = null;
 		actionSuccess = null;
+		acceptedMatterHref = null;
 		load();
 	}
 
@@ -118,9 +119,11 @@
 		pendingIds = new Map(pendingIds).set(proposal.id, 'accepting');
 		actionError = null;
 		actionSuccess = null;
+		acceptedMatterHref = null;
 		try {
 			await autonomousApi.acceptProposal(proposal.id);
 			actionSuccess = `Added to ${projectName} context.`;
+			acceptedMatterHref = matterHref(proposal.project_id);
 			await load();
 		} catch (err) {
 			if (err instanceof LQAIApiError) {
@@ -149,6 +152,7 @@
 		pendingIds = new Map(pendingIds).set(proposal.id, 'rejecting');
 		actionError = null;
 		actionSuccess = null;
+		acceptedMatterHref = null;
 		try {
 			await autonomousApi.rejectProposal(proposal.id);
 			actionSuccess = 'Proposal rejected.';
@@ -216,25 +220,10 @@
 	}
 
 	/**
-	 * Extract the last successful accept from actionSuccess for the link.
-	 * Since we reload after every action, the accepted project_id is passed
-	 * in separately; we keep a ref so the banner can link to the matter.
+	 * Set directly in the accept handler on success; cleared on any action reset
+	 * or tab switch. Decouples the "View matter" link from the banner copy string.
 	 */
-	let lastAcceptedProjectId: string | null = null;
-
-	async function acceptProposalWithTracking(
-		proposal: ProjectContextProposalRead
-	): Promise<void> {
-		lastAcceptedProjectId = proposal.project_id;
-		await acceptProposal(proposal);
-		// If the action failed, clear the ref so the banner doesn't show a stale link.
-		if (actionError) lastAcceptedProjectId = null;
-	}
-
-	$: acceptedMatterHref =
-		lastAcceptedProjectId && actionSuccess?.startsWith('Added')
-			? matterHref(lastAcceptedProjectId)
-			: null;
+	let acceptedMatterHref: string | null = null;
 </script>
 
 <div class="proposals-page">
@@ -354,7 +343,7 @@
 							<button
 								type="button"
 								class="action-button primary"
-								on:click={() => acceptProposalWithTracking(proposal)}
+								on:click={() => acceptProposal(proposal)}
 								disabled={!!pending}
 							>
 								{pending === 'accepting' ? 'Accepting…' : 'Accept'}
