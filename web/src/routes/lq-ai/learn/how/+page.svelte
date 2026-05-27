@@ -593,6 +593,48 @@
 				</span>
 			</div>
 		</section>
+		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-autonomous-flow">
+			<h2 class="lq-section-h">12. Autonomy you can audit: the Autonomous flow</h2>
+			<p class="lq-text-body">
+				<strong>Planned M4 capability.</strong> The Autonomous Layer (M4) runs a single agent on your
+				behalf — on a schedule, or when documents arrive — without you watching each step. Because no
+				human approves each action, the agent runs through declared phases behind one brake-checked
+				chokepoint, and every run produces an auditable receipt. Step through a session below and trip
+				each brake yourself.
+			</p>
+			<div class="lq-playground-wrap">
+				<iframe
+					src="/learn/playgrounds/autonomous-flow.html"
+					title="Autonomous flow — a single agent, fully audited"
+					loading="lazy"
+					data-testid="learn-playground-autonomous-flow"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+				></iframe>
+			</div>
+			<div class="lq-playground-foot">
+				<a
+					href="/learn/playgrounds/autonomous-flow.html"
+					class="lq-link lq-fullscreen-link"
+					target="_blank"
+					rel="noopener noreferrer">Open full-screen ↗</a
+				>
+				<span class="lq-source-ref">
+					Source:
+					<a
+						href="https://github.com/LegalQuants/lq-ai/blob/main/docs/LQVern/agentic-flow-alignment-guide.md"
+						class="lq-link"
+						target="_blank"
+						rel="noopener noreferrer">agentic-flow-alignment-guide.md</a
+					>;
+					<a
+						href="https://github.com/LegalQuants/lq-ai/blob/main/docs/adr/0013-autonomous-layer-design-influences.md"
+						class="lq-link"
+						target="_blank"
+						rel="noopener noreferrer">ADR 0013</a
+					>
+				</span>
+			</div>
+		</section>
 	</div>
 
 	<footer class="lq-how-footer">
