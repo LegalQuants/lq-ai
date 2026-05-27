@@ -684,6 +684,41 @@ async def test_receipt_privacy_non_vacuous(
 
 
 # ---------------------------------------------------------------------------
+# Per-entry timestamps (M4-C2 task 5)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+async def test_receipt_entries_carry_timestamps(
+    db_session: AsyncSession,
+    user_a: User,
+) -> None:
+    """build_receipt carries per-entry ISO timestamps so the web layer can
+    interleave phase_transitions + tool_calls into one ordered timeline."""
+    from app.autonomous.audit import autonomous_audit
+    from app.autonomous.receipt import build_receipt
+
+    sess = await _make_session(db_session, user=user_a)
+
+    await autonomous_audit(db_session, sess, "phase_transition", to_phase="intake")
+    await autonomous_audit(db_session, sess, "tool_call", tool="retrieve_chunks", outcome="success")
+    await db_session.flush()
+
+    receipt = await build_receipt(sess, db_session)
+
+    assert len(receipt["phase_transitions"]) >= 1, "Expected at least one phase_transition"
+    assert len(receipt["tool_calls"]) >= 1, "Expected at least one tool_call"
+
+    for entry in receipt["phase_transitions"]:
+        assert "timestamp" in entry, f"phase_transition entry missing 'timestamp': {entry!r}"
+        assert entry["timestamp"] is not None, f"phase_transition entry null 'timestamp': {entry!r}"
+
+    for entry in receipt["tool_calls"]:
+        assert "timestamp" in entry, f"tool_call entry missing 'timestamp': {entry!r}"
+        assert entry["timestamp"] is not None, f"tool_call entry null 'timestamp': {entry!r}"
+
+
+# ---------------------------------------------------------------------------
 # OpenAPI conformance
 # ---------------------------------------------------------------------------
 

@@ -81,11 +81,13 @@ async def build_receipt(
         suffix = row.action.removeprefix("autonomous_session.")
         details: dict[str, Any] = row.details or {}
 
+        at: str | None = row.timestamp.isoformat() if row.timestamp is not None else None
+
         if suffix == "phase_transition":
             phase_transitions.append(
                 {
                     "to_phase": details.get("to_phase"),
-                    "timestamp": row.timestamp.isoformat() if row.timestamp else None,
+                    "timestamp": at,
                 }
             )
 
@@ -93,7 +95,7 @@ async def build_receipt(
             entry: dict[str, Any] = {
                 "tool": details.get("tool"),
                 "outcome": details.get("outcome"),
-                "timestamp": row.timestamp.isoformat() if row.timestamp else None,
+                "timestamp": at,
             }
             if "cost_usd" in details:
                 entry["cost_usd"] = details["cost_usd"]
