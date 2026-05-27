@@ -473,6 +473,12 @@ const PHASE_PLAN = [
 
 const SESSION_ID = "a3f7-…-9e21";   // illustrative truncated UUID
 
+// Timing + watchdog constants (UI pacing; IDLE_HALT_MINUTES mirrors the
+// shipped idle_halt_minutes default and is also shown in the label text).
+const AUTORUN_INTERVAL_MS = 700;    // Auto-run cadence per step
+const IDLE_TICK_MS = 800;           // gap between idle watchdog ticks
+const IDLE_HALT_MINUTES = 5;        // ground-truth idle_halt_minutes default
+
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
@@ -500,6 +506,7 @@ const state = {
 };
 
 let autoTimer = null;
+let idleTimer = null;   // handle for the pending idle tick-2 setTimeout
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -644,14 +651,17 @@ function idleTick() {
     state.halt_state = "paused";
     state.pendingIdle = 1;
     state.lastChecks = [
-      { r: "R5", label: "idle watchdog tick 1 — no activity past idle_halt_minutes (5)", out: "running → paused", state: "block" },
+      { r: "R5", label: "idle watchdog tick 1 — no activity past idle_halt_minutes (" + IDLE_HALT_MINUTES + ")", out: "running → paused", state: "block" },
     ];
+    // The intermediate pause is a transient halt_state change, NOT a phase
+    // transition — and shipped code audits only the terminal `halted` event.
+    // So we surface the halt_state move WITHOUT fabricating an audit row.
     state.lastSpan = {
       "autonomous.session_id": SESSION_ID,
       "autonomous.phase": state.current_phase,
       "autonomous.halt_state": "paused",
     };
-    state.lastAudit = { action: "autonomous_session.phase_transition", details: { note: "watchdog tick 1 — paused" } };
+    state.lastAudit = null;
   } else {
     state.halt_state = "halted";
     state.status = "halted";
@@ -660,11 +670,14 @@ function idleTick() {
     state.lastChecks = [
       { r: "R5", label: "idle watchdog tick 2 — still idle", out: "paused → halted", state: "block" },
     ];
+    // No `autonomous.outcome` here: the idle halt is written by the watchdog
+    // OUTSIDE the guarded_tool_call chokepoint, so it never opens an
+    // autonomous.tool_call span and never sets an outcome attribute. Only
+    // halt_state flips to "halted"; the audit row + receipt carry idle_timeout.
     state.lastSpan = {
       "autonomous.session_id": SESSION_ID,
       "autonomous.phase": state.current_phase,
       "autonomous.halt_state": "halted",
-      "autonomous.outcome": "external_halt",
     };
     state.lastAudit = { action: "autonomous_session.halted", details: { reason: "idle_timeout" } };
   }
@@ -677,6 +690,7 @@ function idleTick() {
 
 function reset() {
   clearInterval(autoTimer); autoTimer = null;
+  clearTimeout(idleTimer); idleTimer = null;   // cancel any pending idle tick-2 so a fresh session is never paused by a stale timer
   Object.assign(state, {
     stepIndex: 0, halt_state: "running", status: "running", current_phase: "intake",
     cost_total_usd: 0, cost_cap_reached: false, terminal_reason: null,
@@ -687,6 +701,16 @@ function reset() {
   document.getElementById("idle-toggle").checked = false;
   document.getElementById("btn-auto").textContent = "Auto-run ▸▸";
   render();
+}
+
+// Restore the default cost cap (gateway.yaml default $5) and sync the slider
+// DOM so each scenario button is a self-contained demo, independent of any
+// cap a prior scenario (notably A) latched. reset() deliberately leaves the
+// user's manual slider value alone; only the scenario buttons normalize it.
+function normalizeCostCap() {
+  state.max_cost_usd = 5;
+  document.getElementById("cap-slider").value = "5";
+  document.getElementById("cap-val").textContent = usd(5);
 }
 
 function runScenario(s) {
@@ -700,16 +724,19 @@ function runScenario(s) {
     while (!state.finished && guard++ < 50) step();
   } else if (s === "B") {
     // External halt: run two steps, hit Halt, step once more → external_halt.
+    normalizeCostCap();
     step(); step();
     state.halt_state = "halt_requested";
     step();
   } else if (s === "C") {
     // Phase-grant: walk to ethics_review, force a retrieve_chunks call there.
+    normalizeCostCap();
     let guard = 0;
     while (state.current_phase !== "ethics_review" && !state.finished && guard++ < 50) step();
     if (state.current_phase === "ethics_review") forceUngranted("retrieve_chunks");
   } else if (s === "D") {
     // Idle timeout: one step of progress, then two watchdog ticks.
+    normalizeCostCap();
     step();
     document.getElementById("idle-toggle").checked = true;
     idleTick(); idleTick();
@@ -805,6 +832,12 @@ function renderSpanPanel() {
   }).join("");
 
   const a = state.lastAudit;
+  if (!a) {
+    // A span moved (e.g. the idle watchdog's intermediate pause) without
+    // writing an audit row — shipped code audits only the terminal `halted`.
+    auditEl.innerHTML = `<div style="color:var(--text-faint);font-size:11px">No audit row for this step — the idle watchdog audits only the terminal <code>halted</code> event.</div>`;
+    return;
+  }
   let rows = `<div class="attr-row"><div class="attr-k">action</div><div class="attr-v">${esc(a.action)}</div></div>`;
   rows += Object.entries(a.details || {}).map(([k, v]) =>
     `<div class="attr-row"><div class="attr-k">details.${esc(k)}</div><div class="attr-v ${k === "outcome" ? outClass(v) : ""}">${esc(v)}</div></div>`
@@ -934,7 +967,7 @@ document.getElementById("btn-auto").addEventListener("click", () => {
   autoTimer = setInterval(() => {
     if (state.finished) { clearInterval(autoTimer); autoTimer = null; btn.textContent = "Auto-run ▸▸"; return; }
     step();
-  }, 700);
+  }, AUTORUN_INTERVAL_MS);
 });
 
 document.getElementById("btn-halt").addEventListener("click", () => {
@@ -948,7 +981,11 @@ document.getElementById("idle-toggle").addEventListener("change", e => {
   if (e.target.checked && !state.finished) {
     // Two watchdog ticks: running → paused → halted (Scenario D).
     idleTick();                       // tick 1 → paused
-    setTimeout(() => { if (!state.finished || state.halt_state === "paused") idleTick(); }, 800); // tick 2 → halted
+    // Fire tick-2 only if the session is still in the paused state we just set.
+    // The handle is cleared in reset() so a fresh session is never paused by
+    // a stale timer if the user toggles Idle then resets within IDLE_TICK_MS.
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => { if (state.halt_state === "paused") idleTick(); }, IDLE_TICK_MS); // tick 2 → halted
   }
 });
 
