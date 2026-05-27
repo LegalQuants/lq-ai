@@ -575,9 +575,9 @@ export interface SessionSummary {
 }
 export interface SessionListResponse { items: SessionSummary[]; total: number; }
 
-export interface ReceiptPhase { to_phase: string | null; at: string | null; }
+export interface ReceiptPhase { to_phase: string | null; timestamp: string | null; }
 export interface ReceiptToolCall {
-	tool: string | null; outcome: string | null; at: string | null; cost_usd?: number;
+	tool: string | null; outcome: string | null; timestamp: string | null; cost_usd?: number;
 }
 export interface SessionReceipt {
 	session_id: string; trigger_kind: string; status: string | null;
@@ -1008,10 +1008,10 @@ export type TimelineNode =
  *  Entries without a timestamp keep their relative order, appended stably. */
 export function buildTimeline(receipt: SessionReceipt): TimelineNode[] {
 	const phases: TimelineNode[] = receipt.phase_transitions.map((p: ReceiptPhase) => ({
-		kind: 'phase', at: p.at, phase: p.to_phase
+		kind: 'phase', at: p.timestamp, phase: p.to_phase
 	}));
 	const tools: TimelineNode[] = receipt.tool_calls.map((t: ReceiptToolCall) => ({
-		kind: 'tool', at: t.at, tool: t.tool, outcome: t.outcome, cost_usd: t.cost_usd
+		kind: 'tool', at: t.timestamp, tool: t.tool, outcome: t.outcome, cost_usd: t.cost_usd
 	}));
 	return [...phases, ...tools].sort((a, b) => {
 		if (a.at == null) return 1;
@@ -1029,12 +1029,12 @@ import { buildTimeline } from '../receipt-timeline';
 it('interleaves phases and tool calls by timestamp', () => {
 	const r = {
 		phase_transitions: [
-			{ to_phase: 'intake', at: '2026-05-25T10:00:00Z' },
-			{ to_phase: 'analysis', at: '2026-05-25T10:00:02Z' }
+			{ to_phase: 'intake', timestamp: '2026-05-25T10:00:00Z' },
+			{ to_phase: 'analysis', timestamp: '2026-05-25T10:00:02Z' }
 		],
 		tool_calls: [
-			{ tool: 'retrieve_chunks', outcome: 'success', at: '2026-05-25T10:00:01Z' },
-			{ tool: 'run_skill', outcome: 'success', at: '2026-05-25T10:00:03Z' }
+			{ tool: 'retrieve_chunks', outcome: 'success', timestamp: '2026-05-25T10:00:01Z' },
+			{ tool: 'run_skill', outcome: 'success', timestamp: '2026-05-25T10:00:03Z' }
 		]
 	} as never;
 	const t = buildTimeline(r);
