@@ -487,6 +487,8 @@ With the brake-guarded executor proven, Phase B adds the four v1 primitives. Eac
 
 ### Task M4-C2 — Web dashboard: sessions + receipts + memory review + precedent board + schedule/watch config
 
+> **STATUS: ✅ DONE** (2026-05-27). Design + 20-task plan in `docs/LQVern/m4-c2-dashboard-design.md` + `docs/LQVern/m4-c2-implementation-plan.md`. Shipped: backend opt-in slice (`users.autonomous_enabled` col + migration 0044, `/users/me/preferences` field, `AutonomousEnabledUser` gate on mutate endpoints with read+halt open, spawn-path opt-in guards, receipt per-entry timestamps) + the full SvelteKit dashboard (`autonomous.ts` client, opt-in Settings toggle, opt-in-gated top-tab + rail with redirect guard, sessions list + chronological receipt timeline + halt, memory review, precedent board + promote, proposals accept/reject, schedules + cron input, watches, notifications + unread badge) + Cypress E2E (`web/cypress/e2e/m4-autonomous.cy.ts`, 8 tests). 322 backend tests + 124 web unit tests + 8 E2E green; ruff/mypy clean; OpenAPI 113 paths unchanged. Deferred: DE-323 (proposals on Matter page), DE-324 (global notification bell). Branch HEAD ~`04c85e4`.
+
 **Scope (web, SvelteKit — `web/src/routes/lq-ai/autonomous/`):**
 - **Opt-in gate:** the Autonomous Layer is off by default, opt-in per user (§3.10) — a settings toggle; surfaces stay hidden until opted in.
 - **Sessions list + receipt view** — the receipt rendered as "what the agent did and why": phases, per tool call (intent/cost/outcome/gates), terminal state. The headline UX: *you can audit exactly what the agent did.* A visible **Halt** button on a running session (calls `POST …/halt`).
