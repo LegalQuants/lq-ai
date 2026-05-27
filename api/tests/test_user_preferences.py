@@ -74,7 +74,7 @@ async def test_get_preferences_defaults_to_disclosure(client: AsyncClient, calle
 
 @pytest.mark.integration
 async def test_get_preferences_defaults_full_snapshot(client: AsyncClient, caller: User) -> None:
-    """All 5 preference fields return their 'brave choice' server defaults."""
+    """All 6 preference fields return their 'brave choice' server defaults."""
     resp = await client.get("/api/v1/users/me/preferences", headers=_bearer(caller))
     assert resp.status_code == 200
     data = resp.json()
@@ -83,6 +83,7 @@ async def test_get_preferences_defaults_full_snapshot(client: AsyncClient, calle
     assert data["workspace_layout"] == "three_pane"
     assert data["trust_pills"] == "labels"
     assert data["provenance_pills"] == "always"
+    assert data["autonomous_enabled"] is False
 
 
 @pytest.mark.integration

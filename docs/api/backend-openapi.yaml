@@ -5695,9 +5695,10 @@ components:
     UserPreferences:
       type: object
       description: |
-        All 5 personalization preference fields. Wave A (``reasoning_visibility``)
-        per PRD §3.2; Wave B v2 fields per PRD §3.2.1 and frontend spec §4.3.
-      required: [reasoning_visibility, featured_tools, workspace_layout, trust_pills, provenance_pills]
+        All 6 personalization preference fields. Wave A (``reasoning_visibility``)
+        per PRD §3.2; Wave B v2 fields per PRD §3.2.1 and frontend spec §4.3;
+        ``autonomous_enabled`` per PRD §5 / M4-C2.
+      required: [reasoning_visibility, featured_tools, workspace_layout, trust_pills, provenance_pills, autonomous_enabled]
       properties:
         reasoning_visibility:
           type: string
@@ -5719,12 +5720,15 @@ components:
           type: string
           enum: [always, collapsed]
           default: always
+        autonomous_enabled:
+          type: boolean
 
     UserPreferencesUpdate:
       type: object
       description: |
         All fields optional; only supplied keys are updated. Wave B v2 adds
-        four personalization fields per PRD §3.2.1 and frontend spec §4.3.
+        four personalization fields per PRD §3.2.1 and frontend spec §4.3;
+        ``autonomous_enabled`` per PRD §5 / M4-C2.
       properties:
         reasoning_visibility:
           type: string
@@ -5741,6 +5745,8 @@ components:
         provenance_pills:
           type: string
           enum: [always, collapsed]
+        autonomous_enabled:
+          type: boolean
 
     Project:
       type: object
