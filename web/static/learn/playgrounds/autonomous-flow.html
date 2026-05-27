@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LQ.AI — Autonomous flow: a single agent, fully audited</title>
+<style>
+  :root {
+    --bg: #0c0f14;
+    --bg-elev: #151a23;
+    --bg-elev-2: #1d242f;
+    --border: #2a3340;
+    --border-hover: #3a4555;
+    --text: #e6ebf3;
+    --text-dim: #8a96a8;
+    --text-faint: #5a6578;
+    --accent: #7dd3fc;
+    --accent-dim: #38bdf8;
+    --verified: #86efac;
+    --verified-bg: rgba(134,239,172,0.08);
+    --verified-border: rgba(134,239,172,0.3);
+    --partial: #fcd34d;
+    --partial-bg: rgba(252,211,77,0.08);
+    --partial-border: rgba(252,211,77,0.3);
+    --unverified: #f87171;
+    --unverified-bg: rgba(248,113,113,0.08);
+    --unverified-border: rgba(248,113,113,0.3);
+    --pending: #5a6578;
+    --pending-bg: rgba(90,101,120,0.08);
+    --pending-border: rgba(90,101,120,0.25);
+    --shadow: rgba(0,0,0,0.4);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+  }
+  .app { display: grid; grid-template-rows: auto 1fr; height: 100vh; }
+  header {
+    padding: 12px 20px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 16px;
+  }
+  header h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
+  header .subtitle { color: var(--text-dim); font-size: 13px; }
+  header .spacer { flex: 1; }
+  header a {
+    color: var(--accent); text-decoration: none; font-size: 12px;
+    border: 1px solid var(--border); padding: 4px 10px; border-radius: 4px;
+  }
+  header a:hover { border-color: var(--border-hover); background: var(--bg-elev-2); }
+  .badge-planned {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--partial); background: var(--partial-bg);
+    border: 1px solid var(--partial-border); border-radius: 4px;
+    padding: 3px 8px; cursor: help; white-space: nowrap;
+  }
+
+  .main { display: grid; grid-template-columns: 340px 1fr; overflow: hidden; }
+  .controls {
+    background: var(--bg-elev);
+    border-right: 1px solid var(--border);
+    padding: 16px; overflow-y: auto;
+  }
+  .controls h2 {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-dim); margin: 18px 0 8px;
+  }
+  .controls h2:first-child { margin-top: 0; }
+  .controls .hint { font-size: 11px; color: var(--text-faint); margin: 4px 0 10px; line-height: 1.4; }
+
+  .btn-row { display: flex; gap: 6px; margin-bottom: 8px; }
+  .btn {
+    flex: 1; background: var(--bg-elev-2); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 10px; border-radius: 4px;
+    cursor: pointer; font-size: 12px; font-weight: 600; text-align: center;
+    transition: all 0.1s;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--border-hover); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+  .btn.primary:hover:not(:disabled) { background: var(--accent-dim); border-color: var(--accent-dim); }
+  .btn.danger { color: var(--unverified); border-color: var(--unverified-border); background: var(--unverified-bg); }
+  .btn.danger:hover:not(:disabled) { border-color: var(--unverified); }
+  .btn.warn { color: var(--partial); border-color: var(--partial-border); background: var(--partial-bg); }
+  .btn.warn:hover:not(:disabled) { border-color: var(--partial); }
+
+  .slider-wrap { margin: 4px 0 8px; }
+  .slider-wrap .slider-val {
+    font-family: ui-monospace, Menlo, monospace; font-size: 12px;
+    color: var(--accent); float: right;
+  }
+  input[type=range] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+
+  .toggle {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 8px; border-radius: 4px; cursor: pointer;
+    user-select: none; transition: background 0.1s; font-size: 13px;
+  }
+  .toggle:hover { background: var(--bg-elev-2); }
+  .toggle input { margin: 3px 0 0; cursor: pointer; accent-color: var(--accent); flex-shrink: 0; }
+  .toggle .toggle-label { flex: 1; line-height: 1.4; }
+  .toggle .toggle-label span { display: block; color: var(--text-dim); font-size: 11px; margin-top: 2px; }
+
+  .scenario-list { display: flex; flex-direction: column; gap: 5px; }
+  .scenario-btn {
+    background: var(--bg-elev-2); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 10px; border-radius: 4px;
+    cursor: pointer; font-size: 12px; text-align: left; transition: all 0.1s; line-height: 1.4;
+  }
+  .scenario-btn:hover { border-color: var(--border-hover); }
+  .scenario-btn .s-label { display: block; font-weight: 600; margin-bottom: 2px; }
+  .scenario-btn .s-desc { display: block; font-size: 11px; color: var(--text-dim); }
+
+  .status-line {
+    margin-top: 14px; padding: 10px 12px; border-radius: 5px;
+    background: var(--bg-elev-2); border: 1px solid var(--border);
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; line-height: 1.7;
+  }
+  .status-line .sk { color: var(--text-faint); }
+  .status-line .sv { color: var(--text); }
+  .status-line .sv.green { color: var(--verified); }
+  .status-line .sv.amber { color: var(--partial); }
+  .status-line .sv.red { color: var(--unverified); }
+
+  .preview-wrap {
+    overflow-y: auto; padding: 20px;
+    background:
+      radial-gradient(circle at 20% 20%, rgba(125,211,252,0.03), transparent 55%),
+      radial-gradient(circle at 80% 80%, rgba(134,239,172,0.03), transparent 55%);
+  }
+  .preview-inner { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+  .section-title {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-dim); margin: 0 0 10px;
+  }
+
+  /* --- Phase strip --- */
+  .phase-strip { display: flex; gap: 6px; align-items: stretch; }
+  .phase {
+    flex: 1; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg-elev); padding: 8px; position: relative;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .phase.active { border-color: var(--accent); background: rgba(125,211,252,0.06); }
+  .phase.done { border-color: var(--verified-border); }
+  .phase-name {
+    font-size: 11px; font-weight: 700; font-family: ui-monospace, Menlo, monospace;
+    color: var(--text-dim); margin-bottom: 6px; text-align: center;
+  }
+  .phase.active .phase-name { color: var(--accent); }
+  .phase.done .phase-name { color: var(--verified); }
+  .phase-chips { display: flex; flex-direction: column; gap: 3px; }
+  .chip {
+    font-size: 9.5px; font-family: ui-monospace, Menlo, monospace;
+    padding: 2px 5px; border-radius: 3px; text-align: center;
+    border: 1px solid var(--border); color: var(--text-dim);
+    background: var(--bg-elev-2); transition: all 0.15s;
+  }
+  .chip.granted { color: var(--verified); border-color: var(--verified-border); background: var(--verified-bg); }
+  .chip.ungranted { color: var(--pending); border-color: var(--pending-border); opacity: 0.5; }
+  .chip.flash-red {
+    color: var(--unverified); border-color: var(--unverified); background: var(--unverified-bg);
+    opacity: 1; animation: flash 0.4s ease-in-out 3;
+  }
+  @keyframes flash { 0%,100% { background: var(--unverified-bg); } 50% { background: rgba(248,113,113,0.3); } }
+  .phase-arrow { align-self: center; color: var(--text-faint); font-size: 14px; }
+
+  /* --- Chokepoint panel --- */
+  .panel {
+    background: var(--bg-elev); border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden;
+  }
+  .panel-header {
+    padding: 10px 14px; background: var(--bg-elev-2);
+    border-bottom: 1px solid var(--border);
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-dim);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-header .one-chokepoint {
+    margin-left: auto; font-size: 10px; text-transform: none; letter-spacing: 0;
+    color: var(--text-faint); font-weight: 400;
+  }
+  .panel-body { padding: 14px; }
+
+  .check-list { display: flex; flex-direction: column; gap: 8px; }
+  .check {
+    display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: center;
+    padding: 9px 12px; border-radius: 5px;
+    background: var(--bg-elev-2); border: 1px solid var(--border);
+    transition: all 0.15s;
+  }
+  .check .check-icon {
+    width: 22px; height: 22px; border-radius: 50%; display: flex;
+    align-items: center; justify-content: center; font-size: 12px; font-weight: 700;
+    border: 1px solid var(--pending-border); color: var(--pending);
+  }
+  .check .check-text { font-size: 12px; }
+  .check .check-text .cr {
+    font-family: ui-monospace, Menlo, monospace; font-weight: 700;
+    color: var(--accent); margin-right: 6px;
+  }
+  .check .check-text .cd { color: var(--text-dim); }
+  .check .check-out { font-size: 10px; font-family: ui-monospace, Menlo, monospace; color: var(--text-faint); }
+  .check.pass { border-color: var(--verified-border); }
+  .check.pass .check-icon { border-color: var(--verified); color: var(--verified); background: var(--verified-bg); }
+  .check.pass .check-out { color: var(--verified); }
+  .check.block { border-color: var(--unverified-border); background: var(--unverified-bg); }
+  .check.block .check-icon { border-color: var(--unverified); color: var(--unverified); background: var(--unverified-bg); }
+  .check.block .check-out { color: var(--unverified); }
+  .chokepoint-note {
+    margin-top: 12px; font-size: 11px; color: var(--text-faint);
+    line-height: 1.5; padding: 8px 12px; border-radius: 5px;
+    background: rgba(125,211,252,0.04); border: 1px solid rgba(125,211,252,0.15);
+  }
+  .chokepoint-note strong { color: var(--accent); }
+
+  /* --- OTel + audit side-panel --- */
+  .span-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .span-box { }
+  .span-box .sb-title {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-faint); margin-bottom: 6px;
+  }
+  .attr-row {
+    display: grid; grid-template-columns: 150px 1fr; gap: 8px; padding: 3px 0;
+    border-bottom: 1px dashed var(--border);
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px;
+  }
+  .attr-row:last-child { border-bottom: none; }
+  .attr-k { color: var(--text-dim); word-break: break-all; }
+  .attr-v { color: var(--text); word-break: break-all; }
+  .attr-v.green { color: var(--verified); }
+  .attr-v.amber { color: var(--partial); }
+  .attr-v.red { color: var(--unverified); }
+
+  /* --- Hygiene (counts only) side-by-side --- */
+  .attr-hygiene { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .hygiene-col-title {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em; margin-bottom: 8px;
+  }
+  .hygiene-col-title.green { color: var(--verified); }
+  .hygiene-col-title.red { color: var(--unverified); }
+  .hygiene-row {
+    padding: 5px 8px; border-radius: 4px;
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px;
+    margin-bottom: 4px; border: 1px solid var(--border); background: var(--bg-elev-2);
+  }
+  .hygiene-row.appears { color: var(--verified); border-color: var(--verified-border); }
+  .hygiene-row.never { color: var(--unverified); border-color: var(--unverified-border); }
+  .hygiene-row .hygiene-ex { color: var(--text-faint); font-size: 10px; display: block; margin-top: 2px; }
+  .hygiene-foot {
+    margin-top: 10px; font-size: 11px; color: var(--text-faint); line-height: 1.5;
+  }
+  .hygiene-foot code {
+    color: var(--accent); font-family: ui-monospace, Menlo, monospace; font-size: 10px;
+  }
+
+  /* --- Receipt --- */
+  .receipt { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; }
+  .receipt.empty { color: var(--text-faint); text-align: center; padding: 24px; font-family: inherit; font-size: 12px; }
+  .receipt .r-top {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px;
+    padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px solid var(--border);
+  }
+  .receipt .r-kv { display: flex; justify-content: space-between; gap: 10px; }
+  .receipt .r-kv .rk { color: var(--text-faint); }
+  .receipt .r-kv .rv { color: var(--text); }
+  .receipt .r-kv .rv.green { color: var(--verified); }
+  .receipt .r-kv .rv.amber { color: var(--partial); }
+  .receipt .r-kv .rv.red { color: var(--unverified); }
+  .receipt .r-sub {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-faint); margin: 10px 0 6px; font-family: -apple-system, system-ui, sans-serif; font-weight: 600;
+  }
+  .receipt .r-call {
+    display: grid; grid-template-columns: auto 1fr auto auto; gap: 10px; align-items: center;
+    padding: 5px 8px; border-radius: 4px; background: var(--bg-elev-2);
+    border: 1px solid var(--border); margin-bottom: 4px;
+  }
+  .receipt .r-call .rc-phase { color: var(--text-dim); }
+  .receipt .r-call .rc-tool { color: var(--accent); }
+  .receipt .r-call .rc-cost { color: var(--text-faint); }
+  .receipt .r-call .rc-out { font-weight: 700; }
+  .receipt .r-call .rc-out.green { color: var(--verified); }
+  .receipt .r-call .rc-out.red { color: var(--unverified); }
+  .receipt .r-trail { color: var(--text-dim); font-size: 11px; line-height: 1.7; }
+  .receipt .r-trail .rt-phase { color: var(--accent); }
+  .receipt-caption {
+    margin-top: 12px; font-size: 11px; color: var(--text-faint);
+    line-height: 1.5; font-family: -apple-system, system-ui, sans-serif; font-style: italic;
+  }
+</style>
+</head>
+<body>
+<div class="app" data-testid="learn-playground-autonomous-flow">
+  <header>
+    <h1>Autonomous flow — a single agent, fully audited</h1>
+    <span class="subtitle">Step a single-agent session through its phases and watch the brakes fire</span>
+    <span class="badge-planned"
+      title="This illustrates the M4 Autonomous Layer's design. It is not running in your deployment yet.">PLANNED — M4 capability</span>
+    <span class="spacer"></span>
+    <a href="https://github.com/LegalQuants/lq-ai/blob/main/docs/LQVern/agentic-flow-alignment-guide.md" target="_blank" rel="noopener">How aligned flows are built ↗</a>
+  </header>
+  <div class="main">
+    <div class="controls">
+      <h2>Drive the session</h2>
+      <p class="hint">Each step is one tool call through the chokepoint. Auto-run plays the session to its terminal state.</p>
+      <div class="btn-row">
+        <button class="btn primary" id="btn-step">Step ▸</button>
+        <button class="btn" id="btn-auto">Auto-run ▸▸</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="btn-reset">Reset ↻</button>
+      </div>
+
+      <h2>Cost cap (R4)</h2>
+      <p class="hint">Session field <code>max_cost_usd</code> — the gateway.yaml default is $5. Lowering it mid-run trips Scenario A.</p>
+      <div class="slider-wrap">
+        <span class="slider-val" id="cap-val">$5.00</span>
+        <label class="sk" style="font-size:11px;color:var(--text-faint)">max_cost_usd</label>
+        <input type="range" id="cap-slider" min="0.05" max="10" step="0.05" value="5">
+      </div>
+
+      <h2>Brakes</h2>
+      <div class="btn-row">
+        <button class="btn danger" id="btn-halt">Halt (the red button)</button>
+      </div>
+      <p class="hint">Sets <code>halt_state = halt_requested</code>; honored at the <em>next</em> tool boundary (Scenario B).</p>
+      <div class="btn-row">
+        <button class="btn warn" id="btn-ungranted">Force ungranted call</button>
+      </div>
+      <p class="hint">Attempt a tool not granted in the current phase (Scenario C). The stripped chip flashes red.</p>
+      <label class="toggle">
+        <input type="checkbox" id="idle-toggle">
+        <div class="toggle-label">Idle past <code>idle_halt_minutes</code> (5)
+          <span>Simulate inactivity: the watchdog ticks running → paused → halted (Scenario D).</span>
+        </div>
+      </label>
+
+      <h2>Brake scenarios (A–D)</h2>
+      <p class="hint">Each maps one-to-one to an M4-A3 acceptance test. Trigger one to see its outcome + span attribute + audit row.</p>
+      <div class="scenario-list">
+        <button class="scenario-btn" data-scenario="A">
+          <span class="s-label">A · R4 cost cap</span>
+          <span class="s-desc">Projected cost &gt; max_cost_usd → cost_cap_reached, partial result kept.</span>
+        </button>
+        <button class="scenario-btn" data-scenario="B">
+          <span class="s-label">B · R5 external halt</span>
+          <span class="s-desc">Halt mid-run → next call reads halt_requested → external_halt.</span>
+        </button>
+        <button class="scenario-btn" data-scenario="C">
+          <span class="s-label">C · R6 phase-grant</span>
+          <span class="s-desc">retrieve_chunks during ethics_review → tool_not_granted.</span>
+        </button>
+        <button class="scenario-btn" data-scenario="D">
+          <span class="s-label">D · R5 idle timeout</span>
+          <span class="s-desc">Inactivity → running → paused → halted (idle_timeout).</span>
+        </button>
+      </div>
+
+      <div class="status-line" id="status-line"></div>
+    </div>
+
+    <div class="preview-wrap">
+      <div class="preview-inner">
+        <div>
+          <div class="section-title">One autonomous_session — five phases, left to right</div>
+          <div class="phase-strip" id="phase-strip"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            The guarded_tool_call chokepoint — four ordered checks
+            <span class="one-chokepoint">R5 → R6 → R4 → open span + audit + run + record</span>
+          </div>
+          <div class="panel-body">
+            <div class="check-list" id="check-list"></div>
+            <div class="chokepoint-note">
+              <strong>There is exactly one chokepoint.</strong> Every tool call goes through here; a new tool
+              gets the brakes for free and cannot route around them. The order is fixed:
+              <code>R5</code> (halt) → <code>R6</code> (phase grant) → <code>R4</code> (cost) — all <em>before</em> the tool runs.
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">autonomous.tool_call span + audit row — this step</div>
+          <div class="panel-body">
+            <div class="span-grid">
+              <div class="span-box">
+                <div class="sb-title">OTel span — autonomous.tool_call</div>
+                <div id="span-attrs"></div>
+              </div>
+              <div class="span-box">
+                <div class="sb-title">Audit row — audit_log</div>
+                <div id="audit-attrs"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">The "counts only" guarantee — what appears vs. what NEVER appears</div>
+          <div class="panel-body">
+            <div class="attr-hygiene" id="hygiene"></div>
+            <div class="hygiene-foot">
+              This extends the M2 anonymization-span guarantee enforced for the gateway by
+              <code>gateway/tests/test_anonymization_observability.py</code>. Span attributes and audit
+              <code>details</code> carry counts, types, IDs, costs, outcomes, and enum labels — never raw entity
+              values, document text, prompt bodies, or model responses.
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">The receipt — what the user sees afterward</div>
+          <div class="panel-body">
+            <div class="receipt empty" id="receipt">
+              Run the session to a terminal state (completed / halted / cost_cap_reached) to render its receipt.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------------------------------------------------------------------------
+// Ground-truth data — names match shipped code in api/app/autonomous/*.py
+// ---------------------------------------------------------------------------
+
+// Closed phase enum (app/schemas/autonomous.py::Phase)
+const PHASES = ["intake", "analysis", "drafting", "ethics_review", "delivery"];
+
+// PHASE_GRANTS — authoritative shipped map (api/app/autonomous/enums.py)
+const PHASE_GRANTS = {
+  intake:        ["retrieve_chunks"],
+  analysis:      ["retrieve_chunks", "run_skill", "run_playbook", "propose_precedent"],
+  drafting:      ["run_skill", "emit_finding", "propose_memory", "propose_precedent"],
+  ethics_review: ["emit_finding"],
+  delivery:      ["notify"],
+};
+
+// All ToolIntent members (api/app/autonomous/enums.py::ToolIntent)
+const ALL_INTENTS = [
+  "retrieve_chunks", "run_skill", "run_playbook",
+  "propose_memory", "propose_precedent", "emit_finding", "notify",
+];
+
+// The default "happy path" tool call per phase + a representative cost.
+// Costs are illustrative; the names (intents/outcomes) are ground-truth.
+const PHASE_PLAN = [
+  { phase: "intake",        intent: "retrieve_chunks",  cost: 0.02 },
+  { phase: "analysis",      intent: "run_skill",        cost: 1.10 },
+  { phase: "analysis",      intent: "propose_precedent", cost: 0.00 },
+  { phase: "drafting",      intent: "run_skill",        cost: 1.40 },
+  { phase: "drafting",      intent: "emit_finding",     cost: 0.00 },
+  { phase: "ethics_review", intent: "emit_finding",     cost: 0.30 },
+  { phase: "delivery",      intent: "notify",           cost: 0.00 },
+];
+
+const SESSION_ID = "a3f7-…-9e21";   // illustrative truncated UUID
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+
+const state = {
+  stepIndex: 0,            // index into PHASE_PLAN of the NEXT call to run
+  halt_state: "running",   // running | halt_requested | paused | halted
+  status: "running",       // running | completed | halted | failed
+  current_phase: "intake",
+  cost_total_usd: 0,
+  max_cost_usd: 5,
+  cost_cap_reached: false,
+  terminal_reason: null,   // external_halt | idle_timeout | cost_cap_reached | completed
+  trigger_kind: "watch",   // ground-truth TriggerKind member
+  // Records for the receipt
+  tool_calls: [],          // { phase, tool, outcome, cost_usd? }
+  phase_transitions: [{ to_phase: "intake" }],
+  // Last step's telemetry for the side-panel
+  lastSpan: null,          // { phase, intent, halt_state, cost_usd, outcome }
+  lastAudit: null,         // { action, details }
+  lastChecks: null,        // [{r, label, out, state}]
+  flashChip: null,         // { phase, intent } to flash red
+  finished: false,
+  pendingIdle: 0,          // idle watchdog tick counter
+};
+
+let autoTimer = null;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+}
+function usd(n) { return "$" + Number(n).toFixed(2); }
+
+function isTerminal() {
+  return state.status === "completed" || state.status === "halted";
+}
+
+// ---------------------------------------------------------------------------
+// The chokepoint — mirrors guard.py::guarded_tool_call (R5 → R6 → R4)
+// ---------------------------------------------------------------------------
+
+function runGuardedCall(intent, phase, cost, opts) {
+  opts = opts || {};
+  state.flashChip = null;
+
+  const checks = [
+    { r: "R5", label: "read halt_state (before the call)", out: "pending", state: "pending" },
+    { r: "R6", label: "phase grants this intent?",         out: "pending", state: "pending" },
+    { r: "R4", label: "projected cost ≤ max_cost_usd?",    out: "pending", state: "pending" },
+    { r: "→",  label: "open OTel span + write audit row → run tool → record cost + outcome", out: "pending", state: "pending" },
+  ];
+
+  const baseSpan = {
+    "autonomous.session_id": SESSION_ID,
+    "autonomous.phase": phase,
+    "autonomous.tool": intent,
+    "autonomous.halt_state": state.halt_state,
+  };
+
+  // ── R5 temporal — external halt switch, checked BEFORE the call ──────────
+  if (state.halt_state === "halt_requested") {
+    state.halt_state = "halted";
+    state.status = "halted";
+    state.terminal_reason = "external_halt";
+    state.finished = true;
+    checks[0].out = "halt_requested → halted"; checks[0].state = "block";
+    state.lastChecks = checks;
+    state.lastSpan = Object.assign({}, baseSpan, {
+      "autonomous.halt_state": "halted",
+      "autonomous.outcome": "external_halt",
+    });
+    state.lastAudit = { action: "autonomous_session.halted", details: { reason: "external_halt" } };
+    return;
+  }
+  checks[0].out = "running ✓"; checks[0].state = "pass";
+
+  // ── R6 contextual — is this tool granted in the current phase? ───────────
+  const granted = PHASE_GRANTS[phase].includes(intent);
+  if (!granted) {
+    checks[1].out = "not granted"; checks[1].state = "block";
+    state.flashChip = { phase, intent };
+    state.lastChecks = checks;
+    state.lastSpan = Object.assign({}, baseSpan, { "autonomous.outcome": "tool_not_granted" });
+    state.lastAudit = {
+      action: "autonomous_session.tool_call",
+      details: { tool: intent, outcome: "tool_not_granted" },
+    };
+    // R6 block is NOT terminal in the executor — the attempt is audited and rejected,
+    // the session keeps running. (guard.py raises ToolNotGranted; caller handles it.)
+    state.tool_calls.push({ phase, tool: intent, outcome: "tool_not_granted" });
+    return;
+  }
+  checks[1].out = "granted ✓"; checks[1].state = "pass";
+
+  // ── R4 economic — would this call exceed the cap? ────────────────────────
+  const projected = state.cost_total_usd + cost;
+  if (state.max_cost_usd != null && projected > state.max_cost_usd) {
+    state.cost_cap_reached = true;
+    state.halt_state = "halted";
+    state.status = "halted";
+    state.terminal_reason = "cost_cap_reached";
+    state.finished = true;
+    checks[2].out = "projected " + usd(projected) + " > " + usd(state.max_cost_usd); checks[2].state = "block";
+    state.lastChecks = checks;
+    state.lastSpan = Object.assign({}, baseSpan, {
+      "autonomous.halt_state": "halted",
+      "autonomous.cost_usd": "0.0000",
+      "autonomous.outcome": "cost_cap_reached",
+    });
+    state.lastAudit = {
+      action: "autonomous_session.cost_cap_reached",
+      details: { projected_usd: Number(projected.toFixed(4)), max_cost_usd: state.max_cost_usd },
+    };
+    return;
+  }
+  checks[2].out = "≤ " + usd(state.max_cost_usd) + " ✓"; checks[2].state = "pass";
+
+  // ── open span + audit + run + record ─────────────────────────────────────
+  state.cost_total_usd = projected;
+  checks[3].out = "success"; checks[3].state = "pass";
+  state.lastChecks = checks;
+  state.lastSpan = Object.assign({}, baseSpan, {
+    "autonomous.cost_usd": cost.toFixed(4),
+    "autonomous.outcome": "success",
+  });
+  const details = { tool: intent, outcome: "success" };
+  if (cost > 0) details.cost_usd = Number(cost.toFixed(4));
+  state.lastAudit = { action: "autonomous_session.tool_call", details };
+  const tc = { phase, tool: intent, outcome: "success" };
+  if (cost > 0) tc.cost_usd = Number(cost.toFixed(4));
+  state.tool_calls.push(tc);
+}
+
+// Advance the phase pointer + record a phase_transition audit when needed.
+function advancePlanPointer() {
+  state.stepIndex += 1;
+  if (state.stepIndex >= PHASE_PLAN.length) {
+    state.status = "completed";
+    state.terminal_reason = "completed";
+    state.finished = true;
+    return;
+  }
+  const nextPhase = PHASE_PLAN[state.stepIndex].phase;
+  if (nextPhase !== state.current_phase) {
+    state.current_phase = nextPhase;
+    state.phase_transitions.push({ to_phase: nextPhase });
+  }
+}
+
+// One Step button click.
+function step() {
+  if (state.finished) return;
+  if (state.stepIndex >= PHASE_PLAN.length) { state.status = "completed"; state.finished = true; render(); return; }
+  const plan = PHASE_PLAN[state.stepIndex];
+  state.current_phase = plan.phase;
+  runGuardedCall(plan.intent, plan.phase, plan.cost, {});
+  if (!state.finished) advancePlanPointer();
+  render();
+}
+
+// Idle watchdog — two ticks: running → paused → halted (Scenario D)
+function idleTick() {
+  if (state.finished) return;
+  if (state.pendingIdle === 0) {
+    state.halt_state = "paused";
+    state.pendingIdle = 1;
+    state.lastChecks = [
+      { r: "R5", label: "idle watchdog tick 1 — no activity past idle_halt_minutes (5)", out: "running → paused", state: "block" },
+    ];
+    state.lastSpan = {
+      "autonomous.session_id": SESSION_ID,
+      "autonomous.phase": state.current_phase,
+      "autonomous.halt_state": "paused",
+    };
+    state.lastAudit = { action: "autonomous_session.phase_transition", details: { note: "watchdog tick 1 — paused" } };
+  } else {
+    state.halt_state = "halted";
+    state.status = "halted";
+    state.terminal_reason = "idle_timeout";
+    state.finished = true;
+    state.lastChecks = [
+      { r: "R5", label: "idle watchdog tick 2 — still idle", out: "paused → halted", state: "block" },
+    ];
+    state.lastSpan = {
+      "autonomous.session_id": SESSION_ID,
+      "autonomous.phase": state.current_phase,
+      "autonomous.halt_state": "halted",
+      "autonomous.outcome": "external_halt",
+    };
+    state.lastAudit = { action: "autonomous_session.halted", details: { reason: "idle_timeout" } };
+  }
+  render();
+}
+
+// ---------------------------------------------------------------------------
+// Scenario triggers
+// ---------------------------------------------------------------------------
+
+function reset() {
+  clearInterval(autoTimer); autoTimer = null;
+  Object.assign(state, {
+    stepIndex: 0, halt_state: "running", status: "running", current_phase: "intake",
+    cost_total_usd: 0, cost_cap_reached: false, terminal_reason: null,
+    tool_calls: [], phase_transitions: [{ to_phase: "intake" }],
+    lastSpan: null, lastAudit: null, lastChecks: null, flashChip: null,
+    finished: false, pendingIdle: 0,
+  });
+  document.getElementById("idle-toggle").checked = false;
+  document.getElementById("btn-auto").textContent = "Auto-run ▸▸";
+  render();
+}
+
+function runScenario(s) {
+  reset();
+  if (s === "A") {
+    // Cost cap: lower the cap to $1, then step until R4 blocks.
+    state.max_cost_usd = 1;
+    document.getElementById("cap-slider").value = "1";
+    document.getElementById("cap-val").textContent = "$1.00";
+    let guard = 0;
+    while (!state.finished && guard++ < 50) step();
+  } else if (s === "B") {
+    // External halt: run two steps, hit Halt, step once more → external_halt.
+    step(); step();
+    state.halt_state = "halt_requested";
+    step();
+  } else if (s === "C") {
+    // Phase-grant: walk to ethics_review, force a retrieve_chunks call there.
+    let guard = 0;
+    while (state.current_phase !== "ethics_review" && !state.finished && guard++ < 50) step();
+    if (state.current_phase === "ethics_review") forceUngranted("retrieve_chunks");
+  } else if (s === "D") {
+    // Idle timeout: one step of progress, then two watchdog ticks.
+    step();
+    document.getElementById("idle-toggle").checked = true;
+    idleTick(); idleTick();
+  }
+  render();
+}
+
+function forceUngranted(intent) {
+  if (state.finished) return;
+  // Pick an intent not granted in the current phase if none supplied.
+  if (!intent) {
+    intent = ALL_INTENTS.find(i => !PHASE_GRANTS[state.current_phase].includes(i)) || "retrieve_chunks";
+  }
+  runGuardedCall(intent, state.current_phase, 0.0, { forced: true });
+  render();
+}
+
+// ---------------------------------------------------------------------------
+// Render
+// ---------------------------------------------------------------------------
+
+function renderPhaseStrip() {
+  const el = document.getElementById("phase-strip");
+  el.innerHTML = "";
+  PHASES.forEach((p, i) => {
+    const div = document.createElement("div");
+    const activePhaseIdx = PHASES.indexOf(state.current_phase);
+    let cls = "phase";
+    if (p === state.current_phase && !isTerminal()) cls += " active";
+    else if (i < activePhaseIdx || (isTerminal() && i <= activePhaseIdx)) cls += " done";
+    div.className = cls;
+
+    const chips = ALL_INTENTS
+      .filter(intent => PHASE_GRANTS[p].includes(intent) || (state.flashChip && state.flashChip.phase === p && state.flashChip.intent === intent))
+      .map(intent => {
+        const granted = PHASE_GRANTS[p].includes(intent);
+        let chipCls = "chip " + (granted ? "granted" : "ungranted");
+        if (state.flashChip && state.flashChip.phase === p && state.flashChip.intent === intent) chipCls = "chip flash-red";
+        return `<span class="${chipCls}">${esc(intent)}</span>`;
+      });
+    // Also render the dimmed ungranted intents so the "stripped here" story reads.
+    ALL_INTENTS.filter(i => !PHASE_GRANTS[p].includes(i)).forEach(intent => {
+      if (state.flashChip && state.flashChip.phase === p && state.flashChip.intent === intent) return; // already shown flashing
+      chips.push(`<span class="chip ungranted">${esc(intent)}</span>`);
+    });
+
+    div.innerHTML = `<div class="phase-name">${esc(p)}</div><div class="phase-chips">${chips.join("")}</div>`;
+    el.appendChild(div);
+    if (i < PHASES.length - 1) {
+      const arrow = document.createElement("div");
+      arrow.className = "phase-arrow"; arrow.textContent = "→";
+      el.appendChild(arrow);
+    }
+  });
+}
+
+function renderChecks() {
+  const el = document.getElementById("check-list");
+  const checks = state.lastChecks || [
+    { r: "R5", label: "read halt_state (before the call)", out: "—", state: "pending" },
+    { r: "R6", label: "phase grants this intent?",         out: "—", state: "pending" },
+    { r: "R4", label: "projected cost ≤ max_cost_usd?",    out: "—", state: "pending" },
+    { r: "→",  label: "open OTel span + write audit row → run tool → record cost + outcome", out: "—", state: "pending" },
+  ];
+  el.innerHTML = checks.map(c => {
+    const icon = c.state === "pass" ? "✓" : c.state === "block" ? "✕" : "·";
+    return `<div class="check ${c.state}">
+      <div class="check-icon">${icon}</div>
+      <div class="check-text"><span class="cr">${esc(c.r)}</span><span class="cd">${esc(c.label)}</span></div>
+      <div class="check-out">${esc(c.out)}</div>
+    </div>`;
+  }).join("");
+}
+
+function renderSpanPanel() {
+  const spanEl = document.getElementById("span-attrs");
+  const auditEl = document.getElementById("audit-attrs");
+  if (!state.lastSpan) {
+    spanEl.innerHTML = `<div style="color:var(--text-faint);font-size:11px">Step the session to emit a span.</div>`;
+    auditEl.innerHTML = `<div style="color:var(--text-faint);font-size:11px">Step the session to write an audit row.</div>`;
+    return;
+  }
+  const outClass = v => {
+    if (v === "success") return "green";
+    if (["external_halt", "tool_not_granted", "cost_cap_reached", "gateway_error"].includes(v)) return "red";
+    return "";
+  };
+  spanEl.innerHTML = Object.entries(state.lastSpan).map(([k, v]) => {
+    let cls = "";
+    if (k === "autonomous.outcome") cls = outClass(v);
+    else if (k === "autonomous.halt_state" && v === "halted") cls = "red";
+    return `<div class="attr-row"><div class="attr-k">${esc(k)}</div><div class="attr-v ${cls}">${esc(v)}</div></div>`;
+  }).join("");
+
+  const a = state.lastAudit;
+  let rows = `<div class="attr-row"><div class="attr-k">action</div><div class="attr-v">${esc(a.action)}</div></div>`;
+  rows += Object.entries(a.details || {}).map(([k, v]) =>
+    `<div class="attr-row"><div class="attr-k">details.${esc(k)}</div><div class="attr-v ${k === "outcome" ? outClass(v) : ""}">${esc(v)}</div></div>`
+  ).join("");
+  auditEl.innerHTML = rows;
+}
+
+function renderHygiene() {
+  const appears = [
+    { key: "autonomous.session_id", ex: "UUID string" },
+    { key: "autonomous.phase", ex: '"intake" | … | "delivery"' },
+    { key: "autonomous.tool", ex: "the intent label, e.g. run_skill" },
+    { key: "autonomous.halt_state", ex: '"running" | "halted" | …' },
+    { key: "autonomous.cost_usd", ex: "float — e.g. 1.1000" },
+    { key: "autonomous.outcome", ex: '"success" | "tool_not_granted" | …' },
+    { key: "audit details.tool / .outcome", ex: "enum labels only" },
+    { key: "details.reason", ex: '"external_halt" | "idle_timeout"' },
+  ];
+  const never = [
+    { key: "document text / content", ex: "source text, normalized_content" },
+    { key: "raw PERSON values", ex: 'e.g. "Alexandra Pemberton" — never in any attr' },
+    { key: "MATTER_NUMBER values", ex: 'e.g. "MATTER-2024-0042" — pseudonymized first' },
+    { key: "prompt bodies", ex: "system prompt / skill prompt text" },
+    { key: "model responses", ex: "inference output body" },
+    { key: "finding content", ex: "store finding_id + severity, not the text" },
+  ];
+  document.getElementById("hygiene").innerHTML = `
+    <div class="span-box">
+      <div class="hygiene-col-title green">Appears in span attrs + audit details</div>
+      ${appears.map(a => `<div class="hygiene-row appears">${esc(a.key)}<span class="hygiene-ex">${esc(a.ex)}</span></div>`).join("")}
+    </div>
+    <div class="span-box">
+      <div class="hygiene-col-title red">NEVER appears anywhere</div>
+      ${never.map(a => `<div class="hygiene-row never">${esc(a.key)}<span class="hygiene-ex">${esc(a.ex)}</span></div>`).join("")}
+    </div>`;
+}
+
+function renderReceipt() {
+  const el = document.getElementById("receipt");
+  if (!isTerminal()) {
+    el.className = "receipt empty";
+    el.innerHTML = "Run the session to a terminal state (completed / halted / cost_cap_reached) to render its receipt.";
+    return;
+  }
+  el.className = "receipt";
+  const statusCls = state.status === "completed" ? "green" : "red";
+  const top = [
+    ["session_id", SESSION_ID, ""],
+    ["trigger_kind", state.trigger_kind, ""],
+    ["status", state.status, statusCls],
+    ["halt_state", state.halt_state, state.halt_state === "halted" ? "red" : ""],
+    ["current_phase", state.current_phase, ""],
+    ["cost_total_usd", usd(state.cost_total_usd), ""],
+    ["max_cost_usd", usd(state.max_cost_usd), ""],
+    ["cost_cap_reached", String(state.cost_cap_reached), state.cost_cap_reached ? "amber" : ""],
+    ["terminal_reason", state.terminal_reason, state.terminal_reason === "completed" ? "green" : "red"],
+  ];
+  const topHtml = top.map(([k, v, c]) =>
+    `<div class="r-kv"><span class="rk">${esc(k)}</span><span class="rv ${c}">${esc(v)}</span></div>`).join("");
+
+  const callsHtml = state.tool_calls.length
+    ? state.tool_calls.map(tc => {
+        const oc = tc.outcome === "success" ? "green" : "red";
+        const cost = tc.cost_usd != null ? usd(tc.cost_usd) : "—";
+        return `<div class="r-call">
+          <span class="rc-phase">${esc(tc.phase)}</span>
+          <span class="rc-tool">${esc(tc.tool)}</span>
+          <span class="rc-cost">${esc(cost)}</span>
+          <span class="rc-out ${oc}">${esc(tc.outcome)}</span>
+        </div>`;
+      }).join("")
+    : `<div style="color:var(--text-faint)">No tool calls recorded.</div>`;
+
+  const trail = state.phase_transitions.map(t => `<span class="rt-phase">${esc(t.to_phase)}</span>`).join(" → ");
+
+  el.innerHTML = `
+    <div class="r-top">${topHtml}</div>
+    <div class="r-sub">tool_calls (phase · intent · cost · outcome)</div>
+    ${callsHtml}
+    <div class="r-sub">phase_transitions</div>
+    <div class="r-trail">${trail}</div>
+    <div class="receipt-caption">
+      This is what the user sees afterward — exactly what the agent did and why. No raw document content;
+      every action accounted for. Receipt shape matches api/app/autonomous/receipt.py::build_receipt.
+    </div>`;
+}
+
+function renderStatus() {
+  const el = document.getElementById("status-line");
+  const haltCls = state.halt_state === "halted" ? "red" : state.halt_state === "paused" || state.halt_state === "halt_requested" ? "amber" : "green";
+  const statusCls = state.status === "completed" ? "green" : state.status === "halted" ? "red" : "green";
+  const capCls = state.cost_total_usd > state.max_cost_usd * 0.8 ? "amber" : "green";
+  el.innerHTML = `
+    <div><span class="sk">status</span> &nbsp;<span class="sv ${statusCls}">${esc(state.status)}</span></div>
+    <div><span class="sk">halt_state</span> &nbsp;<span class="sv ${haltCls}">${esc(state.halt_state)}</span></div>
+    <div><span class="sk">current_phase</span> &nbsp;<span class="sv">${esc(state.current_phase)}</span></div>
+    <div><span class="sk">cost_total</span> &nbsp;<span class="sv ${capCls}">${esc(usd(state.cost_total_usd))}</span> / ${esc(usd(state.max_cost_usd))}</div>
+    ${state.terminal_reason ? `<div><span class="sk">terminal_reason</span> &nbsp;<span class="sv ${state.terminal_reason === "completed" ? "green" : "red"}">${esc(state.terminal_reason)}</span></div>` : ""}
+  `;
+}
+
+function render() {
+  renderPhaseStrip();
+  renderChecks();
+  renderSpanPanel();
+  renderHygiene();
+  renderReceipt();
+  renderStatus();
+  document.getElementById("btn-step").disabled = state.finished;
+  document.getElementById("btn-halt").disabled = state.finished;
+  document.getElementById("btn-ungranted").disabled = state.finished;
+}
+
+// ---------------------------------------------------------------------------
+// Control wiring
+// ---------------------------------------------------------------------------
+
+document.getElementById("btn-step").addEventListener("click", step);
+document.getElementById("btn-reset").addEventListener("click", reset);
+
+document.getElementById("btn-auto").addEventListener("click", () => {
+  const btn = document.getElementById("btn-auto");
+  if (autoTimer) {
+    clearInterval(autoTimer); autoTimer = null; btn.textContent = "Auto-run ▸▸"; return;
+  }
+  btn.textContent = "Pause ⏸";
+  autoTimer = setInterval(() => {
+    if (state.finished) { clearInterval(autoTimer); autoTimer = null; btn.textContent = "Auto-run ▸▸"; return; }
+    step();
+  }, 700);
+});
+
+document.getElementById("btn-halt").addEventListener("click", () => {
+  if (state.halt_state === "running") state.halt_state = "halt_requested";
+  render();
+});
+
+document.getElementById("btn-ungranted").addEventListener("click", () => forceUngranted(null));
+
+document.getElementById("idle-toggle").addEventListener("change", e => {
+  if (e.target.checked && !state.finished) {
+    // Two watchdog ticks: running → paused → halted (Scenario D).
+    idleTick();                       // tick 1 → paused
+    setTimeout(() => { if (!state.finished || state.halt_state === "paused") idleTick(); }, 800); // tick 2 → halted
+  }
+});
+
+document.getElementById("cap-slider").addEventListener("input", e => {
+  state.max_cost_usd = parseFloat(e.target.value);
+  document.getElementById("cap-val").textContent = usd(state.max_cost_usd);
+  renderStatus();
+});
+
+document.querySelectorAll(".scenario-btn").forEach(btn => {
+  btn.addEventListener("click", () => runScenario(btn.dataset.scenario));
+});
+
+reset();
+</script>
+</body>
+</html>
