@@ -1,22 +1,23 @@
 <script context="module" lang="ts">
-  import { TABS, isTabVisible, type TabDef, type User } from '../tabs';
+  import { TABS, isTabVisible, type TabDef, type User, type TabVisibilityOpts } from '../tabs';
 
   export type TopTabBarUser = User;
 
-  export function visibleTabsFor(user: User | null): TabDef[] {
-    return TABS.filter((t) => isTabVisible(t.id, user));
+  export function visibleTabsFor(user: User | null, opts: TabVisibilityOpts = {}): TabDef[] {
+    return TABS.filter((t) => isTabVisible(t.id, user, opts));
   }
 </script>
 
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { activeTabFor, isTabAvailable, type TabId } from '../tabs';
+  import { preferences } from '$lib/lq-ai/stores/preferences';
   import ComingSoonModal from './ComingSoonModal.svelte';
 
   export let user: User | null;
   export let pathname: string;
 
-  $: tabs = visibleTabsFor(user);
+  $: tabs = visibleTabsFor(user, { autonomousEnabled: $preferences.autonomous_enabled });
   $: active = activeTabFor(pathname);
 
   let comingSoonOpen = false;

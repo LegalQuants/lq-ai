@@ -16,6 +16,7 @@
     tabular: 'Tabular Review',
     'saved-prompts': 'Saved Prompts',
     learn: 'Learn',
+    autonomous: 'Autonomous',
     admin: 'Admin'
   };
 

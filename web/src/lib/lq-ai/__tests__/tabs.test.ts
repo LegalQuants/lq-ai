@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { TABS, isTabVisible, isTabAvailable, activeTabFor, type TabId, type User } from '../tabs';
+import { TABS, isTabVisible, isTabAvailable, activeTabFor, type TabId, type User, type TabVisibilityOpts } from '../tabs';
 
 describe('tabs', () => {
   const adminUser: User = { id: '1', email: 'a@x.io', is_admin: true, must_change_password: false, role: 'admin' };
   const memberUser: User = { id: '2', email: 'm@x.io', is_admin: false, must_change_password: false, role: 'member' };
 
-  it('defines nine core tabs plus admin (tabular added in M3-C3)', () => {
+  it('defines nine core tabs plus autonomous (opt-in) and admin (tabular added in M3-C3, autonomous added in M4-C2)', () => {
     const ids = TABS.map((t) => t.id);
     expect(ids).toEqual([
       'home',
@@ -17,6 +17,7 @@ describe('tabs', () => {
       'tabular',
       'saved-prompts',
       'learn',
+      'autonomous',
       'admin'
     ]);
   });
@@ -24,6 +25,17 @@ describe('tabs', () => {
   it('hides admin tab for non-admin users', () => {
     expect(isTabVisible('admin', memberUser)).toBe(false);
     expect(isTabVisible('admin', adminUser)).toBe(true);
+  });
+
+  // Autonomous tab — opt-in gated (M4-C2)
+  it('hides autonomous tab when autonomousEnabled is false', () => {
+    expect(isTabVisible('autonomous', memberUser, { autonomousEnabled: false })).toBe(false);
+  });
+  it('shows autonomous tab when autonomousEnabled is true', () => {
+    expect(isTabVisible('autonomous', memberUser, { autonomousEnabled: true })).toBe(true);
+  });
+  it('hides autonomous tab when no opts provided (defaults to off)', () => {
+    expect(isTabVisible('autonomous', memberUser)).toBe(false);
   });
 
   it('shows core tabs to all users', () => {

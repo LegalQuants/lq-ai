@@ -20,6 +20,7 @@ export type TabId =
   | 'tabular'
   | 'saved-prompts'
   | 'learn'
+  | 'autonomous'
   | 'admin';
 
 export interface TabDef {
@@ -51,12 +52,18 @@ export const TABS: readonly TabDef[] = [
   { id: 'tabular',       label: 'Tabular',       icon: '📊', route: '/lq-ai/tabular',        available: true },
   { id: 'saved-prompts', label: 'Saved Prompts', icon: '📌', route: '/lq-ai/saved-prompts',  available: true },
   { id: 'learn',         label: 'Learn',         icon: '📖', route: '/lq-ai/learn',           available: true },
+  { id: 'autonomous',    label: 'Autonomous',    icon: '🤖', route: '/lq-ai/autonomous',       available: true },
   { id: 'admin',         label: 'Admin',         icon: '🛡',  route: '/lq-ai/admin/audit-log', adminOnly: true, available: true }
 ] as const;
 
-export function isTabVisible(id: TabId, user: User | null): boolean {
+export interface TabVisibilityOpts {
+  autonomousEnabled?: boolean;
+}
+
+export function isTabVisible(id: TabId, user: User | null, opts: TabVisibilityOpts = {}): boolean {
   const tab = TABS.find((t) => t.id === id);
   if (!tab) return false;
+  if (id === 'autonomous') return opts.autonomousEnabled === true;
   if (tab.adminOnly) {
     return user?.role === 'admin' || user?.is_admin === true;
   }
