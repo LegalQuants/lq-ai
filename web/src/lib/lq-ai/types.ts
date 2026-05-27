@@ -25,6 +25,7 @@ export interface Preferences {
 	workspace_layout: WorkspaceLayout;
 	trust_pills: TrustPills;
 	provenance_pills: ProvenancePills;
+	autonomous_enabled: boolean;
 }
 
 export type PreferencesUpdate = Partial<Preferences>;
@@ -44,6 +45,7 @@ export interface User {
 	workspace_layout?: WorkspaceLayout;
 	trust_pills?: TrustPills;
 	provenance_pills?: ProvenancePills;
+	autonomous_enabled?: boolean;
 }
 
 export interface LoginRequest {

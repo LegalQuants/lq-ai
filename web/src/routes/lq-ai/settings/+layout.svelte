@@ -5,7 +5,8 @@
 
 	const navLinks = [
 		{ href: '/lq-ai/settings/appearance', label: 'Appearance' },
-		{ href: '/lq-ai/settings/account', label: 'Account' }
+		{ href: '/lq-ai/settings/account', label: 'Account' },
+		{ href: '/lq-ai/settings/autonomous', label: 'Autonomous' }
 	];
 </script>
 

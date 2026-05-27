@@ -77,5 +77,6 @@ describe('preferences store', () => {
 		expect(defaultPreferences.workspace_layout).toBe('three_pane');
 		expect(defaultPreferences.trust_pills).toBe('labels');
 		expect(defaultPreferences.provenance_pills).toBe('always');
+		expect(defaultPreferences.autonomous_enabled).toBe(false);
 	});
 });

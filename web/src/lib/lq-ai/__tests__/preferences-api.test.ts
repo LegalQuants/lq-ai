@@ -24,7 +24,8 @@ const FULL_PREFS: Preferences = {
 	featured_tools: 'prominent',
 	workspace_layout: 'three_pane',
 	trust_pills: 'labels',
-	provenance_pills: 'always'
+	provenance_pills: 'always',
+	autonomous_enabled: false
 };
 
 describe('preferences API client', () => {

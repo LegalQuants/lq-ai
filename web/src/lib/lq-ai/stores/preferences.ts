@@ -14,7 +14,8 @@ export const defaultPreferences: Preferences = {
 	featured_tools: 'prominent',
 	workspace_layout: 'three_pane',
 	trust_pills: 'labels',
-	provenance_pills: 'always'
+	provenance_pills: 'always',
+	autonomous_enabled: false
 };
 
 export const preferences = writable<Preferences>({ ...defaultPreferences });
