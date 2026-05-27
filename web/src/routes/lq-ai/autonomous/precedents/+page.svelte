@@ -32,8 +32,8 @@
 	let actionError: string | null = null;
 	let actionSuccess: string | null = null;
 
-	/** Show dismissed entries alongside active ones when true. */
-	let showDismissed = false;
+	/** True after a successful promote-to-proposal action. */
+	let proposalCreated = false;
 
 	/**
 	 * Map of entry id → pending action label (e.g. 'dismissing', 'promoting').
@@ -67,10 +67,8 @@
 		listError = null;
 		try {
 			const resp = await autonomousApi.listPrecedents();
-			// API returns non-dismissed entries by default. When showDismissed is
-			// true we show all returned entries (including those with dismissed_at set);
-			// the server already filters unless a flag is passed, so we do client-side
-			// filtering only for the toggle case where we want to include dismissed.
+			// API returns non-dismissed entries only; there is no client-side
+			// include_dismissed param, so entries is always the full server result.
 			entries = resp.entries;
 		} catch (err) {
 			if (err instanceof LQAIApiError && err.status === 403) {
@@ -97,14 +95,6 @@
 	}
 
 	// ---------------------------------------------------------------------------
-	// Filter helper — apply showDismissed toggle client-side
-	// ---------------------------------------------------------------------------
-
-	$: visibleEntries = showDismissed
-		? entries
-		: entries.filter((e) => e.dismissed_at === null);
-
-	// ---------------------------------------------------------------------------
 	// Actions: Dismiss
 	// ---------------------------------------------------------------------------
 
@@ -117,6 +107,7 @@
 		pendingIds = new Map(pendingIds).set(entry.id, 'dismissing');
 		actionError = null;
 		actionSuccess = null;
+		proposalCreated = false;
 		try {
 			await autonomousApi.dismissPrecedent(entry.id);
 			actionSuccess = 'Precedent dismissed.';
@@ -167,14 +158,15 @@
 		pendingIds = new Map(pendingIds).set(entry.id, 'promoting');
 		actionError = null;
 		actionSuccess = null;
+		proposalCreated = false;
 		try {
 			await autonomousApi.promotePrecedent(entry.id, projectId);
 
 			// Close picker on success.
 			closePicker(entry.id);
 
-			// Surface a contextual success message with a link to the Proposals page.
-			actionSuccess = '__PROPOSAL_CREATED__';
+			// Surface the proposal-created banner with a link to the Proposals page.
+			proposalCreated = true;
 		} catch (err) {
 			if (err instanceof LQAIApiError) {
 				actionError = `Promote failed (${err.status}): ${err.message}`;
@@ -228,21 +220,6 @@
 	</header>
 
 	<!-- ================================================================ -->
-	<!-- Show-dismissed toggle                                            -->
-	<!-- ================================================================ -->
-
-	<div class="filter-bar">
-		<label class="toggle-label">
-			<input
-				type="checkbox"
-				class="toggle-checkbox"
-				bind:checked={showDismissed}
-			/>
-			Show dismissed
-		</label>
-	</div>
-
-	<!-- ================================================================ -->
 	<!-- Banners                                                          -->
 	<!-- ================================================================ -->
 
@@ -252,7 +229,7 @@
 	{#if actionError}
 		<div class="error-banner" role="alert">{actionError}</div>
 	{/if}
-	{#if actionSuccess === '__PROPOSAL_CREATED__'}
+	{#if proposalCreated}
 		<div class="success-banner" role="status">
 			Proposal created — review it under
 			<a class="banner-link" href="/lq-ai/autonomous/proposals">Proposals</a>.
@@ -269,19 +246,17 @@
 		<p class="loading">Loading precedents…</p>
 	{/if}
 
-	{#if !loading && visibleEntries.length === 0 && !listError}
-		<p class="empty-state">
-			{showDismissed ? 'No precedents found.' : 'No precedents yet.'}
-		</p>
+	{#if !loading && entries.length === 0 && !listError}
+		<p class="empty-state">No precedents yet.</p>
 	{/if}
 
 	<!-- ================================================================ -->
 	<!-- Entry list                                                       -->
 	<!-- ================================================================ -->
 
-	{#if visibleEntries.length > 0}
+	{#if entries.length > 0}
 		<ul class="entry-list" aria-label="Precedent entries">
-			{#each visibleEntries as entry (entry.id)}
+			{#each entries as entry (entry.id)}
 				{@const pending = pendingLabel(entry.id)}
 				{@const pickerOpen = isPickerOpen(entry.id)}
 				{@const isDismissed = entry.dismissed_at !== null}
@@ -396,31 +371,6 @@
 		max-width: 60rem;
 		font-size: 14px;
 		line-height: 1.5;
-	}
-
-	/* ------------------------------------------------------------------ */
-	/* Filter bar                                                          */
-	/* ------------------------------------------------------------------ */
-
-	.filter-bar {
-		display: flex;
-		align-items: center;
-		gap: var(--lq-space-3);
-	}
-
-	.toggle-label {
-		display: flex;
-		align-items: center;
-		gap: var(--lq-space-2);
-		font-size: 13px;
-		color: var(--lq-text-secondary);
-		cursor: pointer;
-		user-select: none;
-	}
-
-	.toggle-checkbox {
-		cursor: pointer;
-		accent-color: var(--lq-accent);
 	}
 
 	/* ------------------------------------------------------------------ */
