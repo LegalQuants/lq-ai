@@ -636,6 +636,24 @@ const DATA_NODES = [
     ],
     meta: { table: 'saved_prompts', migration: '0011' },
   },
+  {
+    id: 'autonomous',
+    label: 'Autonomous Layer (M4)',
+    sub: 'autonomous_sessions + 4 more tables',
+    store: 'postgres',
+    zone: 'inside',
+    x: 60, y: 500,
+    what: 'The M4 Autonomous Layer\'s five tables — autonomous_sessions (run state + JSONB receipt), autonomous_schedules, autonomous_watches, autonomous_memory (per-user, system-proposes / user-owns), and precedent_entries. Per-user memory, precedents, and session receipts never leave the deployment. Autonomous inference takes the SAME gateway anonymization path as interactive chat — the executor routes every model call through the gateway, so the data-residency story for an autonomous run is identical to a chat send.',
+    retention: 'Sessions + receipts retained until operator purges; memory/precedents until the user dismisses them.',
+    encryption: 'Postgres at rest.',
+    access: 'Owning user + admins. arq-worker (autonomous executor) service account.',
+    files: [
+      'api/app/autonomous/receipt.py',
+      'api/app/autonomous/guard.py',
+      'api/app/models/autonomous.py',
+    ],
+    meta: { tables: 'autonomous_sessions, autonomous_schedules, autonomous_watches, autonomous_memory, precedent_entries', inference: 'via gateway (same anonymization path)', status: 'M4 — planned' },
+  },
   // --- MinIO ---
   {
     id: 'uploaded-files',
@@ -717,6 +735,16 @@ const PROVIDER_NODES = [
       'gateway/app/router.py',
       'gateway/app/providers/anthropic.py',
       'gateway/app/providers/openai.py',
+    ],
+  },
+  {
+    id: 'smtp-notify',
+    label: 'SMTP notify (M4 — optional)',
+    sub: 'operator-configured · OFF by default',
+    x: 764, y: 300,
+    what: 'The ONE new (optional) egress the M4 Autonomous Layer can introduce: when an autonomous run finishes, it can email a notification. This is operator-configured and OFF by default — no SMTP server means no email egress. When enabled, only a notification (e.g. "session completed, N findings") leaves; never document content or raw entity values. The notify tool is the delivery-phase grant and routes through the same audited chokepoint as every other tool call.',
+    files: [
+      'api/app/autonomous/notify_email.py',
     ],
   },
   {
@@ -1092,7 +1120,9 @@ function renderOutput() {
     describeHtml += `<p>The Inference Gateway (<a class="file" href="${REPO}gateway/app/router.py" target="_blank" rel="noopener">gateway/app/router.py</a>) is the ONLY component that makes outbound calls. A procurement team can read this file to verify there is no other egress path. Every other component — API, ingest worker, web, Postgres, MinIO, Redis — is strictly internal.</p>`;
   }
 
-  describeHtml += `<p><strong>What stays inside:</strong> Chat messages, sessions, projects, skills, knowledge bases + embeddings, uploaded files, audit log, routing log, users, saved prompts, provider API keys.</p>`;
+  describeHtml += `<p><strong>What stays inside:</strong> Chat messages, sessions, projects, skills, knowledge bases + embeddings, uploaded files, audit log, routing log, users, saved prompts, provider API keys, and the M4 Autonomous Layer's five tables (autonomous_sessions, autonomous_schedules, autonomous_watches, autonomous_memory, precedent_entries) — including per-user memory, precedents, and session receipts.</p>`;
+
+  describeHtml += `<p style="color:var(--text-dim)"><strong>Autonomous Layer (M4 — planned):</strong> An autonomous run routes every model call through the Gateway, so its inference takes the same anonymization path as an interactive chat — the data-residency story is identical. The one new (optional) egress is SMTP email notification: operator-configured and OFF by default, and even when enabled only a notification leaves — never document content. The notify action is audited through the same chokepoint as every other tool call.</p>`;
 
   if (state.mode !== 'air-gapped') {
     describeHtml += `<p><strong>What crosses the boundary:</strong> The assembled inference payload (system prompt from resolved skills + relevant RAG chunks + user message). The model response returns through the same channel and is persisted inside the deployment.</p>`;
