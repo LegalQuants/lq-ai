@@ -41,6 +41,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# Mutate endpoints use AutonomousEnabledUser (opt-in required, PRD §3.10);
+# read + halt endpoints use ActiveUser (always reachable for audit access).
 from app.api.dependencies import ActiveUser, AutonomousEnabledUser
 from app.audit import audit_action
 from app.autonomous.audit import autonomous_audit

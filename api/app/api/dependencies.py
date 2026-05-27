@@ -166,10 +166,11 @@ async def get_autonomous_enabled_user(user: ActiveUser) -> User:
     on plain `ActiveUser` so a user who opts out never loses access to the
     audit trail of what already ran (M4-C2 opt-out split).
     """
-    if not getattr(user, "autonomous_enabled", False):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Autonomous Layer is not enabled for this user.",
+    if not user.autonomous_enabled:
+        from app.errors import Forbidden
+
+        raise Forbidden(
+            message="Autonomous Layer is not enabled for this user.",
         )
     return user
 

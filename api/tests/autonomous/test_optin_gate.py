@@ -132,4 +132,4 @@ async def test_mutate_allowed_when_opted_in(
         headers=_bearer(opted_in_user),
         json={"cron_expr": "0 9 * * 1", "name": "scan"},
     )
-    assert r.status_code in (200, 201), r.text
+    assert r.status_code == 201, r.text
