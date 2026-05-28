@@ -1067,6 +1067,7 @@ async def create_schedule(
         skill_ref=body.skill_ref,
         target_kb_id=body.target_kb_id,
         enabled=body.enabled,
+        max_cost_usd=body.max_cost_usd,
         next_run_at=next_run_after(body.cron_expr, now),
     )
     db.add(schedule)
@@ -1190,6 +1191,10 @@ async def update_schedule(
         schedule.skill_ref = fields["skill_ref"]
     if "target_kb_id" in fields:
         schedule.target_kb_id = fields["target_kb_id"]
+    if "max_cost_usd" in fields:
+        # Per design: NULL clears the per-schedule cap → fall back to global default.
+        # `exclude_unset=True` makes "explicitly sent null" distinguishable from "omitted".
+        schedule.max_cost_usd = fields["max_cost_usd"]
 
     schedule.updated_at = datetime.now(UTC)
 
@@ -1306,6 +1311,7 @@ async def create_watch(
         playbook_id=body.playbook_id,
         skill_ref=body.skill_ref,
         enabled=body.enabled,
+        max_cost_usd=body.max_cost_usd,
     )
     db.add(watch)
     await db.flush()
@@ -1416,6 +1422,10 @@ async def update_watch(
         watch.playbook_id = fields["playbook_id"]
     if "skill_ref" in fields:
         watch.skill_ref = fields["skill_ref"]
+    if "max_cost_usd" in fields:
+        # Per design: NULL clears the per-watch cap → fall back to global default.
+        # `exclude_unset=True` makes "explicitly sent null" distinguishable from "omitted".
+        watch.max_cost_usd = fields["max_cost_usd"]
 
     watch.updated_at = datetime.now(UTC)
 
