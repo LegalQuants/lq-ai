@@ -12,10 +12,11 @@ clear the cache via `get_settings.cache_clear()` after monkeypatching env.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LogLevel = Literal["debug", "info", "warning", "warn", "error", "critical"]
@@ -181,6 +182,22 @@ class Settings(BaseSettings):
             "token resets the clock; the refresh endpoint 401s when "
             "exceeded. PRD §5.1 default: 30 minutes."
         ),
+    )
+
+    # ----- Autonomous (M4) -----
+    # Global fallback cap on per-session cost for autonomous sessions
+    # whose spawning trigger (watch or schedule) did not specify
+    # ``max_cost_usd``. Mirrors the gateway.yaml default. R4 (the
+    # economic brake) trips when projected cost would exceed this cap.
+    autonomous_default_max_cost_usd: Decimal = Field(
+        default=Decimal("5.00"),
+        description=(
+            "Global default per-session cost cap (USD) for autonomous sessions "
+            "spawned by a watch or schedule that did not set max_cost_usd. "
+            "Mirrors the gateway.yaml default. R4 (economic brake) trips when "
+            "projected cost would exceed this cap."
+        ),
+        validation_alias=AliasChoices("LQ_AI_AUTONOMOUS_DEFAULT_MAX_COST_USD"),
     )
 
     # M-Sec.1 — MFA-mandatory deployment flag per PRD §5.1. When True,
