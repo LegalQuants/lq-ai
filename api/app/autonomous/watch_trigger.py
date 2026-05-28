@@ -31,6 +31,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from app.config import get_settings
 from app.models.autonomous import AutonomousSession, AutonomousWatch
 from app.models.user import User
 from app.workers.queue import enqueue_autonomous_session_job
@@ -71,6 +72,7 @@ async def fire_watches_for_kb(
     """
 
     enqueue_fn = enqueue if enqueue is not None else enqueue_autonomous_session_job
+    settings = get_settings()
 
     watches_stmt = (
         select(AutonomousWatch)
@@ -103,6 +105,11 @@ async def fire_watches_for_kb(
             trigger_ref=watch.id,
             status="running",
             current_phase="intake",
+            # Per-trigger cap when set, else the config default; never None
+            # so R4 (economic brake) can trip on every spawned session.
+            max_cost_usd=watch.max_cost_usd
+            if watch.max_cost_usd is not None
+            else settings.autonomous_default_max_cost_usd,
             params=params,
         )
         db.add(session)

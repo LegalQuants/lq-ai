@@ -41,6 +41,7 @@ from sqlalchemy import func, select, update
 from app.autonomous.audit import autonomous_audit
 from app.autonomous.cron import next_run_after
 from app.autonomous.executor import run_autonomous_session
+from app.config import get_settings
 from app.db.session import get_session_factory
 from app.models.autonomous import AutonomousSchedule, AutonomousSession
 from app.models.user import User
@@ -325,6 +326,7 @@ async def _run_schedule_sweep(
 
     effective_now: datetime = now if now is not None else datetime.now(UTC)
     enqueue_fn = enqueue if enqueue is not None else enqueue_autonomous_session_job
+    settings = get_settings()
 
     due_stmt = (
         select(AutonomousSchedule)
@@ -350,9 +352,23 @@ async def _run_schedule_sweep(
         # before the error) is reaped by the idle watchdog; what matters is
         # that the other due schedules still dispatch.
         try:
+            # Capture the PRIOR last_run_at BEFORE we advance it below, so
+            # params["since"] carries the timestamp of the previous tick
+            # (NOT the timestamp we're about to set for THIS tick). Task 10's
+            # intake_node reads this to scope retrieve_chunks to docs since
+            # the last successful run; None means "first tick — no prior
+            # baseline".
+            previous_last_run_at = schedule.last_run_at
+
             # Build the trigger→target params carrying only the non-null keys
             # (Decision B3-a). target_kb_id maps to the executor's kb_id state.
-            params: dict[str, Any] = {}
+            # ``since`` is always included (None on first tick) so consumers
+            # can branch on its presence vs. absence cleanly.
+            params: dict[str, Any] = {
+                "since": previous_last_run_at.isoformat()
+                if previous_last_run_at is not None
+                else None,
+            }
             if schedule.target_kb_id is not None:
                 params["kb_id"] = str(schedule.target_kb_id)
             if schedule.playbook_id is not None:
@@ -367,6 +383,12 @@ async def _run_schedule_sweep(
                 trigger_ref=schedule.id,
                 status="running",
                 current_phase="intake",
+                # Per-trigger cap when set, else the config default; never
+                # None so R4 (economic brake) can trip on every spawned
+                # session.
+                max_cost_usd=schedule.max_cost_usd
+                if schedule.max_cost_usd is not None
+                else settings.autonomous_default_max_cost_usd,
                 params=params,
             )
             db.add(session)
