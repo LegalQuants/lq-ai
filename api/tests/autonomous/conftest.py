@@ -1,18 +1,25 @@
 """Shared fixtures for autonomous-package tests.
 
-Currently scoped to the M4 real-executor-work additions (Task 6):
+Scoped to the M4 real-executor-work additions:
 
-- :func:`kb_with_one_indexed_file` — KB + file + document + one chunk
-  that is queryable via hybrid search (FTS) AND fetchable directly by
-  ``file_id``.  Used by mode-1 (query) and mode-2 (file_id) tests of
+- :func:`kb_with_one_indexed_file` (Task 6) — KB + file + document + one
+  chunk that is queryable via hybrid search (FTS) AND fetchable directly
+  by ``file_id``.  Used by mode-1 (query) and mode-2 (file_id) tests of
   :func:`app.autonomous.guard._handle_retrieve_chunks`.
-- :func:`kb_with_old_and_new_files` — KB with TWO attached files;
-  ``old_file`` has ``KnowledgeBaseFile.attached_at`` set far in the
-  past, ``new_file`` has it at "now".  Used by mode-3 (``since``)
+- :func:`kb_with_old_and_new_files` (Task 6) — KB with TWO attached
+  files; ``old_file`` has ``KnowledgeBaseFile.attached_at`` set far in
+  the past, ``new_file`` has it at "now".  Used by mode-3 (``since``)
   tests to verify the since-cutoff filters correctly.
+- :func:`session_with_skill_ref` / :func:`session_with_playbook_id` /
+  :func:`session_without_target` / :func:`sample_chunks` (Task 7) —
+  ``AutonomousSession`` rows shaped for the prompt-assembly tests
+  (``test_prompts.py``).  Also installs a synthetic
+  :class:`SkillRegistry` at ``app.state.skill_registry`` so
+  :func:`assemble_analysis_messages` can resolve the skill_ref without
+  depending on FastAPI lifespan having run.
 
-Both fixtures populate the ``content_tsv`` generated column by issuing
-a no-op UPDATE — mirrors the pattern in
+Both Task-6 fixtures populate the ``content_tsv`` generated column by
+issuing a no-op UPDATE — mirrors the pattern in
 :mod:`tests.autonomous.test_autonomous_observability` so FTS works
 under the per-test SAVEPOINT-rollback session.
 """
@@ -20,18 +27,36 @@ under the per-test SAVEPOINT-rollback session.
 from __future__ import annotations
 
 import uuid
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any
 
 import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.autonomous import AutonomousSession
 from app.models.document import Document, DocumentChunk
 from app.models.file import File as FileModel
 from app.models.knowledge import KnowledgeBase, KnowledgeBaseFile
+from app.models.playbook import Playbook, PlaybookPosition
 from app.models.user import User
 from app.security import hash_password
+from app.skills import load_registry
+from app.skills.registry import MutableSkillRegistry
+
+# Fixtures under tests/fixtures/skills/ — same corpus the C1 internal-skills
+# tests use; ``alpha-test-skill`` is a known-loaded name.
+_SKILL_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "skills"
+
+# A real fixture skill the registry always loads from
+# ``tests/fixtures/skills/`` (see test_internal_skills.py for the
+# canonical access pattern).  Hard-coding a real fixture name keeps the
+# prompts test deterministic — no dependency on which production skills
+# happen to be present in ``skills/`` at test time.
+_FIXTURE_SKILL_REF = "alpha-test-skill"
 
 
 @dataclass
@@ -204,3 +229,176 @@ async def kb_with_old_and_new_files(db_session: AsyncSession) -> KbTwoFiles:
     await db_session.flush()
 
     return KbTwoFiles(kb_id=kb.id, old_file_id=old_f.id, new_file_id=new_f.id)
+
+
+# ---------------------------------------------------------------------------
+# Task 7 — prompt assembly fixtures (test_prompts.py)
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def _installed_skill_registry() -> AsyncIterator[None]:
+    """Install the fixture skill registry at ``app.state.skill_registry``.
+
+    :mod:`app.autonomous.prompts` reads the registry holder from
+    ``app.state`` when no explicit registry is passed.  In production
+    the lifespan handler populates it (``app/main.py:88``); in tests we
+    install the C1-fixtures registry so ``alpha-test-skill`` is
+    resolvable.  The previous holder (if any) is restored on teardown.
+    """
+    from app.main import app
+
+    holder = MutableSkillRegistry(load_registry(_SKILL_FIXTURES_DIR))
+    prior_holder = getattr(app.state, "skill_registry", None)
+    app.state.skill_registry = holder
+    try:
+        yield
+    finally:
+        if prior_holder is None:
+            delattr(app.state, "skill_registry")
+        else:
+            app.state.skill_registry = prior_holder
+
+
+async def _make_autonomous_user(db: AsyncSession) -> User:
+    """Create an opted-in user for the autonomous-prompt fixtures."""
+    user = User(
+        email=f"u-prompt-{uuid.uuid4().hex[:8]}@example.com",
+        hashed_password=hash_password("pw"),
+        is_admin=False,
+        role="member",
+        mfa_enabled=False,
+        must_change_password=False,
+    )
+    db.add(user)
+    await db.flush()
+    return user
+
+
+async def _make_session(
+    db: AsyncSession,
+    *,
+    user: User,
+    params: dict[str, Any],
+) -> AutonomousSession:
+    """Insert a minimal ``AutonomousSession`` row with the given params."""
+    sess = AutonomousSession(
+        user_id=user.id,
+        trigger_kind="manual",
+        params=params,
+    )
+    db.add(sess)
+    await db.flush()
+    return sess
+
+
+@pytest_asyncio.fixture
+async def session_with_skill_ref(
+    db_session: AsyncSession,
+    _installed_skill_registry: None,
+) -> AutonomousSession:
+    """``AutonomousSession`` whose ``params`` points at the fixture skill.
+
+    The fixture skill (``alpha-test-skill``) is loaded into
+    ``app.state.skill_registry`` by :func:`_installed_skill_registry`,
+    so :func:`app.autonomous.prompts.assemble_analysis_messages` can
+    resolve it without an explicit ``registry=`` argument.
+    """
+    user = await _make_autonomous_user(db_session)
+    return await _make_session(
+        db_session,
+        user=user,
+        params={"skill_ref": _FIXTURE_SKILL_REF},
+    )
+
+
+@pytest_asyncio.fixture
+async def session_with_playbook_id(
+    db_session: AsyncSession,
+) -> AutonomousSession:
+    """``AutonomousSession`` whose ``params`` points at a seeded playbook.
+
+    The playbook + a single position are inserted inline so the
+    prompt-assembly path's ``selectinload(Playbook.positions)`` query
+    has real rows to walk.  Mirrors the lightweight pattern in
+    ``tests/playbooks/test_executor.py``'s ``_make_playbook_with_position``.
+    """
+    user = await _make_autonomous_user(db_session)
+    playbook = Playbook(
+        name="Prompt Fixture Playbook",
+        contract_type="NDA",
+        description="Synthetic playbook used by test_prompts.py.",
+    )
+    db_session.add(playbook)
+    await db_session.flush()
+    position = PlaybookPosition(
+        playbook_id=playbook.id,
+        issue="Confidentiality term",
+        description="Receiving Party obligation scope.",
+        standard_language=(
+            "The Receiving Party shall hold Confidential Information in confidence "
+            "and shall not disclose it to any third party."
+        ),
+        severity_if_missing="high",
+        detection_keywords=["confidence", "confidential"],
+        detection_examples=[],
+        redline_strategy="Tighten to the standard language above.",
+        fallback_tiers=[{"rank": 1, "description": "Allow disclosure to professional advisors."}],
+        position_order=0,
+    )
+    db_session.add(position)
+    await db_session.flush()
+    return await _make_session(
+        db_session,
+        user=user,
+        params={"playbook_id": str(playbook.id)},
+    )
+
+
+@pytest_asyncio.fixture
+async def session_without_target(
+    db_session: AsyncSession,
+) -> AutonomousSession:
+    """``AutonomousSession`` whose ``params`` carries neither target.
+
+    Used to assert that :func:`assemble_analysis_messages` raises
+    ``ValueError`` rather than silently producing an empty system
+    prompt.
+    """
+    user = await _make_autonomous_user(db_session)
+    return await _make_session(db_session, user=user, params={})
+
+
+@pytest_asyncio.fixture
+def sample_chunks() -> list[dict[str, Any]]:
+    """A small chunks list shaped like ``_handle_retrieve_chunks`` output.
+
+    The keys mirror the payload built in
+    :func:`app.autonomous.guard._format_chunks_result` so a prompt
+    assembled against this fixture exercises the real downstream shape.
+    """
+    return [
+        {
+            "chunk_id": str(uuid.uuid4()),
+            "document_id": str(uuid.uuid4()),
+            "file_id": str(uuid.uuid4()),
+            "file_name": "fixture-nda.pdf",
+            "content": (
+                "Section 1. The Receiving Party shall hold Confidential "
+                "Information in confidence and not disclose it."
+            ),
+            "char_offset_start": 0,
+            "char_offset_end": 110,
+            "hybrid_score": 0.91,
+        },
+        {
+            "chunk_id": str(uuid.uuid4()),
+            "document_id": str(uuid.uuid4()),
+            "file_id": str(uuid.uuid4()),
+            "file_name": "fixture-nda.pdf",
+            "content": "Section 2. The term of this Agreement is three (3) years.",
+            "char_offset_start": 110,
+            "char_offset_end": 170,
+            "hybrid_score": 0.42,
+        },
+    ]
