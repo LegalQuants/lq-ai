@@ -407,11 +407,81 @@ async def _handle_retrieve_chunks(
     *,
     db: AsyncSession,
 ) -> ToolResult:
-    """Handle ``retrieve_chunks`` — hybrid KB search, zero cost.
+    """Handle ``retrieve_chunks`` — hybrid KB search OR file-scoped OR
+    since-scoped fetch.  Zero cost (local retrieval).
 
-    Returns IDs/counts/offsets in ``data["summary"]`` for span/audit
-    safety, and full chunk text in ``data["chunks"]`` for the node's
-    LLM use (audit code only logs ``data["summary"]`` — never raw text).
+    Three modes (mutually exclusive at the top level):
+
+    1. ``query`` (+ optional ``query_embedding``, ``top_k``, ``alpha``) —
+       hybrid semantic+FTS search via :func:`hybrid_search`.  Existing
+       path, unchanged.
+    2. ``file_id`` (+ ``kb_id`` for safety/audit) — return the file's
+       chunks directly (no semantic ranking), in
+       ``char_offset_start`` order.  Used by watch-triggered intake to
+       fetch the arriving document's chunks.
+    3. ``since`` + ``kb_id`` (no ``query``) — return chunks of files in
+       the KB whose
+       :attr:`~app.models.knowledge.KnowledgeBaseFile.attached_at` >
+       ``since`` (ISO-8601 string or aware datetime), in
+       ``attached_at`` order.  Used by schedule-triggered intake for
+       the "new since ``last_run_at``" path.
+
+    All three modes return the same shape: ``data["summary"]``
+    (counts + IDs + offsets, audit-safe — the chokepoint's audit row
+    only logs the summary) and ``data["chunks"]`` (full text for the
+    node's LLM use).
+
+    Args:
+        params: One of three top-level mode keys must be present:
+
+            - ``query`` (str): semantic+FTS hybrid search.
+              Required: ``kb_id``.
+              Optional: ``top_k`` (default 4), ``alpha`` (default 0.5),
+              ``query_embedding`` (list[float] | None).
+            - ``file_id`` (str | UUID): file-scoped chunk fetch.
+              ``kb_id`` recommended but not enforced (no KB join).
+            - ``since`` (str | datetime) + ``kb_id``: KB-scoped fetch
+              of chunks whose owning file was attached after ``since``.
+
+        db: Active async ORM session.
+
+    Raises:
+        ValueError: If no mode applies (none of ``query``, ``file_id``,
+            or ``since``+``kb_id`` provided).
+    """
+    file_id_raw = params.get("file_id")
+    since_raw = params.get("since")
+    kb_id_raw = params.get("kb_id")
+    query = params.get("query")
+
+    # Mode 2: file-scoped fetch.
+    if file_id_raw is not None:
+        return await _handle_retrieve_chunks_by_file(file_id_raw, db=db)
+
+    # Mode 3: since + kb_id scoped fetch.
+    if since_raw is not None and kb_id_raw is not None:
+        return await _handle_retrieve_chunks_since(since_raw, kb_id_raw, db=db)
+
+    # Mode 1: query-based hybrid search (existing path — unchanged).
+    if query is None:
+        raise ValueError(
+            "_handle_retrieve_chunks: provide one of `query` (hybrid search), "
+            "`file_id` (file-scoped fetch), or `since` + `kb_id` "
+            "(KB-scoped fetch of files attached after a cutoff)."
+        )
+    return await _handle_retrieve_chunks_query(params, db=db)
+
+
+async def _handle_retrieve_chunks_query(
+    params: dict[str, Any],
+    *,
+    db: AsyncSession,
+) -> ToolResult:
+    """Mode 1: hybrid semantic+FTS search via :func:`hybrid_search`.
+
+    This is the existing query-path, unchanged.  Returns IDs/counts/
+    offsets in ``data["summary"]`` for span/audit safety, and full
+    chunk text in ``data["chunks"]`` for the node's LLM use.
 
     Args:
         params: Must contain ``kb_id`` (str | UUID) and ``query`` (str).
@@ -437,35 +507,200 @@ async def _handle_retrieve_chunks(
         alpha=alpha,
     )
 
-    # Build a privacy-safe summary for audit/spans: IDs, counts, offsets.
-    # Full text goes under "chunks" for the node's LLM use only — the
-    # chokepoint's audit rows only log counts/types/cost (never data.chunks).
-    summary = {
-        "chunk_count": len(results),
-        "chunk_ids": [str(r.chunk_id) for r in results],
-        "offsets": [
+    return _format_chunks_result(
+        [
             {
-                "chunk_id": str(r.chunk_id),
-                "char_offset_start": r.char_offset_start,
-                "char_offset_end": r.char_offset_end,
+                "chunk_id": r.chunk_id,
+                "document_id": r.document_id,
+                "file_id": r.file_id,
+                "file_name": r.file_name,
+                "content": r.content,
                 "page_start": r.page_start,
                 "page_end": r.page_end,
+                "char_offset_start": r.char_offset_start,
+                "char_offset_end": r.char_offset_end,
+                "hybrid_score": r.hybrid_score,
             }
             for r in results
+        ]
+    )
+
+
+async def _handle_retrieve_chunks_by_file(
+    file_id_raw: Any,
+    *,
+    db: AsyncSession,
+) -> ToolResult:
+    """Mode 2: return all chunks of a single file in chunk-order.
+
+    The ``file_id`` input is :attr:`~app.models.file.File.id` — the
+    files.id value.  ``DocumentChunk`` has no direct ``file_id``
+    column; the join walks ``document_chunks → documents → files``.
+    The 1:1 ``files.id`` ↔ ``documents.file_id`` relationship is
+    enforced by a unique constraint on :attr:`Document.file_id`.
+
+    Soft-deleted files (``files.deleted_at IS NOT NULL``) are excluded
+    so a deleted source never leaks back via the autonomous loop —
+    matching the same predicate used by :func:`hybrid_search`.
+
+    Args:
+        file_id_raw: ``files.id`` as ``str`` or :class:`uuid.UUID`.
+        db: Active async ORM session.
+    """
+    from sqlalchemy import select
+
+    from app.models.document import Document, DocumentChunk
+    from app.models.file import File as FileModel
+
+    file_id = uuid.UUID(str(file_id_raw))
+
+    rows = (
+        (
+            await db.execute(
+                select(
+                    DocumentChunk.id.label("chunk_id"),
+                    DocumentChunk.document_id.label("document_id"),
+                    FileModel.id.label("file_id"),
+                    FileModel.filename.label("file_name"),
+                    DocumentChunk.content.label("content"),
+                    DocumentChunk.page_start.label("page_start"),
+                    DocumentChunk.page_end.label("page_end"),
+                    DocumentChunk.char_offset_start.label("char_offset_start"),
+                    DocumentChunk.char_offset_end.label("char_offset_end"),
+                )
+                .join(Document, Document.id == DocumentChunk.document_id)
+                .join(FileModel, FileModel.id == Document.file_id)
+                .where(FileModel.id == file_id)
+                .where(FileModel.deleted_at.is_(None))
+                .order_by(DocumentChunk.char_offset_start)
+            )
+        )
+        .mappings()
+        .all()
+    )
+
+    return _format_chunks_result([dict(row) for row in rows])
+
+
+async def _handle_retrieve_chunks_since(
+    since_raw: Any,
+    kb_id_raw: Any,
+    *,
+    db: AsyncSession,
+) -> ToolResult:
+    """Mode 3: return chunks of files in KB ``kb_id`` attached after ``since``.
+
+    Walks ``document_chunks → documents → files → knowledge_base_files``,
+    filtering to ``kbf.kb_id == kb_id`` AND
+    ``kbf.attached_at > since``.  Order is
+    (``attached_at`` ascending, then ``char_offset_start`` ascending) so
+    chunks within a file stay in document-order but newer files come
+    later — matching the "new since I last ran" digest semantics.
+
+    Soft-deleted files (``files.deleted_at IS NOT NULL``) are excluded
+    so a deleted source never leaks back via the autonomous loop.
+
+    Args:
+        since_raw: cutoff as ISO-8601 ``str`` or aware
+            :class:`datetime.datetime`.  Naive datetimes are NOT
+            accepted (Postgres timestamps are timezone-aware on this
+            stack; comparing naive to aware would raise at query time).
+        kb_id_raw: :attr:`KnowledgeBase.id` as ``str`` or
+            :class:`uuid.UUID`.
+        db: Active async ORM session.
+    """
+    from sqlalchemy import select
+
+    from app.models.document import Document, DocumentChunk
+    from app.models.file import File as FileModel
+    from app.models.knowledge import KnowledgeBaseFile
+
+    if isinstance(since_raw, str):
+        since_dt = datetime.fromisoformat(since_raw)
+    elif isinstance(since_raw, datetime):
+        since_dt = since_raw
+    else:
+        raise ValueError(
+            f"_handle_retrieve_chunks: `since` must be ISO-8601 str or datetime, "
+            f"got {type(since_raw).__name__}"
+        )
+
+    kb_id = uuid.UUID(str(kb_id_raw))
+
+    rows = (
+        (
+            await db.execute(
+                select(
+                    DocumentChunk.id.label("chunk_id"),
+                    DocumentChunk.document_id.label("document_id"),
+                    FileModel.id.label("file_id"),
+                    FileModel.filename.label("file_name"),
+                    DocumentChunk.content.label("content"),
+                    DocumentChunk.page_start.label("page_start"),
+                    DocumentChunk.page_end.label("page_end"),
+                    DocumentChunk.char_offset_start.label("char_offset_start"),
+                    DocumentChunk.char_offset_end.label("char_offset_end"),
+                )
+                .join(Document, Document.id == DocumentChunk.document_id)
+                .join(FileModel, FileModel.id == Document.file_id)
+                .join(KnowledgeBaseFile, KnowledgeBaseFile.file_id == FileModel.id)
+                .where(KnowledgeBaseFile.kb_id == kb_id)
+                .where(KnowledgeBaseFile.attached_at > since_dt)
+                .where(FileModel.deleted_at.is_(None))
+                .order_by(
+                    KnowledgeBaseFile.attached_at,
+                    DocumentChunk.char_offset_start,
+                )
+            )
+        )
+        .mappings()
+        .all()
+    )
+
+    return _format_chunks_result([dict(row) for row in rows])
+
+
+def _format_chunks_result(rows: list[dict[str, Any]]) -> ToolResult:
+    """Build the ``(summary, chunks)`` payload uniformly across all modes.
+
+    Centralising this guarantees mode 2 and mode 3 produce the SAME
+    shape as the existing query path, so downstream consumers (the
+    intake_node LLM step) are mode-agnostic.
+
+    ``hybrid_score`` is preserved when present (mode 1) and reported as
+    ``None`` for the unranked modes (2, 3) — the node sees a stable
+    key whose value carries the right "no rank available" signal.
+
+    The summary carries only IDs/counts/offsets — never the raw chunk
+    text — so the chokepoint's audit row can log
+    ``result.data["summary"]`` without leaking document content.
+    """
+    summary = {
+        "chunk_count": len(rows),
+        "chunk_ids": [str(r["chunk_id"]) for r in rows],
+        "offsets": [
+            {
+                "chunk_id": str(r["chunk_id"]),
+                "char_offset_start": r["char_offset_start"],
+                "char_offset_end": r["char_offset_end"],
+                "page_start": r["page_start"],
+                "page_end": r["page_end"],
+            }
+            for r in rows
         ],
     }
-    # Full chunk text for the node to pass into its LLM context.
     chunks = [
         {
-            "chunk_id": str(r.chunk_id),
-            "document_id": str(r.document_id),
-            "file_name": r.file_name,
-            "content": r.content,
-            "hybrid_score": r.hybrid_score,
-            "char_offset_start": r.char_offset_start,
-            "char_offset_end": r.char_offset_end,
+            "chunk_id": str(r["chunk_id"]),
+            "document_id": str(r["document_id"]),
+            "file_id": str(r["file_id"]) if r.get("file_id") is not None else None,
+            "file_name": r["file_name"],
+            "content": r["content"],
+            "hybrid_score": r.get("hybrid_score"),
+            "char_offset_start": r["char_offset_start"],
+            "char_offset_end": r["char_offset_end"],
         }
-        for r in results
+        for r in rows
     ]
     return ToolResult(
         cost_usd=Decimal("0"),
