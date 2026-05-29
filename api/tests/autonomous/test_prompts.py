@@ -22,6 +22,8 @@ Fixtures live in ``conftest.py``:
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -85,3 +87,25 @@ def test_structured_output_instruction_carries_schema_keys() -> None:
     assert "suggested_precedents" in inst
     assert "privilege_concerns" in inst
     assert "scope_concerns" in inst
+
+
+@pytest.mark.asyncio
+async def test_assemble_messages_raises_when_playbook_soft_deleted(
+    db_session: AsyncSession, session_with_playbook_id, sample_chunks
+) -> None:
+    """Soft-deleted playbooks are refused, not analysed."""
+    from datetime import UTC, datetime
+
+    from sqlalchemy import select
+
+    from app.models.playbook import Playbook
+
+    pb_id = uuid.UUID(session_with_playbook_id.params["playbook_id"])
+    playbook = (await db_session.execute(select(Playbook).where(Playbook.id == pb_id))).scalar_one()
+    playbook.deleted_at = datetime.now(UTC)
+    await db_session.flush()
+
+    with pytest.raises(ValueError, match="playbook"):
+        await assemble_analysis_messages(
+            session_with_playbook_id, chunks=sample_chunks, db=db_session
+        )

@@ -53,6 +53,14 @@ from app.skills.registry import MutableSkillRegistry, SkillRegistry
 # the contract; the drafting node and the structured-output parser test
 # both reference them by name.  Changes here REQUIRE matching updates in
 # the drafting node and a regression test.
+#
+# CONTRACT FOR TASK 8 (structured_output.py parser):
+# The "everything else in your response is logged as a finding only if the
+# JSON cannot be parsed" sentence below is a contract — the parser MUST
+# implement this fallback (return a tolerant unstructured result with the
+# raw content preserved, so the drafting node can emit a single fallback
+# finding). If Task 8 changes this behavior, update the prompt to match
+# in the same PR.
 
 STRUCTURED_OUTPUT_INSTRUCTION = """\
 After your analysis, return a final JSON object with this exact shape (and \
@@ -215,7 +223,9 @@ async def _load_playbook_system_prompt(playbook_id: uuid.UUID, *, db: AsyncSessi
     Raises ``ValueError`` if no playbook row matches ``playbook_id``.
     """
     stmt = (
-        select(Playbook).where(Playbook.id == playbook_id).options(selectinload(Playbook.positions))
+        select(Playbook)
+        .where(Playbook.id == playbook_id, Playbook.deleted_at.is_(None))
+        .options(selectinload(Playbook.positions))
     )
     playbook = (await db.execute(stmt)).scalar_one_or_none()
     if playbook is None:
@@ -254,7 +264,10 @@ async def _load_playbook_system_prompt(playbook_id: uuid.UUID, *, db: AsyncSessi
                 for tier in pos.fallback_tiers:
                     rank = tier.get("rank")
                     desc = tier.get("description") or ""
+                    lang = tier.get("language") or ""
                     lines.append(f"- rank {rank}: {desc}")
+                    if lang:
+                        lines.extend(["", "  Language:", "", f"  {lang}"])
     else:
         lines += ["", "(No positions defined.)"]
 
