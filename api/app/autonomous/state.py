@@ -58,6 +58,13 @@ class AutonomousSessionState(TypedDict, total=False):
     # calls retrieve_chunks through the chokepoint.
     kb_id: str | None
     query: str | None
-    # A3.3b: output of retrieve_chunks — carries "summary" (IDs/counts/
-    # offsets, safe for audit) and "chunks" (full text, for LLM use only).
-    retrieved_chunks: dict | None
+    # M4 Tasks 9/10: output of retrieve_chunks — the chunks list
+    # (full text, for downstream LLM use).  Mode-agnostic across
+    # watch/schedule/first-tick paths: empty list when no retrieval
+    # ran or no chunks matched.
+    retrieved_chunks: list[dict] | None
+    # M4 Task 10: schedule-first-tick marker — set when intake skipped
+    # retrieval because the schedule has no prior ``last_run_at`` to
+    # compare against.  Downstream nodes treat empty input as
+    # intentional rather than an error.
+    first_tick_no_baseline: bool

@@ -34,7 +34,6 @@ LangGraph node functions remain pure-ish over the state dict and
 from __future__ import annotations
 
 import logging
-import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -64,10 +63,22 @@ def make_intake_node(
     """Build the intake-phase node bound to a DB session.
 
     The intake node transitions the session to :attr:`Phase.intake`
-    and, when ``kb_id`` is present in state, calls
+    then dispatches on the session's ``params`` to call
     :func:`~app.autonomous.guard.guarded_tool_call` with
-    :attr:`~app.autonomous.enums.ToolIntent.retrieve_chunks` to
-    orient the session with relevant KB context.
+    :attr:`~app.autonomous.enums.ToolIntent.retrieve_chunks` in the
+    mode matching the trigger that spawned the session (M4 Tasks 9/10):
+
+    * Watch path — ``params["file_id"]`` present: scope to the arriving
+      file's chunks via mode 2 of ``_handle_retrieve_chunks``.
+    * Schedule path — ``params["kb_id"]`` + ``params["since"]``: scope
+      to docs attached to the KB after ``since`` (the schedule's prior
+      ``last_run_at``) via mode 3.
+    * Schedule first-tick — ``params["kb_id"]`` with no ``since``: no
+      baseline yet; skip retrieval and set
+      ``first_tick_no_baseline=True`` so downstream nodes know the
+      empty input is intentional.
+    * No-target — neither ``file_id`` nor ``kb_id``: stay empty;
+      delivery still completes with an empty-findings notification.
 
     Brakes (:exc:`~app.errors.AutonomousBrake`) propagate to the
     executor's terminal handler per the brake-commit contract.
@@ -92,26 +103,44 @@ def make_intake_node(
 
         updates: dict[str, Any] = {"current_phase": str(Phase.intake)}
 
-        # If a KB id and query are in state, retrieve orientation chunks.
-        kb_id_raw = state.get("kb_id")
-        query = state.get("query")
-        if kb_id_raw and query:
-            try:
-                uuid.UUID(str(kb_id_raw))  # validate before forwarding
-            except ValueError:
-                logger.warning(
-                    "autonomous.intake_node: invalid kb_id in state, skipping retrieve_chunks",
-                    extra={"event": "autonomous_intake_invalid_kb_id"},
-                )
-            else:
-                result = await guarded_tool_call(
-                    session,
-                    ToolIntent.retrieve_chunks,
-                    {"kb_id": str(kb_id_raw), "query": str(query)},
-                    db,
-                    gateway,
-                )
-                updates["retrieved_chunks"] = result.data
+        params = session.params or {}
+        kb_id = params.get("kb_id")
+        file_id = params.get("file_id")
+        since = params.get("since")
+
+        if file_id:
+            # Watch path: scope to the arriving file's chunks (mode 2).
+            result = await guarded_tool_call(
+                session,
+                ToolIntent.retrieve_chunks,
+                {
+                    "kb_id": str(kb_id) if kb_id else None,
+                    "file_id": str(file_id),
+                },
+                db,
+                gateway,
+            )
+            updates["retrieved_chunks"] = result.data.get("chunks", []) if result.data else []
+        elif kb_id and since:
+            # Schedule path: scope to docs attached after `since` (mode 3).
+            result = await guarded_tool_call(
+                session,
+                ToolIntent.retrieve_chunks,
+                {"kb_id": str(kb_id), "since": since},
+                db,
+                gateway,
+            )
+            updates["retrieved_chunks"] = result.data.get("chunks", []) if result.data else []
+        elif kb_id and not since and not file_id:
+            # First-tick schedule (last_run_at was NULL at spawn): no
+            # baseline yet — record the marker and skip retrieval.
+            updates["retrieved_chunks"] = []
+            updates["first_tick_no_baseline"] = True
+        else:
+            # No target at all — degenerate session (test/manual). Stay
+            # empty; delivery will still complete with an empty-findings
+            # notification.
+            updates["retrieved_chunks"] = []
 
         return updates
 

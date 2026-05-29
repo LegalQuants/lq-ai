@@ -30,9 +30,12 @@ import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -402,3 +405,157 @@ def sample_chunks() -> list[dict[str, Any]]:
             "hybrid_score": 0.42,
         },
     ]
+
+
+# ---------------------------------------------------------------------------
+# Tasks 9 + 10 — intake_node dispatch fixtures (test_executor_real_work.py)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mock_gateway() -> MagicMock:
+    """Minimal gateway double for intake-node tests.
+
+    ``retrieve_chunks`` is a cost-0 local retrieval — the chokepoint
+    never touches the gateway in mode 2 or mode 3.  The factory
+    signature accepts a gateway, so we hand it a ``MagicMock`` with an
+    ``AsyncMock`` ``chat_completion`` so any accidental gateway call
+    fails loud (and so a test that grows past intake into analysis
+    won't need to refactor the fixture).
+    """
+    gw = MagicMock()
+    gw.chat_completion = AsyncMock()
+    return gw
+
+
+async def _make_optedin_user(db: AsyncSession) -> User:
+    """Create an opted-in user for the intake-node session fixtures."""
+    user = User(
+        email=f"u-intake-{uuid.uuid4().hex[:8]}@example.com",
+        hashed_password=hash_password("pw"),
+        is_admin=False,
+        role="member",
+        mfa_enabled=False,
+        must_change_password=False,
+        autonomous_enabled=True,
+    )
+    db.add(user)
+    await db.flush()
+    return user
+
+
+async def _make_running_session(
+    db: AsyncSession,
+    *,
+    user: User,
+    trigger_kind: str,
+    params: dict[str, Any],
+) -> AutonomousSession:
+    """Insert a running ``AutonomousSession`` ready for intake-node dispatch.
+
+    The session lands in ``status='running'`` / ``halt_state='running'``
+    / ``current_phase='intake'`` with a finite ``max_cost_usd`` so the
+    chokepoint's pre-call brake checks pass without negotiating a
+    pending→running transition.
+    """
+    sess = AutonomousSession(
+        user_id=user.id,
+        trigger_kind=trigger_kind,
+        status="running",
+        halt_state="running",
+        current_phase="intake",
+        max_cost_usd=Decimal("5.00"),
+        params=params,
+    )
+    db.add(sess)
+    await db.flush()
+    return sess
+
+
+@pytest_asyncio.fixture
+async def running_watch_session(
+    db_session: AsyncSession,
+    kb_with_one_indexed_file: KbOneFile,
+) -> AutonomousSession:
+    """Watch-triggered session: ``params`` carries ``kb_id`` + ``file_id``.
+
+    Reuses :func:`kb_with_one_indexed_file` so the file_id-scoped
+    retrieval has a real chunk to return — keeps the test exercising
+    the mode 2 path end-to-end through the chokepoint rather than
+    asserting against an empty list.
+    """
+    user = await _make_optedin_user(db_session)
+    return await _make_running_session(
+        db_session,
+        user=user,
+        trigger_kind="watch",
+        params={
+            "kb_id": str(kb_with_one_indexed_file.kb_id),
+            "file_id": str(kb_with_one_indexed_file.file_id),
+        },
+    )
+
+
+@pytest_asyncio.fixture
+async def running_schedule_session_with_since(
+    db_session: AsyncSession,
+    kb_with_old_and_new_files: KbTwoFiles,
+) -> AutonomousSession:
+    """Schedule session with a since-cutoff between the two attached files.
+
+    ``kb_with_old_and_new_files`` backdates ``old_file`` by 1 hour and
+    leaves ``new_file`` at "now".  A ``since`` of 5 minutes ago
+    therefore exercises the mode-3 cutoff: only ``new_file``'s chunks
+    should come back.
+    """
+    user = await _make_optedin_user(db_session)
+    since_iso = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
+    return await _make_running_session(
+        db_session,
+        user=user,
+        trigger_kind="schedule",
+        params={
+            "kb_id": str(kb_with_old_and_new_files.kb_id),
+            "since": since_iso,
+        },
+    )
+
+
+@pytest_asyncio.fixture
+async def running_schedule_session_first_tick(
+    db_session: AsyncSession,
+) -> AutonomousSession:
+    """Schedule session whose ``params`` has ``kb_id`` but no ``since``.
+
+    Represents the first cron tick after a schedule was created —
+    ``schedules.last_run_at`` is NULL at spawn so the dispatcher hands
+    intake a KB-only target.  Intake must skip retrieval and record
+    ``first_tick_no_baseline=True``.
+    """
+    user = await _make_optedin_user(db_session)
+    kb = await _make_kb(db_session, owner=user)
+    return await _make_running_session(
+        db_session,
+        user=user,
+        trigger_kind="schedule",
+        params={"kb_id": str(kb.id)},
+    )
+
+
+@pytest_asyncio.fixture
+async def running_session_without_target(
+    db_session: AsyncSession,
+) -> AutonomousSession:
+    """Manual session with no target keys in ``params``.
+
+    Degenerate case (test/manual spawn): intake must stay empty without
+    error so delivery can still complete with an empty-findings
+    notification.
+    """
+    user = await _make_optedin_user(db_session)
+    return await _make_running_session(
+        db_session,
+        user=user,
+        trigger_kind="manual",
+        params={},
+    )
