@@ -157,3 +157,29 @@ async def test_retrieve_chunks_no_mode_raises_actionable_error(
     assert "query" in message
     assert "file_id" in message
     assert "since" in message
+
+
+@pytest.mark.asyncio
+async def test_retrieve_chunks_since_rejects_naive_datetime(
+    db_session: AsyncSession, kb_with_old_and_new_files: KbTwoFiles
+) -> None:
+    """Naive datetime (object) and naive ISO string (no offset) both raise
+    ValueError — Postgres timestamps are tz-aware; comparing against a naive
+    datetime would surface as a cryptic execution-time error otherwise."""
+    naive_dt = datetime(2026, 5, 27, 12, 0, 0)  # no tzinfo
+    with pytest.raises(ValueError, match="timezone-aware"):
+        await _handle_retrieve_chunks(
+            {
+                "kb_id": str(kb_with_old_and_new_files.kb_id),
+                "since": naive_dt,
+            },
+            db=db_session,
+        )
+    with pytest.raises(ValueError, match="timezone-aware"):
+        await _handle_retrieve_chunks(
+            {
+                "kb_id": str(kb_with_old_and_new_files.kb_id),
+                "since": "2026-05-27T12:00:00",  # naive ISO string (no offset)
+            },
+            db=db_session,
+        )

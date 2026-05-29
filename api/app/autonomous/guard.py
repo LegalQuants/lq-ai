@@ -439,7 +439,8 @@ async def _handle_retrieve_chunks(
               Optional: ``top_k`` (default 4), ``alpha`` (default 0.5),
               ``query_embedding`` (list[float] | None).
             - ``file_id`` (str | UUID): file-scoped chunk fetch.
-              ``kb_id`` recommended but not enforced (no KB join).
+              ``kb_id``, if also provided, is **silently ignored** in
+              this mode (no KB join performed, no audit/log emitted).
             - ``since`` (str | datetime) + ``kb_id``: KB-scoped fetch
               of chunks whose owning file was attached after ``since``.
 
@@ -623,6 +624,12 @@ async def _handle_retrieve_chunks_since(
         raise ValueError(
             f"_handle_retrieve_chunks: `since` must be ISO-8601 str or datetime, "
             f"got {type(since_raw).__name__}"
+        )
+
+    if since_dt.tzinfo is None or since_dt.tzinfo.utcoffset(since_dt) is None:
+        raise ValueError(
+            "_handle_retrieve_chunks: `since` must be timezone-aware "
+            "(got naive datetime — Postgres timestamps are tz-aware on this stack)"
         )
 
     kb_id = uuid.UUID(str(kb_id_raw))
