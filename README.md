@@ -284,7 +284,7 @@ The trust model for a self-hosted, open-source project is that every claim termi
 
 **The honest catalog.** [`docs/HONEST-STATE.md`](docs/HONEST-STATE.md) names what is shipped, what is deferred, and how to verify each. We publish this because the verification path for an open-source product terminates in code, not in claims. If anything in this README is inconsistent with what the code does, please [open an issue](https://github.com/LegalQuants/lq-ai/issues) — the code is canonical.
 
-**Want to contribute?** [`docs/contribute/EASIEST-CONTRIBUTIONS.md`](docs/contribute/EASIEST-CONTRIBUTIONS.md) is the curated list of short-cycle contributions where the foundation is already in source and the gap is written down in advance. Seven items are currently open, ranging from "a practicing attorney with no engineering background can pick this up" to "a security architect familiar with OWASP can pick this up." Each mini-PRD names the acceptance criteria, the contributor profile, and the files to start in.
+**Want to contribute?** [`docs/ROADMAP.md`](docs/ROADMAP.md) is the live, ordered punch list of work that has not yet shipped — distilled from PRD §8/§9, HONEST-STATE, and the active milestone plans into one prioritized contributor view, labelled by complexity (🟢/🟡/🔴), effort (S/M/L), and contributor profile (engineer / attorney / security / DevOps). For the curated short-cycle subset where the foundation is already in source and the gap is written down in advance, see [`docs/contribute/EASIEST-CONTRIBUTIONS.md`](docs/contribute/EASIEST-CONTRIBUTIONS.md) — currently seven items, ranging from "a practicing attorney with no engineering background can pick this up" to "a security architect familiar with OWASP can pick this up." Each mini-PRD names the acceptance criteria, the contributor profile, and the files to start in.
 
 ---
 
@@ -396,7 +396,7 @@ Accessibility findings are treated as defects, not nice-to-haves. If you find on
 | M4 — Autonomous Layer and Contract Repository | Background agents, watches, scheduled tasks; relationship graph over contract sets (amendments, restatements, master/sub) | After M3 (~8 weeks) |
 | M5–M7 — Forward-Looking Workflow Intelligence | Community-driven; not committed. MCP-client subsystem operationalized; Signal Aggregation Service; Today view with prioritization; agent execution framework with human-in-the-loop guardrails. | TBD |
 
-For the full roadmap and the ~50+ deferred enhancements ready for community contribution, see [PRD §8 Roadmap](docs/PRD.md#8-roadmap) and [§9 Deferred Enhancements](docs/PRD.md#9-deferred-enhancements-and-identified-future-work).
+For the full ordered punch list of unshipped work — across the active milestone, PRD-committed deferrals, contributor-ready mini-PRDs, engineering discipline, compliance, and forward-looking M5+ — see **[`docs/ROADMAP.md`](docs/ROADMAP.md)**. The underlying sources of truth are [PRD §8 Roadmap](docs/PRD.md#8-roadmap) and [§9 Deferred Enhancements](docs/PRD.md#9-deferred-enhancements-and-identified-future-work); the roadmap doc threads ~150 entries into one prioritized view.
 
 ---
 
@@ -409,7 +409,7 @@ Two contribution paths, with separate contribution guides:
 - **Code, infrastructure, deployment recipes, documentation:** see [`CONTRIBUTING.md`](CONTRIBUTING.md). DCO sign-off required (no CLA), code style enforced by `ruff` + `mypy` (Python) and Prettier + ESLint (JS), pytest coverage target 80%.
 - **Skills (the canonical artifact of value in this project):** see [`skills/CONTRIBUTING.md`](skills/CONTRIBUTING.md). Skills containing legal substance require attestation that the substantive content is accurate to the contributor's knowledge and review by at least one practicing attorney plus one engineer. The skill-authoring guide ([`docs/skill-authoring-guide.md`](docs/skill-authoring-guide.md)) documents the patterns established by the M1 starter skills — perspective branching, severity rubrics, optional-input design, output-format conventions.
 
-For the curated set of short-cycle contributions where the foundation is already in source and the scope is written down in advance, start with [`docs/contribute/EASIEST-CONTRIBUTIONS.md`](docs/contribute/EASIEST-CONTRIBUTIONS.md) — each entry has a mini-PRD in [`docs/contribute/mini-prds/`](docs/contribute/mini-prds/) covering contributor profile, what ships, acceptance criteria, and where to start.
+For the full picture of what's open, start with [`docs/ROADMAP.md`](docs/ROADMAP.md) — the live, ordered punch list across active milestone work, PRD-committed deferrals, mini-PRDs, engineering discipline, compliance, and forward-looking M5+, each entry labelled by complexity and contributor profile. For the curated short-cycle subset where the foundation is already in source and the scope is written down in advance, see [`docs/contribute/EASIEST-CONTRIBUTIONS.md`](docs/contribute/EASIEST-CONTRIBUTIONS.md) — each entry has a mini-PRD in [`docs/contribute/mini-prds/`](docs/contribute/mini-prds/) covering contributor profile, what ships, acceptance criteria, and where to start.
 
 A few things that are easy and meaningful for first contributions:
 
