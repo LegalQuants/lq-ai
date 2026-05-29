@@ -115,3 +115,38 @@ def test_parse_malformed_fenced_json_falls_back_to_whole_content() -> None:
     r = parse_structured_output(raw)
     assert r.is_structured is False
     assert r.raw_content == raw
+
+
+def test_parse_non_array_value_for_array_key_defaults_to_empty() -> None:
+    """Non-list values for array keys MUST coerce to [] — never raise.
+
+    Pins the never-raise contract (see prompts.py:57-62 CONTRACT FOR TASK 8).
+    """
+    cases = [
+        '{"findings": 42}',  # int → previously TypeError
+        '{"findings": false}',  # bool → previously TypeError
+        '{"findings": null}',  # null → already empty via current `or []`
+        '{"findings": "text"}',  # string → previously silent corruption
+        '{"findings": {"a": 1}}',  # dict → previously silent corruption
+    ]
+    for bad in cases:
+        r = parse_structured_output(bad)
+        assert r.is_structured is True, f"Case {bad!r} should still be structured"
+        assert r.findings == [], f"Case {bad!r} should produce findings=[]"
+
+
+def test_parse_non_array_value_does_not_raise_on_any_array_key() -> None:
+    """Every array key in the schema must coerce non-list to []."""
+    for key in (
+        "findings",
+        "suggested_memories",
+        "suggested_precedents",
+        "privilege_concerns",
+        "scope_concerns",
+    ):
+        # Non-list value at the key under test:
+        raw = '{"' + key + '": 99}'
+        r = parse_structured_output(raw)
+        assert r.is_structured is True
+        # Read the coerced field via getattr to compare uniformly:
+        assert getattr(r, key) == [], f"key={key} should coerce to []"

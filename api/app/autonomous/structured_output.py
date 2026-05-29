@@ -56,6 +56,11 @@ class StructuredResult:
         return cls(is_structured=False, raw_content=raw or "")
 
 
+def _as_list(value: Any) -> list[Any]:
+    """Coerce a JSON value to a list — non-list values yield []."""
+    return list(value) if isinstance(value, list) else []
+
+
 def parse_structured_output(content: str | None) -> StructuredResult:
     """Parse the analysis call's response into a :class:`StructuredResult`.
 
@@ -99,11 +104,11 @@ def parse_structured_output(content: str | None) -> StructuredResult:
 
     return StructuredResult(
         is_structured=True,
-        findings=list(parsed.get("findings") or []),
-        suggested_memories=list(parsed.get("suggested_memories") or []),
-        suggested_precedents=list(parsed.get("suggested_precedents") or []),
-        privilege_concerns=list(parsed.get("privilege_concerns") or []),
-        scope_concerns=list(parsed.get("scope_concerns") or []),
+        findings=_as_list(parsed.get("findings")),
+        suggested_memories=_as_list(parsed.get("suggested_memories")),
+        suggested_precedents=_as_list(parsed.get("suggested_precedents")),
+        privilege_concerns=_as_list(parsed.get("privilege_concerns")),
+        scope_concerns=_as_list(parsed.get("scope_concerns")),
         raw_content=content,
     )
 
