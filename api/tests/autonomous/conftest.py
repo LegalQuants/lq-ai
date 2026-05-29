@@ -559,3 +559,76 @@ async def running_session_without_target(
         trigger_kind="manual",
         params={},
     )
+
+
+# ---------------------------------------------------------------------------
+# Task 11 — analysis_node fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def running_watch_session_at_analysis(
+    db_session: AsyncSession,
+    kb_with_one_indexed_file: KbOneFile,
+    _installed_skill_registry: None,
+) -> AutonomousSession:
+    """Watch-triggered session sitting at the analysis-phase boundary.
+
+    Same shape as :func:`running_watch_session` (mode-2 file-scoped
+    target) PLUS a real ``skill_ref`` so :func:`assemble_analysis_messages`
+    has a resolvable system prompt. ``current_phase`` is left at
+    ``"intake"`` — the analysis node runs the intake→analysis transition
+    itself. ``_installed_skill_registry`` is requested so
+    ``alpha-test-skill`` is loaded into ``app.state.skill_registry`` and
+    the prompt assembly path resolves without an explicit ``registry=``.
+    """
+    user = await _make_optedin_user(db_session)
+    return await _make_running_session(
+        db_session,
+        user=user,
+        trigger_kind="watch",
+        params={
+            "kb_id": str(kb_with_one_indexed_file.kb_id),
+            "file_id": str(kb_with_one_indexed_file.file_id),
+            "skill_ref": _FIXTURE_SKILL_REF,
+        },
+    )
+
+
+@pytest.fixture
+def mock_gateway_structured_response() -> MagicMock:
+    """Gateway double whose ``chat_completion`` returns a structured-output stub.
+
+    The returned object mimics :class:`ChatCompletionResponse` closely
+    enough for :func:`app.autonomous.guard._handle_gateway_inference` to
+    extract ``choices[0].message.content`` and ``usage.prompt_tokens`` /
+    ``usage.completion_tokens``. We do NOT instantiate the real Pydantic
+    model — the chokepoint accesses attributes directly, so a
+    ``MagicMock`` tree with the right attribute names is sufficient and
+    keeps the fixture decoupled from schema drift.
+    """
+    content_json = (
+        "```json\n"
+        '{"findings": [{"title": "T", "summary": "S", "severity": "info", '
+        '"source_chunk_ids": []}], '
+        '"suggested_memories": [], '
+        '"suggested_precedents": [], '
+        '"privilege_concerns": [], '
+        '"scope_concerns": []}\n'
+        "```"
+    )
+    message = MagicMock()
+    message.content = content_json
+    choice = MagicMock()
+    choice.message = message
+    usage = MagicMock()
+    usage.prompt_tokens = 100
+    usage.completion_tokens = 50
+    usage.total_tokens = 150
+    response = MagicMock()
+    response.choices = [choice]
+    response.usage = usage
+
+    gw = MagicMock()
+    gw.chat_completion = AsyncMock(return_value=response)
+    return gw

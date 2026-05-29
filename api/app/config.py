@@ -200,6 +200,21 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("LQ_AI_AUTONOMOUS_DEFAULT_MAX_COST_USD"),
     )
 
+    # Default model the analysis node passes to the gateway when neither
+    # the spawning trigger (watch/schedule ``params["model"]``) nor the
+    # target skill/playbook pinned one. Mirrors the gateway.yaml deployment
+    # default. Operators may override via the env var; the value must be a
+    # model identifier the gateway recognises in its routing table.
+    autonomous_default_model: str = Field(
+        default="claude-opus-4-7",
+        description=(
+            "Fallback chat-completion model used by the autonomous "
+            "analysis node when ``params['model']`` is not set on the "
+            "session. Must be a model id the gateway can route."
+        ),
+        validation_alias=AliasChoices("LQ_AI_AUTONOMOUS_DEFAULT_MODEL"),
+    )
+
     # M-Sec.1 — MFA-mandatory deployment flag per PRD §5.1. When True,
     # the backend treats any authenticated user without MFA enrolled
     # as not-fully-authenticated for normal endpoints — they can only

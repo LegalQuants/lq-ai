@@ -68,3 +68,13 @@ class AutonomousSessionState(TypedDict, total=False):
     # compare against.  Downstream nodes treat empty input as
     # intentional rather than an error.
     first_tick_no_baseline: bool
+
+    # M4 Task 11: analysis-phase output. ``analysis_content`` is the LLM's
+    # raw response text (the JSON-fenced structured output the drafting
+    # node parses via Task 8's tolerant parser) — ``None`` when the
+    # analysis call was skipped (first_tick_no_baseline, no target) or
+    # when the gateway returned an error. ``analysis_outcome`` is the
+    # chokepoint's outcome label (``"success"`` or ``"gateway_error"``)
+    # for the inference call; absent when no inference call was made.
+    analysis_content: str | None
+    analysis_outcome: str

@@ -43,8 +43,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.autonomous.enums import ToolIntent
 from app.autonomous.guard import guarded_tool_call
 from app.autonomous.phases import run_phase_transition
+from app.autonomous.prompts import assemble_analysis_messages
 from app.autonomous.receipt import build_receipt
 from app.autonomous.state import AutonomousSessionState
+from app.config import get_settings
 from app.models.autonomous import AutonomousSession
 from app.schemas.autonomous import Phase
 
@@ -153,14 +155,33 @@ def make_analysis_node(
 ) -> Callable[[AutonomousSessionState], Awaitable[dict[str, Any]]]:
     """Build the analysis-phase node bound to a DB session.
 
-    The analysis node transitions the session to :attr:`Phase.analysis`.
-    Any tool calls in this phase MUST go through
-    :func:`~app.autonomous.guard.guarded_tool_call` with one of the
-    analysis-phase grants: ``retrieve_chunks``, ``run_skill``,
-    ``run_playbook``.
+    The analysis node transitions the session to :attr:`Phase.analysis`
+    then makes ONE guarded inference call through the chokepoint:
 
-    In the current skeleton no inference tools are called; the node
-    advances the phase machine and records the audit row.
+    * If state carries ``first_tick_no_baseline`` (set by intake on a
+      schedule's first cron tick — no baseline yet), the node skips the
+      inference call entirely and returns ``analysis_content=None``;
+      downstream drafting emits the empty-findings notification.
+    * If the session's ``params`` carries neither ``skill_ref`` nor
+      ``playbook_id``, the node also skips the call (a degenerate
+      no-target session — downstream emits a "no autonomous target
+      configured" finding).
+    * Otherwise the node assembles messages via
+      :func:`~app.autonomous.prompts.assemble_analysis_messages` from
+      the skill's SKILL.md body / playbook render plus the retrieved
+      chunks, picks ``ToolIntent.run_playbook`` when ``playbook_id`` is
+      set else ``ToolIntent.run_skill``, picks a model from
+      ``params["model"]`` -> :attr:`settings.autonomous_default_model`,
+      and calls :func:`~app.autonomous.guard.guarded_tool_call` with
+      ``anonymize=True``.
+
+    The LLM's response text lands in ``state["analysis_content"]`` and
+    the call's outcome (``"success"`` or ``"gateway_error"``) lands in
+    ``state["analysis_outcome"]`` — both consumed by the drafting node
+    (Task 12) and the tolerant structured-output parser (Task 8).
+
+    Brakes (:exc:`~app.errors.AutonomousBrake`) propagate to the
+    executor's terminal handler per the brake-commit contract.
     """
 
     async def analysis_node(state: AutonomousSessionState) -> dict[str, Any]:
@@ -179,7 +200,51 @@ def make_analysis_node(
         await run_phase_transition(session, Phase.analysis, db)
         await db.flush()
 
-        return {"current_phase": str(Phase.analysis)}
+        # First-tick schedule (intake had no baseline to retrieve against):
+        # skip the inference call entirely; downstream drafting handles the
+        # empty-input case.
+        if state.get("first_tick_no_baseline"):
+            return {
+                "current_phase": str(Phase.analysis),
+                "analysis_content": None,
+                "first_tick_no_baseline": True,
+            }
+
+        params = session.params or {}
+        skill_ref = params.get("skill_ref")
+        playbook_id = params.get("playbook_id")
+        if not skill_ref and not playbook_id:
+            # Degenerate no-target session — drafting emits the
+            # "no autonomous target configured" finding (Task 12).
+            return {
+                "current_phase": str(Phase.analysis),
+                "analysis_content": None,
+            }
+
+        chunks = state.get("retrieved_chunks") or []
+        messages = await assemble_analysis_messages(session, chunks=chunks, db=db)
+        intent = ToolIntent.run_playbook if playbook_id else ToolIntent.run_skill
+
+        settings = get_settings()
+        model = params.get("model") or settings.autonomous_default_model
+
+        result = await guarded_tool_call(
+            session,
+            intent,
+            {
+                "model": model,
+                "messages": messages,
+                "anonymize": True,
+            },
+            db,
+            gateway,
+        )
+
+        return {
+            "current_phase": str(Phase.analysis),
+            "analysis_content": (result.data or {}).get("content"),
+            "analysis_outcome": result.outcome,
+        }
 
     return analysis_node
 
