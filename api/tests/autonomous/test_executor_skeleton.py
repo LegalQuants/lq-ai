@@ -1,6 +1,21 @@
-"""Executor skeleton tests for the M4-A2/A3.3b LangGraph phase machine.
+"""Executor tests for the LangGraph phase machine + chokepoint invariant.
 
-Five contracts under test:
+The nodes now do real work (M4-D2): analysis runs inference, drafting emits
+findings through the chokepoint, ethics_review emits its own findings, and
+delivery notifies and builds the receipt.  These tests pin the structural
+contracts of the phase machine and the chokepoint, *not* the real-work content
+itself — that is covered by the gateway-error / R4 / real-work test files.
+
+The happy-path integration tests here use a **manual** session with no
+``skill_ref`` configured.  That deliberately drives analysis down the
+no-inference-target / unstructured-fallback path, so a bare ``_StubGateway``
+(no ``chat_completion``) suffices: analysis makes no gateway call because no
+inference target is configured, while drafting / ethics_review / delivery still
+exercise the real ``emit_finding`` and ``notify`` chokepoint paths (which do not
+touch the gateway).  This isolates the phase machine + the no-target path from
+gateway behaviour; the gateway-call paths are exercised elsewhere.
+
+Contracts under test:
 
 1. A session row drives the graph through all five phases in order
    (intake → analysis → drafting → ethics_review → delivery).
@@ -8,15 +23,19 @@ Five contracts under test:
 2. Each phase transition writes an ``autonomous_session.phase_transition``
    audit row — five rows per full run, in phase order.
 
-3. (A3.3b) The real :func:`~app.autonomous.guard.guarded_tool_call` is
-   importable from :mod:`app.autonomous.guard`; the old stub is removed
-   from :mod:`app.autonomous.nodes`.
+3. The real :func:`~app.autonomous.guard.guarded_tool_call` is importable
+   from :mod:`app.autonomous.guard`; the old stub is removed from
+   :mod:`app.autonomous.nodes`.
 
 4. :data:`~app.autonomous.enums.PHASE_GRANTS` contains exactly the
-   grants specified in the M4-A2 task (pure unit test, no DB required).
+   grants specified (pure unit test, no DB required).
 
 5. A node returning ``{"error": ...}`` in LangGraph state results in
    ``status='failed'`` on the row (Critical-2 fix).
+
+6. The chokepoint invariant: every ``autonomous_session.tool_call`` audit
+   row carries a recognized ``ToolIntent`` value and a recognized outcome,
+   proving no tool reaches the audit log except via ``guarded_tool_call``.
 
 Tests run against the SAVEPOINT-rolled-back per-test session from
 ``tests/conftest.py``.
@@ -60,7 +79,15 @@ async def _make_user(db: AsyncSession) -> User:
 
 
 class _StubGateway:
-    """Minimal gateway stub — no calls expected in the M4-A2 skeleton."""
+    """Minimal gateway stub with no ``chat_completion``.
+
+    Sufficient for the manual-session happy path: with no ``skill_ref`` on the
+    session, analysis takes the no-inference-target / unstructured-fallback path
+    and never calls the gateway.  The remaining real-work paths exercised here
+    (drafting / ethics_review ``emit_finding`` + delivery ``notify``) go through
+    the chokepoint but do not touch the gateway, so this stub is enough.  Tests
+    that need a real inference response use a richer fake elsewhere.
+    """
 
 
 # ---------------------------------------------------------------------------
@@ -378,3 +405,80 @@ async def test_executor_persists_failed_status_on_state_dict_error(
     assert session.error is not None
     assert "injected state-dict error" in session.error
     assert session.completed_at is not None, "completed_at must be set on the error state-dict path"
+
+
+@pytest.mark.integration
+async def test_no_tool_call_bypasses_chokepoint(db_session: AsyncSession) -> None:
+    """Invariant: every ``tool_call`` audit row went through the chokepoint.
+
+    A full manual session emits findings (drafting + ethics_review) and notifies
+    (delivery) — each through :func:`~app.autonomous.guard.guarded_tool_call`.
+    The chokepoint is the *only* code path that writes an
+    ``autonomous_session.tool_call`` audit row, and it always stamps the row's
+    ``details`` with a ``tool`` (a :class:`ToolIntent` value) and an ``outcome``.
+
+    So if we query *all* ``tool_call`` rows for the session and every one carries
+    a recognized ``ToolIntent`` + a recognized outcome, no tool reached the audit
+    log except through the chokepoint — which is the invariant this file's name
+    promises.
+    """
+    user = await _make_user(db_session)
+    session = AutonomousSession(user_id=user.id, trigger_kind="manual")
+    db_session.add(session)
+    await db_session.flush()
+    session_id_str = str(session.id)
+
+    gateway = _StubGateway()
+
+    await run_autonomous_session(
+        db_session,
+        session_id=session.id,
+        gateway=gateway,  # type: ignore[arg-type]
+    )
+
+    rows = (
+        (
+            await db_session.execute(
+                select(AuditLog)
+                .where(AuditLog.action == "autonomous_session.tool_call")
+                .where(AuditLog.resource_id == session_id_str)
+                .order_by(AuditLog.timestamp)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    # Not vacuously true: the session must produce at least one tool_call row.
+    assert len(rows) >= 1, "expected at least one tool_call audit row for a full session"
+
+    # Recognized intents: the full ToolIntent enum (the chokepoint only ever
+    # stamps a valid ToolIntent value as details["tool"]).
+    recognized_intents = {t.value for t in ToolIntent}
+
+    # Recognized outcomes for an ``autonomous_session.tool_call`` row.  Sourced
+    # from the only call sites that write a tool_call row in
+    # app/autonomous/guard.py (grep: 'outcome=' inside guarded_tool_call):
+    #   - "tool_not_granted"  (R6 grant rejection, line ~193)
+    #   - "started"           (pre-dispatch marker, line ~225)
+    #   - result.outcome      (post-dispatch, line ~245): ToolResult.outcome
+    #     defaults to "success" and is set to "gateway_error" on the two
+    #     inference-failure paths (lines ~790/819).
+    # The cost_cap_reached / external_halt outcomes live on *other* audit
+    # actions ("cost_cap_reached" / "halted"), not on tool_call rows, so they
+    # are intentionally excluded from this set.
+    recognized_outcomes = {"started", "success", "gateway_error", "tool_not_granted"}
+
+    for row in rows:
+        details = row.details
+        assert details is not None, f"tool_call row {row.id} has no details"
+        tool = details["tool"]
+        outcome = details["outcome"]
+        assert tool in recognized_intents, (
+            f"tool_call row {row.id} carries unrecognized tool {tool!r}; "
+            f"a tool_call row not produced by the chokepoint would not match a ToolIntent"
+        )
+        assert outcome in recognized_outcomes, (
+            f"tool_call row {row.id} carries unrecognized outcome {outcome!r}; "
+            f"expected one of {sorted(recognized_outcomes)}"
+        )
