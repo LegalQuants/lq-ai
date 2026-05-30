@@ -1,10 +1,31 @@
-# Handoff — M4 real-executor-work execution (mid-stream, 11/19 done) → resume at Task 12
+# Handoff — M4 real-executor-work execution (Tasks 1–18 done) → resume at Task 19 (fresh-install acceptance)
 
 > **For:** the next Claude Code session continuing the M4 real-executor-work series on branch **`feat/lqvern-m4-autonomous`** in **`~/Code/lq-ai`** (canonical repo — NEVER `~/Desktop/lq-ai`; Bash cwd resets to `~/Desktop` between calls, so prefix every command with `cd ~/Code/lq-ai &&`).
 >
-> **Where we are:** Tasks **1–11 of 19 SHIPPED** on the branch (substrate + max_cost_usd threading + retrieve_chunks scope extension + prompts module + tolerant structured-output parser + intake_node wired + analysis_node wired). Branch HEAD `276da7a`, pushed origin + tucuxi, tree clean. **RESUME AT Task 12 (drafting_node).**
+> **Where we are (updated 2026-05-30):** Tasks **1–18 of 19 SHIPPED** + one **beyond-plan brake-receipt fix** (see UPDATE block below). Branch HEAD `f6bec54`, pushed origin + tucuxi, tree clean. Full gate green: autonomous suite **361 passed**, `ruff check api scripts` + `ruff format --check api scripts` + `mypy app` (141 files) all clean. **RESUME AT Task 19 (fresh-install re-acceptance) — DESTRUCTIVE, needs Kevin's explicit green-light for `docker compose down -v`.**
 >
 > **The contract:** the design at [`docs/LQVern/m4-real-executor-work-design.md`](m4-real-executor-work-design.md) (commit `d1293b4`) and the 19-task plan at [`docs/LQVern/m4-real-executor-work-implementation-plan.md`](m4-real-executor-work-implementation-plan.md) (commit `7da5c47`). The plan is the source — every task's full text is in that file with TDD steps + code snippets + commit messages.
+
+---
+
+## UPDATE 2026-05-30 — Tasks 12–18 SHIPPED + brake-receipt fix
+
+Executed subagent-driven (implementer → spec review → code-quality review → fix → re-review → push both remotes). Commits since the original `41558c5` handoff:
+
+| # | Task | Commit | Note |
+|---|---|---|---|
+| 12 | `drafting_node` — parse structured output + per-item guarded calls | `76d4bba` | Quality review caught a real regression (delivery read `state["findings"]` but drafting wrote only `findings_count`); fixed so drafting populates BOTH keys on every emit path. |
+| 14 | `ethics_review_node` — privilege/scope concerns finding | `321aa6f` | Light v1; combined spec+quality review (small single-node). |
+| 15 | `delivery_node` — write `completed` audit row (terminal_reason fix, §7.1) | `0c39e7d` | RED→GREEN confirmed; flush-visibility verified. |
+| 13 | gateway_error + unstructured-output complete honestly (E2E) | `ff1c43a` | Done AFTER 14/15 per the recommended reorder. Strengthened test #2 (assert gateway awaited + exact emit_finding count). |
+| 16 | R4 per-trigger live test | `09d7239` | **Surfaced a real gap** (see below). R4-proper assertions pass. |
+| — | **brake-receipt fix (beyond plan, Kevin-approved)** | `5e9f2bd` | The executor's `except AutonomousBrake` handler never called `build_receipt`, so R4/R5 **halted** sessions had `result=None` / no `terminal_reason` — contradicting design §10 and blocking Task 19's R4/R5 acceptance. Plan misjudged this (Task 15 fixed only the *completed* path). Fix: `if status == "halted": session.result = await build_receipt(session, db)` before commit. Scoped to halted only; `ToolNotGranted`/failed intentionally excluded. Un-xfailed the Task 16 receipt test → passes. |
+| 17 | refresh `test_executor_skeleton.py` + strengthen chokepoint invariant | `f6bec54` | The file had no obsolete assertions (plan's premise was stale); refreshed skeleton-era wording + added `test_no_tool_call_bypasses_chokepoint`. |
+| 18 | full pre-acceptance gate | (no code) | autonomous suite 361 passed; ruff + mypy clean. CI runs `mypy app` (NOT tests/) — 4 pre-existing `unused-ignore` warnings in test files are out of CI scope, non-blocking. |
+
+**DE to file in the M4-D2 doc batch (next free number DE-325):** harden the `build_receipt` call sites against a receipt-build failure converting a clean terminal session into a worker crash / stuck row. Both `delivery_node` (completed) and the brake handler (halted) call `build_receipt` bare; a raise in the brake handler isn't caught by the sibling `except Exception` and would crash the worker mid-job. `build_receipt` is defensive today (null-guards, Decimal try/except), so low likelihood — file as DE, don't block.
+
+**Trailer note:** the series uses `Co-Authored-By: Claude Opus 4.7 (1M context)` on every commit for branch consistency (actual session model is Opus 4.8). Keep 4.7.
 
 ---
 
