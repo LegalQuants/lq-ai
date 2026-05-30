@@ -41,6 +41,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.autonomous.audit import autonomous_audit
 from app.autonomous.enums import ToolIntent
 from app.autonomous.guard import guarded_tool_call
 from app.autonomous.phases import run_phase_transition
@@ -506,8 +507,10 @@ def make_delivery_node(
     The delivery node transitions the session to :attr:`Phase.delivery`,
     calls :func:`~app.autonomous.guard.guarded_tool_call` with
     :attr:`~app.autonomous.enums.ToolIntent.notify` to write the
-    in-app notification row, then marks the session as completed and
-    commits.
+    in-app notification row, writes the terminal
+    ``autonomous_session.completed`` audit row (so the receipt's
+    ``terminal_reason`` populates), then marks the session as completed
+    and commits.
 
     Brakes propagate to the executor's terminal handler per the
     brake-commit contract.
@@ -530,19 +533,29 @@ def make_delivery_node(
 
         # Notify the user via the chokepoint — this is the canonical tool
         # call in the delivery phase; it must not bypass the gate.
-        finding_count = len(state.get("findings") or [])
+        findings_count = state.get("findings_count", len(state.get("findings") or []))
         await guarded_tool_call(
             session,
             ToolIntent.notify,
             {
                 "title": "Autonomous session complete",
-                "body": f"Session completed with {finding_count} finding(s).",
-                "payload": {"finding_count": finding_count},
+                "body": f"Session completed with {findings_count} finding(s).",
+                "payload": {"finding_count": findings_count},
             },
             db,
             gateway,
         )
 
+        # Write the terminal 'completed' audit row BEFORE build_receipt so the
+        # receipt's terminal_reason derives from it (bug fix: 2026-05-27
+        # acceptance showed terminal_reason=None because no completed row existed).
+        await autonomous_audit(
+            db,
+            session,
+            "completed",
+            cost_total_usd=str(session.cost_total_usd or "0"),
+            findings_count=findings_count,
+        )
         session.status = "completed"
         session.completed_at = datetime.now(UTC)
         # Persist the receipt into result BEFORE the commit so the JSONB
