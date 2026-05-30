@@ -30,10 +30,16 @@ Task 11 covers the analysis-node dispatch:
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.autonomous.nodes import make_analysis_node, make_intake_node
+from app.autonomous.nodes import (
+    make_analysis_node,
+    make_drafting_node,
+    make_intake_node,
+)
 from app.autonomous.state import AutonomousSessionState
 from app.models.autonomous import AutonomousSession
 
@@ -197,3 +203,119 @@ async def test_analysis_no_target_skips_gateway(
     result = await node(state)
     assert mock_gateway.chat_completion.await_count == 0
     assert result.get("analysis_content") is None
+
+
+# ---------------------------------------------------------------------------
+# Task 12 — drafting_node structured-output parse + per-item guarded dispatch
+# ---------------------------------------------------------------------------
+
+
+def _started_tool_calls(rows: list[Any]) -> int:
+    """Count the chokepoint's per-call ``started`` audit rows.
+
+    The chokepoint writes one ``tool_call`` row with ``outcome="started"``
+    per guarded call (plus a second row with the terminal outcome). Counting
+    only the ``started`` rows yields the number of distinct guarded calls.
+    """
+    return sum(
+        1
+        for r in rows
+        if r.action == "autonomous_session.tool_call"
+        and (r.details or {}).get("outcome") == "started"
+    )
+
+
+async def _autonomous_audit_rows(db_session: AsyncSession, session_id: str) -> list[Any]:
+    from sqlalchemy import select
+
+    from app.models.audit import AuditLog
+
+    return list(
+        (
+            await db_session.execute(
+                select(AuditLog)
+                .where(AuditLog.resource_type == "autonomous_session")
+                .where(AuditLog.resource_id == session_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+@pytest.mark.integration
+async def test_drafting_dispatches_per_item_guarded_calls(
+    db_session: AsyncSession,
+    running_session_at_drafting: AutonomousSession,
+    mock_gateway: object,
+) -> None:
+    """drafting_node parses analysis_content (well-formed JSON) and dispatches
+    each finding/memory/precedent as its own guarded call."""
+    state: AutonomousSessionState = {
+        "session_id": str(running_session_at_drafting.id),
+        "analysis_content": (
+            "```json\n{"
+            '"findings": [{"title": "F1", "summary": "S1", "severity": "info", '
+            '"source_chunk_ids": []}, '
+            '{"title": "F2", "summary": "S2", "severity": "warn", "source_chunk_ids": []}], '
+            '"suggested_memories": [{"category": "preference", "content": "C", '
+            '"rationale": "R"}], '
+            '"suggested_precedents": [{"pattern_kind": "clause", "summary": "P"}], '
+            '"privilege_concerns": [], "scope_concerns": []}\n```'
+        ),
+        "analysis_outcome": "success",
+    }
+    node = make_drafting_node(db_session, mock_gateway)
+    result = await node(state)
+
+    rows = await _autonomous_audit_rows(db_session, str(running_session_at_drafting.id))
+    # Two findings + one memory + one precedent = 4 distinct guarded calls.
+    assert _started_tool_calls(rows) >= 4
+    assert result["findings_count"] == 2
+    # The structured path returns the emitted finding dicts in ``findings``
+    # (memories/precedents excluded) and ``findings_count`` is its length —
+    # the delivery node reads ``state["findings"]`` so both must be coherent.
+    assert isinstance(result["findings"], list)
+    assert len(result["findings"]) == result["findings_count"] == 2
+
+
+@pytest.mark.integration
+async def test_drafting_unstructured_emits_single_fallback_finding(
+    db_session: AsyncSession,
+    running_session_at_drafting: AutonomousSession,
+    mock_gateway: object,
+) -> None:
+    """Plain prose (no JSON) → exactly ONE emit_finding carrying the raw
+    content as the fallback, findings_count == 1."""
+    state: AutonomousSessionState = {
+        "session_id": str(running_session_at_drafting.id),
+        "analysis_content": "Just some prose with no structured JSON block at all.",
+        "analysis_outcome": "success",
+    }
+    node = make_drafting_node(db_session, mock_gateway)
+    result = await node(state)
+
+    rows = await _autonomous_audit_rows(db_session, str(running_session_at_drafting.id))
+    assert _started_tool_calls(rows) == 1
+    assert result["findings_count"] == 1
+
+
+@pytest.mark.integration
+async def test_drafting_gateway_error_emits_single_explanatory_finding(
+    db_session: AsyncSession,
+    running_session_at_drafting: AutonomousSession,
+    mock_gateway: object,
+) -> None:
+    """analysis_outcome=gateway_error → exactly ONE emit_finding (severity
+    warn), findings_count == 1, session continues honestly."""
+    state: AutonomousSessionState = {
+        "session_id": str(running_session_at_drafting.id),
+        "analysis_content": None,
+        "analysis_outcome": "gateway_error",
+    }
+    node = make_drafting_node(db_session, mock_gateway)
+    result = await node(state)
+
+    rows = await _autonomous_audit_rows(db_session, str(running_session_at_drafting.id))
+    assert _started_tool_calls(rows) == 1
+    assert result["findings_count"] == 1

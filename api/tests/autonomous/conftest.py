@@ -595,6 +595,18 @@ async def running_watch_session_at_analysis(
     )
 
 
+@pytest_asyncio.fixture
+async def running_session_at_drafting(db_session: AsyncSession) -> AutonomousSession:
+    """Running session ready for the drafting node.
+
+    ``current_phase`` is left at ``"intake"``; the drafting node runs the
+    transition to ``"drafting"`` itself (``run_phase_transition`` does no
+    ordering validation), then dispatches the per-item guarded calls.
+    """
+    user = await _make_optedin_user(db_session)
+    return await _make_running_session(db_session, user=user, trigger_kind="watch", params={})
+
+
 @pytest.fixture
 def mock_gateway_structured_response() -> MagicMock:
     """Gateway double whose ``chat_completion`` returns a structured-output stub.

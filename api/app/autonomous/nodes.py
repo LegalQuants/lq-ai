@@ -6,8 +6,9 @@ Five phase nodes run sequentially:
    when ``kb_id`` is provided in state.
 2. :func:`make_analysis_node` — analysis phase: evaluate the
    incoming trigger against retrieved chunks, run skills / playbooks.
-3. :func:`make_drafting_node` — drafting phase: emit an orientation
-   finding via the chokepoint.
+3. :func:`make_drafting_node` — drafting phase: parse the analysis
+   node's structured output and dispatch per-item findings / memories /
+   precedents via the chokepoint.
 4. :func:`make_ethics_review_node` — ethics-review phase: validate
    the proposed output for privilege sensitivity, scope creep, etc.
 5. :func:`make_delivery_node` — delivery phase: notify the user /
@@ -46,6 +47,7 @@ from app.autonomous.phases import run_phase_transition
 from app.autonomous.prompts import assemble_analysis_messages
 from app.autonomous.receipt import build_receipt
 from app.autonomous.state import AutonomousSessionState
+from app.autonomous.structured_output import parse_structured_output
 from app.config import get_settings
 from app.models.autonomous import AutonomousSession
 from app.schemas.autonomous import Phase
@@ -255,10 +257,36 @@ def make_drafting_node(
 ) -> Callable[[AutonomousSessionState], Awaitable[dict[str, Any]]]:
     """Build the drafting-phase node bound to a DB session.
 
-    The drafting node transitions the session to :attr:`Phase.drafting`
-    and emits an orientation finding via
-    :func:`~app.autonomous.guard.guarded_tool_call` with
-    :attr:`~app.autonomous.enums.ToolIntent.emit_finding`.
+    The drafting node transitions the session to :attr:`Phase.drafting`,
+    then turns the analysis node's raw ``analysis_content`` into a set of
+    durable proposals — each dispatched as its OWN
+    :func:`~app.autonomous.guard.guarded_tool_call` so every finding,
+    memory, and precedent is independently brake-checked and audited.
+
+    Four input cases, in priority order:
+
+    1. ``analysis_outcome == "gateway_error"`` — the analysis inference
+       call failed at the gateway. Emit ONE explanatory finding
+       (severity ``warn``) and continue honestly; no findings/memories/
+       precedents are fabricated from a failed call.
+    2. ``first_tick_no_baseline`` — the schedule's first cron tick had no
+       baseline to analyze. Emit ONE ``info`` "baseline set" finding.
+    3. Unparseable ``analysis_content`` — the tolerant parser
+       (:func:`~app.autonomous.structured_output.parse_structured_output`)
+       returns ``is_structured=False``. Emit ONE ``info`` finding carrying
+       the raw content (truncated) so nothing is silently dropped.
+    4. Structured output — dispatch each parsed finding via
+       :attr:`~app.autonomous.enums.ToolIntent.emit_finding`, each
+       suggested memory via
+       :attr:`~app.autonomous.enums.ToolIntent.propose_memory`, and each
+       suggested precedent via
+       :attr:`~app.autonomous.enums.ToolIntent.propose_precedent`. The
+       parser's ``privilege_concerns`` / ``scope_concerns`` are forwarded
+       in the returned state for the ethics-review node.
+
+    Every return path emits both ``findings`` (the list of dispatched
+    finding dicts) and ``findings_count`` (its length) — ``findings_count``
+    counts findings ONLY, never memories or precedents.
 
     Brakes propagate to the executor's terminal handler per the
     brake-commit contract.
@@ -280,21 +308,123 @@ def make_drafting_node(
         await run_phase_transition(session, Phase.drafting, db)
         await db.flush()
 
-        # Emit an orientation finding through the chokepoint so the
-        # drafting phase always exercises the chokepoint path — no tool
-        # call bypasses the gate.
-        finding_result = await guarded_tool_call(
-            session,
-            ToolIntent.emit_finding,
-            {"finding": {"phase": "drafting", "status": "oriented"}},
-            db,
-            gateway,
-        )
-        findings = list(state.get("findings") or [])
-        if finding_result.data is not None:
-            findings.append(finding_result.data)
+        # Case 1 — honest gateway_error path: emit ONE explanatory finding.
+        if state.get("analysis_outcome") == "gateway_error":
+            finding = {
+                "title": "Autonomous analysis failed at the gateway",
+                "summary": (
+                    "The analysis inference call returned a gateway error. "
+                    "No findings, memories, or precedents were produced."
+                ),
+                "severity": "warn",
+            }
+            await guarded_tool_call(
+                session,
+                ToolIntent.emit_finding,
+                {"finding": finding},
+                db,
+                gateway,
+            )
+            return {
+                "current_phase": str(Phase.drafting),
+                "findings": [finding],
+                "findings_count": 1,
+            }
 
-        return {"current_phase": str(Phase.drafting), "findings": findings}
+        # Case 2 — schedule first tick: emit ONE baseline finding.
+        if state.get("first_tick_no_baseline"):
+            finding = {
+                "title": "First scheduled tick — baseline set",
+                "summary": (
+                    "No documents attached before this run; "
+                    "the next run will analyze what arrives in between."
+                ),
+                "severity": "info",
+            }
+            await guarded_tool_call(
+                session,
+                ToolIntent.emit_finding,
+                {"finding": finding},
+                db,
+                gateway,
+            )
+            return {
+                "current_phase": str(Phase.drafting),
+                "findings": [finding],
+                "findings_count": 1,
+            }
+
+        parsed = parse_structured_output(state.get("analysis_content"))
+
+        # Case 3 — tolerant fallback: ONE finding carrying the raw content.
+        if not parsed.is_structured:
+            finding = {
+                "title": "Unstructured autonomous output",
+                "summary": parsed.raw_content[:8000] if parsed.raw_content else "(empty)",
+                "severity": "info",
+            }
+            await guarded_tool_call(
+                session,
+                ToolIntent.emit_finding,
+                {"finding": finding},
+                db,
+                gateway,
+            )
+            return {
+                "current_phase": str(Phase.drafting),
+                "findings": [finding],
+                "findings_count": 1,
+            }
+
+        # Case 4 — structured: dispatch each item as its own guarded call.
+        findings: list[dict[str, Any]] = []
+        for finding in parsed.findings:
+            await guarded_tool_call(
+                session,
+                ToolIntent.emit_finding,
+                {"finding": finding},
+                db,
+                gateway,
+            )
+            findings.append(finding)
+
+        for memory in parsed.suggested_memories:
+            await guarded_tool_call(
+                session,
+                ToolIntent.propose_memory,
+                {
+                    "category": memory.get("category", "general"),
+                    "content": memory.get("content", ""),
+                    # rationale is accepted but ignored by the handler
+                    # (AutonomousMemory has no rationale column); passed per
+                    # the M4-D2 design — harmless.
+                    "rationale": memory.get("rationale"),
+                },
+                db,
+                gateway,
+            )
+
+        for precedent in parsed.suggested_precedents:
+            await guarded_tool_call(
+                session,
+                ToolIntent.propose_precedent,
+                {
+                    "pattern_kind": precedent.get("pattern_kind", "general"),
+                    "summary": precedent.get("summary", ""),
+                },
+                db,
+                gateway,
+            )
+
+        # ``findings_count`` counts findings ONLY — memories and precedents
+        # are deliberately excluded (they are proposals, not findings).
+        return {
+            "current_phase": str(Phase.drafting),
+            "findings": findings,
+            "findings_count": len(findings),
+            "privilege_concerns": parsed.privilege_concerns,
+            "scope_concerns": parsed.scope_concerns,
+        }
 
     return drafting_node
 

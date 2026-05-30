@@ -78,3 +78,12 @@ class AutonomousSessionState(TypedDict, total=False):
     # for the inference call; absent when no inference call was made.
     analysis_content: str | None
     analysis_outcome: str
+
+    # M4 Task 12: drafting-phase output. ``findings_count`` is the number of
+    # findings the drafting node dispatched through the chokepoint (one per
+    # parsed finding, or 1 for the fallback / gateway-error / first-tick
+    # single-finding paths). ``privilege_concerns`` / ``scope_concerns`` carry
+    # the parser's flagged concerns forward to the ethics-review node.
+    findings_count: int
+    privilege_concerns: list[str]
+    scope_concerns: list[str]
