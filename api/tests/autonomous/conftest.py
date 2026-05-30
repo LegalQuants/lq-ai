@@ -607,6 +607,13 @@ async def running_session_at_drafting(db_session: AsyncSession) -> AutonomousSes
     return await _make_running_session(db_session, user=user, trigger_kind="watch", params={})
 
 
+@pytest_asyncio.fixture
+async def running_session_at_ethics(db_session: AsyncSession) -> AutonomousSession:
+    """Running session ready for the ethics-review node."""
+    user = await _make_optedin_user(db_session)
+    return await _make_running_session(db_session, user=user, trigger_kind="watch", params={})
+
+
 @pytest.fixture
 def mock_gateway_structured_response() -> MagicMock:
     """Gateway double whose ``chat_completion`` returns a structured-output stub.

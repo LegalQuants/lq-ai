@@ -38,6 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.autonomous.nodes import (
     make_analysis_node,
     make_drafting_node,
+    make_ethics_review_node,
     make_intake_node,
 )
 from app.autonomous.state import AutonomousSessionState
@@ -319,3 +320,59 @@ async def test_drafting_gateway_error_emits_single_explanatory_finding(
     rows = await _autonomous_audit_rows(db_session, str(running_session_at_drafting.id))
     assert _started_tool_calls(rows) == 1
     assert result["findings_count"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Task 14 — ethics_review_node privilege/scope concerns finding
+# ---------------------------------------------------------------------------
+
+
+def _emit_finding_success_rows(rows: list[Any]) -> list[Any]:
+    """Terminal-success ``emit_finding`` tool_call rows."""
+    return [
+        r
+        for r in rows
+        if r.action == "autonomous_session.tool_call"
+        and (r.details or {}).get("tool") == "emit_finding"
+        and (r.details or {}).get("outcome") == "success"
+    ]
+
+
+@pytest.mark.integration
+async def test_ethics_review_emits_privilege_and_scope_finding(
+    db_session: AsyncSession,
+    running_session_at_ethics: AutonomousSession,
+    mock_gateway: object,
+) -> None:
+    """ethics_review_node emits ONE finding summarizing privilege/scope concerns."""
+    state: AutonomousSessionState = {
+        "session_id": str(running_session_at_ethics.id),
+        "privilege_concerns": ["mention of attorney-client communication on p.2"],
+        "scope_concerns": [],
+    }
+    node = make_ethics_review_node(db_session, mock_gateway)
+    await node(state)
+
+    rows = await _autonomous_audit_rows(db_session, str(running_session_at_ethics.id))
+    emit_findings = _emit_finding_success_rows(rows)
+    assert len(emit_findings) >= 1
+
+
+@pytest.mark.integration
+async def test_ethics_review_empty_concerns_emits_single_finding(
+    db_session: AsyncSession,
+    running_session_at_ethics: AutonomousSession,
+    mock_gateway: object,
+) -> None:
+    """Both concern lists empty → still emits exactly ONE 'no concerns' finding."""
+    state: AutonomousSessionState = {
+        "session_id": str(running_session_at_ethics.id),
+        "privilege_concerns": [],
+        "scope_concerns": [],
+    }
+    node = make_ethics_review_node(db_session, mock_gateway)
+    await node(state)
+
+    rows = await _autonomous_audit_rows(db_session, str(running_session_at_ethics.id))
+    emit_findings = _emit_finding_success_rows(rows)
+    assert len(emit_findings) == 1

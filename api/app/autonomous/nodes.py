@@ -436,11 +436,16 @@ def make_ethics_review_node(
     """Build the ethics-review-phase node bound to a DB session.
 
     The ethics-review node transitions the session to
-    :attr:`Phase.ethics_review`. The only tool intent permitted in this
-    phase is ``emit_finding``.
+    :attr:`Phase.ethics_review`, then emits ONE guarded
+    :attr:`~app.autonomous.enums.ToolIntent.emit_finding` summarizing the
+    ``privilege_concerns`` / ``scope_concerns`` the drafting node (Task 12)
+    forwarded from the structured-output JSON. When both lists are empty it
+    emits a single ``info`` "no concerns flagged" finding. A dedicated
+    ethics LLM gate is a future enhancement (DE); ``emit_finding`` is the
+    only tool intent permitted in this phase.
 
-    In the current skeleton no tools are called; the node advances the
-    phase machine and records the audit row.
+    Brakes propagate to the executor's terminal handler per the
+    brake-commit contract.
     """
 
     async def ethics_review_node(state: AutonomousSessionState) -> dict[str, Any]:
@@ -458,6 +463,34 @@ def make_ethics_review_node(
         )
         await run_phase_transition(session, Phase.ethics_review, db)
         await db.flush()
+
+        privilege = state.get("privilege_concerns") or []
+        scope = state.get("scope_concerns") or []
+
+        if privilege or scope:
+            summary_lines: list[str] = []
+            if privilege:
+                summary_lines.append(f"Privilege concerns ({len(privilege)}):")
+                summary_lines.extend(f"  - {c}" for c in privilege)
+            if scope:
+                summary_lines.append(f"Scope concerns ({len(scope)}):")
+                summary_lines.extend(f"  - {c}" for c in scope)
+            title = "Ethics-review concerns flagged"
+            summary = "\n".join(summary_lines)
+        else:
+            title = "Ethics review: no concerns flagged"
+            summary = (
+                "The analysis output did not surface privilege or scope concerns. "
+                "A dedicated ethics LLM gate is a future enhancement (DE)."
+            )
+
+        await guarded_tool_call(
+            session,
+            ToolIntent.emit_finding,
+            {"finding": {"title": title, "summary": summary, "severity": "info"}},
+            db,
+            gateway,
+        )
 
         return {"current_phase": str(Phase.ethics_review)}
 
