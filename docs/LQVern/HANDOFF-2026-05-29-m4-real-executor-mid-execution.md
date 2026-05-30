@@ -29,6 +29,37 @@ Executed subagent-driven (implementer → spec review → code-quality review �
 
 ---
 
+## UPDATE 2026-05-30 (later) — Task 19 fresh-install acceptance PASSED ✅
+
+Destructive `docker compose down -v && up --build` (Kevin green-lit). Migrations ran cleanly **0001 → 0045** via the api entrypoint; all containers healthy; admin bootstrapped + password rotated to `AcceptTest12345!`; opted in; created KB `9003dbc6…` + watch (NDA-Mutual `726cb3dd…`, cap $1.00); upload-then-attach NDAs (correct flow: POST /files → poll `ingestion_status=ready` → POST /knowledge-bases/{kb}/files `{"file_id":…}`).
+
+**Verified live (DB + receipt ground truth):**
+
+| session | trigger | status | cost | terminal_reason |
+|---|---|---|---|---|
+| `09543815` | watch | completed | $0.0050 | completed |
+| `1e49dc62` | watch | completed | $0.0050 | completed |
+| `3ae382df` | watch (cap 1.00) | completed | $0.0050 | completed |
+| `4554cdd9` | watch (cap 0.001) | **halted** | $0.0000 | **cost_cap_reached** |
+
+- **Real executor work end-to-end:** phase walk intake→analysis→drafting→ethics_review→delivery; a real `run_playbook` gateway call (cost $0.005, outcome success); **9 `emit_finding`** + **`propose_memory` ×N** + **`propose_precedent` ×N** + `notify`, each independently brake-checked through the chokepoint; receipt `terminal_reason='completed'`, cost > 0.
+- **R4 live (Step 7):** second watch cap $0.001 → session `4554cdd9` halted, `cost_cap_reached=true`, **receipt `terminal_reason='cost_cap_reached'`** — this is the LIVE PROOF of the beyond-plan brake-receipt fix `5e9f2bd` (the field was `None` before it).
+- **Durable analytical work product** (the attorney-reviewable output): memory proposals (survival-of-confidentiality flags, permitted-disclosure expansion, a `client-preference` learning for "Cypress Holdings… two-year terms, Delaware law", and a `playbook_selection` proposal correctly flagging that an MSA should NOT get the NDA-Mutual playbook end-to-end — honest self-correction, not hallucinated NDA findings); precedent entries (survival_coextensive_with_term, permissive_irreparable_harm, narrow-permitted-disclosures, msa_confidentiality_section). Notifications written (in-app).
+
+**Step 8 (R5 live halt):** SKIPPED — timing-sensitive (happy path runs ~40s); already test-covered (`test_brakes.py`). Optional per the plan.
+
+**Findings surfaced (file in the M4-D2 doc batch):**
+- **DE-325** (already noted): harden `build_receipt` call sites against a build failure crashing the worker.
+- **DE-326 (new):** fresh-install worker-migration race. The **arq-worker** (and likely ingest-worker) entrypoint runs `alembic upgrade head` on boot, but the arq image doesn't ship `skills/`, so migration **0032** (seed builtin NDA playbooks, which reads `/skills/playbooks/nda/playbook.yaml`) raises `RuntimeError` in the worker. It self-recovered (the **api** owns migrations and reached 0045; the worker retried until head), but it logs scary tracebacks on every fresh boot. Fix options: only the api runs migrations (set `LQ_AI_SKIP_MIGRATIONS=1` on the workers), or mount `skills/` into the worker images. Non-blocking but a fresh-install polish item.
+- **Process note (not a code bug):** a runaway background `docker compose logs` process corrupted/interleaved terminal output mid-acceptance, producing phantom "cost=0 / no run_playbook" readings that triggered a false-alarm investigation. Ground-truth DB queries (after killing the log stream) confirmed every real session worked. Lesson: for live acceptance, query the DB/receipt directly; don't stream `docker compose logs` unbounded in the background.
+
+**REMAINING for v0.4.0 tag:**
+1. **Attorney legal-substance walk-through — Kevin owns** (per [[feedback_no_maintainer_legal_review]]). Inputs ready: the memory/precedent content above + receipts on KB `9003dbc6…`, admin `admin@lq.ai` / `AcceptTest12345!`, dashboard `localhost:3000`.
+2. **M4-D2 docs:** boundary-registers R4/R5/R6 → SHIPPED (with the live citations above), PRD §3.10 SHIPPED, new `docs/autonomous-layer.md`, HONEST-STATE sweep M3+M4, grep M4 markers, file DE-325 + DE-326 in PRD §9.
+3. Then tag **v0.4.0**.
+
+---
+
 ## Why this exists (the pivot, in one paragraph)
 
 Per the 2026-05-27 destructive fresh-install acceptance, the M4 autonomous **substrate + R4/R5/R6 brakes + the four primitives' lifecycle + dashboard + Learn viz** are all shipped, but the **executor itself is an intended walking skeleton** (analysis_node docstring literally says *"In the current skeleton no inference tools are called"*; drafting emitted a hardcoded `{phase:drafting,status:oriented}` finding; no node ever called `run_skill`/`run_playbook`/`propose_memory`/`propose_precedent`). Kevin decided: **wire real in-loop agentic work before tagging v0.4.0**, AND fix both minor bugs found (terminal_reason=None on completed sessions; watch-trigger live verify). The good news: the chokepoint's `_handle_gateway_inference`/`_handle_retrieve_chunks`/`propose_memory`/`propose_precedent`/`notify`/`emit_finding` handlers are **fully implemented** (real anonymized gateway calls, real DB writes). The 19 tasks are bounded **node-orchestration work** + 2 small enabling changes + 2 bug fixes.
