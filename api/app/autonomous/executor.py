@@ -42,6 +42,7 @@ from app.autonomous.nodes import (
     make_ethics_review_node,
     make_intake_node,
 )
+from app.autonomous.receipt import build_receipt
 from app.autonomous.state import AutonomousSessionState
 from app.clients.gateway import GatewayClient
 from app.errors import AutonomousBrake, ToolNotGranted
@@ -163,6 +164,14 @@ async def run_autonomous_session(
         session.status = status
         session.error = f"{type(brake).__name__}: {brake}"[:2000]
         session.completed_at = datetime.now(UTC)
+        # R4/R5 halted sessions get an honest receipt so the dashboard +
+        # API surface terminal_reason (cost_cap_reached / external_halt).
+        # The chokepoint already flushed the terminal audit row before
+        # raising, so build_receipt derives terminal_reason correctly.
+        # ToolNotGranted (status="failed") is intentionally excluded — a
+        # failed-session receipt is a separate, deferred decision.
+        if status == "halted":
+            session.result = await build_receipt(session, db)
         await db.commit()
 
     except Exception as exc:

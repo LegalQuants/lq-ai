@@ -138,23 +138,6 @@ async def test_r4_trips_on_low_per_trigger_max_cost_usd(
 
 
 @pytest.mark.integration
-@pytest.mark.xfail(
-    reason=(
-        "Production gap: the executor's `except AutonomousBrake` handler "
-        "(executor.py) never calls build_receipt, so a brake-halted session "
-        "leaves session.result=None. build_receipt is only invoked by "
-        "delivery_node (the 'completed' path), which a cost-cap halt never "
-        "reaches. The R4 chain itself works (see "
-        "test_r4_trips_on_low_per_trigger_max_cost_usd: cost_cap_reached + "
-        "halted both latch). The design (m4-real-executor-work-design.md §10, "
-        "'Live R4 demo') INTENDS a brake-halted receipt with "
-        "terminal_reason='cost_cap_reached', but no implementation task wires "
-        "build_receipt into the brake path. This xfail pins that gap: when the "
-        "executor builds a receipt on brake halt, it flips to xpass. PURE-TEST "
-        "task 16 may not touch production, so the fix is deferred and reported."
-    ),
-    strict=True,
-)
 async def test_r4_halt_populates_receipt_terminal_reason(
     db_session: AsyncSession,
     kb_with_one_indexed_file: KbOneFile,
@@ -163,9 +146,10 @@ async def test_r4_halt_populates_receipt_terminal_reason(
     """A cost-cap-halted session's receipt should carry
     terminal_reason='cost_cap_reached'.
 
-    XFAIL (strict) against current production: the executor does not build a
-    receipt on the brake path, so session.result stays None. Documents the
-    intended behavior from design §10 and signals when the gap closes.
+    The executor's `except AutonomousBrake` handler now calls build_receipt on
+    the halted path (the chokepoint already flushed the terminal audit row, so
+    terminal_reason derives correctly). This pins design §10's intended
+    brake-halted receipt behavior. The gap documented at Task 16 is now closed.
     """
     kb = kb_with_one_indexed_file
     opted_in_user = await _make_opted_in_user(db_session)
