@@ -518,10 +518,10 @@ const NODES = [
   {
     id: 'postgres', layer: 'data', label: 'Postgres', sub: 'pgvector/pgvector:pg16 · :5432',
     x: 280, y: 440, w: 170, h: 56,
-    desc: 'Primary persistence: chats, messages, projects, skills, user_skills, knowledge_bases, document_chunks (with embeddings via pgvector), audit_log, routing_log, saved_prompts. The M4 Autonomous Layer adds five tables here — autonomous_sessions, autonomous_schedules, autonomous_watches, autonomous_memory, precedent_entries — so per-user memory, precedents, and session receipts never leave the deployment.',
+    desc: 'Primary persistence: chats, messages, projects, skills, user_skills, knowledge_bases, document_chunks (with embeddings via pgvector), audit_log, routing_log, saved_prompts. The M4 Autonomous Layer adds seven tables here — autonomous_sessions, autonomous_schedules, autonomous_watches, autonomous_memory, precedent_entries, autonomous_notifications, project_context_proposals — so per-user memory, precedents, and session receipts never leave the deployment.',
     role: 'Data', roleColor: 'var(--data)',
     files: ['api/alembic/versions/', 'api/app/db/'],
-    meta: { container: 'lq-ai-postgres-1', port: '5432', extensions: 'pgvector', migrations: '0001–0023', m4_tables: 'autonomous_sessions, autonomous_schedules, autonomous_watches, autonomous_memory, precedent_entries' },
+    meta: { container: 'lq-ai-postgres-1', port: '5432', extensions: 'pgvector', migrations: '0001–0045', m4_tables: 'autonomous_sessions, autonomous_schedules, autonomous_watches, autonomous_memory, precedent_entries, autonomous_notifications, project_context_proposals' },
   },
   {
     id: 'redis', layer: 'data', label: 'Redis', sub: 'redis:7-alpine · :6379',

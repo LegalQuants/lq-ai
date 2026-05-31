@@ -314,7 +314,7 @@
             <div class="caveat-box" style="margin-top:12px;">
               <div class="caveat-title">Not in the per-PR CI matrix — verify these yourself</div>
               <ul>
-                <li><strong>Cypress E2E</strong> (<code>web/cypress/</code>, 16 specs) — the Web job runs svelte-check + Vitest only; Cypress runs against a deployed stack, not in the unit CI job.</li>
+                <li><strong>Cypress E2E</strong> (<code>web/cypress/</code>, 17 specs) — the Web job runs svelte-check + Vitest only; Cypress runs against a deployed stack, not in the unit CI job.</li>
                 <li><strong>Repo-root <code>tests/</code></strong> (cross-cutting, e.g. <code>test_observability.py</code>, <code>test_error_code_contract.py</code>) — CI runs <code>api/</code>, <code>gateway/</code>, and <code>web/</code> only. Run root tests with <code>api/.venv/bin/python -m pytest tests/ -q</code>.</li>
                 <li><strong>Coverage gate</strong> — the 80% (api) / 90% (gateway) targets are tracked but not yet build-failing in CI (PRD §6, on the engineering-discipline roadmap).</li>
                 <li><strong><code>provider</code>-marked tests</strong> — hit a real LLM; require an API key, so they're skipped in CI. Run them locally with a key + <code>-m provider</code>.</li>
@@ -457,7 +457,7 @@ const CHANGE_TYPES = [
     ],
     tests: [
       { name: "Vitest (unit)", req: true, note: "Runs on the host against the source tree — no container rebuild needed.", cmd: "cd web && npm run test:frontend -- --run" },
-      { name: "Cypress E2E", req: false, note: "LQ.AI specs are prefixed wave-*. Run against a deployed stack — NOT in the per-PR CI job.", cmd: "cd web && npx cypress run" }
+      { name: "Cypress E2E", req: false, note: "Many LQ.AI specs are prefixed wave-* (others by milestone, e.g. m3-…). Run against a deployed stack — NOT in the per-PR CI job.", cmd: "cd web && npx cypress run" }
     ],
     docs: [ "Use the design-system primitives; match OpenWebUI conventions for shared components." ],
     process: [],
@@ -516,10 +516,10 @@ const MARKERS = [
 ];
 
 const COUNTS = [
-  { num: "115", label: "api pytest files" },
+  { num: "144", label: "api pytest files" },
   { num: "41", label: "gateway pytest files" },
-  { num: "66", label: "vitest specs" },
-  { num: "16", label: "cypress specs" }
+  { num: "71", label: "vitest specs" },
+  { num: "17", label: "cypress specs" }
 ];
 
 let activeId = "api-endpoint";

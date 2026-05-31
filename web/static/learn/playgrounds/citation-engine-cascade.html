@@ -22,9 +22,9 @@
     --partial: #fcd34d;
     --partial-bg: rgba(252,211,77,0.08);
     --partial-border: rgba(252,211,77,0.3);
-    --unverified: #f87171;
-    --unverified-bg: rgba(248,113,113,0.08);
-    --unverified-border: rgba(248,113,113,0.3);
+    --unverified: #6b7280;
+    --unverified-bg: rgba(107,114,128,0.08);
+    --unverified-border: rgba(107,114,128,0.3);
     --pending: #5a6578;
     --pending-bg: rgba(90,101,120,0.08);
     --pending-border: rgba(90,101,120,0.25);
@@ -168,7 +168,7 @@
   }
   .stage.verified .stage-status { color: var(--verified); border-color: var(--verified-border); background: rgba(134,239,172,0.05); }
   .stage.partial .stage-status { color: var(--partial); border-color: var(--partial-border); background: rgba(252,211,77,0.05); }
-  .stage.missed .stage-status { color: var(--unverified); border-color: var(--unverified-border); background: rgba(248,113,113,0.05); }
+  .stage.missed .stage-status { color: var(--unverified); border-color: var(--unverified-border); background: rgba(107,114,128,0.05); }
 
   .result {
     margin-top: 20px; max-width: 720px; margin-left: auto; margin-right: auto;
@@ -210,6 +210,7 @@
   .ui-state .chip.green { background: var(--verified-bg); color: var(--verified); border: 1px solid var(--verified-border); }
   .ui-state .chip.yellow { background: var(--partial-bg); color: var(--partial); border: 1px solid var(--partial-border); }
   .ui-state .chip.red { background: var(--unverified-bg); color: var(--unverified); border: 1px solid var(--unverified-border); }
+  .ui-state .chip.grey { background: var(--unverified-bg); color: var(--unverified); border: 1px solid var(--unverified-border); }
   .ui-state .quote { font-style: italic; color: var(--text); }
   .ui-state .quote.dim { color: var(--text-faint); text-decoration: line-through dotted; }
 
@@ -562,7 +563,7 @@ function render() {
   let uiState, uiChip, uiNote;
   if (!winning) {
     uiState = "unverified";
-    uiChip = `<span class="chip red">unverified</span>`;
+    uiChip = `<span class="chip grey">unverified</span>`;
     uiNote = `Citation rendered as <span class="quote dim">${escapeHtml(quote)}</span> — greyed text + [unverified] marker. The model emitted a quote that the cascade could not match against any source.`;
   } else if (idx <= 1) {
     uiState = "verified (exact/tolerant)";

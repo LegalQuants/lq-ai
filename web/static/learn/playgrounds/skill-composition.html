@@ -453,7 +453,7 @@
       <label class="toggle-row" id="toggle-org-profile">
         <input type="checkbox" id="chk-org-profile">
         <span class="label">Include Organization Profile (singleton)</span>
-        <span class="badge badge-m2">M2</span>
+        <span class="badge badge-m2">M1</span>
       </label>
 
       <h2>Skill ordering</h2>
@@ -694,7 +694,7 @@ const ORG_PROFILE_PLACEHOLDER = `# Organization Profile
 
 This section is populated by the deployment's Organization Profile — a singleton skill set by the operator at the deployment level that provides organization-wide voice, jurisdiction defaults, and institutional context for all downstream skills.
 
-The Organization Profile shipped in M2 and is active — an operator-configured singleton. This demo shows it unconfigured (the placeholder above).`;
+The Organization Profile shipped in M1 and is active — an operator-configured singleton. This demo shows it unconfigured (the placeholder above).`;
 
 const USER_SKILL_CONTENT = `# Skill: company-style-guide (User skill)
 [Hypothetical user-authored skill — illustrating how user skills compose alongside built-in skills]
@@ -919,12 +919,12 @@ function renderPrompt() {
 
     const noteSpan = document.createElement('div');
     noteSpan.style.cssText = 'padding: 4px 14px 6px; font-size: 10px; color: var(--providers); font-family: -apple-system, sans-serif; background: var(--prompt-bg);';
-    noteSpan.textContent = 'Organization Profile — shipped in M2; an operator-configured singleton. Shown here as an unconfigured placeholder.';
+    noteSpan.textContent = 'Organization Profile — shipped in M1; an operator-configured singleton. Shown here as an unconfigured placeholder.';
     container.appendChild(noteSpan);
 
     const { element: orgEl, bodyText: orgText } = makeSection({
       label: '## Organization Profile',
-      badgeText: 'Org · M2',
+      badgeText: 'Org · M1',
       badgeClass: 'badge-org',
       body: ORG_PROFILE_PLACEHOLDER,
       extraClass: 'org-profile',
@@ -1097,14 +1097,14 @@ function renderOutput() {
     describeHtml += `<p style="margin-top:8px"><strong>Transparency:</strong> Every built-in skill body is open-source. Click any GitHub link in the "Verify in source" tab to read exactly what the skill instructs the model to do. If you don't like what a skill does, you can fork it — the full corpus is at <a class="file" href="https://github.com/LegalQuants/lq-ai/tree/main/skills" target="_blank" rel="noopener">github.com/LegalQuants/lq-ai/tree/main/skills</a> and the authoring guide at <a class="file" href="${REPO}docs/skill-authoring-guide.md" target="_blank" rel="noopener">docs/skill-authoring-guide.md</a>.</p>`;
 
     if (state.includeOrgProfile) {
-      describeHtml += `<p style="margin-top:8px;padding:8px;border-left:2px solid var(--providers);background:rgba(253,164,175,0.06)"><strong>Organization Profile note:</strong> This is an M2 feature, active in the current deployment. The Organization Profile is a singleton skill set by the operator at the deployment level — it provides org-wide voice, default jurisdiction, and institutional context that shapes every downstream skill. It is the first section of the assembled prompt, rendered before any attached skills. <a class="file" href="${REPO}docs/PRD.md" target="_blank" rel="noopener">PRD §3.12</a></p>`;
+      describeHtml += `<p style="margin-top:8px;padding:8px;border-left:2px solid var(--providers);background:rgba(253,164,175,0.06)"><strong>Organization Profile note:</strong> This is an M1 feature, active in the current deployment. The Organization Profile is a singleton skill set by the operator at the deployment level — it provides org-wide voice, default jurisdiction, and institutional context that shapes every downstream skill. It is the first section of the assembled prompt, rendered before any attached skills. <a class="file" href="${REPO}docs/PRD.md" target="_blank" rel="noopener">PRD §3.12</a></p>`;
     }
 
     if (state.includeUserSkill) {
       describeHtml += `<p style="margin-top:8px"><strong>User skills</strong> are stored in the <code style="font-family:ui-monospace,monospace;font-size:11px;color:var(--accent)">user_skills</code> table (see <a class="file" href="${REPO}api/app/api/user_skills.py" target="_blank" rel="noopener">api/app/api/user_skills.py</a>). They compose into the system message alongside built-in skills in caller-supplied order. The assembler treats them identically to built-in skills — same separator, same <code style="font-family:ui-monospace,monospace;font-size:11px;color:var(--accent)">{{var}}</code> substitution, same reference-file injection.</p>`;
     }
 
-    describeHtml += `<p style="margin-top:8px;color:var(--text-faint);font-size:11px">Assembly implemented in <a class="file" href="${REPO}gateway/app/skills/assembler.py" target="_blank" rel="noopener">gateway/app/skills/assembler.py</a> — <code style="font-family:ui-monospace,monospace;color:var(--text-dim)">assemble_skill_prompt()</code>. Skills concatenate with <code style="font-family:ui-monospace,monospace;color:var(--text-dim)">\\n\\n---\\n\\n</code> separators; input variables substituted via <code style="font-family:ui-monospace,monospace;color:var(--text-dim)">{{name}}</code> regex per ADR 0006.</p>`;
+    describeHtml += `<p style="margin-top:8px;color:var(--text-faint);font-size:11px">Assembly implemented in <a class="file" href="${REPO}gateway/app/skills/assembler.py" target="_blank" rel="noopener">gateway/app/skills/assembler.py</a> — <code style="font-family:ui-monospace,monospace;color:var(--text-dim)">assemble_skill_prompt()</code>. Skills concatenate with <code style="font-family:ui-monospace,monospace;color:var(--text-dim)">\\n\\n---\\n\\n</code> separators; input variables substituted via <code style="font-family:ui-monospace,monospace;color:var(--text-dim)">{{name}}</code> regex per ADR 0007.</p>`;
   }
 
   describeEl.innerHTML = describeHtml;
