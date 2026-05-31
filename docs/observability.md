@@ -1,10 +1,11 @@
 # LQ.AI — Observability Operator Guide
 
-> **Scope:** OpenTelemetry traces, Prometheus metrics, and deployment recipes for the
-> `api` and `gateway` services. Covers what is shipped as of M3-F (M3-F1 trace
-> propagation, M3-F2 domain spans, M3-F3 recipes and this doc). What is not yet
-> shipped is listed in [§6 — What's not yet shipped](#6-whats-not-yet-shipped) with
-> links to the tracking DE entries.
+> **Scope:** OpenTelemetry traces, Prometheus metrics, audit actions, and deployment
+> recipes for the `api` and `gateway` services. Covers what is shipped as of the M4
+> close: the M3-F OTel baseline (M3-F1 trace propagation, M3-F2 domain spans, M3-F3
+> recipes and this doc) plus the M4 Autonomous Layer spans and audit actions. What is
+> not yet shipped is listed in [§6 — What's not yet shipped](#6-whats-not-yet-shipped)
+> with links to the tracking DE entries.
 
 For the architectural context see [docs/architecture.md](architecture.md) §OBS and the
 "What the diagram doesn't show" section. For the deployment recipes see
@@ -97,19 +98,31 @@ each stage that runs.
 
 #### `anonymization.pre` / `anonymization.post`
 
-Emitted by the gateway anonymization middleware. `anonymization.pre` wraps the
-entity-detection + pseudonymization pass before the model call;
-`anonymization.post` wraps the rehydration pass on the response.
+Emitted by the gateway anonymization middleware (`gateway/app/anonymization/middleware.py`).
+`anonymization.pre` wraps the entity-detection + pseudonymization pass before the
+model call; `anonymization.post` wraps the rehydration pass on the response.
 
-**Attributes (both spans):**
+**The domain attributes below are recorded on `anonymization.pre` only.**
+`anonymization.post` is created by the `@traced("anonymization.post")` decorator and
+carries no domain attributes — it exists to time the rehydration pass and capture an
+exception if one is raised, nothing more. (The per-entity rehydration count is not
+recorded; capturing it on the post span is a future enhancement, not a shipped claim.)
+
+**Attributes on `anonymization.pre`:**
 
 | Attribute | Description |
 |---|---|
-| `anonymization.enabled` | Boolean; `false` when the tier or project configuration skips anonymization |
-| `anonymization.skip_reason` | Present when `enabled=false`; values include `tier_below_threshold`, `privileged_project`, `retrieval_context` |
-| `anonymization.entity_count` | Integer count of entities detected (pre) or rehydrated (post) |
-| `anonymization.entity_types` | Comma-separated list of entity type labels (e.g., `PERSON,MATTER_NUMBER`). **Never raw entity values** — see [§4](#4-anonymization-and-telemetry). |
-| `anonymization.tier` | Inference tier at the time of the anonymization decision |
+| `anonymization.enabled` | Boolean; mirrors the gateway anonymization config `enabled` flag |
+| `anonymization.tier` | Inference tier at the time of the anonymization decision (recorded on every `pre` span) |
+| `anonymization.skip_reason` | Present when the pass is skipped; one of `disabled` (config off), `tier_floor` (routed tier not in `apply_at_tiers`), `privileged` (privileged matter), `request_opt_out` (`anonymize=false` on the request) |
+| `anonymization.entity_count` | Integer count of entities detected (`0` when skipped) |
+| `anonymization.entity_types` | Sorted list of entity type labels (e.g., `PERSON,MATTER_NUMBER`). **Never raw entity values** — see [§4](#4-anonymization-and-telemetry). Recorded only when the pass actually runs (not on the skip path). |
+
+**Span event on `anonymization.pre`:**
+
+| Event | Meaning |
+|---|---|
+| `anonymization.skip.{reason}` | Emitted on the skip path, where `{reason}` is the `skip_reason` value above (e.g., `anonymization.skip.disabled`) |
 
 ---
 
@@ -139,22 +152,62 @@ this span — tracked at [DE-317](PRD.md#de-317--inferencedispatch-span-on-the-s
 | `inference.provider` | Provider name: `anthropic`, `openai`, `azure_openai`, `ollama` |
 | `inference.model` | Model ID as sent to the provider |
 | `inference.tier` | Routed inference tier (1–5) |
-| `inference.outcome` | `success`, `fallback`, or `error` |
-| `inference.tokens_in` | Prompt token count |
-| `inference.tokens_out` | Completion token count |
+| `inference.outcome` | `success`, `provider_error`, `network_error`, or `unavailable` (the last when no adapter could be instantiated). The `provider_error` / `network_error` labels come from `outcome_label_from_error` in `gateway/app/router.py`; `unavailable` is set on the `NoAdapterAvailableError` path in `gateway/app/api/inference.py`. |
+| `inference.tokens_in` | Prompt token count (omitted when the provider returns no usage) |
+| `inference.tokens_out` | Completion token count (omitted when the provider returns no usage) |
 | `inference.cost_usd` | Computed cost in USD at configured per-model rates |
 
 ---
 
 #### `playbook.execute` / `tabular.execute`
 
-Top-level spans wrapping a full Playbook or Tabular Review execution. Each has
-per-position child spans (`playbook.position`) or per-cell child spans
-(`tabular.cell`).
+Top-level spans wrapping a full Playbook or Tabular Review execution.
+
+**`playbook.execute`** attributes (`api/app/playbooks/executor.py`): `playbook.id`,
+`playbook.contract_type`, `position.count`, `document.id`. Has per-position child
+spans (`playbook.position`) carrying `playbook.position.id` and
+`playbook.position.order` (`api/app/playbooks/nodes.py`).
+
+**`tabular.execute`** attributes (`api/app/tabular/executor.py`):
+`tabular.document_count`, `tabular.column_count`. Has per-cell child spans
+(`tabular.cell`) carrying `tabular.document.id` and `tabular.column.name`
+(`api/app/tabular/nodes.py`).
 
 **Note on `playbook.position` coverage:** child spans are emitted in the `classify`
 node but not yet in the `redline` node — tracked at
 [DE-318](PRD.md#de-318--playbookposition-child-spans-on-the-redline-node-otel-deepening).
+
+---
+
+#### `autonomous.execute` / `autonomous.tool_call`
+
+Emitted by the M4 Autonomous Layer. `autonomous.execute`
+(`api/app/autonomous/executor.py`) wraps a full autonomous-session graph
+invocation; `autonomous.tool_call` (`api/app/autonomous/guard.py`) wraps the
+per-tool chokepoint that enforces the autonomy brakes (halt, phase-grant, cost
+cap) and dispatches the tool. Both record **counts, type labels, IDs, and enum
+values only — never raw parameters or document text.**
+
+**Attributes on `autonomous.execute`:**
+
+| Attribute | Description |
+|---|---|
+| `autonomous.session_id` | Session UUID |
+| `autonomous.trigger_kind` | What initiated the session (e.g., watch / schedule / manual trigger kind) |
+| `autonomous.halt_state` | Halt-state latch value at execution start |
+
+**Attributes on `autonomous.tool_call`:**
+
+| Attribute | Description |
+|---|---|
+| `autonomous.session_id` | Session UUID |
+| `autonomous.phase` | Current session phase |
+| `autonomous.tool` | The tool *intent* label (never the params) |
+| `autonomous.halt_state` | Halt-state latch value at the tool boundary |
+| `autonomous.outcome` | Set on every exit path: `external_halt` (R5 halt latch), `tool_not_granted` (R6 phase-grant miss), `cost_cap_reached` (R4 cap), or — on the dispatch path — the `ToolResult.outcome` from the executed tool |
+| `autonomous.cost_usd` | Tool cost in USD; recorded only on the successful dispatch path |
+
+The autonomous spans also write audit rows — see [§2.4 — Audit actions](#audit-actions).
 
 ---
 
@@ -171,7 +224,46 @@ not exposed on a public interface by default.
 | `lq_ai_api_http_request_duration_seconds` | Histogram | `method`, `route`, `status` | Request latency distribution on the api service |
 | `lq_ai_gateway_http_requests_total` | Counter | `method`, `route`, `status` | Total HTTP requests handled by the gateway service |
 | `lq_ai_gateway_http_request_duration_seconds` | Histogram | `method`, `route`, `status` | Request latency distribution on the gateway service |
-| `lq_ai_gateway_inference_requests_total` | Counter | `provider`, `tier`, `outcome` | Inference dispatches by provider, tier, and outcome (success / fallback / error) |
+| `lq_ai_gateway_inference_requests_total` | Counter | `provider`, `tier`, `outcome` | Inference dispatches by provider, tier, and outcome. Incremented by `_record_inference_outcome` in `gateway/app/router.py`, which emits `success`, `provider_error`, or `network_error`. See the note below on the `refused` label. |
+
+**Known gap — the `refused` outcome label is never emitted.** The
+`INFERENCE_REQUESTS_TOTAL` docstring in `gateway/app/observability.py` lists
+`refused` as a possible `outcome` value, but no code path passes it:
+`_record_inference_outcome` is called only with `success` or the two
+`outcome_label_from_error` values (`provider_error` / `network_error`). The
+tier-floor refusal path (`_write_refusal` in `gateway/app/api/inference.py`) returns
+a `tier_below_minimum` gateway error **without** incrementing this counter. Treat
+`refused` as documentation-only until a refusal counter increment is wired up.
+
+---
+
+### Audit actions
+
+The M4 Autonomous Layer writes structured audit rows to the `audit_log` table for
+every session lifecycle event, distinct from OTel spans. All autonomous-session
+writes flow through `autonomous_audit` (`api/app/autonomous/audit.py`), which
+stamps a canonical `autonomous_session.<event>` action and gates the `details`
+dict to counts, type labels, IDs, costs, and enums — **never raw entity values**.
+
+The `details` dict carries only structured scalars (e.g., `to_phase`, `reason`,
+`tool`, `outcome`, `cost_total_usd`, `findings_count`, `projected_usd`).
+
+| Audit action | Emitted by | When |
+|---|---|---|
+| `autonomous_session.phase_transition` | `api/app/autonomous/phases.py` | On each session phase transition (`details.to_phase`) |
+| `autonomous_session.tool_call` | `api/app/autonomous/guard.py` | At the tool chokepoint — `outcome` ∈ `started`, the executed tool's outcome, or `tool_not_granted` |
+| `autonomous_session.halted` | `api/app/autonomous/guard.py` (external halt), `api/app/workers/autonomous_worker.py` (idle timeout) | On a halt (`details.reason` = `external_halt` or `idle_timeout`) |
+| `autonomous_session.cost_cap_reached` | `api/app/autonomous/guard.py` | When projected cost would exceed the session cap (`details.projected_usd`) |
+| `autonomous_session.completed` | `api/app/autonomous/nodes.py` | On normal session completion (`details.cost_total_usd`, `findings_count`) |
+| `autonomous_session.halt_requested` | `api/app/api/autonomous.py` | On `POST /sessions/{id}/halt` — the API-layer request that precedes the executor's `halted` event |
+
+**Known gap — `autonomous_session.started` is defined but never emitted.** The
+closed-action set `_ACTIONS` in `api/app/autonomous/audit.py` includes `started`,
+and the module docstring shows it as an example, but no production code path writes
+it (the only `"started"` string in the executor is the `outcome="started"` *detail*
+on a `tool_call` row, a different field). Session creation does not currently write
+a `started` audit row. Treat `started` as a reserved-but-unused action until a
+creation-time write is wired up.
 
 ---
 
