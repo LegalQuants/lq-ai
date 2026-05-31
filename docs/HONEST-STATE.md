@@ -164,7 +164,7 @@ An opt-in background executor that does real in-loop agentic work under hard bra
 | Schedules (in-repo cron dispatcher) | M4 | `api/app/autonomous/cron.py`; `/autonomous/schedules`; table `autonomous_schedules` |
 | Per-user memory (proposed → kept/dismissed) | M4 | `/autonomous/memory/*`; table `autonomous_memory` |
 | Precedent board (race-safe upsert, observed_count) + promote-to-Project proposals | M4 | `/autonomous/precedents/*`, `/autonomous/project-context-proposals/*`; tables `precedent_entries` (migration `0039`), `project_context_proposals` (migration `0041`) |
-| Honest per-session receipt (`terminal_reason`: completed / cost_cap_reached / external_halt) | M4 | `api/app/autonomous/receipt.py` (`build_receipt` / `build_receipt_safe`); stored in `autonomous_sessions.result` |
+| Honest per-session receipt (`terminal_reason`: completed / cost_cap_reached / external_halt / idle_timeout) | M4 | `api/app/autonomous/receipt.py` (`build_receipt` / `build_receipt_safe`); stored in `autonomous_sessions.result` |
 | In-app notifications (durable; best-effort email transport) | M4 | `/autonomous/notifications/*`; table `autonomous_notifications` (migration `0040`) |
 | Per-user opt-in (off by default) | M4 | `User.autonomous_enabled` (migration `0044`); spawn paths + mutate endpoints gated |
 | Web dashboard (sessions/receipt/halt, memory, precedents, watches, schedules, notifications, proposals) | M4 | `web/src/routes/lq-ai/autonomous/`; opt-in toggle at `settings/autonomous/` |
