@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Slack / Teams intake bridges — LQ.AI Learn</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --panel: #1a1d27;
+    --panel-2: #222634;
+    --border: #2e3342;
+    --text: #e6e8ed;
+    --text-dim: #9aa0b0;
+    --accent: #5b8def;
+    --accent-2: #7c5cff;
+    --green: #3fb950;
+    --amber: #d29922;
+    --red: #f85149;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.5;
+    padding: 2rem;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin: 0 0 0.25rem; }
+  .sub { color: var(--text-dim); margin: 0 0 1.25rem; font-size: 0.95rem; }
+
+  .callout {
+    background: rgba(210,153,34,0.08);
+    border: 1px solid rgba(210,153,34,0.35);
+    border-radius: 8px;
+    padding: 0.8rem 1rem;
+    margin-bottom: 1.5rem;
+    font-size: 0.86rem;
+    color: var(--text);
+  }
+  .callout strong { color: var(--amber); }
+  .callout code { font-family: var(--mono); color: var(--text); font-size: 0.82rem; }
+
+  .legend {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.25rem;
+    font-size: 0.78rem;
+    color: var(--text-dim);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .dot.shipped { background: var(--green); }
+  .dot.partial { background: var(--amber); }
+  .dot.deferred { background: var(--red); }
+
+  .lanes { display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1.5rem; }
+  .lane {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.9rem 1rem;
+  }
+  .lane-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .lane-head .name { font-weight: 700; font-size: 1rem; }
+  .lane-head .meta { font-family: var(--mono); font-size: 0.74rem; color: var(--text-dim); }
+  .lane.admin { border-color: var(--accent); }
+
+  .row { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: stretch; }
+  .node {
+    flex: 1 1 0;
+    min-width: 150px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.7rem 0.8rem;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, opacity 0.15s;
+    position: relative;
+  }
+  .node:hover { border-color: var(--accent); }
+  .node.active { border-color: var(--accent); background: #28304a; }
+  .node.dim { opacity: 0.62; }
+  .node.dim.active { opacity: 1; }
+  .node .step { font-size: 0.66rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+  .node .label { font-weight: 600; margin-top: 0.2rem; font-size: 0.86rem; }
+  .node .tag {
+    display: inline-block;
+    margin-top: 0.5rem;
+    font-size: 0.66rem;
+    padding: 0.12rem 0.45rem;
+    border-radius: 999px;
+    font-weight: 600;
+  }
+  .tag.shipped { background: rgba(63,185,80,0.15); color: var(--green); }
+  .tag.partial { background: rgba(210,153,34,0.15); color: var(--amber); }
+  .tag.deferred { background: rgba(248,81,73,0.12); color: var(--red); }
+  .arrow { align-self: center; color: var(--text-dim); font-size: 1.1rem; padding: 0 0.1rem; user-select: none; }
+
+  .stopbar {
+    margin: 0.2rem 0 1.5rem;
+    border: 1px dashed rgba(248,81,73,0.5);
+    background: rgba(248,81,73,0.06);
+    border-radius: 8px;
+    padding: 0.7rem 0.9rem;
+    font-size: 0.82rem;
+    color: var(--text);
+  }
+  .stopbar strong { color: var(--red); }
+
+  .desc {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.1rem 1.2rem;
+    min-height: 130px;
+  }
+  .desc h3 { margin: 0 0 0.5rem; font-size: 1rem; }
+  .desc .state { font-size: 0.72rem; font-weight: 600; margin-bottom: 0.5rem; }
+  .desc .state.shipped { color: var(--green); }
+  .desc .state.partial { color: var(--amber); }
+  .desc .state.deferred { color: var(--red); }
+  .desc p { margin: 0 0 0.6rem; color: var(--text-dim); font-size: 0.9rem; }
+  .desc .mech {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    background: var(--bg);
+    padding: 0.5rem 0.7rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    color: var(--text);
+    margin-top: 0.5rem;
+    white-space: pre-wrap;
+  }
+
+  footer {
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 0.8rem;
+  }
+  footer code { font-family: var(--mono); color: var(--text); }
+  footer p { margin: 0 0 0.4rem; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Slack / Teams intake bridges: OAuth install &rarr; admin lifecycle (partial)</h1>
+    <p class="sub">How an operator installs a chat-platform intake bridge, where the rows live, what admins can manage &mdash; and exactly where the flow stops today.</p>
+
+    <div class="callout">
+      <strong>Honest state &mdash; partial feature (M3).</strong> The admin list + soft-delete and the OAuth/persistence
+      plumbing are <strong>shipped</strong>. But <strong>end-to-end OAuth has never been exercised against live Slack or Microsoft</strong>
+      (<code>DE-312</code>), and the Slack <code>/lq</code> slash command <strong>does not exist</strong> &mdash; no handler,
+      no manifest <code>slash_commands</code> block, descoped to M4 / community (<code>DE-288</code>). The bridges only start with their Compose profile enabled
+      <em>and</em> their env vars set (<code>${VAR:?}</code> interpolation hard-fails if unset).
+    </div>
+
+    <div class="legend">
+      <span><span class="dot shipped"></span> Shipped (exercised)</span>
+      <span><span class="dot partial"></span> Plumbing shipped &mdash; live path unverified (DE-312)</span>
+      <span><span class="dot deferred"></span> Inert / never exercised (DE-288 / DE-312)</span>
+    </div>
+
+    <div class="lanes" id="lanes"></div>
+
+    <div class="stopbar">
+      <strong>&#9632; Flow stops here.</strong> No installation has ever completed against live Slack/Microsoft
+      (<code>DE-312</code>), so no real inbound message has ever round-tripped. Even if one did, there is no Slack
+      <code>/lq</code> command surface to receive it &mdash; no handler, no manifest <code>slash_commands</code> block,
+      no in-thread reply (<code>DE-288</code>). The shipped, exercised part is everything in the <em>Admin lifecycle</em> lane.
+    </div>
+
+    <div class="desc" id="desc">
+      <h3>Click any step</h3>
+      <p>Select a node in either lane to see what actually happens &mdash; and its honest state.</p>
+    </div>
+
+    <footer>
+      <p>Verified state per <code>docs/intake-bridges.md</code>. Source:
+      <code>slack-bridge/app/main.py</code>, <code>teams-bridge/app/main.py</code>,
+      <code>api/app/api/integrations_slack.py</code>, <code>api/app/api/integrations_teams.py</code>,
+      <code>api/app/api/admin_intake_bridges.py</code>, <code>web/src/routes/lq-ai/admin/intake-bridges/+page.svelte</code>.</p>
+      <p>Migrations: <code>0037_slack_workspaces.py</code> (table <code>slack_workspaces</code>) ·
+      <code>0038_teams_tenants.py</code> (table <code>teams_tenants</code>). Compose profiles
+      <code>slack</code> (port 8002) / <code>teams</code> (port 8003).</p>
+      <p>Deferred: <code>DE-288</code> &mdash; Slack <code>/lq</code> slash command descoped (does not exist) · <code>DE-312</code> &mdash; live OAuth never exercised. Honest framing per <code>docs/PRD.md §9</code>.</p>
+    </footer>
+  </div>
+
+<script>
+  const lanes = [
+    {
+      key: "slack",
+      name: "Slack bridge",
+      meta: "slack-bridge/  ·  port 8002  ·  --profile slack  ·  table slack_workspaces (mig 0037)",
+      cls: "",
+      steps: [
+        {
+          step: "1 · Install",
+          label: "Operator starts OAuth",
+          tag: "partial", tagText: "Plumbing", state: "partial", stateText: "Plumbing shipped — live path unverified (DE-312)",
+          title: "GET /slack/oauth/install — begin OAuth",
+          body: "Operator hits the bridge's install endpoint, which mints a CSRF state token (secrets.token_urlsafe(32), 10-min in-memory TTL) and 302-redirects to Slack's authorize page (scopes: commands, chat:write). The handler exists but has never been driven against live Slack.",
+          mech: "slack-bridge: GET /slack/oauth/install\nstate = token_urlsafe(32)  (in-memory, 10-min TTL)\n302 → slack.com/oauth/v2/authorize",
+        },
+        {
+          step: "2 · Callback",
+          label: "Exchange code → bot token",
+          tag: "partial", tagText: "Plumbing", state: "partial", stateText: "Plumbing shipped — live path unverified (DE-312)",
+          title: "GET /slack/oauth/callback — token exchange + encrypted persist",
+          body: "Callback verifies the round-tripped state, exchanges the code for a bot token via oauth.v2.access, then POSTs the workspace tuple to the api (POST /api/v1/integrations/slack/workspaces, shared bridge bearer). The api Fernet-encrypts the bot token under LQ_AI_BRIDGE_MASTER_KEY — a key DISTINCT from the gateway's — before the slack_workspaces row lands. Code path present; never run end-to-end.",
+          mech: "GET /slack/oauth/callback → exchange code\nPOST /api/v1/integrations/slack/workspaces\nBridgeTokenEncryptor: Fernet(LQ_AI_BRIDGE_MASTER_KEY)\n→ slack_workspaces.bot_token_encrypted (mig 0037)",
+        },
+        {
+          step: "3 · Events",
+          label: "Inbound webhook (signed)",
+          tag: "shipped", tagText: "Shipped", state: "shipped", stateText: "Shipped — unit-tested with synthetic signatures",
+          title: "POST /slack/events — signature-verified webhook",
+          body: "The events webhook verifies the Slack signature (HMAC-SHA256 over v0:timestamp:body) before any processing, and handles the URL-verification challenge. Verification logic is unit-tested with synthetic signatures.",
+          mech: "POST /slack/events\n_verify_signature(): HMAC-SHA256(v0:ts:body)\n401 on mismatch",
+        },
+        {
+          step: "4 · /lq",
+          label: "Slash command",
+          tag: "deferred", tagText: "Inert · DE-288", state: "deferred", stateText: "Does not exist — descoped (DE-288)",
+          title: "/lq slash command — DOES NOT EXIST at v0.3.0",
+          body: "There is no /lq slash command. No slash-command handler exists in the bridge, the Slack App manifest declares no slash_commands block, and there is no per-user identity mapping or in-thread reply. The /slack/events webhook verifies signatures and handles only Slack's url_verification challenge; every other event type is a no-op. The /lq surface — the actual reason an operator would install a bridge — is descoped to M4 / community as DE-288. This is the Slack lane's 'stops here' point.",
+          mech: "# no slash-command endpoint exists\n# manifest declares no slash_commands block\nPOST /slack/events  →  signature-verified, then no-op\n# /lq surface descoped — DE-288",
+        },
+      ],
+    },
+    {
+      key: "teams",
+      name: "Teams bridge",
+      meta: "teams-bridge/  ·  port 8003  ·  --profile teams  ·  table teams_tenants (mig 0038)",
+      cls: "",
+      steps: [
+        {
+          step: "1 · Consent",
+          label: "Admin-consent OAuth",
+          tag: "partial", tagText: "Plumbing", state: "partial", stateText: "Plumbing shipped — live path unverified (DE-312)",
+          title: "GET /teams/oauth/install — multi-tenant admin consent",
+          body: "Operator begins a multi-tenant admin-consent flow: the bridge 302-redirects to Microsoft's /common/oauth2/v2.0/authorize with prompt=admin_consent so one tenant admin consents for the whole tenant. Handler present; never driven against live Microsoft.",
+          mech: "teams-bridge: GET /teams/oauth/install\nlogin.microsoftonline.com/common/.../authorize\nprompt=admin_consent",
+        },
+        {
+          step: "2 · Callback",
+          label: "Persist tenant (encrypted)",
+          tag: "partial", tagText: "Plumbing", state: "partial", stateText: "Plumbing shipped — live path unverified (DE-312)",
+          title: "GET /teams/oauth/callback — identity-only tenant persist",
+          body: "Callback verifies state, exchanges the code at /common/.../token, base64url-decodes the id_token (unverified — claims grant no authority) for tid + oid, best-effort fetches the org display name via Graph (falls back to the raw tid), then POSTs {tenant_id, tenant_name, installer_oid} to the api. Teams uses app-level bot credentials, so there is NO per-tenant token to encrypt — teams_tenants stores no secret. Code path present; never run end-to-end.",
+          mech: "GET /teams/oauth/callback → exchange code\ndecode id_token (unverified) → tid, oid\nPOST /api/v1/integrations/teams/tenants\n→ teams_tenants (mig 0038) — no encrypted column",
+        },
+        {
+          step: "3 · Inbound",
+          label: "(no live round-trip)",
+          tag: "deferred", tagText: "Unverified · DE-312", state: "deferred", stateText: "Never exercised (DE-312)",
+          title: "Inbound message handling — never exercised",
+          body: "Because no install has completed against live Microsoft, no real inbound Teams message has ever round-tripped. There is no shipped inbound command surface to demonstrate. This is the Teams lane 'stops here' point.",
+          mech: "# no live tenant has ever installed\n# DE-312 — never exercised end-to-end",
+        },
+      ],
+    },
+    {
+      key: "admin",
+      name: "Admin lifecycle",
+      meta: "api/app/api/admin_intake_bridges.py  ·  UI: web/src/routes/lq-ai/admin/intake-bridges/+page.svelte",
+      cls: "admin",
+      steps: [
+        {
+          step: "A · List",
+          label: "Admin sees installed bridges",
+          tag: "shipped", tagText: "Shipped", state: "shipped", stateText: "Shipped — exercised against synthetic rows",
+          title: "GET /api/v1/admin/intake-bridges — list",
+          body: "Admins see all installed Slack workspaces + Teams tenants (non-deleted) in the intake-bridges admin panel. Shipped and exercised against synthetic rows — it manages whatever rows exist regardless of how they got there.",
+          mech: "GET /api/v1/admin/intake-bridges\nlists slack_workspaces + teams_tenants (deleted_at IS NULL)",
+        },
+        {
+          step: "B · Soft-delete (Slack)",
+          label: "Remove a workspace",
+          tag: "shipped", tagText: "Shipped", state: "shipped", stateText: "Shipped — exercised against synthetic rows",
+          title: "DELETE …/slack/{workspace_id} — soft-delete",
+          body: "Soft-delete sets deleted_at on the slack_workspaces row; the row is retained for audit. Returns 204 No Content (response_class=Response, explicit empty return — the FastAPI 204 recipe).",
+          mech: "DELETE /api/v1/admin/intake-bridges/slack/{workspace_id}\nsets deleted_at  →  204 No Content",
+        },
+        {
+          step: "C · Soft-delete (Teams)",
+          label: "Remove a tenant",
+          tag: "shipped", tagText: "Shipped", state: "shipped", stateText: "Shipped — exercised against synthetic rows",
+          title: "DELETE …/teams/{tenant_id} — soft-delete",
+          body: "Soft-delete sets deleted_at on the teams_tenants row; retained for audit. Returns 204 No Content. The Svelte admin UI lists both platforms and confirms before deleting.",
+          mech: "DELETE /api/v1/admin/intake-bridges/teams/{tenant_id}\nsets deleted_at  →  204 No Content",
+        },
+      ],
+    },
+  ];
+
+  const lanesEl = document.getElementById("lanes");
+  const desc = document.getElementById("desc");
+  let allNodes = [];
+
+  lanes.forEach((lane) => {
+    const laneEl = document.createElement("div");
+    laneEl.className = "lane " + lane.cls;
+
+    const head = document.createElement("div");
+    head.className = "lane-head";
+    head.innerHTML = '<span class="name">' + lane.name + '</span><span class="meta">' + lane.meta + '</span>';
+    laneEl.appendChild(head);
+
+    const row = document.createElement("div");
+    row.className = "row";
+
+    lane.steps.forEach((s, i) => {
+      const node = document.createElement("div");
+      node.className = "node" + (s.tag === "shipped" ? "" : " dim");
+      node.innerHTML =
+        '<div class="step">' + s.step + '</div>' +
+        '<div class="label">' + s.label + '</div>' +
+        '<span class="tag ' + s.tag + '">' + s.tagText + '</span>';
+      node.addEventListener("click", () => {
+        allNodes.forEach((n) => n.classList.remove("active"));
+        node.classList.add("active");
+        desc.innerHTML =
+          '<h3>' + s.title + '</h3>' +
+          '<div class="state ' + s.state + '">' + s.stateText + '</div>' +
+          '<p>' + s.body + '</p>' +
+          '<div class="mech">' + s.mech + '</div>';
+      });
+      allNodes.push(node);
+      row.appendChild(node);
+      if (i < lane.steps.length - 1) {
+        const a = document.createElement("span");
+        a.className = "arrow";
+        a.textContent = "→";
+        row.appendChild(a);
+      }
+    });
+
+    laneEl.appendChild(row);
+    lanesEl.appendChild(laneEl);
+  });
+
+  // auto-select the first shipped node (the honest, exercised surface): admin list
+  const firstShipped = allNodes.find((n) => n.querySelector(".tag.shipped"));
+  (firstShipped || allNodes[0]).click();
+</script>
+</body>
+</html>
