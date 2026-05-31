@@ -49,7 +49,7 @@ Then start the stack:
 docker compose up -d
 ```
 
-First run pulls images (about 1.5 GB across 6 services — web, api, gateway, postgres, redis, minio). On a reasonable connection this takes 2–4 minutes. Subsequent runs reuse the images and start in seconds.
+First run pulls images across the eight always-on services — `postgres`, `redis`, `minio`, `gateway`, `api`, `ingest-worker`, `arq-worker`, `web` (the `ingest-worker` and `arq-worker` background workers run unconditionally; the local-Ollama, PaddleOCR, and Slack/Teams services are opt-in Compose profiles). On a reasonable connection this takes 2–4 minutes. Subsequent runs reuse the images and start in seconds.
 
 When the stack is up, you should see something like this in the API container's logs:
 
@@ -282,7 +282,7 @@ You should see ten healthy services: `api`, `gateway`, `web`, `postgres`, `redis
 Confirm the migration head is current:
 
 ```bash
-docker compose exec api alembic current   # expect 0038 (head)
+docker compose exec api alembic current   # expect 0045 (head)
 ```
 
 ### M3.1 — Attach the synthetic corpus
