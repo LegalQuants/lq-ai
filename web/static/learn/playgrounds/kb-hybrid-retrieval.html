@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LQ.AI — Knowledge bases: hybrid retrieval (lexical + vector)</title>
+<style>
+  :root {
+    --bg: #0c0f14;
+    --bg-elev: #151a23;
+    --bg-elev-2: #1d242f;
+    --border: #2a3340;
+    --border-hover: #3a4555;
+    --text: #e6ebf3;
+    --text-dim: #8a96a8;
+    --text-faint: #5a6578;
+    --accent: #7dd3fc;
+    --accent-dim: #38bdf8;
+    --lex: #fcd34d;
+    --lex-bg: rgba(252,211,77,0.08);
+    --lex-border: rgba(252,211,77,0.3);
+    --vec: #c4b5fd;
+    --vec-bg: rgba(196,181,253,0.08);
+    --vec-border: rgba(196,181,253,0.3);
+    --fused: #86efac;
+    --fused-bg: rgba(134,239,172,0.08);
+    --fused-border: rgba(134,239,172,0.3);
+    --ready: #86efac;
+    --shadow: rgba(0,0,0,0.4);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+  }
+  .app { display: grid; grid-template-rows: auto 1fr auto; height: 100vh; }
+  header {
+    padding: 12px 20px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 16px;
+  }
+  header h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
+  header .subtitle { color: var(--text-dim); font-size: 13px; }
+  header .spacer { flex: 1; }
+  header a {
+    color: var(--accent); text-decoration: none; font-size: 12px;
+    border: 1px solid var(--border); padding: 4px 10px; border-radius: 4px;
+  }
+  header a:hover { border-color: var(--border-hover); background: var(--bg-elev-2); }
+
+  .main { display: grid; grid-template-columns: 320px 1fr; overflow: hidden; }
+  .controls {
+    background: var(--bg-elev); border-right: 1px solid var(--border);
+    padding: 16px; overflow-y: auto;
+  }
+  .controls h2 {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-dim); margin: 16px 0 8px;
+  }
+  .controls h2:first-child { margin-top: 0; }
+  .controls .hint { font-size: 11px; color: var(--text-faint); margin: 4px 0 8px; line-height: 1.45; }
+  .controls code { background: var(--bg-elev-2); padding: 1px 4px; border-radius: 3px; font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; }
+
+  .presets { display: grid; grid-template-columns: 1fr; gap: 5px; }
+  .preset-btn {
+    background: var(--bg-elev-2); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 10px; border-radius: 4px;
+    cursor: pointer; font-size: 12px; text-align: left; transition: all 0.1s; line-height: 1.4;
+  }
+  .preset-btn:hover { border-color: var(--border-hover); }
+  .preset-btn.active { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
+  .preset-btn .pl { display: block; font-weight: 600; margin-bottom: 2px; }
+  .preset-btn .pd { display: block; font-size: 11px; color: var(--text-dim); }
+  .preset-btn.active .pd { color: rgba(12,15,20,0.72); }
+
+  .slider-row { margin-top: 8px; }
+  .slider-row label { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-dim); margin-bottom: 4px; }
+  .slider-row label .val { font-family: ui-monospace, Menlo, monospace; color: var(--accent); }
+  input[type="range"] { width: 100%; accent-color: var(--accent); }
+  .slider-ends { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-faint); margin-top: 2px; font-family: ui-monospace, Menlo, monospace; }
+
+  .topk-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .topk-row input { width: 64px; background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text); padding: 5px 8px; border-radius: 4px; font: 12px ui-monospace, Menlo, monospace; }
+  .topk-row span { font-size: 12px; color: var(--text-dim); }
+
+  .stage-wrap { overflow-y: auto; padding: 18px 22px;
+    background: radial-gradient(circle at 18% 18%, rgba(125,211,252,0.03), transparent 55%),
+      radial-gradient(circle at 82% 82%, rgba(196,181,253,0.03), transparent 55%), var(--bg);
+  }
+  .stage-wrap > .inner { max-width: 860px; margin: 0 auto; }
+
+  .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-faint); margin: 20px 0 8px; }
+  .section-title:first-child { margin-top: 0; }
+
+  /* Ingestion pipeline */
+  .pipe { display: flex; align-items: stretch; flex-wrap: wrap; gap: 0; }
+  .pstep {
+    flex: 1 1 0; min-width: 96px;
+    background: var(--bg-elev); border: 1px solid var(--border);
+    border-radius: 6px; padding: 9px 10px; margin: 0 3px 6px; position: relative;
+  }
+  .pstep .pn { font-size: 11.5px; font-weight: 600; margin-bottom: 2px; }
+  .pstep .pm { font-size: 10px; color: var(--text-faint); font-family: ui-monospace, Menlo, monospace; line-height: 1.3; }
+  .pstep.ready { border-color: var(--ready-border, rgba(134,239,172,0.4)); }
+  .pstep.ready .pn { color: var(--ready); }
+  .arrow { align-self: center; color: var(--border); font-size: 16px; padding: 0 1px; }
+
+  /* Query bar */
+  .qbar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: var(--bg-elev); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; margin-bottom: 4px;
+  }
+  .qbar .ql { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-faint); }
+  .qbar .qtext { font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--text); flex: 1; min-width: 180px; }
+  .qbar .qtag { font-size: 10.5px; font-family: ui-monospace, Menlo, monospace; color: var(--text-dim); padding: 2px 7px; border: 1px solid var(--border); border-radius: 999px; }
+
+  /* Arms */
+  .arms { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 720px) { .arms { grid-template-columns: 1fr; } }
+  .arm { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .arm.lex { border-top: 2px solid var(--lex); }
+  .arm.vec { border-top: 2px solid var(--vec); }
+  .arm.dim { opacity: 0.4; }
+  .arm h3 { margin: 0 0 2px; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  .arm .subt { font-size: 11px; color: var(--text-dim); margin-bottom: 8px; }
+  .arm .sql { font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; color: var(--text-dim);
+    background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 8px 10px; margin: 0 0 10px;
+    white-space: pre-wrap; line-height: 1.5; }
+  .arm .sql b { color: var(--text); font-weight: 600; }
+
+  .row { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: center; padding: 5px 7px; border-radius: 5px; font-size: 12px; }
+  .row + .row { margin-top: 3px; }
+  .row .rk { width: 22px; height: 22px; border-radius: 50%; background: var(--bg-elev-2); border: 1px solid var(--border); display: inline-flex; align-items: center; justify-content: center; font-size: 10.5px; font-family: ui-monospace, Menlo, monospace; color: var(--text-dim); }
+  .row .ct { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, Menlo, monospace; color: var(--text-dim); }
+  .row .sc { font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; color: var(--text-faint); white-space: nowrap; }
+  .arm.lex .row { background: var(--lex-bg); }
+  .arm.vec .row { background: var(--vec-bg); }
+  .arm .empty { font-size: 12px; color: var(--text-faint); padding: 6px 7px; }
+
+  /* Fused */
+  .fused { background: var(--bg-elev); border: 1px solid var(--border); border-top: 2px solid var(--fused); border-radius: 8px; padding: 14px; }
+  .fused h3 { margin: 0 0 2px; font-size: 13px; }
+  .fused .subt { font-size: 11px; color: var(--text-dim); margin-bottom: 10px; }
+  .fchunk { display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: center;
+    background: var(--bg-elev-2); border: 1px solid var(--border); border-radius: 6px; padding: 9px 12px; }
+  .fchunk + .fchunk { margin-top: 6px; }
+  .fchunk .rk { width: 26px; height: 26px; border-radius: 50%; background: var(--fused); color: #0a1410; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-family: ui-monospace, Menlo, monospace; }
+  .fchunk .body { min-width: 0; }
+  .fchunk .body .txt { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fchunk .body .meta { font-size: 10.5px; color: var(--text-faint); margin-top: 2px; font-family: ui-monospace, Menlo, monospace; }
+  .fchunk .why { text-align: right; font-size: 10.5px; font-family: ui-monospace, Menlo, monospace; color: var(--text-dim); white-space: nowrap; }
+  .fchunk .why .both { color: var(--fused); }
+  .fchunk .why .hs { color: var(--accent); }
+
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 700; border: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.04em; }
+  .pill.lex { color: var(--lex); border-color: var(--lex-border); }
+  .pill.vec { color: var(--vec); border-color: var(--vec-border); }
+
+  .note { background: var(--bg-elev); border: 1px solid var(--border); border-left: 2px solid var(--fused);
+    border-radius: 6px; padding: 11px 14px; font-size: 12.5px; color: var(--text-dim); margin-top: 12px; line-height: 1.55; }
+  .note b { color: var(--text); }
+  .note code { background: var(--bg-elev-2); padding: 1px 5px; border-radius: 3px; font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; }
+
+  .footer { background: var(--bg-elev); border-top: 1px solid var(--border); padding: 12px 22px; max-height: 200px; overflow-y: auto; }
+  .footer .ft { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-faint); margin-bottom: 6px; }
+  .footer p { margin: 0 0 8px; font-size: 12px; color: var(--text-dim); line-height: 1.55; max-width: 920px; }
+  .footer code { background: var(--bg-elev-2); padding: 1px 5px; border-radius: 3px; font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; color: var(--text); }
+  .footer ul { margin: 0; padding: 0; list-style: none; }
+  .footer li { font-size: 11.5px; color: var(--text-dim); padding: 2px 0; line-height: 1.5; }
+  .footer .src { font-family: ui-monospace, Menlo, monospace; color: var(--accent); font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Knowledge bases: hybrid retrieval (lexical + vector)</h1>
+    <span class="subtitle">How a query becomes grounded context for chat, skills, and citation verification.</span>
+    <span class="spacer"></span>
+    <a href="../../" id="learn-home">↩ Learn</a>
+    <a href="https://github.com/LegalQuants/lq-ai/blob/main/api/app/knowledge/retrieval.py" target="_blank" rel="noopener">source: retrieval.py ↗</a>
+  </header>
+
+  <div class="main">
+    <aside class="controls">
+      <h2>Sample query</h2>
+      <p class="hint">Each query fans into two retrieval arms over the same KB chunks, then the arms are merged. The lexical arm rewards literal term overlap; the vector arm rewards meaning.</p>
+      <div class="presets" id="presets"></div>
+
+      <h2>Mix weight <code>hybrid_alpha</code></h2>
+      <p class="hint">Per-KB setting (default <code>0.5</code>), overridable per query. <code>0</code> = vector-only, <code>1</code> = lexical/FTS-only. The fused score is <code>(1 - alpha)·vector + alpha·fts</code>.</p>
+      <div class="slider-row">
+        <label>alpha <span class="val" id="alphaVal">0.50</span></label>
+        <input type="range" id="alpha" min="0" max="1" step="0.05" value="0.5">
+        <div class="slider-ends"><span>0 · vector</span><span>1 · lexical</span></div>
+      </div>
+
+      <h2>Result count <code>top_k</code></h2>
+      <p class="hint">Each arm pulls <code>top_k × 4</code> candidates (<code>CANDIDATE_OVERSHOOT</code>) before merge. Default 10, max 50.</p>
+      <div class="topk-row">
+        <input type="number" id="topk" min="1" max="50" value="4">
+        <span>final chunks returned</span>
+      </div>
+
+      <h2>FTS-only fallback</h2>
+      <p class="hint">If the query embedding can't be produced (gateway down) or <code>alpha = 1</code>, the vector arm is skipped and ranking degrades to FTS-only — retrieval still works.</p>
+    </aside>
+
+    <div class="stage-wrap">
+      <div class="inner">
+        <div class="section-title">1 · Ingestion — document → chunks → tsvector + embedding → ready</div>
+        <div class="pipe" id="pipe"></div>
+        <div class="note">
+          Chunking is a <b>character-precise sliding window</b> (<code>DEFAULT_TARGET_CHARS = 2000</code>, <code>DEFAULT_OVERLAP_CHARS = 200</code>) that snaps boundaries back to the nearest sentence/paragraph break. The invariant <code>content == normalized_content[char_offset_start:char_offset_end]</code> is what the citation engine later verifies against. Each <code>document_chunks</code> row carries a <b>generated</b> <code>content_tsv</code> tsvector (for the lexical arm) and an <code>embedding vector(1536)</code> (for the vector arm). A file is only searchable once its <code>files.ingestion_status = 'ready'</code>.
+        </div>
+
+        <div class="section-title">2 · The query fans into two arms</div>
+        <div class="qbar">
+          <span class="ql">query</span>
+          <span class="qtext" id="qtext"></span>
+          <span class="qtag" id="qtagEmbed">embedded → 1536-dim vector</span>
+        </div>
+        <p class="hint" style="margin:6px 0 10px; color:var(--text-faint); font-size:11px">Both arms scan <code style="font-size:10px">document_chunks</code> joined to <code style="font-size:10px">documents → files → knowledge_base_files</code>, filtered to <code style="font-size:10px">files.ingestion_status = 'ready'</code> and not soft-deleted, in this KB. Showing the top candidates per arm.</p>
+        <div class="arms">
+          <div class="arm lex" id="armLex">
+            <h3><span class="pill lex">lexical</span> Postgres full-text search</h3>
+            <div class="subt">Stemmed, operator-safe; GIN-indexed tsvector.</div>
+            <div class="sql">rank = <b>ts_rank_cd</b>(
+  dc.content_tsv,
+  <b>plainto_tsquery</b>('english', :q)
+)
+-- GIN index ix_document_chunks_content_tsv</div>
+            <div id="lexRows"></div>
+          </div>
+          <div class="arm vec" id="armVec">
+            <h3><span class="pill vec">vector</span> pgvector cosine</h3>
+            <div class="subt">Query embedding via the Inference Gateway.</div>
+            <div class="sql">score = 1.0 - (
+  dc.embedding <b>&lt;=&gt;</b> CAST(:q AS vector)
+)
+-- &lt;=&gt; = cosine distance (pgvector)
+-- sequential scan; ANN index deferred</div>
+            <div id="vecRows"></div>
+          </div>
+        </div>
+
+        <div class="section-title">3 · Min-max normalize each arm, then linear-combine</div>
+        <div class="fused">
+          <h3>Fused ranking — <code style="font-size:11px">(1 - alpha)·vec_norm + alpha·fts_norm</code></h3>
+          <div class="subt" id="fusedSubt"></div>
+          <div id="fusedList"></div>
+        </div>
+        <div class="note">
+          Each arm's raw scores are <b>min-max normalized</b> to [0, 1] across the candidate union (not z-score — too few candidates at this scale), then combined with the <code>alpha</code> weight. A chunk found by <i>both</i> arms gets contributions from both sides. The top <code>top_k</code> by fused score are returned. These chunks are formatted into an <b>LQ.AI Knowledge Context</b> system block (numbered <code>[n]</code> markers) and handed to the model. That retrieval-context block is flagged <code>lq_ai_skip_anonymization = True</code> (Decision M2-1) so the gateway lets the model see <b>intact source</b> — and the same chunk text is what the citation engine verifies quoted spans against.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="ft">How this works in the codebase</div>
+    <p>Hybrid retrieval is M1 (shipped). The lexical arm is Postgres FTS — <code>ts_rank_cd</code> over a generated <code>content_tsv</code> tsvector, not a literal BM25 library. The vector arm is pgvector cosine distance (<code>&lt;=&gt;</code>). Fusion is a <b>min-max-normalized weighted linear combination</b> via <code>hybrid_alpha</code> — <b>not</b> Reciprocal Rank Fusion. The pgvector ANN index (ivfflat/hnsw) is deferred, so the vector arm is a sequential cosine scan today. Mechanics, operators, and constants below are read from source; the sample chunks and scores are illustrative.</p>
+    <ul>
+      <li><span class="src">api/app/knowledge/retrieval.py</span> — <code>hybrid_search</code>; <code>_FTS_SQL</code> (<code>ts_rank_cd</code> / <code>plainto_tsquery('english', …)</code>); <code>_VECTOR_SQL</code> (<code>1.0 - (embedding &lt;=&gt; …)</code>); <code>_min_max_normalize</code> + <code>(1-alpha)·v + alpha·f</code>; <code>CANDIDATE_OVERSHOOT = 4</code></li>
+      <li><span class="src">api/app/knowledge/embed.py</span> — <code>request_embedding_vector</code> via the gateway; alias <code>"embedding"</code> → <code>text-embedding-3-small</code>, <code>EMBEDDING_DIMENSION = 1536</code></li>
+      <li><span class="src">api/app/pipeline/chunker.py</span> — sliding-window chunker, <code>DEFAULT_TARGET_CHARS = 2000</code>, <code>DEFAULT_OVERLAP_CHARS = 200</code>, sentence-boundary snap</li>
+      <li><span class="src">api/alembic/versions/0005_create_documents_and_chunks.py</span> — <code>document_chunks</code>; <code>content_tsv … GENERATED ALWAYS AS to_tsvector('english', content) STORED</code>; GIN index; <code>embedding vector(1536)</code></li>
+      <li><span class="src">api/app/api/knowledge_bases.py</span> — <code>POST /knowledge-bases/{kb_id}/query</code> calls <code>hybrid_search</code>; create / attach-file / patch (<code>hybrid_alpha</code>) / list / delete. Schema: <code>DEFAULT_TOP_K = 10</code>, <code>MAX_TOP_K = 50</code>, <code>hybrid_alpha</code> default <code>0.5</code></li>
+      <li><span class="src">api/app/api/chats.py</span> — <code>_retrieve_kb_context_for_chat</code> + <code>_format_retrieval_context_block</code> (numbered <code>[n]</code> "LQ.AI Knowledge Context")</li>
+      <li><span class="src">gateway/app/anonymization/middleware.py</span> — honors <code>lq_ai_skip_anonymization</code> on the retrieval-context message (M2-1) so the model sees intact source</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// Ingestion stages (chunker.py + pipeline status flow ending at files.ingestion_status='ready').
+const STAGES = [
+  { n: "pending",    m: "queued" },
+  { n: "parsing",    m: "PDF / DOCX / txt" },
+  { n: "chunking",   m: "2000c · 200 ovl" },
+  { n: "embedding",  m: "→ vector(1536)" },
+  { n: "indexing",   m: "content_tsv (gen)" },
+  { n: "ready",      m: "searchable" }
+];
+
+// Illustrative corpus. Scores are made up but ordering reflects what each
+// arm favors: lexical = literal term overlap (ts_rank_cd); vector = meaning
+// (cosine). Some chunks surface in only one arm.
+const QUERIES = {
+  indemnify: {
+    label: 'who indemnifies the buyer',
+    query: 'who indemnifies the buyer',
+    // raw scores: lexical = ts_rank_cd magnitude; vector = 1 - cosine_distance
+    lexical: [
+      { id: 'c14', doc: 'MSA.pdf', pg: 'p.7',  txt: 'Seller shall indemnify and hold harmless the Buyer…', raw: 0.214 },
+      { id: 'c27', doc: 'MSA.pdf', pg: 'p.12', txt: '…indemnification obligations survive termination…',  raw: 0.131 },
+      { id: 'c03', doc: 'NDA.pdf', pg: 'p.2',  txt: 'each party shall indemnify the other for breach…',   raw: 0.092 }
+    ],
+    vector: [
+      { id: 'c14', doc: 'MSA.pdf', pg: 'p.7',  txt: 'Seller shall indemnify and hold harmless the Buyer…', raw: 0.881 },
+      { id: 'c41', doc: 'MSA.pdf', pg: 'p.18', txt: 'the Vendor bears liability for third-party claims…',  raw: 0.842 },
+      { id: 'c27', doc: 'MSA.pdf', pg: 'p.12', txt: '…indemnification obligations survive termination…',  raw: 0.806 }
+    ]
+  },
+  term: {
+    label: 'how long does confidentiality last',
+    query: 'how long does confidentiality last',
+    lexical: [
+      { id: 'c08', doc: 'NDA.pdf', pg: 'p.3', txt: 'Confidential Information shall remain confidential…',  raw: 0.176 },
+      { id: 'c19', doc: 'NDA.pdf', pg: 'p.4', txt: '…confidentiality obligations for a period of three…',  raw: 0.144 },
+      { id: 'c30', doc: 'MSA.pdf', pg: 'p.9', txt: 'confidentiality clause; defined Confidential terms…',   raw: 0.061 }
+    ],
+    vector: [
+      { id: 'c19', doc: 'NDA.pdf', pg: 'p.4', txt: '…confidentiality obligations for a period of three…',  raw: 0.903 },
+      { id: 'c08', doc: 'NDA.pdf', pg: 'p.3', txt: 'Confidential Information shall remain confidential…',  raw: 0.871 },
+      { id: 'c52', doc: 'NDA.pdf', pg: 'p.6', txt: 'survive expiry of this Agreement for three (3) years…', raw: 0.834 }
+    ]
+  }
+};
+
+const state = { q: 'indemnify', alpha: 0.5, topk: 4 };
+
+function minMaxNormalize(map) {
+  // Mirror retrieval.py _min_max_normalize: empty -> {}, all-equal -> 1.0,
+  // else (v - lo) / (hi - lo) clamped to [0,1].
+  const ids = Object.keys(map);
+  if (ids.length === 0) return {};
+  const vals = ids.map(k => map[k]);
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  const out = {};
+  if (hi === lo) { ids.forEach(k => out[k] = 1.0); return out; }
+  const spread = hi - lo;
+  ids.forEach(k => out[k] = Math.max(0, Math.min(1, (map[k] - lo) / spread)));
+  return out;
+}
+
+function renderPipe() {
+  const el = document.getElementById('pipe');
+  el.innerHTML = '';
+  STAGES.forEach((s, i) => {
+    const step = document.createElement('div');
+    step.className = 'pstep' + (s.n === 'ready' ? ' ready' : '');
+    step.innerHTML = `<div class="pn">${s.n}</div><div class="pm">${s.m}</div>`;
+    el.appendChild(step);
+    if (i < STAGES.length - 1) {
+      const a = document.createElement('span');
+      a.className = 'arrow'; a.textContent = '›';
+      el.appendChild(a);
+    }
+  });
+}
+
+function renderArm(targetId, rows, active) {
+  const el = document.getElementById(targetId);
+  el.innerHTML = '';
+  if (!active) { el.innerHTML = '<div class="empty">Arm skipped (alpha boundary or embed fallback).</div>'; return; }
+  if (rows.length === 0) { el.innerHTML = '<div class="empty">No candidates.</div>'; return; }
+  rows.forEach((r, i) => {
+    const div = document.createElement('div');
+    div.className = 'row';
+    div.innerHTML =
+      `<span class="rk">${i + 1}</span>` +
+      `<span class="ct" title="${r.txt.replace(/"/g, '&quot;')}">${r.id} · ${r.txt}</span>` +
+      `<span class="sc">${r.raw.toFixed(3)}</span>`;
+    el.appendChild(div);
+  });
+}
+
+function renderFused(lexActive, vecActive) {
+  const q = QUERIES[state.q];
+  const lexRows = lexActive ? q.lexical : [];
+  const vecRows = vecActive ? q.vector : [];
+
+  // raw score maps
+  const lexRaw = {}, vecRaw = {};
+  lexRows.forEach(r => lexRaw[r.id] = r.raw);
+  vecRows.forEach(r => vecRaw[r.id] = r.raw);
+
+  const lexNorm = minMaxNormalize(lexRaw);
+  const vecNorm = minMaxNormalize(vecRaw);
+
+  // metadata + arm ranks (1-based, for display)
+  const meta = {}; const lexRank = {}; const vecRank = {};
+  lexRows.forEach((r, i) => { meta[r.id] = r; lexRank[r.id] = i + 1; });
+  vecRows.forEach((r, i) => { if (!meta[r.id]) meta[r.id] = r; vecRank[r.id] = i + 1; });
+
+  const ids = Array.from(new Set([...lexRows.map(r => r.id), ...vecRows.map(r => r.id)]));
+  const a = state.alpha;
+  const fused = ids.map(id => {
+    const v = vecNorm[id] ?? 0;
+    const f = lexNorm[id] ?? 0;
+    return { id, v, f, hs: (1 - a) * v + a * f, inLex: id in lexRank, inVec: id in vecRank };
+  });
+  fused.sort((x, y) => y.hs - x.hs);
+  const top = fused.slice(0, state.topk);
+
+  const subt = document.getElementById('fusedSubt');
+  const armsTxt = lexActive && vecActive ? 'both arms' : (lexActive ? 'lexical only' : 'vector only');
+  subt.textContent = `alpha = ${a.toFixed(2)} · ${armsTxt} · returning top ${state.topk} of ${fused.length} merged candidates`;
+
+  const el = document.getElementById('fusedList');
+  el.innerHTML = '';
+  if (top.length === 0) { el.innerHTML = '<div class="empty">No results.</div>'; return; }
+  top.forEach((r, i) => {
+    const m = meta[r.id];
+    const both = r.inLex && r.inVec;
+    const tags = [];
+    if (r.inLex) tags.push(`lex #${lexRank[r.id]}`);
+    if (r.inVec) tags.push(`vec #${vecRank[r.id]}`);
+    const tagHtml = both ? `<span class="both">${tags.join(' + ')}</span>` : tags.join(' + ');
+    const div = document.createElement('div');
+    div.className = 'fchunk';
+    div.innerHTML =
+      `<span class="rk">${i + 1}</span>` +
+      `<div class="body"><div class="txt" title="${m.txt.replace(/"/g, '&quot;')}">${m.id} · ${m.txt}</div>` +
+      `<div class="meta">${m.doc} · ${m.pg} · chunk ${m.id}</div></div>` +
+      `<div class="why">${tagHtml}<br><span class="hs">hybrid ${r.hs.toFixed(3)}</span></div>`;
+    el.appendChild(div);
+  });
+}
+
+function render() {
+  const q = QUERIES[state.q];
+  document.getElementById('qtext').textContent = `"${q.query}"`;
+
+  // Arm activation mirrors hybrid_search: vector runs when alpha < 1 and an
+  // embedding exists; FTS runs when alpha > 0.
+  const vecActive = state.alpha < 1.0;
+  const lexActive = state.alpha > 0.0;
+
+  document.getElementById('armLex').classList.toggle('dim', !lexActive);
+  document.getElementById('armVec').classList.toggle('dim', !vecActive);
+  document.getElementById('qtagEmbed').style.display = vecActive ? '' : 'none';
+
+  document.getElementById('alphaVal').textContent = state.alpha.toFixed(2);
+
+  renderArm('lexRows', q.lexical, lexActive);
+  renderArm('vecRows', q.vector, vecActive);
+  renderFused(lexActive, vecActive);
+}
+
+// Wiring
+const presetsEl = document.getElementById('presets');
+Object.keys(QUERIES).forEach((key, idx) => {
+  const q = QUERIES[key];
+  const b = document.createElement('button');
+  b.className = 'preset-btn' + (idx === 0 ? ' active' : '');
+  b.dataset.q = key;
+  b.innerHTML = `<span class="pl">"${q.label}"</span><span class="pd">${key === 'indemnify' ? 'literal vs semantic term split' : 'duration / survival phrasing'}</span>`;
+  b.addEventListener('click', () => {
+    state.q = key;
+    document.querySelectorAll('.preset-btn').forEach(x => x.classList.toggle('active', x.dataset.q === key));
+    render();
+  });
+  presetsEl.appendChild(b);
+});
+
+document.getElementById('alpha').addEventListener('input', e => {
+  state.alpha = parseFloat(e.target.value);
+  render();
+});
+document.getElementById('topk').addEventListener('input', e => {
+  let v = parseInt(e.target.value, 10);
+  if (isNaN(v)) v = 1;
+  v = Math.max(1, Math.min(50, v));
+  state.topk = v;
+  render();
+});
+
+renderPipe();
+render();
+</script>
+</body>
+</html>
