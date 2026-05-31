@@ -10,7 +10,7 @@ A useful framing of professional-services agent design, articulated by Dazza Gre
 
 A few things this document is **not**:
 
-- **Not a marketing claim.** The goal is not to ship "six of six" as a positioning statement. The goal is to make every register's state — implemented, partial, deferred-with-commitment, or rejected-with-reasoning — verifiable in source. The honest count today is 2 fully, 2 partial, 2 deferred-with-architectural-commitment.
+- **Not a marketing claim.** The goal is not to ship "six of six" as a positioning statement. The goal is to make every register's state — implemented, partial, deferred-with-commitment, or rejected-with-reasoning — verifiable in source. The honest count today (M4 close): R1 fully, R2 fully (adapted), R3 partial, and R4 + R5 + R6 shipped for the autonomous layer — the Tier 2 brakes that have an unattended-autonomy surface to attach to. Each Tier 2 register still has a non-autonomous-Playbook facet that remains future work (R4 → DE-292; R5/R6 → multi-phase Playbook grants).
 - **Not a fixed enumeration.** The number six is the count of registers observed in the two open-source codebases Greenwood ran (Claude for Legal and Lavern, both Apache 2.0) as of May 2026. Future systems may add registers — cryptographic restraint, jurisdictional restraint, others not yet articulated. This document treats the catalog as a living artifact; the framework is the durable contribution, not the count.
 - **Not a re-derivation of Greenwood's analysis.** Where this document uses "registers of restraint," "Tier 1 vs. Tier 2," and the R1–R6 numbering, the vocabulary follows Greenwood's coinage. Detailed framework rationale lives in the source article; this document captures only what an LQ.AI operator needs to verify the project's current state against the framework.
 
@@ -66,7 +66,7 @@ LQ.AI's first capability boundary attaches to the **inference path** rather than
 
 - **Code path.** `gateway/app/tier_floor.py` (refusal envelope), `gateway/app/router.py` (annotation in B4 stage), `gateway/app/errors.py` (`CODE_TIER_BELOW_MINIMUM`).
 - **Privileged Projects force a tier floor.** PRD §3.11 — privileged Projects disable anonymization and require a tier matching the privilege posture.
-- **Per-purpose tagging (M2-E2).** `gateway/app/routing_log.py` adds `lq_ai_purpose` tagging so cost-estimation and the ensemble pre-flight budget (R4-partial) can differentiate judge calls from chat calls and embeddings.
+- **Per-purpose tagging (M2-E2).** `gateway/app/routing_log.py` adds `lq_ai_purpose` tagging so cost-estimation and the ensemble pre-flight budget (an R4 input) can differentiate judge calls from chat calls and embeddings.
 
 **Gap.** Agent-to-agent tool grants don't exist as a model today because LQ.AI doesn't yet have agents-calling-agents. The Playbook executor (M3-A2, `api/app/playbooks/executor.py`) runs single-agent multi-step workflows with implicit tool capabilities (read document, retrieve chunks, emit findings); each step does not declare its tools explicitly. A retrofit that adds declared per-position tool grants is tracked by **DE-292**.
 
@@ -119,58 +119,71 @@ Once autonomy exists — once the system runs without a lawyer reading every out
 
 **Definition.** A per-session or per-execution cost cap that halts the run rather than overspend. An agent running in a loop can quietly burn a fortune in API credits; the brake checks projected cost against a remaining budget before every tool call and halts gracefully if a call would exceed the cap.
 
-**Current implementation: PARTIAL.**
+**Current implementation: SHIPPED (M4) for the autonomous layer.**
+
+The autonomous layer ships a hard per-session **and** per-trigger `max_cost_usd` cap, checked before every tool call at the single `guarded_tool_call` chokepoint (`api/app/autonomous/guard.py`, the R4 stage of the R5 → R6 → R4 ordering). The pre-flight projects the call's cost (`api/app/autonomous/cost.py::estimate_tool_cost`), and if `session.cost_total_usd + projected > session.max_cost_usd` it raises `CostCapReached`, latches the session, and produces a receipt with `terminal_reason=cost_cap_reached` — a graceful halt, not an overrun. The per-trigger cap (a watch's or schedule's own `max_cost_usd`, inherited by the spawned session) landed in migration `0045`.
+
+The pre-M4 cost-tracking surfaces remain and feed the estimator:
 
 - **Per-call cost tracking (M1).** `inference_routing_log` table captures `cost_estimate` per provider call (PRD §5.5).
 - **Per-purpose tagging (M2-E2).** `gateway/app/routing_log.py` adds `lq_ai_purpose` so judge-call cost can be differentiated from chat-call cost.
-- **Rolling-average cost estimator (M2-E2).** `api/app/citation/cost.py::estimate_judge_call_cost_usd` queries per-model rolling averages from `inference_routing_log` with cold-start defaults.
+- **Rolling-average cost estimator (M2-E2).** `api/app/citation/cost.py::estimate_judge_call_cost_usd` queries per-model rolling averages from `inference_routing_log` with cold-start defaults; the autonomous cost wrapper reuses it for inference-bearing intents.
 - **Per-message ensemble pre-flight budget (M2-D1).** Pre-flight check in `chats.py::_resolve_ensemble_config` falls back from ensemble to single-judge Stage 3 when projected `n_citations × n_judges × per-judge-cost` exceeds the per-message cap.
 
-**Gap.** No hard per-session or per-execution `max_cost_usd` cap that halts an autonomous flow on overrun. The Playbook executor today does not surface a cost cap to the operator at execution time. The Easy Playbook generation pipeline has an ARQ `job_timeout` of 900 seconds (temporal, not economic) but no spend cap.
+**Live acceptance evidence.** The M4 fresh-install acceptance run produced a real halted session (`4554cdd9`) from a watch with `max_cost_usd=$0.001`: the analysis-phase `run_skill` call's R4 brake latched, the session halted, and its stored receipt carried `terminal_reason=cost_cap_reached`. R4 fired for real, end-to-end through the production-shape trigger → session → chokepoint chain.
 
-Two follow-ons:
-
-- **DE-292** retrofits a per-execution `max_cost_usd` cap on Playbook executions (M3 follow-on; folds into the executor's pre-flight cost-check).
-- **DE-293** specifies the per-autonomous-session cap for the M4 autonomous layer — defaults to a configurable value in `gateway.yaml` (suggested $5 initial default, matching Lavern's posture).
+**Remaining gap.** The non-autonomous Playbook executor still does not surface a per-execution cost cap to the operator at execution time; that retrofit is tracked by **DE-292** (folds into the executor's pre-flight cost-check). The autonomous-layer cap (DE-293, R4 facet) is shipped.
 
 **Verification path.**
 
 ```bash
-less api/app/citation/cost.py                 # Rolling-average estimator
-less gateway/app/routing_log.py               # Per-purpose tagging
-less api/app/api/chats.py                     # Pre-flight cost budget (M2-D1)
+rg -n "CostCapReached|max_cost_usd" api/app/autonomous/guard.py   # R4 stage at the chokepoint
+less api/app/autonomous/cost.py                                   # Per-call pre-flight projection
+less api/alembic/versions/0045_autonomous_per_trigger_max_cost.py # Per-trigger cap migration
+cd api && pytest tests/autonomous/test_r4_per_trigger_cap.py      # asserts terminal_reason == cost_cap_reached
+less api/app/citation/cost.py                                     # Rolling-average estimator (reused)
 ```
 
 ### R5 — Temporal restraint
 
 **Definition.** A liveness primitive checked before every tool call: external halt signal, idle-timeout auto-halt. An agent that runs unattended needs a stop that an operator can hit from outside the agent's loop.
 
-**Current implementation: NOT YET (marginal).**
+**Current implementation: SHIPPED (M4) for the autonomous layer.**
 
-A hard temporal brake exists in the form of ARQ `job_timeout` (currently 900s for `easy_playbook_generation_job`; configurable per-job), which kills a worker after the timeout elapses. This is *a* temporal brake but not the Lavern `haltCheckHook` pattern — it is a hard kill (the worker process is terminated, partial state may not be preserved cleanly) rather than a graceful halt that flushes the session's partial state, audits the halt cause, and surfaces a structured "halted" result to the operator. There is no external halt switch checked before every tool call; an operator cannot intervene mid-run to halt a generation that is otherwise going to complete.
+The autonomous layer ships the graceful-halt pattern (the Lavern `haltCheckHook` equivalent): a liveness check runs as the R5 stage at the start of every `guarded_tool_call` (`api/app/autonomous/guard.py`), the first of the R5 → R6 → R4 ordering.
 
-The graceful halt pattern attaches to the autonomous layer (PRD §3.10, M4). Implementation specification tracked by **DE-293** (the R5 facet): liveness primitive on the autonomous-session table, before-every-tool-call check, idle-halt timeout (suggested 5 minutes, matching Lavern), structured `halted` final state.
+- **External halt switch.** `POST /api/v1/autonomous/sessions/{session_id}/halt` (`api/app/api/autonomous.py::halt_session`) sets `halt_state='halt_requested'` (idempotent). On the next per-call pre-call refresh the chokepoint raises `SessionHalted(reason="external_halt")` and the executor transitions the session to `halted` with a structured receipt — an operator can intervene mid-run.
+- **Idle-timeout auto-halt.** A per-minute arq cron, `autonomous_idle_watchdog` (`api/app/workers/autonomous_worker.py`), runs a two-tick sweep via `_run_idle_sweep`: sessions idle past `idle_halt_minutes` go `running → paused`, and past `2 × idle_halt_minutes` go `paused → halted` with a `halted` audit row carrying `reason='idle_timeout'`. `last_activity_at` is bumped by the chokepoint on each tool call, feeding the watchdog.
+
+The pre-M4 ARQ `job_timeout` (e.g. 900s for `easy_playbook_generation_job`) remains for non-autonomous jobs — a hard-kill backstop, not the graceful-halt brake.
+
+**Remaining gap.** None for the autonomous layer (DE-293, R5 facet, shipped). The hard-kill `job_timeout` on non-autonomous Playbook jobs is still a kill rather than a graceful flush.
 
 **Verification path.**
 
 ```bash
-grep -n "job_timeout" api/app/workers/        # Current hard-kill brake
+rg -n "SessionHalted|halt_state" api/app/autonomous/guard.py    # R5 stage at the chokepoint
+rg -n "halt" api/app/api/autonomous.py                          # External halt endpoint
+rg -n "_run_idle_sweep|idle_halt_minutes" api/app/workers/autonomous_worker.py  # Idle watchdog cron
+cd api && pytest tests/autonomous/test_idle_watchdog.py         # Two-tick idle-halt semantics
 ```
 
 ### R6 — Contextual restraint
 
 **Definition.** Tool access is not granted once and left. The agent's permissions modulate as the workflow advances — search/read tools available during intake, stripped at the ethics gate or delivery. Capability is scoped to where you are in the work.
 
-**Current implementation: NOT YET.**
+**Current implementation: SHIPPED (M4) for the autonomous layer.**
 
-The Inference Tier model (R2) is a *resource-class* boundary, not a workflow-phase boundary. The Playbook executor (M3-A2) runs all positions with the same implicit capability set throughout the execution; there is no phase concept yet, no per-phase tool grant, no runtime tool-stripping at phase transitions.
+The autonomous executor's five phases (`intake`, `analysis`, `drafting`, `ethics_review`, `delivery`) each carry an explicit tool-grant set in `PHASE_GRANTS` (`api/app/autonomous/enums.py`), the authoritative per-phase grant map. The R6 stage of `guarded_tool_call` (`api/app/autonomous/guard.py`, between R5 and R4) checks `intent in PHASE_GRANTS[Phase(session.current_phase)]` before dispatch; a call for an intent not granted in the current phase raises `ToolNotGranted` (with the intent and phase in `.details`). Capability is scoped to where the session is in the work — a search/read intent available during `intake` is not available at `ethics_review` unless its phase grant says so. A test invariant (`test_phase_grants_covers_all_phases`) asserts every `Phase` member is a key in `PHASE_GRANTS`, so no phase can `KeyError` past the gate.
 
-R6 attaches to the autonomous layer (PRD §3.10, M4) and to multi-phase Playbook workflows. Implementation specification tracked by **DE-293** (the R6 facet): workflows declare phases (`intake`, `analysis`, `drafting`, `ethics_review`, `delivery`); the executor's current-phase row gates each tool call; phase transitions are explicit (declared in the workflow definition) and audited.
+**Remaining gap.** The non-autonomous Playbook executor (M3-A2) still runs all positions with the same implicit capability set — it has no phase concept. Phase-modulated grants for multi-phase Playbook workflows remain future work; the autonomous-layer facet (DE-293, R6) is shipped.
 
 **Verification path.**
 
 ```bash
-# No code path today — verification path lands with DE-293 / M4 implementation.
+rg -n "PHASE_GRANTS|ToolNotGranted" api/app/autonomous/guard.py  # R6 stage at the chokepoint
+less api/app/autonomous/enums.py                                 # PHASE_GRANTS authoritative map
+cd api && pytest tests/autonomous/test_brakes.py                 # R4/R5/R6 acceptance bar
 ```
 
 ---
@@ -202,9 +215,9 @@ It is named here so a reader doesn't conflate the two boundaries: a deployment c
 | R1 — prompt/workflow | Tier 1 (how) | Fully | `docs/skill-authoring-guide.md`, `api/app/citation/verification.py`, built-in skills; codification by **DE-291** |
 | R2 — capability/tool-grant | Tier 1 (how) | Fully (adapted) — inference tier; agent-tool-grant facet retrofit by **DE-292** | `gateway/app/tier_floor.py`, `gateway/app/router.py` |
 | R3 — code | Tier 1 (how) | Partial — gateway + Citation Engine + Anonymization + Playbook executor typed transitions; closed-intent-enum + audit-log retrofit by **DE-292**, cross-agent handoff by **DE-294** | `gateway/`, `api/app/citation/verification.py`, `gateway/app/anonymization/`, `api/app/playbooks/` |
-| R4 — economic | Tier 2 (what else) | Partial — per-call cost tracking + per-message ensemble budget; per-execution + per-session caps by **DE-292** / **DE-293** | `api/app/citation/cost.py`, `gateway/app/routing_log.py` |
-| R5 — temporal | Tier 2 (what else) | Not yet — ARQ `job_timeout` is a hard-kill brake; graceful halt by **DE-293** | (DE-293 implementation path) |
-| R6 — contextual | Tier 2 (what else) | Not yet — phase-modulated tool grants by **DE-293** | (DE-293 implementation path) |
+| R4 — economic | Tier 2 (what else) | SHIPPED (M4) — hard per-session + per-trigger `max_cost_usd` cap at the chokepoint; live-proven (`terminal_reason=cost_cap_reached`); non-autonomous Playbook per-execution cap still by **DE-292** | `api/app/autonomous/guard.py` (R4 stage), `api/app/autonomous/cost.py`, migration `0045`, `tests/autonomous/test_r4_per_trigger_cap.py` |
+| R5 — temporal | Tier 2 (what else) | SHIPPED (M4) — external halt endpoint + idle watchdog, graceful `halted` state at the chokepoint (`SessionHalted`); pre-M4 `job_timeout` still a hard-kill backstop for non-autonomous jobs | `api/app/autonomous/guard.py` (R5 stage), `api/app/api/autonomous.py` (halt), `api/app/workers/autonomous_worker.py` (idle cron), `tests/autonomous/test_idle_watchdog.py` |
+| R6 — contextual | Tier 2 (what else) | SHIPPED (M4) — phase-gated tool grants (`PHASE_GRANTS`) at the chokepoint (`ToolNotGranted`); non-autonomous Playbook phase grants remain future work | `api/app/autonomous/guard.py` (R6 stage), `api/app/autonomous/enums.py`, `tests/autonomous/test_brakes.py` |
 | **Orthogonal** | Inference Choice Spectrum (where data goes) | Fully (per tier model) | `gateway/app/tier_floor.py`, PRD §1.5.2 |
 
 ---
@@ -216,7 +229,7 @@ It is named here so a reader doesn't conflate the two boundaries: a deployment c
 - [PRD §9 DE-289](../PRD.md#de-289--lavern-as-design-reference-for-the-autonomous-layer-full-path-ensemble-and-mcp-catalog) — Lavern as design reference (the codebase Tier 2 framing draws from).
 - [PRD §9 DE-291](../PRD.md#de-291--r1-codification-rules-of-restraint-in-skill-authoring-guide-and-golden-tests-for-starter-skills) — R1 codification + golden tests.
 - [PRD §9 DE-292](../PRD.md#de-292--playbook-executor-retrofit-declared-tool-grants--schema-validated-step-handoffs--per-execution-cost-cap) — Playbook executor R2-agent + R3-step + R4-execution retrofit.
-- [PRD §9 DE-293](../PRD.md#de-293--autonomous-layer-restraints-r4-economic-r5-temporal-r6-contextual) — autonomous-layer Tier 2 implementation spec.
+- [PRD §9 DE-293](../PRD.md#de-293--autonomous-layer-restraints-r4-economic-r5-temporal-r6-contextual) — autonomous-layer Tier 2 implementation spec (R4 + R5 + R6, shipped in M4 at the `guarded_tool_call` chokepoint).
 - [PRD §9 DE-294](../PRD.md#de-294--cross-agent-handoff-validation-for-autonomous-multi-agent-flows) — cross-agent `orchestrate.py`-equivalent.
 - [HONEST-STATE.md](../HONEST-STATE.md) — the parallel posture document for capabilities (this file is the same pattern for restraints).
 
