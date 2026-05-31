@@ -122,7 +122,7 @@ Run a skill (or ad-hoc column spec) across a document corpus into a document × 
 | Column-spec snapshot at execution start (auditable invariant) | M3 | `api/app/models/tabular.py` (columns JSONB snapshot) |
 | Learn viz | M3 | `web/static/learn/playgrounds/tabular-review.html` |
 
-**Caveat (honest):** no backend test coverage in `api/tests/` for tabular yet — a known gap. Bulk-op sibling infrastructure (`parent_execution_id`) is present but not yet exercised.
+**Caveat (honest):** tabular has unit/component backend coverage (`api/tests/tabular/` — nodes, cost, export, schemas, worker, executor-spans), but no per-endpoint integration test driving the handlers end-to-end against a live DB yet — a known gap. Bulk-op sibling infrastructure (`parent_execution_id`) is present but not yet exercised.
 
 ### 4.3 Word add-in (Office.js) — scaffold only
 
