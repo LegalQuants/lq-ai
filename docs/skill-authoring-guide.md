@@ -28,6 +28,8 @@ my-skill/
 
 `SKILL.md` is the operational instruction the model executes when the skill is attached to a chat. Everything in `SKILL.md` becomes part of the prompt; everything in `reference/` is optionally surfaced when the skill's workflow references it. `examples/` are documentation for users and reviewers; they do not become part of the prompt by default.
 
+**Where skills live.** Built-in skills are filesystem-canonical under `skills/<slug>/SKILL.md` in this repo. Community skills come from the [`LegalQuants/lq-skills`](https://github.com/LegalQuants/lq-skills) git submodule mounted at `skills/community/` — **empty on a fresh clone until you run `git submodule update --init --remote skills/community`**. At startup the loader (`api/app/skills/loader.py`) walks built-in skills first, then community skills, with **built-in winning on slug collision**. User- and team-authored skills are a separate path entirely: they live in the `user_skills` database table (created via the wizard UI or `POST /api/v1/user-skills`), not on the filesystem — see [User-scope skills](#user-scope-skills-slash_alias-forked_from-and-capture-from-chat-wave-d2) below.
+
 ---
 
 ## SKILL.md frontmatter
@@ -73,15 +75,15 @@ lq_ai:
 - **`lq_ai.version`** — semver. `1.0.0` for first stable release.
 - **`lq_ai.author`** — your name (or a co-authoring pair, separated by " and "), or "LegalQuants" for skills authored by the project team.
 - **`lq_ai.tags`** — array of tags for skill discovery. See the [tag conventions](#tag-conventions) section below.
-- **`lq_ai.jurisdiction`** — what jurisdiction the skill is calibrated to.
+- **`lq_ai.jurisdiction`** — what jurisdiction the skill is calibrated to. The parser treats this as a free-form string; the M1 corpus uses a range of values (`us`, `US-default`, `agnostic`, `regime-aware`, etc.). The conventional values to prefer:
   - `us` — US-law-focused.
   - `eu` — EU-focused.
   - `regime-aware` — the skill takes a `regulatory_regime` input or similar to handle multiple regimes.
-  - `global` — explicitly jurisdiction-agnostic (rare; most skills are at minimum US-law-defaults).
+  - `global` (or `agnostic`) — explicitly jurisdiction-agnostic (rare; most skills are at minimum US-law-defaults).
   - `other` — for specific jurisdictions (Brazil, India, etc.); spell out in skill body.
 - **`lq_ai.trigger_examples`** — at least three example prompts that should trigger this skill. The application uses these for skill matching; the model uses them to disambiguate between skills.
 - **`lq_ai.inputs`** — required and optional inputs (see [Input design](#input-design) below).
-- **`lq_ai.output_format`** — `report` (default markdown), `table` (structured grid for Tabular Review), `issues_list` (structured JSON for issue-tracker piping), or `redline` (Word tracked-changes mode).
+- **`lq_ai.output_format`** — the conventional values are `report` (default markdown), `table` (structured grid for Tabular Review), `issues_list` (structured JSON for issue-tracker piping), and `redline` (Word tracked-changes mode). The frontmatter parser treats this field as a free-form string (the M1 starter skills predate this guide and use a wider range of values — e.g. `markdown`, `structured_checklist`, `adaptive`); only `table` is load-bearing. New skills should prefer the conventional values above, but the loader will not reject an unrecognized one. See `api/app/skills/schema.py`.
 
 ### Optional fields
 
