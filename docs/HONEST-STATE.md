@@ -1,6 +1,6 @@
 # Honest State
 
-> Catalog of what LQ.AI ships today, what is deferred, and how to verify each. Maintained per release.
+> Catalog of what LQ.AI ships today, what is deferred, and how to verify each. Maintained per release. **Current as of the M4 close (Autonomous Layer shipped; migration head `0045`).**
 
 ## What this doc is
 
@@ -11,49 +11,44 @@ This document catalogs what LQ.AI ships today, what is deferred, and how an oper
 Each table has three columns:
 
 - **Capability** — what the operator gets.
-- **Status** — `M1` or `M2` (shipped today), `M2-XX` (shipped today, naming a specific M2 phase task like `M2-D3` for context), `deferred-Mx` (named in the roadmap; not yet wired in source), or `deferred (community-friendly)` for items on the [PRD §9](PRD.md#9-deferred-enhancements-and-identified-future-work) backlog ready for contribution.
+- **Status** — `M1`/`M2`/`M3`/`M4` (shipped today, naming the milestone it landed in; a sub-tag like `M4` or `M3` may name a specific phase for context), `partial` (shipped with explicit caveats, named inline), `scaffold` (plumbing only, feature work deferred), or `deferred-Mx` / `deferred (community-friendly)` for roadmap or [PRD §9](PRD.md#9-deferred-enhancements-and-identified-future-work) items not yet wired in source.
 - **Verification** — the file path, test command, or doc the operator can read to confirm the claim.
 
 Status markers reference the roadmap milestones (M1 → M4) documented in [README.md](../README.md#project-status) and [PRD §8](PRD.md#8-roadmap).
 
-## Where M1 and M2 sit
+## Where M1–M4 sit
 
-**M1 — Foundation (shipped).** Self-hostable release that delivers conversational legal AI on top of the ten starter skills, with the engineering surfaces (audit, tier enforcement, projects, knowledge bases, saved prompts, receipts, the skill-creator pipeline) that the M2–M4 capability work builds on. Three provider adapters: Anthropic, OpenAI, Ollama (local Tier 1).
+**M1 — Foundation (shipped).** Self-hostable conversational legal AI on the starter skills, with the engineering surfaces (audit, tier enforcement, projects/matters, knowledge bases + ingestion, saved prompts, receipts, the skill-creator pipeline) that later milestones build on. Provider adapters: Anthropic, OpenAI, Ollama (local Tier 1).
 
-**M2 — Citation Engine + Anonymization Layer (shipped).** Closes the two flagship M1-described capabilities whose architectural slots existed without running pipelines:
+**M2 — Citation Engine + Anonymization Layer (shipped).** The four-stage citation verification cascade (exact → tolerant → paraphrase judge → ensemble) and the gateway anonymization middleware (Presidio + custom legal recognizers, streaming-aware rehydration, privileged + retrieval skips) both ship operational. The Azure OpenAI provider adapter rounds out the provider set.
 
-- **Citation Engine** — four-stage verification cascade (exact match → tolerant match → paraphrase judge → ensemble) ships operational. Every model-emitted citation gets verified character-by-character against the source document before rendering; failed citations surface as "unverified" rather than as confident-looking wrong text. §3.1 below catalogs the cascade and what an operator can verify in source today.
-- **Anonymization Layer** — pre/post middleware in the gateway pseudonymizes named entities (Presidio defaults + custom legal recognizers for case + matter numbers) before requests leave for the model provider; streaming-aware rehydration restores originals on the response path. Privileged-project chats skip the layer entirely; retrieved source documents stay un-pseudonymized so citation grounding is direct. §3.2 below catalogs the middleware and the decisions it implements.
-- **Azure OpenAI provider adapter** rounds out the M2 provider set, unblocking Azure-tenant enterprise deployments via the operator's existing Azure agreement.
+**M3 — Playbooks · Tabular Review · Word add-in · Slack/Teams intake bridge (shipped, with two honest caveats).**
+- **Playbooks** and **Tabular / multi-document review** ship operational end-to-end (real execution against documents, with cost tracking and export).
+- The **Word add-in** ships as a **scaffold** — installable, authenticatable, version-safe — but its substantive in-Word feature surfaces (chat, skills with tracked changes, playbook execution) are deferred ([DE-287](PRD.md#9-deferred-enhancements-and-identified-future-work)); today its tabs deep-link to the web app.
+- The **Slack/Teams light intake bridge** ships **partial** — the bridge services, OAuth install flows, encrypted persistence, and admin management are wired and unit-tested, but the flows have **not been exercised end-to-end against live Slack/Microsoft endpoints** ([DE-312](PRD.md#9-deferred-enhancements-and-identified-future-work)), and the `/lq` slash-command surface is inert ([DE-288](PRD.md#9-deferred-enhancements-and-identified-future-work)).
 
-**M3 and M4 not yet started in source.** Playbooks, the Word add-in, Tabular / Multi-Document Review, the Slack/Teams light-intake bridge, the Autonomous Layer, and the Contract Repository auto-relationship graph remain deferred milestone capabilities — the architectural slots will land when each milestone's work starts. §4 below catalogs them with the verification path (current absence in source) for each.
+**M4 — Autonomous Layer (shipped).** The background autonomous executor runs real in-loop work: a five-phase LangGraph state machine (intake → analysis → drafting → ethics_review → delivery) where every external action routes through a single `guarded_tool_call` chokepoint enforcing three brakes — R4 (per-session/per-trigger cost cap), R5 (external halt + idle watchdog), R6 (phase-gated tool grants). It ships the four primitives (watches, schedules, per-user memory, precedent board), honest per-session receipts, per-user opt-in, and a full web dashboard. The **Contract Repository auto-relationship graph** (a separate M4-roadmap capability) is **not** built.
 
-The honest reading is that an operator can deploy LQ.AI today for the everyday in-house work the ten starter skills cover, with character-verified citation grounding and operator-configurable pseudonymization, with the knowledge that the broader product surface (Playbooks, Word integration, multi-doc review, Slack/Teams bridge, autonomous background agents, contract relationship graph) lands across M3 and M4. The sections below catalog each capability so the operator can make that assessment with the same information the maintainer team has.
+**The honest reading:** an operator can deploy LQ.AI today for everyday in-house work on the starter skills, with character-verified citation grounding, operator-configurable pseudonymization, codified-position playbooks, multi-document tabular review, and an opt-in autonomous background layer with hard economic/temporal/contextual brakes. The deferred edges are: in-Word feature surfaces (scaffold today), live-verified chat-platform intake (plumbing today), the contract relationship graph, and the MCP client subsystem.
 
 ---
 
-## 1. Conversational and workspace surface
+## 1. Conversational and workspace surface (M1)
 
-This is the surface an in-house counsel touches every day: chat, matter workspaces, skills, knowledge bases, saved prompts, receipts. Every row below is wired end-to-end in M1 and covered by at least one Cypress E2E spec.
+The surface in-house counsel touches every day. Every row is wired end-to-end in M1.
 
 | Capability | Status | Verification |
 |---|---|---|
 | Multi-turn chat with persistent history | M1 | `api/app/api/chats.py`; `web/cypress/e2e/chat.cy.ts` |
 | Matter (project) workspace with attached files / skills / KBs | M1 | `api/app/api/projects.py`; `web/src/routes/lq-ai/matters/[id]/+page.svelte` |
 | Slash-invoked skills with provenance pill | M1 | `web/cypress/e2e/wave-d2-skill-creator.cy.ts` Test 4 |
-| Community skill catalog via [`LegalQuants/lq-skills`](https://github.com/LegalQuants/lq-skills) submodule | M1 | `skills/community/` (30+ skills); loader walks both built-in + community paths with built-in winning on slug collision (`api/app/skills/loader.py`); operator refreshes via `git submodule update --remote skills/community` |
-| Skill capture from a chat reply | M1 | `web/cypress/e2e/wave-d2-skill-creator.cy.ts` Test 1 |
-| Wizard-based skill authoring (from scratch) | M1 | `web/cypress/e2e/wave-d2-skill-creator.cy.ts` Test 2 |
-| Fork built-in or team skills | M1 | `web/cypress/e2e/wave-d2-skill-creator.cy.ts` Test 3 |
-| Skill versions tab + per-version audit log | M1 | `web/cypress/e2e/wave-d2-skill-creator.cy.ts` Test 6 |
-| Try-it sandbox per skill (component-state) | M1 | `web/cypress/e2e/wave-d2-skill-creator.cy.ts` Test 5; cross-tab conversation persistence in the sandbox is deferred (read the M1 limitation in `web/src/lib/lq-ai/components/SkillTryItPane.svelte`) |
-| Saved Prompts library with one-click "Use in chat" | M1 | `web/cypress/e2e/wave-m1-final-surfaces.cy.ts` Test 1; `api/app/api/saved_prompts.py` |
-| Knowledge bases — create, attach documents, ingest to `ready` | M1 | `web/cypress/e2e/wave-m1-final-surfaces.cy.ts` Test 2; `api/app/api/knowledge_bases.py`; `api/app/pipeline/ingest.py`; `api/app/workers/document_pipeline.py` |
-| Receipts drawer with per-event provenance | M1 | `web/cypress/e2e/wave-d1-power-features.cy.ts` Test 4 + `wave-m1-final-surfaces.cy.ts` Test 3; `api/app/api/chat_receipts.py` |
-| Tier-floor refusal with admin override | M1 | `web/cypress/e2e/wave-d1-power-features.cy.ts` Test 3 + Test 5; `gateway/app/tier_floor.py` |
-| Admin model-alias CRUD (create / edit / delete) | M1 with one known UX gap | `web/src/routes/lq-ai/admin/models/+page.svelte` + `AliasForm.svelte`; **known issue in M1:** the edit modal's Model dropdown shows only the currently-saved model (the autocomplete prop `providerModels` is not populated by the parent — the field remains free-text-editable but autocomplete is missing). Tracked as [DE-272](PRD.md#de-272--admin-aliasform-model-dropdown-autocomplete-population). The light/dark color-contrast issue originally reported alongside this was fixed pre-tag — the `dark:` Tailwind variants were removed so the form matches the surrounding admin chrome |
-| Enhance Prompt (⌘E) | M1 | `web/cypress/e2e/wave-d1-power-features.cy.ts` Test 1; `api/app/api/enhance_prompt.py` |
-| KB attach modal from the composer | M1 | `web/cypress/e2e/wave-d1-power-features.cy.ts` Test 2 |
+| Built-in starter skills | M1 | `skills/*/SKILL.md` (read every prompt — no hidden instructions) |
+| Community skill catalog via [`LegalQuants/lq-skills`](https://github.com/LegalQuants/lq-skills) submodule | M1 (opt-in) | `skills/community/` is a git submodule, **empty until initialized** — run `git submodule update --init --remote skills/community` to populate it. The loader walks built-in + community paths with built-in winning on slug collision (`api/app/skills/loader.py`); on a fresh clone with no submodule checkout there are no community skills. |
+| Skill capture / wizard authoring / fork / versions tab | M1 | `web/cypress/e2e/wave-d2-skill-creator.cy.ts` Tests 1–6 |
+| Saved Prompts library with one-click "Use in chat" | M1 | `api/app/api/saved_prompts.py`; `web/cypress/e2e/wave-m1-final-surfaces.cy.ts` Test 1 |
+| Knowledge bases — create, attach documents, ingest to `ready` (hybrid BM25 + vector retrieval) | M1 | `api/app/api/knowledge_bases.py`; `api/app/workers/document_pipeline.py` |
+| Receipts drawer with per-event provenance | M1 | `api/app/api/chat_receipts.py`; `web/cypress/e2e/wave-m1-final-surfaces.cy.ts` Test 3 |
+| Enhance Prompt (⌘E) | M1 | `api/app/api/enhance_prompt.py` |
 | Audit log of all sensitive actions | M1 | `api/app/audit.py`; admin reads at `/lq-ai/admin/audit-log` |
 | FTS over chat history | M1 | `api/app/api/chats.py` (search route); migration `0016_chat_messages_fts.py` |
 | GDPR-aligned export and account deletion | M1 | `api/app/workers/user_export.py`; `api/app/workers/user_deletion.py`; `api/app/api/users.py` |
@@ -62,250 +57,203 @@ This is the surface an in-house counsel touches every day: chat, matter workspac
 
 ## 2. Inference gateway and providers
 
-The Inference Gateway is the security boundary — the only component holding privileged provider API keys, the only component making outbound calls to inference providers. Four provider adapters ship after M2: Anthropic, OpenAI, Azure OpenAI (M2-E1), and Ollama (local Tier 1). Google Vertex AI and AWS Bedrock are spec'd in PRD §9 with wire-format detail and acceptance criteria; they are contributor-friendly work units and remain on the deferred-enhancement list.
+The Inference Gateway is the security boundary — the only component holding privileged provider API keys and the only component making outbound calls to inference providers. Four provider adapters ship: Anthropic, OpenAI, Azure OpenAI, Ollama (local Tier 1). Google Vertex AI and AWS Bedrock are spec'd in PRD §9 as contributor-friendly work and remain deferred.
 
 | Capability | Status | Verification |
 |---|---|---|
 | Inference gateway with provider routing | M1 | `gateway/app/router.py` |
-| Anthropic provider adapter | M1 | `gateway/app/providers/anthropic.py` |
-| OpenAI provider adapter | M1 | `gateway/app/providers/openai.py` |
-| Ollama provider adapter (local, Tier 1) | M1 | `gateway/app/providers/ollama.py`; `docker-compose.yml` `--profile local` |
-| Azure OpenAI provider adapter | M2-E1 | `gateway/app/providers/azure_openai.py`; PRD entry [DE-267](PRD.md#de-267--azure-openai-provider-adapter) (closed in M2) |
-| Google Vertex AI provider adapter | deferred (community-friendly) | Wire-format spec in [PRD §9 DE-034](PRD.md#de-034--google-vertex-ai-provider-adapter-anthropic-on-vertex) ready for a contributor to pick up |
-| AWS Bedrock provider adapter | deferred (community-friendly) | Fully spec'd in [PRD §9 DE-035](PRD.md#de-035--aws-bedrock-provider-adapter-anthropic-on-bedrock) with AWS Event Stream parser + SigV4 acceptance criteria |
-| Tier enforcement (Tiers 1 – 5) | M1 | `gateway/app/tier_floor.py` |
-| Privileged-matter tier floor enforcement | M1 + M2-D3 (verification) | `web/cypress/e2e/wave-d1-power-features.cy.ts` Test 3 + Test 5; M2-D3 added end-to-end audit-trail integration test at `api/tests/test_chat_citations.py::test_chat_send_privileged_project_full_audit_trail` |
-| Anonymization pre/post middleware | M2 (recognizer accuracy on legal corpus: empirically unmeasured — see [PRD §9 DE-282](PRD.md#de-282--anonymization-layer-empirical-validation-on-legal-document-corpus) and [`docs/security/anonymization.md` §"What's validated vs what's unvalidated"](security/anonymization.md#whats-validated-vs-whats-unvalidated)) | `gateway/app/anonymization/middleware.py`; see §3.2 below |
+| Anthropic / OpenAI / Ollama provider adapters | M1 | `gateway/app/providers/{anthropic,openai,ollama}.py`; Ollama via `docker compose --profile local` |
+| Azure OpenAI provider adapter | M2 | `gateway/app/providers/azure_openai.py` ([DE-267](PRD.md#9-deferred-enhancements-and-identified-future-work), closed in M2) |
+| Google Vertex AI / AWS Bedrock provider adapters | deferred (community-friendly) | Wire-format specs in PRD §9 (DE-034 / DE-035) |
+| Tier enforcement (Tiers 1–5) + privileged-matter tier floor | M1 | `gateway/app/tier_floor.py` |
+| Anonymization pre/post middleware | M2 | `gateway/app/anonymization/middleware.py` (wired on the request path at `gateway/app/api/inference.py`); see §3.2. Recognizer accuracy on a legal corpus is empirically unmeasured — [DE-282](PRD.md#9-deferred-enhancements-and-identified-future-work). |
 | Routing log (per-inference) | M1 | `gateway/app/routing_log.py` |
-| Citation Engine config endpoint (`GET /v1/citation-engine/config`) | M2-C1 + M2-D1 | `gateway/app/api/inference.py::citation_engine_config` — returns judge_model + ensemble block with server-computed `envelope_tier` |
-| Provider-key encryption at rest (Fernet-wrapped master-key path) | M1 | `gateway/app/secrets.py`; `docs/security/encrypted-keys.md` |
-| Hot-reload of gateway config via SIGHUP | M1 | `gateway/app/config_holder.py`; `gateway/app/config_loader.py`; `docs/adr/0010-gateway-config-hot-reload.md` |
-| Per-skill prompt-injection detection rates published | not yet | No published numbers; see §6 below for the engineering-discipline plan |
+| Provider-key encryption at rest (Fernet master-key) | M1 | `gateway/app/secrets.py`; `docs/security/encrypted-keys.md` |
+| Hot-reload of gateway config via SIGHUP | M1 | `gateway/app/config_holder.py`; `docs/adr/0010-gateway-config-hot-reload.md` |
 
 ---
 
-## 3. M2-shipped capabilities — Citation Engine and Anonymization Layer
+## 3. M2 — Citation Engine and Anonymization Layer (shipped)
 
-These are the two flagship M2 capabilities that landed Phase D of the M2 build. Both were architectural slots in M1 with explicit "M2 deferred" stubs; both are now operational and exercised by integration tests against a live Postgres + mocked-gateway stack. They are called out individually rather than in the tables above because they materially change what an M2 deployment promises its users — and because the same "verification path runs through readable code" framing now applies to the shipped pipeline rather than to a deferred stub.
+### 3.1 Citation Engine — 4-stage cascade
 
-### 3.1 Citation Engine — shipped M2 (4-stage cascade)
+Character-level verification of every model-emitted citation against source documents; failed citations surface as "unverified" rather than confident wrong text.
 
-The PRD ([§3.3](PRD.md#33-citation-engine-exact-quote)) describes a Citation Engine with character-level verification of every claim against source documents — a pipeline that guarantees character-fidelity from document → model context → cited output → rendered viewer, and that renders failed citations as "unverified" rather than as confident wrong citations. **In M2, the full four-stage cascade is operational.**
+- **Cascade** (`api/app/citation/verification.py`): Stage 1 `verify_exact_match` → Stage 2 `verify_tolerant_match` (rapidfuzz ≥95 + normalization) → Stage 3 `verify_paraphrase` (LLM judge via gateway) → Stage 4 `verify_ensemble` (N-model parallel, strict/majority, cost-budget fallback to Stage 3).
+- **Endpoint:** `GET /api/v1/chats/{chat_id}/messages/{message_id}/citations`; rows persist in `message_citations` (migrations `0025`–`0027`). Candidates that miss every stage are not persisted — the UI reads the absence as "unverified" (red).
+- **Verify:** `cd api && pytest tests/citation/ tests/test_chat_citations.py`; full reference in [`docs/citation-engine.md`](citation-engine.md).
+- **Known limitation:** a quote spanning two retrieved chunks silently drops at extraction ([DE-277](PRD.md#9-deferred-enhancements-and-identified-future-work); pinned by `api/tests/citation/test_edge_cases.py`).
 
-The endpoint at `GET /api/v1/chats/{chat_id}/messages/{message_id}/citations` returns one row per verified citation from the `message_citations` table; the row carries `verification_method`, `verification_confidence`, the byte-precise source offsets, and (for ensemble runs) a `tier_envelope` audit field. Candidates that miss every stage are NOT persisted — the M2-C2 chat UI consumes the absence of a row as the "unverified" signal and renders the marker red.
+### 3.2 Anonymization Layer — gateway middleware
 
-**The four-stage cascade** (implemented in `api/app/citation/verification.py`):
+Pseudonymizes named entities before requests leave for the provider; rehydrates originals on the response path (streaming-aware). **The middleware is wired and running** — `pre_anonymize_request` is called on the request path in `gateway/app/api/inference.py` after tier derivation, before provider dispatch.
 
-1. **Stage 1 — `verify_exact_match`** (M2-A2). Byte-for-byte equality at the candidate's offsets against `documents.normalized_content`. Trivially fast; pure Python.
-2. **Stage 2 — `verify_tolerant_match`** (M2-B1). Normalizes both the source slice and the candidate text via `app.citation.normalization.normalize` (smart-quote folding, whitespace collapse, OCR-confusion rules when `document.was_ocrd=True`) and compares with `rapidfuzz.fuzz.ratio` at threshold 95. Catches formatting drift without accepting genuine paraphrases.
-3. **Stage 3 — `verify_paraphrase`** (M2-C1). LLM judge call through the gateway (model configured via `gateway.yaml` `citation_engine.judge_model`, default `fast`). Returns `yes` / `partial` / `no` with `high` / `medium` / `low` confidence mapped to 0.90 / 0.70 / 0.50. `partial` verdicts persist with a `partial=true` flag so the M2-C2 UI renders them distinctly.
-4. **Stage 4 — `verify_ensemble`** (M2-D1). Replaces Stage 3 when activated. Dispatches the paraphrase judge in parallel across N models via `asyncio.gather`; aggregates verdicts under `strict` (all-agree) or `majority` (simple-majority) rules. Activation is the OR of skill frontmatter (`lq_ai.ensemble_verification: true`), the project's `ensemble_verification` column, and the gateway's `default_enabled` flag. Pre-flight cost-budget check falls back to single-judge Stage 3 if the estimated spend exceeds `max_cost_per_message_usd`.
-
-**What an operator can verify today:**
-
-- Read the cascade implementation: [`api/app/citation/verification.py`](../api/app/citation/verification.py).
-- Read the persistence + activation logic: `api/app/api/chats.py::_persist_message_citations` and `::_resolve_ensemble_config`.
-- Read the gateway config endpoint: [`gateway/app/api/inference.py`](../gateway/app/api/inference.py) `GET /v1/citation-engine/config` (computes the ensemble's `envelope_tier` server-side from the configured `judge_models` list).
-- Read the schema: migration [`0025_create_message_citations.py`](../api/alembic/versions/0025_create_message_citations.py) + extensions in `0026_paraphrase_judge_and_partial.py` (M2-C1) and `0027_ensemble_method_values.py` (M2-D1).
-- Read the full integration walkthrough: [`docs/citation-engine.md`](citation-engine.md) — cascade, UI states (4 chip variants with tooltip variance per method), configuration surface, cost-budget enforcement, privacy implications of Stage 4, integration with Anonymization Layer, known limitations.
-- Run the unit test suite: `cd api && pytest tests/citation/` (95 tests covering extraction, normalization, exact match, tolerant match, paraphrase judge, ensemble strict/majority/tier-envelope/budget-fallback, cascade routing).
-- Run the integration test suite: `cd api && pytest tests/test_chat_citations.py` (12 tests against live Postgres covering verbatim quotes, tolerant matches, paraphrase verdicts, partial flag, multi-doc citations, deleted-doc handling, retrieval-context skip, privileged-project full audit trail).
-
-**What this means for an M2 deployment:**
-
-- The model cannot produce confidently-rendered text that wasn't traceable to source. Every emitted `"..." (Source: [N])` pair gets verified through the cascade; only verified candidates persist as `message_citations` rows; the UI distinguishes verified (green / yellow) from unverified (red) cleanly.
-- Operators with high-stakes operations (regulatory filings, board materials) opt in to Stage 4 ensemble verification for additional confidence. The privacy envelope (max tier across the configured judge models) persists per row so the operator can audit which chats had citations sent to weaker tiers.
-- The `verification_method` enum (`exact_match` / `tolerant_match` / `paraphrase_judge` / `ensemble_strict` / `ensemble_majority` / `failed`) is queryable for compliance reporting: `SELECT method, count(*) FROM message_citations GROUP BY verification_method` shows the verification distribution across the deployment's chat history.
-- One known limitation persists, tracked as [DE-277](PRD.md#de-277--citation-extractor-fallback-to-document-scan-on-chunk-boundary-miss): a citation quote that spans the boundary between two retrieved chunks (neither chunk's content alone contains the full quote) silently drops at extraction and renders as "unverified." Documented in [`docs/citation-engine.md` §Known limitations](citation-engine.md#chunk-boundary-spanning-quotes--silently-drop-today); pinned by `api/tests/citation/test_edge_cases.py::test_chunk_boundary_spanning_citation_does_not_extract_today` so a future DE-277 implementation has a failing test to flip.
-
-### 3.2 Anonymization Layer — shipped M2 (middleware + custom recognizers + privileged-skip + retrieval-skip)
-
-The PRD ([§4.7](PRD.md#47-anonymization-layer-m2)) describes an Anonymization Layer that swaps named entities for stable placeholders on the request path and rehydrates them on the response path — the privacy fallback for Tier 3+ inference paths when local (Tier 1) inference is impractical but defensible privacy posture is still required. **In M2, the full middleware is wired end-to-end with custom legal recognizers, streaming-aware rehydration, privileged-project carve-out, and a retrieval-context skip for direct citation grounding.**
-
-**Pipeline:** `gateway/app/anonymization/middleware.py::pre_anonymize_request` runs after tier derivation and before provider dispatch (per the request path in `gateway/app/api/inference.py:614`). It walks user/assistant/system messages plus skill inputs, pseudonymizes each detected entity via `app.anonymization.engine.Anonymizer`, and returns a `PseudonymMapper` carrying the pseudonym→original mapping. The response path calls `post_anonymize_response` (non-streaming) or feeds chunks through `StreamingRehydrator` (streaming) to substitute originals back. The mapper is per-request and in-memory only — never persisted, never logged, dropped on function exit.
-
-**Recognizer set** (configured in `gateway/app/anonymization/engine.py::get_analyzer_engine`):
-
-- Presidio defaults: `PERSON`, `ORGANIZATION`, `EMAIL_ADDRESS`, `PHONE_NUMBER`, `LOCATION` (via spaCy `en_core_web_lg` baked into the gateway Dockerfile per M2-B2).
-- Custom legal recognizers: `CaseNumberRecognizer` (matches docket-number formats; M2-B2) and `MatterNumberRecognizer` (matches internal matter-tracking identifiers; M2-B2).
-
-**Skip conditions** (any one short-circuits to no-op):
-
-1. `config.enabled is False` — master switch.
-2. `routed_tier not in config.apply_at_tiers` — Tier 1 (local) doesn't benefit.
-3. `chat_request.lq_ai_privileged is True` — privileged chats are never rewritten (Decision A: rewriting privileged work product risks corrupting it).
-4. `chat_request.anonymize is False` — per-request opt-out (the Citation Engine's judge calls use this).
-5. `message.lq_ai_skip_anonymization is True` — per-message opt-out, set by the api/ on the retrieval-context system message so the model sees intact source quotes for citation grounding (Decision M2-1).
-
-**What an operator can verify today:**
-
-- Read the middleware: [`gateway/app/anonymization/middleware.py`](../gateway/app/anonymization/middleware.py) — `pre_anonymize_request`, `post_anonymize_response`, `StreamingRehydrator` with bounded-tail-buffer semantics.
-- Read the mapper: [`gateway/app/anonymization/mapper.py`](../gateway/app/anonymization/mapper.py) — `PseudonymMapper.assign` (stable per-`(entity_type, original)` assignments within a request), `reverse` (rehydration substitution table).
-- Read the custom recognizers: [`gateway/app/anonymization/recognizers/case_number.py`](../gateway/app/anonymization/recognizers/case_number.py) and `matter_number.py`.
-- Read the request-path wiring: `gateway/app/api/inference.py:614-619` (pre-middleware call) and `:673` (post-middleware call); streaming counterparts at `:1107` and onwards.
-- Read the full middleware contract: [`docs/security/anonymization.md`](security/anonymization.md) — recognizer set, decision basis, audit-log shape, privileged-chat carve-out, retrieval-context skip, known limitations.
-- Run the unit + integration test suite: `cd gateway && pytest tests/anonymization/ tests/test_inference_anonymization.py` (93+ tests covering analyzer, mapper, engine integration, recognizers, middleware skip conditions, round-trip correctness with the real Presidio engine, edge cases).
-
-**What this means for an M2 deployment:**
-
-- Operators on Tier 3+ paths can configure pseudonymization as a defense-in-depth control on top of the provider's contractual privacy posture. The provider sees pseudonymized entity strings (`PERSON_0001`, `COMPANY_0001`); the user sees originals (rehydrated on the response path).
-- Privileged matters work as expected: setting `Project.privileged=True` causes the gateway middleware to skip the entire request, so privileged work product reaches the configured inference target verbatim. The combination "privileged + Tier 1 (Ollama)" produces fully sealed local inference with no outbound network and no anonymization rewriting — the recommended posture for the most sensitive matters per [`docs/security/anonymization.md` §Privileged chats](security/anonymization.md#privileged-chats--why-we-skip-m2-b3--m2-d3).
-- Retrieved source documents stay un-pseudonymized so the Citation Engine's quote verification works directly against the original document text (Decision M2-1). The alternative (Option A: pseudonymize sources too) is tracked as [DE-269](PRD.md#de-269--anonymization-option-a-pseudonymize-source-documents-too).
-- One forward-looking surface remains: per-request salting of the pseudonym format to close the cross-mapper collision surface, tracked as [DE-274](PRD.md#de-274--anonymization-pseudonym-collision-in-source-documents). The current `{ENTITY_TYPE}_{NNNN}` format is operator-readable and deterministic by design; the salt would add ~5 chars per pseudonym and close the structural distinctness gap. Pinned by the M2-C3 round-trip test suite so the gap is visible in CI.
+- **Recognizers** (`gateway/app/anonymization/engine.py`): Presidio defaults (`PERSON`, `ORGANIZATION`, `EMAIL_ADDRESS`, `PHONE_NUMBER`, `LOCATION` via spaCy `en_core_web_lg`) + custom `CaseNumberRecognizer` + `MatterNumberRecognizer`.
+- **Skip conditions** (any one short-circuits): master switch off; Tier 1 (local); privileged chat; per-request opt-out (citation judge calls use this); per-message retrieval-context skip (so the model sees intact source quotes for citation grounding).
+- **Mapper** is per-request, in-memory only — never persisted, never logged.
+- **Verify:** `cd gateway && pytest tests/anonymization/ tests/test_inference_anonymization.py`; full reference in [`docs/security/anonymization.md`](security/anonymization.md). Open surfaces: pseudonymize-source-docs ([DE-269](PRD.md#9-deferred-enhancements-and-identified-future-work)), per-request salt ([DE-274](PRD.md#9-deferred-enhancements-and-identified-future-work)).
 
 ---
 
-## 4. Capabilities not yet started in source
+## 4. M3 — Playbooks · Tabular Review · Word add-in · Intake bridges
 
-These are PRD-committed capabilities where the directory or subsystem does not yet exist in the codebase. They are honest milestone deferrals, not partial implementations — the milestone target is firm, and the architectural slot will land when the milestone work starts.
+### 4.1 Playbooks — shipped
+
+Codified legal positions with detection + redline strategy, plus an "easy" auto-generation pipeline from a document corpus.
 
 | Capability | Status | Verification |
 |---|---|---|
-| Word add-in (Office.js) | deferred-M3 | `ls word-addin/` — directory absent. Spec in [PRD §3.9](PRD.md#39-word-add-in-m3) |
-| Playbooks (codified legal positions, auto-generation wizard) | deferred-M3 | No `playbooks` table in `api/alembic/versions/` (M2 head is 0028). Spec in [PRD §3.7](PRD.md#37-playbooks-m3) |
-| Tabular / multi-document review (M3) | deferred-M3 | No grid surface; spec in [PRD §3.8](PRD.md#38-tabular-multi-document-review-m3) |
-| Slack / Teams light intake bridge (M3) | deferred-M3 | No `/lq` slash command surface; spec in [PRD §3.10](PRD.md#310-slack--teams-light-intake-bridge-m3) |
-| Autonomous Layer (cron tasks, watches, per-user memory) | deferred-M4 | No `autonomous_tasks` table; spec in [PRD §3.11](PRD.md#311-autonomous-layer-m4) |
-| Contract Repository auto-relationship detection (M4) | deferred-M4 | No `contract_relationships` table; spec in [PRD §3.12](PRD.md#312-contract-repository--auto-relationship-detection-m4) |
-| MCP-client subsystem (M5+) | deferred-M5 | `grep -r "mcp" api/app gateway/app` is empty; spec in [PRD §8.5](PRD.md#m5m7--forward-looking-workflow-intelligence-community-driven-not-committed) |
+| Playbook CRUD + execute against a document | M3 | `api/app/api/playbooks.py` (`GET/POST/PATCH/DELETE /api/v1/playbooks`, `POST /playbooks/{id}/execute`, `GET /playbook-executions/{id}`); executor `api/app/playbooks/` |
+| Built-in seeded playbooks (NDA mutual/unilateral, MSA, DPA) | M3 | migrations `0032`/`0033`; `cd api && pytest tests/test_builtin_nda_playbooks.py` |
+| Easy playbook auto-generation (3-stage) | M3 | `POST /api/v1/playbooks/easy` + `GET /playbooks/easy/{id}`; migration `0035` |
+| Tables: `playbooks`, `playbook_positions`, `playbook_executions`, `easy_playbook_generations` | M3 | migrations `0031`, `0035` |
+| Learn viz | M3 | `web/static/learn/playgrounds/playbook-cascade.html` |
+
+**Caveats (honest):** execution runs in-process via FastAPI BackgroundTasks (not arq) per the M3 architecture decision; soft-delete only; built-ins are immutable (admins fork to edit); tracked-changes rendering into Word is deferred ([DE-287](PRD.md#9-deferred-enhancements-and-identified-future-work)).
+
+### 4.2 Tabular / multi-document review — shipped
+
+Run a skill (or ad-hoc column spec) across a document corpus into a document × column grid with per-cell confidence + citations; export XLSX/CSV.
+
+| Capability | Status | Verification |
+|---|---|---|
+| Cost preview · execute · list · get · cancel · soft-delete | M3 | `api/app/api/tabular.py`; arq job `api/app/workers/tabular_worker.py`; table `tabular_executions` (migration `0036`) |
+| Export to XLSX (cell comments) / CSV (citation links) | M3 | `GET /api/v1/tabular/executions/{id}/export` |
+| Column-spec snapshot at execution start (auditable invariant) | M3 | `api/app/models/tabular.py` (columns JSONB snapshot) |
+| Learn viz | M3 | `web/static/learn/playgrounds/tabular-review.html` |
+
+**Caveat (honest):** no backend test coverage in `api/tests/` for tabular yet — a known gap. Bulk-op sibling infrastructure (`parent_execution_id`) is present but not yet exercised.
+
+### 4.3 Word add-in (Office.js) — scaffold only
+
+| Capability | Status | Verification |
+|---|---|---|
+| Installable Office.js add-in (manifest, task pane, React shell) | scaffold (M3) | `word-addin/manifest.xml`, `word-addin/src/taskpane/` |
+| Admin manifest download + version handshake | M3 | `api/app/api/word_addin.py` (`GET /api/v1/admin/word-addin/manifest`, `GET /api/v1/word-addin/version`) |
+| OAuth sign-in (reuses `/auth/login` + refresh) | M3 | `word-addin/src/taskpane/auth.ts`; `web/src/routes/lq-ai/word-addin/oauth-start/` |
+| Learn viz | M3 | `web/static/learn/playgrounds/word-addin-flow.html` |
+| In-Word chat / skills (tracked changes + comments) / playbook execution | **deferred** | The three tabs render deep-link cards to the web app, not in-Word feature surfaces — [DE-287](PRD.md#9-deferred-enhancements-and-identified-future-work) |
+
+**Honest assessment:** the add-in is installable, authenticatable, and version-safe, but every substantive feature surface is a placeholder pointing to the web app. Do not market it as feature-shipped.
+
+### 4.4 Slack / Teams light intake bridge — partial
+
+| Capability | Status | Verification |
+|---|---|---|
+| Slack bridge service + OAuth install + encrypted persistence | partial (M3) | `slack-bridge/` (compose `--profile slack`, port 8002); table `slack_workspaces` (migration `0037`, Fernet-encrypted bot token under a distinct master key); `api/app/api/integrations_slack.py` |
+| Teams bridge service + multi-tenant admin-consent OAuth | partial (M3) | `teams-bridge/` (compose `--profile teams`, port 8003); table `teams_tenants` (migration `0038`); `api/app/api/integrations_teams.py` |
+| Admin intake-bridges management (list + soft-delete) | M3 | `api/app/api/admin_intake_bridges.py`; `web/src/routes/lq-ai/admin/intake-bridges/+page.svelte` |
+| `/lq` slash-command intake surface | **deferred** | Webhook handler is signature-verified but inert — [DE-288](PRD.md#9-deferred-enhancements-and-identified-future-work) |
+| End-to-end OAuth against live Slack/Microsoft | **unverified** | Never exercised against a live tunnel — [DE-312](PRD.md#9-deferred-enhancements-and-identified-future-work); see [`docs/intake-bridges.md`](intake-bridges.md) "Honest state up front" |
 
 ---
 
-## 5. Compliance and procurement state
+## 5. M4 — Autonomous Layer (shipped)
 
-The Compliance Alignment Pack at [`docs/compliance/`](compliance/) is a documented commitment whose individual framework documents are stubs at v1 launch. The pack format is documented in [`docs/compliance/README.md`](compliance/README.md); per-framework alignment docs land as M1 and M2 ship. The pack is not a certification — LQ.AI is open-source software the operator deploys and operates, and the operator's deployment is what gets certified, not the project itself. The pack is the project's contribution to the operator's certification work: pre-mapped control responses with citations into source so the operator's compliance team has a substantive starting point.
+An opt-in background executor that does real in-loop agentic work under hard brakes. **Not a skeleton** — each phase calls real tools through the chokepoint. Full reference: [`docs/autonomous-layer.md`](autonomous-layer.md).
 
-Some of the highest-value compliance documents (OWASP LLM Top 10 mapping, NIST AI RMF 1.0 Profile, the procurement-readiness pack itself) are scoped as contributor-friendly work and have mini-PRDs published at [`docs/contribute/mini-prds/`](contribute/mini-prds/). They are off the maintainer's critical path because the foundation is in source and the work is reading the foundation and producing the framework-mapped document on top of it.
+| Capability | Status | Verification |
+|---|---|---|
+| Five-phase executor (intake → analysis → drafting → ethics_review → delivery) | M4 | `api/app/autonomous/executor.py`, `nodes.py`; arq job `autonomous_session_job` |
+| Real in-loop work: `run_skill`/`run_playbook` inference, `emit_finding`, `propose_memory`, `propose_precedent`, `notify` | M4 | `api/app/autonomous/guard.py` (`_dispatch`); `cd api && pytest tests/autonomous/test_executor_real_work.py` |
+| Single chokepoint `guarded_tool_call` enforcing R5 → R6 → R4 | M4 | `api/app/autonomous/guard.py`; `tests/autonomous/test_executor_skeleton.py::test_no_tool_call_bypasses_chokepoint` |
+| **R4** per-session **and** per-trigger cost cap (`max_cost_usd`) | M4 | `api/app/autonomous/cost.py`; migration `0045`; `tests/autonomous/test_r4_per_trigger_cap.py` |
+| **R5** external halt (`POST /autonomous/sessions/{id}/halt`) + idle watchdog | M4 | `api/app/workers/autonomous_worker.py` (idle cron); `tests/autonomous/test_idle_watchdog.py` |
+| **R6** phase-gated tool grants (`PHASE_GRANTS`) | M4 | `api/app/autonomous/enums.py`; `tests/autonomous/test_brakes.py` |
+| Watches (KB-attach-triggered sessions) | M4 | `api/app/autonomous/watch_trigger.py`; `GET/POST/PATCH/DELETE /autonomous/watches`; table `autonomous_watches` (migration `0039`, `max_cost_usd` in `0045`) |
+| Schedules (in-repo cron dispatcher) | M4 | `api/app/autonomous/cron.py`; `/autonomous/schedules`; table `autonomous_schedules` |
+| Per-user memory (proposed → kept/dismissed) | M4 | `/autonomous/memory/*`; table `autonomous_memory` |
+| Precedent board (race-safe upsert, observed_count) + promote-to-Project proposals | M4 | `/autonomous/precedents/*`, `/autonomous/project-context-proposals/*`; tables `precedent_entries`, `project_context_proposals` (migration `0041`) |
+| Honest per-session receipt (`terminal_reason`: completed / cost_cap_reached / external_halt) | M4 | `api/app/autonomous/receipt.py` (`build_receipt` / `build_receipt_safe`); stored in `autonomous_sessions.result` |
+| In-app notifications (durable; best-effort email transport) | M4 | `/autonomous/notifications/*`; table `autonomous_notifications` (migration `0040`) |
+| Per-user opt-in (off by default) | M4 | `User.autonomous_enabled` (migration `0044`); spawn paths + mutate endpoints gated |
+| Web dashboard (sessions/receipt/halt, memory, precedents, watches, schedules, notifications, proposals) | M4 | `web/src/routes/lq-ai/autonomous/`; opt-in toggle at `settings/autonomous/` |
+| Learn viz | M4 | `web/static/learn/playgrounds/autonomous-flow.html` (phase walk + the four brake scenarios; the four *primitives* are not yet visualized — see §11) |
+
+**Honesty notes:** the ethics-review phase is a light v1 (emits a privilege/scope-concerns finding from the structured output; a dedicated ethics LLM gate is a future enhancement). A gateway error mid-analysis produces an honest "analysis failed at the gateway" finding and a completed (not fabricated) receipt. Audit rows carry counts/types/IDs/enums only — never raw entity values or document text.
+
+---
+
+## 6. Capabilities not yet started in source
+
+Honest milestone deferrals — the subsystem does not yet exist (or only as plumbing). Verifiable by absence.
+
+| Capability | Status | Verification |
+|---|---|---|
+| In-Word feature surfaces (chat/skills/playbooks in the add-in) | deferred (M4 / community) | `word-addin/` tabs are deep-link cards; [DE-287](PRD.md#9-deferred-enhancements-and-identified-future-work) |
+| `/lq` Slack/Teams slash-command intake | deferred | Bridge webhook handlers inert; [DE-288](PRD.md#9-deferred-enhancements-and-identified-future-work) |
+| Contract Repository auto-relationship detection (PRD §3.16) | deferred-M4+ | No `contract_relationships` table in `api/alembic/versions/` |
+| MCP-client subsystem (M5+) | deferred-M5 | `grep -r "mcp" api/app gateway/app` is empty; PRD §8.5 |
+
+---
+
+## 7. Compliance and procurement state
+
+The Compliance Alignment Pack at [`docs/compliance/`](compliance/) is a documented commitment; the per-framework alignment docs land incrementally. The pack is the project's contribution to the *operator's* certification work (pre-mapped control responses citing source), not a certification of the project itself.
 
 | Document | Status | Verification |
 |---|---|---|
-| SOC 2 Type II alignment | stub (target M1) | `docs/compliance/README.md` describes the format; `soc2-alignment.md` not yet authored |
-| ISO/IEC 27001:2022 alignment | stub (target M1) | Same |
-| ISO/IEC 42001:2023 alignment | stub (target M2) | Same |
-| GDPR readiness | stub (target M1) | Same |
-| HIPAA Security + Privacy Rule alignment | stub (target M2) | Same |
-| FedRAMP Moderate alignment | stub (target M2) | Same |
-| OWASP LLM Top 10 mapping | not yet | [Mini-PRD open](contribute/mini-prds/owasp-llm-top10-mapping.md) — contributor-friendly |
-| NIST AI RMF 1.0 Profile | not yet | [Mini-PRD open](contribute/mini-prds/nist-ai-rmf-profile.md) |
-| Procurement Pack (SIG Lite + CAIQ pre-fills) | M2-D3 starter (privileged-matter scope only) | [`docs/procurement/sig-lite.md`](procurement/sig-lite.md) — 4 SIG Lite questions covering data classification + privileged work-product + audit-log integrity. Full pack (every SIG Lite domain + CAIQ Lite + cover letter) tracked as [DE-086](PRD.md#de-086--procurement-readiness-pack); [mini-PRD open](contribute/mini-prds/procurement-readiness-pack.md) |
-| Threat model (STRIDE) | M1 | [`docs/security/threat-model.md`](security/threat-model.md) |
-| Architecture document | M1 | [`docs/architecture.md`](architecture.md) |
-| Cryptography reference | M1 | [`docs/security/cryptography.md`](security/cryptography.md) |
-| Dependency-management posture | M1 | [`docs/security/dependencies.md`](security/dependencies.md) |
-| Audit-logging policy | M1 | [`docs/security/audit-logging.md`](security/audit-logging.md) |
-| Encrypted-keys ADR (master-key workflow) | M1 | [`docs/security/encrypted-keys.md`](security/encrypted-keys.md) |
+| Threat model (STRIDE) / Architecture / Cryptography / Audit-logging / Encrypted-keys / Dependencies | M1 | `docs/security/*.md`, `docs/architecture.md` |
 | Security policy + coordinated disclosure | M1 | [`SECURITY.md`](../SECURITY.md) |
+| SOC2 / ISO 27001 / ISO 42001 / GDPR / HIPAA / FedRAMP alignment | stub | `docs/compliance/README.md` describes the format; per-framework docs land incrementally |
+| OWASP LLM Top 10 / NIST AI RMF profiles | not yet (community-friendly) | mini-PRDs at `docs/contribute/mini-prds/` |
+| Procurement Pack (SIG Lite + CAIQ) | starter | `docs/procurement/sig-lite.md`; full pack [DE-086](PRD.md#9-deferred-enhancements-and-identified-future-work) |
 
 ---
 
-## 6. Engineering-discipline state
+## 8. Engineering-discipline state
 
-The project's commitment is that engineering rigor is measurable, not asserted. The signals below are the M1 snapshot — what is in CI, what is in the test suite, what is in the release pipeline, and which engineering practices are on the roadmap but not yet enforced. Where a discipline is not yet shipped, the path is named so a reviewer can confirm both what is and what is not in place.
+Engineering rigor is measurable, not asserted. Test **file** counts below are verifiable without standing up the stack (`find … | wc -l`); pass counts run in CI (`.github/workflows/ci.yml`).
 
 | Practice | Status | Verification |
 |---|---|---|
-| Frontend unit tests (Vitest) | M1 + M2 | `cd web && npx vitest run` — 56 spec files; **456 tests passing** as of M2 close |
-| Backend tests (pytest) | M1 + M2 | 70+ test files in `api/tests/`; **1001 tests passing, 1 skipped** against live Postgres after M2 close (`cd api && DATABASE_URL=... pytest`) |
-| Gateway tests (pytest) | M1 + M2 | 30+ test files in `gateway/tests/`; **497 tests passing, 2 skipped** after M2 close (`cd gateway && pytest`) |
-| Cypress E2E (LQ.AI shell) | M1 | 6 LQ.AI specs in `web/cypress/e2e/` (`wave-a-chrome`, `wave-b-surfaces`, `wave-c-matters`, `wave-d1-power-features`, `wave-d2-skill-creator`, `wave-m1-final-surfaces`) plus 4 upstream OpenWebUI specs |
-| Documented E2E coverage matrix per surface (`docs/test-strategy.md`) | not yet | CLAUDE.md notes `docs/test-strategy.md` as an M1 deliverable; the file does not yet exist. The coverage signal today is the spec inventory above and the "tests as documentation" framing in PRD §5.8; the explicit per-surface coverage matrix (smoke / happy path / edge cases) with milestone tags is deferred. Closes the criticism that "tests as documentation" is overstated when 6 specs cover the M1 LQ.AI surfaces without an explicit per-surface contract. |
-| Coverage gate (PRD §5.8 target: 80% api / 90% gateway) | not enforced | `.github/workflows/ci.yml` runs pytest but does not fail below threshold; the gap is documented |
-| Ruff lint + format (Python) | M1 | `.github/workflows/ci.yml`; configured in each subsystem |
-| mypy type-checking (api: standard, gateway: strict) | M1 | Same |
-| svelte-check (web, LQ.AI-owned code) | M1 | `cd web && npm run check:lq-ai` — 0 errors on all LQ.AI-owned paths (`src/lib/lq-ai/**`, `src/routes/lq-ai/**`). Full-scope check (`npm run check`) shows ~9,359 inherited errors from upstream OpenWebUI files; see §6.1 below. |
-| Mutation testing | not yet | Out of M1 scope; on the engineering-discipline roadmap |
-| Property-based tests (Hypothesis) | not yet | Same |
-| Eval harness with held-out test sets | not yet | Per-skill `test-plan.md` exists for the 10 starter skills; eval execution is deferred. [Mini-PRD for skill acceptance tests](contribute/mini-prds/skill-acceptance-tests.md) is the contributor-friendly path |
-| Cypress in CI | not yet | E2E suite runs locally; CI integration is on the engineering-discipline roadmap |
-| OpenSSF Scorecard | not yet | [Mini-PRD open](contribute/mini-prds/openssf-scorecard-and-badges.md) |
-| OpenSSF Best Practices Badge | not yet (target Passing at M1, Silver at M2) | Same mini-PRD |
-| Accessibility audit (WCAG 2.1 AA + axe-core CI gate) | not yet (axe-cli scans in dev; CI gate deferred) | The design target is WCAG 2.1 AA per [`README.md`](../README.md#accessibility); CI enforcement deferred |
-| Air-gap install verification in CI | not yet | [Mini-PRD open](contribute/mini-prds/air-gap-install-verification.md) |
-| Per-skill prompt-injection detection rates | not yet | Out of M1 scope; on the engineering-discipline roadmap |
-| Per-skill PII leakage measurement | not yet | Depends on Anonymization Layer (§3.2 above) |
-| Annual third-party penetration test | committed; not scheduled | First engagement targeted within 90 days of M1 release |
-| Annual adversarial-AI red-team engagement | committed; not scheduled | Same posture |
-| Signed commits enforced on `main` | not yet | DCO sign-off is required ([CONTRIBUTING.md](../CONTRIBUTING.md)); cryptographic commit signing is on the engineering-discipline roadmap |
-| SLSA-3 build provenance | committed | Documented in [`docs/security/releases/README.md`](security/releases/README.md); verified on release builds |
-| Sigstore-signed container images | committed | Same |
-| SBOM with every release | committed | Same |
+| Backend tests (pytest, live Postgres) | M1–M4 | 144 `test_*.py` files in `api/tests/` (incl. `tests/autonomous/` — 361 passing at M4 close); `cd api && DATABASE_URL=… pytest` |
+| Gateway tests (pytest) | M1–M4 | 41 `test_*.py` files in `gateway/tests/`; `cd gateway && pytest` |
+| Frontend unit tests (Vitest) | M1–M4 | 71 spec files in `web/src/`; `cd web && npx vitest run` |
+| Cypress E2E (LQ.AI shell) | M1–M4 | 17 specs in `web/cypress/e2e/` |
+| Ruff lint + format (Python) | M1–M4 | `.github/workflows/ci.yml`: `ruff check api scripts` + `ruff format --check` |
+| mypy (api standard, gateway strict) | M1–M4 | CI `mypy app` per subsystem |
+| svelte-check (LQ.AI-owned code) | M1–M4 | `cd web && npm run check:lq-ai` (0 errors on `src/{lib,routes}/lq-ai/**`); inherited OpenWebUI debt tracked as DE-262 (§8.1) |
+| Coverage gate (target 80% api / 90% gateway) | not enforced | CI runs pytest but does not fail below threshold |
+| Mutation / property-based testing, eval harness, Cypress-in-CI | not yet | On the engineering-discipline roadmap |
+| OpenSSF Scorecard / Best Practices Badge | not yet (community-friendly) | mini-PRDs at `docs/contribute/mini-prds/` |
+| SLSA-3 provenance / Sigstore-signed images / SBOM per release | committed | `docs/security/releases/README.md` |
+| Annual third-party pen test + adversarial red-team | committed; not scheduled | First engagements targeted within 90 days of M1 release |
 
-### 6.1 OpenWebUI fork — inherited TypeScript-check debt
+### 8.1 OpenWebUI fork — inherited TypeScript-check debt
 
-The LQ.AI web frontend is a fork of OpenWebUI (per ADR 0001). When `svelte-check` runs against the full codebase (`npm run check`), approximately 9,359 TypeScript errors surface — all in upstream OpenWebUI files inherited at fork time. None are in LQ.AI-owned code (`src/lib/lq-ai/**`, `src/routes/lq-ai/**`).
-
-**Why these are not critical bugs:**
-
-- They are TypeScript strict-mode signals (implicit `any`, missing property declarations on legacy `.js` files, narrowing issues in upstream Svelte components) — not runtime errors. The application runs correctly; these are static-analysis warnings about upstream code we did not author.
-- None affect the Inference Gateway, which is the security boundary. The gateway is a separate Python service with its own clean typecheck (mypy strict mode, CI-enforced).
-- None affect the LQ.AI surfaces an operator interacts with. Those are the `/lq-ai/*` routes and `src/lib/lq-ai/**` components, which pass strict typecheck with 0 errors.
-- Vitest unit tests (400 tests, 53 spec files) and Cypress E2E tests exercise the actual runtime behavior and are 100% passing on M1.
-
-**What ships in M1:** CI scopes `svelte-check` to LQ.AI-owned code via `npm run check:lq-ai` (using `tsconfig.lq-ai.json`) so the typecheck signal stays meaningful for new contributions. Operators or auditors who want the full picture can run `npm run check` for the unscoped check, see the upstream errors, and verify they are confined to upstream paths.
-
-**Migration plan (deferred to post-M1):** Tracked as DE-262. Path: clean up the highest-impact upstream files first (auth, chat shell, settings), then long-tail. Target Silver OpenSSF Best Practices Badge tier requires no strict-mode noise; the migration is a stepping stone toward that badge.
+The web frontend is a fork of OpenWebUI (ADR 0001). `npm run check` (full scope) surfaces ~9,359 TypeScript strict-mode signals, all in upstream files inherited at fork time; none in LQ.AI-owned code, none in the (separate Python) gateway. CI scopes the check to LQ.AI code (`npm run check:lq-ai`). Migration tracked as DE-262.
 
 ---
 
-## 7. Operational state
-
-The deployment story in M1 is Docker Compose plus a drafted Helm chart. The supporting operational artifacts — reverse-proxy + TLS recipes, backup tooling, runbooks, SLOs — are partially shipped or deferred. The operator is the running organization; the project provides the artifacts that make running it tractable, and surfaces honestly where additional operator work is required today.
+## 9. Operational state
 
 | Surface | Status | Verification |
 |---|---|---|
-| Docker Compose reference deployment | M1 | [`docker-compose.yml`](../docker-compose.yml) — 7 services in the default profile |
+| Docker Compose reference deployment | M1–M4 | [`docker-compose.yml`](../docker-compose.yml) — always-on: postgres, redis, minio, gateway, api, ingest-worker, arq-worker, web |
 | Local-only profile (Ollama + PaddleOCR) | M1 | `docker compose --profile local up` |
-| Helm chart for Kubernetes | drafted (M1) | [`deploy/helm/lq-ai/`](../deploy/helm/lq-ai/) |
-| Reverse-proxy + TLS recipes (Caddy, Traefik, nginx) | not yet | [Mini-PRD open](contribute/mini-prds/reverse-proxy-tls-deployment-recipes.md) |
-| Backup + restore tooling (`pg_dump` + MinIO snapshot wrapper) | not yet | `ls scripts/` — no backup tooling |
-| Runbooks for operational tasks | not yet | `ls docs/` — no `runbooks/` directory |
-| OpenTelemetry instrumentation (traces + metrics) | M1 baseline + M3-F domain spans | [`docs/observability.md`](observability.md) — signal inventory, span names, attribute schema; deployment recipes at [`deploy/observability/`](../deploy/observability/) |
-| SLO / SLI publication | not yet | OpenTelemetry instrumentation ships at M1; service-level objectives are deferred |
-| Public status page (for any LegalQuants-hosted artifacts) | not yet | No hosted service in M1; the project ships as software the operator runs |
-| Public postmortem template + commitment | not yet | No incidents in operator-facing infrastructure yet; the publication commitment lands with the engineering-discipline roadmap |
-| Quarterly DR test cadence | not yet | Deployment recipes ship at M1; test cadence is operator-side and not yet documented |
+| Slack / Teams bridge profiles | M3 | `docker compose --profile slack up` / `--profile teams up` |
+| Helm chart for Kubernetes | drafted | [`deploy/helm/lq-ai/`](../deploy/helm/lq-ai/) (worker-migration parity with the compose single-migrator fix is a community item — DE-327) |
+| OpenTelemetry instrumentation (traces + metrics + domain spans) | M1 baseline + M3 domain spans + M4 autonomous spans | [`docs/observability.md`](observability.md) |
+| Reverse-proxy/TLS recipes · backup tooling · runbooks · SLOs | not yet | mini-PRDs / deferred |
 
 ---
 
-## 8. How to verify everything in this doc
+## 10. How to verify everything in this doc
 
-The general protocol is the same for every row:
+1. Clone the repo and follow the [Quickstart](../README.md#quickstart) to stand the stack up (`docker compose up -d --build` — the api runs migrations 0001→0045 on boot).
+2. Browse the file path or run the test command in the Verification column.
+3. To read source without running the stack, the cited paths are all in the repository.
 
-1. Clone the repository: `git clone https://github.com/legalquants/lq-ai.git`.
-2. Follow the [Quickstart](../README.md#quickstart) in the README to stand the stack up.
-3. Browse the file path or run the test command cited in the Verification column.
-4. If you want to read the source without standing the stack up, the cited paths are all in the repository and any file viewer (GitHub web UI, `cat`, an editor) is sufficient.
-
-If a claim in this document does not check out — a path does not exist, a test does not pass, a status marker is wrong — the codebase is canonical. Please [open an issue](https://github.com/LegalQuants/lq-ai/issues) and the maintainer team will reconcile the doc. The point of publishing the doc in source is that the verification path runs through readable code, not through a vendor's representation of the code.
+If a claim does not check out, the codebase is canonical — please [open an issue](https://github.com/LegalQuants/lq-ai/issues). The point of publishing this in source is that verification runs through readable code, not a vendor's representation of it.
 
 ---
 
-## 9. What an operator's evaluation can confirm in source
+## 11. Known doc/Learn gaps (this maintenance pass)
 
-Because LQ.AI is open-source and self-hosted, an operator's evaluation does not terminate in a vendor's representation of the product. The list below is a sample of the verifications that are available in source today and are not available from a closed-source vendor at any price:
+- **Learn visualizations to add** (shipped capabilities not yet visualized): intake-bridges (Slack/Teams OAuth + workspace lifecycle); the autonomous **four primitives** (watches/schedules/memory/precedent lifecycle — `autonomous-flow.html` covers phases + brakes only); projects/matters + org-profile + privilege tiers; KB hybrid retrieval (BM25 + vector). Tracked in the M4-D2 doc/Learn alignment plan.
+- **Resolved this session (DEs):** DE-325 (`build_receipt_safe` hardening), DE-326 (fresh-install worker alembic-migration race). DE-327 (Helm worker-migration parity) is open as a community-suitable item.
 
-- **Read the inference gateway's routing logic** and confirm the operator's tier policy is enforced as documented: `gateway/app/router.py` plus `gateway/app/tier_floor.py`.
-- **Read the audit logger** and confirm what is captured: `api/app/audit.py`. Every sensitive action — login, MFA setup, skill execution, tier override, account deletion — produces a structured event.
-- **Read every built-in skill** and confirm what each skill instructs the model to do: `skills/*/SKILL.md` plus the supporting reference and example files. There are no hidden prompts.
-- **Read the provider adapters** and confirm what is sent to each inference provider and how authentication is handled: `gateway/app/providers/{anthropic,openai,ollama}.py`.
-- **Read the routing log writer** and confirm what is recorded per inference: `gateway/app/routing_log.py`.
-- **Read the secrets layer** and confirm provider-key encryption at rest: `gateway/app/secrets.py` plus `docs/security/encrypted-keys.md`.
-- **Read the threat model** and confirm the STRIDE analysis is current: `docs/security/threat-model.md`.
-- **Read the M2 Citation Engine implementation** end-to-end: `api/app/citation/verification.py` (cascade), `api/app/citation/extraction.py` (extractor), `api/app/api/chats.py::_persist_message_citations` (persistence + activation), `gateway/app/api/inference.py::citation_engine_config` (gateway endpoint), `docs/citation-engine.md` (full reference). Failed citations surface as "unverified" — read [`api/tests/citation/test_edge_cases.py`](../api/tests/citation/test_edge_cases.py) for the pinned edge-case behaviors and one known limitation ([DE-277](PRD.md#de-277--citation-extractor-fallback-to-document-scan-on-chunk-boundary-miss)).
-- **Read the M2 Anonymization Layer implementation** end-to-end: `gateway/app/anonymization/middleware.py` (pre/post + StreamingRehydrator), `gateway/app/anonymization/engine.py` (Presidio AnalyzerEngine config), `gateway/app/anonymization/recognizers/` (custom legal recognizers), `docs/security/anonymization.md` (full reference). The privileged-skip carve-out + retrieval-context skip are explicit in the skip conditions at `middleware.py:81-110`.
-- **Run the test suite** and read the results: `cd web && npx vitest run` (456 passing); `cd api && DATABASE_URL=... pytest` (1001 passing); `cd gateway && pytest` (497 passing); `cd web && npx cypress run`.
-- **Read the capabilities that are not yet started in source** — the symmetric verification: `ls word-addin/` (empty; M3 add-in not yet started), `grep -r "playbooks" api/alembic/versions/` (no Playbooks table; M3), `grep -r "autonomous_tasks" api/alembic/versions/` (no Autonomous Layer table; M4), `grep -r "contract_relationships" api/alembic/versions/` (no Contract Repository relationship graph; M4). What is shipped is in source; what is deferred is verifiable by its absence.
+## 12. Maintenance note
 
-The verification budget is the operator's to set, on a timeline the operator chooses, with a scope the operator defines. None of those properties is true for closed-source attestation.
-
-## 10. Maintenance note
-
-This document is maintained per release. Items leave the deferred lists when they ship; items join when they are scoped. Last updated alongside the M2 closeout chain — Phase D + E1 + E2 shipped, F1 closed via scope reframe, F2 closed via transparency-first deferral (DE-282 invites community contribution for empirical PII-recognition validation on legal corpus); 2026-05-17.
-
-The substantive content that drives this doc lives in:
-
-- [PRD §3 Capability Specifications](PRD.md#3-capability-specifications) — what each capability is.
-- [PRD §8 Roadmap](PRD.md#8-roadmap) — when each milestone lands.
-- [PRD §9 Deferred Enhancements](PRD.md#9-deferred-enhancements-and-identified-future-work) — what is deferred and why.
-- [`docs/compliance/`](compliance/) and [`docs/security/`](security/) — compliance and security artifacts.
-- [`docs/contribute/EASIEST-CONTRIBUTIONS.md`](contribute/EASIEST-CONTRIBUTIONS.md) — the contributor-friendly path for items this doc surfaces as gaps.
+Maintained per release. Last rewritten at the **M4 close** (Autonomous Layer shipped end-to-end; fresh-install acceptance passed; migration head `0045`). Substantive content drivers: [PRD §3](PRD.md#3-capability-specifications) (capabilities), [PRD §8](PRD.md#8-roadmap) (roadmap), [PRD §9](PRD.md#9-deferred-enhancements-and-identified-future-work) (deferrals), and the per-feature docs (`docs/citation-engine.md`, `docs/playbooks.md`, `docs/tabular-review.md`, `docs/word-addin.md`, `docs/intake-bridges.md`, `docs/autonomous-layer.md`).
