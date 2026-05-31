@@ -65,7 +65,7 @@ flowchart TB
     %% =========================================
     subgraph PROVIDERS["🌐 LLM Providers (operator's choice; configured per-deployment)"]
         direction LR
-        cloud["<b>Cloud Providers</b><br/>Anthropic · OpenAI · Vertex<br/>Cohere · Azure OpenAI · Bedrock<br/><i>Tier 2–4 depending on configuration</i>"]
+        cloud["<b>Cloud Providers</b><br/>Anthropic · OpenAI · Azure OpenAI<br/><i>Vertex · Bedrock deferred — DE-034/035</i><br/><i>Tier 2–4 depending on configuration</i>"]
         local["<b>Local Providers</b><br/>Ollama · vLLM · llama.cpp<br/>any OpenAI-compatible endpoint<br/><i>Tier 1 — air-gap-capable</i>"]
     end
 
@@ -318,8 +318,8 @@ The gateway is shown as a single service in the main diagram; its internal reque
             └──────┬───────┘
                    ▼
             ┌──────────────┐
-            │ Provider     │  (HTTP/gRPC to Anthropic / OpenAI / Vertex /
-            │ Adapter      │   Cohere / Azure / Bedrock / Ollama / vLLM)
+            │ Provider     │  (HTTP/gRPC to Anthropic / OpenAI / Azure /
+            │ Adapter      │   Ollama / vLLM; Vertex + Bedrock deferred — DE-034/035)
             └──────┬───────┘
                    │
                  (response)
