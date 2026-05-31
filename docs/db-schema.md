@@ -43,6 +43,8 @@ CREATE TABLE users (
     workspace_layout      TEXT NOT NULL DEFAULT 'three_pane',  -- CHECK (workspace_layout IN ('three_pane','two_pane','one_pane'))
     trust_pills           TEXT NOT NULL DEFAULT 'labels',      -- CHECK (trust_pills IN ('labels','dots'))
     provenance_pills      TEXT NOT NULL DEFAULT 'always',      -- CHECK (provenance_pills IN ('always','collapsed'))
+    -- M4-C2 (migration 0044) — Autonomous Layer per-user opt-in; off by default.
+    autonomous_enabled    BOOLEAN NOT NULL DEFAULT FALSE,
     created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_login_at         TIMESTAMPTZ,
@@ -64,6 +66,7 @@ CREATE INDEX idx_users_deletion_scheduled ON users(deletion_scheduled_at) WHERE 
 | `workspace_layout` | 0019 | Matter workspace pane count for Wave C: `three_pane`, `two_pane`, `one_pane`. |
 | `trust_pills` | 0019 | Ambient trust label format: `labels` (full text) vs. `dots` (minimal). |
 | `provenance_pills` | 0019 | Per-message skill/tier/provider pill row: `always` visible vs. `collapsed`. |
+| `autonomous_enabled` | 0044 | M4-C2 Autonomous Layer opt-in. `FALSE` by default; the autonomous executor and trigger surfaces are inert for a user until they flip this on. |
 
 `must_change_password` is set to TRUE for:
 - the auto-created first-run admin (Task B2 / migration `0002`),
@@ -246,6 +249,26 @@ ALTER TABLE files
 independently owned by its `owner_id` and may be in other projects via
 the `project_files` join (the `files.project_id` column is the file's
 *primary* project; the join table is the many-to-many relation).
+
+### `project_knowledge_bases` (migration 0021)
+
+Many-to-many join binding knowledge bases to projects (a project can
+surface multiple KBs; a KB can be attached to multiple projects).
+Distinct from `knowledge_bases.project_id`, which is the KB's *primary*
+project; this table is the many-to-many attach relation.
+
+```sql
+CREATE TABLE project_knowledge_bases (
+    project_id           UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,            -- fk_project_knowledge_bases_project_id
+    knowledge_base_id    UUID NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,     -- fk_project_knowledge_bases_kb_id
+    attached_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    attached_by_user_id  UUID REFERENCES users(id) ON DELETE SET NULL,                       -- fk_project_knowledge_bases_attached_by
+    CONSTRAINT pk_project_knowledge_bases PRIMARY KEY (project_id, knowledge_base_id)
+);
+
+CREATE INDEX idx_project_knowledge_bases_kb_id
+    ON project_knowledge_bases (knowledge_base_id);
+```
 
 ---
 
@@ -455,13 +478,95 @@ Candidates that fail Stage 1 are dropped (not persisted) until later
 stages ship; the M2-C2 UI work decides what to render for "model
 emitted but we couldn't verify."
 
+### `enhance_prompt_interactions` (migration 0015)
+
+One row per Enhance Prompt (⌘E) invocation. Records the raw input, the
+expanded output (or the skip reason if expansion did not apply), the
+model's reasoning trace, whether the user used/edited the result, and
+the routing metadata for the enhance call.
+
+```sql
+CREATE TABLE enhance_prompt_interactions (
+    id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id                UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,    -- fk_enhance_prompt_interactions_user
+    chat_id                UUID REFERENCES chats(id) ON DELETE SET NULL,            -- fk_enhance_prompt_interactions_chat
+    raw_input              TEXT NOT NULL,
+    expansion_applied      BOOLEAN NOT NULL,
+    expanded_output        TEXT,
+    reasoning              JSONB NOT NULL DEFAULT '[]'::jsonb,
+    skip_reason            TEXT,
+    used                   BOOLEAN NOT NULL DEFAULT FALSE,
+    edited_before_use      BOOLEAN NOT NULL DEFAULT FALSE,
+    routed_inference_tier  INTEGER,
+    routed_provider        TEXT,
+    routed_model           TEXT,
+    prompt_tokens          INTEGER,
+    completion_tokens      INTEGER,
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_enhance_prompt_tier_range
+        CHECK (routed_inference_tier IS NULL OR (routed_inference_tier BETWEEN 1 AND 5)),
+    CONSTRAINT chk_enhance_prompt_skip_has_reason
+        CHECK (expansion_applied OR skip_reason IS NOT NULL)
+);
+```
+
+### `work_product_attribution` (migration 0017)
+
+One row per assistant message that constitutes attributable work
+product (PRD §5 work-product attribution). Captures the routing/skill/
+playbook provenance and a content hash so a given output can be tied
+back to the actor, matter, model, and skills that produced it. The
+`message_id` FK is `UNIQUE` — at most one attribution row per message.
+
+```sql
+CREATE TABLE work_product_attribution (
+    id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    message_id             UUID NOT NULL UNIQUE REFERENCES messages(id) ON DELETE CASCADE,  -- fk_work_product_attribution_message
+    user_id                UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,            -- fk_work_product_attribution_user
+    chat_id                UUID NOT NULL REFERENCES chats(id) ON DELETE CASCADE,            -- fk_work_product_attribution_chat
+    project_id             UUID REFERENCES projects(id) ON DELETE SET NULL,                 -- fk_work_product_attribution_project
+    routed_inference_tier  INTEGER,
+    provider               TEXT,
+    model                  TEXT,
+    model_version          TEXT,
+    skill_ids              TEXT[] NOT NULL DEFAULT ARRAY[]::text[],
+    playbook_id            UUID,                                          -- plain UUID; no FK (playbooks land in M3)
+    content_hash           TEXT NOT NULL,
+    timestamp              TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_work_product_tier_range
+        CHECK (routed_inference_tier IS NULL OR (routed_inference_tier BETWEEN 1 AND 5))
+);
+
+CREATE INDEX idx_work_product_user_timestamp
+    ON work_product_attribution (user_id, timestamp DESC);
+CREATE INDEX idx_work_product_chat
+    ON work_product_attribution (chat_id);
+```
+
+`playbook_id` is a plain UUID column with no FK constraint — migration
+0017 (M1) predates the `playbooks` table (migration 0031, M3), so the
+reference is stored unbound.
+
 ---
 
-## Skills
+## Skills (sketch — **not built**; superseded by `user_skills`)
 
-Skills are stored both on disk (the canonical source for built-in skills loaded at startup) and in the database (for user-scoped and team-scoped skills, plus any forks of built-ins).
+> **Status: NOT created by any migration.** The `skills`,
+> `skill_reference_files`, and `skill_example_files` tables below are an
+> early sketch from before [ADR 0004](adr/0004-filesystem-canonical-skills.md)
+> made skills **filesystem-canonical**. There is no `skills` SQL table,
+> no `skill_reference_files` table, and no `skill_example_files` table in
+> the shipped schema (verified against migrations 0001–0045 and
+> `api/app/models/` — no `Skill` ORM model exists). Built-in skills load
+> from disk at startup; user/team-scoped skills are stored in the
+> **`user_skills`** table (migration 0013, documented below), and the
+> singleton Organization Profile is the **`organization_profile`** table
+> (migration 0010, documented below). The blocks here are retained only
+> as a record of the original sketch.
 
-### `skills`
+The original sketch stored skills both on disk (the canonical source for built-in skills loaded at startup) and in the database (for user-scoped and team-scoped skills, plus any forks of built-ins).
+
+### `skills` (sketch — not built)
 
 ```sql
 CREATE TABLE skills (
@@ -499,9 +604,9 @@ CREATE INDEX idx_skills_owner_active ON skills(owner_id, scope) WHERE deleted_at
 
 The `idx_skills_org_profile_singleton` partial unique index enforces that there is at most one Organization Profile in the deployment.
 
-### `skill_reference_files` and `skill_example_files`
+### `skill_reference_files` and `skill_example_files` (sketch — not built)
 
-Reference and example files associated with a skill. For built-in skills these are loaded from disk at startup; user/team skills store them here.
+Reference and example files associated with a skill. For built-in skills these are loaded from disk at startup; user/team skills store them here. **Like `skills` above, these tables were never created** — reference/example files for built-ins live on disk, and user-skill bodies are stored inline in `user_skills.body` / `user_skills.frontmatter_extra`.
 
 ```sql
 CREATE TABLE skill_reference_files (
@@ -521,6 +626,37 @@ CREATE TABLE skill_example_files (
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (skill_id, path)
 );
+```
+
+### `organization_profile` (Task D4, migration 0010)
+
+The Organization Profile is a "singleton skill" per PRD §3.12 — same
+SKILL.md format and inspectability, treated as a singleton by the Skill
+Service. Because ADR 0004 keeps built-in skills filesystem-canonical
+(there is no `skills` SQL table to add an `is_organization_profile`
+column to), D4 backs the GET/PUT API with a focused single-row table.
+The gateway-side prompt-assembler fetches the row's content and prepends
+it to every attached skill whose frontmatter does not opt out
+(`use_organization_profile: false`).
+
+```sql
+CREATE TABLE organization_profile (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    content_md  TEXT NOT NULL DEFAULT '',
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_by  UUID REFERENCES users(id) ON DELETE SET NULL  -- fk_org_profile_updated_by
+);
+
+-- Singleton enforcement — Postgres "at most one row" pattern: the
+-- expression index collapses every row to the same literal, so a second
+-- insert violates the unique index (23505).
+CREATE UNIQUE INDEX idx_organization_profile_singleton
+    ON organization_profile ((true));
+
+CREATE TRIGGER trg_organization_profile_updated_at
+    BEFORE UPDATE ON organization_profile
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 ```
 
 ---
@@ -1099,6 +1235,40 @@ intact even after the actor or matter is removed. The
 against a deleted document has no anchor (the source the executor
 ran against is gone).
 
+### `easy_playbook_generations` (M3-A6, migration 0035)
+
+Backs the async Easy Playbook generation pipeline. `POST /api/v1/playbooks/easy`
+returns 202 with a generation-row id; the ARQ worker on the `arq:m3a6`
+queue runs the extract → cluster → assemble pipeline against the supplied
+documents and writes progress back to this row. The Phase-6 wizard's
+Step-3 inline editor consumes `draft_playbook` once `status='completed'`.
+
+```sql
+CREATE TABLE easy_playbook_generations (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id        UUID REFERENCES users(id) ON DELETE SET NULL,        -- fk_easy_playbook_generations_user_id
+    contract_type  TEXT NOT NULL,                                       -- free-form per PRD §3.7 ('NDA', 'MSA-SaaS', ...)
+    status         TEXT NOT NULL DEFAULT 'pending',
+    document_ids   UUID[] NOT NULL DEFAULT '{}'::uuid[],                -- source corpus snapshot; NOT an FK (docs may be soft-deleted)
+    draft_playbook JSONB,                                               -- assembled PlaybookCreate shape; populated on status='completed'
+    error_message  TEXT,                                                -- populated on status='error'
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    started_at     TIMESTAMPTZ,                                         -- set on pending → running
+    completed_at   TIMESTAMPTZ,                                         -- set on either terminal state
+    CONSTRAINT chk_easy_playbook_generations_status
+        CHECK (status IN ('pending','running','completed','error'))
+);
+
+-- The wizard's history view sorts the caller's recent generations by recency.
+CREATE INDEX idx_easy_playbook_generations_user_recent
+    ON easy_playbook_generations (user_id, created_at DESC);
+```
+
+`user_id` is `ON DELETE SET NULL` so historical generations survive
+operator deletion (matches `playbook_executions`). `document_ids` is a
+snapshot array, deliberately not an FK, so the audit row is preserved
+even after a source document is soft-deleted.
+
 ---
 
 ## Tabular review (per [PRD §3.14](PRD.md#314-tabular--multi-document-review-m3), M3-C2)
@@ -1321,6 +1491,11 @@ CREATE TABLE autonomous_sessions (
                           CHECK (status IN ('running','completed','halted','failed')),
     result            JSONB,
     error             TEXT,
+    -- M4-B3 (migration 0042): trigger→target seam. Every trigger source
+    -- populates the non-null subset of {kb_id, playbook_id, skill_ref,
+    -- query}; the executor reads it into initial_state — uniform across
+    -- all trigger kinds, decoupled from the schedule/watch tables.
+    params            JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     completed_at      TIMESTAMPTZ
@@ -1351,10 +1526,21 @@ CREATE TABLE autonomous_schedules (
     enabled       BOOLEAN NOT NULL DEFAULT TRUE,
     last_run_at   TIMESTAMPTZ,
     next_run_at   TIMESTAMPTZ,
+    -- M4 real-executor work (migration 0045): per-schedule cost cap.
+    -- NULL = fall back to settings.autonomous_default_max_cost_usd at spawn.
+    max_cost_usd  NUMERIC(10,4),
     deleted_at    TIMESTAMPTZ,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- M4-B3 (migration 0042): the dispatcher scan
+--   WHERE enabled AND deleted_at IS NULL AND next_run_at <= now()
+-- The partial predicate matches the always-true filter so the planner
+-- reads only live, enabled schedules ordered by next_run_at.
+CREATE INDEX idx_autonomous_schedules_due
+    ON autonomous_schedules (next_run_at)
+    WHERE enabled AND deleted_at IS NULL;
 ```
 
 ### `autonomous_watches` (M4)
@@ -1373,6 +1559,9 @@ CREATE TABLE autonomous_watches (
     playbook_id        UUID REFERENCES playbooks(id) ON DELETE SET NULL,          -- fk_autonomous_watches_playbook_id
     skill_ref          TEXT,
     enabled            BOOLEAN NOT NULL DEFAULT TRUE,
+    -- M4 real-executor work (migration 0045): per-watch cost cap.
+    -- NULL = fall back to settings.autonomous_default_max_cost_usd at spawn.
+    max_cost_usd       NUMERIC(10,4),
     deleted_at         TIMESTAMPTZ,
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -1431,6 +1620,16 @@ CREATE TABLE precedent_entries (
 
 -- The "my live precedents for pattern kind X" lookup; dismissed precedents drop out (partial).
 CREATE INDEX idx_precedent_entries_user_kind ON precedent_entries(user_id, pattern_kind) WHERE dismissed_at IS NULL;
+
+-- M4-B2 (migration 0041): backs the race-safe propose_precedent upsert
+-- (INSERT ... ON CONFLICT). The recurrence key is (user_id, pattern_kind,
+-- summary), but `summary` is unbounded TEXT and a btree tuple has a
+-- ~2704-byte limit; hashing with md5() yields a fixed 32-char digest. The
+-- partial WHERE preserves "a dismissed precedent is not reused": a new
+-- observation after dismissal does not conflict and inserts a fresh row.
+CREATE UNIQUE INDEX uq_precedent_entries_user_kind_summary_active
+    ON precedent_entries (user_id, pattern_kind, md5(summary))
+    WHERE dismissed_at IS NULL;
 ```
 
 > **Note (UUID default):** these tables use `gen_random_uuid()` (UUIDv4)
@@ -1457,10 +1656,15 @@ M4-8); its presence means M4-C1's fold-in is purely additive.
 receipt — **never raw entity values**. `payload` is optional structured
 JSONB the web renders (same constraint).
 
-**Read index deferred to M4-C1.** Following the locked Phase-A pattern
-(cf. `autonomous_schedules` index comment in migration 0039), the read
-index (likely `user_id, read_at, created_at DESC`) is deferred until the
-read-API query shape is concrete.
+**Read index (added in migration 0043, M4-C1).** Migration 0040 deferred
+the read index until the read-API query shape was concrete; 0043 adds it
+now that the shape is known —
+`GET /api/v1/autonomous/notifications WHERE user_id = :u [AND read_at IS NULL] ORDER BY created_at DESC`.
+The index is a **partial** `(user_id, created_at DESC) WHERE read_at IS NULL`,
+serving the hot `?unread=true` query (the predicate matches `read_at IS NULL`
+exactly; the `created_at DESC` trailing column matches the newest-first sort).
+The all-notifications list is low-volume per user and rides the `user_id`
+prefix.
 
 ```sql
 CREATE TABLE autonomous_notifications (
@@ -1477,7 +1681,48 @@ CREATE TABLE autonomous_notifications (
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Read index deferred to M4-C1 when the query shape (unread filter? ordering?) is concrete.
+-- Migration 0043 (M4-C1): partial read index serving
+--   GET /autonomous/notifications?unread=true
+--   WHERE user_id = :u AND read_at IS NULL ORDER BY created_at DESC
+CREATE INDEX idx_autonomous_notifications_user_unread
+    ON autonomous_notifications (user_id, created_at DESC)
+    WHERE read_at IS NULL;
+```
+
+### `project_context_proposals` (M4-B2, migration 0041)
+
+Records the autonomous agent's *proposals* to promote a recurring
+precedent into a Project's context document. The agent NEVER writes
+`projects.context_md` directly (ADR 0013 D5): it writes a proposal here,
+and the user accepting it
+(`POST /autonomous/project-context-proposals/{id}/accept`) is the
+authorized write that appends `suggested_md` to the Project's context.
+
+**Hard per-user isolation.** All three FKs (`user_id`, `precedent_id`,
+`project_id`) are `ON DELETE CASCADE` — a proposal is meaningless without
+its precedent or target project, and autonomous state is private to its
+owner.
+
+```sql
+CREATE TABLE project_context_proposals (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,                 -- fk_project_context_proposals_user_id
+    precedent_id  UUID NOT NULL REFERENCES precedent_entries(id) ON DELETE CASCADE,      -- fk_project_context_proposals_precedent_id
+    project_id    UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,               -- fk_project_context_proposals_project_id
+    suggested_md  TEXT NOT NULL,                                                         -- server-derived from the precedent's summary at promote time
+    state         TEXT NOT NULL DEFAULT 'proposed',
+    accepted_at   TIMESTAMPTZ,
+    rejected_at   TIMESTAMPTZ,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_project_context_proposals_state
+        CHECK (state IN ('proposed','accepted','rejected'))
+);
+
+-- (user_id, state) backs the per-user, state-filtered list query that
+-- GET /autonomous/project-context-proposals issues.
+CREATE INDEX idx_project_context_proposals_user_state
+    ON project_context_proposals (user_id, state);
 ```
 
 ## M4+ tables (sketched, land at the indicated milestone)
@@ -1494,7 +1739,12 @@ CREATE TABLE autonomous_notifications (
 > only as a record of the original sketch; it is not created by any
 > migration.
 
-### `contract_relationships` (M4 — Contract Repository auto-relationship detection)
+### `contract_relationships` (M4 — Contract Repository auto-relationship detection; **not built**)
+
+> **Status: NOT created by any migration.** The Contract Repository
+> auto-relationship graph is an M4-roadmap capability that was **not**
+> built (see [HONEST-STATE.md](HONEST-STATE.md) §M4). The block below is
+> the original sketch, retained as a forward-looking record only.
 
 ```sql
 CREATE TABLE contract_relationships (
@@ -1558,17 +1808,33 @@ CREATE INDEX idx_relationships_target ON contract_relationships(target_file_id);
 
 ## Migration approach
 
-- **Alembic** for schema migrations.
-- Initial migration `0001_initial.py` creates all M1 tables.
-- `0002_skills.py` creates skills + reference + example tables.
-- `0003_audit_log.py` creates audit_log + inference_routing_log.
-- M2 migrations add citation-engine fields.
-- M3 migrations add playbooks, tabular_executions (M3-C2), and the
-  intake-bridge tables slack_workspaces (M3-D1) + teams_tenants (M3-D3).
-- M4 migrations add the autonomous layer (0039: autonomous_sessions,
+- **Alembic** for schema migrations. **Migration head is `0045`.** The
+  `0001`–`0045` sequence in `api/alembic/versions/` is the schema truth;
+  this document is reconciled to it.
+- `0001_initial.py` creates the core M1 tables (`users`, `user_sessions`,
+  `audit_log`, `inference_routing_log`, and the M1 foundation). Note:
+  there is **no** `skills` SQL table — built-in skills are
+  filesystem-canonical per ADR 0004; user/team skills land in
+  `user_skills` (`0013`).
+- M1 continues: files (`0003`), projects + documents/chunks (`0004`/`0005`),
+  chats + messages (`0006`), knowledge bases (`0007`), user_export_jobs
+  (`0009`), organization_profile (`0010`), saved_prompts (`0011`),
+  user_skills (`0013`), teams + team_members (`0014`),
+  enhance_prompt_interactions (`0015`), work_product_attribution (`0017`),
+  project_knowledge_bases (`0021`).
+- M2 (`0024`–`0029`) adds citation-engine fields and `message_citations`.
+- M3 adds playbooks + positions + executions (`0031`),
+  easy_playbook_generations (`0035`), tabular_executions (`0036`), and the
+  intake-bridge tables slack_workspaces (`0037`) + teams_tenants (`0038`).
+- M4 adds the autonomous layer: `0039` (autonomous_sessions,
   autonomous_schedules, autonomous_watches, autonomous_memory,
-  precedent_entries — superseding the sketched autonomous_tasks) and
-  contract_relationships.
+  precedent_entries — superseding the sketched `autonomous_tasks`),
+  `0040` (autonomous_notifications), `0041` (project_context_proposals +
+  precedent upsert index), `0042` (autonomous_sessions.params +
+  schedule due-index), `0043` (notifications read-index), `0044`
+  (users.autonomous_enabled), `0045` (per-trigger max_cost_usd on
+  watches + schedules). `contract_relationships` remains a sketch — it is
+  **not** created by any migration (see the M4+ sketched section).
 
 Migration conventions:
 - Every migration is reversible (`downgrade()` always implemented).
