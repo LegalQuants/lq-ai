@@ -553,7 +553,7 @@ reference is stored unbound.
 
 > **Status: NOT created by any migration.** The `skills`,
 > `skill_reference_files`, and `skill_example_files` tables below are an
-> early sketch from before [ADR 0004](adr/0004-filesystem-canonical-skills.md)
+> early sketch from before [ADR 0004](adr/0004-skill-loader-locus.md)
 > made skills **filesystem-canonical**. There is no `skills` SQL table,
 > no `skill_reference_files` table, and no `skill_example_files` table in
 > the shipped schema (verified against migrations 0001–0045 and
