@@ -183,7 +183,7 @@
 		<section class="lq-build-section" data-testid="lq-ai-learn-build-section-agentic-flow">
 			<h2 class="lq-section-h">Anatomy of an aligned agentic flow (M4)</h2>
 			<p class="lq-text-body">
-				<strong>Planned M4 capability.</strong> When you contribute an autonomous flow — a single agent that
+				<strong>Shipped in M4.</strong> When you contribute an autonomous flow — a single agent that
 				acts without a human approving each step — transparency moves from "you can read the prompt" to "you
 				can audit the behavior." Four obligations make a flow aligned. The authoritative how-to is the
 				<a href="https://github.com/LegalQuants/lq-ai/blob/main/docs/LQVern/agentic-flow-alignment-guide.md" class="lq-link" target="_blank" rel="noopener noreferrer">agentic-flow-alignment-guide.md</a>;
@@ -208,8 +208,8 @@
 				<div class="lq-build-step">
 					<span class="lq-build-step-n">3</span>
 					<div>
-						<strong>Observable + audited, counts only.</strong> Emit the <code>autonomous.session</code>
-						+ <code>autonomous.tool_call</code> spans and closed-enum audit rows (started / phase_transition
+						<strong>Observable + audited, counts only.</strong> Emit the <code>autonomous.execute</code>
+						+ <code>autonomous.tool_call</code> spans and closed-enum audit rows (phase_transition
 						/ tool_call / halted / cost_cap_reached / completed). Attributes carry counts, types, IDs, and
 						costs only — never raw entity values, document text, prompt bodies, or model responses.
 					</div>
@@ -235,8 +235,8 @@
 			<h2 class="lq-section-h">The roadmap</h2>
 			<p class="lq-text-body">
 				LQ.AI follows a milestone-based roadmap. M1 shipped the foundation; M2 and M3 each added a
-				named capability layer on top. M1, M2, and M3 are all shipped as of v0.3.0; M4 is the next
-				milestone.
+				named capability layer on top. M1, M2, M3, and the M4 Autonomous Layer are all shipped; the
+				Contract Relationship graph remains deferred future work.
 			</p>
 			<div class="lq-roadmap-list">
 				<div class="lq-roadmap-item lq-roadmap-item--shipped">
@@ -264,11 +264,17 @@
 						add-in (Office.js — plumbing only at v0.3.0; the in-pane feature surface is deferred).
 					</div>
 				</div>
-				<div class="lq-roadmap-item">
-					<div class="lq-roadmap-pill lq-roadmap-pill--future">M4</div>
+				<div class="lq-roadmap-item lq-roadmap-item--shipped">
+					<div class="lq-roadmap-pill">M4</div>
 					<div>
 						<strong>Autonomous Layer.</strong> Multi-step agent execution with
-						verifiable receipts; Contract Relationship graph.
+						verifiable receipts (opt-in, off by default).
+					</div>
+				</div>
+				<div class="lq-roadmap-item">
+					<div class="lq-roadmap-pill lq-roadmap-pill--future">Future</div>
+					<div>
+						<strong>Contract Relationship graph.</strong> Deferred future work — not yet built.
 					</div>
 				</div>
 			</div>

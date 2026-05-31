@@ -1,7 +1,7 @@
 <!--
   /lq-ai/learn/use — "How to Use" feature tour.
 
-  Sections covering every user-facing capability across M1–M3. Each section has:
+  Sections covering every user-facing capability across M1–M4. Each section has:
   - A heading
   - A plain-language description
   - A <details> foldout linking to the relevant source file paths, E2E
@@ -15,9 +15,11 @@
 		<a href="/lq-ai/learn" class="lq-back-link">← Learn</a>
 		<h1 class="lq-text-page-h">How to Use LQ.AI</h1>
 		<p class="lq-text-body lq-page-intro">
-			A plain-language tour of every user-facing feature across M1–M3. Each section names the
+			A plain-language tour of every user-facing feature across M1–M4. Each section names the
 			file paths and test that exercise the behavior described, so you can verify any claim
-			against the source.
+			against the source. The M4 Autonomous Layer surfaces in the web app as the autonomous
+			dashboard (<a href="/lq-ai/autonomous" class="lq-link">Autonomous</a>) plus an opt-in
+			toggle in settings (off by default).
 		</p>
 	</header>
 
@@ -57,9 +59,10 @@
 				press Enter. The skill's system prompt, input schema, and reference files are
 				assembled and sent to the model — the full assembled prompt is visible in the
 				receipts drawer. Ten starter skills ship with M1:
-				NDA Review, MSA Review (SaaS), IP Assignment Review, MNDA Review,
-				Employment Offer Review, Severance Agreement Review, Equity Grant Review,
-				Privacy Policy Audit, Terms of Service Audit, and GDPR Data-Processing Addendum.
+				NDA Review, MSA Review — SaaS, MSA Review — Commercial Purchase,
+				DPA Checklist Review, Vendor Privacy Policy First Pass, Contract QA,
+				Action Items from Client Alert, Comms Improver, Enhance Prompt (an optional
+					prompt-rewriting pre-step), and Skill Creator (a meta-skill for building new skills).
 			</p>
 			<details class="lq-verify">
 				<summary class="lq-verify-summary">Dig deeper / verify</summary>
@@ -431,7 +434,7 @@
 	<footer class="lq-use-footer">
 		<p class="lq-text-body">
 			<a href="/lq-ai/learn/how" class="lq-link">Want to see how this all fits together?</a>
-			— Eleven interactive playgrounds that show the system from request to response.
+			— Twelve interactive playgrounds that show the system from request to response.
 		</p>
 		<p class="lq-text-body">
 			For the full shipped/deferred capability catalog, read

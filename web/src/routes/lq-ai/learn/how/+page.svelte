@@ -1,7 +1,7 @@
 <!--
   /lq-ai/learn/how — "How It Works" visualization page.
 
-  Eleven interactive playground iframes in narrative order: system map →
+  Twelve interactive playground iframes in narrative order: system map →
   request lifecycle → tier system → skill composition → citation engine →
   anonymization layer → data residency → playbook cascade → tabular review →
   word add-in flow → observability trace. Each section has: a heading, a 2-3
@@ -21,7 +21,7 @@
 		<a href="/lq-ai/learn" class="lq-back-link">← Learn</a>
 		<h1 class="lq-text-page-h">How It Works</h1>
 		<p class="lq-text-body lq-page-intro">
-			Eleven interactive surfaces. Together they tell the story of how LQ.AI works from request to
+			Twelve interactive surfaces. Together they tell the story of how LQ.AI works from request to
 			response — the engine, its boundaries, the M3 capability surfaces built on top, and the
 			observability trace that ties them together. Each playground links to the source files that
 			implement what it shows — if a visualization makes a claim, the linked file is where you verify it.
@@ -505,7 +505,7 @@
 				sideloads the unsigned manifest via the Microsoft 365 Admin Center (which warns about the
 				unsigned add-in — expected at v0.3.0), the task pane completes OAuth against the deployment, and
 				the version handshake confirms compatibility. M3 shipped the plumbing only — the in-pane feature
-				surface (chat, skills, playbooks) is deferred to M4, and the signed distribution package is
+				surface (chat, skills, playbooks) is deferred (DE-287; M4 closed without it — community-friendly), and the signed distribution package is
 				community-led.
 			</p>
 			<div class="lq-playground-wrap">
@@ -596,7 +596,7 @@
 		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-autonomous-flow">
 			<h2 class="lq-section-h">12. Autonomy you can audit: the Autonomous flow</h2>
 			<p class="lq-text-body">
-				<strong>Planned M4 capability.</strong> The Autonomous Layer (M4) runs a single agent on your
+				The Autonomous Layer (M4, shipped) runs a single agent on your
 				behalf — on a schedule, or when documents arrive — without you watching each step. Because no
 				human approves each action, the agent runs through declared phases behind one brake-checked
 				chokepoint, and every run produces an auditable receipt. Step through a session below and trip
