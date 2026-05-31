@@ -4379,6 +4379,46 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 ---
 
+#### DE-325 — Harden `build_receipt` call sites against receipt-build failure (M4 finding)
+
+**Status:** ✅ RESOLVED (M4, commit `a012b6f`). Added `build_receipt_safe()` (`api/app/autonomous/receipt.py`) — a best-effort wrapper that calls `build_receipt()`, and on any exception logs (`autonomous_build_receipt_failed`, `exc_info`) and returns `None` instead of propagating. Both terminal call sites — `executor.py:174` and `nodes.py:565` — now go through it, so a malformed/exception receipt build degrades gracefully and the caller still persists the already-set terminal status.
+
+**Priority:** P2 · **Effort:** XS
+
+**Context:** The autonomous executor builds a structured receipt at the terminal transition. `build_receipt` does FK loads + JSON assembly and can raise; raising at that point would crash the autonomous worker *and* leave the session row non-terminal (status set but never committed), wedging the session. The caller has already chosen the terminal status — receipt assembly is supplementary and must not be able to take down the worker.
+
+**Specific scope:** Wrap `build_receipt` in a never-raises shim; on failure persist the terminal status without a receipt and log the failure. Route every terminal call site through the shim.
+
+**When to ship:** Done in M4.
+
+---
+
+#### DE-326 — Fresh-install worker/api alembic-migration race (M4 finding)
+
+**Status:** ✅ RESOLVED (M4, commit `5999832`). In `docker-compose.yml` the `ingest-worker` and `arq-worker` now set `LQ_AI_SKIP_MIGRATIONS: "1"` and `depends_on` the `api` with `condition: service_healthy`, so only the `api` runs migrations and the workers start after the schema is in place. Eliminates the fresh-install race where multiple alembic runners (workers vs. api, or worker vs. worker) could collide on an empty database.
+
+**Priority:** P2 · **Effort:** S
+
+**Context:** On a fresh install the api, ingest-worker, and arq-worker each ran alembic at startup. Against an empty database these runs raced one another (and the api's run), producing intermittent migration failures / crash-loops on first boot. The fix designates a single migrator (the api) and gates the workers on api health.
+
+**Specific scope:** Set `LQ_AI_SKIP_MIGRATIONS=1` on every api-derived worker and have them wait for the api's `service_healthy` condition; keep the api as the sole migration runner.
+
+**When to ship:** Done in M4.
+
+---
+
+#### DE-327 — Helm/k8s worker-migration parity (M4 finding)
+
+**Priority:** P3 · **Effort:** M · **Good first issue** (community-suitable)
+
+**Context:** The single-migrator fix from DE-326 lives only in `docker-compose.yml`. The Helm chart at `deploy/helm/lq-ai/` has no equivalent: it ships `deployment-{api,gateway,web}.yaml` only — there are no worker (ingest-worker / arq-worker) deployments yet, and no migration-ordering mechanism (no migration `Job`/init-container, no `LQ_AI_SKIP_MIGRATIONS` wiring) anywhere in the chart. When the chart grows worker deployments, it must carry the same guarantee compose now has: exactly one component runs migrations and workers wait for the api/schema to be ready, rather than every replica racing alembic on a fresh cluster.
+
+**Specific scope:** When worker deployments are added to the Helm chart, designate a single migrator — a one-shot pre-install/pre-upgrade migration `Job` (or an init-container on the api), set `LQ_AI_SKIP_MIGRATIONS=1` on the worker deployments, and order workers after the api/migration via readiness gating. Mirror the compose intent. A self-contained, contributor-friendly task once the chart's worker deployments land.
+
+**When to ship:** Alongside (or just after) the Helm chart gaining worker deployments; open for community pickup.
+
+---
+
 ## 10. Appendices
 
 ### Appendix A — Glossary
