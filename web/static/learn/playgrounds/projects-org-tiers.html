@@ -1,322 +1,490 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Matters, org profile &amp; privilege tiers — LQ.AI Learn</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LQ.AI — Matters, Org Profile &amp; Privilege Tiers</title>
 <style>
   :root {
-    --bg: #0b0e14;
-    --panel: #131722;
-    --panel-2: #1a2030;
-    --ink: #e6e9ef;
-    --ink-dim: #9aa3b2;
-    --accent: #5b9cff;
-    --accent-2: #7ee0c0;
-    --warn: #ffb454;
-    --danger: #ff6b6b;
-    --line: #273043;
-    --radius: 10px;
-    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --bg: #0c0f14;
+    --bg-elev: #151a23;
+    --bg-elev-2: #1d242f;
+    --border: #2a3340;
+    --border-hover: #3a4555;
+    --text: #e6ebf3;
+    --text-dim: #8a96a8;
+    --text-faint: #5a6578;
+    --accent: #7dd3fc;
+    --accent-dim: #38bdf8;
+    --web: #93c5fd;
+    --api: #fcd34d;
+    --gateway: #c4b5fd;
+    --data: #f9a8d4;
+    --workers: #86efac;
+    --providers: #fda4af;
+    --shadow: rgba(0,0,0,0.4);
+    --tier1: #86efac;
+    --tier2: #93c5fd;
+    --tier3: #fcd34d;
+    --tier4: #c4b5fd;
+    --tier5: #fda4af;
+    --refused: #f87171;
+    --refused-bg: rgba(248,113,113,0.08);
+    --refused-border: rgba(248,113,113,0.3);
+    --allowed: #86efac;
+    --allowed-bg: rgba(134,239,172,0.07);
+    --allowed-border: rgba(134,239,172,0.25);
+    --org-bg: #1e2d1e;
+    --org-border: #3a5a3a;
+    --prompt-bg: #0e1219;
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; }
-  body {
+  html, body {
+    margin: 0; padding: 0;
     background: var(--bg);
-    color: var(--ink);
-    font-family: var(--sans);
-    line-height: 1.5;
-    padding: 24px;
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    height: 100vh;
+    overflow: hidden;
   }
-  .wrap { max-width: 980px; margin: 0 auto; }
-  h1 { font-size: 1.4rem; margin: 0 0 4px; }
-  .sub { color: var(--ink-dim); font-size: 0.92rem; margin-bottom: 20px; }
-  .panel {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    padding: 18px;
-    margin-bottom: 16px;
+  .app { display: grid; grid-template-rows: auto 1fr auto; height: 100vh; }
+  header {
+    padding: 12px 20px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 16px;
   }
-  .panel h2 { font-size: 1.05rem; margin: 0 0 12px; display: flex; align-items: center; gap: 10px; }
-  label.field { display: block; font-size: 0.85rem; color: var(--ink-dim); margin-bottom: 6px; }
-  .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 8px; }
-  button.seg {
-    background: var(--panel-2);
-    color: var(--ink-dim);
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    padding: 7px 14px;
-    font-size: 0.85rem;
-    cursor: pointer;
-    font-family: var(--sans);
+  header h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
+  header .subtitle { color: var(--text-dim); font-size: 13px; }
+  header .spacer { flex: 1; }
+  header a {
+    color: var(--accent); text-decoration: none; font-size: 12px;
+    border: 1px solid var(--border); padding: 4px 10px; border-radius: 4px;
   }
-  button.seg.active {
-    background: var(--accent);
-    color: #0b0e14;
-    border-color: var(--accent);
-    font-weight: 600;
-  }
-  .stack { display: flex; flex-direction: column; gap: 8px; }
-  .chip {
+  header a:hover { border-color: var(--border-hover); background: var(--bg-elev-2); }
+
+  .main { display: grid; grid-template-columns: 320px 1fr; overflow: hidden; }
+  .controls { background: var(--bg-elev); border-right: 1px solid var(--border); padding: 16px; overflow-y: auto; }
+  .controls h2 {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-dim); margin: 18px 0 8px;
     display: flex; align-items: center; gap: 8px;
-    background: var(--panel-2);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 8px 12px;
-    font-size: 0.85rem;
-    cursor: pointer;
   }
-  .chip.on { border-color: var(--accent-2); background: #16241f; }
-  .chip input { pointer-events: none; }
-  .tier-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 12px; }
+  .controls h2:first-child { margin-top: 0; }
+  .m1-badge {
+    font-size: 9px; font-family: ui-monospace, Menlo, monospace;
+    padding: 1px 5px; border-radius: 3px; letter-spacing: 0.04em;
+    background: rgba(134,239,172,0.15); color: var(--workers); border: 1px solid var(--allowed-border);
+  }
+
+  .matter-selector { display: flex; flex-direction: column; gap: 5px; }
+  .matter-btn {
+    background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;
+    text-align: left; transition: all 0.1s;
+  }
+  .matter-btn:hover { border-color: var(--border-hover); }
+  .matter-btn.active { border-color: var(--accent); background: rgba(125,211,252,0.06); }
+  .matter-btn.active .matter-label { color: var(--accent); font-weight: 600; }
+  .matter-label { display: block; font-size: 13px; font-weight: 500; }
+  .matter-desc { display: block; font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+  .toggle {
+    display: flex; align-items: flex-start; gap: 8px; padding: 7px 8px;
+    border-radius: 4px; cursor: pointer; user-select: none;
+    transition: background 0.1s; font-size: 12px; border: 1px solid transparent;
+  }
+  .toggle:hover { background: var(--bg-elev-2); border-color: var(--border); }
+  .toggle.checked { background: rgba(125,211,252,0.07); border-color: rgba(125,211,252,0.2); }
+  .toggle.checked-green { background: rgba(134,239,172,0.06); border-color: rgba(134,239,172,0.18); }
+  .toggle input { margin: 3px 0 0; cursor: pointer; accent-color: var(--accent); flex-shrink: 0; }
+  .toggle .toggle-label { flex: 1; line-height: 1.4; }
+  .toggle .toggle-label span { display: block; color: var(--text-dim); font-size: 11px; margin-top: 2px; }
+
+  .preview-wrap {
+    overflow-y: auto; padding: 20px;
+    background:
+      radial-gradient(circle at 20% 20%, rgba(125,211,252,0.03), transparent 55%),
+      radial-gradient(circle at 80% 80%, rgba(196,181,253,0.03), transparent 55%),
+      var(--bg);
+  }
+  .section-label {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.07em; color: var(--text-faint); margin: 18px 0 8px;
+  }
+  .section-label:first-child { margin-top: 0; }
+
+  /* Composed context card */
+  .context-card {
+    border-radius: 8px; border: 1px solid var(--border); background: var(--prompt-bg);
+    max-width: 760px; overflow: hidden; margin-bottom: 8px;
+  }
+  .ctx-row {
+    display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px;
+    border-bottom: 1px solid var(--border); font-size: 12px;
+  }
+  .ctx-row:last-child { border-bottom: none; }
+  .ctx-row .ctx-tag {
+    font-family: ui-monospace, Menlo, monospace; font-size: 10px;
+    padding: 2px 7px; border-radius: 3px; flex-shrink: 0; white-space: nowrap;
+  }
+  .tag-org { background: var(--org-bg); color: var(--workers); border: 1px solid var(--org-border); }
+  .tag-matter { background: rgba(125,211,252,0.1); color: var(--accent); border: 1px solid rgba(125,211,252,0.3); }
+  .tag-attach { background: rgba(196,181,253,0.1); color: var(--gateway); border: 1px solid rgba(196,181,253,0.3); }
+  .tag-msg { background: rgba(252,211,77,0.1); color: var(--api); border: 1px solid rgba(252,211,77,0.3); }
+  .ctx-row .ctx-text { color: var(--text); line-height: 1.5; }
+  .ctx-row .ctx-text code {
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px;
+    color: var(--accent); background: rgba(125,211,252,0.08);
+    padding: 0 4px; border-radius: 3px;
+  }
+  .ctx-row.off { opacity: 0.32; }
+  .ctx-empty { padding: 12px 14px; color: var(--text-faint); font-size: 12px; font-style: italic; }
+
+  /* Tier ladder */
+  .tier-ladder { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; max-width: 760px; }
   .tier-cell {
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 10px;
-    text-align: center;
-    font-size: 0.78rem;
-    background: var(--panel-2);
-    transition: all 0.15s;
+    border: 1px solid var(--border); border-radius: 6px; padding: 10px;
+    text-align: center; background: var(--bg-elev); transition: all 0.15s;
   }
-  .tier-cell.allowed { border-color: var(--accent-2); background: #16241f; }
-  .tier-cell.floor { border-color: var(--accent); background: #1c2740; }
-  .tier-cell.blocked { opacity: 0.35; }
-  .tier-num { font-weight: 700; font-size: 1.05rem; }
-  .tier-tag { font-size: 0.66rem; color: var(--ink-dim); margin-top: 4px; }
-  .badge {
-    display: inline-block;
-    font-size: 0.7rem;
-    padding: 2px 8px;
-    border-radius: 999px;
-    background: var(--panel-2);
-    border: 1px solid var(--line);
-    color: var(--ink-dim);
-    font-weight: 400;
+  .tier-cell.allowed { border-color: var(--allowed-border); background: var(--allowed-bg); }
+  .tier-cell.floor { border-color: var(--accent); background: rgba(125,211,252,0.08); }
+  .tier-cell.refused { opacity: 0.4; }
+  .tier-num { font-weight: 700; font-size: 13px; font-family: ui-monospace, Menlo, monospace; }
+  .tier-label { font-size: 10px; color: var(--text-dim); margin-top: 4px; line-height: 1.3; }
+  .tier-state { font-size: 9px; margin-top: 5px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .tier-state.s-allowed { color: var(--allowed); }
+  .tier-state.s-floor { color: var(--accent); }
+  .tier-state.s-refused { color: var(--refused); }
+
+  .floor-note {
+    max-width: 760px; margin-top: 12px; padding: 12px 14px; border-radius: 6px;
+    font-size: 13px; background: var(--bg-elev-2); border: 1px solid var(--border);
+    border-left: 3px solid var(--border); line-height: 1.55;
   }
-  .badge.m1 { border-color: var(--accent-2); color: var(--accent-2); }
-  .desc-pane {
-    background: var(--panel-2);
-    border-radius: 8px;
-    padding: 14px;
-    margin-top: 12px;
-    font-size: 0.88rem;
+  .floor-note code {
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px;
+    color: var(--accent); background: rgba(125,211,252,0.08); padding: 0 4px; border-radius: 3px;
   }
-  .desc-pane strong { color: var(--ink); }
-  .out {
-    background: #0a0d12;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 14px;
-    font-family: var(--mono);
-    font-size: 0.8rem;
-    white-space: pre-wrap;
-    color: var(--ink);
+
+  /* Provider picker + verdict */
+  .provider-picker { display: flex; gap: 6px; flex-wrap: wrap; }
+  .seg {
+    background: var(--bg-elev-2); color: var(--text-dim); border: 1px solid var(--border);
+    border-radius: 6px; padding: 7px 14px; font-size: 12px; cursor: pointer;
+    font-family: ui-monospace, Menlo, monospace;
   }
+  .seg.active { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
   .verdict {
-    margin-top: 12px;
-    padding: 12px 14px;
-    border-radius: 8px;
-    font-size: 0.9rem;
-    border: 1px solid var(--line);
+    max-width: 760px; margin-top: 14px; padding: 14px 16px; border-radius: 8px;
+    font-size: 13px; border: 1px solid var(--border); line-height: 1.55;
   }
-  .verdict.ok { border-color: var(--accent-2); background: #16241f; }
-  .verdict.block { border-color: var(--danger); background: #2a1618; }
-  .verdict strong { color: var(--ink); }
-  .footer {
-    margin-top: 24px;
-    padding-top: 16px;
-    border-top: 1px solid var(--line);
-    font-size: 0.78rem;
-    color: var(--ink-dim);
+  .verdict.ok { border-color: var(--allowed-border); background: var(--allowed-bg); }
+  .verdict.block { border-color: var(--refused-border); background: var(--refused-bg); }
+  .verdict .status-pill {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 11px;
+    font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
+    padding: 4px 10px; border-radius: 20px; margin-bottom: 10px;
   }
-  .footer code { font-family: var(--mono); color: var(--accent-2); }
-  .hint { font-size: 0.78rem; color: var(--ink-dim); margin-top: 6px; }
+  .verdict.ok .status-pill { background: rgba(134,239,172,0.15); color: var(--allowed); border: 1px solid var(--allowed-border); }
+  .verdict.block .status-pill { background: rgba(248,113,113,0.15); color: var(--refused); border: 1px solid var(--refused-border); }
+  .verdict code {
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px;
+    color: var(--text); background: rgba(255,255,255,0.06); padding: 0 4px; border-radius: 3px;
+  }
+
+  /* Output panel (footer / verify) */
+  .output { background: var(--bg-elev); border-top: 1px solid var(--border); max-height: 230px; display: grid; grid-template-rows: auto 1fr; }
+  .output-tabs { display: flex; padding: 0 16px; border-bottom: 1px solid var(--border); gap: 4px; align-items: flex-end; }
+  .output-tab {
+    background: transparent; border: none; color: var(--text-dim); padding: 10px 14px;
+    cursor: pointer; font-size: 12px; font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .output-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .output-tab:hover { color: var(--text); }
+  .output-body { padding: 14px 16px; overflow-y: auto; font-size: 12px; line-height: 1.6; color: var(--text); }
+  .output-body .pane { display: none; }
+  .output-body .pane.active { display: block; }
+  .output-body p { margin: 4px 0; }
+  .output-body ul { margin: 4px 0; padding-left: 18px; }
+  .output-body li { margin: 3px 0; }
+  .output-body .file {
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--accent);
+    text-decoration: none; display: inline-block; padding: 1px 4px; border-radius: 3px; background: rgba(125,211,252,0.08);
+  }
+  .output-body .file:hover { background: rgba(125,211,252,0.16); }
+  .output-body code { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--accent-dim); }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <h1>Matters, org profile &amp; privilege tiers: how context shapes a request</h1>
-  <div class="sub">
-    A matter's context — its org voice, attached files / skills / knowledge bases,
-    and privilege posture — shapes every request it makes, and the privilege
-    posture sets a tier floor the gateway enforces. All three capabilities shipped in M1.
+<div class="app">
+  <header>
+    <h1>LQ.AI — Matters, org profile &amp; privilege tiers</h1>
+    <span class="subtitle">How a matter's context shapes a request — and how its privilege posture sets a tier floor the gateway enforces.</span>
+    <span class="spacer"></span>
+    <a href="../../" id="learn-home">&#8617; Learn</a>
+    <a href="https://github.com/LegalQuants/lq-ai" target="_blank" rel="noopener">View source &#8599;</a>
+  </header>
+
+  <div class="main">
+    <aside class="controls">
+      <h2>Matter (project) <span class="m1-badge">M1</span></h2>
+      <div class="matter-selector" id="matter-selector">
+        <button class="matter-btn active" data-matter="standard">
+          <span class="matter-label">Standard matter</span>
+          <span class="matter-desc">privileged=false · minimum_inference_tier NULL — no floor; any tier may serve.</span>
+        </button>
+        <button class="matter-btn" data-matter="privileged">
+          <span class="matter-label">Privileged matter</span>
+          <span class="matter-desc">privileged=true · minimum_inference_tier=2 — Tier 2 or stronger required.</span>
+        </button>
+        <button class="matter-btn" data-matter="privileged-local">
+          <span class="matter-label">Privileged, local-only</span>
+          <span class="matter-desc">privileged=true · minimum_inference_tier=1 — local / air-gapped only.</span>
+        </button>
+      </div>
+
+      <h2>Attached to the matter <span class="m1-badge">M1</span></h2>
+      <label class="toggle checked" id="t-files">
+        <input type="checkbox" checked>
+        <span class="toggle-label">Attached files
+          <span>Documents uploaded for this engagement.</span></span>
+      </label>
+      <label class="toggle checked" id="t-skills">
+        <input type="checkbox" checked>
+        <span class="toggle-label">Attached skills
+          <span>Skills selected for this matter's work (each may declare its own tier floor).</span></span>
+      </label>
+      <label class="toggle" id="t-kbs">
+        <input type="checkbox">
+        <span class="toggle-label">Knowledge bases
+          <span>project_knowledge_bases junction (migration 0021).</span></span>
+      </label>
+
+      <h2>Organization profile <span class="m1-badge">M1</span></h2>
+      <label class="toggle checked-green" id="t-org">
+        <input type="checkbox" checked>
+        <span class="toggle-label">Org profile configured
+          <span>Singleton skill (is_organization_profile=true). Voice + "what good looks like" injected ambiently.</span></span>
+      </label>
+
+      <h2>Candidate provider tier</h2>
+      <div class="provider-picker" id="provider-picker"></div>
+      <p style="font-size:11px;color:var(--text-faint);margin-top:8px;line-height:1.5">
+        Lower tier number = stronger security (PRD &sect;1.5.2). Tier 1 = local Ollama; Tier 5 = consumer / free.
+      </p>
+    </aside>
+
+    <div class="preview-wrap">
+      <div class="section-label">a · What context composes into the request</div>
+      <div class="context-card" id="context-card"></div>
+
+      <div class="section-label">b · Privilege posture &rarr; tier floor (forwarded to the gateway)</div>
+      <div class="tier-ladder" id="tier-ladder"></div>
+      <div class="floor-note" id="floor-note"></div>
+
+      <div class="section-label">c · Gateway decision for the candidate provider</div>
+      <div class="verdict" id="verdict"></div>
+    </div>
   </div>
 
-  <div class="panel">
-    <h2>1 · Configure the matter <span class="badge m1">M1</span></h2>
-    <label class="field">Privilege posture (sets the tier floor)</label>
-    <div class="controls" id="privControls"></div>
-    <label class="field" style="margin-top:14px;">Attach context to the matter</label>
-    <div class="stack" id="attachments"></div>
-    <div class="hint">Skills and documents attach at the request layer; knowledge bases attach per matter (<code>matter_knowledge_bases</code>, migration 0021).</div>
+  <div class="output">
+    <div class="output-tabs">
+      <button class="output-tab active" data-tab="describe">How it works</button>
+      <button class="output-tab" data-tab="verify">Verify in source</button>
+    </div>
+    <div class="output-body">
+      <div class="pane active" id="pane-describe"></div>
+      <div class="pane" id="pane-verify"></div>
+    </div>
   </div>
-
-  <div class="panel">
-    <h2>2 · Organization profile <span class="badge m1">M1</span></h2>
-    <div class="stack" id="orgControls"></div>
-    <div class="hint">A per-org singleton (<code>organization_profile</code>, migration 0010). When configured, its voice, drafting standards, and house style inject into every skill request as a system-prompt layer.</div>
-  </div>
-
-  <div class="panel">
-    <h2>3 · Composed request context</h2>
-    <div class="out" id="composed"></div>
-  </div>
-
-  <div class="panel">
-    <h2>4 · Tier floor &amp; gateway decision <span class="badge m1">M1</span></h2>
-    <div class="desc-pane" id="floorDesc"></div>
-    <div class="tier-grid" id="tierGrid"></div>
-    <label class="field" style="margin-top:16px;">Pick a candidate provider tier the request could route to</label>
-    <div class="controls" id="providerControls"></div>
-    <div class="verdict" id="verdict"></div>
-  </div>
-
-  <div class="footer" id="footer"></div>
 </div>
+
 <script>
-  // Privilege posture -> tier floor. Mirrors gateway/app/tier_floor.py
-  // (PRIVILEGE_TIER_FLOOR) and api/app/api/matters.py.
-  // Lower floor number = more restrictive / more secure.
-  const PRIVILEGE = [
-    { id: "standard", label: "Standard", floor: 5,
-      blurb: "General business work. Floor is Tier 5 — any provider may serve the request, including frontier hosted models." },
-    { id: "confidential", label: "Confidential", floor: 3,
-      blurb: "Client-confidential. Floor is Tier 3 — restricted to Tier 3 or stronger; weaker (higher-numbered) providers are refused." },
-    { id: "privileged", label: "Privileged", floor: 2,
-      blurb: "Attorney-client privileged. Floor is Tier 2 — only the most secure providers (Tier 2 or stronger) may serve it." },
-  ];
+const REPO = 'https://github.com/LegalQuants/lq-ai/blob/main/';
 
-  // Tiers 1-5; lower = more secure. tier_floor.py canonically names only the
-  // endpoints (Tier 1 = local/on-prem, Tier 5 = frontier hosted); intermediate
-  // tiers are described by relative security, not invented names.
-  const TIERS = [
-    { n: 1, tag: "local / on-prem" },
-    { n: 2, tag: "more secure" },
-    { n: 3, tag: "mid" },
-    { n: 4, tag: "less secure" },
-    { n: 5, tag: "frontier hosted" },
-  ];
+// Matter privilege posture -> minimum_inference_tier (the project floor).
+// Mirrors api/app/models/project.py (columns `privileged`, `minimum_inference_tier`)
+// and the privileged-project default of minimum_inference_tier=2 documented in
+// gateway/app/tier_floor.py. A floor of N means "require Tier N or stronger (<=N)".
+// null = no floor declared (request never refused on this axis).
+const MATTERS = {
+  standard:         { label: 'Standard matter',        privileged: false, floor: null,
+    blurb: 'privileged=false, so minimum_inference_tier is NULL (CHECK chk_projects_privileged_implies_tier only requires a tier when privileged=true). No project floor is forwarded; the request is never refused on the tier-floor axis.' },
+  privileged:       { label: 'Privileged matter',      privileged: true,  floor: 2,
+    blurb: 'privileged=true defaults to minimum_inference_tier=2. The backend forwards it to the gateway as lq_ai_project_minimum_inference_tier. The gateway allows Tier 1 (stronger) and Tier 2 (the floor) and refuses Tier 3-5.' },
+  'privileged-local': { label: 'Privileged, local-only', privileged: true, floor: 1,
+    blurb: 'privileged=true with minimum_inference_tier=1. Only Tier 1 (local Ollama, air-gap-capable) satisfies the floor; every cloud tier is refused.' },
+};
 
-  const ATTACHMENTS = [
-    { id: "files", label: "Attached documents", text: "matter documents (uploaded for this engagement)" },
-    { id: "skills", label: "Attached skills", text: "skills selected for this matter's work" },
-    { id: "kbs", label: "Knowledge bases", text: "matter_knowledge_bases entries (migration 0021)" },
-  ];
+// Tiers 1-5, lower = stronger. Endpoint names from PRD §1.5.2 / tier_floor.py;
+// intermediate tiers described by relative posture rather than invented names.
+const TIERS = [
+  { n: 1, label: 'local Ollama / air-gapped' },
+  { n: 2, label: 'customer-hosted cloud' },
+  { n: 3, label: 'enterprise ZDR / no-training' },
+  { n: 4, label: 'standard cloud API' },
+  { n: 5, label: 'consumer / free' },
+];
 
-  const state = {
-    privilege: "confidential",
-    attach: { files: true, skills: true, kbs: false },
-    org: true,
-    providerTier: 4,
-  };
+const state = {
+  matter: 'standard',
+  files: true,
+  skills: true,
+  kbs: false,
+  org: true,
+  providerTier: 4,
+};
 
-  const privControls = document.getElementById("privControls");
-  const attachments = document.getElementById("attachments");
-  const orgControls = document.getElementById("orgControls");
-  const composed = document.getElementById("composed");
-  const floorDesc = document.getElementById("floorDesc");
-  const tierGrid = document.getElementById("tierGrid");
-  const providerControls = document.getElementById("providerControls");
-  const verdict = document.getElementById("verdict");
+function curMatter() { return MATTERS[state.matter]; }
 
-  function curPriv() { return PRIVILEGE.find(p => p.id === state.privilege); }
+// --- a) composed context ---------------------------------------------------
+function renderContext() {
+  const card = document.getElementById('context-card');
+  const m = curMatter();
+  const rows = [];
 
-  function render() {
-    // Privilege segmented control
-    privControls.innerHTML = "";
-    PRIVILEGE.forEach(p => {
-      const b = document.createElement("button");
-      b.className = "seg" + (p.id === state.privilege ? " active" : "");
-      b.textContent = p.label;
-      b.onclick = () => { state.privilege = p.id; render(); };
-      privControls.appendChild(b);
-    });
-
-    // Attachment chips
-    attachments.innerHTML = "";
-    ATTACHMENTS.forEach(a => {
-      const on = state.attach[a.id];
-      const c = document.createElement("div");
-      c.className = "chip" + (on ? " on" : "");
-      c.innerHTML = `<input type="checkbox" ${on ? "checked" : ""}/> <span>${a.label}</span>`;
-      c.onclick = () => { state.attach[a.id] = !state.attach[a.id]; render(); };
-      attachments.appendChild(c);
-    });
-
-    // Org profile chip
-    orgControls.innerHTML = "";
-    const oc = document.createElement("div");
-    oc.className = "chip" + (state.org ? " on" : "");
-    oc.innerHTML = `<input type="checkbox" ${state.org ? "checked" : ""}/> <span>Org profile configured (voice + drafting standards + house style)</span>`;
-    oc.onclick = () => { state.org = !state.org; render(); };
-    orgControls.appendChild(oc);
-
-    // Composed context
-    const priv = curPriv();
-    const lines = ["=== REQUEST CONTEXT (matter-scoped) ==="];
-    if (state.org) {
-      lines.push("# Organization profile (system-prompt layer)");
-      lines.push("  - org voice");
-      lines.push("  - drafting standards");
-      lines.push("  - house style");
-    }
-    lines.push("# Matter");
-    lines.push(`  - privilege_level: ${priv.id}`);
-    lines.push(`  - tier_floor: ${priv.floor}  (resolved from privilege_level)`);
-    ATTACHMENTS.forEach(a => {
-      if (state.attach[a.id]) lines.push(`# ${a.label}: ${a.text}`);
-    });
-    lines.push("# User document / query");
-    composed.textContent = lines.join("\n");
-
-    // Floor description
-    floorDesc.innerHTML = priv.blurb;
-
-    // Tier grid
-    tierGrid.innerHTML = "";
-    TIERS.forEach(t => {
-      const cell = document.createElement("div");
-      let cls = "tier-cell";
-      if (t.n > priv.floor) cls += " blocked";
-      else if (t.n === priv.floor) cls += " floor";
-      else cls += " allowed";
-      cell.className = cls;
-      const label = t.n === priv.floor ? "floor" : (t.n < priv.floor ? "allowed" : "refused");
-      cell.innerHTML = `<div class="tier-num">T${t.n}</div><div class="tier-tag">${t.tag}</div><div class="tier-tag">${label}</div>`;
-      tierGrid.appendChild(cell);
-    });
-
-    // Provider tier picker
-    providerControls.innerHTML = "";
-    TIERS.forEach(t => {
-      const b = document.createElement("button");
-      b.className = "seg" + (t.n === state.providerTier ? " active" : "");
-      b.textContent = `T${t.n}`;
-      b.onclick = () => { state.providerTier = t.n; render(); };
-      providerControls.appendChild(b);
-    });
-
-    // Gateway verdict: enforce_tier_floor refuses when provider_tier > floor.
-    const allowed = state.providerTier <= priv.floor;
-    verdict.className = "verdict " + (allowed ? "ok" : "block");
-    if (allowed) {
-      verdict.innerHTML = `<strong>Allowed.</strong> Provider Tier ${state.providerTier} satisfies the floor (Tier ${priv.floor}): a provider passes only when <code>provider_tier &le; floor</code>. The gateway routes the request.`;
-    } else {
-      verdict.innerHTML = `<strong>Refused.</strong> Provider Tier ${state.providerTier} is weaker than the floor (Tier ${priv.floor}). <code>enforce_tier_floor</code> raises <code>TierFloorViolation</code> because <code>provider_tier &gt; floor</code>; the gateway will not route to this provider.`;
-    }
+  if (state.org) {
+    rows.push({ tag: 'org', cls: 'tag-org', text: 'Organization profile (singleton skill) &mdash; org-wide voice, templates, and "what good looks like" injected as ambient context.' });
   }
-  render();
+  rows.push({ tag: 'matter', cls: 'tag-matter', text: `Matter: <code>privileged=${m.privileged}</code> &middot; <code>minimum_inference_tier=${m.floor === null ? 'NULL' : m.floor}</code>` });
+  if (state.files)  rows.push({ tag: 'files',  cls: 'tag-attach', text: 'Attached files &mdash; extracted document text for this engagement.' });
+  if (state.skills) rows.push({ tag: 'skills', cls: 'tag-attach', text: 'Attached skills &mdash; each skill body composes into the system prompt; a skill may also declare its own minimum_inference_tier.' });
+  if (state.kbs)    rows.push({ tag: 'kbs',    cls: 'tag-attach', text: 'Knowledge bases &mdash; retrieved chunks via project_knowledge_bases (migration 0021).' });
+  rows.push({ tag: 'message', cls: 'tag-msg', text: 'User message / document under review.' });
 
-  const footer = document.getElementById("footer");
-  footer.innerHTML =
-    'Source: matters &mdash; <code>api/app/api/matters.py</code>, <code>api/app/models/matter.py</code> (table <code>matters</code>; ' +
-    '<code>privilege_level</code>, <code>tier_floor</code>), <code>matter_knowledge_bases</code> (migration 0021). ' +
-    'Org profile &mdash; <code>api/app/api/orgprofile.py</code>, <code>api/app/models/orgprofile.py</code> (table <code>organization_profile</code>, migration 0010). ' +
-    'Tier floor &mdash; <code>gateway/app/tier_floor.py</code> (<code>PRIVILEGE_TIER_FLOOR</code>, <code>enforce_tier_floor</code>; mirrored in <code>matters.py</code>). ' +
-    '<code>docs/PRD.md &sect;3.11</code> (Projects / Matters), <code>&sect;3.12</code> (Organization Profile), <code>&sect;3.13</code> (Inference Tiers). ' +
-    'Tiers 1&ndash;5; lower = more secure. All three capabilities shipped in M1.';
+  card.innerHTML = rows.map(r =>
+    `<div class="ctx-row"><span class="ctx-tag ${r.cls}">${r.tag}</span><span class="ctx-text">${r.text}</span></div>`
+  ).join('');
+}
+
+// --- b) tier ladder + floor note ------------------------------------------
+function renderLadder() {
+  const ladder = document.getElementById('tier-ladder');
+  const note = document.getElementById('floor-note');
+  const m = curMatter();
+  const floor = m.floor;
+
+  ladder.innerHTML = TIERS.map(t => {
+    let cls = 'tier-cell', state_, slabel;
+    if (floor === null) { cls += ' allowed'; state_ = 's-allowed'; slabel = 'allowed'; }
+    else if (t.n < floor) { cls += ' allowed'; state_ = 's-allowed'; slabel = 'allowed'; }
+    else if (t.n === floor) { cls += ' floor'; state_ = 's-floor'; slabel = 'floor'; }
+    else { cls += ' refused'; state_ = 's-refused'; slabel = 'refused'; }
+    return `<div class="${cls}"><div class="tier-num">T${t.n}</div><div class="tier-label">${t.label}</div><div class="tier-state ${state_}">${slabel}</div></div>`;
+  }).join('');
+
+  if (floor === null) {
+    note.innerHTML = `${m.blurb} <code>resolve_tier_floor()</code> returns <code>None</code>, so <code>is_refused()</code> is always false.`;
+  } else {
+    note.innerHTML = `${m.blurb} The effective floor is <code>min()</code> across the request, project, and any attached-skill floors (the strongest wins). A request is refused when <code>resolved_tier &gt; floor.value</code>.`;
+  }
+}
+
+// --- c) gateway verdict ----------------------------------------------------
+function renderVerdict() {
+  const el = document.getElementById('verdict');
+  const m = curMatter();
+  const floor = m.floor;
+  const pt = state.providerTier;
+  // is_refused: refuse iff resolved_tier > floor.value; floor None never refuses.
+  const refused = floor !== null && pt > floor;
+
+  if (!refused) {
+    el.className = 'verdict ok';
+    const why = floor === null
+      ? `This matter declares no floor (<code>minimum_inference_tier=NULL</code>), so any tier routes.`
+      : `Tier ${pt} satisfies the floor (Tier ${floor}) because <code>resolved_tier &le; floor.value</code> (${pt} &le; ${floor}).`;
+    el.innerHTML = `<span class="status-pill">&#10003; Routed</span><div>${why} The gateway forwards the request to the Tier ${pt} provider.</div>`;
+  } else {
+    el.className = 'verdict block';
+    el.innerHTML = `<span class="status-pill">&#9432; Refused</span><div>Tier ${pt} is weaker than the floor (Tier ${floor}): <code>resolved_tier &gt; floor.value</code> (${pt} &gt; ${floor}). <code>is_refused()</code> returns true, so the gateway responds HTTP 403 <code>tier_below_minimum</code> and writes a routing-log row with <code>refused=true</code> &mdash; before any upstream provider call.</div>`;
+  }
+}
+
+function renderOutput() {
+  const m = curMatter();
+  document.getElementById('pane-describe').innerHTML = `
+    <p>A <strong>matter</strong> (a Project, PRD &sect;3.11, M1) is a workspace whose context shapes every request made inside it. Three things compose into a request:</p>
+    <ul>
+      <li><strong>The organization profile</strong> (PRD &sect;3.12, M1) &mdash; a deployment singleton implemented as a skill with <code>is_organization_profile=true</code> frontmatter. When configured, its voice and standards inject as ambient context into every chat and skill execution.</li>
+      <li><strong>Attached files, skills, and knowledge bases</strong> &mdash; per-matter resources. Skills compose into the system prompt; knowledge bases attach via the <code>project_knowledge_bases</code> junction (migration 0021).</li>
+      <li><strong>The privilege posture</strong> &mdash; the project's <code>privileged</code> flag and <code>minimum_inference_tier</code> column. A privileged matter sets a tier floor.</li>
+    </ul>
+    <p>The privilege floor is the security-boundary piece (PRD &sect;3.13, M1). The backend forwards the project floor to the gateway as <code>lq_ai_project_minimum_inference_tier</code>. The gateway resolves the effective floor with <code>resolve_tier_floor()</code> &mdash; <code>min()</code> across the request override, the project floor, and any attached-skill floors &mdash; then <code>is_refused()</code> refuses when <code>resolved_tier &gt; floor.value</code>. Under PRD &sect;1.5.2 a lower tier number is stronger, so a floor of N means "require Tier N or stronger". A privileged project defaults to <code>minimum_inference_tier=2</code>; the DB CHECK <code>chk_projects_privileged_implies_tier</code> guarantees a privileged matter always carries a non-NULL tier.</p>
+    <p style="color:var(--text-faint);font-size:11px">Current selection: <strong>${m.label}</strong> &mdash; privileged=${m.privileged}, minimum_inference_tier=${m.floor === null ? 'NULL' : m.floor}; org profile ${state.org ? 'configured' : 'not configured'}.</p>`;
+
+  document.getElementById('pane-verify').innerHTML = `
+    <p style="color:var(--text-dim);margin:0 0 8px">Every field, table, and function shown here is verifiable in source.</p>
+    <strong style="font-size:12px">Matters (projects)</strong>
+    <ul>
+      <li><a class="file" href="${REPO}api/app/api/projects.py" target="_blank" rel="noopener">api/app/api/projects.py</a> &mdash; project CRUD + KB attach/detach routes</li>
+      <li><a class="file" href="${REPO}api/app/models/project.py" target="_blank" rel="noopener">api/app/models/project.py</a> &mdash; <code>privileged</code>, <code>minimum_inference_tier</code> (1&ndash;5), CHECK <code>chk_projects_privileged_implies_tier</code></li>
+      <li><a class="file" href="${REPO}api/alembic/versions/0021_project_knowledge_bases_junction.py" target="_blank" rel="noopener">migration 0021</a> &mdash; <code>project_knowledge_bases</code> junction table</li>
+    </ul>
+    <strong style="font-size:12px">Organization profile</strong>
+    <ul>
+      <li><a class="file" href="${REPO}api/app/api/organization_profile.py" target="_blank" rel="noopener">api/app/api/organization_profile.py</a> &amp; <a class="file" href="${REPO}api/app/models/organization_profile.py" target="_blank" rel="noopener">models/organization_profile.py</a></li>
+      <li><a class="file" href="${REPO}api/alembic/versions/0010_create_organization_profile.py" target="_blank" rel="noopener">migration 0010</a> &mdash; the org-profile singleton</li>
+    </ul>
+    <strong style="font-size:12px">Tier floor (gateway enforcement)</strong>
+    <ul>
+      <li><a class="file" href="${REPO}gateway/app/tier_floor.py" target="_blank" rel="noopener">gateway/app/tier_floor.py</a> &mdash; <code>resolve_tier_floor()</code>, <code>is_refused()</code>, <code>TierFloor</code></li>
+    </ul>
+    <strong style="font-size:12px">PRD</strong>
+    <ul>
+      <li><a class="file" href="${REPO}docs/PRD.md" target="_blank" rel="noopener">PRD</a> &sect;3.11 Projects (M1) &middot; &sect;3.12 Organization Profile (M1) &middot; &sect;3.13 Inference Tier Awareness (M1) &middot; &sect;1.5.2 tier ordering</li>
+      <li><a class="file" href="${REPO}docs/HONEST-STATE.md" target="_blank" rel="noopener">HONEST-STATE.md &sect;1</a> &mdash; matter workspace, KBs, privilege (all M1)</li>
+    </ul>`;
+}
+
+function renderAll() { renderContext(); renderLadder(); renderVerdict(); renderOutput(); }
+
+// --- wiring ----------------------------------------------------------------
+document.getElementById('matter-selector').addEventListener('click', (e) => {
+  const btn = e.target.closest('.matter-btn');
+  if (!btn) return;
+  state.matter = btn.dataset.matter;
+  document.querySelectorAll('.matter-btn').forEach(b => b.classList.toggle('active', b === btn));
+  renderAll();
+});
+
+function wireToggle(id, key, checkedClass) {
+  const row = document.getElementById(id);
+  const input = row.querySelector('input');
+  input.addEventListener('change', () => {
+    state[key] = input.checked;
+    row.classList.toggle(checkedClass, input.checked);
+    renderAll();
+  });
+}
+wireToggle('t-files', 'files', 'checked');
+wireToggle('t-skills', 'skills', 'checked');
+wireToggle('t-kbs', 'kbs', 'checked');
+wireToggle('t-org', 'org', 'checked-green');
+
+const picker = document.getElementById('provider-picker');
+TIERS.forEach(t => {
+  const b = document.createElement('button');
+  b.className = 'seg' + (t.n === state.providerTier ? ' active' : '');
+  b.textContent = 'T' + t.n;
+  b.addEventListener('click', () => {
+    state.providerTier = t.n;
+    document.querySelectorAll('#provider-picker .seg').forEach(s => s.classList.toggle('active', s === b));
+    renderVerdict();
+    renderOutput();
+  });
+  picker.appendChild(b);
+});
+
+document.querySelectorAll('.output-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.output-tab').forEach(t => t.classList.toggle('active', t === tab));
+    document.querySelectorAll('.output-body .pane').forEach(p => p.classList.toggle('active', p.id === `pane-${tab.dataset.tab}`));
+  });
+});
+
+renderAll();
 </script>
 </body>
 </html>
