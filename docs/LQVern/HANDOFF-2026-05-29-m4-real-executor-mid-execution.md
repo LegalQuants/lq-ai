@@ -1,8 +1,22 @@
 # Handoff — M4 real-executor-work execution (Tasks 1–18 done) → resume at Task 19 (fresh-install acceptance)
 
+> ## ⮕ Status update (as of the M4 close — 2026-05-31)
+>
+> **This handoff is historical.** As of the M4 close, the M4 real-executor-work series is **CODE-COMPLETE** — all **19** executor tasks landed, plus the beyond-plan brake-receipt fix and the deferred-enhancement writeups (DE-325 / DE-326). **Fresh-install acceptance PASSED live** (a real R4 per-trigger cost-cap halt fired, `terminal_reason=cost_cap_reached`). The remaining work on branch `feat/lqvern-m4-autonomous` is the **docs + Learn honest-alignment sweep (M4-D2)**, in progress; then Kevin's attorney legal-substance walk-through; then the branch merges to `main` (code + docs + Learn together) and **v0.4.0 is tagged**. *(v0.4.0 is **not yet tagged** as of this note.)*
+>
+> **Canonical current-state sources — read these, not this handoff, for "what's true now":**
+> - [`docs/HONEST-STATE.md`](../HONEST-STATE.md) — the capability truth-map (M4 is §5).
+> - [`docs/autonomous-layer.md`](../autonomous-layer.md) — the M4 Autonomous Layer feature doc.
+>
+> Everything below this addendum (the title line, the original "where we are" header, and the Task 1–19 / DE / resume-instruction body) is **preserved unchanged as the point-in-time record** of the mid-execution session. Treat it as history, not as the current plan of record.
+>
+> ---
+
 > **For:** the next Claude Code session continuing the M4 real-executor-work series on branch **`feat/lqvern-m4-autonomous`** in **`~/Code/lq-ai`** (canonical repo — NEVER `~/Desktop/lq-ai`; Bash cwd resets to `~/Desktop` between calls, so prefix every command with `cd ~/Code/lq-ai &&`).
 >
-> **Where we are (updated 2026-05-30):** Tasks **1–18 of 19 SHIPPED** + one **beyond-plan brake-receipt fix** (see UPDATE block below). Branch HEAD `f6bec54`, pushed origin + tucuxi, tree clean. Full gate green: autonomous suite **361 passed**, `ruff check api scripts` + `ruff format --check api scripts` + `mypy app` (141 files) all clean. **RESUME AT Task 19 (fresh-install re-acceptance) — DESTRUCTIVE, needs Kevin's explicit green-light for `docker compose down -v`.**
+> **SUPERSEDED — see the "Status update (M4 close)" addendum directly below for current truth.** The historical "where we are" line that follows is preserved as the point-in-time record of the mid-execution session and is no longer the current state.
+>
+> **Where we were (point-in-time, 2026-05-30):** Tasks **1–18 of 19 SHIPPED** + one **beyond-plan brake-receipt fix** (see UPDATE block below). Branch HEAD `f6bec54`, pushed origin + tucuxi, tree clean. Full gate green: autonomous suite **361 passed**, `ruff check api scripts` + `ruff format --check api scripts` + `mypy app` (141 files) all clean. Resume point at the time was Task 19 (fresh-install re-acceptance). *(Task 19 has since PASSED — see the UPDATE block and the addendum below.)*
 >
 > **The contract:** the design at [`docs/LQVern/m4-real-executor-work-design.md`](m4-real-executor-work-design.md) (commit `d1293b4`) and the 19-task plan at [`docs/LQVern/m4-real-executor-work-implementation-plan.md`](m4-real-executor-work-implementation-plan.md) (commit `7da5c47`). The plan is the source — every task's full text is in that file with TDD steps + code snippets + commit messages.
 
