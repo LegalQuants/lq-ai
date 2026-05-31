@@ -228,9 +228,21 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      # DE-326: the api is the single schema migrator. Wait for it to be
+      # healthy (entrypoint runs `alembic upgrade head` before serving) so
+      # this worker never touches an unmigrated DB and never races the api's
+      # migration. Paired with LQ_AI_SKIP_MIGRATIONS=1 below.
+      api:
+        condition: service_healthy
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-lq_ai}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-lq_ai}}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      # DE-326: the api owns migrations; this worker must NOT run
+      # `alembic upgrade head` on boot. The worker image does not mount
+      # ./skills, so migration 0032 (seed builtin NDA playbooks, which reads
+      # /skills/playbooks/nda/playbook.yaml) would raise on a fresh install.
+      # Skipping is safe because the api (above) migrates to head first.
+      LQ_AI_SKIP_MIGRATIONS: "1"
       S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-${MINIO_ROOT_USER:-lq_ai}}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-${MINIO_ROOT_PASSWORD}}
@@ -291,12 +303,22 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      # DE-326: the api is the single schema migrator. Wait for it to be
+      # healthy so this worker never touches an unmigrated DB and never
+      # races the api's migration. Paired with LQ_AI_SKIP_MIGRATIONS=1 below.
+      api:
+        condition: service_healthy
     environment:
       # The worker opens DB sessions in its on_shutdown hook (and Phase
       # 5 will add the easy-playbook generation pipeline that reads
       # source documents). Same env wiring as the api/ingest-worker.
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-lq_ai}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-lq_ai}}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      # DE-326: the api owns migrations; this worker must NOT run
+      # `alembic upgrade head` on boot. The worker image does not mount
+      # ./skills, so migration 0032 (seed builtin NDA playbooks) would raise
+      # on a fresh install. Safe because the api (above) migrates first.
+      LQ_AI_SKIP_MIGRATIONS: "1"
       # Gateway endpoint + auth — required by Phase 5's easy-playbook
       # extractor which calls the inference gateway. Pre-wired now so
       # Phase 5 doesn't need a second docker-compose edit.
