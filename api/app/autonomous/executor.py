@@ -42,7 +42,7 @@ from app.autonomous.nodes import (
     make_ethics_review_node,
     make_intake_node,
 )
-from app.autonomous.receipt import build_receipt
+from app.autonomous.receipt import build_receipt_safe
 from app.autonomous.state import AutonomousSessionState
 from app.clients.gateway import GatewayClient
 from app.errors import AutonomousBrake, ToolNotGranted
@@ -171,7 +171,7 @@ async def run_autonomous_session(
         # ToolNotGranted (status="failed") is intentionally excluded — a
         # failed-session receipt is a separate, deferred decision.
         if status == "halted":
-            session.result = await build_receipt(session, db)
+            session.result = await build_receipt_safe(session, db)
         await db.commit()
 
     except Exception as exc:

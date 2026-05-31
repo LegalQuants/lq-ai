@@ -17,6 +17,7 @@ The returned dict is JSON-serialisable and can be stored in
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from sqlalchemy import select
@@ -24,6 +25,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit import AuditLog
 from app.models.autonomous import AutonomousSession
+
+log = logging.getLogger(__name__)
 
 
 async def build_receipt(
@@ -141,3 +144,26 @@ async def build_receipt(
         "tool_calls": tool_calls,
         "terminal_reason": terminal_reason,
     }
+
+
+async def build_receipt_safe(session: AutonomousSession, db: AsyncSession) -> dict[str, Any] | None:
+    """Best-effort :func:`build_receipt` — NEVER raises.
+
+    On any failure, logs and returns ``None`` so a receipt-build error can
+    neither crash the autonomous worker nor leave the session row
+    non-terminal. The caller has already set the terminal status; persisting
+    it (and committing) is the caller's responsibility and must proceed even
+    when the receipt JSON could not be assembled. (DE-325)
+    """
+    try:
+        return await build_receipt(session, db)
+    except Exception:
+        log.warning(
+            "build_receipt failed; persisting terminal status without a receipt",
+            extra={
+                "event": "autonomous_build_receipt_failed",
+                "session_id": str(session.id),
+            },
+            exc_info=True,
+        )
+        return None

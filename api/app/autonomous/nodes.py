@@ -46,7 +46,7 @@ from app.autonomous.enums import ToolIntent
 from app.autonomous.guard import guarded_tool_call
 from app.autonomous.phases import run_phase_transition
 from app.autonomous.prompts import assemble_analysis_messages
-from app.autonomous.receipt import build_receipt
+from app.autonomous.receipt import build_receipt_safe
 from app.autonomous.state import AutonomousSessionState
 from app.autonomous.structured_output import parse_structured_output
 from app.config import get_settings
@@ -562,7 +562,7 @@ def make_delivery_node(
         # column is populated atomically with the terminal status update.
         # build_receipt reads audit rows that were flushed during the run
         # and are visible in the same session/transaction.
-        session.result = await build_receipt(session, db)
+        session.result = await build_receipt_safe(session, db)
         await db.commit()
 
         return {"current_phase": str(Phase.delivery)}
