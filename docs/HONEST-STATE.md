@@ -163,7 +163,7 @@ An opt-in background executor that does real in-loop agentic work under hard bra
 | Watches (KB-attach-triggered sessions) | M4 | `api/app/autonomous/watch_trigger.py`; `GET/POST/PATCH/DELETE /autonomous/watches`; table `autonomous_watches` (migration `0039`, `max_cost_usd` in `0045`) |
 | Schedules (in-repo cron dispatcher) | M4 | `api/app/autonomous/cron.py`; `/autonomous/schedules`; table `autonomous_schedules` |
 | Per-user memory (proposed → kept/dismissed) | M4 | `/autonomous/memory/*`; table `autonomous_memory` |
-| Precedent board (race-safe upsert, observed_count) + promote-to-Project proposals | M4 | `/autonomous/precedents/*`, `/autonomous/project-context-proposals/*`; tables `precedent_entries`, `project_context_proposals` (migration `0041`) |
+| Precedent board (race-safe upsert, observed_count) + promote-to-Project proposals | M4 | `/autonomous/precedents/*`, `/autonomous/project-context-proposals/*`; tables `precedent_entries` (migration `0039`), `project_context_proposals` (migration `0041`) |
 | Honest per-session receipt (`terminal_reason`: completed / cost_cap_reached / external_halt) | M4 | `api/app/autonomous/receipt.py` (`build_receipt` / `build_receipt_safe`); stored in `autonomous_sessions.result` |
 | In-app notifications (durable; best-effort email transport) | M4 | `/autonomous/notifications/*`; table `autonomous_notifications` (migration `0040`) |
 | Per-user opt-in (off by default) | M4 | `User.autonomous_enabled` (migration `0044`); spawn paths + mutate endpoints gated |
