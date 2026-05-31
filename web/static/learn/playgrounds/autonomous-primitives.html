@@ -1,0 +1,717 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>
+      Autonomous primitives: watches · schedules · memory · precedent · LQ.AI
+      Learn
+    </title>
+    <style>
+      :root {
+        --bg-0: #0b0e14;
+        --bg-1: #11151f;
+        --bg-2: #1a2030;
+        --border: #2a3344;
+        --text-0: #e6ebf5;
+        --text-1: #9aa7bd;
+        --text-2: #6b7689;
+        --accent-1: #6ea8fe;
+        --accent-2: #8b9eff;
+        --accent-ok: #34d399;
+        --accent-warn: #fbbf24;
+        --accent-stop: #f87171;
+        --radius: 10px;
+        --mono: "SF Mono", "JetBrains Mono", "Fira Code", monospace;
+        --sans:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: var(--sans);
+        background: var(--bg-0);
+        color: var(--text-0);
+        line-height: 1.5;
+        padding: 32px 20px;
+      }
+
+      .wrap {
+        max-width: 920px;
+        margin: 0 auto;
+      }
+
+      header {
+        margin-bottom: 28px;
+      }
+
+      .badge {
+        display: inline-block;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--accent-1);
+        background: rgba(110, 168, 254, 0.1);
+        padding: 4px 12px;
+        border-radius: 999px;
+        margin-bottom: 14px;
+      }
+
+      h1 {
+        font-size: 28px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        margin-bottom: 10px;
+      }
+
+      .sub {
+        color: var(--text-1);
+        font-size: 15px;
+        max-width: 680px;
+      }
+
+      .optin {
+        margin-top: 14px;
+        font-size: 13px;
+        color: var(--text-1);
+        background: rgba(251, 191, 36, 0.07);
+        border-left: 3px solid var(--accent-warn);
+        padding: 10px 14px;
+        border-radius: 6px;
+      }
+
+      .optin code {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--accent-warn);
+        background: var(--bg-1);
+        padding: 1px 6px;
+        border-radius: 4px;
+      }
+
+      /* primitive selector tabs */
+      .tabs {
+        display: flex;
+        gap: 10px;
+        margin: 28px 0 18px;
+        flex-wrap: wrap;
+      }
+
+      .tab {
+        flex: 1;
+        min-width: 150px;
+        background: var(--bg-1);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 16px 14px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+
+      .tab:hover {
+        border-color: var(--accent-1);
+        background: var(--bg-2);
+      }
+
+      .tab.active {
+        border-color: var(--accent-1);
+        background: var(--bg-2);
+        box-shadow: 0 0 0 1px var(--accent-1);
+      }
+
+      .tab-num {
+        font-size: 11px;
+        color: var(--text-2);
+        font-family: var(--mono);
+        margin-bottom: 6px;
+      }
+
+      .tab-name {
+        font-weight: 600;
+        font-size: 14px;
+        color: var(--text-0);
+      }
+
+      .tab-tag {
+        margin-top: 6px;
+        font-size: 12px;
+        font-family: var(--mono);
+        color: var(--accent-ok);
+      }
+
+      /* primitive overview panel */
+      .overview {
+        background: var(--bg-1);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 24px;
+        margin-bottom: 16px;
+      }
+
+      .overview h2 {
+        font-size: 18px;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .overview p {
+        color: var(--text-1);
+        font-size: 14px;
+        margin-bottom: 14px;
+      }
+
+      .overview .meta-row {
+        margin-top: 4px;
+      }
+
+      /* lifecycle track */
+      .lifecycle-label {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-2);
+        margin: 18px 0 10px;
+      }
+
+      .stage-track {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 18px;
+        flex-wrap: wrap;
+      }
+
+      .stage {
+        flex: 1;
+        min-width: 120px;
+        background: var(--bg-1);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 14px 12px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        position: relative;
+      }
+
+      .stage:hover {
+        border-color: var(--accent-1);
+        background: var(--bg-2);
+      }
+
+      .stage.active {
+        border-color: var(--accent-1);
+        background: var(--bg-2);
+        box-shadow: 0 0 0 1px var(--accent-1);
+      }
+
+      .stage-num {
+        font-size: 11px;
+        color: var(--text-2);
+        font-family: var(--mono);
+        margin-bottom: 6px;
+      }
+
+      .stage-name {
+        font-weight: 600;
+        font-size: 13px;
+        color: var(--text-0);
+      }
+
+      .stage-kind {
+        font-size: 11px;
+        margin-top: 4px;
+      }
+
+      .kind-trigger {
+        color: var(--accent-1);
+      }
+      .kind-session {
+        color: var(--accent-2);
+      }
+      .kind-outcome {
+        color: var(--accent-ok);
+      }
+
+      /* step detail panel */
+      .panel {
+        background: var(--bg-1);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 24px;
+        margin-bottom: 16px;
+        min-height: 180px;
+      }
+
+      .panel h3 {
+        font-size: 16px;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .panel p {
+        color: var(--text-1);
+        font-size: 14px;
+        margin-bottom: 12px;
+      }
+
+      .step-detail {
+        display: none;
+      }
+
+      .step-detail.active {
+        display: block;
+      }
+
+      .meta-row {
+        display: flex;
+        gap: 10px;
+        margin-top: 16px;
+        flex-wrap: wrap;
+      }
+
+      .meta-tag {
+        font-size: 12px;
+        font-family: var(--mono);
+        background: var(--bg-2);
+        border: 1px solid var(--border);
+        padding: 5px 10px;
+        border-radius: 6px;
+        color: var(--text-1);
+      }
+
+      .meta-tag.endpoint {
+        color: var(--accent-2);
+        border-color: rgba(139, 158, 255, 0.3);
+      }
+
+      .meta-tag.table {
+        color: var(--accent-ok);
+        border-color: rgba(52, 211, 153, 0.3);
+      }
+
+      .meta-tag.enum {
+        color: var(--accent-warn);
+        border-color: rgba(251, 191, 36, 0.3);
+      }
+
+      .footer {
+        margin-top: 32px;
+        padding-top: 20px;
+        border-top: 1px solid var(--border);
+        color: var(--text-2);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .footer code {
+        background: var(--bg-1);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--accent-2);
+      }
+
+      .pill {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .pill-shipped {
+        background: rgba(52, 211, 153, 0.15);
+        color: var(--accent-ok);
+        border: 1px solid rgba(52, 211, 153, 0.3);
+      }
+
+      @media (max-width: 720px) {
+        .stage-track,
+        .tabs {
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div class="badge">LQ.AI Learn · Autonomous</div>
+        <h1>
+          Autonomous primitives: watches · schedules · memory · precedent
+        </h1>
+        <p class="sub">
+          The four building blocks of the autonomous layer. Each has its own
+          trigger → session → outcome lifecycle. Pick a primitive, then click a
+          step to see the real endpoints, tables, and state transitions behind
+          it. (For what happens <em>inside</em> a single session — its phases
+          and brakes — see the autonomous-flow playground.)
+        </p>
+        <div class="optin">
+          The whole layer is <strong>per-user opt-in, off by default</strong>
+          (<code>User.autonomous_enabled</code>). Every state transition writes
+          an audit row carrying counts, types, IDs, and enum values only — never
+          raw document text or proposed values.
+        </div>
+      </header>
+
+      <div class="tabs" id="tabs"></div>
+
+      <div class="overview" id="overview"></div>
+
+      <div class="lifecycle-label">Lifecycle — click a step</div>
+      <div class="stage-track" id="stageTrack"></div>
+
+      <div class="panel">
+        <div id="stageDetails"></div>
+      </div>
+
+      <div class="footer">
+        <p>
+          <strong>Source.</strong> All four primitives shipped in M4. Mechanics,
+          endpoints, and tables verified against
+          <code>api/app/autonomous/watch_trigger.py</code>,
+          <code>api/app/autonomous/cron.py</code>,
+          <code>api/app/autonomous/memory.py</code>,
+          <code>api/app/autonomous/precedent.py</code>,
+          <code>api/app/autonomous/proposals.py</code>,
+          <code>api/app/api/autonomous.py</code>, and
+          <code>docs/autonomous-layer.md</code>. Tables come from migrations
+          <code>0039</code> (watches, schedules, memory, precedent_entries,
+          autonomous_sessions), <code>0041</code> (precedent unique-index upsert
+          + project_context_proposals), and <code>0045</code>
+          (<code>autonomous_watches.max_cost_usd</code>).
+        </p>
+      </div>
+    </div>
+
+    <script>
+      // Each primitive: overview + a trigger→session→outcome lifecycle.
+      // Every endpoint/table/enum below is verified against the source files
+      // cited in the footer — nothing is written from memory.
+      const PRIMITIVES = [
+        {
+          num: "01",
+          name: "Watches",
+          tag: "autonomous_watches",
+          title: "Watches",
+          overview: `A <strong>watch</strong> binds an autonomous session to a knowledge base. Attaching a document to that KB triggers a session for every active watch on the KB. Each trigger is bounded by the watch's per-trigger cost cap.`,
+          meta: [
+            { kind: "table", text: "autonomous_watches (0039)" },
+            { kind: "table", text: "max_cost_usd col (0045)" },
+          ],
+          stages: [
+            {
+              num: "01",
+              name: "Create watch",
+              kind: "trigger",
+              kindLabel: "setup",
+              title: "Create a watch on a KB",
+              body: `The user creates a watch bound to a knowledge base. <code>max_cost_usd</code> (added in migration 0045) sets the per-trigger budget cap. Watches are listed and deleted from the same resource.`,
+              meta: [
+                { kind: "endpoint", text: "GET /autonomous/watches" },
+                { kind: "endpoint", text: "POST /autonomous/watches" },
+                {
+                  kind: "endpoint",
+                  text: "DELETE /autonomous/watches/{watch_id} → 204",
+                },
+                { kind: "table", text: "autonomous_watches" },
+              ],
+            },
+            {
+              num: "02",
+              name: "Doc attached",
+              kind: "trigger",
+              kindLabel: "trigger",
+              title: "A document is attached to the watched KB",
+              body: `When a document is attached to a watched KB, <code>on_document_attached</code> fans out: for every active watch on that KB it spawns one autonomous session, enforcing <code>max_cost_usd</code> as the per-trigger cap. The audit row carries counts/IDs only — never raw doc text.`,
+              meta: [
+                { kind: "table", text: "autonomous_watches" },
+                { kind: "enum", text: "trigger = watch" },
+              ],
+            },
+            {
+              num: "03",
+              name: "Session runs",
+              kind: "session",
+              kindLabel: "session",
+              title: "An autonomous session is created",
+              body: `An <code>autonomous_sessions</code> row is created with <code>trigger=watch</code> and runs within the watch's cost cap. (The session's own internal phases and brakes are covered by the autonomous-flow playground.)`,
+              meta: [{ kind: "table", text: "autonomous_sessions" }],
+            },
+          ],
+        },
+        {
+          num: "02",
+          name: "Schedules",
+          tag: "autonomous_schedules",
+          title: "Schedules",
+          overview: `A <strong>schedule</strong> spawns autonomous sessions on a recurring cadence. An in-repo cron dispatcher — no external scheduler dependency — scans due schedules and spawns a session for each.`,
+          meta: [{ kind: "table", text: "autonomous_schedules (0039)" }],
+          stages: [
+            {
+              num: "01",
+              name: "Create schedule",
+              kind: "trigger",
+              kindLabel: "setup",
+              title: "Create a schedule",
+              body: `The user creates a schedule defining a recurring cadence. Schedules are listed and created from the same resource.`,
+              meta: [
+                { kind: "endpoint", text: "GET /autonomous/schedules" },
+                { kind: "endpoint", text: "POST /autonomous/schedules" },
+                { kind: "table", text: "autonomous_schedules" },
+              ],
+            },
+            {
+              num: "02",
+              name: "Dispatcher fires",
+              kind: "trigger",
+              kindLabel: "trigger",
+              title: "The in-repo cron dispatcher scans due schedules",
+              body: `<code>dispatch_due_schedules</code> runs periodically inside the app process. It scans <code>autonomous_schedules</code> for rows whose next-run time has elapsed, spawns a session for each, advances each schedule's next-run timestamp, and returns the count spawned.`,
+              meta: [
+                { kind: "table", text: "autonomous_schedules" },
+                { kind: "enum", text: "trigger = schedule" },
+              ],
+            },
+            {
+              num: "03",
+              name: "Session runs",
+              kind: "session",
+              kindLabel: "session",
+              title: "An autonomous session is created",
+              body: `Each due schedule produces an <code>autonomous_sessions</code> row with <code>trigger=schedule</code>. The dispatcher then advances that schedule's next-run timestamp so it fires again next cadence.`,
+              meta: [{ kind: "table", text: "autonomous_sessions" }],
+            },
+          ],
+        },
+        {
+          num: "03",
+          name: "Per-user memory",
+          tag: "autonomous_memory",
+          title: "Per-user memory",
+          overview: `A session may <strong>propose</strong> a memory entry. The user keeps or dismisses it. Kept entries are eligible to inform future sessions for that user — memory is session-proposed but user-curated.`,
+          meta: [{ kind: "table", text: "autonomous_memory (0039)" }],
+          stages: [
+            {
+              num: "01",
+              name: "Propose",
+              kind: "session",
+              kindLabel: "session",
+              title: "A session proposes a memory entry",
+              body: `During a run, a session inserts a memory row with <code>status=proposed</code> (<code>propose_memory</code>). The audit row carries the memory ID + status transition only — never the proposed text.`,
+              meta: [
+                { kind: "table", text: "autonomous_memory" },
+                { kind: "enum", text: "status = proposed" },
+              ],
+            },
+            {
+              num: "02",
+              name: "Review",
+              kind: "outcome",
+              kindLabel: "user review",
+              title: "The user reviews proposed memory",
+              body: `The user lists proposed and kept entries, then decides per-entry. Listing is the entry point for the keep/dismiss decision.`,
+              meta: [{ kind: "endpoint", text: "GET /autonomous/memory" }],
+            },
+            {
+              num: "03",
+              name: "Keep / Dismiss",
+              kind: "outcome",
+              kindLabel: "outcome",
+              title: "Keep, dismiss, or delete",
+              body: `<strong>Keep</strong> moves the entry to <code>status=kept</code> (eligible to inform future sessions). <strong>Dismiss</strong> moves it to <code>status=dismissed</code>. The entry can also be deleted outright.`,
+              meta: [
+                {
+                  kind: "endpoint",
+                  text: "POST /autonomous/memory/{memory_id}/keep",
+                },
+                {
+                  kind: "endpoint",
+                  text: "POST /autonomous/memory/{memory_id}/dismiss",
+                },
+                {
+                  kind: "endpoint",
+                  text: "DELETE /autonomous/memory/{memory_id} → 204",
+                },
+                { kind: "enum", text: "kept | dismissed" },
+              ],
+            },
+          ],
+        },
+        {
+          num: "04",
+          name: "Precedent board",
+          tag: "precedent_entries",
+          title: "Precedent board",
+          overview: `Sessions record <strong>precedents</strong> via a race-safe upsert keyed by a content signature; <code>observed_count</code> increments on conflict instead of inserting a duplicate. A user may dismiss a precedent or promote it into a project-context proposal, which is then accepted (merged into a Project) or rejected.`,
+          meta: [
+            { kind: "table", text: "precedent_entries (0039)" },
+            { kind: "table", text: "unique index + upsert (0041)" },
+            { kind: "table", text: "project_context_proposals (0041)" },
+          ],
+          stages: [
+            {
+              num: "01",
+              name: "Record (upsert)",
+              kind: "session",
+              kindLabel: "session",
+              title: "A session records a precedent",
+              body: `<code>record_precedent</code> performs an idempotent upsert keyed by a content signature. The unique index added in migration 0041 makes a repeat an <code>ON CONFLICT</code> that increments <code>observed_count</code> rather than inserting a duplicate row.`,
+              meta: [
+                { kind: "table", text: "precedent_entries" },
+                { kind: "enum", text: "observed_count++" },
+              ],
+            },
+            {
+              num: "02",
+              name: "Review",
+              kind: "outcome",
+              kindLabel: "user review",
+              title: "The user reviews the precedent board",
+              body: `The user lists the precedent board, then decides per-entry: dismiss it, or promote it toward a Project.`,
+              meta: [{ kind: "endpoint", text: "GET /autonomous/precedents" }],
+            },
+            {
+              num: "03",
+              name: "Dismiss / Promote",
+              kind: "outcome",
+              kindLabel: "decision",
+              title: "Dismiss the precedent, or promote it",
+              body: `<strong>Dismiss</strong> drops the precedent. <strong>Promote</strong> creates a row in <code>project_context_proposals</code> (migration 0041) with <code>status=pending</code> — a request to merge the precedent into a Project's context.`,
+              meta: [
+                {
+                  kind: "endpoint",
+                  text: "POST /autonomous/precedents/{precedent_id}/dismiss",
+                },
+                {
+                  kind: "endpoint",
+                  text: "POST /autonomous/precedents/{precedent_id}/promote",
+                },
+                { kind: "table", text: "project_context_proposals" },
+                { kind: "enum", text: "status = pending" },
+              ],
+            },
+            {
+              num: "04",
+              name: "Accept / Reject",
+              kind: "outcome",
+              kindLabel: "outcome",
+              title: "Resolve the project-context proposal",
+              body: `The user lists pending proposals and resolves each. <strong>Accept</strong> merges the proposal into the target Project's context (<code>status=accepted</code>); <strong>Reject</strong> drops it (<code>status=rejected</code>). Audit rows carry the proposal ID + status only.`,
+              meta: [
+                {
+                  kind: "endpoint",
+                  text: "GET /autonomous/project-context-proposals",
+                },
+                {
+                  kind: "endpoint",
+                  text: "POST /autonomous/project-context-proposals/{proposal_id}/accept",
+                },
+                {
+                  kind: "endpoint",
+                  text: "POST /autonomous/project-context-proposals/{proposal_id}/reject",
+                },
+                { kind: "enum", text: "accepted | rejected" },
+              ],
+            },
+          ],
+        },
+      ];
+
+      const tabsEl = document.getElementById("tabs");
+      const overviewEl = document.getElementById("overview");
+      const trackEl = document.getElementById("stageTrack");
+      const detailsEl = document.getElementById("stageDetails");
+
+      let activePrimitive = 0;
+      let activeStage = 0;
+
+      function renderTabs() {
+        tabsEl.innerHTML = "";
+        PRIMITIVES.forEach((p, i) => {
+          const el = document.createElement("div");
+          el.className = "tab" + (i === activePrimitive ? " active" : "");
+          el.innerHTML =
+            `<div class="tab-num">${p.num}</div>` +
+            `<div class="tab-name">${p.name}</div>` +
+            `<div class="tab-tag">${p.tag}</div>`;
+          el.addEventListener("click", () => selectPrimitive(i));
+          tabsEl.appendChild(el);
+        });
+      }
+
+      function renderOverview() {
+        const p = PRIMITIVES[activePrimitive];
+        const metaHtml = p.meta
+          .map((m) => `<span class="meta-tag ${m.kind}">${m.text}</span>`)
+          .join("");
+        overviewEl.innerHTML =
+          `<h2>${p.title} <span class="pill pill-shipped">Shipped · M4</span></h2>` +
+          `<p>${p.overview}</p>` +
+          `<div class="meta-row">${metaHtml}</div>`;
+      }
+
+      function renderTrack() {
+        const p = PRIMITIVES[activePrimitive];
+        trackEl.innerHTML = "";
+        p.stages.forEach((s, i) => {
+          const el = document.createElement("div");
+          el.className = "stage" + (i === activeStage ? " active" : "");
+          el.innerHTML =
+            `<div class="stage-num">${s.num}</div>` +
+            `<div class="stage-name">${s.name}</div>` +
+            `<div class="stage-kind kind-${s.kind}">${s.kindLabel}</div>`;
+          el.addEventListener("click", () => selectStage(i));
+          trackEl.appendChild(el);
+        });
+      }
+
+      function renderDetail() {
+        const s = PRIMITIVES[activePrimitive].stages[activeStage];
+        const metaHtml = s.meta
+          .map((m) => `<span class="meta-tag ${m.kind}">${m.text}</span>`)
+          .join("");
+        detailsEl.innerHTML =
+          `<div class="step-detail active">` +
+          `<h3>${s.title}</h3>` +
+          `<p>${s.body}</p>` +
+          `<div class="meta-row">${metaHtml}</div>` +
+          `</div>`;
+      }
+
+      function selectPrimitive(i) {
+        activePrimitive = i;
+        activeStage = 0;
+        renderTabs();
+        renderOverview();
+        renderTrack();
+        renderDetail();
+      }
+
+      function selectStage(i) {
+        activeStage = i;
+        renderTrack();
+        renderDetail();
+      }
+
+      // initial render
+      renderTabs();
+      renderOverview();
+      renderTrack();
+      renderDetail();
+    </script>
+  </body>
+</html>
