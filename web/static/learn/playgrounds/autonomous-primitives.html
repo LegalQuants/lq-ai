@@ -511,10 +511,10 @@
               kind: "session",
               kindLabel: "session",
               title: "A session proposes a memory entry",
-              body: `During a run, a session inserts a memory row with <code>status=proposed</code> (<code>propose_memory</code>). The audit row carries the memory ID + status transition only — never the proposed text.`,
+              body: `During a run, a session inserts a memory row with <code>state=proposed</code> (the <code>propose_memory</code> intent through the chokepoint). The audit row carries the memory ID + state transition only — never the proposed text.`,
               meta: [
                 { kind: "table", text: "autonomous_memory" },
-                { kind: "enum", text: "status = proposed" },
+                { kind: "enum", text: "state = proposed" },
               ],
             },
             {
@@ -532,7 +532,7 @@
               kind: "outcome",
               kindLabel: "outcome",
               title: "Keep, dismiss, or delete",
-              body: `<strong>Keep</strong> moves the entry to <code>status=kept</code> (eligible to inform future sessions). <strong>Dismiss</strong> moves it to <code>status=dismissed</code>. The entry can also be deleted outright.`,
+              body: `<strong>Keep</strong> moves the entry to <code>state=kept</code> (eligible to inform future sessions — only kept, non-deleted notes feed a session's prompt context). <strong>Dismiss</strong> moves it to <code>state=dismissed</code>. The entry can also be soft-deleted (returns 200 with the deleted entry, not 204).`,
               meta: [
                 {
                   kind: "endpoint",
@@ -544,9 +544,9 @@
                 },
                 {
                   kind: "endpoint",
-                  text: "DELETE /autonomous/memory/{memory_id} → 204",
+                  text: "DELETE /autonomous/memory/{memory_id} → 200",
                 },
-                { kind: "enum", text: "kept | dismissed" },
+                { kind: "enum", text: "state = kept | dismissed" },
               ],
             },
           ],
@@ -556,7 +556,7 @@
           name: "Precedent board",
           tag: "precedent_entries",
           title: "Precedent board",
-          overview: `Sessions record <strong>precedents</strong> via a race-safe upsert keyed by a content signature; <code>observed_count</code> increments on conflict instead of inserting a duplicate. A user may dismiss a precedent or promote it into a project-context proposal, which is then accepted (merged into a Project) or rejected.`,
+          overview: `Sessions record <strong>precedents</strong> via a race-safe <code>INSERT ... ON CONFLICT</code> upsert keyed on <code>(user_id, pattern_kind, md5(summary))</code>; <code>observed_count</code> increments on conflict instead of inserting a duplicate. A user may dismiss a precedent or promote it into a project-context proposal, which is then accepted (merged into a Project) or rejected.`,
           meta: [
             { kind: "table", text: "precedent_entries (0039)" },
             { kind: "table", text: "unique index + upsert (0041)" },
@@ -569,7 +569,7 @@
               kind: "session",
               kindLabel: "session",
               title: "A session records a precedent",
-              body: `<code>record_precedent</code> performs an idempotent upsert keyed by a content signature. The unique index added in migration 0041 makes a repeat an <code>ON CONFLICT</code> that increments <code>observed_count</code> rather than inserting a duplicate row.`,
+              body: `The <code>propose_precedent</code> intent performs an idempotent <code>INSERT ... ON CONFLICT</code> upsert keyed on <code>(user_id, pattern_kind, md5(summary))</code>. The partial unique index added in migration 0041 (<code>WHERE dismissed_at IS NULL</code>) makes a recurrence increment <code>observed_count</code> rather than inserting a duplicate row.`,
               meta: [
                 { kind: "table", text: "precedent_entries" },
                 { kind: "enum", text: "observed_count++" },
@@ -590,7 +590,7 @@
               kind: "outcome",
               kindLabel: "decision",
               title: "Dismiss the precedent, or promote it",
-              body: `<strong>Dismiss</strong> drops the precedent. <strong>Promote</strong> creates a row in <code>project_context_proposals</code> (migration 0041) with <code>status=pending</code> — a request to merge the precedent into a Project's context.`,
+              body: `<strong>Dismiss</strong> sets <code>dismissed_at</code> (idempotent). <strong>Promote</strong> creates a row in <code>project_context_proposals</code> (migration 0041) with <code>state=proposed</code> — a request to merge the precedent's summary into a Project's context. Promotion is proposal-only; it never writes <code>projects.context_md</code> directly.`,
               meta: [
                 {
                   kind: "endpoint",
@@ -601,7 +601,7 @@
                   text: "POST /autonomous/precedents/{precedent_id}/promote",
                 },
                 { kind: "table", text: "project_context_proposals" },
-                { kind: "enum", text: "status = pending" },
+                { kind: "enum", text: "state = proposed" },
               ],
             },
             {
@@ -610,7 +610,7 @@
               kind: "outcome",
               kindLabel: "outcome",
               title: "Resolve the project-context proposal",
-              body: `The user lists pending proposals and resolves each. <strong>Accept</strong> merges the proposal into the target Project's context (<code>status=accepted</code>); <strong>Reject</strong> drops it (<code>status=rejected</code>). Audit rows carry the proposal ID + status only.`,
+              body: `The user lists proposals and resolves each. <strong>Accept</strong> is the user-authorized write: it appends <code>suggested_md</code> to the target Project's context and sets <code>state=accepted</code>. <strong>Reject</strong> sets <code>state=rejected</code>. Audit rows carry the proposal ID + state only.`,
               meta: [
                 {
                   kind: "endpoint",
