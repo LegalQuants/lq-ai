@@ -153,8 +153,9 @@ class ChatCompletionRequest(BaseModel):
     lq_ai_file_ids: list[str] = Field(default_factory=list, max_length=16)
     """Donna: caller-owned file UUIDs supplying ephemeral per-message
     document context for this turn. The backend validates ownership
-    (id-probing-safe 404) before forwarding; the gateway consumes these
-    as the document-context channel for the send. Distinct from
+    (id-probing-safe 404) before forwarding; this is the channel the
+    gateway will consume as document context (gateway-side consumption
+    is a follow-up — see DE for file-content injection). Distinct from
     ``lq_ai_skills`` (the prompt-assembly channel) and from KB attach
     (project-scoped, persistent). Empty list (default) preserves the
     pre-existing wire shape exactly. Capped server-side at the same
