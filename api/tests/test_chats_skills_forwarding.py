@@ -814,4 +814,5 @@ async def test_attached_file_writes_audit_row(
     assert row.user_id == db_user.id
     assert row.details is not None
     assert row.details["file_ids"] == [str(f.id)]
-    assert row.details["file_count"] == 1
+    assert row.details["attached_count"] == 1
+    assert row.details["injected_count"] == 1

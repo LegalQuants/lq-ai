@@ -1353,8 +1353,14 @@ async def send_message(
             project_id=chat.project_id,
             request=request,
             details={
+                # All validated file_ids forwarded this turn, vs. the count
+                # whose extracted text was actually injected as document
+                # context (a file with no parsed text yet is attached but
+                # contributes nothing) — kept as distinct fields so Receipts
+                # don't conflate "attached" with "reached the model".
                 "file_ids": list(effective_file_ids),
-                "file_count": len(attached_file_contexts),
+                "attached_count": len(effective_file_ids),
+                "injected_count": len(attached_file_contexts),
             },
         )
         await db.commit()
