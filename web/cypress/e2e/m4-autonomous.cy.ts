@@ -514,3 +514,65 @@ describe('M4-C2 — Scenario 4: precedent dismiss', () => {
 		cy.get('[role="status"]', { timeout: 10000 }).should('contain', 'Precedent dismissed');
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Scenario 6 — Run now (§4.4): one-off run from the Sessions page
+// ---------------------------------------------------------------------------
+
+describe('M4-C2 — Scenario 6: Run now', () => {
+	beforeEach(() => {
+		interceptBaseRequests(true);
+	});
+
+	it('6: Open the Run-now modal, pick a skill, submit → POST run-now → navigate to the receipt', () => {
+		// Sessions list starts empty so the page renders with just the header button.
+		cy.intercept('GET', '**/api/v1/autonomous/sessions**', {
+			statusCode: 200,
+			body: { sessions: [], total_count: 0, limit: 50, offset: 0 }
+		}).as('listSessions');
+
+		// Picker lists the modal loads on mount / open. The skills list drives the
+		// skill <select>; we return one selectable skill.
+		cy.intercept('GET', '**/api/v1/skills**', {
+			statusCode: 200,
+			body: [{ name: 'nda-review', title: 'NDA Review', description: 'Review an NDA' }]
+		}).as('listSkillsForRun');
+		cy.intercept('GET', '**/api/v1/playbooks**', { statusCode: 200, body: [] }).as('listPlaybooks');
+		cy.intercept('GET', '**/api/v1/knowledge-bases**', { statusCode: 200, body: [] }).as('listKbs');
+
+		// run-now → 201 with a freshly created (running) session.
+		cy.intercept('POST', '**/api/v1/autonomous/run-now', {
+			statusCode: 201,
+			body: mockSession
+		}).as('runNow');
+
+		// The receipt page the run-now navigates to issues a GET for the session.
+		cy.intercept('GET', `**/api/v1/autonomous/sessions/${SESSION_ID}`, {
+			statusCode: 200,
+			body: { session: mockSession, receipt: mockReceipt }
+		}).as('getSession');
+
+		cy.visit('/lq-ai/autonomous', {
+			onBeforeLoad: (win) => setAuthStorage(win, { autonomousEnabled: true })
+		});
+
+		cy.wait('@listSessions');
+
+		// Open the modal via the header button.
+		cy.contains('button', 'Run now').click();
+
+		// Modal renders with its title.
+		cy.contains('h2', 'Run a skill or playbook once').should('exist');
+
+		// Skill is the default target — pick the seeded skill.
+		cy.get('select[aria-label="Select skill"]', { timeout: 10000 }).select('nda-review');
+
+		// Submit the modal (the primary "Run now" button inside the dialog).
+		cy.get('.modal-actions').contains('button', 'Run now').click();
+
+		cy.wait('@runNow');
+
+		// On success the app navigates to the new session's receipt.
+		cy.url({ timeout: 10000 }).should('include', `/lq-ai/autonomous/sessions/${SESSION_ID}`);
+	});
+});
