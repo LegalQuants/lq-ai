@@ -125,6 +125,13 @@ jobs:
           artifact-name: ${{ matrix.service }}.spdx.json
           upload-artifact: true
           upload-artifact-retention: 90
+          # Do NOT attach the SBOM as a GitHub Release asset. anchore/sbom-action
+          # defaults this to true and tries the releases API when the run is on a
+          # tag — which needs `contents: write` (this job is `contents: read`) and
+          # fails with "Resource not accessible by integration" whenever a Release
+          # for the tag already exists. The SBOM is delivered as a signed cosign
+          # attestation by the `sign` job; the Actions artifact above feeds that.
+          upload-release-assets: false
 
       - name: Verify SBOM is non-empty
         run: |

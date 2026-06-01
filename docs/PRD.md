@@ -4159,6 +4159,8 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 #### DE-305 — Bridge env vars use `${VAR:?}` and break all Compose commands when unset (M3-E1 finding F1)
 
+**Status:** ✅ RESOLVED (2026-05-24) — independently reported by a community contributor as [issue #92](https://github.com/LegalQuants/lq-ai/issues/92). Fix: the 8 opt-in bridge vars in `docker-compose.yml` changed from `${VAR:?msg}` to `${VAR:-}` (the 4 core secrets keep `${VAR:?}`); the "required when the profile is active" guarantee moved into each bridge's `Settings` via a `field_validator` that rejects empty/whitespace credentials at startup (runs only when the profile is active). A default `docker compose up` with only the 4 core vars now succeeds. Regression tests: `slack-bridge/tests/test_config.py`, `teams-bridge/tests/test_config.py`.
+
 **Priority:** P2 (degrades the fresh-install / non-bridge-operator experience) · **Effort:** S (~1–2 hr)
 
 **Context:** Surfaced during M3-E1 fresh-install verification. `docker-compose.yml` declares the slack-bridge and teams-bridge env vars (`LQ_AI_BRIDGE_TOKEN`, `SLACK_CLIENT_ID`, `MICROSOFT_APP_ID`, etc.) with the required-error `${VAR:?msg}` interpolation form. Docker Compose interpolates **every** service definition at parse time regardless of the active `--profile`, so any `docker compose` command (`up`, `down`, `config`, `ps`) fails with `"required variable LQ_AI_BRIDGE_TOKEN is missing a value"` for an operator who has not set the bridge vars — **even one who never enables the `slack`/`teams` profiles.** This directly contradicts `.env.example` (~L297-300): "Operators who don't use Slack can leave all of the variables below unset."
@@ -4328,6 +4330,18 @@ Two bulk operations as originally written in the M3-C4 spec:
 **Specific scope:** Re-type the ~7 `add_node` call sites across **all three** executors that share the runtime — `api/app/playbooks/executor.py`, `api/app/tabular/executor.py`, and `api/app/autonomous/executor.py` (lands in M4) — by annotating node-factory returns against the graph's state type (the `total=False` TypedDicts already permit partial returns) per 1.x's `State -> Partial<State>` contract, **or** parametrize `StateGraph[StateT, ...]`. Then bump the pin to `>=1,<2`, confirm the `langgraph-checkpoint` / `langgraph-sdk` transitive pins resolve (SBOM churn), and re-run `ruff` + `mypy` + `pytest` for `api/`. Note: `warn_unused_ignores=true` means a blanket `# type: ignore` is not a clean fix.
 
 **When to ship:** Post-M4, low priority. Do all three executors in one PR since they share the runtime. No runtime behavior change expected; the gate is the full api test+type matrix.
+
+---
+
+#### DE-320 — Scanned-PDF OCR for the ingestion pipeline
+
+**Priority:** P2 · **Effort:** M
+
+**Context:** The ingestion pipeline (`api/app/pipeline/ingest.py`, `api/app/pipeline/parsers.py`) parses text-bearing PDFs via PyMuPDF (the canonical character stream) plus Docling (structure), and sets `was_ocrd=False` unconditionally — image-only / scanned PDFs yield no extractable text and so cannot be chunked or cited. A `paddleocr` sidecar referencing `legalquants/paddleocr-vl:latest` was sketched in `docker-compose.yml` under the `local` profile but was never implemented: the image was never published and the placeholder entrypoint only echoed "lands in M2". Worse, its presence forced `docker compose --profile local up` to attempt the missing pull and abort the whole profile — including the Ollama sidecar local inference actually needs (issue #99). The dead placeholder was removed and the README / `HONEST-STATE` claims of a PaddleOCR scanned-PDF fallback were corrected; this DE tracks the genuine capability.
+
+**Specific scope:** Add a scanned-PDF OCR path so image-only PDFs produce a normalized character stream with `was_ocrd=True`. The Citation Engine's tolerant-match already gates OCR-confusion normalization on that flag (`app.citation.normalization.normalize`, see `docs/HONEST-STATE.md` §Citation Engine), so the downstream consumer is ready. Preferred approach: Docling's built-in OCR backend (EasyOCR is already cached in the `ingest-easyocr-cache` volume — no new sidecar, no new SBOM surface) rather than a separate OCR service, unless throughput demands process isolation. Re-confirm the air-gapped story end-to-end (OCR models present in the image / cached volume, no outbound calls). Update the README ingestion description and `HONEST-STATE` when shipped.
+
+**When to ship:** When a real scanned-PDF corpus is in scope; not blocking for text-bearing PDFs (the common case today).
 
 ---
 

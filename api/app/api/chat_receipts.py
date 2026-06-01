@@ -74,7 +74,10 @@ class ReceiptEvent(BaseModel):
         "``messages`` (+ denorm ``applied_skills``), "
         "``inference_routing_log``, and ``audit_log`` into one "
         "timestamp-ordered stream. Owner-of-chat or admin only. "
-        "Filter with ``?event_kinds=message,audit`` etc."
+        "Filter with ``?event_kinds=message,audit`` etc. "
+        "Inference/error event ``detail`` includes ``anonymization_applied`` "
+        "(bool — the source of truth for the UI's anonymization indicator) and "
+        "``message_id`` (the assistant message the indicator pins to; may be null)."
     ),
 )
 async def get_chat_receipts(
@@ -200,6 +203,11 @@ async def get_chat_receipts(
                             "latency_ms": log.latency_ms,
                             "refused": log.refused,
                             "refusal_reason": log.refusal_reason,
+                            # anonymization_applied is the source of truth for the
+                            # UI's anonymization indicator; message_id pins the
+                            # indicator to the right assistant message bubble.
+                            "anonymization_applied": log.anonymization_applied,
+                            "message_id": str(log.message_id) if log.message_id else None,
                         },
                     )
                 )

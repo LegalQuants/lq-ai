@@ -231,11 +231,11 @@ The web frontend is a fork of OpenWebUI (ADR 0001). `npm run check` (full scope)
 | Surface | Status | Verification |
 |---|---|---|
 | Docker Compose reference deployment | M1–M4 | [`docker-compose.yml`](../docker-compose.yml) — always-on: postgres, redis, minio, gateway, api, ingest-worker, arq-worker, web |
-| Local-only profile (Ollama + PaddleOCR) | M1 | `docker compose --profile local up` |
+| Local-only profile (Ollama) | M1 | `docker compose --profile local up` — adds the Ollama sidecar. Scanned-PDF OCR / PaddleOCR is not implemented (DE-320); the prior placeholder sidecar was removed. |
 | Slack / Teams bridge profiles | M3 | `docker compose --profile slack up` / `--profile teams up` |
 | Helm chart for Kubernetes | drafted | [`deploy/helm/lq-ai/`](../deploy/helm/lq-ai/) (worker-migration parity with the compose single-migrator fix is a community item — DE-327) |
 | OpenTelemetry instrumentation (traces + metrics + domain spans) | M1 baseline + M3 domain spans + M4 autonomous spans | [`docs/observability.md`](observability.md) |
-| Reverse-proxy/TLS recipes · backup tooling · runbooks · SLOs | not yet | mini-PRDs / deferred |
+| Reverse-proxy/TLS recipes · backup tooling · runbooks · SLOs · status page · postmortem · DR cadence | not yet | mini-PRDs / deferred |
 
 ---
 

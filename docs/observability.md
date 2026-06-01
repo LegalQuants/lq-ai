@@ -69,6 +69,13 @@ each stage that runs.
 | `citation.stage.paraphrase_judge` | Stage 2 misses (single-judge path) |
 | `citation.stage.ensemble` | Ensemble path active (replaces paraphrase_judge) |
 
+**Attributes on each `citation.stage.*` child span:**
+
+| Attribute | Description |
+|---|---|
+| `citation.stage.verified` | Boolean; whether this stage verified the candidate |
+| `citation.stage.confidence` | Float 0.0–1.0; this stage's confidence for the candidate |
+
 **Attributes on `citation.verify`:**
 
 | Attribute | Description |
@@ -124,6 +131,12 @@ recorded; capturing it on the post span is a future enhancement, not a shipped c
 |---|---|
 | `anonymization.skip.{reason}` | Emitted on the skip path, where `{reason}` is the `skip_reason` value above (e.g., `anonymization.skip.disabled`) |
 
+**Span events:**
+
+| Event | Meaning |
+|---|---|
+| `anonymization.skip.{skip_reason}` | Emitted when anonymization is skipped; the suffix is the `skip_reason` value (`disabled`, `tier_floor`, `privileged`, or `request_opt_out`) |
+
 ---
 
 #### `skill.execute`
@@ -156,6 +169,8 @@ this span — tracked at [DE-317](PRD.md#de-317--inferencedispatch-span-on-the-s
 | `inference.tokens_in` | Prompt token count (omitted when the provider returns no usage) |
 | `inference.tokens_out` | Completion token count (omitted when the provider returns no usage) |
 | `inference.cost_usd` | Computed cost in USD at configured per-model rates |
+
+On the `unavailable` path (no adapter could be instantiated for the resolved target), only `inference.provider` and `inference.outcome` are set — `inference.model`, `inference.tier`, `inference.tokens_in`/`inference.tokens_out`, and `inference.cost_usd` are absent, because no native model or tier was resolved.
 
 ---
 
@@ -320,7 +335,7 @@ entity values.**
 
 Concretely: if a request triggers anonymization of three person names and one matter
 number, the `anonymization.entity_count` attribute is `4` and
-`anonymization.entity_types` is `PERSON,MATTER_NUMBER`. The actual names and the
+`anonymization.entity_types` is the sorted array `["MATTER_NUMBER", "PERSON"]`. The actual names and the
 matter number do not appear in any span attribute, span event, or metric label.
 
 This invariant is enforced by `gateway/tests/test_anonymization_observability.py`.
