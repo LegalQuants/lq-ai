@@ -23,7 +23,7 @@ dependencies = [
     # A4 dependencies — readiness wiring + clients used at startup.
     # `redis` ships an async client at `redis.asyncio` (formerly aioredis,
     # merged into redis-py). One library covers sync + async.
-    "redis>=5.0,<6",
+    "redis>=5.0,<9",
     # `aioboto3` is an asyncio wrapper over botocore; required because the
     # backend's storage path (Task C4) is async and we don't want to block
     # the event loop on file I/O. Pulls boto3/botocore transitively.
