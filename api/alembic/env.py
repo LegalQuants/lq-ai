@@ -29,7 +29,12 @@ from app.models import AuditLog, InferenceRoutingLog, User, UserSession  # noqa:
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers=False so configuring alembic's own loggers does
+    # not silence already-imported application loggers (e.g. app.citation.*).
+    # Without this, running migrations mid-session (the test suite's per-session
+    # alembic upgrade) disables every app.* logger, dropping their records and
+    # breaking unrelated caplog-based tests downstream.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 
