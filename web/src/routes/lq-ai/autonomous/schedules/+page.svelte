@@ -80,7 +80,12 @@
 	// Load
 	// ---------------------------------------------------------------------------
 
-	onMount(load);
+	onMount(() => {
+		load();
+		// Load picker lists up front so list rows can resolve target/KB ids to
+		// names without waiting for the modal to be opened.
+		loadPickerData();
+	});
 
 	async function load(): Promise<void> {
 		loading = true;
@@ -265,11 +270,29 @@
 		return s.name || s.cron_expr;
 	}
 
+	/** Resolve a playbook id to its name, falling back to the id when unknown. */
+	function playbookName(id: string | null): string {
+		if (!id) return '';
+		return playbooks.find((p) => p.id === id)?.name ?? id;
+	}
+
+	/** Resolve a skill ref to its title, falling back to the ref when unknown. */
+	function skillName(ref: string | null): string {
+		if (!ref) return '';
+		return skillSummaries.find((s) => s.name === ref)?.title || ref;
+	}
+
+	/** Resolve a KB id to its name, falling back to the id when unknown. */
+	function kbName(id: string | null): string {
+		if (!id) return '';
+		return kbs.find((k) => k.id === id)?.name ?? id;
+	}
+
 	function targetSummary(s: AutonomousScheduleRead): string {
 		const parts: string[] = [];
-		if (s.playbook_id) parts.push(`Playbook: ${s.playbook_id}`);
-		if (s.skill_ref) parts.push(`Skill: ${s.skill_ref}`);
-		if (s.target_kb_id) parts.push(`KB: ${s.target_kb_id}`);
+		if (s.playbook_id) parts.push(`Playbook: ${playbookName(s.playbook_id)}`);
+		if (s.skill_ref) parts.push(`Skill: ${skillName(s.skill_ref)}`);
+		if (s.target_kb_id) parts.push(`KB: ${kbName(s.target_kb_id)}`);
 		return parts.join(' · ') || '—';
 	}
 
