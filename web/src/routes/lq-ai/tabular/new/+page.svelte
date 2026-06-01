@@ -274,7 +274,7 @@
 	<header class="lq-tabwiz__header">
 		<h1>New Tabular Review</h1>
 		<p class="lq-tabwiz__subtitle">
-			Run a column spec across multiple documents. Each cell is grounded by the Citation Engine.
+			Run a column spec across multiple documents. Each cell is grounded by source-chunk references.
 		</p>
 	</header>
 

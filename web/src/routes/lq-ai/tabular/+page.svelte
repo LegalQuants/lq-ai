@@ -80,7 +80,7 @@
 		</div>
 		<p class="lq-tabular-page__subtitle">
 			Run a table-mode skill or an ad-hoc column spec across multiple documents. Each cell is
-			grounded by the Citation Engine; click any cell in the result view to see the source
+			grounded by source-chunk references; click any cell in the result view to see the source
 			passage.
 		</p>
 	</header>
