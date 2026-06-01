@@ -61,6 +61,7 @@
 	let formSkillRef: string = '';
 	let formKbId: string = '';
 	let formProjectId: string = '';
+	let formMaxCostUsd: string = '';
 
 	// Form errors
 	let cronError: string | null = null;
@@ -162,6 +163,7 @@
 		formSkillRef = '';
 		formKbId = '';
 		formProjectId = '';
+		formMaxCostUsd = '';
 		cronError = null;
 		targetError = null;
 		submitError = null;
@@ -235,7 +237,8 @@
 				skill_ref: formTargetKind === 'skill' ? formSkillRef || undefined : undefined,
 				target_kb_id: formKbId || undefined,
 				project_id: formProjectId || undefined,
-				enabled: true
+				enabled: true,
+				...(formMaxCostUsd.trim() !== '' ? { max_cost_usd: formMaxCostUsd.trim() } : {})
 			});
 			actionSuccess = `Schedule "${formName.trim() || formCronExpr.trim()}" created.`;
 			closeModal();
@@ -564,6 +567,26 @@
 					{/if}
 				</div>
 
+				<!-- Cost cap (optional) -->
+				<div class="modal-field">
+					<label class="modal-label" for="sched-cost-cap">
+						Cost cap (USD) <span class="modal-optional">(optional)</span>
+					</label>
+					<input
+						id="sched-cost-cap"
+						type="number"
+						min="0"
+						step="0.01"
+						class="modal-input"
+						bind:value={formMaxCostUsd}
+						placeholder="e.g. 1.00 — defaults to the system cap if blank"
+						disabled={submitting}
+					/>
+					<p class="modal-hint">
+						The most this run may spend before it halts (R4). Blank uses the system default.
+					</p>
+				</div>
+
 				{#if pickerError}
 					<p class="picker-error" role="alert">{pickerError}</p>
 				{/if}
@@ -865,6 +888,13 @@
 		font-weight: 400;
 		color: var(--lq-text-tertiary);
 		font-size: 12px;
+	}
+
+	.modal-hint {
+		font-size: 12px;
+		color: var(--lq-text-tertiary);
+		margin: 0;
+		line-height: 1.4;
 	}
 
 	.modal-input,

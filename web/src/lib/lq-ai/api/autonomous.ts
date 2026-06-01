@@ -255,6 +255,8 @@ export interface AutonomousScheduleCreate {
 	target_kb_id?: string | null;
 	project_id?: string | null;
 	enabled?: boolean;
+	/** Per-schedule spend cap. Decimal serialized as a string; null/omitted falls back to the system default. */
+	max_cost_usd?: string;
 }
 
 /** PATCH /autonomous/schedules/{id} — partial update. */
@@ -274,6 +276,8 @@ export interface AutonomousWatchCreate {
 	skill_ref?: string | null;
 	project_id?: string | null;
 	enabled?: boolean;
+	/** Per-watch spend cap. Decimal serialized as a string; null/omitted falls back to the system default. */
+	max_cost_usd?: string;
 }
 
 /** PATCH /autonomous/watches/{id} — partial update. */

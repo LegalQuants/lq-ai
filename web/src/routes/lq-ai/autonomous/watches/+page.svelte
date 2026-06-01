@@ -64,6 +64,7 @@
 	let formPlaybookId: string = '';
 	let formSkillRef: string = '';
 	let formProjectId: string = '';
+	let formMaxCostUsd: string = '';
 
 	// Form errors
 	let kbError: string | null = null;
@@ -175,6 +176,7 @@
 		formPlaybookId = '';
 		formSkillRef = '';
 		formProjectId = '';
+		formMaxCostUsd = '';
 		kbError = null;
 		targetError = null;
 		submitError = null;
@@ -246,7 +248,8 @@
 				playbook_id: formTargetKind === 'playbook' ? formPlaybookId || undefined : undefined,
 				skill_ref: formTargetKind === 'skill' ? formSkillRef || undefined : undefined,
 				project_id: formProjectId || undefined,
-				enabled: true
+				enabled: true,
+				...(formMaxCostUsd.trim() !== '' ? { max_cost_usd: formMaxCostUsd.trim() } : {})
 			});
 			const kbName = kbs.find((kb) => kb.id === formKbId)?.name ?? formKbId;
 			actionSuccess = `Watch on "${kbName}" created.`;
@@ -534,6 +537,26 @@
 							{/each}
 						</select>
 					{/if}
+				</div>
+
+				<!-- Cost cap (optional) -->
+				<div class="modal-field">
+					<label class="modal-label" for="watch-cost-cap">
+						Cost cap (USD) <span class="modal-optional">(optional)</span>
+					</label>
+					<input
+						id="watch-cost-cap"
+						type="number"
+						min="0"
+						step="0.01"
+						class="modal-input"
+						bind:value={formMaxCostUsd}
+						placeholder="e.g. 1.00 — defaults to the system cap if blank"
+						disabled={submitting}
+					/>
+					<p class="modal-hint">
+						The most this run may spend before it halts (R4). Blank uses the system default.
+					</p>
 				</div>
 
 				{#if pickerError}
@@ -835,6 +858,7 @@
 		line-height: 1.4;
 	}
 
+	.modal-input,
 	.modal-select {
 		background: var(--lq-inset);
 		border: 1px solid var(--lq-border);
@@ -847,12 +871,14 @@
 		transition: border-color 0.15s ease;
 	}
 
+	.modal-input:focus,
 	.modal-select:focus {
 		outline: none;
 		border-color: var(--lq-accent);
 		box-shadow: 0 0 0 2px var(--lq-accent-soft);
 	}
 
+	.modal-input:disabled,
 	.modal-select:disabled {
 		opacity: 0.6;
 		cursor: not-allowed;
