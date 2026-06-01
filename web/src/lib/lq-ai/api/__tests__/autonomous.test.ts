@@ -25,6 +25,7 @@ import {
 	listProposals,
 	acceptProposal,
 	rejectProposal,
+	runNow,
 	listSchedules,
 	createSchedule,
 	updateSchedule,
@@ -137,6 +138,24 @@ describe('autonomous API client', () => {
 		const [url, init] = firstCall(fetchMock);
 		expect(String(url)).toContain('/autonomous/sessions/sess-1/halt');
 		expect(init.method).toBe('POST');
+	});
+
+	it('runNow POSTs /autonomous/run-now with the body and returns a manual session', async () => {
+		fetchMock.mockResolvedValueOnce(
+			jsonResponseLike(201, {
+				id: 's1',
+				trigger_kind: 'manual',
+				status: 'running'
+			})
+		);
+		const result = await runNow({ skill_ref: 'nda-review', max_cost_usd: '0.50' });
+		expect(result.trigger_kind).toBe('manual');
+		const [url, init] = firstCall(fetchMock);
+		expect(String(url)).toContain('/autonomous/run-now');
+		expect(init.method).toBe('POST');
+		const body = JSON.parse(String(init.body));
+		expect(body.skill_ref).toBe('nda-review');
+		expect(body.max_cost_usd).toBe('0.50');
 	});
 
 	// -----------------------------------------------------------------------

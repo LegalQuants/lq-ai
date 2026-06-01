@@ -288,6 +288,19 @@ export interface PromotePrecedentRequest {
 	project_id: string;
 }
 
+/**
+ * POST /autonomous/run-now — manual-trigger body. All fields optional.
+ * Mirrors app/schemas/autonomous.py ManualRunRequest. `max_cost_usd` is a
+ * Decimal serialized as a string, matching AutonomousScheduleCreate.
+ */
+export interface ManualRunRequest {
+	playbook_id?: string;
+	skill_ref?: string;
+	target_kb_id?: string;
+	project_id?: string;
+	max_cost_usd?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Sessions (read + halt — gated on ActiveUser; always reachable for audit)
 // ---------------------------------------------------------------------------
@@ -457,6 +470,14 @@ export const listSchedules = (
  */
 export const createSchedule = (body: AutonomousScheduleCreate): Promise<AutonomousScheduleRead> =>
 	apiRequest<AutonomousScheduleRead>('/autonomous/schedules', { method: 'POST', body });
+
+/**
+ * POST /autonomous/run-now
+ * Manual trigger — kicks off a session immediately (trigger_kind 'manual').
+ * Returns 201 with the created AutonomousSessionRead.
+ */
+export const runNow = (body: ManualRunRequest): Promise<AutonomousSessionRead> =>
+	apiRequest<AutonomousSessionRead>('/autonomous/run-now', { method: 'POST', body });
 
 /**
  * PATCH /autonomous/schedules/{schedule_id}
