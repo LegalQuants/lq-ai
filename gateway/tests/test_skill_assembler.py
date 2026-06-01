@@ -360,6 +360,76 @@ def test_interpolate_records_consumed_keys() -> None:
 
 
 @pytest.mark.unit
+def test_assemble_input_consumed_only_in_reference_is_not_relisted() -> None:
+    """A key consumed by a ``{{}}`` in a reference file (not the body) must not
+    reappear in the "Provided inputs" block — consumed-tracking unions the body
+    and every reference file, not just the body.
+    """
+
+    skill = Skill(
+        name="alpha",
+        title="Alpha",
+        content_md="No body placeholders.",
+        content_yaml="name: alpha\n",
+        reference_files=[
+            SkillFile(
+                path="reference/note.md",
+                content="For counterparty {{counterparty}}, proceed.",
+            )
+        ],
+    )
+    out = assemble_skill_prompt(
+        [skill],
+        skill_inputs={"alpha": {"counterparty": "Acme Corp"}},
+    )
+    # Substituted in the reference...
+    assert "For counterparty Acme Corp" in out
+    # ...and therefore NOT re-listed in a Provided-inputs block.
+    assert "Provided inputs" not in out
+    assert out.count("Acme Corp") == 1
+
+
+@pytest.mark.unit
+def test_assemble_provided_inputs_blocks_do_not_bleed_across_skills() -> None:
+    """Each skill's leftover-input block lists only that skill's bindings.
+
+    ``_render_skill`` scopes ``consumed``/``inputs`` per skill, so a multi-skill
+    assemble must keep each "Provided inputs" block under its own skill section
+    with no cross-skill bleed.
+    """
+
+    alpha = Skill(
+        name="alpha",
+        title="Alpha",
+        content_md="Alpha body, no placeholders.",
+        content_yaml="name: alpha\n",
+    )
+    beta = Skill(
+        name="beta",
+        title="Beta",
+        content_md="Beta body, no placeholders.",
+        content_yaml="name: beta\n",
+    )
+    out = assemble_skill_prompt(
+        [alpha, beta],
+        skill_inputs={
+            "alpha": {"audience": "the board"},
+            "beta": {"jurisdiction": "Delaware"},
+        },
+    )
+    assert "### Provided inputs for Alpha" in out
+    assert "### Provided inputs for Beta" in out
+    # Each value appears exactly once, under its own skill's block.
+    assert out.count("the board") == 1
+    assert out.count("Delaware") == 1
+    # Alpha's block precedes Beta's, and alpha's input is above the beta divider.
+    alpha_block = out.index("### Provided inputs for Alpha")
+    beta_header = out.index("# Skill: Beta")
+    assert alpha_block < beta_header
+    assert out.index("the board") < beta_header
+
+
+@pytest.mark.unit
 def test_assemble_concatenates_multiple_skills_with_separator() -> None:
     a = _basic_skill("alpha", body="Alpha body")
     b = _basic_skill("beta", body="Beta body")
