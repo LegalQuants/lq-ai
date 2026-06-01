@@ -265,6 +265,33 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("GET", "/api/v1/skills/autocomplete"),
     ("GET", "/api/v1/user-skills/{skill_id}/versions"),
     ("GET", "/api/v1/knowledge-bases/{kb_id}/files"),
+    # M4 — Autonomous Layer (opt-in) + Phase-1 run-now. Fully implemented;
+    # each has dedicated coverage under tests/autonomous/, so they must be
+    # excluded from this 501-scaffold sweep.
+    ("GET", "/api/v1/autonomous/memory"),
+    ("DELETE", "/api/v1/autonomous/memory/{memory_id}"),
+    ("POST", "/api/v1/autonomous/memory/{memory_id}/dismiss"),
+    ("POST", "/api/v1/autonomous/memory/{memory_id}/keep"),
+    ("GET", "/api/v1/autonomous/notifications"),
+    ("POST", "/api/v1/autonomous/notifications/{notification_id}/read"),
+    ("GET", "/api/v1/autonomous/precedents"),
+    ("POST", "/api/v1/autonomous/precedents/{precedent_id}/dismiss"),
+    ("POST", "/api/v1/autonomous/precedents/{precedent_id}/promote"),
+    ("GET", "/api/v1/autonomous/project-context-proposals"),
+    ("POST", "/api/v1/autonomous/project-context-proposals/{proposal_id}/accept"),
+    ("POST", "/api/v1/autonomous/project-context-proposals/{proposal_id}/reject"),
+    ("POST", "/api/v1/autonomous/run-now"),
+    ("GET", "/api/v1/autonomous/schedules"),
+    ("POST", "/api/v1/autonomous/schedules"),
+    ("DELETE", "/api/v1/autonomous/schedules/{schedule_id}"),
+    ("PATCH", "/api/v1/autonomous/schedules/{schedule_id}"),
+    ("GET", "/api/v1/autonomous/sessions"),
+    ("GET", "/api/v1/autonomous/sessions/{session_id}"),
+    ("POST", "/api/v1/autonomous/sessions/{session_id}/halt"),
+    ("GET", "/api/v1/autonomous/watches"),
+    ("POST", "/api/v1/autonomous/watches"),
+    ("DELETE", "/api/v1/autonomous/watches/{watch_id}"),
+    ("PATCH", "/api/v1/autonomous/watches/{watch_id}"),
 }
 
 
