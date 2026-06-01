@@ -275,6 +275,69 @@ async def _validate_owned_file_ids(
     return [str(fid) for fid in parsed]
 
 
+async def _load_attached_file_contexts(
+    db: AsyncSession,
+    file_ids: list[str],
+    owner_id: uuid.UUID,
+) -> list[tuple[str, str]]:
+    """Load ``(filename, content)`` for per-message attached files, in caller order.
+
+    The text is :attr:`Document.normalized_content` (the canonical
+    PyMuPDF character stream) joined ``File → Document`` on
+    ``Document.file_id == File.id``. The query is **owner-scoped**
+    (``owner_id == ... AND deleted_at IS NULL``) as defense in depth —
+    even though :func:`_validate_owned_file_ids` has already validated
+    ownership upstream, this read re-asserts the boundary rather than
+    trusting the caller-supplied ids.
+
+    Files are returned in the order their ids appear in ``file_ids``
+    (deduped, first-seen). A file with **no Document row yet** (ingestion
+    pending or failed) or with empty ``normalized_content`` is OMITTED
+    from the result — it was validly attached, it just has no extractable
+    text to inject. This is graceful, not an error: the send still
+    proceeds, the file simply contributes no document-context block.
+
+    Empty input returns an empty list without a DB round-trip.
+    """
+
+    if not file_ids:
+        return []
+
+    parsed: list[uuid.UUID] = []
+    seen: set[uuid.UUID] = set()
+    for raw in file_ids:
+        try:
+            fid = uuid.UUID(raw)
+        except (ValueError, AttributeError):
+            # Upstream validation already 404s malformed ids; if a bad id
+            # reaches here it simply contributes no context.
+            continue
+        if fid not in seen:
+            seen.add(fid)
+            parsed.append(fid)
+
+    stmt = (
+        select(File.id, File.filename, Document.normalized_content)
+        .join(Document, Document.file_id == File.id)
+        .where(
+            File.id.in_(parsed),
+            File.owner_id == owner_id,
+            File.deleted_at.is_(None),
+        )
+    )
+    rows = (await db.execute(stmt)).all()
+    by_id: dict[uuid.UUID, tuple[str, str]] = {}
+    for row in rows:
+        fid, filename, content = row[0], row[1], row[2]
+        # Omit files with no extractable text (empty / whitespace-only).
+        if content and content.strip():
+            by_id[fid] = (filename, content)
+
+    # Preserve caller-supplied order; files without a Document or with no
+    # text simply don't appear in ``by_id`` and are skipped.
+    return [by_id[fid] for fid in parsed if fid in by_id]
+
+
 async def _message_count(db: AsyncSession, chat_id: uuid.UUID) -> int:
     """Return the count of messages for a chat (single COUNT(*) query)."""
 
@@ -920,6 +983,37 @@ def _format_retrieval_context_block(
     return "\n".join(lines).rstrip()
 
 
+def _format_attached_files_block(files: list[tuple[str, str]]) -> str:
+    """Render per-message attached files as a Markdown system-message block.
+
+    Mirrors :func:`_format_retrieval_context_block`'s style: a header line
+    so the LLM recognizes the block as attached document context, then one
+    ``### {filename}`` section per file with the file's extracted text
+    verbatim. The block is injected as a ``system`` message marked
+    ``lq_ai_skip_anonymization=True`` so the content stays verbatim to the
+    provider (Decision M2-1 — attached files are document content, like
+    retrieved KB documents, and the model needs intact source text).
+
+    Callers must only pass files that actually produced text; this helper
+    does not filter (the empty-text omission happens in
+    :func:`_load_attached_file_contexts`).
+    """
+
+    lines: list[str] = [
+        "## Attached documents for this turn",
+        "",
+        "Documents the user attached to this message. Treat them as "
+        "primary source material for the user's question.",
+        "",
+    ]
+    for filename, content in files:
+        lines.append(f"### {filename}")
+        lines.append("")
+        lines.append(content)
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
 # ---------------------------------------------------------------------------
 # Messages: post (the keystone)
 # ---------------------------------------------------------------------------
@@ -1222,6 +1316,49 @@ async def send_message(
             },
         )
         await db.commit()
+
+    # Part B — inject per-message attached-file content as a verbatim
+    # document-context system message, mirroring the KB-retrieval block
+    # above. ``effective_file_ids`` are already ownership-validated;
+    # ``_load_attached_file_contexts`` re-asserts the owner scope (defense
+    # in depth) and returns ``(filename, content)`` per file that has
+    # extractable text. Files with no Document yet (ingestion pending /
+    # failed) or empty content are omitted gracefully — no block, no
+    # error. Decision M2-1: attached files are document content, so the
+    # injected message opts out of anonymization (verbatim to provider),
+    # exactly like the retrieval block. Injecting here — before the final
+    # ``user`` turn and at the single ``gw_messages`` build site — covers
+    # both the streaming and non-streaming dispatch paths.
+    attached_file_contexts = await _load_attached_file_contexts(
+        db, list(effective_file_ids), user.id
+    )
+    if attached_file_contexts:
+        attached_block = _format_attached_files_block(attached_file_contexts)
+        gw_messages.append(
+            ChatCompletionMessage(
+                role="system",
+                content=attached_block,
+                lq_ai_skip_anonymization=True,
+            )
+        )
+        # Audit row mirroring inference.kb_chunks_retrieved — committed on
+        # its own boundary so Receipts records that file content was
+        # attached regardless of the downstream gateway-call outcome.
+        await audit_action(
+            db,
+            user_id=user.id,
+            action="inference.message_files_attached",
+            resource_type="chat",
+            resource_id=str(cid),
+            project_id=chat.project_id,
+            request=request,
+            details={
+                "file_ids": list(effective_file_ids),
+                "file_count": len(attached_file_contexts),
+            },
+        )
+        await db.commit()
+
     gw_messages.append(ChatCompletionMessage(role="user", content=effective_content))
 
     # Build the gateway request. C3 still sends a single-turn request

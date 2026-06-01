@@ -24,12 +24,15 @@ import pytest
 import pytest_asyncio
 import respx
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.gateway import GatewayClient, set_gateway_client
 from app.db.session import get_db
 from app.main import app
+from app.models.audit import AuditLog
 from app.models.chat import Chat
+from app.models.document import Document
 from app.models.file import File
 from app.models.user import User
 from app.security import create_access_token, hash_password
@@ -114,6 +117,32 @@ async def _make_file(
         deleted_at=(_dt.datetime.now(tz=_dt.UTC) if deleted else None),
     )
     db_session.add(f)
+    await db_session.flush()
+    return f
+
+
+async def _make_file_with_document(
+    db_session: AsyncSession,
+    owner: User,
+    *,
+    filename: str = "contract.pdf",
+    content: str = "This Agreement is governed by Delaware law.",
+) -> File:
+    """Insert a ``files`` row plus its joined ``documents`` row with text.
+
+    Part B fetches ``Document.normalized_content`` joined File→Document to
+    build the attached-files context block. Passing ``content=""`` produces
+    a Document with no extractable text (the graceful-omit case).
+    """
+
+    f = await _make_file(db_session, owner)
+    f.filename = filename
+    doc = Document(
+        file_id=f.id,
+        parser="pymupdf",
+        normalized_content=content,
+    )
+    db_session.add(doc)
     await db_session.flush()
     return f
 
@@ -546,3 +575,243 @@ async def test_file_ids_echoed_on_streaming_complete_frame(
     complete = [e for e in events if e["type"] == "complete"]
     assert len(complete) == 1
     assert complete[0]["applied_file_ids"] == [str(f.id)]
+
+
+# --- Part B: attached-file content injection --------------------------------
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_attached_file_content_injected_as_system_message_non_streaming(
+    client: AsyncClient, db_user: User, db_session: AsyncSession
+) -> None:
+    """A file WITH document text injects a verbatim system message (M2-1)."""
+
+    f = await _make_file_with_document(
+        db_session,
+        db_user,
+        filename="nda.pdf",
+        content="The receiving party shall not disclose Confidential Information.",
+    )
+    route = respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json=_success_payload())
+    )
+    token = _bearer_for(db_user)
+    response = await client.post(
+        f"/api/v1/chats/{_DUMMY_CHAT_ID}/messages",
+        json={"content": "summarize this", "model": "smart", "file_ids": [str(f.id)]},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200, response.text
+    sent = _json.loads(route.calls[0].request.read())
+    messages = sent["messages"]
+    # system attached-docs block + user turn.
+    assert len(messages) == 2, messages
+    sys_msg = messages[0]
+    assert sys_msg["role"] == "system"
+    assert "Attached documents for this turn" in sys_msg["content"]
+    assert "nda.pdf" in sys_msg["content"]
+    assert "The receiving party shall not disclose Confidential Information." in sys_msg["content"]
+    # Decision M2-1: attached document content stays verbatim to the provider.
+    assert sys_msg["lq_ai_skip_anonymization"] is True
+    # User turn is still last, unchanged.
+    assert messages[-1] == {
+        "role": "user",
+        "content": "summarize this",
+        "lq_ai_skip_anonymization": False,
+    }
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_attached_file_content_injected_streaming(
+    client: AsyncClient, db_user: User, db_session: AsyncSession
+) -> None:
+    """The same injection feeds the streaming path (single gw_request build)."""
+
+    f = await _make_file_with_document(
+        db_session,
+        db_user,
+        filename="msa.pdf",
+        content="Term and termination provisions apply.",
+    )
+    body = _stream_chunk("done") + "data: [DONE]\n\n"
+    route = respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200, content=body, headers={"content-type": "text/event-stream"}
+        )
+    )
+    token = _bearer_for(db_user)
+
+    async with client.stream(
+        "POST",
+        f"/api/v1/chats/{_DUMMY_CHAT_ID}/messages",
+        json={"content": "review", "stream": True, "file_ids": [str(f.id)]},
+        headers={"Authorization": f"Bearer {token}"},
+    ) as resp:
+        assert resp.status_code == 200
+        async for _line in resp.aiter_lines():
+            pass
+
+    sent = _json.loads(route.calls[0].request.read())
+    messages = sent["messages"]
+    sys_msgs = [m for m in messages if m["role"] == "system"]
+    assert len(sys_msgs) == 1
+    assert "msa.pdf" in sys_msgs[0]["content"]
+    assert "Term and termination provisions apply." in sys_msgs[0]["content"]
+    assert sys_msgs[0]["lq_ai_skip_anonymization"] is True
+    assert messages[-1]["role"] == "user"
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_two_attached_files_both_present_in_order(
+    client: AsyncClient, db_user: User, db_session: AsyncSession
+) -> None:
+    """Two files → both contents in one block, in caller-supplied order."""
+
+    f1 = await _make_file_with_document(
+        db_session, db_user, filename="first.pdf", content="ALPHA clause body."
+    )
+    f2 = await _make_file_with_document(
+        db_session, db_user, filename="second.pdf", content="BRAVO clause body."
+    )
+    route = respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json=_success_payload())
+    )
+    token = _bearer_for(db_user)
+    response = await client.post(
+        f"/api/v1/chats/{_DUMMY_CHAT_ID}/messages",
+        json={
+            "content": "compare these",
+            "model": "smart",
+            "file_ids": [str(f1.id), str(f2.id)],
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200, response.text
+    sent = _json.loads(route.calls[0].request.read())
+    sys_content = next(m["content"] for m in sent["messages"] if m["role"] == "system")
+    assert "ALPHA clause body." in sys_content
+    assert "BRAVO clause body." in sys_content
+    # Order preserved: first.pdf section precedes second.pdf section.
+    assert sys_content.index("first.pdf") < sys_content.index("second.pdf")
+    assert sys_content.index("ALPHA") < sys_content.index("BRAVO")
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_attached_file_without_text_is_omitted_gracefully(
+    client: AsyncClient, db_user: User, db_session: AsyncSession
+) -> None:
+    """A file with an empty Document produces no block; request still succeeds."""
+
+    f = await _make_file_with_document(db_session, db_user, content="")
+    route = respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json=_success_payload())
+    )
+    token = _bearer_for(db_user)
+    response = await client.post(
+        f"/api/v1/chats/{_DUMMY_CHAT_ID}/messages",
+        json={"content": "summarize", "model": "smart", "file_ids": [str(f.id)]},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200, response.text
+    sent = _json.loads(route.calls[0].request.read())
+    # file_ids still forwarded (Part A contract) but no attached-docs block.
+    assert sent["lq_ai_file_ids"] == [str(f.id)]
+    assert sent["messages"] == [
+        {"role": "user", "content": "summarize", "lq_ai_skip_anonymization": False}
+    ]
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_attached_file_with_no_document_is_omitted_gracefully(
+    client: AsyncClient, db_user: User, db_session: AsyncSession
+) -> None:
+    """A validly-attached file with NO Document row yet → no block, no crash."""
+
+    f = await _make_file(db_session, db_user)  # no Document created
+    route = respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json=_success_payload())
+    )
+    token = _bearer_for(db_user)
+    response = await client.post(
+        f"/api/v1/chats/{_DUMMY_CHAT_ID}/messages",
+        json={"content": "summarize", "model": "smart", "file_ids": [str(f.id)]},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200, response.text
+    sent = _json.loads(route.calls[0].request.read())
+    assert sent["messages"] == [
+        {"role": "user", "content": "summarize", "lq_ai_skip_anonymization": False}
+    ]
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_no_file_ids_means_no_attached_docs_block(client: AsyncClient, db_user: User) -> None:
+    """Omitted file_ids: back-compat, no attached-docs system message."""
+
+    route = respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json=_success_payload())
+    )
+    token = _bearer_for(db_user)
+    response = await client.post(
+        f"/api/v1/chats/{_DUMMY_CHAT_ID}/messages",
+        json={"content": "hi", "model": "smart"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    sent = _json.loads(route.calls[0].request.read())
+    assert sent["messages"] == [
+        {"role": "user", "content": "hi", "lq_ai_skip_anonymization": False}
+    ]
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_attached_file_writes_audit_row(
+    client: AsyncClient, db_user: User, db_session: AsyncSession
+) -> None:
+    """A file with content writes an inference.message_files_attached audit row."""
+
+    f = await _make_file_with_document(
+        db_session, db_user, filename="deed.pdf", content="Grantor conveys to Grantee."
+    )
+    respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json=_success_payload())
+    )
+    token = _bearer_for(db_user)
+    response = await client.post(
+        f"/api/v1/chats/{_DUMMY_CHAT_ID}/messages",
+        json={"content": "summarize", "model": "smart", "file_ids": [str(f.id)]},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200, response.text
+    rows = (
+        (
+            await db_session.execute(
+                select(AuditLog).where(
+                    AuditLog.action == "inference.message_files_attached",
+                    AuditLog.resource_id == _DUMMY_CHAT_ID,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.resource_type == "chat"
+    assert row.user_id == db_user.id
+    assert row.details is not None
+    assert row.details["file_ids"] == [str(f.id)]
+    assert row.details["file_count"] == 1
