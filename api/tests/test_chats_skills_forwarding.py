@@ -30,6 +30,7 @@ from app.clients.gateway import GatewayClient, set_gateway_client
 from app.db.session import get_db
 from app.main import app
 from app.models.chat import Chat
+from app.models.file import File
 from app.models.user import User
 from app.security import create_access_token, hash_password
 
@@ -91,6 +92,30 @@ async def client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
 
 def _bearer_for(user: User) -> str:
     return create_access_token(user.id, user.email, is_admin=user.is_admin)
+
+
+async def _make_file(
+    db_session: AsyncSession,
+    owner: User,
+    *,
+    deleted: bool = False,
+) -> File:
+    """Insert a minimal ``files`` row owned by ``owner``."""
+    import datetime as _dt
+
+    f = File(
+        owner_id=owner.id,
+        filename="contract.pdf",
+        mime_type="application/pdf",
+        size_bytes=1234,
+        hash_sha256="0" * 64,
+        storage_path=str(uuid.uuid4()),
+        ingestion_status="ready",
+        deleted_at=(_dt.datetime.now(tz=_dt.UTC) if deleted else None),
+    )
+    db_session.add(f)
+    await db_session.flush()
+    return f
 
 
 def _success_payload(
@@ -336,3 +361,188 @@ async def test_skill_input_missing_propagates_to_400(client: AsyncClient, db_use
     body = response.json()
     assert body["detail"]["code"] == "skill_input_missing"
     assert "alpha.document" in body["detail"]["details"]["missing"]
+
+
+# --- file_ids: per-message document context (Donna) -------------------------
+
+
+def _stream_chunk(content: str) -> str:
+    chunk = {
+        "id": "chatcmpl-stream",
+        "object": "chat.completion.chunk",
+        "created": 1_700_000_000,
+        "model": "claude-sonnet-4-6",
+        "choices": [
+            {"index": 0, "delta": {"role": "assistant", "content": content}, "finish_reason": None}
+        ],
+        "routed_inference_tier": 3,
+        "routed_provider": "anthropic-prod",
+    }
+    return f"data: {_json.dumps(chunk)}\n\n"
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_file_ids_forwarded_and_echoed_non_streaming(
+    client: AsyncClient, db_user: User, db_session: AsyncSession
+) -> None:
+    """Caller-owned file_ids forward as lq_ai_file_ids and echo back."""
+
+    f = await _make_file(db_session, db_user)
+    route = respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json=_success_payload())
+    )
+    token = _bearer_for(db_user)
+    response = await client.post(
+        f"/api/v1/chats/{_DUMMY_CHAT_ID}/messages",
+        json={"content": "summarize this", "model": "smart", "file_ids": [str(f.id)]},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    sent = _json.loads(route.calls[0].request.read())
+    assert sent["lq_ai_file_ids"] == [str(f.id)]
+    body = response.json()
+    assert body["applied_file_ids"] == [str(f.id)]
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_file_ids_foreign_owner_404(
+    client: AsyncClient, db_user: User, db_session: AsyncSession
+) -> None:
+    """A file owned by another user 404s without leaking existence; no gateway call."""
+
+    other = User(
+        email=f"other-{uuid.uuid4().hex[:8]}@example.com",
+        display_name="Other",
+        hashed_password=hash_password("correct-horse-battery-staple"),
+        is_admin=False,
+        mfa_enabled=False,
+        must_change_password=False,
+    )
+    db_session.add(other)
+    await db_session.flush()
+    foreign = await _make_file(db_session, other)
+
+    route = respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json=_success_payload())
+    )
+    token = _bearer_for(db_user)
+    response = await client.post(
+        f"/api/v1/chats/{_DUMMY_CHAT_ID}/messages",
+        json={"content": "summarize this", "model": "smart", "file_ids": [str(foreign.id)]},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+    # The gateway is never reached when validation fails.
+    assert not route.called
+    # The 404 detail carries only the id the caller already sent — no
+    # owner / existence signal that distinguishes "not yours" from
+    # "doesn't exist".
+    body = response.json()
+    assert body["detail"]["details"]["file_id"] == str(foreign.id)
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_file_ids_nonexistent_404(
+    client: AsyncClient, db_user: User, db_session: AsyncSession
+) -> None:
+    """An unknown UUID 404s identically to a foreign file (id-probing-safe)."""
+
+    ghost = str(uuid.uuid4())
+    route = respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json=_success_payload())
+    )
+    token = _bearer_for(db_user)
+    response = await client.post(
+        f"/api/v1/chats/{_DUMMY_CHAT_ID}/messages",
+        json={"content": "hi", "model": "smart", "file_ids": [ghost]},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+    assert not route.called
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_file_ids_soft_deleted_404(
+    client: AsyncClient, db_user: User, db_session: AsyncSession
+) -> None:
+    """A soft-deleted file owned by the caller still 404s."""
+
+    f = await _make_file(db_session, db_user, deleted=True)
+    route = respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json=_success_payload())
+    )
+    token = _bearer_for(db_user)
+    response = await client.post(
+        f"/api/v1/chats/{_DUMMY_CHAT_ID}/messages",
+        json={"content": "hi", "model": "smart", "file_ids": [str(f.id)]},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+    assert not route.called
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_no_file_ids_means_empty_extension_field(client: AsyncClient, db_user: User) -> None:
+    """Omitted file_ids is back-compatible: empty/absent lq_ai_file_ids, empty echo."""
+
+    route = respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json=_success_payload())
+    )
+    token = _bearer_for(db_user)
+    response = await client.post(
+        f"/api/v1/chats/{_DUMMY_CHAT_ID}/messages",
+        json={"content": "hi", "model": "smart"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    sent = _json.loads(route.calls[0].request.read())
+    # exclude_none/exclude_default serialization may drop the empty list.
+    assert sent.get("lq_ai_file_ids", []) == []
+    assert response.json()["applied_file_ids"] == []
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_file_ids_echoed_on_streaming_complete_frame(
+    client: AsyncClient, db_user: User, db_session: AsyncSession
+) -> None:
+    """The streaming `complete` SSE frame echoes applied_file_ids."""
+
+    f = await _make_file(db_session, db_user)
+    body = _stream_chunk("done") + "data: [DONE]\n\n"
+    respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200, content=body, headers={"content-type": "text/event-stream"}
+        )
+    )
+    token = _bearer_for(db_user)
+
+    events: list[dict[str, object]] = []
+    async with client.stream(
+        "POST",
+        f"/api/v1/chats/{_DUMMY_CHAT_ID}/messages",
+        json={"content": "summarize", "stream": True, "file_ids": [str(f.id)]},
+        headers={"Authorization": f"Bearer {token}"},
+    ) as resp:
+        assert resp.status_code == 200
+        async for line in resp.aiter_lines():
+            line = line.strip()
+            if not line or line == "data: [DONE]":
+                if line == "data: [DONE]":
+                    break
+                continue
+            events.append(_json.loads(line[len("data:") :].strip()))
+
+    complete = [e for e in events if e["type"] == "complete"]
+    assert len(complete) == 1
+    assert complete[0]["applied_file_ids"] == [str(f.id)]

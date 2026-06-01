@@ -6033,6 +6033,31 @@ components:
             that the skill's frontmatter declares but the bindings
             don't provide cause a 400 with `code=skill_input_missing`.
 
+            Values are plain scalars interpolated into the skill body via
+            `{{name}}` substitution (ADR 0006). There is NO `type:"file"`
+            binding: passing a file UUID here interpolates the literal
+            UUID string, not the file's document text. For per-turn
+            document context use the separate `file_ids` channel below —
+            `skill_inputs` and `file_ids` are distinct; a `file_id` is
+            NOT bindable to a skill file-input via `skill_inputs`.
+        file_ids:
+          type: array
+          maxItems: 16
+          items: {type: string, format: uuid}
+          description: |
+            Donna: caller-owned file UUIDs supplying ephemeral,
+            per-message document context for this one chat turn.
+            Distinct from KB attach (project-scoped, persistent) and
+            from `skill_inputs` (scalar skill params — see the note
+            above; no `type:"file"` binding is wired). Each id is
+            validated server-side to exist and be owned by the caller;
+            a foreign, unknown, or soft-deleted id returns 404
+            (id-probing-safe — indistinguishable from "not found").
+            Validated ids are forwarded to the gateway as `lq_ai_file_ids`
+            alongside `lq_ai_skills` and echoed back as `applied_file_ids`
+            on the response / SSE `complete` frame. Capped at 16 entries.
+            Omitted / empty is back-compatible.
+
     MessagePostResponse:
       type: object
       required: [message, citations]
@@ -6069,6 +6094,17 @@ components:
           description: |
             C2: skills that were successfully assembled into the prompt
             for this request. Empty when no skills were attached.
+        applied_file_ids:
+          type: array
+          items: {type: string, format: uuid}
+          description: |
+            Donna: caller-owned file ids that were validated and
+            forwarded to the gateway as `lq_ai_file_ids` for this turn —
+            the echo of `MessageCreate.file_ids` (mirrors
+            `applied_skills`). Turn-scoped: there is no
+            `messages.file_ids` column, so this surfaces only on the send
+            response (and the SSE `complete` frame), not on rows read
+            back via `GET /chats/{id}/messages`. Empty when none attached.
 
     MessageStreamEvent:
       oneOf:
@@ -6136,6 +6172,14 @@ components:
           description: |
             C2: skills that were successfully assembled into the prompt
             for this request. Empty when no skills were attached.
+        applied_file_ids:
+          type: array
+          items: {type: string, format: uuid}
+          description: |
+            Donna: caller-owned file ids forwarded to the gateway as
+            `lq_ai_file_ids` for this turn — the echo of
+            `MessageCreate.file_ids` (mirrors `applied_skills`).
+            Turn-scoped; not persisted. Empty when none attached.
         routed_inference_tier:
           type: integer
           enum: [1,2,3,4,5]

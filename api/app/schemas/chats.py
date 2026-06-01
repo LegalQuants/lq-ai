@@ -83,6 +83,16 @@ path attaches exactly one skill, the wizard tryout attaches exactly
 one, and even an "attach multiple skills to a chat" UX rarely exceeds
 a handful. Requests with more than 16 attachments 422 at schema time."""
 
+MESSAGE_FILE_IDS_MAX_LEN: int = 16
+"""Donna — hard cap on ``MessageCreateRequest.file_ids``.
+
+Each id triggers an ownership-validation SELECT and forwards document
+context to the gateway for one turn. Without a cap, a single message
+could attach thousands of file ids — workload-multiplication DoS
+available to any authenticated user. 16 matches
+:data:`ATTACHED_SKILLS_MAX_LEN`; realistic per-turn document context is
+a handful of files. Requests over the cap 422 at schema time."""
+
 KNOWN_ATTACHED_SKILL_SOURCES: frozenset[str] = frozenset(
     {"slash", "wizard-tryout", "tryit-tab", "capture", "manual"}
 )
@@ -381,7 +391,35 @@ class MessageCreateRequest(BaseModel):
     """C2: per-skill input bindings, keyed by skill name. Forwarded as
     ``lq_ai_skill_inputs``. Per-attachment ``inputs`` on
     ``attached_skills`` entries are merged into this map at handler
-    time (the per-attachment value wins on key collision)."""
+    time (the per-attachment value wins on key collision).
+
+    Note on the ``file_ids`` interaction: ``skill_inputs`` values are
+    plain scalars interpolated into the skill body via ``{{name}}``
+    substitution (ADR 0006 / the gateway's ``skills/assembler.py``).
+    There is **no** ``type:"file"`` binding that resolves a ``file_id``
+    to document content today — passing a file UUID as a skill-input
+    value would interpolate the literal UUID string, not the file's
+    text. To attach document context for a turn, use the separate
+    :attr:`file_ids` channel below, not ``skill_inputs``."""
+
+    file_ids: list[str] = Field(default_factory=list, max_length=MESSAGE_FILE_IDS_MAX_LEN)
+    """Donna: caller-owned file UUIDs supplying ephemeral, per-message
+    document context for this one chat turn. Distinct from KB attach
+    (which is project-scoped and persistent): these ids bind document
+    context to a single send and are not stored on the chat.
+
+    Each id is validated server-side to exist and be owned by the
+    caller (id-probing-safe: a foreign or unknown id 404s exactly like
+    ``GET /files/{id}``). Validated ids are forwarded to the gateway as
+    ``lq_ai_file_ids`` alongside ``lq_ai_skills`` and echoed back as
+    ``applied_file_ids`` on the response / SSE ``complete`` frame.
+
+    This is a **separate channel from** ``skill_inputs``: file_ids are
+    NOT bound to a skill file-input via ``skill_inputs`` (no
+    ``type:"file"`` binding is wired — see the ``skill_inputs`` note
+    above). Populate ``file_ids`` for document context; populate
+    ``skill_inputs`` for scalar skill parameters. Omitted / empty is
+    fully back-compatible (pre-existing wire shape unchanged)."""
 
     stream: bool = False
     """Whether to stream the response as SSE. ``False`` returns a single
@@ -523,6 +561,15 @@ class MessagePostResponse(BaseModel):
     routed_provider: str | None = None
     cost_estimate: float | None = None
     applied_skills: list[str] = Field(default_factory=list)
+    applied_file_ids: list[str] = Field(default_factory=list)
+    """Donna: caller-owned file ids that were validated and forwarded to
+    the gateway as ``lq_ai_file_ids`` for this turn — the echo of
+    :attr:`MessageCreateRequest.file_ids`. Mirrors how ``applied_skills``
+    is echoed, but turn-scoped: there is no ``messages.file_ids`` column,
+    so this surfaces only on the send response (and the SSE ``complete``
+    frame), not on rows read back via ``GET /chats/{id}/messages``. Empty
+    when no file_ids were attached."""
+
     attached_skill_names: list[str] = Field(default_factory=list)
     """Wave D.2 Task 2.7 — slugs the send-time slash fallback attached
     on the caller's behalf. Distinct from ``applied_skills`` (the
@@ -562,6 +609,7 @@ __all__ = [
     "KNOWN_ATTACHED_SKILL_SOURCES",
     "LIST_LIMIT_DEFAULT",
     "LIST_LIMIT_MAX",
+    "MESSAGE_FILE_IDS_MAX_LEN",
     "TITLE_MAX_LEN",
     "AttachedSkillRef",
     "ChatCreateRequest",

@@ -150,6 +150,16 @@ class ChatCompletionRequest(BaseModel):
     lq_ai_skill_inputs: dict[str, dict[str, Any]] = Field(default_factory=dict)
     """Per-skill input bindings, keyed by skill name."""
 
+    lq_ai_file_ids: list[str] = Field(default_factory=list, max_length=16)
+    """Donna: caller-owned file UUIDs supplying ephemeral per-message
+    document context for this turn. The backend validates ownership
+    (id-probing-safe 404) before forwarding; the gateway consumes these
+    as the document-context channel for the send. Distinct from
+    ``lq_ai_skills`` (the prompt-assembly channel) and from KB attach
+    (project-scoped, persistent). Empty list (default) preserves the
+    pre-existing wire shape exactly. Capped server-side at the same
+    bound as the request schema's ``file_ids``."""
+
     lq_ai_inline_skills: list[InlineSkillRef] = Field(default_factory=list, max_length=16)
     """Wave D.2 Task 3.0: inline-body skills the gateway assembles
     without a catalogue fetch. Mirrors

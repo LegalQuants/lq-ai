@@ -82,6 +82,7 @@ from app.knowledge.embed import DEFAULT_EMBEDDING_MODEL, request_embedding_vecto
 from app.knowledge.retrieval import HybridSearchResult, hybrid_search
 from app.models.chat import Chat, Message, MessageCitation
 from app.models.document import Document
+from app.models.file import File
 from app.models.inference import InferenceRoutingLog
 from app.models.knowledge import KnowledgeBase
 from app.models.project import Project
@@ -212,6 +213,66 @@ async def _load_visible_chat(
             details={"chat_id": str(chat_id)},
         )
     return row
+
+
+async def _validate_owned_file_ids(
+    db: AsyncSession,
+    file_ids: list[str],
+    owner_id: uuid.UUID,
+) -> list[str]:
+    """Validate caller-owned, non-deleted file ids for per-message attach.
+
+    Mirrors :func:`app.api.files._load_visible_file`'s ownership posture:
+    each id must parse as a UUID and resolve to a non-soft-deleted
+    ``files`` row owned by ``owner_id``. Any id that is malformed,
+    nonexistent, soft-deleted, or owned by another user raises
+    :class:`NotFound` (404) — **id-probing-safe**: a foreign file is
+    indistinguishable from a nonexistent one, so the caller can't probe
+    for the existence of files they don't own (per CLAUDE.md
+    information-leakage avoidance + the C4 file-ownership brief).
+
+    Returns the validated ids as strings (deduped, order-preserving) for
+    forwarding to the gateway as ``lq_ai_file_ids``. Empty input returns
+    an empty list without a DB round-trip — the back-compatible no-op
+    path.
+    """
+
+    if not file_ids:
+        return []
+
+    # Parse + dedupe while preserving first-seen order. A malformed id is
+    # a 404 (not a 422) so it's indistinguishable from "not yours" — the
+    # caller learns nothing about which ids exist.
+    parsed: list[uuid.UUID] = []
+    seen: set[uuid.UUID] = set()
+    for raw in file_ids:
+        try:
+            fid = uuid.UUID(raw)
+        except (ValueError, AttributeError) as exc:
+            raise NotFound(
+                f"File {raw} not found.",
+                details={"file_id": str(raw)},
+            ) from exc
+        if fid not in seen:
+            seen.add(fid)
+            parsed.append(fid)
+
+    # Single SELECT for all ids, scoped to owner + not-deleted. Any id
+    # that doesn't come back is 404'd (the loop above already deduped).
+    stmt = select(File.id).where(
+        File.id.in_(parsed),
+        File.owner_id == owner_id,
+        File.deleted_at.is_(None),
+    )
+    found = set((await db.execute(stmt)).scalars().all())
+    for fid in parsed:
+        if fid not in found:
+            raise NotFound(
+                f"File {fid} not found.",
+                details={"file_id": str(fid)},
+            )
+
+    return [str(fid) for fid in parsed]
 
 
 async def _message_count(db: AsyncSession, chat_id: uuid.UUID) -> int:
@@ -925,6 +986,15 @@ async def send_message(
     # must explicitly unarchive (PATCH archived=false) before posting.
     chat = await _load_visible_chat(db, cid, user.id, include_archived=False)
 
+    # Donna — validate caller-owned ``file_ids`` before anything is
+    # persisted or dispatched. Ownership is enforced id-probing-safe
+    # (404 on foreign / nonexistent / soft-deleted, indistinguishable
+    # from one another) so the caller can't enumerate file ids they
+    # don't own. Validated ids forward to the gateway as
+    # ``lq_ai_file_ids`` and echo back as ``applied_file_ids``. Empty /
+    # omitted is a no-op (no DB round-trip) — back-compatible.
+    effective_file_ids = await _validate_owned_file_ids(db, payload.file_ids, user.id)
+
     # Wave D.2 Task 3.0 — merge legacy ``skills`` with new
     # ``attached_skills``. Each ``attached_skills`` entry is XOR'd at
     # schema time: ``slug`` entries roll into the legacy slug path
@@ -1176,6 +1246,7 @@ async def send_message(
         lq_ai_skills=list(effective_skills),
         lq_ai_skill_inputs=dict(effective_skill_inputs),
         lq_ai_inline_skills=list(inline_skill_refs),
+        lq_ai_file_ids=list(effective_file_ids),
         lq_ai_project_minimum_inference_tier=project_floor,
         lq_ai_privileged=project_privileged,
     )
@@ -1929,6 +2000,7 @@ async def _non_streaming_response(
         routed_provider=response.routed_provider,
         cost_estimate=response.cost_estimate,
         applied_skills=applied_skills,
+        applied_file_ids=list(request.lq_ai_file_ids),
         attached_skill_names=list(attached_skill_names or []),
         slash_unresolved=slash_unresolved,
     )
@@ -2146,6 +2218,10 @@ async def _stream_response(
                     "created_at": datetime.now(tz=UTC).isoformat(),
                 },
                 "applied_skills": last_applied_skills or [],
+                # Donna — echo the validated, caller-owned file ids that
+                # were forwarded to the gateway for this turn (mirrors
+                # ``applied_skills``; turn-scoped, not persisted).
+                "applied_file_ids": list(request.lq_ai_file_ids),
                 "citations": [],
                 "routed_inference_tier": last_tier,
                 "routed_provider": last_provider,
