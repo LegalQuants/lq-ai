@@ -3,7 +3,14 @@
 
 	$: mode = $preferences.featured_tools;
 
-	const tools = [
+	// Autonomous is opt-in / off by default. Surface it for everyone, but route
+	// a not-yet-enabled user to the Settings opt-in (so they can reach the toggle
+	// without hunting the gear icon) and an enabled user straight to the layer.
+	$: autonomousHref = $preferences.autonomous_enabled
+		? '/lq-ai/autonomous'
+		: '/lq-ai/settings/autonomous';
+
+	$: tools = [
 		{
 			id: 'enhance',
 			title: 'Enhance Prompt',
@@ -51,8 +58,17 @@
 			description: 'Run a saved skill on a document or message.',
 			cta: 'Apply',
 			href: '/lq-ai/skills'
+		},
+		{
+			id: 'autonomous',
+			title: 'Autonomous',
+			icon: '🤖',
+			description:
+				'Let LQ.AI run a skill or playbook on a schedule or when documents arrive (opt-in, off by default).',
+			cta: $preferences.autonomous_enabled ? 'Open' : 'Turn on',
+			href: autonomousHref
 		}
-	] as const;
+	];
 </script>
 
 {#if mode === 'prominent'}
