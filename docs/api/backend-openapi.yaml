@@ -4437,6 +4437,42 @@ paths:
         '404':
           description: Notification not found
 
+  /api/v1/autonomous/run-now:
+    post:
+      tags: [autonomous]
+      summary: Run a skill or playbook once now (one-off manual autonomous session)
+      description: |
+        Spawns a single ``trigger_kind='manual'`` autonomous session so a
+        user can test what a skill/playbook does — and inspect the
+        resulting receipt — before arming it as a schedule or watch.
+        Exactly one of ``playbook_id`` / ``skill_ref`` must be set (zero
+        or both → 422). ``target_kb_id`` / ``project_id`` are optional
+        scope; ``max_cost_usd`` is the per-run cap (NULL falls back to the
+        config default so R4 always arms). Gated by opt-in
+        (``autonomous_enabled``); the spawned session runs under the same
+        R4/R5/R6 brakes as every other session. Per-user isolated. Audited.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutonomousManualRunRequest'
+      responses:
+        '201':
+          description: Session spawned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutonomousSessionRead'
+        '401':
+          description: Not authenticated
+        '403':
+          description: Autonomous layer not enabled for this user
+        '422':
+          description: Invalid target (need exactly one of playbook_id/skill_ref)
+
 # ============================================================
 # COMPONENTS
 # ============================================================
@@ -5343,6 +5379,21 @@ components:
         playbook_id: {type: string, format: uuid, nullable: true}
         skill_ref: {type: string, nullable: true}
         target_kb_id: {type: string, format: uuid, nullable: true}
+
+    AutonomousManualRunRequest:
+      type: object
+      description: |
+        Request body for ``POST /autonomous/run-now``.  Spawns one
+        ``trigger_kind='manual'`` session.  Exactly one of ``playbook_id``
+        / ``skill_ref`` must be set (zero or both → 422).  ``target_kb_id``
+        / ``project_id`` are optional scope.  ``max_cost_usd`` is the
+        per-run cap (NULL → fall back to the config default).
+      properties:
+        playbook_id: {type: string, format: uuid, nullable: true}
+        skill_ref: {type: string, nullable: true}
+        target_kb_id: {type: string, format: uuid, nullable: true}
+        project_id: {type: string, format: uuid, nullable: true}
+        max_cost_usd: {type: string, nullable: true}
 
     AutonomousScheduleListResponse:
       type: object

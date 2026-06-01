@@ -25,7 +25,7 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class TriggerKind(StrEnum):
@@ -185,6 +185,33 @@ class AutonomousScheduleUpdate(BaseModel):
     skill_ref: str | None = None
     target_kb_id: uuid.UUID | None = None
     max_cost_usd: Decimal | None = None
+
+
+class AutonomousManualRunRequest(BaseModel):
+    """Request body for ``POST /autonomous/run-now`` (Phase 1, §4.4).
+
+    Spawns a single one-off autonomous session (``trigger_kind='manual'``)
+    so a user can test what a skill/playbook does — and inspect the
+    resulting receipt — before arming it as a schedule or watch. Exactly
+    one of ``playbook_id`` / ``skill_ref`` must be set (the agent runs an
+    existing artifact; custom-task authoring is out of scope for Phase 1).
+    ``target_kb_id`` and ``project_id`` are optional scope. ``max_cost_usd``
+    is the per-run cap (NULL = fall back to
+    ``settings.autonomous_default_max_cost_usd`` at spawn time, so R4 always
+    trips).
+    """
+
+    playbook_id: uuid.UUID | None = None
+    skill_ref: str | None = None
+    target_kb_id: uuid.UUID | None = None
+    project_id: uuid.UUID | None = None
+    max_cost_usd: Decimal | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one_target(self) -> AutonomousManualRunRequest:
+        if (self.playbook_id is None) == (self.skill_ref is None):
+            raise ValueError("exactly one of playbook_id or skill_ref must be set")
+        return self
 
 
 class AutonomousScheduleListResponse(BaseModel):

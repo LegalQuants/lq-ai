@@ -34,6 +34,7 @@ Cross-user probes return 404 — not 403 — to avoid existence disclosure
 from __future__ import annotations
 
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -48,6 +49,7 @@ from app.audit import audit_action
 from app.autonomous.audit import autonomous_audit
 from app.autonomous.cron import next_run_after, validate_cron_expr
 from app.autonomous.receipt import build_receipt
+from app.config import get_settings
 from app.db.session import get_db
 from app.models.autonomous import (
     AutonomousMemory,
@@ -61,6 +63,7 @@ from app.models.autonomous import (
 from app.models.knowledge import KnowledgeBase
 from app.models.project import Project
 from app.schemas.autonomous import (
+    AutonomousManualRunRequest,
     AutonomousMemoryListResponse,
     AutonomousMemoryRead,
     AutonomousNotificationListResponse,
@@ -85,6 +88,7 @@ from app.schemas.autonomous import (
     PromotePrecedentRequest,
     ProposalState,
 )
+from app.workers.queue import enqueue_autonomous_session_job
 
 router = APIRouter(prefix="/autonomous", tags=["autonomous"])
 
@@ -1085,6 +1089,91 @@ async def create_schedule(
     await db.refresh(schedule)
 
     return AutonomousScheduleRead.model_validate(schedule)
+
+
+async def _spawn_manual_session(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    body: AutonomousManualRunRequest,
+    enqueue: Callable[[uuid.UUID], Awaitable[bool]] | None = None,
+) -> AutonomousSession:
+    """Create + enqueue a one-off manual autonomous session.
+
+    Mirrors the session construction in
+    :func:`app.workers.autonomous_worker._run_schedule_sweep`: builds
+    ``params`` carrying only the non-null target keys, sets a non-null
+    ``max_cost_usd`` (per-run cap or the config default so R4 always
+    arms), flushes to obtain the id, then best-effort enqueues. The
+    five-phase executor + R4/R5/R6 brakes + receipt are unchanged.
+    """
+    enqueue_fn = enqueue if enqueue is not None else enqueue_autonomous_session_job
+    settings = get_settings()
+
+    params: dict[str, object] = {"since": None}
+    if body.target_kb_id is not None:
+        params["kb_id"] = str(body.target_kb_id)
+    if body.playbook_id is not None:
+        params["playbook_id"] = str(body.playbook_id)
+    if body.skill_ref is not None:
+        params["skill_ref"] = body.skill_ref
+
+    session = AutonomousSession(
+        user_id=user_id,
+        project_id=body.project_id,
+        trigger_kind="manual",
+        trigger_ref=None,
+        status="running",
+        current_phase="intake",
+        max_cost_usd=body.max_cost_usd
+        if body.max_cost_usd is not None
+        else settings.autonomous_default_max_cost_usd,
+        params=params,
+    )
+    db.add(session)
+    await db.flush()
+    await enqueue_fn(session.id)
+    return session
+
+
+@router.post(
+    "/run-now",
+    response_model=AutonomousSessionRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Run a skill or playbook once now (one-off manual autonomous session)",
+    responses={
+        201: {"description": "Session spawned"},
+        403: {"description": "Autonomous layer not enabled for this user"},
+        422: {"description": "Invalid target (need exactly one of playbook_id/skill_ref)"},
+        401: {"description": "Not authenticated"},
+    },
+)
+async def run_now(
+    body: AutonomousManualRunRequest,
+    request: Request,
+    user: AutonomousEnabledUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AutonomousSessionRead:
+    """POST /api/v1/autonomous/run-now
+
+    Spawn a single ``trigger_kind='manual'`` session so the user can test
+    a skill/playbook and inspect its receipt before arming a schedule or
+    watch. Gated by opt-in (``AutonomousEnabledUser``); the spawned
+    session runs under the same R4/R5/R6 brakes as every other session.
+    Audited.
+    """
+    session = await _spawn_manual_session(db, user_id=user.id, body=body)
+    await audit_action(
+        db,
+        user_id=user.id,
+        action="autonomous_session.run_now",
+        resource_type="autonomous_session",
+        resource_id=str(session.id),
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(session)
+    return AutonomousSessionRead.model_validate(session)
 
 
 @router.get(

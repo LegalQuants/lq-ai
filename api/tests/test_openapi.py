@@ -181,6 +181,8 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         # M4-C1 — notification read/dismiss API (list + mark-read)
         "/api/v1/autonomous/notifications",
         "/api/v1/autonomous/notifications/{notification_id}/read",
+        # Phase 1 §4.4 — one-off manual session spawn (run a skill/playbook now)
+        "/api/v1/autonomous/run-now",
     }
 )
 
@@ -269,7 +271,9 @@ async def test_openapi_paths_match_sketch() -> None:
     # M4-C1 adds two new paths:
     # /api/v1/autonomous/notifications
     # /api/v1/autonomous/notifications/{notification_id}/read
-    assert len(actual) == 113
+    # Phase 1 §4.4 adds one new path:
+    # /api/v1/autonomous/run-now
+    assert len(actual) == 114
 
 
 @pytest.mark.unit
