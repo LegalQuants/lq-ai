@@ -10,6 +10,7 @@
 	const NOTIFICATIONS_HREF = '/lq-ai/autonomous/notifications';
 
 	const navLinks = [
+		{ href: '/lq-ai/autonomous/configure',      label: 'Configure',     exact: false },
 		{ href: '/lq-ai/autonomous',               label: 'Sessions',      exact: true  },
 		{ href: '/lq-ai/autonomous/memory',         label: 'Memory',        exact: false },
 		{ href: '/lq-ai/autonomous/precedents',     label: 'Precedents',    exact: false },

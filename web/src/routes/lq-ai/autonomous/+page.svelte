@@ -209,7 +209,12 @@
 	{/if}
 
 	{#if !loading && sessions.length === 0 && !listError}
-		<p class="empty-state">No autonomous sessions yet.</p>
+		<p class="empty-state">
+			No runs yet. Use <strong>Run now</strong> to run a skill or playbook once, or set up a
+			<a class="empty-link" href="/lq-ai/autonomous/schedules">Schedule</a> or
+			<a class="empty-link" href="/lq-ai/autonomous/watches">Watch</a>. New here? See
+			<a class="empty-link" href="/lq-ai/autonomous/configure">Configure</a>.
+		</p>
 	{/if}
 
 	{#if sessions.length > 0}
@@ -512,6 +517,16 @@
 		color: var(--lq-text-secondary);
 		font-style: italic;
 		margin: 0;
+	}
+
+	.empty-link {
+		font-style: normal;
+		color: var(--lq-accent);
+		text-decoration: none;
+	}
+
+	.empty-link:hover {
+		text-decoration: underline;
 	}
 
 	.sessions-table {

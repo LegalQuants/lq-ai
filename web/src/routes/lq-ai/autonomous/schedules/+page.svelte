@@ -346,7 +346,9 @@
 
 	{#if !loading && schedules.length === 0 && !listError}
 		<p class="empty-state">
-			No schedules yet. Use <strong>New schedule</strong> to create a cron-driven run.
+			No schedules yet. Use <strong>New schedule</strong> to create a cron-driven run. A schedule
+			runs a skill or playbook on a cron cadence. See
+			<a class="empty-link" href="/lq-ai/autonomous/configure">Configure</a> to learn how.
 		</p>
 	{/if}
 
@@ -700,6 +702,16 @@
 		color: var(--lq-text-secondary);
 		font-style: italic;
 		margin: 0;
+	}
+
+	.empty-link {
+		color: var(--lq-accent);
+		text-decoration: none;
+		font-style: normal;
+	}
+
+	.empty-link:hover {
+		text-decoration: underline;
 	}
 
 	/* ------------------------------------------------------------------ */

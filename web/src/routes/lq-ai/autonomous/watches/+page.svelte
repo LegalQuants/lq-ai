@@ -343,7 +343,8 @@
 	{#if !loading && watches.length === 0 && !listError}
 		<p class="empty-state">
 			No watches yet. Use <strong>New watch</strong> to trigger a run when documents arrive in a
-			Knowledge Base.
+			Knowledge Base. See
+			<a class="empty-link" href="/lq-ai/autonomous/configure">Configure</a> to learn how.
 		</p>
 	{/if}
 
@@ -666,6 +667,16 @@
 		color: var(--lq-text-secondary);
 		font-style: italic;
 		margin: 0;
+	}
+
+	.empty-link {
+		color: var(--lq-accent);
+		text-decoration: none;
+		font-style: normal;
+	}
+
+	.empty-link:hover {
+		text-decoration: underline;
 	}
 
 	/* ------------------------------------------------------------------ */
