@@ -81,7 +81,12 @@ _SKILL_SEPARATOR: Final[str] = "\n\n---\n\n"
 _PREPEND_SEPARATOR: Final[str] = "\n\n---\n\n## Operator system instructions\n\n"
 
 
-def interpolate(template: str, bindings: dict[str, Any]) -> str:
+def interpolate(
+    template: str,
+    bindings: dict[str, Any],
+    *,
+    consumed: set[str] | None = None,
+) -> str:
     """Substitute ``{{name}}`` placeholders with values from ``bindings``.
 
     Unknown variables are left in place. Non-string values are
@@ -90,11 +95,21 @@ def interpolate(template: str, bindings: dict[str, Any]) -> str:
     * ``interpolate("hello {{name}}", {"name": "Ada"}) == "hello Ada"``
     * ``interpolate("hello {{name}}", {})              == "hello {{name}}"``
     * ``interpolate("hi", {"unused": "x"})             == "hi"``
+
+    Optional out-param ``consumed``: if a mutable set is passed, every
+    binding key that was actually substituted by a ``{{placeholder}}``
+    is added to it. This lets callers (DE-328) detect which bound
+    inputs the template never referenced so they can surface them
+    elsewhere instead of silently dropping them. The return value and
+    substitution behavior are unchanged whether or not ``consumed`` is
+    passed — existing callers that omit it are unaffected.
     """
 
     def _replace(match: re.Match[str]) -> str:
         var = match.group(1)
         if var in bindings:
+            if consumed is not None:
+                consumed.add(var)
             value = bindings[var]
             if value is None:
                 return ""
@@ -219,8 +234,13 @@ def _render_skill(skill: Skill, *, inputs: dict[str, Any]) -> _AssembledSkill:
     if skill.description:
         parts.append(skill.description)
 
+    # Track which bound input keys are actually consumed by a
+    # ``{{placeholder}}`` across the body and every reference file, so
+    # we can surface the leftovers (DE-328) rather than dropping them.
+    consumed: set[str] = set()
+
     # Body markdown — apply substitution to the body text.
-    body = interpolate(skill.content_md or "", inputs)
+    body = interpolate(skill.content_md or "", inputs, consumed=consumed)
     parts.append(body.strip("\n"))
 
     # Reference files — appended verbatim with clear delimiters so the
@@ -230,8 +250,28 @@ def _render_skill(skill: Skill, *, inputs: dict[str, Any]) -> _AssembledSkill:
     # that says "for {{counterparty}} ..."); permissive substitution
     # is the right default.
     for ref in skill.reference_files:
-        ref_body = interpolate(ref.content or "", inputs)
+        ref_body = interpolate(ref.content or "", inputs, consumed=consumed)
         parts.append(f"## Reference: {ref.path}\n\n{ref_body.strip()}\n")
+
+    # DE-328 (Option A) — surface caller-bound inputs that no
+    # ``{{placeholder}}`` consumed. None of the built-in skill bodies use
+    # ``{{}}`` tokens, so without this the collected inputs (jurisdiction,
+    # audience, text, …) would vanish before reaching the model. We append
+    # a single labelled block per skill listing each leftover input whose
+    # value is non-empty. Insertion order of ``inputs`` is preserved.
+    # Templated skills whose inputs are all consumed get no block (no
+    # duplication); a skill with no leftover inputs gets no block.
+    leftover = [k for k in inputs if k not in consumed]
+    leftover_lines: list[str] = []
+    for key in leftover:
+        value = inputs[key]
+        if value is None or value == "":
+            continue
+        leftover_lines.append(f"- {key}: {value!s}")
+    if leftover_lines:
+        display = skill.title or skill.name
+        block = f"### Provided inputs for {display}\n\n" + "\n".join(leftover_lines)
+        parts.append(block)
 
     return _AssembledSkill(name=skill.name, text="\n\n".join(parts).strip())
 

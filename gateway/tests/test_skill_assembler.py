@@ -249,6 +249,116 @@ def test_assemble_includes_reference_files_in_separate_blocks() -> None:
     assert "ref b" in out
 
 
+# --- DE-328: unconsumed inputs surfaced as a labelled block ------------------
+
+
+@pytest.mark.unit
+def test_assemble_surfaces_unconsumed_inputs_for_non_templated_skill() -> None:
+    """A non-templated body (no ``{{}}``) must not silently drop bound inputs.
+
+    None of the built-in skills use ``{{placeholder}}`` tokens, so without
+    DE-328 (Option A) the caller-bound inputs vanish before reaching the
+    model. The assembled prompt must carry each leftover input's name AND
+    value under a "Provided inputs" block.
+    """
+
+    skill = Skill(
+        name="comms-improver",
+        title="Comms Improver",
+        content_md="Improve the writing. No placeholders here.",
+        content_yaml="name: comms-improver\n",
+    )
+    out = assemble_skill_prompt(
+        [skill],
+        skill_inputs={
+            "comms-improver": {
+                "audience": "executives",
+                "text": "Our Q3 results",
+            }
+        },
+    )
+    assert "### Provided inputs for Comms Improver" in out
+    assert "audience" in out
+    assert "executives" in out
+    assert "text" in out
+    assert "Our Q3 results" in out
+
+
+@pytest.mark.unit
+def test_assemble_does_not_duplicate_consumed_templated_inputs() -> None:
+    """An input consumed by ``{{}}`` is substituted in-body, not re-listed.
+
+    A templated skill whose inputs are all consumed must get NO "Provided
+    inputs" block, so the value isn't duplicated (once in-body, once in the
+    block).
+    """
+
+    skill = Skill(
+        name="alpha",
+        title="Alpha",
+        content_md="Review {{document}} carefully.",
+        content_yaml="name: alpha\n",
+    )
+    out = assemble_skill_prompt(
+        [skill],
+        skill_inputs={"alpha": {"document": "the NDA"}},
+    )
+    assert "Review the NDA carefully." in out
+    assert "Provided inputs" not in out
+
+
+@pytest.mark.unit
+def test_assemble_block_only_lists_unconsumed_inputs() -> None:
+    """Mixed case: consumed inputs substitute in-body; only leftovers list."""
+
+    skill = Skill(
+        name="alpha",
+        title="Alpha",
+        content_md="Review {{document}} now.",
+        content_yaml="name: alpha\n",
+    )
+    out = assemble_skill_prompt(
+        [skill],
+        skill_inputs={"alpha": {"document": "the NDA", "audience": "the board"}},
+    )
+    assert "Review the NDA now." in out
+    assert "### Provided inputs for Alpha" in out
+    assert "audience" in out
+    assert "the board" in out
+    # The consumed input is not duplicated in the block.
+    assert out.count("the NDA") == 1
+
+
+@pytest.mark.unit
+def test_assemble_omits_empty_value_inputs_from_block() -> None:
+    """Leftover inputs whose value is None/empty-string are not listed."""
+
+    skill = Skill(
+        name="alpha",
+        title="Alpha",
+        content_md="No placeholders.",
+        content_yaml="name: alpha\n",
+    )
+    out = assemble_skill_prompt(
+        [skill],
+        skill_inputs={"alpha": {"audience": "execs", "blank": "", "missing": None}},
+    )
+    assert "### Provided inputs for Alpha" in out
+    assert "audience: execs" in out
+    assert "blank" not in out
+    assert "missing" not in out
+
+
+@pytest.mark.unit
+def test_interpolate_records_consumed_keys() -> None:
+    """The optional ``consumed`` out-param tracks substituted keys only."""
+
+    consumed: set[str] = set()
+    out = interpolate("hi {{name}}", {"name": "Ada", "unused": "x"}, consumed=consumed)
+    assert out == "hi Ada"
+    assert consumed == {"name"}
+
+
 @pytest.mark.unit
 def test_assemble_concatenates_multiple_skills_with_separator() -> None:
     a = _basic_skill("alpha", body="Alpha body")
