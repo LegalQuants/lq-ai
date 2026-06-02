@@ -111,6 +111,35 @@ async def test_delete_schedules_deletion_and_revokes_sessions(
 
 
 @pytest.mark.integration
+async def test_users_me_exposes_deletion_scheduled_at(
+    client: AsyncClient, db_session: AsyncSession, seed_user: User
+) -> None:
+    """GET /users/me surfaces deletion_scheduled_at (Donna P1.4).
+
+    A user's own session must be able to tell on load whether a deletion is
+    pending — the field is null before scheduling and carries the scheduled
+    timestamp after, matching the POST /users/me/delete response.
+    """
+    # Before any deletion: field present and null.
+    before = await client.get("/api/v1/users/me", headers=_bearer(seed_user))
+    assert before.status_code == 200, before.text
+    assert "deletion_scheduled_at" in before.json()
+    assert before.json()["deletion_scheduled_at"] is None
+
+    # Schedule a deletion.
+    sched = await client.post("/api/v1/users/me/delete", headers=_bearer(seed_user))
+    assert sched.status_code == 202, sched.text
+    scheduled_at = sched.json()["scheduled_deletion_at"]
+
+    # /users/me now reflects the pending-deletion timestamp.
+    after = await client.get("/api/v1/users/me", headers=_bearer(seed_user))
+    assert after.status_code == 200, after.text
+    exposed = after.json()["deletion_scheduled_at"]
+    assert exposed is not None
+    assert datetime.fromisoformat(exposed) == datetime.fromisoformat(scheduled_at)
+
+
+@pytest.mark.integration
 async def test_delete_is_idempotent(
     client: AsyncClient, db_session: AsyncSession, seed_user: User
 ) -> None:

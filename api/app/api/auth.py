@@ -108,6 +108,11 @@ class UserPublic(BaseModel):
     provenance_pills: str = "always"
     created_at: datetime
     last_login_at: datetime | None = None
+    # GDPR Article 17 grace-period delete: non-null while a deletion is
+    # pending (set by POST /users/me/delete, cleared by .../delete/cancel).
+    # Surfaced here so a user's own session can render a "deletion pending —
+    # cancel by <date>" state on load (Donna P1.4), not just the admin view.
+    deletion_scheduled_at: datetime | None = None
 
     @classmethod
     def from_user(cls, user: User) -> UserPublic:
@@ -126,6 +131,7 @@ class UserPublic(BaseModel):
             provenance_pills=getattr(user, "provenance_pills", "always"),
             created_at=user.created_at,
             last_login_at=user.last_login_at,
+            deletion_scheduled_at=user.deletion_scheduled_at,
         )
 
 

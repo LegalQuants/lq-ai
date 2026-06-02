@@ -5778,6 +5778,9 @@ components:
             by default) vs. ``collapsed`` (hidden until expanded).
         created_at: {type: string, format: date-time}
         last_login_at: {type: string, format: date-time, nullable: true}
+        deletion_scheduled_at:
+          {type: string, format: date-time, nullable: true,
+           description: "Non-null while a GDPR Article 17 grace-period deletion is pending (set by POST /users/me/delete, cleared by .../delete/cancel)."}
 
     UserPreferences:
       type: object
