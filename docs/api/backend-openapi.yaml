@@ -266,6 +266,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/User'
+    patch:
+      tags: [users]
+      summary: Update the caller's own profile (display_name)
+      description: |
+        Bearer-authenticated. Caller-scoped — updates only the
+        authenticated user's own row; no user id is accepted from the
+        path or body. Currently edits `display_name` only: the value is
+        trimmed, must be non-empty after trimming, and is length-capped
+        (200 chars). Omitting `display_name` (or sending an empty body)
+        is a 422 — there is nothing to update. Writes a
+        `user.profile_updated` audit row listing the changed fields and
+        returns the updated `User` (same shape as `GET /users/me`).
+
+        Email self-service editing is intentionally out of scope on this
+        surface — changing the login email pulls in re-verification, MFA,
+        and uniqueness concerns and warrants its own dedicated flow (a
+        future enhancement).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UserProfileUpdate'}
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '422': {description: Validation error (empty/whitespace/over-length display_name, or no fields to update)}
 
   /api/v1/users/me/export:
     post:
@@ -5804,6 +5834,27 @@ components:
           enum: [always, collapsed]
         autonomous_enabled:
           type: boolean
+
+    UserProfileUpdate:
+      type: object
+      description: |
+        PATCH body for `/api/v1/users/me`. Caller-scoped self-edit of the
+        user's own profile. Currently `display_name` only: when supplied
+        it is trimmed and must be non-empty after trimming. At least one
+        updatable field must be present (an all-omitted body is a 422).
+
+        Email self-service editing is intentionally out of scope here —
+        changing the login email pulls in re-verification, MFA, and
+        uniqueness concerns and is deferred to a dedicated flow.
+      properties:
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: |
+            New display name. Trimmed server-side; must be non-empty after
+            trimming. Omit to leave unchanged (but at least one field must
+            be present, so an empty body is rejected).
 
     Project:
       type: object

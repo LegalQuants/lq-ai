@@ -95,6 +95,8 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("POST", "/api/v1/auth/refresh"),
     ("POST", "/api/v1/auth/logout"),
     ("GET", "/api/v1/users/me"),
+    # Donna-3 — caller-scoped profile edit (display_name)
+    ("PATCH", "/api/v1/users/me"),
     # B2 — first-run admin + forced password change
     ("POST", "/api/v1/auth/change-password"),
     # D5 — MFA enrollment + verification
