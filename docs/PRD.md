@@ -4435,6 +4435,8 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 #### DE-328 — `skill_inputs` collected from the UI never reach the model for non-templated skills (M4-D2 finding)
 
+**Status:** ✅ RESOLVED (post-v0.4.0, PR #115 / `396e19f`). Implemented Option A: `interpolate` now records which binding keys a `{{placeholder}}` consumes, and `_render_skill` appends each skill's unconsumed bound inputs as a `### Provided inputs for <skill>` block (across body + reference files), so non-templated built-in skills surface their collected inputs to the model. Templated inputs stay in-body (no duplication); the Organization Profile path is unaffected. Behavior-only; no schema change.
+
 **Priority:** P2 · **Effort:** S · **Good first issue** (community-suitable)
 
 **Context:** `MessageCreate.skill_inputs` is accepted by the backend, anonymized, and forwarded to the gateway as `lq_ai_skill_inputs`, but the gateway assembler (`gateway/app/skills/assembler.py` — `interpolate` / `_render_skill` / `assemble_skill_prompt`) only substitutes `{{placeholder}}` tokens in a skill body and drops any bound input the body never references (its docstring notes "surplus inputs the body never references are tolerated"). None of the 14 built-in `skills/*/SKILL.md` bodies use `{{}}` placeholders, so collected inputs (jurisdiction, perspective, audience, …) silently vanish before reaching the model for every built-in skill. User-skill bodies that *do* contain `{{}}` interpolate correctly, confirming the mechanism works only for templated bodies.
@@ -4442,6 +4444,18 @@ Two bulk operations as originally written in the M3-C4 spec:
 **Specific scope (recommended fix = Option A):** After interpolation in `_render_skill` / `assemble_skill_prompt`, take the bound inputs that were *not* consumed by a `{{placeholder}}` and append them per skill as a short labelled context block (e.g. `### Provided inputs for {skill}` / `- {name}: {value}`). This is backward-compatible — templated skills are unaffected, the block only carries the leftovers — and needs no corpus edits. Add a gateway test (e.g. in `gateway/tests/test_inference_skill_assembly.py`) asserting a non-templated skill's assembled prompt contains the bound input's name and value. Option B (the higher-fidelity alternative) is to add `{{}}` placeholders to every built-in `SKILL.md` body matching its declared `inputs`, but that touches every skill file and must stay in sync with the frontmatter; ship Option A as the safety net first and adopt B opportunistically.
 
 **When to ship:** Post-v0.4.0; well-scoped for community pickup (Option A is contained to the assembler plus one test).
+
+---
+
+#### DE-329 — Self-service email editing on `PATCH /api/v1/users/me` (Donna profile-edit finding)
+
+**Priority:** P3 · **Effort:** M
+
+**Context:** `PATCH /api/v1/users/me` (the editable-profile endpoint added for the Donna frontend) was deliberately scoped to **`display_name` only**. Self-service email editing was held back because it pulls in a cluster of auth-adjacent concerns the display-name change does not: a uniqueness collision must return `409` in an id-probing-safe way (a duplicate-email probe must not reveal whether an address is already registered), and changing the address a user authenticates/receives notifications with generally warrants a re-verification step (confirm the new address before it becomes live) and possibly an MFA/step-up gate, since email is an account-recovery vector. Shipping `display_name` alone unblocked Donna's editable-profile slice without opening those questions.
+
+**Specific scope:** Extend `UserProfileUpdate` (`api/app/api/users.py`) with an optional `email` field. On change: validate format; check uniqueness against `users.email` and return `409` on collision **without** leaking which address collided (consistent with the project's id-probing-safe idiom); decide and implement the verification model (recommended: write the new address to a pending-verification field, email a confirmation token, and only swap `users.email` on confirmation — rather than mutating it live); decide whether a step-up/MFA challenge is required for the change. Update the `user.profile_updated` audit detail to record the email change (action only, not the address values), and update `docs/api/backend-openapi.yaml` (`409` response + the new field). Add tests for the happy path, the `409` collision (id-probing-safe), and the verification flow.
+
+**When to ship:** When the editable-profile surface needs email editing; depends on a product decision about the verification/step-up model first.
 
 ---
 
