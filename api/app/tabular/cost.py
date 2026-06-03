@@ -61,6 +61,8 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.citation.cost import estimate_judge_call_cost_usd
+from app.clients.gateway import EnsembleConfig
 from app.models.inference import InferenceRoutingLog
 from app.schemas.tabular import ColumnSpec, TabularPreviewCostResponse
 
@@ -167,6 +169,7 @@ async def estimate_tabular_execution_cost(
     *,
     document_ids: list[UUID],
     columns: list[ColumnSpec],
+    ensemble_config: EnsembleConfig | None = None,
 ) -> TabularPreviewCostResponse:
     """Compute the full cost-preview payload for one tabular execution.
 
@@ -175,12 +178,42 @@ async def estimate_tabular_execution_cost(
     cell count; bucketizes cells by ``minimum_inference_tier`` for
     the ``per_tier_breakdown`` informational field.
 
+    Ensemble premium (Donna #6)
+    ---------------------------
+
+    When ``ensemble_config`` is supplied and a column's effective
+    ``ensemble_verification`` flag is true, each of that column's cells
+    runs one Stage-4 ensemble pass — N parallel judge-model calls. The
+    premium per ensemble cell is
+    ``sum(estimate_judge_call_cost_usd(db, judge_model=m) for m in
+    ensemble_config.judge_models)`` — the SAME per-model rolling-average
+    primitive the chat-send cost pre-flight uses
+    (:func:`app.citation.cost.estimate_judge_call_cost_usd`), so the
+    tabular preview and the chat budget agree on judge costs. Total
+    premium = that per-pass cost x the number of ensemble cells, where
+    the ensemble-cell count is ``n_docs x (count of columns whose
+    effective flag is true)``. ``estimated_cost_usd`` returned here is
+    the TOTAL: base extraction + premium.
+
+    Effective per-column flag mirrors the executor's Task-1 resolution:
+    the column's own value when set, else the deployment default
+    (``ensemble_config.default_enabled``) when an ensemble is configured,
+    else false. Skill-level inheritance already happened upstream in
+    ``_resolve_columns``, so a remaining ``None`` here means "inherit
+    deployment default". A column only contributes premium when its
+    effective flag is true AND ``ensemble_config is not None`` (the
+    gateway must have an ensemble to run).
+
+    ``db=None`` keeps working: the judge estimator returns its cold-start
+    default, so ensemble columns still preview a non-zero (conservative)
+    premium.
+
     Edge case: an empty column list yields a zero-cell preview with
-    zero cost / zero tokens / empty breakdown. The endpoint layer's
-    request validation rejects this before it reaches the estimator
-    (``min_length=1`` on ``columns`` in the request schema), but the
-    estimator is defensive about edge inputs so callers building
-    previews internally don't crash on empty drafts.
+    zero cost / zero tokens / empty breakdown / zero ensemble fields.
+    The endpoint layer's request validation rejects this before it
+    reaches the estimator (``min_length=1`` on ``columns`` in the
+    request schema), but the estimator is defensive about edge inputs
+    so callers building previews internally don't crash on empty drafts.
     """
 
     cells_count = len(document_ids) * len(columns)
@@ -191,11 +224,13 @@ async def estimate_tabular_execution_cost(
             estimated_tokens=0,
             estimated_cost_usd=Decimal("0"),
             per_tier_breakdown={},
+            ensemble_cells_count=0,
+            ensemble_premium_usd=Decimal("0"),
         )
 
     per_cell_cost, per_cell_tokens = await _estimate_per_cell_metrics(db)
 
-    estimated_cost = per_cell_cost * Decimal(cells_count)
+    base_cost = per_cell_cost * Decimal(cells_count)
     estimated_tokens = per_cell_tokens * cells_count
 
     per_tier_breakdown = _bucketize_cells_by_tier(
@@ -203,12 +238,48 @@ async def estimate_tabular_execution_cost(
         columns=columns,
     )
 
+    ensemble_column_count = sum(1 for col in columns if _column_runs_ensemble(col, ensemble_config))
+    ensemble_cells_count = len(document_ids) * ensemble_column_count
+
+    ensemble_premium = Decimal("0")
+    if ensemble_config is not None and ensemble_cells_count > 0:
+        per_pass_cost = sum(
+            [
+                await estimate_judge_call_cost_usd(db, judge_model=model)
+                for model in ensemble_config.judge_models
+            ],
+            Decimal("0"),
+        )
+        ensemble_premium = per_pass_cost * Decimal(ensemble_cells_count)
+
     return TabularPreviewCostResponse(
         cells_count=cells_count,
         estimated_tokens=estimated_tokens,
-        estimated_cost_usd=estimated_cost,
+        estimated_cost_usd=base_cost + ensemble_premium,
         per_tier_breakdown=per_tier_breakdown,
+        ensemble_cells_count=ensemble_cells_count,
+        ensemble_premium_usd=ensemble_premium,
     )
+
+
+def _column_runs_ensemble(
+    column: ColumnSpec,
+    ensemble_config: EnsembleConfig | None,
+) -> bool:
+    """Resolve a column's effective ``ensemble_verification`` flag.
+
+    Mirrors Task-1's executor resolution: the column's explicit value
+    wins; a ``None`` falls back to the deployment default
+    (``ensemble_config.default_enabled``). A column can only actually run
+    an ensemble when the gateway has one configured, so this returns
+    false whenever ``ensemble_config is None`` regardless of the flag.
+    """
+
+    if ensemble_config is None:
+        return False
+    if column.ensemble_verification is not None:
+        return column.ensemble_verification
+    return ensemble_config.default_enabled
 
 
 def invalidate_cache() -> None:

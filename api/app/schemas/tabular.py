@@ -266,15 +266,43 @@ class TabularPreviewCostResponse(BaseModel):
 
     The UI uses ``estimated_cost_usd`` to decide whether to render
     the confirmation-checkbox gate (Decision C-5: gate above $1.00,
-    no friction below)."""
+    no friction below).
+
+    Ensemble columns cost more (Donna #6). When a column's effective
+    ``ensemble_verification`` flag is true, each of its cells runs one
+    Stage-4 ensemble pass (N judge-model calls) on top of the base
+    extraction. ``estimated_cost_usd`` is the TOTAL — base extraction
+    plus the ensemble premium — so the operator's confirmation reflects
+    the real spend. ``ensemble_premium_usd`` and ``ensemble_cells_count``
+    surface that premium explicitly."""
 
     cells_count: int
     estimated_tokens: int
+    """Extraction tokens only. EXCLUDES ensemble judge-call tokens, whose
+    cost is captured in ``ensemble_premium_usd`` — so this token figure
+    and ``estimated_cost_usd`` are intentionally asymmetric (the dollar
+    figure includes ensemble spend; the token figure does not)."""
+
     estimated_cost_usd: Decimal
+    """Total estimated cost: base extraction (``per_cell_cost x
+    cells_count``) plus ``ensemble_premium_usd``."""
+
     per_tier_breakdown: dict[str, int]
     """Map of tier name (e.g., ``"tier_2"``) -> cell count routed
     at that tier. Lets the operator see "20 cells at Tier 2,
     4 cells at Tier 4 for the high-stakes columns."""
+
+    ensemble_cells_count: int = 0
+    """Number of cells that will run ensemble verification — the count
+    of cells whose column has an effective ``ensemble_verification`` of
+    true (``n_docs x ensemble_column_count``). Zero when no column is
+    ensemble-verified or the gateway has no ensemble configured."""
+
+    ensemble_premium_usd: Decimal = Decimal("0")
+    """The ensemble judge-call cost included in ``estimated_cost_usd``.
+    Equals ``n_judges x per-judge-cost x ensemble_cells_count`` — one
+    ensemble pass (N parallel judge calls) per ensemble cell. Zero when
+    no cell is ensemble-verified."""
 
 
 class TabularExecutionResponse(BaseModel):

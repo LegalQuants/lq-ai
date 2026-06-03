@@ -29,6 +29,8 @@ from decimal import Decimal
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.citation.cost import DEFAULT_PER_JUDGE_USD, invalidate_cache as invalidate_judge_cache
+from app.clients.gateway import EnsembleConfig
 from app.models.inference import InferenceRoutingLog
 from app.schemas.tabular import ColumnSpec
 from app.tabular.cost import (
@@ -43,10 +45,34 @@ from app.tabular.cost import (
 
 @pytest.fixture(autouse=True)
 def _clean_cache() -> None:
-    """Reset the in-process cache between tests so cached values from
-    one test don't leak into the next."""
+    """Reset both in-process caches between tests so cached values from
+    one test don't leak into the next: the tabular per-cell cache and
+    the judge-cost cache (the ensemble premium reuses the latter)."""
 
     invalidate_cache()
+    invalidate_judge_cache()
+
+
+def _ensemble_config(
+    *,
+    default_enabled: bool = False,
+    judge_models: tuple[str, ...] = ("a", "b", "c"),
+) -> EnsembleConfig:
+    """Build an :class:`EnsembleConfig` for premium-cost assertions.
+
+    The aggregation_rule / max_cost / envelope_tier fields don't affect
+    the cost preview (the preview always counts one ensemble pass per
+    ensemble cell); only ``default_enabled`` and ``judge_models`` matter
+    here, so they get sensible fixed values.
+    """
+
+    return EnsembleConfig(
+        default_enabled=default_enabled,
+        judge_models=judge_models,
+        aggregation_rule="strict",
+        max_cost_per_message_usd=1.0,
+        envelope_tier=3,
+    )
 
 
 def _tabular_row(
@@ -373,3 +399,183 @@ async def test_execution_cost_empty_columns_yields_zero_cells() -> None:
     assert preview.estimated_cost_usd == Decimal("0")
     assert preview.estimated_tokens == 0
     assert preview.per_tier_breakdown == {}
+    # New ensemble fields default to zero on the empty edge case.
+    assert preview.ensemble_cells_count == 0
+    assert preview.ensemble_premium_usd == Decimal("0")
+
+
+# --- estimate_tabular_execution_cost: ensemble premium (Donna #6) -----------
+
+
+@pytest.mark.unit
+async def test_execution_cost_ensemble_column_previews_higher() -> None:
+    """An ensemble column previews HIGHER than the same shape without
+    ensemble config — the premium is one ensemble pass (N judge calls)
+    per ensemble cell, on top of the extraction rate."""
+
+    doc_ids = [uuid.uuid4() for _ in range(4)]
+    cols = [ColumnSpec(name="A", query="?", ensemble_verification=True)]
+    config = _ensemble_config(judge_models=("a", "b", "c"))
+
+    # Baseline: same columns, no ensemble config wired → no premium.
+    base = await estimate_tabular_execution_cost(
+        None,
+        document_ids=doc_ids,
+        columns=cols,
+    )
+
+    invalidate_cache()
+    invalidate_judge_cache()
+
+    premium_preview = await estimate_tabular_execution_cost(
+        None,
+        document_ids=doc_ids,
+        columns=cols,
+        ensemble_config=config,
+    )
+
+    assert premium_preview.estimated_cost_usd > base.estimated_cost_usd
+    # 4 docs * 1 ensemble column = 4 ensemble cells.
+    assert premium_preview.ensemble_cells_count == 4
+    assert premium_preview.ensemble_premium_usd > Decimal("0")
+    # db=None → each judge call costs the cold-start default; one pass is
+    # 3 judges, applied per ensemble cell.
+    expected_premium = DEFAULT_PER_JUDGE_USD * Decimal(3) * Decimal(4)
+    assert premium_preview.ensemble_premium_usd == expected_premium
+    # estimated_cost_usd is the TOTAL: base extraction + premium.
+    assert premium_preview.estimated_cost_usd == base.estimated_cost_usd + expected_premium
+
+
+@pytest.mark.unit
+async def test_execution_cost_no_ensemble_config_adds_no_premium() -> None:
+    """``ensemble_config=None`` → no premium even if a column has
+    ``ensemble_verification=True`` (can't run an ensemble the gateway
+    hasn't configured)."""
+
+    doc_ids = [uuid.uuid4() for _ in range(3)]
+    cols = [ColumnSpec(name="A", query="?", ensemble_verification=True)]
+
+    preview = await estimate_tabular_execution_cost(
+        None,
+        document_ids=doc_ids,
+        columns=cols,
+        ensemble_config=None,
+    )
+
+    assert preview.ensemble_cells_count == 0
+    assert preview.ensemble_premium_usd == Decimal("0")
+    # estimated_cost equals the pure extraction base (3 * 1 * default).
+    assert preview.estimated_cost_usd == DEFAULT_PER_CELL_USD * Decimal(3)
+
+
+@pytest.mark.unit
+async def test_execution_cost_mixed_columns_counts_only_ensemble_cells() -> None:
+    """A mix of one ensemble + one non-ensemble column charges the
+    premium only against the ensemble cells (n_docs * 1, not * 2)."""
+
+    doc_ids = [uuid.uuid4() for _ in range(5)]
+    cols = [
+        ColumnSpec(name="Ensemble", query="?", ensemble_verification=True),
+        ColumnSpec(name="Plain", query="?", ensemble_verification=False),
+    ]
+    config = _ensemble_config(judge_models=("a", "b"))
+
+    preview = await estimate_tabular_execution_cost(
+        None,
+        document_ids=doc_ids,
+        columns=cols,
+        ensemble_config=config,
+    )
+
+    # 5 docs * 1 ensemble column = 5 ensemble cells (the plain column
+    # contributes 0 to the ensemble count).
+    assert preview.ensemble_cells_count == 5
+    expected_premium = DEFAULT_PER_JUDGE_USD * Decimal(2) * Decimal(5)
+    assert preview.ensemble_premium_usd == expected_premium
+
+
+@pytest.mark.unit
+async def test_execution_cost_deployment_default_activates_null_column() -> None:
+    """A column with ``ensemble_verification=None`` inherits the
+    deployment default: ``default_enabled=True`` → counts as ensemble."""
+
+    doc_ids = [uuid.uuid4() for _ in range(3)]
+    cols = [ColumnSpec(name="A", query="?")]  # ensemble_verification defaults to None
+    config = _ensemble_config(default_enabled=True, judge_models=("a", "b"))
+
+    preview = await estimate_tabular_execution_cost(
+        None,
+        document_ids=doc_ids,
+        columns=cols,
+        ensemble_config=config,
+    )
+
+    assert preview.ensemble_cells_count == 3
+    assert preview.ensemble_premium_usd == DEFAULT_PER_JUDGE_USD * Decimal(2) * Decimal(3)
+
+
+@pytest.mark.unit
+async def test_execution_cost_deployment_default_off_null_column_no_premium() -> None:
+    """A column with ``ensemble_verification=None`` and
+    ``default_enabled=False`` → no premium."""
+
+    doc_ids = [uuid.uuid4() for _ in range(3)]
+    cols = [ColumnSpec(name="A", query="?")]
+    config = _ensemble_config(default_enabled=False, judge_models=("a", "b"))
+
+    preview = await estimate_tabular_execution_cost(
+        None,
+        document_ids=doc_ids,
+        columns=cols,
+        ensemble_config=config,
+    )
+
+    assert preview.ensemble_cells_count == 0
+    assert preview.ensemble_premium_usd == Decimal("0")
+
+
+@pytest.mark.unit
+async def test_execution_cost_empty_judge_models_yields_zero_premium() -> None:
+    """An ``EnsembleConfig`` with ``judge_models=()`` (empty tuple) and an
+    ensemble column → ``ensemble_premium_usd == Decimal("0")`` cleanly.
+
+    The premium is a sum over the judge models; an empty tuple sums to
+    zero rather than crashing. This path can't arise via the gateway
+    (it rejects empty judge_models), but ``estimate_tabular_execution_cost``
+    is a public function, so this pins the empty-judges behavior: zero
+    premium, no error.
+    """
+
+    doc_ids = [uuid.uuid4() for _ in range(3)]
+    cols = [ColumnSpec(name="A", query="?", ensemble_verification=True)]
+    config = _ensemble_config(judge_models=())
+
+    preview = await estimate_tabular_execution_cost(
+        None,
+        document_ids=doc_ids,
+        columns=cols,
+        ensemble_config=config,
+    )
+
+    # Empty judge_models → zero premium (sum over zero judges = 0).
+    assert preview.ensemble_premium_usd == Decimal("0")
+
+
+@pytest.mark.unit
+async def test_execution_cost_explicit_false_overrides_deployment_default() -> None:
+    """An explicit ``ensemble_verification=False`` wins over
+    ``default_enabled=True`` — no premium for that column."""
+
+    doc_ids = [uuid.uuid4() for _ in range(3)]
+    cols = [ColumnSpec(name="A", query="?", ensemble_verification=False)]
+    config = _ensemble_config(default_enabled=True, judge_models=("a", "b"))
+
+    preview = await estimate_tabular_execution_cost(
+        None,
+        document_ids=doc_ids,
+        columns=cols,
+        ensemble_config=config,
+    )
+
+    assert preview.ensemble_cells_count == 0
+    assert preview.ensemble_premium_usd == Decimal("0")

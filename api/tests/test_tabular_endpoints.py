@@ -25,6 +25,8 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.citation.cost import invalidate_cache as invalidate_judge_cache
+from app.clients.gateway import EnsembleConfig, get_gateway_client
 from app.db.session import get_db
 from app.main import app
 from app.models.document import Document, DocumentChunk
@@ -32,6 +34,7 @@ from app.models.file import File as FileModel
 from app.models.tabular import TabularExecution
 from app.models.user import User
 from app.security import create_access_token, hash_password
+from app.tabular import cost as tabular_cost
 
 
 def _override_get_db(db_session: AsyncSession):
@@ -319,3 +322,89 @@ async def test_get_execution_batches_across_two_documents(
     assert cit_b["source_file_id"] == str(doc_b.file_id)
     assert cit_b["source_page"] == 5
     assert cit_b["source_text"] == "bravo source text"
+
+
+# --- preview-cost: ensemble premium surface (Donna #6) ----------------------
+
+
+class _StubGateway:
+    """Minimal gateway stub for preview-cost — only the ensemble-config
+    accessor the endpoint touches is implemented."""
+
+    def __init__(self, ensemble_config: EnsembleConfig | None) -> None:
+        self._ensemble_config = ensemble_config
+
+    async def get_citation_engine_ensemble_config(self) -> EnsembleConfig | None:
+        return self._ensemble_config
+
+
+@pytest.mark.asyncio
+async def test_preview_cost_no_ensemble_config_back_compat(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """With no ensemble configured, the new fields are present and zero —
+    the back-compat shape the UI relies on when the gateway has no
+    ensemble. (The premium math itself is unit-tested in
+    tests/tabular/test_cost.py.)"""
+
+    user = await _make_user(db_session)
+    app.dependency_overrides[get_gateway_client] = lambda: _StubGateway(None)
+    tabular_cost.invalidate_cache()
+    invalidate_judge_cache()
+    try:
+        resp = await client.post(
+            "/api/v1/tabular/preview-cost",
+            headers=_bearer(user),
+            json={
+                "document_ids": [str(uuid.uuid4()) for _ in range(2)],
+                "columns": [
+                    {"name": "A", "query": "?", "ensemble_verification": True},
+                ],
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_gateway_client, None)
+
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    assert payload["ensemble_cells_count"] == 0
+    assert payload["ensemble_premium_usd"] == "0"
+
+
+@pytest.mark.asyncio
+async def test_preview_cost_ensemble_premium_applied(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """An ensemble-verified column drives a positive premium through the
+    endpoint when the gateway returns an ensemble config."""
+
+    user = await _make_user(db_session)
+    config = EnsembleConfig(
+        default_enabled=False,
+        judge_models=("a", "b", "c"),
+        aggregation_rule="strict",
+        max_cost_per_message_usd=1.0,
+        envelope_tier=3,
+    )
+    app.dependency_overrides[get_gateway_client] = lambda: _StubGateway(config)
+    tabular_cost.invalidate_cache()
+    invalidate_judge_cache()
+    try:
+        resp = await client.post(
+            "/api/v1/tabular/preview-cost",
+            headers=_bearer(user),
+            json={
+                "document_ids": [str(uuid.uuid4()) for _ in range(3)],
+                "columns": [
+                    {"name": "A", "query": "?", "ensemble_verification": True},
+                ],
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_gateway_client, None)
+
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    # 3 docs * 1 ensemble column = 3 ensemble cells.
+    assert payload["ensemble_cells_count"] == 3
+    assert float(payload["ensemble_premium_usd"]) > 0
