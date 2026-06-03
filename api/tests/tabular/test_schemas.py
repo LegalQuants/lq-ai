@@ -27,6 +27,7 @@ def _persisted_cell(
     cited_chunk_ids: list[str],
     confidence: str,
     error: str | None = None,
+    verification_method: str | None = None,
 ) -> dict[str, object]:
     """Mirror the exact JSONB shape the executor persists per cell."""
     return {
@@ -36,6 +37,7 @@ def _persisted_cell(
         "tier_used": None,
         "cost_usd": "0",
         "error": error,
+        "verification_method": verification_method,
     }
 
 
@@ -82,6 +84,60 @@ def test_synthesized_citation_id_is_deterministic() -> None:
     first = TabularRow.model_validate(payload).cells["Col"].citations[0].citation_id
     second = TabularRow.model_validate(payload).cells["Col"].citations[0].citation_id
     assert first == second
+
+
+def test_synthesized_citation_carries_verification_method() -> None:
+    """A cell carrying ``verification_method`` mirrors it onto each
+    synthesized citation (Donna #6) so the navigable UI can badge the
+    ensemble-verified state per citation."""
+    document_id = uuid.uuid4()
+    chunk_a = uuid.uuid4()
+    chunk_b = uuid.uuid4()
+    row = TabularRow.model_validate(
+        {
+            "document_id": str(document_id),
+            "document_name": "nda-1.pdf",
+            "cells": {
+                "Governing Law": _persisted_cell(
+                    value="Delaware",
+                    cited_chunk_ids=[str(chunk_a), str(chunk_b)],
+                    confidence="high",
+                    verification_method="ensemble_strict",
+                ),
+            },
+        }
+    )
+
+    cell = row.cells["Governing Law"]
+    assert cell.verification_method == "ensemble_strict"
+    assert len(cell.citations) == 2
+    assert all(c.verification_method == "ensemble_strict" for c in cell.citations)
+
+
+def test_synthesized_citation_verification_method_none_when_absent() -> None:
+    """A non-ensemble cell (verification_method None) yields citations with
+    ``verification_method is None``."""
+    document_id = uuid.uuid4()
+    chunk = uuid.uuid4()
+    row = TabularRow.model_validate(
+        {
+            "document_id": str(document_id),
+            "document_name": "nda-1.pdf",
+            "cells": {
+                "Term": _persisted_cell(
+                    value="3 years",
+                    cited_chunk_ids=[str(chunk)],
+                    confidence="high",
+                    verification_method=None,
+                ),
+            },
+        }
+    )
+
+    cell = row.cells["Term"]
+    assert cell.verification_method is None
+    assert len(cell.citations) == 1
+    assert cell.citations[0].verification_method is None
 
 
 def test_failed_cell_with_no_chunks_yields_no_citations() -> None:

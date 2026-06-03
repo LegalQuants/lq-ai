@@ -153,7 +153,19 @@ def _resolve_columns(
         # Re-validate through the wire-side ColumnSpec so any
         # skill-side fields the wire schema doesn't honor are
         # stripped consistently.
-        return skill_name, [ColumnSpec.model_validate(col.model_dump()) for col in skill_columns]
+        resolved = [ColumnSpec.model_validate(col.model_dump()) for col in skill_columns]
+        # Bake the skill-level ensemble_verification fallback into each
+        # column at this single resolution point (Decision C-1
+        # snapshotting posture) so both preview-cost and execute see a
+        # consistent snapshot. A column that didn't declare its own
+        # value (None) inherits the skill-level value; an explicit
+        # True/False per column is left untouched.
+        skill_ensemble = record.frontmatter.lq_ai.ensemble_verification
+        if skill_ensemble is not None:
+            for col in resolved:
+                if col.ensemble_verification is None:
+                    col.ensemble_verification = skill_ensemble
+        return skill_name, resolved
 
     # ad_hoc branch — the request-validation min_length=1 on columns
     # in TabularExecutionCreate already covers the empty case.

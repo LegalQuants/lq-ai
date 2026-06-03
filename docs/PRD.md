@@ -4471,6 +4471,18 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 ---
 
+#### DE-331 — Mid-run ensemble verification cost ceiling for Tabular Review
+
+**Priority:** P3 · **Effort:** M
+
+**Context:** Tabular ensemble verification (Donna #6) runs one Stage-4 ensemble `verify()` pass per cell when a column's effective `ensemble_verification` flag is true, fanning out N parallel judge calls per cell across the up-to-200×10 cell grid. Unlike the chat-send path — which runs a per-message cost pre-flight (`_resolve_ensemble_config` in `api/app/api/chats.py`) and falls back to a single judge when the estimate exceeds `citation_engine.ensemble_verification.max_cost_per_message_usd` — the tabular executor has no mid-run cost ceiling. Cost is instead gated up-front: `POST /api/v1/tabular/preview-cost` surfaces the ensemble premium and the operator confirms `confirmed_cost_usd` before kickoff (Decision C-5). That up-front gate is sufficient for the v1 acceptance, but a long run whose live judge costs drift above the estimate will not self-throttle the way chat does.
+
+**Specific scope:** Add an in-loop ensemble cost ceiling to the tabular extraction node — e.g. track cumulative judge spend against `confirmed_cost_usd` (or a dedicated cap) and degrade ensemble cells to no-verify (or single-judge) once the ceiling is hit, mirroring the chat path's `max_cost_per_message_usd` fallback. Receipt the degradation so the result view can show "ensemble verification halted at cost ceiling" rather than silently dropping verification.
+
+**When to ship:** When operators run large ensemble-heavy tabular grids in production and the up-front estimate proves insufficient as the sole guardrail.
+
+---
+
 ## 10. Appendices
 
 ### Appendix A — Glossary

@@ -85,6 +85,11 @@ class _StubGateway:
             choices=[_StubChoice(message=_StubMessage(content=json.dumps(payload)))]
         )
 
+    async def get_citation_engine_ensemble_config(self) -> None:
+        # No ensemble configured in this span-tracing test; cells run the
+        # plain (non-ensemble) extraction path.
+        return None
+
 
 # ---------------------------------------------------------------------------
 # DB helpers

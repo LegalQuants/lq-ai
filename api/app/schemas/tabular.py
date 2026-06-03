@@ -116,6 +116,14 @@ class Citation(BaseModel):
     """The cited chunk's full ``document_chunks.content``. The frontend
     locates / highlights the cited span within this text."""
 
+    verification_method: str | None = None
+    """The Citation-Engine verification method backing this citation
+    (Donna #6), e.g. ``ensemble_strict`` / ``ensemble_majority``.
+    Mirrors the parent cell's ``verification_method`` onto each citation
+    so the navigable UI can badge the ensemble-verified state per
+    citation. ``None`` when the column isn't ensemble-verified or
+    verification didn't confirm the value."""
+
 
 class CellResult(BaseModel):
     """One cell in the tabular grid.
@@ -146,6 +154,12 @@ class CellResult(BaseModel):
     """Error message when ``confidence='failed'``. Populated by the
     cell node's try/except (model error, no citation found,
     Citation Engine rejection)."""
+
+    verification_method: str | None = None
+    """The Citation-Engine verification method for the cell (Donna #6),
+    e.g. ``ensemble_strict`` / ``ensemble_majority``. ``None`` when the
+    column isn't ensemble-verified or verification didn't confirm the
+    value (a verification miss never fails the cell)."""
 
 
 class TabularRow(BaseModel):
@@ -193,12 +207,14 @@ class TabularRow(BaseModel):
             if not isinstance(chunk_ids, list) or not chunk_ids:
                 continue
             confidence = cell.get("confidence")
+            verification_method = cell.get("verification_method")
             cell["citations"] = [
                 {
                     "citation_id": str(uuid.uuid5(_TABULAR_CITATION_NAMESPACE, str(chunk_id))),
                     "document_id": str(document_id),
                     "chunk_id": str(chunk_id),
                     "confidence": confidence,
+                    "verification_method": verification_method,
                 }
                 for chunk_id in chunk_ids
             ]

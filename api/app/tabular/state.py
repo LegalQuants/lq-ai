@@ -66,6 +66,10 @@ class _CellResultState(TypedDict, total=False):
     tier_used: int | None
     cost_usd: str  # Decimal as string for JSON serializability
     error: str | None
+    # Citation-Engine verification method for the cell (Donna #6), e.g.
+    # ``ensemble_strict`` / ``ensemble_majority``. None when the column
+    # isn't ensemble-verified or verification didn't confirm the value.
+    verification_method: str | None
 
 
 class TabularExecutionState(TypedDict, total=False):

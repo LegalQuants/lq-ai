@@ -35,6 +35,7 @@ import json
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
@@ -42,6 +43,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.citation.verification import verify
 from app.models.document import Document, DocumentChunk
 from app.models.file import File
 from app.models.tabular import TabularExecution
@@ -52,9 +54,42 @@ from app.tabular.cost import TABULAR_EXTRACTION_PURPOSE
 from app.tabular.state import TabularExecutionState
 
 if TYPE_CHECKING:
-    from app.clients.gateway import GatewayClient
+    from app.clients.gateway import EnsembleConfig, GatewayClient
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Cell-verification candidate / document stubs (Donna #6)
+# ---------------------------------------------------------------------------
+#
+# The Citation Engine's :func:`app.citation.verification.verify` reads a
+# candidate (the "claim") and a document (the "source") via duck-typed
+# protocols. For a tabular cell the claim is the extracted value and the
+# source is the concatenated cited-chunk text. We mint these minimal
+# stubs (mirroring ``tests/citation/test_ensemble.py``'s
+# ``_StubCandidate`` / ``_StubDocument``) rather than load a real
+# Document row — the cell's grounding evidence is the chunk text already
+# in hand, and the synthetic ids only feed a trace-span attribute.
+
+
+# Not ``frozen`` — the verifier's ``_CandidateProtocol`` /
+# ``_DocumentProtocol`` declare settable attributes, so a frozen
+# (read-only) dataclass fails the structural-subtype check. ``slots``
+# keeps them lightweight; we never mutate them after construction.
+@dataclass(slots=True)
+class _CellVerifyCandidate:
+    source_offset_start: int
+    source_offset_end: int
+    source_text: str
+    source_document_id: uuid.UUID
+
+
+@dataclass(slots=True)
+class _CellVerifyDocument:
+    id: uuid.UUID
+    normalized_content: str
+    was_ocrd: bool = False
 
 
 # Top-k chunks retrieved per cell. Bounded so the per-cell LLM context
@@ -188,10 +223,36 @@ def make_extract_cells_node(
 
         per_cell_results: list[dict[str, Any]] = []
 
+        # Resolve the gateway's Stage-4 ensemble config ONCE for the whole
+        # run (the lookup is process-cached). Per column we then decide
+        # the effective flag: explicit per-column value wins; None falls
+        # back to the gateway's deployment default. ``verify_ensemble_config``
+        # is the gateway config when this column should actually run
+        # ensemble AND the gateway has ensemble configured — else None.
+        #
+        # Cost posture (intentional): tabular ensemble verification runs one
+        # ensemble pass per cell and is NOT bounded by a mid-run per-message
+        # cost cap the way the chat path is (``_resolve_ensemble_config`` in
+        # ``api/app/api/chats.py`` falls back to a single judge once an
+        # estimate exceeds ``max_cost_per_message_usd``). Instead, tabular
+        # gates cost up-front: ``POST /api/v1/tabular/preview-cost`` surfaces
+        # the ensemble premium and the operator confirms ``confirmed_cost_usd``
+        # before the run starts (Decision C-5 cost-confirmation gate). A future
+        # mid-run / per-cell ensemble cost ceiling is deferred as DE-331.
+        ensemble_config = await gateway.get_citation_engine_ensemble_config()
+
         tracer = get_tracer()
         for document in documents:
             document_id = uuid.UUID(document["id"])
             for column in columns:
+                effective = (
+                    column.ensemble_verification
+                    if column.ensemble_verification is not None
+                    else (ensemble_config.default_enabled if ensemble_config is not None else False)
+                )
+                verify_ensemble_config = (
+                    ensemble_config if (effective and ensemble_config is not None) else None
+                )
                 with tracer.start_as_current_span("tabular.cell") as cell_span:
                     record_attributes(
                         cell_span,
@@ -212,6 +273,7 @@ def make_extract_cells_node(
                         document_name=document["name"],
                         chunks=chunks,
                         column=column,
+                        verify_ensemble_config=verify_ensemble_config,
                     )
                     cell["document_id"] = str(document_id)
                     cell["column_name"] = column.name
@@ -229,6 +291,7 @@ async def extract_cell(
     document_name: str,
     chunks: list[dict[str, Any]],
     column: ColumnSpec,
+    verify_ensemble_config: EnsembleConfig | None = None,
 ) -> dict[str, Any]:
     """Run one cell extraction; return a cell-result dict.
 
@@ -299,9 +362,32 @@ async def extract_cell(
         n_chunks=len(chunks),
     )
     cited_chunk_ids = [chunks[i]["id"] for i in cited_indices]
+    value = value.strip()
+
+    # Stage-4 ensemble verification (Donna #6). When this column should
+    # run ensemble (config supplied) and the cell has grounding chunks,
+    # run ONE ensemble pass over the concatenation of ALL cited chunks:
+    # the "claim" is the extracted value, the "source" is the cited
+    # chunk text. Stages 1-2 usually MISS (a short value rarely equals
+    # the long concatenation), so Stage 4 fires. Note: a near-verbatim
+    # single-chunk value CAN legitimately hit Stage 1 (``exact_match``) or
+    # Stage 2 (``fuzz.ratio`` >= 95, ``tolerant_match``) — that surfaces a
+    # ``verification_method`` of ``exact_match``/``tolerant_match`` instead
+    # of an ``ensemble_*`` value, which is a STRONGER verification, not an
+    # error. A verification failure must NEVER fail the cell or alter its
+    # value/confidence/citations, so the whole pass is defensively wrapped.
+    verification_method: str | None = None
+    if verify_ensemble_config is not None and cited_chunk_ids:
+        verification_method = await _verify_cell_ensemble(
+            gateway=gateway,
+            value=value,
+            chunks=chunks,
+            cited_chunk_ids=cited_chunk_ids,
+            ensemble_config=verify_ensemble_config,
+        )
 
     return {
-        "value": value.strip(),
+        "value": value,
         "cited_chunk_ids": cited_chunk_ids,
         "confidence": confidence,
         "tier_used": column.minimum_inference_tier,
@@ -311,7 +397,59 @@ async def extract_cell(
         # rolling-average converges off the routing log either way.
         "cost_usd": "0",
         "error": None,
+        "verification_method": verification_method,
     }
+
+
+async def _verify_cell_ensemble(
+    *,
+    gateway: GatewayClient,
+    value: str,
+    chunks: list[dict[str, Any]],
+    cited_chunk_ids: list[str],
+    ensemble_config: EnsembleConfig,
+) -> str | None:
+    """Run one Stage-4 ensemble verify pass for a tabular cell.
+
+    Concatenates ALL cited chunks' content as the source and the
+    extracted ``value`` as the claim, then dispatches through
+    :func:`app.citation.verification.verify`. Returns the method string
+    (e.g. ``ensemble_strict``) when the ensemble verified the value, else
+    ``None``. Any exception degrades to ``None`` — a verification failure
+    is never a cell failure.
+    """
+
+    try:
+        cited_set = set(cited_chunk_ids)
+        concat = "\n---\n".join(chunk["content"] for chunk in chunks if chunk["id"] in cited_set)
+        # Deterministic synthetic ids — used only for a trace-span
+        # attribute, so a stable uuid5 off the primary chunk id is
+        # preferred over uuid4.
+        synthetic_id = uuid.uuid5(uuid.NAMESPACE_DNS, cited_chunk_ids[0])
+        candidate = _CellVerifyCandidate(
+            source_offset_start=0,
+            source_offset_end=len(concat),
+            source_text=value,
+            source_document_id=synthetic_id,
+        )
+        document = _CellVerifyDocument(id=synthetic_id, normalized_content=concat)
+        result = await verify(
+            candidate,
+            document,
+            gateway=gateway,
+            ensemble_config=ensemble_config,
+        )
+        return result.method if result.verified else None
+    except Exception as exc:
+        logger.warning(
+            "tabular extract_cell ensemble verification error: %s",
+            exc,
+            extra={
+                "event": "tabular_extract_cell_verify_error",
+                "error_type": type(exc).__name__,
+            },
+        )
+        return None
 
 
 def _failed_cell(reason: str) -> dict[str, Any]:
@@ -322,6 +460,7 @@ def _failed_cell(reason: str) -> dict[str, Any]:
         "tier_used": None,
         "cost_usd": "0",
         "error": reason,
+        "verification_method": None,
     }
 
 
@@ -504,7 +643,15 @@ def _assemble_rows(
 
 def _strip_state_keys(cell: dict[str, Any]) -> dict[str, Any]:
     """Project the in-flight cell shape down to the persisted shape."""
-    keys = ("value", "cited_chunk_ids", "confidence", "tier_used", "cost_usd", "error")
+    keys = (
+        "value",
+        "cited_chunk_ids",
+        "confidence",
+        "tier_used",
+        "cost_usd",
+        "error",
+        "verification_method",
+    )
     return {key: cell.get(key) for key in keys}
 
 

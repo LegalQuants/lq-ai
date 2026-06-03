@@ -19,6 +19,7 @@ from typing import Any
 
 import pytest
 
+from app.clients.gateway import EnsembleConfig
 from app.schemas.tabular import ColumnSpec
 from app.tabular.nodes import (
     _assemble_rows,
@@ -308,6 +309,225 @@ async def test_extract_cell_with_no_chunks_marks_failed() -> None:
     )
     assert cell["confidence"] == "failed"
     assert gateway.calls_received == []
+
+
+# ---------------------------------------------------------------------------
+# extract_cell — Stage-4 ensemble verification (Donna #6)
+# ---------------------------------------------------------------------------
+
+
+def _ensemble_config(
+    *,
+    n: int = 3,
+    aggregation_rule: str = "strict",
+    default_enabled: bool = True,
+) -> EnsembleConfig:
+    """Build a real (frozen) :class:`EnsembleConfig` for the cell-verify path."""
+
+    return EnsembleConfig(
+        default_enabled=default_enabled,
+        judge_models=tuple(f"judge-{i}" for i in range(n)),
+        aggregation_rule=aggregation_rule,  # type: ignore[arg-type]
+        max_cost_per_message_usd=0.05,
+        envelope_tier=3,
+    )
+
+
+def _extraction_payload(value: str = "Delaware") -> dict[str, Any]:
+    return {
+        "value": value,
+        "cited_chunk_indices": [0],
+        "confidence": "high",
+        "justification": "stated explicitly",
+    }
+
+
+def _judge_payload(verdict: str) -> dict[str, Any]:
+    return {"verdict": verdict, "confidence": "high", "justification": "test"}
+
+
+@pytest.mark.unit
+async def test_extract_cell_ensemble_strict_all_yes_sets_method() -> None:
+    """Ensemble config + all judges 'yes' under strict → method='ensemble_strict'.
+
+    The gateway is called once for extraction, then once per judge model
+    (verify runs Stage 1+2 first — they miss because the short value never
+    equals the concatenated chunk text — then dispatches Stage 4).
+    """
+
+    cfg = _ensemble_config(n=3, aggregation_rule="strict")
+    chunks = [_chunk(0, "Governing law is the State of Delaware."), _chunk(1, "Other")]
+    gateway = _StubGateway(
+        payloads=[
+            _extraction_payload("Delaware"),
+            _judge_payload("yes"),
+            _judge_payload("yes"),
+            _judge_payload("yes"),
+        ]
+    )
+
+    cell = await extract_cell(
+        gateway=gateway,  # type: ignore[arg-type]
+        judge_model="smart",
+        document_name="NDA",
+        chunks=chunks,
+        column=ColumnSpec(name="Governing Law", query="What is the governing law?"),
+        verify_ensemble_config=cfg,
+    )
+
+    assert cell["value"] == "Delaware"
+    assert cell["cited_chunk_ids"] == [chunks[0]["id"]]
+    assert cell["verification_method"] == "ensemble_strict"
+    # 1 extraction + 3 judge calls.
+    assert len(gateway.calls_received) == 4
+
+
+@pytest.mark.unit
+async def test_extract_cell_no_ensemble_config_leaves_method_none() -> None:
+    """No ensemble config → verification_method is None; gateway called once."""
+
+    gateway = _StubGateway(payloads=[_extraction_payload("Delaware")])
+    cell = await extract_cell(
+        gateway=gateway,  # type: ignore[arg-type]
+        judge_model="smart",
+        document_name="NDA",
+        chunks=[_chunk(0, "Delaware text")],
+        column=ColumnSpec(name="Governing Law", query="?"),
+    )
+
+    assert cell["value"] == "Delaware"
+    assert cell["verification_method"] is None
+    # Extraction only — no judge calls.
+    assert len(gateway.calls_received) == 1
+
+
+@pytest.mark.unit
+async def test_extract_cell_ensemble_strict_dissent_misses() -> None:
+    """Strict rule + a judge 'no' → ensemble MISS → verification_method None,
+    but the cell still returns its extracted value (verify failure is not
+    a cell failure)."""
+
+    cfg = _ensemble_config(n=3, aggregation_rule="strict")
+    gateway = _StubGateway(
+        payloads=[
+            _extraction_payload("Delaware"),
+            _judge_payload("yes"),
+            _judge_payload("no"),
+            _judge_payload("yes"),
+        ]
+    )
+
+    cell = await extract_cell(
+        gateway=gateway,  # type: ignore[arg-type]
+        judge_model="smart",
+        document_name="NDA",
+        chunks=[_chunk(0, "Governing law is the State of Delaware.")],
+        column=ColumnSpec(name="Governing Law", query="?"),
+        verify_ensemble_config=cfg,
+    )
+
+    assert cell["value"] == "Delaware"
+    assert cell["confidence"] == "high"
+    assert cell["verification_method"] is None
+
+
+@pytest.mark.unit
+async def test_extract_cell_ensemble_judge_failure_keeps_value() -> None:
+    """A judge raising / malformed JSON degrades to MISS (verify is robust);
+    verification_method is None and the cell value is intact (no crash)."""
+
+    cfg = _ensemble_config(n=2, aggregation_rule="strict")
+    gateway = _StubGateway(
+        payloads=[
+            _extraction_payload("Delaware"),
+            RuntimeError("judge down"),
+            "not valid json",
+        ]
+    )
+
+    cell = await extract_cell(
+        gateway=gateway,  # type: ignore[arg-type]
+        judge_model="smart",
+        document_name="NDA",
+        chunks=[_chunk(0, "Governing law is the State of Delaware.")],
+        column=ColumnSpec(name="Governing Law", query="?"),
+        verify_ensemble_config=cfg,
+    )
+
+    assert cell["value"] == "Delaware"
+    assert cell["verification_method"] is None
+
+
+@pytest.mark.unit
+async def test_extract_cell_ensemble_on_but_no_cited_chunks_skips_verify() -> None:
+    """Ensemble config supplied, but the model cites no (valid) chunk →
+    ``verification_method`` stays None and the gateway is called exactly
+    once (extraction only). The ``and cited_chunk_ids`` guard in
+    ``extract_cell`` skips the verify pass when there is nothing to ground
+    the value against, so no judge calls fire."""
+
+    cfg = _ensemble_config(n=3, aggregation_rule="strict")
+    # Model returns a value but cites no chunk indices — nothing to verify.
+    gateway = _StubGateway(
+        payloads=[
+            {
+                "value": "Delaware",
+                "cited_chunk_indices": [],
+                "confidence": "high",
+                "justification": "no grounding",
+            }
+        ]
+    )
+
+    cell = await extract_cell(
+        gateway=gateway,  # type: ignore[arg-type]
+        judge_model="smart",
+        document_name="NDA",
+        chunks=[_chunk(0, "Governing law is the State of Delaware.")],
+        column=ColumnSpec(name="Governing Law", query="?"),
+        verify_ensemble_config=cfg,
+    )
+
+    assert cell["value"] == "Delaware"
+    assert cell["cited_chunk_ids"] == []
+    assert cell["verification_method"] is None
+    # Extraction only — the empty-citation guard skips all judge calls.
+    assert len(gateway.calls_received) == 1
+
+
+@pytest.mark.unit
+async def test_extract_cell_ensemble_majority_sets_method() -> None:
+    """Majority rule + a verified majority of judges → method='ensemble_majority'.
+
+    Exercises the majority aggregation branch through the tabular path
+    (the strict branch is covered above). With n=3 and two 'yes' verdicts,
+    the strict-majority rule (> n/2) is satisfied and the result verifies
+    even though one judge dissented."""
+
+    cfg = _ensemble_config(n=3, aggregation_rule="majority")
+    chunks = [_chunk(0, "Governing law is the State of Delaware."), _chunk(1, "Other")]
+    gateway = _StubGateway(
+        payloads=[
+            _extraction_payload("Delaware"),
+            _judge_payload("yes"),
+            _judge_payload("no"),
+            _judge_payload("yes"),
+        ]
+    )
+
+    cell = await extract_cell(
+        gateway=gateway,  # type: ignore[arg-type]
+        judge_model="smart",
+        document_name="NDA",
+        chunks=chunks,
+        column=ColumnSpec(name="Governing Law", query="What is the governing law?"),
+        verify_ensemble_config=cfg,
+    )
+
+    assert cell["value"] == "Delaware"
+    assert cell["verification_method"] == "ensemble_majority"
+    # 1 extraction + 3 judge calls.
+    assert len(gateway.calls_received) == 4
 
 
 # ---------------------------------------------------------------------------
