@@ -63,7 +63,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import ActiveUser
 from app.audit import audit_action
 from app.db.session import get_db
-from app.models.document import Document
+from app.models.document import Document, DocumentChunk
 from app.models.tabular import TabularExecution
 from app.schemas.tabular import (
     Citation,
@@ -376,7 +376,9 @@ async def get_tabular_execution(
     """
 
     row = await _load_caller_execution(db, execution_id=execution_id, user=user)
-    return await _to_response(db, row)
+    response = await _to_response(db, row)
+    await _enrich_cell_citations(db, response)
+    return response
 
 
 @router.delete(
@@ -741,6 +743,68 @@ async def _to_response(db: AsyncSession, row: TabularExecution) -> TabularExecut
             "completed_at": row.completed_at,
         }
     )
+
+
+async def _enrich_cell_citations(db: AsyncSession, response: TabularExecutionResponse) -> None:
+    """Make tabular cell citations navigable by resolving their source.
+
+    The schema-level ``_synthesize_cell_citations`` validator builds each
+    :class:`Citation` purely from the cell's persisted ``cited_chunk_ids``
+    (real ``document_chunks.id`` UUIDs) with no DB access, so it can only
+    set ``document_id`` (a ``documents.id``) — not enough for the frontend
+    to navigate (its doc panel keys off ``files.id``). Here, where a DB
+    session is available, we enrich every cell citation in place with
+    ``source_file_id`` (``documents.file_id``), ``source_page``
+    (``document_chunks.page_start``), and ``source_text``
+    (``document_chunks.content``).
+
+    Resolution is batched — two ``IN`` queries total regardless of grid
+    size (no N+1): one over every cited chunk id across the whole grid,
+    then one over the documents those chunks belong to. Citations whose
+    ``chunk_id`` is missing (stale / hard-deleted chunk) are left with the
+    navigation fields unset rather than crashing.
+    """
+
+    if response.results is None:
+        return
+
+    all_citations: list[Citation] = [
+        citation
+        for tab_row in response.results.rows
+        for cell in tab_row.cells.values()
+        for citation in cell.citations
+    ]
+    chunk_ids = {c.chunk_id for c in all_citations if c.chunk_id is not None}
+    if not chunk_ids:
+        return
+
+    # Query 1: chunk id -> (document_id, page_start, content).
+    chunk_stmt = select(
+        DocumentChunk.id,
+        DocumentChunk.document_id,
+        DocumentChunk.page_start,
+        DocumentChunk.content,
+    ).where(DocumentChunk.id.in_(chunk_ids))
+    chunk_rows = (await db.execute(chunk_stmt)).all()
+    chunk_by_id = {cr.id: (cr.document_id, cr.page_start, cr.content) for cr in chunk_rows}
+
+    # Query 2: document id -> file_id.
+    document_ids = {doc_id for (doc_id, _page, _content) in chunk_by_id.values()}
+    file_by_document: dict[uuid.UUID, uuid.UUID] = {}
+    if document_ids:
+        doc_stmt = select(Document.id, Document.file_id).where(Document.id.in_(document_ids))
+        file_by_document = {dr.id: dr.file_id for dr in (await db.execute(doc_stmt)).all()}
+
+    for citation in all_citations:
+        if citation.chunk_id is None:
+            continue
+        resolved = chunk_by_id.get(citation.chunk_id)
+        if resolved is None:
+            continue  # stale chunk reference — leave navigation fields unset.
+        doc_id, page_start, content = resolved
+        citation.source_file_id = file_by_document.get(doc_id)
+        citation.source_page = page_start
+        citation.source_text = content
 
 
 def _to_summary(row: TabularExecution) -> TabularExecutionSummary:

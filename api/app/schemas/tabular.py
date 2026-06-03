@@ -93,6 +93,29 @@ class Citation(BaseModel):
 
     confidence: CellConfidence
 
+    # --- Navigation fields (Donna) ----------------------------------------
+    # Resolved at read time in ``GET /tabular/executions/{id}`` so the
+    # frontend can open the cited source in its doc panel (same UX as chat
+    # citations). They are optional + default ``None`` so the schema-level
+    # ``_synthesize_cell_citations`` validator (no DB access) and the
+    # XLSX/CSV export paths (which only read ``citation_id``) keep building
+    # this model unchanged; the endpoint handler populates them via batched
+    # lookups against ``documents`` and ``document_chunks``.
+    source_file_id: uuid.UUID | None = None
+    """The ``documents.file_id`` of the citation's source document. The
+    critical missing piece for navigation: cells reference a
+    ``documents.id`` (via ``document_id``), but the frontend's doc panel
+    keys off ``files.id``. ``None`` until resolved (or when the backing
+    chunk row is missing / stale)."""
+
+    source_page: int | None = None
+    """The cited chunk's ``document_chunks.page_start``. Nullable because
+    some chunks have no clean page assignment (best-effort page mapping)."""
+
+    source_text: str | None = None
+    """The cited chunk's full ``document_chunks.content``. The frontend
+    locates / highlights the cited span within this text."""
+
 
 class CellResult(BaseModel):
     """One cell in the tabular grid.

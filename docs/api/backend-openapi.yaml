@@ -5162,6 +5162,31 @@ components:
           description: |
             Assembled grid shape with rows + per-cell results. Shape is
             versioned via ``schema_version`` (currently ``m3-c2-v1``).
+
+            Each cell carries a ``citations`` array. A tabular cell
+            ``Citation`` is distinct from the chat ``Citation`` schema; it
+            has: ``citation_id`` (uuid; deterministic display-only id —
+            DE-309), ``document_id`` (uuid; the source ``documents.id``),
+            ``chunk_id`` (uuid, nullable; the cited ``document_chunks.id``),
+            and ``confidence`` (one of ``high|medium|low|failed``).
+
+            On ``GET /api/v1/tabular/executions/{id}`` (only) each citation
+            is additionally enriched at read time so the frontend can open
+            the cited source in its doc panel (same UX as chat citations):
+
+            - ``source_file_id`` (uuid, nullable): the source document's
+              ``documents.file_id`` — the ``files.id`` the doc panel keys
+              off. ``null`` when the backing chunk row is missing/stale.
+            - ``source_page`` (integer, nullable): the cited chunk's
+              ``document_chunks.page_start`` (nullable — best-effort page
+              assignment).
+            - ``source_text`` (string, nullable): the cited chunk's full
+              ``document_chunks.content`` (the frontend locates/highlights
+              the cited span within it).
+
+            These three fields are resolved via two batched ``IN`` queries
+            (chunks, then documents) — no N+1 — and are ``null`` on the
+            list/export paths, which do not enrich.
         cost_estimate_usd:
           type: string
           nullable: true
