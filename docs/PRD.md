@@ -4459,6 +4459,18 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 ---
 
+#### DE-330 — Formalize the tabular `results` OpenAPI schema (typed cell/citation components)
+
+**Priority:** P3 · **Effort:** M · **Good first issue** (community-suitable)
+
+**Context:** The tabular execution detail (`GET /api/v1/tabular/executions/{id}`) returns `results` as a free-form `type: object, additionalProperties: true` in `docs/api/backend-openapi.yaml` — the grid's rows/cells/citations have no named OpenAPI components. So a generated client (Donna's `npm run gen:api`) sees `results` as an opaque object and emits no typed fields for cell results or their citations, even though the runtime JSON is well-structured. This surfaced when adding navigable-citation fields (`source_file_id` / `source_page` / `source_text`) to the tabular cell `Citation`: the new fields are present at runtime and documented in the `results` description, but cannot be expressed as typed properties without restructuring the whole `results` tree. The existing tabular-cell citation fields (`citation_id`, `document_id`, `chunk_id`, `confidence`) are already untyped for the same reason — this is a pre-existing gap, not introduced by the navigable-citations change.
+
+**Specific scope:** Introduce named components for the tabular result tree — e.g. `TabularResults` / `TabularRow` / `TabularCellResult` / `TabularCitation` — mirroring the actual serialized shape in `api/app/schemas/tabular.py` (including the navigable-citation fields), and `$ref` them from the execution-detail response instead of `additionalProperties: true`. Keep `api/tests/test_openapi.py` green (the path count is unchanged; this is schema-component work, not new paths). The frontend can then generate typed cell/citation models and drop any hand-written shims.
+
+**When to ship:** When typed tabular results would meaningfully reduce frontend shim code; safe community pickup (contract-only, no runtime behavior change).
+
+---
+
 ## 10. Appendices
 
 ### Appendix A — Glossary
