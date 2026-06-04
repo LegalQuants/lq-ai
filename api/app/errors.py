@@ -500,6 +500,13 @@ _GATEWAY_CODE_MAP: dict[str, type[LQAIError]] = {
     # through with the matching backend-side typed exception.
     "not_found": NotFound,
     "conflict": Conflict,
+    # Donna #7: runtime provider-key management. The gateway returns 400
+    # with this code when the master key (LQ_AI_GATEWAY_MASTER_KEY) is
+    # unset and a runtime key write is attempted. Map to ValidationError
+    # (400) so the operator sees a sensible 4xx — without this entry the
+    # code falls through to InternalError (500), which would mask an
+    # operator-actionable misconfiguration as a server fault.
+    "failed_precondition": ValidationError,
 }
 
 

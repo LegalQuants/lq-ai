@@ -1142,7 +1142,12 @@ components:
         provider: {type: string}
         type:
           type: string
-          enum: [anthropic, openai, vertex, cohere, azure_openai, bedrock, ollama, vllm, openai_compatible]
+          nullable: true
+          enum: [anthropic, openai, vertex, cohere, azure_openai, bedrock, ollama, vllm, openai_compatible, null]
+          description: |
+            The provider's adapter type. Null only in the rare race where a
+            provider is removed between the write and the status read-back on
+            a single-provider (POST/PATCH) response; never null on the list.
         configured:
           type: boolean
           description: |

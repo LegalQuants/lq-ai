@@ -180,6 +180,11 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("POST", "/api/v1/admin/aliases"),
     ("PATCH", "/api/v1/admin/aliases/{name}"),
     ("DELETE", "/api/v1/admin/aliases/{name}"),
+    # Donna #7 — runtime provider-key (BYOK) admin proxy
+    ("GET", "/api/v1/admin/provider-keys"),
+    ("POST", "/api/v1/admin/provider-keys"),
+    ("PATCH", "/api/v1/admin/provider-keys/{provider}"),
+    ("DELETE", "/api/v1/admin/provider-keys/{provider}"),
     ("GET", "/api/v1/admin/config"),
     # D3 — admin audit-log read endpoint
     ("GET", "/api/v1/admin/audit-log"),

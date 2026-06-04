@@ -764,6 +764,90 @@ class GatewayClient:
             allow_204=True,
         )
 
+    # --- Admin: provider-key CRUD (Donna #7) --------------------------------
+
+    async def list_provider_keys(
+        self,
+        *,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        """GET /admin/v1/provider-keys. Returns the secret-safe status list.
+
+        The response is ``{"provider_keys": [...]}`` where each row is
+        ``{provider, type, configured, last4, source}`` — never a full key.
+        """
+
+        return await self._admin_request(
+            method="GET",
+            path="/admin/v1/provider-keys",
+            op="list_provider_keys",
+            request_id=request_id,
+        )
+
+    async def set_provider_key(
+        self,
+        body: dict[str, Any],
+        *,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        """POST /admin/v1/provider-keys. Set/replace a runtime key and hot-apply.
+
+        400 (``failed_precondition``) surfaces when the gateway master key
+        is unset; 404 (``not_found``) when the provider isn't configured.
+        Returns the provider's secret-safe status dict.
+        """
+
+        return await self._admin_request(
+            method="POST",
+            path="/admin/v1/provider-keys",
+            op="set_provider_key",
+            request_id=request_id,
+            body=body,
+        )
+
+    async def rotate_provider_key(
+        self,
+        provider: str,
+        body: dict[str, Any],
+        *,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        """PATCH /admin/v1/provider-keys/{provider}. Rotate a configured key.
+
+        Same mechanics as :meth:`set_provider_key`; the provider comes from
+        the path. 400 master-key-missing / 404 unknown-provider surface as
+        on the set path.
+        """
+
+        return await self._admin_request(
+            method="PATCH",
+            path=f"/admin/v1/provider-keys/{provider}",
+            op="rotate_provider_key",
+            request_id=request_id,
+            body=body,
+        )
+
+    async def delete_provider_key(
+        self,
+        provider: str,
+        *,
+        request_id: str | None = None,
+    ) -> None:
+        """DELETE /admin/v1/provider-keys/{provider}. Revoke a runtime key.
+
+        404 (``not_found``) surfaces for an unknown provider; 409
+        (``conflict``) when the provider has no runtime key to revoke (e.g.
+        an env-sourced key). 204 on success.
+        """
+
+        await self._admin_request(
+            method="DELETE",
+            path=f"/admin/v1/provider-keys/{provider}",
+            op="delete_provider_key",
+            request_id=request_id,
+            allow_204=True,
+        )
+
     async def get_admin_config(
         self,
         *,

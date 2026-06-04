@@ -132,6 +132,9 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/admin/config",
         "/api/v1/admin/aliases",
         "/api/v1/admin/aliases/{name}",
+        # Donna #7 — runtime provider-key (BYOK) admin proxy
+        "/api/v1/admin/provider-keys",
+        "/api/v1/admin/provider-keys/{provider}",
         # D0 — model availability proxy
         "/api/v1/models",
         # Wave D.1 T4 — admin tier-floor override re-run
@@ -273,7 +276,10 @@ async def test_openapi_paths_match_sketch() -> None:
     # /api/v1/autonomous/notifications/{notification_id}/read
     # Phase 1 §4.4 adds one new path:
     # /api/v1/autonomous/run-now
-    assert len(actual) == 114
+    # Donna #7 adds two new paths:
+    # /api/v1/admin/provider-keys
+    # /api/v1/admin/provider-keys/{provider}
+    assert len(actual) == 116
 
 
 @pytest.mark.unit

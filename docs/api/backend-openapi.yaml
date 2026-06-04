@@ -3081,6 +3081,133 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
 
+  /api/v1/admin/provider-keys:
+    get:
+      tags: [admin]
+      summary: List provider-key status (admin only)
+      description: |
+        Donna #7 (runtime BYOK). Proxies the gateway's
+        ``/admin/v1/provider-keys`` surface. The backend holds the
+        gateway-key; the frontend never does. Returns a secret-safe status
+        row per configured provider — the response NEVER contains a full
+        key, only the last 4 characters of a resolved key. The caller's
+        bearer token must have ``is_admin = true`` or the endpoint returns
+        403 ``forbidden``.
+      responses:
+        '200':
+          description: Provider-key status list
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProviderKeyList'}
+        '403':
+          description: Caller is not an admin
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+    post:
+      tags: [admin]
+      summary: Set/replace a provider's runtime key (admin only)
+      description: |
+        Proxies the gateway's set-key path. The gateway encrypts the
+        plaintext key, persists it to gateway.yaml, and hot-applies the
+        rebuilt adapter — no restart. The backend forwards the JSON and
+        never returns the secret. 400 when the gateway master key is unset
+        (surfaced as ``validation_error``); 404 when the provider isn't a
+        configured entry.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProviderKeySetRequest'}
+      responses:
+        '200':
+          description: Key applied; provider status returned (no secret)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProviderKeyStatus'}
+        '400':
+          description: Gateway master key is not set
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '403':
+          description: Caller is not an admin
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '404':
+          description: Provider not configured
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/v1/admin/provider-keys/{provider}:
+    parameters:
+      - in: path
+        name: provider
+        required: true
+        schema: {type: string}
+    patch:
+      tags: [admin]
+      summary: Rotate a provider's runtime key (admin only)
+      description: |
+        Same mechanics as POST /api/v1/admin/provider-keys; the provider
+        comes from the path. Proxies the gateway, which retires the
+        displaced adapter and swaps the rebuilt one in. The backend never
+        returns the secret. 400 when the gateway master key is unset; 404
+        when the provider isn't configured.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProviderKeyRotateRequest'}
+      responses:
+        '200':
+          description: Key rotated; provider status returned (no secret)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProviderKeyStatus'}
+        '400':
+          description: Gateway master key is not set
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '403':
+          description: Caller is not an admin
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '404':
+          description: Provider not configured
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+    delete:
+      tags: [admin]
+      summary: Revoke a provider's runtime key (admin only)
+      description: |
+        Proxies the gateway's revoke path. Only runtime
+        (encrypted-at-rest) keys can be revoked; an env-sourced key is
+        owned by the operator's environment and returns 409.
+      responses:
+        '204':
+          description: Runtime key revoked
+        '403':
+          description: Caller is not an admin
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '404':
+          description: Provider not configured
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '409':
+          description: Provider has no runtime key to revoke (e.g., env-sourced)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
   /api/v1/admin/config:
     get:
       tags: [admin]
@@ -7060,6 +7187,81 @@ components:
         fallback:
           type: array
           items: {$ref: '#/components/schemas/AdminAliasFallback'}
+
+    # Donna #7 — runtime provider-key (BYOK) proxy. These mirror the
+    # gateway's ProviderKey* schemas; the backend forwards the JSON
+    # verbatim and never returns the secret (the status carries at most
+    # the last 4 characters of a resolved key).
+    ProviderKeySetRequest:
+      type: object
+      required: [provider, api_key]
+      properties:
+        provider:
+          type: string
+          minLength: 1
+          description: Name of an already-configured provider entry.
+        api_key:
+          type: string
+          minLength: 1
+          description: |
+            Plaintext provider key. The gateway encrypts it with the
+            gateway master key before it touches disk; it is never echoed
+            back in any response.
+
+    ProviderKeyRotateRequest:
+      type: object
+      required: [api_key]
+      properties:
+        api_key:
+          type: string
+          minLength: 1
+          description: |
+            Replacement plaintext provider key. Same handling as
+            ProviderKeySetRequest.api_key.
+
+    ProviderKeyStatus:
+      type: object
+      required: [provider, type, configured, last4, source]
+      description: |
+        Secret-safe status for one provider. Carries at most the last 4
+        characters of the resolved key — never the full key or token.
+      properties:
+        provider: {type: string}
+        type:
+          type: string
+          nullable: true
+          description: |
+            The provider's adapter type. Null only in the rare race where a
+            provider is removed between the write and the status read-back on
+            a single-provider (POST/PATCH) response; never null on the list.
+        configured:
+          type: boolean
+          description: |
+            True when the provider has a live, routable adapter (its key
+            resolved). A keyless or unresolvable provider is false.
+        last4:
+          type: string
+          nullable: true
+          minLength: 4
+          maxLength: 4
+          description: |
+            Last 4 characters of the resolved key, or null when the key is
+            absent, unresolvable, or shorter than 4 characters.
+        source:
+          type: string
+          nullable: true
+          enum: [env, runtime, null]
+          description: |
+            Key source: `runtime` (encrypted-at-rest in gateway.yaml),
+            `env` (api_key_env), or null (no key configured).
+
+    ProviderKeyList:
+      type: object
+      required: [provider_keys]
+      properties:
+        provider_keys:
+          type: array
+          items: {$ref: '#/components/schemas/ProviderKeyStatus'}
 
     Error:
       type: object

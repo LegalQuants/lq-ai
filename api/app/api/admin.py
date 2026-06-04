@@ -7,6 +7,10 @@ Surface (current):
 * ``POST   /api/v1/admin/aliases``           — create alias (D0.5)
 * ``PATCH  /api/v1/admin/aliases/{name}``    — update alias (D0.5)
 * ``DELETE /api/v1/admin/aliases/{name}``    — remove alias (D0.5)
+* ``GET    /api/v1/admin/provider-keys``     — list provider-key status (Donna #7)
+* ``POST   /api/v1/admin/provider-keys``     — set/replace runtime key (Donna #7)
+* ``PATCH  /api/v1/admin/provider-keys/{p}`` — rotate runtime key (Donna #7)
+* ``DELETE /api/v1/admin/provider-keys/{p}`` — revoke runtime key (Donna #7)
 * ``GET    /api/v1/admin/config``            — sanitized gateway config (D0.5)
 * ``GET    /api/v1/admin/audit-log``         — 501 (D3 wires real impl)
 * ``GET    /api/v1/admin/tier-policy``       — 501 (D1)
@@ -32,7 +36,7 @@ import uuid as _uuid_mod
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import ColumnElement, Select, Text, and_, func, select
@@ -557,6 +561,91 @@ async def get_admin_config(
     """Return the gateway's sanitized current config (D0.5)."""
 
     return await gateway.get_admin_config()
+
+
+# ---------------------------------------------------------------------------
+# Donna #7 — runtime provider-key (BYOK) proxy
+# ---------------------------------------------------------------------------
+# These endpoints proxy the gateway's ``/admin/v1/provider-keys`` surface,
+# mirroring the alias-CRUD proxy above. The backend is the only entity that
+# holds the gateway-key; the frontend never does. The gateway encrypts the
+# plaintext key, persists it to gateway.yaml, and hot-applies the rebuilt
+# adapter — the backend simply forwards the JSON. No secret is ever returned
+# (the gateway's status rows carry at most the last 4 characters of a key).
+#
+# Error propagation: the gateway returns 400 (``failed_precondition``) when
+# the master key is unset, 404 (``not_found``) for an unknown provider, and
+# 409 (``conflict``) when revoking a non-runtime (env-sourced) key. The
+# GatewayClient maps each via ``map_gateway_error_code`` to a backend typed
+# exception, so the same 4xx surfaces to the caller (the 400 master-key case
+# maps to ValidationError → 400, not a 500).
+
+
+class ProviderKeySetRequest(BaseModel):
+    """Request body for ``POST /api/v1/admin/provider-keys``."""
+
+    provider: str = Field(min_length=1)
+    api_key: str = Field(min_length=1)
+
+
+class ProviderKeyRotateRequest(BaseModel):
+    """Request body for ``PATCH /api/v1/admin/provider-keys/{provider}``."""
+
+    api_key: str = Field(min_length=1)
+
+
+@router.get("/provider-keys")
+async def list_provider_keys(
+    _admin: AdminUser,
+    gateway: Annotated[GatewayClient, Depends(get_gateway_client)],
+) -> dict[str, Any]:
+    """List provider-key status via the gateway. No secret is returned."""
+
+    return await gateway.list_provider_keys()
+
+
+@router.post("/provider-keys")
+async def set_provider_key(
+    body: ProviderKeySetRequest,
+    _admin: AdminUser,
+    gateway: Annotated[GatewayClient, Depends(get_gateway_client)],
+) -> dict[str, Any]:
+    """Set/replace a provider's runtime key. 400 / 404 propagate from the gateway."""
+
+    return await gateway.set_provider_key(body.model_dump(mode="json"))
+
+
+@router.patch("/provider-keys/{provider}")
+async def rotate_provider_key(
+    provider: str,
+    body: ProviderKeyRotateRequest,
+    _admin: AdminUser,
+    gateway: Annotated[GatewayClient, Depends(get_gateway_client)],
+) -> dict[str, Any]:
+    """Rotate a provider's runtime key. 400 / 404 propagate from the gateway."""
+
+    return await gateway.rotate_provider_key(provider, body.model_dump(mode="json"))
+
+
+@router.delete(
+    "/provider-keys/{provider}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+async def revoke_provider_key(
+    provider: str,
+    _admin: AdminUser,
+    gateway: Annotated[GatewayClient, Depends(get_gateway_client)],
+) -> Response:
+    """Revoke a provider's runtime key. 404 / 409 propagate from the gateway.
+
+    Uses the canonical DELETE-204 recipe (``response_class=Response`` plus an
+    explicit empty ``Response`` return) so the 204 carries a genuinely empty
+    body.
+    """
+
+    await gateway.delete_provider_key(provider)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ---------------------------------------------------------------------------
