@@ -58,7 +58,7 @@ from app.clients.backend import (
     close_backend_client,
     configure_backend_client,
 )
-from app.config import GatewayConfig
+from app.config import GatewayConfig, ProviderConfig
 from app.config_holder import MutableConfigHolder, install_sighup_reload
 from app.config_loader import ConfigLoadError, load_config
 from app.db import engine_or_none
@@ -90,6 +90,55 @@ def _resolve_config_path() -> Path:
     if override:
         return Path(override)
     return DEFAULT_CONFIG_PATH
+
+
+def build_adapter(provider: ProviderConfig) -> ProviderAdapter | None:
+    """Construct the adapter for one provider, or ``None`` if no live
+    adapter can be built.
+
+    ``None`` is returned for two distinct reasons:
+
+    (a) the provider is **disabled** (``enabled=False``); or
+    (b) the provider's ``type`` has **no adapter implementation** yet
+        (vertex/bedrock, or any unknown type).
+
+    Both mean "no live adapter was built" — they are not distinguished in
+    the return value. A caller that needs to tell "disabled" from
+    "unsupported type" apart (e.g. Task B's hot-apply) can re-check
+    ``provider.enabled`` / ``provider.type`` itself.
+
+    A supported, **enabled** provider whose key can't be resolved does
+    **not** return ``None`` — it raises :class:`ValueError`, the same
+    signal the ``from_config`` factories raise. Callers decide what to do
+    with that: startup (the lifespan loop) skips the provider with a
+    warning; runtime hot-apply (Task B) surfaces it.
+
+    This is the single source of truth for "which adapter does this
+    provider get"; it is reused by the lifespan at startup and by the
+    runtime BYOK hot-apply path (Donna #7, Task B). Behavior must match
+    the per-type dispatch the lifespan used previously, so the set of
+    adapters built for a given config is unchanged.
+    """
+
+    if not provider.enabled:
+        return None
+    if provider.type == "anthropic":
+        return AnthropicAdapter.from_config(provider)
+    if provider.type in ("openai", "openai_compatible"):
+        # C6 + B6: OpenAI adapter services both embeddings and chat
+        # completions and handles both ``openai`` and ``openai_compatible``.
+        return OpenAIAdapter.from_config(provider)
+    if provider.type == "azure_openai":
+        # M2-E1 (DE-267): Azure OpenAI mirrors the OpenAI wire shape with
+        # a deployment-scoped URL (+ api-version) and ``api-key`` auth.
+        return AzureOpenAIAdapter.from_config(provider)
+    if provider.type == "ollama":
+        # B6 partial: Ollama is the Mode-2 (air-gapped local inference)
+        # backbone per PRD §1.5.1 / §6.1.
+        return OllamaAdapter.from_config(provider)
+    # B6 lands the remaining adapters (Vertex, Bedrock); until then there
+    # is no adapter for those types (or any unknown type).
+    return None
 
 
 @asynccontextmanager
@@ -133,84 +182,46 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # routes to a provider with no adapter.
     adapters: dict[str, ProviderAdapter] = {}
     for provider in config.providers:
-        if not provider.enabled:
+        try:
+            adapter = build_adapter(provider)
+        except ValueError as exc:
+            # Missing/unresolvable key for a supported provider — non-fatal
+            # at startup; the provider is skipped and chat requests routing
+            # to it get a clean 503 at request time.
+            logger.warning(
+                "skipping provider %r (type=%s): %s",
+                provider.name,
+                provider.type,
+                exc,
+            )
             continue
-        if provider.type == "anthropic":
-            try:
-                adapters[provider.name] = AnthropicAdapter.from_config(provider)
-                logger.info("instantiated Anthropic adapter for provider %r", provider.name)
-            except ValueError as exc:
-                logger.warning(
-                    "skipping Anthropic provider %r: %s",
-                    provider.name,
-                    exc,
-                )
-            continue
-        if provider.type in ("openai", "openai_compatible"):
-            # C6 + B6: OpenAI adapter services both embeddings and chat
-            # completions. The lifespan-time check matches the pattern
-            # for Anthropic: a missing key for cloud OpenAI is non-fatal
-            # at startup but produces a clean 503 at request time.
-            try:
-                adapters[provider.name] = OpenAIAdapter.from_config(provider)
-                logger.info(
-                    "instantiated OpenAI adapter for provider %r (type=%s)",
+        if adapter is None:
+            # Disabled, or a type with no adapter yet (vertex/bedrock).
+            if provider.enabled:
+                # B6 lands the remaining adapters (Vertex, Bedrock).
+                logger.debug(
+                    "no adapter for provider %r (type=%s); awaiting B6",
                     provider.name,
                     provider.type,
                 )
-            except ValueError as exc:
-                logger.warning(
-                    "skipping OpenAI provider %r: %s",
-                    provider.name,
-                    exc,
-                )
             continue
-        if provider.type == "azure_openai":
-            # M2-E1 (DE-267): Azure OpenAI mirrors the OpenAI wire shape
-            # with a different URL (deployment-scoped + api-version)
-            # and ``api-key`` auth. Missing key or missing api_version
-            # surfaces as a startup warning (skip provider) and a clean
-            # 503 at request time, matching OpenAI's lifespan posture.
-            try:
-                adapters[provider.name] = AzureOpenAIAdapter.from_config(provider)
-                logger.info(
-                    "instantiated Azure OpenAI adapter for provider %r",
-                    provider.name,
-                )
-            except ValueError as exc:
-                logger.warning(
-                    "skipping Azure OpenAI provider %r: %s",
-                    provider.name,
-                    exc,
-                )
-            continue
-        if provider.type == "ollama":
-            # B6 partial: Ollama is the Mode-2 (air-gapped local
-            # inference) backbone per PRD §1.5.1 / §6.1. Chat
-            # completions are wired here; embeddings raise
-            # ProviderUnsupportedError (the embedding alias still routes
-            # through the OpenAI adapter per ADR 0008).
-            try:
-                adapters[provider.name] = OllamaAdapter.from_config(provider)
-                logger.info(
-                    "instantiated Ollama adapter for provider %r (base_url=%s)",
-                    provider.name,
-                    provider.base_url,
-                )
-            except ValueError as exc:
-                logger.warning(
-                    "skipping Ollama provider %r: %s",
-                    provider.name,
-                    exc,
-                )
-            continue
-        # B6 lands the remaining adapters (Vertex, Bedrock).
-        logger.debug(
-            "no adapter for provider %r (type=%s); awaiting B6",
+        adapters[provider.name] = adapter
+        logger.info(
+            "instantiated %s adapter for provider %r (type=%s)",
+            type(adapter).__name__,
             provider.name,
             provider.type,
         )
     app.state.adapters = adapters
+    # Donna #7: adapters displaced by a runtime BYOK hot-swap (Task B)
+    # are stashed here so they're closed at shutdown rather than
+    # mid-request. Empty at startup; Task B appends to it.
+    # Invariant the hot-swap MUST uphold: a displaced adapter is MOVED
+    # into this list — popped from the active ``adapters`` registry, not
+    # copied — so it lives in exactly one of the two collections.
+    # Otherwise shutdown's two close loops would double-close it.
+    retired_adapters: list[ProviderAdapter] = []
+    app.state.retired_adapters = retired_adapters
 
     # B4: build the request router around the loaded config + adapter
     # registry. Per-request handlers pull this off ``app.state.router``
@@ -278,6 +289,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 await adapter.aclose()
             except Exception:
                 logger.exception("error closing adapter %r", name)
+        # Donna #7: close any adapters retired by a runtime BYOK hot-swap.
+        # Defensive ``getattr`` — a test bypassing the lifespan may not
+        # have set the attribute.
+        retired = getattr(app.state, "retired_adapters", [])
+        if retired:
+            logger.info("closing %d retired adapters", len(retired))
+            for adapter in retired:
+                try:
+                    await adapter.aclose()
+                except Exception:
+                    logger.exception("error closing retired adapter")
         try:
             await close_backend_client()
         except Exception:

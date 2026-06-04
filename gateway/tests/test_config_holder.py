@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 
 import pytest
+from cryptography.fernet import Fernet
 
 from app.config_holder import (
     ConfigReloadError,
@@ -19,6 +20,12 @@ from app.config_holder import (
     install_sighup_reload,
 )
 from app.config_loader import load_config
+from app.config_writer import (
+    ProviderKeyMutationError,
+    delete_provider_key,
+    upsert_provider_key,
+)
+from app.secrets import encrypt_value
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EXAMPLE_CONFIG = REPO_ROOT / "gateway.yaml.example"
@@ -186,6 +193,154 @@ def test_sighup_handler_does_not_raise_on_bad_file(tmp_config: Path, example_env
     os.kill(os.getpid(), signal.SIGHUP)
     time.sleep(0.1)
     assert holder.current() is initial
+
+
+# --- Provider-key mutation (runtime BYOK, Donna #7) --------------------------
+
+
+def _read_provider_entry(config_path: Path, name: str) -> dict[str, object]:
+    """Read the raw YAML providers entry for ``name`` (no env expansion)."""
+
+    import yaml
+
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    for entry in raw["providers"]:
+        if entry.get("name") == name:
+            return entry
+    raise AssertionError(f"provider {name!r} not found in {config_path}")
+
+
+@pytest.mark.unit
+def test_upsert_provider_key_sets_encrypted_and_clears_env(
+    tmp_config: Path, example_env: None
+) -> None:
+    initial = load_config(tmp_config)
+    holder = MutableConfigHolder(initial, config_path=tmp_config)
+
+    token = encrypt_value("sk-test", master_key=Fernet.generate_key().decode())
+    upsert_provider_key(holder, provider_name="anthropic-prod", encrypted_token=token)
+
+    # On-disk YAML: gains api_key_encrypted, loses api_key_env.
+    entry = _read_provider_entry(tmp_config, "anthropic-prod")
+    assert entry["api_key_encrypted"] == token
+    assert "api_key_env" not in entry
+
+    # holder.current() reflects it (and round-trips the token).
+    provider = holder.current().provider_by_name("anthropic-prod")
+    assert provider is not None
+    assert provider.api_key_encrypted == token
+    assert provider.api_key_env is None
+
+
+@pytest.mark.unit
+def test_upsert_provider_key_unknown_provider_raises_404(
+    tmp_config: Path, example_env: None
+) -> None:
+    initial = load_config(tmp_config)
+    holder = MutableConfigHolder(initial, config_path=tmp_config)
+
+    token = encrypt_value("sk-test", master_key=Fernet.generate_key().decode())
+    with pytest.raises(ProviderKeyMutationError) as excinfo:
+        upsert_provider_key(holder, provider_name="does-not-exist", encrypted_token=token)
+    assert excinfo.value.http_status == 404
+
+
+@pytest.mark.unit
+def test_delete_provider_key_removes_runtime_key(tmp_config: Path, example_env: None) -> None:
+    initial = load_config(tmp_config)
+    holder = MutableConfigHolder(initial, config_path=tmp_config)
+
+    # First set a runtime key, then revoke it.
+    token = encrypt_value("sk-test", master_key=Fernet.generate_key().decode())
+    upsert_provider_key(holder, provider_name="anthropic-prod", encrypted_token=token)
+    delete_provider_key(holder, provider_name="anthropic-prod")
+
+    entry = _read_provider_entry(tmp_config, "anthropic-prod")
+    assert "api_key_encrypted" not in entry
+    provider = holder.current().provider_by_name("anthropic-prod")
+    assert provider is not None
+    assert provider.api_key_encrypted is None
+
+
+@pytest.mark.unit
+def test_delete_provider_key_env_only_raises_409(tmp_config: Path, example_env: None) -> None:
+    initial = load_config(tmp_config)
+    holder = MutableConfigHolder(initial, config_path=tmp_config)
+
+    # openai-prod ships with api_key_env only — no runtime key to revoke.
+    with pytest.raises(ProviderKeyMutationError) as excinfo:
+        delete_provider_key(holder, provider_name="openai-prod")
+    assert excinfo.value.http_status == 409
+
+
+@pytest.mark.unit
+def test_delete_provider_key_unknown_provider_raises_404(
+    tmp_config: Path, example_env: None
+) -> None:
+    initial = load_config(tmp_config)
+    holder = MutableConfigHolder(initial, config_path=tmp_config)
+
+    with pytest.raises(ProviderKeyMutationError) as excinfo:
+        delete_provider_key(holder, provider_name="does-not-exist")
+    assert excinfo.value.http_status == 404
+
+
+@pytest.mark.unit
+def test_upsert_provider_key_empty_token_raises_422(tmp_config: Path, example_env: None) -> None:
+    """An empty ciphertext can never produce a keyless provider."""
+
+    initial = load_config(tmp_config)
+    holder = MutableConfigHolder(initial, config_path=tmp_config)
+
+    with pytest.raises(ProviderKeyMutationError) as excinfo:
+        upsert_provider_key(holder, provider_name="anthropic-prod", encrypted_token="")
+    assert excinfo.value.http_status == 422
+
+
+@pytest.mark.unit
+def test_upsert_provider_key_no_providers_list_raises_500(
+    tmp_config: Path, example_env: None
+) -> None:
+    """A config whose ``providers:`` key is absent (or not a list) is
+    treated as a malformed config — 500, not 404."""
+
+    initial = load_config(tmp_config)
+    holder = MutableConfigHolder(initial, config_path=tmp_config)
+
+    # Overwrite the file with a mapping that has no ``providers`` list.
+    tmp_config.write_text("model_aliases: {}\n", encoding="utf-8")
+
+    token = encrypt_value("sk-test", master_key=Fernet.generate_key().decode())
+    with pytest.raises(ProviderKeyMutationError) as excinfo:
+        upsert_provider_key(holder, provider_name="anthropic-prod", encrypted_token=token)
+    assert excinfo.value.http_status == 500
+
+
+@pytest.mark.unit
+def test_upsert_provider_key_preserves_other_provider_fields(
+    tmp_config: Path, example_env: None
+) -> None:
+    """Mutating one provider leaves a DIFFERENT provider's fields intact.
+
+    Locks in the raw-YAML round-trip guarantee: ``base_url`` / ``tier``
+    on an unrelated entry must survive the write untouched.
+    """
+
+    initial = load_config(tmp_config)
+    holder = MutableConfigHolder(initial, config_path=tmp_config)
+
+    before = holder.current().provider_by_name("openai-prod")
+    assert before is not None
+    base_url_before = before.base_url
+    tier_before = before.tier
+
+    token = encrypt_value("sk-test", master_key=Fernet.generate_key().decode())
+    upsert_provider_key(holder, provider_name="anthropic-prod", encrypted_token=token)
+
+    after = holder.current().provider_by_name("openai-prod")
+    assert after is not None
+    assert after.base_url == base_url_before
+    assert after.tier == tier_before
 
 
 def test_install_sighup_reload_no_op_on_windows(monkeypatch: pytest.MonkeyPatch) -> None:

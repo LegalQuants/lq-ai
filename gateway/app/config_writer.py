@@ -64,6 +64,22 @@ class AliasMutationError(ValueError):
         self.http_status = http_status
 
 
+class ProviderKeyMutationError(ValueError):
+    """Raised when a provider-key mutation cannot be applied (404, 409, 500).
+
+    Sibling of :class:`AliasMutationError` for the runtime BYOK
+    (Donna #7) provider-key endpoints. Carries an HTTP-status hint via
+    :attr:`http_status` so the route handler (Task B) can map cleanly
+    without parsing the message string. We keep this distinct from the
+    alias-named error so the two surfaces don't accidentally share
+    status semantics.
+    """
+
+    def __init__(self, message: str, *, http_status: int) -> None:
+        super().__init__(message)
+        self.http_status = http_status
+
+
 def _read_yaml_mapping(config_path: Path) -> dict[str, Any]:
     """Read the YAML file as a plain dict (no env-var expansion).
 
@@ -396,9 +412,137 @@ def update_tier_policy(
     return dict(holder.current().tier_policy.model_dump(mode="json"))
 
 
+# --- Provider-key mutation API (runtime BYOK, Donna #7) ----------------------
+
+
+def _find_provider_entry(
+    raw: dict[str, Any],
+    *,
+    provider_name: str,
+) -> dict[str, Any]:
+    """Locate the ``providers:`` list entry whose ``name`` matches.
+
+    ``providers`` is a YAML *list* of mappings (unlike ``model_aliases``,
+    which is a keyed mapping). We round-trip the raw list so unrelated
+    provider-specific keys (``base_url``, ``tier``, ``api_version``,
+    operator extras) survive the write.
+
+    Raises :class:`ProviderKeyMutationError` 500 when ``providers`` is
+    missing or not a list (malformed config), and 404 when no entry
+    matches ``provider_name``.
+    """
+
+    providers = raw.get("providers")
+    if not isinstance(providers, list):
+        raise ProviderKeyMutationError(
+            "gateway.yaml providers is missing or malformed (expected a list)",
+            http_status=500,
+        )
+    for entry in providers:
+        if isinstance(entry, dict) and entry.get("name") == provider_name:
+            return entry
+    raise ProviderKeyMutationError(
+        f"provider {provider_name!r} not found",
+        http_status=404,
+    )
+
+
+def upsert_provider_key(
+    holder: MutableConfigHolder,
+    *,
+    provider_name: str,
+    encrypted_token: str,
+) -> None:
+    """Set a provider's runtime ``api_key_encrypted`` and reload.
+
+    Scope: managing the key on an **existing** provider entry only.
+    Adding a brand-new provider (with type/base_url/tier) is out of
+    scope for this API — those land through the operator's edit of
+    ``gateway.yaml`` directly.
+
+    Setting a runtime key switches the entry's key source to the
+    encrypted-at-rest path: we set ``api_key_encrypted`` and clear any
+    ``api_key_env`` (the :class:`~app.config.ProviderConfig` validator
+    refuses both, so the env key must be dropped). The reload then
+    re-validates the whole file; on failure the file is rolled back to
+    the prior bytes and :class:`ConfigReloadError` re-raised (the exact
+    ``upsert_alias`` rollback pattern).
+
+    Raises :class:`ProviderKeyMutationError` 404 if no provider matches
+    ``provider_name`` (500 if the providers list is malformed, 422 if the
+    encrypted token is empty).
+    """
+
+    if not encrypted_token:
+        # ``encrypt_value`` already rejects empty plaintext, so a real
+        # ciphertext is never empty — this just keeps the contract honest
+        # if a route ever passes a malformed body and prevents an upsert
+        # from silently producing a keyless provider.
+        raise ProviderKeyMutationError(
+            "encrypted_token must be non-empty",
+            http_status=422,
+        )
+
+    raw = _read_yaml_mapping(holder.config_path)
+    entry = _find_provider_entry(raw, provider_name=provider_name)
+
+    entry["api_key_encrypted"] = encrypted_token
+    # Source becomes runtime; the validator forbids both key sources.
+    entry.pop("api_key_env", None)
+
+    prior_bytes = holder.config_path.read_bytes()
+    _atomic_write_yaml(holder.config_path, raw)
+    try:
+        holder.reload_from_disk()
+    except ConfigReloadError:
+        holder.config_path.write_bytes(prior_bytes)
+        raise
+
+
+def delete_provider_key(
+    holder: MutableConfigHolder,
+    *,
+    provider_name: str,
+) -> None:
+    """Revoke a provider's runtime ``api_key_encrypted`` and reload.
+
+    Only runtime (encrypted-at-rest) keys can be revoked through this
+    API. An env-sourced key (``api_key_env``) is owned by the operator's
+    environment, not the gateway file; attempting to revoke one raises
+    409 (documented behavior). A now-keyless provider entry is still
+    valid config — its adapter simply won't build, and Task B's
+    hot-apply pops it from the live registry.
+
+    Raises :class:`ProviderKeyMutationError` 404 if no provider matches,
+    409 if the matched provider has no runtime key to revoke.
+    """
+
+    raw = _read_yaml_mapping(holder.config_path)
+    entry = _find_provider_entry(raw, provider_name=provider_name)
+
+    if "api_key_encrypted" not in entry:
+        raise ProviderKeyMutationError(
+            f"provider {provider_name!r} has no runtime key to revoke",
+            http_status=409,
+        )
+
+    entry.pop("api_key_encrypted", None)
+
+    prior_bytes = holder.config_path.read_bytes()
+    _atomic_write_yaml(holder.config_path, raw)
+    try:
+        holder.reload_from_disk()
+    except ConfigReloadError:
+        holder.config_path.write_bytes(prior_bytes)
+        raise
+
+
 __all__ = [
     "AliasMutationError",
+    "ProviderKeyMutationError",
     "delete_alias",
+    "delete_provider_key",
     "update_tier_policy",
     "upsert_alias",
+    "upsert_provider_key",
 ]
