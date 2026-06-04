@@ -30,17 +30,26 @@ rolled back to the prior bytes on a best-effort basis.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.dependencies import make_require_gateway_key
 from app.config import GatewayConfig, ModelAliasConfig
 from app.config_holder import ConfigReloadError, MutableConfigHolder
-from app.config_writer import AliasMutationError, delete_alias, update_tier_policy, upsert_alias
+from app.config_writer import (
+    AliasMutationError,
+    ProviderKeyMutationError,
+    delete_alias,
+    update_tier_policy,
+    upsert_alias,
+)
+from app.provider_keys import apply_provider_key, list_provider_keys, revoke_provider_key
 from app.router import derive_routed_inference_tier
+from app.secrets import MASTER_KEY_ENV, ProviderKeyResolver
 
 require_gateway_key = make_require_gateway_key()
 
@@ -182,6 +191,33 @@ class AliasUpdateRequest(BaseModel):
     provider: str = Field(min_length=1)
     model: str = Field(min_length=1)
     fallback: list[_FallbackEntry] | None = None
+
+
+class ProviderKeySetRequest(BaseModel):
+    """``POST /admin/v1/provider-keys`` body (Donna #7).
+
+    ``api_key`` is the plaintext provider key. It is encrypted with the
+    gateway master key before it touches disk and is NEVER echoed back in
+    any response. ``min_length=1`` rejects an empty key at the edge.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider: str = Field(min_length=1)
+    api_key: str = Field(min_length=1)
+
+
+class ProviderKeyRotateRequest(BaseModel):
+    """``PATCH /admin/v1/provider-keys/{provider}`` body (Donna #7).
+
+    Rotate the runtime key on an already-configured provider. Same
+    secret-handling as :class:`ProviderKeySetRequest`; the provider comes
+    from the path.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    api_key: str = Field(min_length=1)
 
 
 # ---------------------------------------------------------------------------
@@ -477,3 +513,198 @@ def _alias_error_code(exc: AliasMutationError) -> str:
     if exc.http_status == status.HTTP_422_UNPROCESSABLE_ENTITY:
         return "invalid_request"
     return "internal_error"
+
+
+# ---------------------------------------------------------------------------
+# Donna #7: runtime provider-key management (BYOK hot-apply)
+# ---------------------------------------------------------------------------
+
+
+def _provider_key_error_code(exc: ProviderKeyMutationError) -> str:
+    """Map a :class:`ProviderKeyMutationError` HTTP status to a gateway code.
+
+    Parallel to :func:`_alias_error_code` — kept separate so the two
+    surfaces don't accidentally share status semantics (provider-key delete
+    uses 409 for "no runtime key to revoke", not the alias "conflict"
+    meaning, but they render the same stable code).
+    """
+
+    if exc.http_status == status.HTTP_404_NOT_FOUND:
+        return "not_found"
+    if exc.http_status == status.HTTP_409_CONFLICT:
+        return "conflict"
+    if exc.http_status == status.HTTP_422_UNPROCESSABLE_ENTITY:
+        return "invalid_request"
+    return "internal_error"
+
+
+def _resolved_master_key() -> str | None:
+    """Return the bound gateway master key, or ``None`` if unset.
+
+    Runtime (encrypted-at-rest) key storage is impossible without it; the
+    write endpoints fail fast with 400 when it's absent rather than writing
+    an unencryptable key.
+    """
+
+    return os.environ.get(MASTER_KEY_ENV) or None
+
+
+@router.get("/provider-keys")
+async def list_provider_keys_endpoint(request: Request) -> dict[str, Any]:
+    """List the secret-safe key status of every configured provider.
+
+    Each row is ``{provider, type, configured, last4, source}``. The
+    response NEVER contains a full key — only the last 4 characters of a
+    resolvable key, and only when the provider's adapter is built.
+    """
+
+    config = _config(request)
+    rows = list_provider_keys(
+        config,
+        request.app.state.adapters,
+        ProviderKeyResolver.from_environ(),
+    )
+    return {"provider_keys": rows}
+
+
+async def _apply_provider_key_request(
+    request: Request,
+    *,
+    provider_name: str,
+    plaintext: str,
+) -> dict[str, Any] | JSONResponse:
+    """Shared apply path for the POST (set) and PATCH (rotate) endpoints.
+
+    Both endpoints differ only in where ``provider_name`` comes from (POST
+    reads it from the body, PATCH from the path). The work is identical:
+    enforce the master-key precondition (400 when unset), hold the
+    serialization lock, delegate to :func:`apply_provider_key`, and map the
+    service-layer errors to the canonical ``GatewayError`` envelope.
+
+    Returns the provider's secret-safe status dict on success, or a
+    :class:`JSONResponse` error envelope on the precondition / mutation /
+    reload failure paths.
+    """
+
+    master_key = _resolved_master_key()
+    if not master_key:
+        return _gateway_error(
+            code="failed_precondition",
+            message=(f"runtime key storage requires {MASTER_KEY_ENV} to be set"),
+            http_status=status.HTTP_400_BAD_REQUEST,
+            details={"provider": provider_name},
+        )
+
+    holder = _holder(request)
+    async with request.app.state.provider_key_lock:
+        try:
+            return await apply_provider_key(
+                holder=holder,
+                app_state=request.app.state,
+                provider_name=provider_name,
+                plaintext=plaintext,
+                master_key=master_key,
+            )
+        except ProviderKeyMutationError as exc:
+            return _gateway_error(
+                code=_provider_key_error_code(exc),
+                message=str(exc),
+                http_status=exc.http_status,
+                details={"provider": provider_name},
+            )
+        except ConfigReloadError as exc:
+            return _gateway_error(
+                code="invalid_request",
+                message=str(exc),
+                http_status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                details={"provider": provider_name},
+            )
+
+
+@router.post("/provider-keys", response_model=None)
+async def set_provider_key(
+    request: Request,
+    body: ProviderKeySetRequest,
+) -> dict[str, Any] | JSONResponse:
+    """Set/replace a provider's runtime key and hot-apply it.
+
+    Encrypts the key with the master key, persists ``api_key_encrypted`` to
+    ``gateway.yaml``, reloads, and swaps the rebuilt adapter into the live
+    registry — no restart. 400 if the master key is unset; 404 if the
+    provider isn't configured. Returns the provider's status dict (no
+    secret).
+    """
+
+    return await _apply_provider_key_request(
+        request,
+        provider_name=body.provider,
+        plaintext=body.api_key,
+    )
+
+
+@router.patch("/provider-keys/{provider}", response_model=None)
+async def rotate_provider_key(
+    request: Request,
+    provider: str,
+    body: ProviderKeyRotateRequest,
+) -> dict[str, Any] | JSONResponse:
+    """Rotate the runtime key on an already-configured provider.
+
+    Same mechanics as POST; the provider comes from the path. 404 if the
+    provider isn't configured; 400 if the master key is unset.
+    """
+
+    return await _apply_provider_key_request(
+        request,
+        provider_name=provider,
+        plaintext=body.api_key,
+    )
+
+
+@router.delete(
+    "/provider-keys/{provider}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+async def revoke_provider_key_endpoint(
+    request: Request,
+    provider: str,
+) -> Response:
+    """Revoke a provider's runtime key and retire its live adapter.
+
+    Deletes ``api_key_encrypted`` from ``gateway.yaml``, reloads, and pops
+    the adapter from the live registry (it routes 503 afterward). 404 if
+    the provider isn't configured; 409 if the provider has no runtime key
+    to revoke (e.g., an env-sourced key, which the operator owns). 204 on
+    success.
+
+    Per the CLAUDE.md DELETE-204 recipe: ``response_class=Response`` plus an
+    explicit empty ``Response`` return so the 204 carries a genuinely empty
+    body. The error branch still returns a ``JSONResponse`` (a ``Response``
+    subclass) carrying the ``GatewayError`` envelope — FastAPI honors the
+    explicit return, so that is fine even with ``response_class=Response``.
+    """
+
+    holder = _holder(request)
+    async with request.app.state.provider_key_lock:
+        try:
+            await revoke_provider_key(
+                holder=holder,
+                app_state=request.app.state,
+                provider_name=provider,
+            )
+        except ProviderKeyMutationError as exc:
+            return _gateway_error(
+                code=_provider_key_error_code(exc),
+                message=str(exc),
+                http_status=exc.http_status,
+                details={"provider": provider},
+            )
+        except ConfigReloadError as exc:
+            return _gateway_error(
+                code="invalid_request",
+                message=str(exc),
+                http_status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                details={"provider": provider},
+            )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

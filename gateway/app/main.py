@@ -41,6 +41,7 @@ The lifespan reads the path from ``GATEWAY_CONFIG_PATH``. Defaults:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from collections.abc import AsyncIterator
@@ -222,6 +223,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Otherwise shutdown's two close loops would double-close it.
     retired_adapters: list[ProviderAdapter] = []
     app.state.retired_adapters = retired_adapters
+    # Donna #7: serialize the runtime BYOK mutation (write → reload → swap)
+    # so two concurrent key mutations can't interleave their reload+swap and
+    # leave the live registry pointing at an adapter that doesn't match the
+    # on-disk config. The provider-key admin endpoints hold this lock across
+    # the whole mutation. Created here (inside the running event loop) so the
+    # lock binds to the right loop.
+    app.state.provider_key_lock = asyncio.Lock()
 
     # B4: build the request router around the loaded config + adapter
     # registry. Per-request handlers pull this off ``app.state.router``
