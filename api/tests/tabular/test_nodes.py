@@ -380,6 +380,12 @@ async def test_extract_cell_ensemble_strict_all_yes_sets_method() -> None:
     assert cell["verification_method"] == "ensemble_strict"
     # 1 extraction + 3 judge calls.
     assert len(gateway.calls_received) == 4
+    # The ensemble pass must judge ONLY the cited chunk (index 0), never the
+    # uncited chunk ("Other") — the verify document is the concatenation of
+    # *cited* chunks, not all retrieved chunks. Inspect a judge call's source.
+    judge_source = gateway.calls_received[1].messages[1].content
+    assert "Delaware" in judge_source
+    assert "Other" not in judge_source
 
 
 @pytest.mark.unit
