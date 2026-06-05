@@ -4320,6 +4320,8 @@ paths:
                 $ref: '#/components/schemas/AutonomousScheduleRead'
         '401':
           description: Not authenticated
+        '404':
+          description: Referenced project not found
         '422':
           description: Invalid cron expression
     get:
@@ -4384,7 +4386,7 @@ paths:
         '401':
           description: Not authenticated
         '404':
-          description: Schedule not found
+          description: Schedule or referenced project not found
         '422':
           description: Invalid cron expression
     delete:
@@ -4442,7 +4444,7 @@ paths:
         '401':
           description: Not authenticated
         '404':
-          description: Target knowledge base not found
+          description: Target knowledge base or referenced project not found
     get:
       tags: [autonomous]
       summary: List the calling user's autonomous watches (non-deleted, newest first)
@@ -4510,7 +4512,7 @@ paths:
         '401':
           description: Not authenticated
         '404':
-          description: Watch not found
+          description: Watch or referenced project not found
     delete:
       tags: [autonomous]
       summary: Soft-delete an autonomous watch (returns 200 with updated entity)
@@ -4633,6 +4635,8 @@ paths:
           description: Not authenticated
         '403':
           description: Autonomous layer not enabled for this user
+        '404':
+          description: Referenced project not found
         '422':
           description: Invalid target (need exactly one of playbook_id/skill_ref)
 
@@ -5588,7 +5592,9 @@ components:
       description: |
         Request body for ``PATCH /autonomous/schedules/{id}``.  All fields
         optional.  Changing ``cron_expr`` re-validates (422) and recomputes
-        ``next_run_at``.
+        ``next_run_at``.  The matter (``project_id``) may be reassigned; an
+        explicit ``null`` unassigns it, and a non-null ``project_id`` the
+        caller does not own returns 404 (id-probing-safe).
       properties:
         name: {type: string, nullable: true}
         cron_expr: {type: string, nullable: true}
@@ -5596,6 +5602,7 @@ components:
         playbook_id: {type: string, format: uuid, nullable: true}
         skill_ref: {type: string, nullable: true}
         target_kb_id: {type: string, format: uuid, nullable: true}
+        project_id: {type: string, format: uuid, nullable: true}
         max_cost_usd: {type: string, nullable: true}
 
     AutonomousManualRunRequest:
@@ -5674,11 +5681,15 @@ components:
       description: |
         Request body for ``PATCH /autonomous/watches/{id}``.  All fields
         optional.  The watch's ``knowledge_base_id`` is immutable (not
-        present here) — a watch is bound to its KB.
+        present here) — a watch is bound to its KB.  The matter
+        (``project_id``) may be reassigned; an explicit ``null`` unassigns
+        it, and a non-null ``project_id`` the caller does not own returns
+        404 (id-probing-safe).
       properties:
         enabled: {type: boolean, nullable: true}
         playbook_id: {type: string, format: uuid, nullable: true}
         skill_ref: {type: string, nullable: true}
+        project_id: {type: string, format: uuid, nullable: true}
         max_cost_usd: {type: string, nullable: true}
 
     AutonomousWatchListResponse:

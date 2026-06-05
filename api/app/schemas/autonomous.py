@@ -176,6 +176,9 @@ class AutonomousScheduleUpdate(BaseModel):
     it is re-validated (invalid → 422) and ``next_run_at`` is recomputed.
     Toggling ``enabled`` is allowed. ``max_cost_usd`` may be edited
     (NULL clears the per-schedule cap → fall back to global default).
+    The matter (``project_id``) may be reassigned; an explicit ``null``
+    clears it (unassign). A non-null ``project_id`` the caller does not
+    own is rejected (404, id-probing-safe).
     """
 
     name: str | None = None
@@ -184,6 +187,7 @@ class AutonomousScheduleUpdate(BaseModel):
     playbook_id: uuid.UUID | None = None
     skill_ref: str | None = None
     target_kb_id: uuid.UUID | None = None
+    project_id: uuid.UUID | None = None
     max_cost_usd: Decimal | None = None
 
 
@@ -275,12 +279,16 @@ class AutonomousWatchUpdate(BaseModel):
     allowed; ``playbook_id`` / ``skill_ref`` may be retargeted. The
     watch's ``knowledge_base_id`` is immutable (not present here) — a
     watch is bound to its KB. ``max_cost_usd`` may be edited (NULL clears
-    the per-watch cap → fall back to global default).
+    the per-watch cap → fall back to global default). The matter
+    (``project_id``) may be reassigned; an explicit ``null`` clears it
+    (unassign). A non-null ``project_id`` the caller does not own is
+    rejected (404, id-probing-safe).
     """
 
     enabled: bool | None = None
     playbook_id: uuid.UUID | None = None
     skill_ref: str | None = None
+    project_id: uuid.UUID | None = None
     max_cost_usd: Decimal | None = None
 
 

@@ -1034,6 +1034,7 @@ async def reject_project_context_proposal(
     responses={
         201: {"description": "Schedule created"},
         422: {"description": "Invalid cron expression"},
+        404: {"description": "Referenced project not found"},
         401: {"description": "Not authenticated"},
     },
 )
@@ -1060,6 +1061,11 @@ async def create_schedule(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"invalid cron expression: {exc}",
         ) from exc
+
+    # Validate matter ownership — a non-null project_id the caller doesn't own
+    # is rejected 404 (id-probing-safe). NULL = no matter; no check needed.
+    if body.project_id is not None:
+        await _load_owned_project(db, project_id=body.project_id, user_id=user.id)
 
     now = datetime.now(UTC)
     schedule = AutonomousSchedule(
@@ -1110,6 +1116,11 @@ async def _spawn_manual_session(
     enqueue_fn = enqueue if enqueue is not None else enqueue_autonomous_session_job
     settings = get_settings()
 
+    # Validate matter ownership — a non-null project_id the caller doesn't own
+    # is rejected 404 (id-probing-safe). NULL = no matter; no check needed.
+    if body.project_id is not None:
+        await _load_owned_project(db, project_id=body.project_id, user_id=user_id)
+
     params: dict[str, object] = {"since": None}
     if body.target_kb_id is not None:
         params["kb_id"] = str(body.target_kb_id)
@@ -1145,6 +1156,7 @@ async def _spawn_manual_session(
         201: {"description": "Session spawned"},
         403: {"description": "Autonomous layer not enabled for this user"},
         422: {"description": "Invalid target (need exactly one of playbook_id/skill_ref)"},
+        404: {"description": "Referenced project not found"},
         401: {"description": "Not authenticated"},
     },
 )
@@ -1233,7 +1245,7 @@ async def list_schedules(
     response_model=AutonomousScheduleRead,
     summary="Partially update an autonomous schedule (edit / enable / disable)",
     responses={
-        404: {"description": "Schedule not found"},
+        404: {"description": "Schedule or referenced project not found"},
         422: {"description": "Invalid cron expression"},
         401: {"description": "Not authenticated"},
     },
@@ -1280,6 +1292,11 @@ async def update_schedule(
         schedule.skill_ref = fields["skill_ref"]
     if "target_kb_id" in fields:
         schedule.target_kb_id = fields["target_kb_id"]
+    if "project_id" in fields:
+        new_project_id = fields["project_id"]
+        if new_project_id is not None:
+            await _load_owned_project(db, project_id=new_project_id, user_id=user.id)
+        schedule.project_id = new_project_id  # explicit null clears the matter
     if "max_cost_usd" in fields:
         # Per design: NULL clears the per-schedule cap → fall back to global default.
         # `exclude_unset=True` makes "explicitly sent null" distinguishable from "omitted".
@@ -1360,7 +1377,7 @@ async def delete_schedule(
     summary="Create an autonomous watch (KB-arrival-triggered run definition)",
     responses={
         201: {"description": "Watch created"},
-        404: {"description": "Target knowledge base not found"},
+        404: {"description": "Target knowledge base or referenced project not found"},
         401: {"description": "Not authenticated"},
     },
 )
@@ -1392,6 +1409,11 @@ async def create_watch(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="knowledge base not found",
         )
+
+    # Validate matter ownership — a non-null project_id the caller doesn't own
+    # is rejected 404 (id-probing-safe). NULL = no matter; no check needed.
+    if body.project_id is not None:
+        await _load_owned_project(db, project_id=body.project_id, user_id=user.id)
 
     watch = AutonomousWatch(
         user_id=user.id,
@@ -1480,7 +1502,7 @@ async def list_watches(
     response_model=AutonomousWatchRead,
     summary="Partially update an autonomous watch (enable / disable / retarget)",
     responses={
-        404: {"description": "Watch not found"},
+        404: {"description": "Watch or referenced project not found"},
         401: {"description": "Not authenticated"},
     },
 )
@@ -1511,6 +1533,11 @@ async def update_watch(
         watch.playbook_id = fields["playbook_id"]
     if "skill_ref" in fields:
         watch.skill_ref = fields["skill_ref"]
+    if "project_id" in fields:
+        new_project_id = fields["project_id"]
+        if new_project_id is not None:
+            await _load_owned_project(db, project_id=new_project_id, user_id=user.id)
+        watch.project_id = new_project_id  # explicit null clears the matter
     if "max_cost_usd" in fields:
         # Per design: NULL clears the per-watch cap → fall back to global default.
         # `exclude_unset=True` makes "explicitly sent null" distinguishable from "omitted".
