@@ -6,6 +6,7 @@ Sessions (M4-A4-i):
 * ``POST /sessions/{session_id}/halt`` — idempotent halt request.
 * ``GET  /sessions``                  — paginated list, newest first.
 * ``GET  /sessions/{session_id}``     — detail + live receipt.
+* ``GET  /sessions/{session_id}/findings`` — the run's findings, emission order.
 
 Memory curation (M4-B1):
 * ``GET  /memory``                           — list non-deleted entries.
@@ -52,6 +53,7 @@ from app.autonomous.receipt import build_receipt
 from app.config import get_settings
 from app.db.session import get_db
 from app.models.autonomous import (
+    AutonomousFinding,
     AutonomousMemory,
     AutonomousNotification,
     AutonomousSchedule,
@@ -63,6 +65,8 @@ from app.models.autonomous import (
 from app.models.knowledge import KnowledgeBase
 from app.models.project import Project
 from app.schemas.autonomous import (
+    AutonomousFindingListResponse,
+    AutonomousFindingRead,
     AutonomousManualRunRequest,
     AutonomousMemoryListResponse,
     AutonomousMemoryRead,
@@ -491,6 +495,62 @@ async def get_session(
     )
 
 
+@router.get(
+    "/sessions/{session_id}/findings",
+    response_model=AutonomousFindingListResponse,
+    summary="List a session's persisted findings (work-product, emission order)",
+    responses={
+        404: {"description": "Session not found"},
+        401: {"description": "Not authenticated"},
+    },
+)
+async def list_session_findings(
+    session_id: uuid.UUID,
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    limit: int = _LIMIT_DEFAULT,
+    offset: int = 0,
+) -> AutonomousFindingListResponse:
+    """GET /api/v1/autonomous/sessions/{session_id}/findings
+
+    Returns the run's persisted findings (the ``emit_finding`` chokepoint
+    work-product) ordered by ``created_at ASC`` — emission order, the run's
+    output sequence. This differs intentionally from the newest-first
+    autonomous lists: these are one run's sequential output, not a feed.
+
+    Owner-gated by loading the owned session first (the findings table has
+    no ``user_id`` — authz is via the parent session). Another user's
+    ``session_id`` — or a missing one — returns 404 (not 403) to avoid
+    existence disclosure. ``limit`` is clamped to [1, 200]; ``offset`` to
+    [0, ∞).
+    """
+    await _load_owned_session(db, session_id=session_id, user_id=user.id)
+
+    limit = max(1, min(limit, _LIMIT_MAX))
+    offset = max(0, offset)
+
+    base_where = [AutonomousFinding.session_id == session_id]
+
+    count_stmt = select(func.count()).select_from(AutonomousFinding).where(*base_where)
+    total_count: int = (await db.execute(count_stmt)).scalar_one()
+
+    rows_stmt = (
+        select(AutonomousFinding)
+        .where(*base_where)
+        .order_by(AutonomousFinding.created_at.asc())
+        .limit(limit)
+        .offset(offset)
+    )
+    rows = (await db.execute(rows_stmt)).scalars().all()
+
+    return AutonomousFindingListResponse(
+        findings=[AutonomousFindingRead.model_validate(r) for r in rows],
+        total_count=total_count,
+        limit=limit,
+        offset=offset,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Memory curation endpoints (M4-B1)
 # ---------------------------------------------------------------------------
@@ -508,6 +568,7 @@ async def list_memory(
     user: ActiveUser,
     db: Annotated[AsyncSession, Depends(get_db)],
     state: Annotated[MemoryState | None, Query()] = None,
+    source_session_id: Annotated[uuid.UUID | None, Query()] = None,
     limit: int = _LIMIT_DEFAULT,
     offset: int = 0,
 ) -> AutonomousMemoryListResponse:
@@ -515,7 +576,9 @@ async def list_memory(
 
     Returns the caller's non-deleted memory entries ordered by
     ``created_at DESC``.  Pass ``?state=proposed|kept|dismissed`` to
-    filter; omitting ``state`` returns all non-deleted entries.
+    filter by review state; omitting ``state`` returns all non-deleted
+    entries.  Pass ``?source_session_id=`` to narrow to the memories a
+    specific run proposed (the run's "memories this run proposed" view).
     ``limit`` is clamped to [1, 200]; ``offset`` to [0, ∞).
     """
     limit = max(1, min(limit, _LIMIT_MAX))
@@ -527,6 +590,8 @@ async def list_memory(
     ]
     if state is not None:
         base_where.append(AutonomousMemory.state == str(state))
+    if source_session_id is not None:
+        base_where.append(AutonomousMemory.source_session_id == source_session_id)
 
     count_stmt = select(func.count()).select_from(AutonomousMemory).where(*base_where)
     total_count: int = (await db.execute(count_stmt)).scalar_one()

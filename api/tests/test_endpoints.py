@@ -294,6 +294,7 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("PATCH", "/api/v1/autonomous/schedules/{schedule_id}"),
     ("GET", "/api/v1/autonomous/sessions"),
     ("GET", "/api/v1/autonomous/sessions/{session_id}"),
+    ("GET", "/api/v1/autonomous/sessions/{session_id}/findings"),
     ("POST", "/api/v1/autonomous/sessions/{session_id}/halt"),
     ("GET", "/api/v1/autonomous/watches"),
     ("POST", "/api/v1/autonomous/watches"),

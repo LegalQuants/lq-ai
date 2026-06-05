@@ -163,6 +163,8 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/autonomous/sessions",
         "/api/v1/autonomous/sessions/{session_id}",
         "/api/v1/autonomous/sessions/{session_id}/halt",
+        # Findings read-model — a run's persisted findings (work-product)
+        "/api/v1/autonomous/sessions/{session_id}/findings",
         # M4-B1 — per-user memory curation API (list, keep, dismiss, delete)
         "/api/v1/autonomous/memory",
         "/api/v1/autonomous/memory/{memory_id}/keep",
@@ -279,7 +281,9 @@ async def test_openapi_paths_match_sketch() -> None:
     # Donna #7 adds two new paths:
     # /api/v1/admin/provider-keys
     # /api/v1/admin/provider-keys/{provider}
-    assert len(actual) == 116
+    # Findings read-model adds one new path:
+    # /api/v1/autonomous/sessions/{session_id}/findings
+    assert len(actual) == 117
 
 
 @pytest.mark.unit

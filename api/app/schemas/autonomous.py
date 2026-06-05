@@ -437,6 +437,41 @@ class AutonomousMemoryListResponse(BaseModel):
     offset: int
 
 
+class AutonomousFindingRead(BaseModel):
+    """ORM-read view of an ``autonomous_findings`` row (work-product).
+
+    A finding is one analysis result emitted by an autonomous run via the
+    ``emit_finding`` chokepoint. ``content`` is the finding body — the
+    LLM's ``summary`` for the finding. ``severity`` is LLM-emitted free
+    text (no CHECK constraint; ``info`` | ``warn`` | ``critical`` are the
+    intended values but anything stores).
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    session_id: uuid.UUID
+    severity: str
+    title: str
+    content: str
+    created_at: datetime
+
+
+class AutonomousFindingListResponse(BaseModel):
+    """Paginated list of :class:`AutonomousFindingRead` items.
+
+    Mirrors ``AutonomousMemoryListResponse`` — total_count / limit /
+    offset envelope. Findings are read in emission order (``created_at
+    ASC``) — one run's sequential output, not a newest-first feed. Uses
+    the ``findings`` key (Donna's UI expects ``findings: [...]``).
+    """
+
+    findings: list[AutonomousFindingRead]
+    total_count: int
+    limit: int
+    offset: int
+
+
 class AutonomousSessionListResponse(BaseModel):
     """Paginated list of :class:`AutonomousSessionRead` items.
 

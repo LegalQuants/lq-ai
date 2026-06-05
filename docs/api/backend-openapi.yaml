@@ -3904,6 +3904,50 @@ paths:
         '404':
           description: Session not found
 
+  /api/v1/autonomous/sessions/{session_id}/findings:
+    get:
+      tags: [autonomous]
+      summary: List a session's persisted findings (work-product, emission order)
+      description: |
+        Returns the run's persisted findings (the ``emit_finding`` chokepoint
+        work-product) ordered by ``created_at ASC`` — emission order, the
+        run's output sequence. This differs intentionally from the
+        newest-first autonomous lists: these are one run's sequential output.
+
+        Owner-gated by loading the owned session first (the findings table
+        has no ``user_id`` — authz is via the parent session). Another
+        user's ``session_id`` — or a missing one — returns 404 (not 403) to
+        avoid existence disclosure. ``limit`` is clamped to [1, 200];
+        ``offset`` to [0, ∞).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, default: 50, minimum: 1, maximum: 200}
+          description: Maximum number of findings to return (clamped to [1, 200]).
+        - name: offset
+          in: query
+          required: false
+          schema: {type: integer, default: 0, minimum: 0}
+          description: Zero-based index of the first result to return.
+      responses:
+        '200':
+          description: Paginated list of the session's findings (emission order)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutonomousFindingListResponse'
+        '401':
+          description: Not authenticated
+        '404':
+          description: Session not found
+
   /api/v1/autonomous/sessions/{session_id}/halt:
     post:
       tags: [autonomous]
@@ -3960,6 +4004,11 @@ paths:
             type: string
             enum: [proposed, kept, dismissed]
           description: Filter by review state; omit to return all non-deleted entries.
+        - name: source_session_id
+          in: query
+          required: false
+          schema: {type: string, format: uuid}
+          description: Narrow to the memories a specific run proposed; omit for all.
         - name: limit
           in: query
           required: false
@@ -5399,6 +5448,45 @@ components:
         created_at: {type: string, format: date-time}
         last_login_at: {type: string, format: date-time, nullable: true}
         deletion_scheduled_at: {type: string, format: date-time, nullable: true}
+
+    # Autonomous run findings (work-product) schemas
+
+    AutonomousFindingRead:
+      type: object
+      description: |
+        Read-only view of an ``autonomous_findings`` row — one analysis
+        finding emitted by a run via the ``emit_finding`` chokepoint.
+        ``content`` is the finding body (the LLM's ``summary``).
+        ``severity`` is LLM-emitted free text (no CHECK; ``info`` |
+        ``warn`` | ``critical`` are the intended values).
+      required:
+        - id
+        - session_id
+        - severity
+        - title
+        - content
+        - created_at
+      properties:
+        id: {type: string, format: uuid}
+        session_id: {type: string, format: uuid}
+        severity: {type: string}
+        title: {type: string}
+        content: {type: string}
+        created_at: {type: string, format: date-time}
+
+    AutonomousFindingListResponse:
+      type: object
+      description: |
+        Paginated list of a session's findings, in emission order
+        (``created_at ASC``) — one run's sequential output.
+      required: [findings, total_count, limit, offset]
+      properties:
+        findings:
+          type: array
+          items: {$ref: '#/components/schemas/AutonomousFindingRead'}
+        total_count: {type: integer, minimum: 0}
+        limit: {type: integer, minimum: 1, maximum: 200}
+        offset: {type: integer, minimum: 0}
 
     # M4-B1 — Autonomous memory curation schemas
 
