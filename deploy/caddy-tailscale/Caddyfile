@@ -1,0 +1,16 @@
+{
+	auto_https off
+}
+
+:80 {
+	encode gzip zstd
+
+	handle /lq-ai-api/v1/* {
+		uri replace /lq-ai-api/v1 /api/v1
+		reverse_proxy api:8000
+	}
+
+	handle {
+		reverse_proxy web:8080
+	}
+}

@@ -1,0 +1,66 @@
+name: lq-ai
+
+services:
+  # ============================================================
+  # Reverse proxy (optional; designed for use with the host's Tailscale)
+  # ============================================================
+  #
+  # This profile adds a Caddy reverse proxy in front of the web shell
+  # and backend. Caddy is NOT given its own tailnet identity — it
+  # publishes on the host's loopback by default, and the host's
+  # already-installed Tailscale fronts it via `tailscale serve`.
+  #
+  # Recommended end-to-end path (Linux host with `tailscale` in PATH):
+  #
+  #   Browser  →  https://<host>.<tailnet>.ts.net   (Tailscale CA cert)
+  #            →  127.0.0.1:80  on the host         (tailscale serve)
+  #            →  caddy container                    (Docker port map)
+  #            →  api:8000  /  web:8080              (Compose bridge net)
+  #
+  # One-time setup after `docker compose up -d`:
+  #
+  #   sudo tailscale serve --bg --https=443 / http://127.0.0.1:80
+  #
+  # That command lives in the HOST's tailscale config; it persists
+  # across host and stack reboots and gets the HTTPS cert from
+  # Tailscale's CA automatically. The Caddy container does not need
+  # to know anything about Tailscale.
+  #
+  # Caddy routes:
+  #   /api/v1/*  → api:8000   (FastAPI backend; ADR 0002 owns auth)
+  #   /*         → web:8080   (OpenWebUI fork — LQ.AI web shell)
+  #
+  # The gateway is intentionally NOT exposed via Caddy: per PRD §4 it
+  # is the security boundary holding privileged provider keys. Admin
+  # access to the gateway stays on 127.0.0.1:${GATEWAY_HOST_PORT}.
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      # web's first boot pulls embedding models from HuggingFace and
+      # may not become healthy for a few minutes. Don't block Caddy
+      # on it — `service_started` is enough for DNS resolution to
+      # work, and Caddy will return 502 until web is actually
+      # listening (a recoverable UX state, vs. the tailnet entry
+      # point staying down entirely).
+      web:
+        condition: service_started
+      api:
+        condition: service_healthy
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      - "${CADDY_BIND_ADDR:-127.0.0.1}:${CADDY_HOST_PORT:-80}:80"
+volumes:
+  caddy-data:
+  caddy-config:
+
+configs:
+  caddyfile:
+    file: ./deploy/caddy-tailscale/Caddyfile
+# file path is if you keep these files in the current directory structure.
