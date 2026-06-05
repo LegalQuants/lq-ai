@@ -5558,6 +5558,7 @@ components:
         skill_ref: {type: string, nullable: true}
         target_kb_id: {type: string, format: uuid, nullable: true}
         enabled: {type: boolean}
+        max_cost_usd: {type: string, nullable: true}
         last_run_at: {type: string, format: date-time, nullable: true}
         next_run_at: {type: string, format: date-time, nullable: true}
         deleted_at: {type: string, format: date-time, nullable: true}
@@ -5580,6 +5581,7 @@ components:
         target_kb_id: {type: string, format: uuid, nullable: true}
         project_id: {type: string, format: uuid, nullable: true}
         enabled: {type: boolean, default: true}
+        max_cost_usd: {type: string, nullable: true}
 
     AutonomousScheduleUpdate:
       type: object
@@ -5594,6 +5596,7 @@ components:
         playbook_id: {type: string, format: uuid, nullable: true}
         skill_ref: {type: string, nullable: true}
         target_kb_id: {type: string, format: uuid, nullable: true}
+        max_cost_usd: {type: string, nullable: true}
 
     AutonomousManualRunRequest:
       type: object
@@ -5645,6 +5648,7 @@ components:
         playbook_id: {type: string, format: uuid, nullable: true}
         skill_ref: {type: string, nullable: true}
         enabled: {type: boolean}
+        max_cost_usd: {type: string, nullable: true}
         deleted_at: {type: string, format: date-time, nullable: true}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
@@ -5663,6 +5667,7 @@ components:
         skill_ref: {type: string, nullable: true}
         project_id: {type: string, format: uuid, nullable: true}
         enabled: {type: boolean, default: true}
+        max_cost_usd: {type: string, nullable: true}
 
     AutonomousWatchUpdate:
       type: object
@@ -5674,6 +5679,7 @@ components:
         enabled: {type: boolean, nullable: true}
         playbook_id: {type: string, format: uuid, nullable: true}
         skill_ref: {type: string, nullable: true}
+        max_cost_usd: {type: string, nullable: true}
 
     AutonomousWatchListResponse:
       type: object
