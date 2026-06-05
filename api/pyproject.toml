@@ -12,7 +12,7 @@ license = { text = "Apache-2.0" }
 authors = [{ name = "LegalQuants" }]
 dependencies = [
     "fastapi>=0.115,<0.117",
-    "uvicorn[standard]>=0.32,<0.48",
+    "uvicorn[standard]>=0.32,<0.50",
     "pydantic>=2.7,<3",
     "pydantic-settings>=2.4,<3",
     "sqlalchemy[asyncio]>=2.0.30,<2.1",
