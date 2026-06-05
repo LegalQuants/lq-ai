@@ -40,6 +40,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.autonomous.enums import PHASE_GRANTS, Phase, ToolIntent
 from app.models.audit import AuditLog
 from app.models.autonomous import (
+    AutonomousFinding,
     AutonomousMemory,
     AutonomousNotification,
     AutonomousSession,
@@ -383,7 +384,9 @@ async def test_r6_granted_intent_passes_through(db_session: AsyncSession) -> Non
         gateway,
     )
     assert isinstance(result, ToolResult)
-    assert result.data == {"flag": "privilege_sensitive"}
+    # emit_finding echoes the finding plus the persisted row's id (Task 1).
+    assert result.data["flag"] == "privilege_sensitive"
+    assert "finding_id" in result.data
 
 
 # ---------------------------------------------------------------------------
@@ -532,10 +535,16 @@ async def test_success_notify_writes_notification_row(db_session: AsyncSession) 
 
 
 @pytest.mark.integration
-async def test_success_emit_finding_returns_data_no_db_row(
+async def test_success_emit_finding_persists_row_and_echoes(
     db_session: AsyncSession,
 ) -> None:
-    """emit_finding: the finding dict is echoed as data; no DB row written."""
+    """emit_finding: the finding is echoed (plus finding_id) AND persisted.
+
+    Task 1 added durable persistence: emit_finding now writes one
+    autonomous_findings row per finding (the run's work-product) in
+    addition to the transient echo, at zero cost. It does NOT write an
+    autonomous_memory row.
+    """
     from app.autonomous.guard import ToolResult, guarded_tool_call
 
     user = await _make_user(db_session)
@@ -558,7 +567,26 @@ async def test_success_emit_finding_returns_data_no_db_row(
 
     assert isinstance(result, ToolResult)
     assert result.cost_usd == Decimal("0")
-    assert result.data == finding
+    # Echo carries the original keys plus the persisted row's id.
+    assert result.data["clause"] == "limitation_of_liability"
+    assert result.data["severity"] == "high"
+    assert "finding_id" in result.data
+
+    # One autonomous_findings row was written for this session.
+    finding_rows = (
+        (
+            await db_session.execute(
+                select(AutonomousFinding).where(AutonomousFinding.session_id == sess.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(finding_rows) == 1
+    assert finding_rows[0].severity == "high"
+    # "clause" maps nowhere on the model; missing title/summary → defaults.
+    assert finding_rows[0].title == "(untitled)"
+    assert finding_rows[0].content == ""
 
     # No autonomous_memory rows should have been written
     mem_rows = (

@@ -85,6 +85,7 @@ from app.autonomous.enums import PHASE_GRANTS, HaltState, Phase, ToolIntent
 from app.autonomous.notify_email import send_notification_email
 from app.errors import CostCapReached, SessionHalted, ToolNotGranted
 from app.models.autonomous import (
+    AutonomousFinding,
     AutonomousMemory,
     AutonomousNotification,
     AutonomousSession,
@@ -283,13 +284,29 @@ async def _dispatch(
         A :class:`ToolResult` with ``cost_usd`` and tool-specific ``data``.
     """
     if intent == ToolIntent.emit_finding:
-        # Local, zero-cost: echo the finding payload back as data.
-        # The calling node appends it to state["findings"].
+        # Local, zero-cost: persist the finding row, then echo the payload
+        # (plus the new row id) back as data. The calling node still appends
+        # the finding to state["findings"] and computes findings_count — that
+        # transient-state behavior is unchanged; this only ADDS durable
+        # persistence so a run's findings can be read back later.
         # Missing "finding" key is a programming error at the call site;
         # KeyError is acceptable here (unreachable via the executor) and is
         # consistent with the propose_memory/notify required-param access —
         # a silent None finding must never propagate into state["findings"].
-        return ToolResult(cost_usd=Decimal("0"), data=params["finding"])
+        # The finding dict may omit keys (LLM structured output) — the
+        # `.get(...) or default` guards keep non-null DB columns satisfied.
+        finding = params["finding"]
+        finding_row = AutonomousFinding(
+            session_id=session.id,
+            severity=str(finding.get("severity") or "info"),
+            title=str(finding.get("title") or "(untitled)"),
+            content=str(finding.get("summary") or ""),
+        )
+        db.add(finding_row)
+        await db.flush()
+        return ToolResult(
+            cost_usd=Decimal("0"), data={**finding, "finding_id": str(finding_row.id)}
+        )
 
     if intent == ToolIntent.propose_memory:
         # Local, zero-cost: write a proposed autonomous_memory row.

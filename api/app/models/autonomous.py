@@ -423,6 +423,60 @@ class ProjectContextProposal(Base):
         )
 
 
+class AutonomousFinding(Base):
+    """A persisted analysis finding emitted by an autonomous run.
+
+    Findings are the core work-product of a run — written by the
+    ``emit_finding`` chokepoint handler each time a node emits one. Until
+    now findings were echoed into transient LangGraph state and discarded
+    after the run; only a count survived. This table makes a run's
+    findings readable back later (read endpoint + contract follow).
+
+    Unlike the other autonomous enum columns (which carry CHECK
+    constraints — see migrations 0039/0040), ``severity`` deliberately has
+    NO CHECK: it is LLM-emitted free text, so we persist whatever the model
+    produces (``info`` | ``warn`` | ``critical`` are the intended values,
+    but a stray ``high`` etc. must store, not reject the finding row).
+    ``title`` is the short headline; ``content`` is the finding's summary
+    body.
+
+    ``session_id`` FK is ``ON DELETE CASCADE`` — a finding belongs to one
+    session and is meaningless without it; deleting the session deletes its
+    findings. There is no ``user_id`` column: authz is via the owning
+    session (the read endpoint owner-gates by loading the owned session,
+    then queries by ``session_id``).
+    """
+
+    __tablename__ = "autonomous_findings"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "autonomous_sessions.id",
+            ondelete="CASCADE",
+            name="fk_autonomous_findings_session_id",
+        ),
+        nullable=False,
+    )
+    severity: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<AutonomousFinding id={self.id} session_id={self.session_id} "
+            f"severity={self.severity!r} title={self.title!r}>"
+        )
+
+
 class AutonomousNotification(Base):
     """A durable in-app notification written by the autonomous agent.
 
