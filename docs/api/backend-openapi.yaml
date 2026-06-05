@@ -5771,8 +5771,8 @@ components:
         halt_state:
           type: string
           enum: [running, halt_requested, halted, paused]
-        max_cost_usd: {type: number, format: decimal, nullable: true}
-        cost_total_usd: {type: number, format: decimal}
+        max_cost_usd: {type: string, nullable: true}
+        cost_total_usd: {type: string}
         cost_cap_reached: {type: boolean}
         idle_halt_minutes: {type: integer, minimum: 1}
         last_activity_at: {type: string, format: date-time}
