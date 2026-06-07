@@ -245,7 +245,8 @@ async def _installed_skill_registry() -> AsyncIterator[None]:
 
     :mod:`app.autonomous.prompts` reads the registry holder from
     ``app.state`` when no explicit registry is passed.  In production
-    the lifespan handler populates it (``app/main.py:88``); in tests we
+    both startup paths populate it via
+    :func:`app.skills.bootstrap.install_skill_registry`; in tests we
     install the C1-fixtures registry so ``alpha-test-skill`` is
     resolvable.  The previous holder (if any) is restored on teardown.
     """

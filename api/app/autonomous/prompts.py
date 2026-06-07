@@ -241,10 +241,14 @@ async def _load_skill_system_prompt(
 def _registry_from_app_state() -> SkillRegistry | None:
     """Return the current ``SkillRegistry`` snapshot from ``app.state``, or None.
 
-    The production lifespan handler installs a :class:`MutableSkillRegistry`
-    at ``app.state.skill_registry`` (see ``app/main.py:88``); tests that
-    want this default path install the same holder.  Callers that pass
-    an explicit ``registry=`` bypass this helper entirely.
+    Both production startup paths install a :class:`MutableSkillRegistry`
+    at ``app.state.skill_registry`` via
+    :func:`app.skills.bootstrap.install_skill_registry` — the FastAPI
+    lifespan (``app/main.py``) and the arq worker's startup hook
+    (``app/workers/arq_setup.on_startup``), because this module runs in
+    whichever process executes the session.  Tests that want this
+    default path install the same holder.  Callers that pass an
+    explicit ``registry=`` bypass this helper entirely.
 
     The import of :mod:`app.main` is deferred to function-call time to
     avoid circular imports — ``main.py`` already imports from

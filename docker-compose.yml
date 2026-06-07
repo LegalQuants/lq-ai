@@ -315,9 +315,13 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-lq_ai}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-lq_ai}}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       # DE-326: the api owns migrations; this worker must NOT run
-      # `alembic upgrade head` on boot. The worker image does not mount
-      # ./skills, so migration 0032 (seed builtin NDA playbooks) would raise
-      # on a fresh install. Safe because the api (above) migrates first.
+      # `alembic upgrade head` on boot — the api is the single schema
+      # migrator and runs first. (This worker NOW mounts ./skills — see
+      # volumes below — because the shared registry bootstrap installs
+      # the skill registry at worker startup so skill_ref autonomous
+      # sessions resolve here; the old "no ./skills mount" caveat about
+      # migration 0032 no longer applies. DE-326 remains the operative
+      # reason to skip.)
       LQ_AI_SKIP_MIGRATIONS: "1"
       # Gateway endpoint + auth — required by Phase 5's easy-playbook
       # extractor which calls the inference gateway. Pre-wired now so
@@ -325,6 +329,15 @@ services:
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
       LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Skills loader — the worker's on_startup installs the skill
+      # registry via the shared bootstrap (app/skills/bootstrap.py) so
+      # skill_ref autonomous sessions resolve on this process. Mounted
+      # read-only so the container can only consume the skills filesystem,
+      # not mutate it (skill authoring is a host-side / human-attestation
+      # workflow per CLAUDE.md "Working with skills").
+      LQ_AI_SKILLS_DIR: ${LQ_AI_SKILLS_DIR:-/skills}
+    volumes:
+      - ./skills:/skills:ro
     command: ["arq", "app.workers.arq_setup.WorkerSettings"]
     healthcheck:
       # Same proxy as ingest-worker: redis-reachability stands in for

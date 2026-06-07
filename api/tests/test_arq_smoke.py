@@ -57,11 +57,44 @@ async def test_noop_job_returns_ok() -> None:
 
 
 @pytest.mark.unit
-async def test_on_startup_logs_and_returns_none() -> None:
-    """Startup hook is a no-op-but-logging coroutine in Phase 1."""
+async def test_on_startup_installs_skill_registry_and_returns_none() -> None:
+    """Startup hook installs the skill registry (Donna ask #9), then logs.
 
-    # No exception, no return value.
-    assert await arq_setup.on_startup({}) is None
+    skill_ref autonomous sessions resolve through
+    ``app.state.skill_registry`` in whichever process runs them; the
+    worker must install it exactly like the API lifespan does. The full
+    resolution path is covered by
+    ``tests/autonomous/test_worker_skill_registry.py``; this unit test
+    pins the wiring (hook calls the shared bootstrap; returns None).
+    """
+
+    from app.skills.registry import MutableSkillRegistry, SkillRegistry
+
+    holder = MutableSkillRegistry(SkillRegistry(records={}))
+    with patch(
+        "app.skills.bootstrap.install_skill_registry",
+        return_value=holder,
+    ) as mock_install:
+        # No exception, no return value.
+        assert await arq_setup.on_startup({}) is None
+
+    mock_install.assert_called_once()
+
+
+@pytest.mark.unit
+async def test_on_startup_propagates_registry_failure() -> None:
+    """Fail-loudly contract: a registry bootstrap failure must propagate
+    so the worker process exits at startup (crash-looping container)
+    instead of dying at the first scheduled tick."""
+
+    with (
+        patch(
+            "app.skills.bootstrap.install_skill_registry",
+            side_effect=FileNotFoundError("skills directory does not exist"),
+        ),
+        pytest.raises(FileNotFoundError),
+    ):
+        await arq_setup.on_startup({})
 
 
 @pytest.mark.unit

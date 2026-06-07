@@ -19,7 +19,6 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,8 +32,7 @@ from app.clients.gateway import close_gateway_client, get_gateway_client
 from app.config import get_settings
 from app.db.session import check_db, dispose_engine, get_session_factory
 from app.errors import LQAIError
-from app.skills import install_sighup_reload, load_registry
-from app.skills.registry import MutableSkillRegistry
+from app.skills import install_sighup_reload, install_skill_registry, resolve_skill_dirs
 from app.storage import check_storage, ensure_bucket
 
 SERVICE_NAME = "lq-ai-api"
@@ -57,35 +55,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         await ensure_bucket()
     except Exception as exc:
-        # Startup must not crash the process — surface degradation via /ready.
+        # The bucket check must not crash the process — surface degradation
+        # via /ready. The skills bootstrap below is the deliberate exception:
+        # it raises on a missing/unreadable skills dir (uniform fail-fast
+        # across api + worker, maintainer-ruled; see the bootstrap docstring).
         log.warning("ensure_bucket failed at startup: %s (continuing)", exc)
 
-    # Skill registry (Task C1). Walk the configured skills directory and
-    # the community submodule directory, parse + validate each SKILL.md's
-    # frontmatter, and register in memory. Built-in skills win on slug
-    # collision with community skills. Per-skill failures emit WARNING and
-    # are skipped; the registry is built from whatever parses cleanly.
-    # The SIGHUP handler triggers an atomic-swap reload from disk on demand,
-    # re-scanning both directories.
-    skills_dir = Path(settings.skills_dir).resolve()
-    if settings.community_skills_dir:
-        community_skills_dir: Path | None = Path(settings.community_skills_dir).resolve()
-    else:
-        # Default: community submodule lives at skills/community/skills/ inside
-        # the repo root. skills_dir is the repo's skills/ directory, so the
-        # community path is skills_dir / community / skills.
-        candidate = skills_dir / "community" / "skills"
-        community_skills_dir = candidate if candidate.is_dir() else None
-    # Only pass community dir when it actually exists so startup does not
-    # warn loudly on fresh clones that omitted --recurse-submodules.
-    effective_community_dir = (
-        community_skills_dir
-        if community_skills_dir is not None and community_skills_dir.is_dir()
-        else None
+    # Skill registry (Task C1). The bootstrap is shared with the arq
+    # worker's on_startup (app/skills/bootstrap.py) because the autonomous
+    # executor resolves skill_refs via app.state in whichever process it
+    # runs. The SIGHUP atomic-swap reload stays api-only policy, so it is
+    # wired here on the returned holder, not inside the shared helper.
+    skills_dir, effective_community_dir = resolve_skill_dirs(settings)
+    skill_registry_holder = install_skill_registry(
+        app, settings, resolved_dirs=(skills_dir, effective_community_dir)
     )
-    initial_registry = load_registry(skills_dir, community_skills_dir=effective_community_dir)
-    skill_registry_holder = MutableSkillRegistry(initial_registry)
-    app.state.skill_registry = skill_registry_holder
     install_sighup_reload(
         skill_registry_holder,
         skills_dir,

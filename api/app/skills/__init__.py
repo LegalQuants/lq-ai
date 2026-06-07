@@ -6,6 +6,10 @@ Public surface:
 * :func:`load_registry` — walk a skills directory, build a fresh registry.
 * :func:`install_sighup_reload` — wire the registry to SIGHUP for in-place
   reloads on a running process.
+* :func:`install_skill_registry` / :func:`resolve_skill_dirs` — shared
+  bootstrap that builds the registry from settings and installs it at
+  ``app.state.skill_registry``; called from BOTH the FastAPI lifespan and
+  the arq worker's ``on_startup`` (see :mod:`app.skills.bootstrap`).
 
 The Pydantic schema for the frontmatter (the ``lq_ai:`` namespace) lives
 in :mod:`app.skills.schema`; the wire shapes returned to API clients are
@@ -34,6 +38,7 @@ Design notes:
 
 from __future__ import annotations
 
+from app.skills.bootstrap import install_skill_registry, resolve_skill_dirs
 from app.skills.loader import LoaderError, install_sighup_reload, load_registry
 from app.skills.registry import SkillRegistry
 from app.skills.schema import (
@@ -53,5 +58,7 @@ __all__ = [
     "SkillRegistry",
     "SkillSummary",
     "install_sighup_reload",
+    "install_skill_registry",
     "load_registry",
+    "resolve_skill_dirs",
 ]
