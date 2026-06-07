@@ -8,7 +8,8 @@ brakes. M4-A1 lands only the tables, models, and schemas — no executor,
 no API endpoints, no business logic. M4-A3.2 adds the in-app
 notification substrate (``autonomous_notifications``).
 
-Five tables (migration ``0039_autonomous_layer.py``) + one from 0040:
+Nine tables — five from migration ``0039_autonomous_layer.py``, plus
+one each from 0040, 0041, 0046, and 0047:
 
 * :class:`AutonomousSession` — the run record carrying the brakes
   (cost cap, halt state, idle-halt window, phase machine).
@@ -23,13 +24,20 @@ Five tables (migration ``0039_autonomous_layer.py``) + one from 0040:
   the authorized ``context_md`` write (ADR 0013 D5).
 * :class:`AutonomousNotification` — durable in-app notification written
   by the ``notify`` chokepoint handler (A3.3); migration 0040.
+* :class:`AutonomousFinding` — persisted analysis finding emitted by a
+  run via the ``emit_finding`` chokepoint; migration 0046.
+* :class:`AutonomousArtifact` — reference to a document-grade artifact
+  (a KB document) emitted by a run via the ``emit_artifact``
+  chokepoint; migration 0047.
 
 Every table carries a non-null ``user_id`` FK with ``ON DELETE
 CASCADE`` — the autonomous layer is **hard per-user isolated**. A
-user's deletion removes all of their autonomous state. This differs
-from the playbook tables (which ``SET NULL`` to preserve shared audit
-history) because autonomous sessions are private to the operator who
-ran them and carry no shared work product.
+user's deletion removes all of their autonomous state. (Exceptions:
+``autonomous_findings`` and ``autonomous_artifacts`` carry no
+``user_id`` — authz is via the owning session, which cascades from the
+user.) This differs from the playbook tables (which ``SET NULL`` to
+preserve shared audit history) because autonomous sessions are private
+to the operator who ran them and carry no shared work product.
 
 The CHECK constraints on the session enums + ``autonomous_memory.state``
 are enforced at the storage layer (see migration 0039); the canonical
@@ -44,7 +52,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, Text, text
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, Numeric, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -136,8 +144,11 @@ class AutonomousSchedule(Base):
     ``cron_expr`` is a standard five-field cron string the scheduler
     parses. ``playbook_id`` / ``skill_ref`` / ``target_kb_id`` describe
     what the triggered session runs (a playbook, a skill, against a KB).
-    Soft-deleted via ``deleted_at`` so a disabled-then-removed schedule
-    keeps its audit trail.
+    ``emit_artifacts`` opts the schedule's sessions in to document-grade
+    artifact emission (migration 0047) — default off, so existing
+    automations see zero behavior or cost change. Soft-deleted via
+    ``deleted_at`` so a disabled-then-removed schedule keeps its audit
+    trail.
     """
 
     __tablename__ = "autonomous_schedules"
@@ -175,6 +186,9 @@ class AutonomousSchedule(Base):
         nullable=True,
     )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    emit_artifacts: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     max_cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(10, 4), nullable=True)
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -198,7 +212,10 @@ class AutonomousWatch(Base):
 
     When the watched ``knowledge_base_id`` changes (a new file ingested),
     the agent starts a session running ``playbook_id`` / ``skill_ref``
-    against the change. Soft-deleted via ``deleted_at``.
+    against the change. ``emit_artifacts`` opts the watch's sessions in
+    to document-grade artifact emission (migration 0047) — default off,
+    so existing automations see zero behavior or cost change.
+    Soft-deleted via ``deleted_at``.
     """
 
     __tablename__ = "autonomous_watches"
@@ -234,6 +251,9 @@ class AutonomousWatch(Base):
     )
     skill_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    emit_artifacts: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     max_cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(10, 4), nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -474,6 +494,73 @@ class AutonomousFinding(Base):
         return (
             f"<AutonomousFinding id={self.id} session_id={self.session_id} "
             f"severity={self.severity!r} title={self.title!r}>"
+        )
+
+
+class AutonomousArtifact(Base):
+    """A reference to a document-grade artifact emitted by an autonomous run.
+
+    Artifacts are markdown memos (or other document-grade work product)
+    an opted-in run persists into its target knowledge base as real
+    documents. Rows are written by the ``emit_artifact`` chokepoint
+    handler (handler + read endpoint follow this substrate); this table
+    is the *reference*, not the document —
+    the document itself lives in ``files`` / the KB like any other
+    upload.
+
+    Deletion semantics: ``session_id`` FK is ``ON DELETE CASCADE`` — the
+    artifact *reference* dies with its session. ``file_id`` FK is ``ON
+    DELETE SET NULL`` — the KB document OUTLIVES the session (it is the
+    user's deliverable); deleting the session never deletes the KB
+    document, and a hard file-delete nulls the ref while the name/size
+    metadata survives here.
+
+    ``name`` and ``mime`` are LLM-emitted free text — deliberately NO
+    CHECK constraints (the ``autonomous_findings.severity`` precedent):
+    whatever the model produces must store, not reject the row.
+
+    There is no ``user_id`` column: authz is via the owning session,
+    exactly like :class:`AutonomousFinding` (the read endpoint
+    owner-gates by loading the owned session, then queries by
+    ``session_id``).
+    """
+
+    __tablename__ = "autonomous_artifacts"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "autonomous_sessions.id",
+            ondelete="CASCADE",
+            name="fk_autonomous_artifacts_session_id",
+        ),
+        nullable=False,
+    )
+    file_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "files.id",
+            ondelete="SET NULL",
+            name="fk_autonomous_artifacts_file_id",
+        ),
+        nullable=True,
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    mime: Mapped[str] = mapped_column(Text, nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<AutonomousArtifact id={self.id} session_id={self.session_id} "
+            f"name={self.name!r} file_id={self.file_id}>"
         )
 
 

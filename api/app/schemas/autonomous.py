@@ -140,6 +140,7 @@ class AutonomousScheduleRead(BaseModel):
     skill_ref: str | None = None
     target_kb_id: uuid.UUID | None = None
     enabled: bool
+    emit_artifacts: bool
     max_cost_usd: Decimal | None = None
     last_run_at: datetime | None = None
     next_run_at: datetime | None = None
@@ -155,8 +156,11 @@ class AutonomousScheduleCreate(BaseModel):
     :func:`app.autonomous.cron.validate_cron_expr` (invalid → 422). The
     target (``playbook_id`` / ``skill_ref`` / ``target_kb_id``) and
     ``project_id`` are optional; ``enabled`` defaults to True.
-    ``max_cost_usd`` is the per-schedule spend cap (NULL = fall back to
-    ``settings.autonomous_default_max_cost_usd`` at spawn time).
+    ``emit_artifacts`` opts the schedule's sessions in to document-grade
+    artifact emission (default off — zero behavior/cost change unless
+    requested). ``max_cost_usd`` is the per-schedule spend cap (NULL =
+    fall back to ``settings.autonomous_default_max_cost_usd`` at spawn
+    time).
     """
 
     cron_expr: str
@@ -166,6 +170,7 @@ class AutonomousScheduleCreate(BaseModel):
     target_kb_id: uuid.UUID | None = None
     project_id: uuid.UUID | None = None
     enabled: bool = True
+    emit_artifacts: bool = False
     max_cost_usd: Decimal | None = None
 
 
@@ -174,7 +179,9 @@ class AutonomousScheduleUpdate(BaseModel):
 
     All fields optional — a partial update. If ``cron_expr`` is provided
     it is re-validated (invalid → 422) and ``next_run_at`` is recomputed.
-    Toggling ``enabled`` is allowed. ``max_cost_usd`` may be edited
+    Toggling ``enabled`` is allowed. ``emit_artifacts`` may be toggled
+    to opt the schedule's future sessions in or out of document-grade
+    artifact emission. ``max_cost_usd`` may be edited
     (NULL clears the per-schedule cap → fall back to global default).
     The matter (``project_id``) may be reassigned; an explicit ``null``
     clears it (unassign). A non-null ``project_id`` the caller does not
@@ -184,6 +191,7 @@ class AutonomousScheduleUpdate(BaseModel):
     name: str | None = None
     cron_expr: str | None = None
     enabled: bool | None = None
+    emit_artifacts: bool | None = None
     playbook_id: uuid.UUID | None = None
     skill_ref: str | None = None
     target_kb_id: uuid.UUID | None = None
@@ -244,6 +252,7 @@ class AutonomousWatchRead(BaseModel):
     playbook_id: uuid.UUID | None = None
     skill_ref: str | None = None
     enabled: bool
+    emit_artifacts: bool
     max_cost_usd: Decimal | None = None
     deleted_at: datetime | None = None
     created_at: datetime
@@ -259,9 +268,11 @@ class AutonomousWatchCreate(BaseModel):
     ``skill_ref``) and ``project_id`` are optional; ``enabled`` defaults
     to True. The watch is bound to its KB — there is no
     ``knowledge_base_id`` on the update schema (create a new watch for a
-    different KB). ``max_cost_usd`` is the per-watch spend cap (NULL =
-    fall back to ``settings.autonomous_default_max_cost_usd`` at spawn
-    time).
+    different KB). ``emit_artifacts`` opts the watch's sessions in to
+    document-grade artifact emission (default off — zero behavior/cost
+    change unless requested). ``max_cost_usd`` is the per-watch spend
+    cap (NULL = fall back to
+    ``settings.autonomous_default_max_cost_usd`` at spawn time).
     """
 
     knowledge_base_id: uuid.UUID
@@ -269,6 +280,7 @@ class AutonomousWatchCreate(BaseModel):
     skill_ref: str | None = None
     project_id: uuid.UUID | None = None
     enabled: bool = True
+    emit_artifacts: bool = False
     max_cost_usd: Decimal | None = None
 
 
@@ -278,7 +290,9 @@ class AutonomousWatchUpdate(BaseModel):
     All fields optional — a partial update. Toggling ``enabled`` is
     allowed; ``playbook_id`` / ``skill_ref`` may be retargeted. The
     watch's ``knowledge_base_id`` is immutable (not present here) — a
-    watch is bound to its KB. ``max_cost_usd`` may be edited (NULL clears
+    watch is bound to its KB. ``emit_artifacts`` may be toggled to opt
+    the watch's future sessions in or out of document-grade artifact
+    emission. ``max_cost_usd`` may be edited (NULL clears
     the per-watch cap → fall back to global default). The matter
     (``project_id``) may be reassigned; an explicit ``null`` clears it
     (unassign). A non-null ``project_id`` the caller does not own is
@@ -286,6 +300,7 @@ class AutonomousWatchUpdate(BaseModel):
     """
 
     enabled: bool | None = None
+    emit_artifacts: bool | None = None
     playbook_id: uuid.UUID | None = None
     skill_ref: str | None = None
     project_id: uuid.UUID | None = None
@@ -467,6 +482,46 @@ class AutonomousFindingListResponse(BaseModel):
     """
 
     findings: list[AutonomousFindingRead]
+    total_count: int
+    limit: int
+    offset: int
+
+
+class AutonomousArtifactRead(BaseModel):
+    """ORM-read view of an ``autonomous_artifacts`` row (work-product ref).
+
+    An artifact is a document-grade deliverable (a markdown memo) an
+    opted-in run persisted into its target KB via the ``emit_artifact``
+    chokepoint. ``name`` and ``mime`` are LLM-emitted free text (no
+    CHECK constraints; the ``severity`` precedent). ``file_id`` is NULL
+    if the underlying file was later hard-deleted — the name/size
+    metadata survives here. ``document_id`` is NOT an ORM column: it is
+    enriched at the endpoint from ``documents.file_id`` (default None),
+    so the UI can deep-link the KB document. ``session_id`` is
+    deliberately omitted — the endpoint is session-scoped per the Donna
+    contract shape, so the caller already has it.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    mime: str
+    size_bytes: int
+    file_id: uuid.UUID | None = None
+    document_id: uuid.UUID | None = None
+    created_at: datetime
+
+
+class AutonomousArtifactListResponse(BaseModel):
+    """Paginated list of :class:`AutonomousArtifactRead` items.
+
+    Mirrors ``AutonomousFindingListResponse`` — total_count / limit /
+    offset envelope. Artifacts are read in emission order (``created_at
+    ASC``) — one run's sequential output, not a newest-first feed.
+    """
+
+    artifacts: list[AutonomousArtifactRead]
     total_count: int
     limit: int
     offset: int
