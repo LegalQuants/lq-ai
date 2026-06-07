@@ -210,7 +210,10 @@ class AutonomousManualRunRequest(BaseModel):
     ``target_kb_id`` and ``project_id`` are optional scope. ``max_cost_usd``
     is the per-run cap (NULL = fall back to
     ``settings.autonomous_default_max_cost_usd`` at spawn time, so R4 always
-    trips).
+    trips). ``emit_artifacts`` opts the run in to document-grade artifacts
+    (Donna ask #8) — a manual run has no schedule/watch row to inherit the
+    flag from, so the request body IS the opt-in source; defaults off,
+    matching the schedule/watch column default.
     """
 
     playbook_id: uuid.UUID | None = None
@@ -218,6 +221,7 @@ class AutonomousManualRunRequest(BaseModel):
     target_kb_id: uuid.UUID | None = None
     project_id: uuid.UUID | None = None
     max_cost_usd: Decimal | None = None
+    emit_artifacts: bool = False
 
     @model_validator(mode="after")
     def _exactly_one_target(self) -> AutonomousManualRunRequest:

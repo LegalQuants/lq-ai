@@ -27,6 +27,13 @@ The structured-output instruction tail :data:`STRUCTURED_OUTPUT_INSTRUCTION`
 is always appended to the system prompt and tells the model exactly which
 JSON keys the drafting node parses (``findings``, ``suggested_memories``,
 ``suggested_precedents``, ``privilege_concerns``, ``scope_concerns``).
+
+When the session opted in to document-grade artifacts
+(``session.params["emit_artifacts"]`` is truthy — Donna ask #8), the
+additional :data:`ARTIFACT_OUTPUT_INSTRUCTION` tail is appended AFTER it,
+documenting the optional ``artifacts`` key. Sessions that did not opt in
+never see the artifact instruction, so existing automations see zero
+behavior/cost change.
 """
 
 from __future__ import annotations
@@ -88,6 +95,42 @@ response is logged as a finding only if the JSON cannot be parsed.
 
 
 # ---------------------------------------------------------------------------
+# Artifact instruction tail (opt-in — Donna ask #8)
+# ---------------------------------------------------------------------------
+#
+# Appended AFTER ``STRUCTURED_OUTPUT_INSTRUCTION`` ONLY when the session
+# opted in (``session.params["emit_artifacts"]`` is truthy).  It documents
+# one ADDITIONAL optional top-level key (``artifacts``) in the same JSON
+# object.  The contract spans three modules, all updated in this commit:
+#
+# - the parser (structured_output.py) fills ``StructuredResult.artifacts``
+#   via ``_as_dict_list`` regardless of the flag (flag-agnostic by design);
+# - the drafting node (nodes.py case 4) dispatches each parsed artifact
+#   through the ``emit_artifact`` chokepoint ONLY when the session flag is
+#   set (defense-in-depth: an un-asked-for ``artifacts`` key is ignored);
+# - the chokepoint handler (guard.py::_handle_emit_artifact) takes the
+#   inner ``content`` key — the drafting node maps ``content_md`` (the
+#   name instructed here) onto it.
+#
+# Changes here REQUIRE matching updates in those three places and a
+# regression test.
+
+ARTIFACT_OUTPUT_INSTRUCTION = """\
+The JSON object may also carry one ADDITIONAL optional top-level key:
+
+  "artifacts": [
+    {"name": "<filename, e.g. review-memo.md>",
+     "content_md": "<the full document in markdown>"}
+  ]
+
+When the work product warrants a standalone document (a review memo, a \
+summary, a report), emit it here as complete, self-contained markdown.  \
+The array may be empty.  Emit at most a few artifacts — the executor \
+persists each one into the run's knowledge base.
+"""
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -104,7 +147,10 @@ async def assemble_analysis_messages(
     Resolves the session's target (``skill_ref`` or ``playbook_id`` from
     ``session.params``) into a system prompt, formats the retrieved chunks
     as a user message, and appends :data:`STRUCTURED_OUTPUT_INSTRUCTION`
-    to the system prompt.
+    to the system prompt.  When the session opted in to artifacts
+    (``session.params["emit_artifacts"]`` is truthy),
+    :data:`ARTIFACT_OUTPUT_INSTRUCTION` is appended after it; otherwise
+    the model is never told about the ``artifacts`` key.
 
     Args:
         session: The autonomous session.  ``session.params`` must carry
@@ -152,6 +198,11 @@ async def assemble_analysis_messages(
 
     user_chunks = _format_chunks_as_user_content(chunks)
     full_system = system + "\n\n" + STRUCTURED_OUTPUT_INSTRUCTION
+    # Opt-in only (Donna ask #8): the artifact instruction is appended iff
+    # the spawn path copied ``emit_artifacts`` into the session params —
+    # non-opted-in sessions never pay the extra output tokens.
+    if (session.params or {}).get("emit_artifacts"):
+        full_system = full_system + "\n" + ARTIFACT_OUTPUT_INSTRUCTION
     return [
         {"role": "system", "content": full_system},
         {"role": "user", "content": user_chunks},
@@ -313,6 +364,7 @@ def _format_chunks_as_user_content(chunks: list[dict[str, Any]]) -> str:
 
 
 __all__ = [
+    "ARTIFACT_OUTPUT_INSTRUCTION",
     "STRUCTURED_OUTPUT_INSTRUCTION",
     "assemble_analysis_messages",
 ]

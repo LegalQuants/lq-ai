@@ -87,3 +87,12 @@ class AutonomousSessionState(TypedDict, total=False):
     findings_count: int
     privilege_concerns: list[str]
     scope_concerns: list[str]
+
+    # Donna ask #8: number of document-grade artifacts the drafting node
+    # PERSISTED through the ``emit_artifact`` chokepoint (skips and storage
+    # errors are excluded). Always present on the drafting node's return —
+    # 0 when the session did not opt in (``params["emit_artifacts"]``
+    # absent) or on the non-structured drafting paths. The delivery node
+    # surfaces it as ``artifact_count`` in the notify payload and as
+    # ``artifacts_count`` on the terminal ``completed`` audit row.
+    artifacts_count: int

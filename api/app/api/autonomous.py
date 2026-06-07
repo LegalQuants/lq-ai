@@ -1173,10 +1173,13 @@ async def _spawn_manual_session(
 
     Mirrors the session construction in
     :func:`app.workers.autonomous_worker._run_schedule_sweep`: builds
-    ``params`` carrying only the non-null target keys, sets a non-null
-    ``max_cost_usd`` (per-run cap or the config default so R4 always
-    arms), flushes to obtain the id, then best-effort enqueues. The
-    five-phase executor + R4/R5/R6 brakes + receipt are unchanged.
+    ``params`` carrying only the non-null target keys (plus
+    ``emit_artifacts`` — set to ``True`` only when the request body opted
+    in; Donna ask #8 — a manual run has no schedule/watch row, so the
+    body carries the flag), sets a non-null ``max_cost_usd`` (per-run cap
+    or the config default so R4 always arms), flushes to obtain the id,
+    then best-effort enqueues. The five-phase executor + R4/R5/R6 brakes
+    + receipt are unchanged.
     """
     enqueue_fn = enqueue if enqueue is not None else enqueue_autonomous_session_job
     settings = get_settings()
@@ -1193,6 +1196,10 @@ async def _spawn_manual_session(
         params["playbook_id"] = str(body.playbook_id)
     if body.skill_ref is not None:
         params["skill_ref"] = body.skill_ref
+    if body.emit_artifacts:
+        # Opt-in (Donna ask #8) — non-null-subset convention: the key is
+        # present iff the caller opted in.
+        params["emit_artifacts"] = True
 
     session = AutonomousSession(
         user_id=user_id,

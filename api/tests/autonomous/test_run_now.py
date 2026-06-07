@@ -115,6 +115,48 @@ async def test_run_now_spawns_manual_session(
     assert row.trigger_kind == "manual"
     assert row.max_cost_usd == Decimal("0.50")
     assert row.params.get("skill_ref") == "nda-review"
+    # emit_artifacts was not requested — excluded from params (non-null
+    # subset; the key is present iff the body opted in — Donna ask #8).
+    assert "emit_artifacts" not in row.params
+
+
+@pytest.mark.asyncio
+async def test_run_now_copies_emit_artifacts_flag_into_params(
+    client: AsyncClient,
+    opted_in_user: User,
+    db_session: AsyncSession,
+) -> None:
+    """emit_artifacts=true in the body → session params carry the flag
+    (Donna ask #8 opt-in plumbing — run-now has no schedule/watch row to
+    inherit from, so the request body is the opt-in source)."""
+    resp = await client.post(
+        "/api/v1/autonomous/run-now",
+        json={"skill_ref": "nda-review", "emit_artifacts": True},
+        headers=_bearer(opted_in_user),
+    )
+    assert resp.status_code == 201, resp.text
+    session_id = uuid.UUID(resp.json()["id"])
+    row = (
+        await db_session.execute(
+            select(AutonomousSession).where(AutonomousSession.id == session_id)
+        )
+    ).scalar_one()
+    assert row.params["emit_artifacts"] is True
+
+    # Explicit false behaves like the default: key absent.
+    resp = await client.post(
+        "/api/v1/autonomous/run-now",
+        json={"skill_ref": "nda-review", "emit_artifacts": False},
+        headers=_bearer(opted_in_user),
+    )
+    assert resp.status_code == 201, resp.text
+    session_id = uuid.UUID(resp.json()["id"])
+    row = (
+        await db_session.execute(
+            select(AutonomousSession).where(AutonomousSession.id == session_id)
+        )
+    ).scalar_one()
+    assert "emit_artifacts" not in row.params
 
 
 @pytest.mark.asyncio

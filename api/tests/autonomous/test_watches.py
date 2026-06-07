@@ -117,6 +117,7 @@ async def _make_watch(
     deleted: bool = False,
     playbook_id: uuid.UUID | None = None,
     skill_ref: str | None = None,
+    emit_artifacts: bool = False,
 ) -> AutonomousWatch:
     watch = AutonomousWatch(
         user_id=user.id,
@@ -125,6 +126,7 @@ async def _make_watch(
         deleted_at=datetime.now(UTC) if deleted else None,
         playbook_id=playbook_id,
         skill_ref=skill_ref,
+        emit_artifacts=emit_artifacts,
     )
     db.add(watch)
     await db.flush()
@@ -174,8 +176,39 @@ async def test_fire_watches_spawns_one_session(
     assert sess.params["skill_ref"] == "nda-review"
     # playbook_id was None — excluded from params (non-null subset).
     assert "playbook_id" not in sess.params
+    # emit_artifacts defaults False — excluded too (non-null subset; the
+    # key is present iff the watch opted in — Donna ask #8).
+    assert "emit_artifacts" not in sess.params
 
     enqueue.assert_awaited_once_with(sess.id)
+
+
+@pytest.mark.integration
+async def test_fire_watches_copies_emit_artifacts_flag_into_params(
+    db_session: AsyncSession,
+    user_a: User,
+) -> None:
+    """A watch with emit_artifacts=True spawns a session whose params carry
+    emit_artifacts=True (Donna ask #8 opt-in plumbing)."""
+    from app.autonomous.watch_trigger import fire_watches_for_kb
+
+    kb = await _make_kb(db_session, owner=user_a)
+    watch = await _make_watch(
+        db_session, user=user_a, kb=kb, skill_ref="nda-review", emit_artifacts=True
+    )
+
+    enqueue = AsyncMock(return_value=True)
+    count = await fire_watches_for_kb(
+        db_session, kb_id=kb.id, file_id=uuid.uuid4(), enqueue=enqueue
+    )
+    assert count == 1
+
+    sess = (
+        await db_session.execute(
+            select(AutonomousSession).where(AutonomousSession.trigger_ref == watch.id)
+        )
+    ).scalar_one()
+    assert sess.params["emit_artifacts"] is True
 
 
 @pytest.mark.integration

@@ -283,11 +283,19 @@ def make_drafting_node(
        suggested precedent via
        :attr:`~app.autonomous.enums.ToolIntent.propose_precedent`. The
        parser's ``privilege_concerns`` / ``scope_concerns`` are forwarded
-       in the returned state for the ethics-review node.
+       in the returned state for the ethics-review node. When the session
+       opted in to artifacts (``params["emit_artifacts"]`` truthy — Donna
+       ask #8), each parsed artifact is additionally dispatched via
+       :attr:`~app.autonomous.enums.ToolIntent.emit_artifact`; skip /
+       storage-error outcomes surface as honest explanatory findings.
 
-    Every return path emits both ``findings`` (the list of dispatched
-    finding dicts) and ``findings_count`` (its length) — ``findings_count``
-    counts findings ONLY, never memories or precedents.
+    Every return path emits ``findings`` (the list of dispatched finding
+    dicts), ``findings_count`` (its length), and ``artifacts_count`` (the
+    number of artifacts PERSISTED through the chokepoint; 0 on cases 1-3
+    and when the opt-in flag is off) — ``findings_count`` counts findings
+    ONLY, never memories, precedents, or artifacts (though the
+    artifact-explanatory info/warn findings DO count: they go through
+    ``emit_finding`` like any other finding).
 
     Brakes propagate to the executor's terminal handler per the
     brake-commit contract.
@@ -330,6 +338,7 @@ def make_drafting_node(
                 "current_phase": str(Phase.drafting),
                 "findings": [finding],
                 "findings_count": 1,
+                "artifacts_count": 0,
             }
 
         # Case 2 — schedule first tick: emit ONE baseline finding.
@@ -353,6 +362,7 @@ def make_drafting_node(
                 "current_phase": str(Phase.drafting),
                 "findings": [finding],
                 "findings_count": 1,
+                "artifacts_count": 0,
             }
 
         parsed = parse_structured_output(state.get("analysis_content"))
@@ -375,6 +385,7 @@ def make_drafting_node(
                 "current_phase": str(Phase.drafting),
                 "findings": [finding],
                 "findings_count": 1,
+                "artifacts_count": 0,
             }
 
         # Case 4 — structured: dispatch each item as its own guarded call.
@@ -417,12 +428,99 @@ def make_drafting_node(
                 gateway,
             )
 
-        # ``findings_count`` counts findings ONLY — memories and precedents
-        # are deliberately excluded (they are proposals, not findings).
+        # Donna ask #8 — document-grade artifacts, OPT-IN ONLY. When the
+        # session flag is off, ``parsed.artifacts`` is ignored entirely
+        # (defense-in-depth: the model was never instructed to emit the
+        # ``artifacts`` key, so an unasked-for emission must never persist —
+        # and no finding is emitted about it either).
+        artifacts_count = 0
+        if (session.params or {}).get("emit_artifacts") and parsed.artifacts:
+            for artifact in parsed.artifacts:
+                result = await guarded_tool_call(
+                    session,
+                    ToolIntent.emit_artifact,
+                    {
+                        "artifact": {
+                            "name": artifact.get("name"),
+                            # Key mapping: ARTIFACT_OUTPUT_INSTRUCTION tells
+                            # the model to emit ``content_md``; the chokepoint
+                            # handler takes ``content``. Tolerate both so a
+                            # model that emits ``content`` anyway still lands.
+                            "content": artifact.get("content_md") or artifact.get("content") or "",
+                            "mime": "text/markdown",
+                        }
+                    },
+                    db,
+                    gateway,
+                )
+                data = result.data or {}
+                if data.get("artifact_id"):
+                    # Persisted — only real persists count toward the tally.
+                    artifacts_count += 1
+                    continue
+                if data.get("skipped") == "no_target_kb":
+                    # The session has no target KB, so EVERY remaining
+                    # artifact would skip for the same reason — emit ONE
+                    # ``info`` finding total (not one per artifact) and stop
+                    # attempting further artifacts.
+                    artifact_name = str(artifact.get("name") or "(unnamed)")[:255]
+                    finding = {
+                        "title": "Artifact not persisted — no target knowledge base",
+                        "summary": (
+                            f"The run produced the artifact "
+                            f"{artifact_name!r} but has no "
+                            "target knowledge base to save it into. Configure a "
+                            "target KB on the schedule or watch to persist "
+                            "artifacts."
+                        ),
+                        "severity": "info",
+                    }
+                    await guarded_tool_call(
+                        session,
+                        ToolIntent.emit_finding,
+                        {"finding": finding},
+                        db,
+                        gateway,
+                    )
+                    findings.append(finding)
+                    break
+                if data.get("skipped") == "empty_content":
+                    # Nothing to persist and nothing to explain — counted
+                    # nowhere; the remaining artifacts may still be fine.
+                    continue
+                if result.outcome == "storage_error":
+                    # Storage failures are per-artifact (and possibly
+                    # transient) — emit ONE ``warn`` finding for THIS
+                    # artifact and continue with the remaining ones.
+                    error_text = str(data.get("error") or "")[:500]
+                    artifact_name = str(artifact.get("name") or "(unnamed)")[:255]
+                    finding = {
+                        "title": "Artifact persistence failed at storage",
+                        "summary": (
+                            f"The artifact {artifact_name!r} "
+                            f"could not be uploaded to object storage: {error_text}"
+                        ),
+                        "severity": "warn",
+                    }
+                    await guarded_tool_call(
+                        session,
+                        ToolIntent.emit_finding,
+                        {"finding": finding},
+                        db,
+                        gateway,
+                    )
+                    findings.append(finding)
+                    continue
+
+        # ``findings_count`` counts findings ONLY — memories, precedents,
+        # and artifacts are deliberately excluded (the artifact-explanatory
+        # info/warn findings above DO count: they were dispatched through
+        # emit_finding and appended to ``findings`` like any other finding).
         return {
             "current_phase": str(Phase.drafting),
             "findings": findings,
             "findings_count": len(findings),
+            "artifacts_count": artifacts_count,
             "privilege_concerns": parsed.privilege_concerns,
             "scope_concerns": parsed.scope_concerns,
         }
@@ -507,10 +605,12 @@ def make_delivery_node(
     The delivery node transitions the session to :attr:`Phase.delivery`,
     calls :func:`~app.autonomous.guard.guarded_tool_call` with
     :attr:`~app.autonomous.enums.ToolIntent.notify` to write the
-    in-app notification row, writes the terminal
+    in-app notification row (payload always carries ``finding_count`` AND
+    ``artifact_count`` — Donna ask #8; the body mentions documents only
+    when ``artifact_count > 0``), writes the terminal
     ``autonomous_session.completed`` audit row (so the receipt's
-    ``terminal_reason`` populates), then marks the session as completed
-    and commits.
+    ``terminal_reason`` populates; it carries ``artifacts_count`` next to
+    ``findings_count``), then marks the session as completed and commits.
 
     Brakes propagate to the executor's terminal handler per the
     brake-commit contract.
@@ -534,13 +634,22 @@ def make_delivery_node(
         # Notify the user via the chokepoint — this is the canonical tool
         # call in the delivery phase; it must not bypass the gate.
         findings_count = state.get("findings_count", len(state.get("findings") or []))
+        artifact_count = state.get("artifacts_count", 0)
+        # Counts only, no content — one sentence; the document clause is
+        # appended only when artifacts persisted. The payload ALWAYS carries
+        # artifact_count (0 is honest, and lets a client distinguish
+        # "feature present, zero artifacts" from a pre-artifacts payload).
+        body = f"Session completed with {findings_count} finding(s)"
+        if artifact_count > 0:
+            body += f" and {artifact_count} document(s) saved to the knowledge base"
+        body += "."
         await guarded_tool_call(
             session,
             ToolIntent.notify,
             {
                 "title": "Autonomous session complete",
-                "body": f"Session completed with {findings_count} finding(s).",
-                "payload": {"finding_count": findings_count},
+                "body": body,
+                "payload": {"finding_count": findings_count, "artifact_count": artifact_count},
             },
             db,
             gateway,
@@ -555,6 +664,7 @@ def make_delivery_node(
             "completed",
             cost_total_usd=str(session.cost_total_usd or "0"),
             findings_count=findings_count,
+            artifacts_count=artifact_count,
         )
         session.status = "completed"
         session.completed_at = datetime.now(UTC)

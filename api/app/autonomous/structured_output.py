@@ -11,6 +11,11 @@ This satisfies the inline contract in
 :mod:`api.app.autonomous.prompts` above ``STRUCTURED_OUTPUT_INSTRUCTION``:
 the parser MUST implement the malformed-response fallback (tolerant
 unstructured result with raw content preserved) — never raise.
+
+Tolerance is item-level too: in the dict-shaped arrays (``findings``,
+``suggested_memories``, ``suggested_precedents``, ``artifacts``), any
+non-dict item is silently dropped rather than passed through to the
+drafting node's ``.get()`` calls.
 """
 
 from __future__ import annotations
@@ -30,6 +35,13 @@ _FENCED_JSON_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 class StructuredResult:
     """Result of parsing the analysis call's response content.
 
+    The four dict-shaped arrays (``findings``, ``suggested_memories``,
+    ``suggested_precedents``, ``artifacts``) contain dicts ONLY — any
+    non-dict items the model emitted are silently dropped at parse time
+    (tolerant parsing). The string arrays (``privilege_concerns``,
+    ``scope_concerns``) keep items as-is; they are only ever
+    string-formatted downstream.
+
     Attributes:
         is_structured: True iff a JSON object was successfully parsed.
         findings: Parsed ``findings`` array (empty when missing).
@@ -37,6 +49,11 @@ class StructuredResult:
         suggested_precedents: Parsed ``suggested_precedents`` array.
         privilege_concerns: Parsed ``privilege_concerns`` array.
         scope_concerns: Parsed ``scope_concerns`` array.
+        artifacts: Parsed ``artifacts`` array (Donna ask #8 — items shaped
+            ``{"name", "content_md"}`` per ``ARTIFACT_OUTPUT_INSTRUCTION``).
+            Parsed regardless of the session's ``emit_artifacts`` opt-in
+            flag — the parser is flag-agnostic; the drafting node enforces
+            opt-in and ignores this list when the flag is off.
         raw_content: Original response content, preserved verbatim.
             When ``is_structured`` is False this is the text the drafting
             node logs as a single fallback finding.
@@ -48,6 +65,7 @@ class StructuredResult:
     suggested_precedents: list[dict[str, Any]] = field(default_factory=list)
     privilege_concerns: list[str] = field(default_factory=list)
     scope_concerns: list[str] = field(default_factory=list)
+    artifacts: list[dict[str, Any]] = field(default_factory=list)
     raw_content: str = ""
 
     @classmethod
@@ -59,6 +77,25 @@ class StructuredResult:
 def _as_list(value: Any) -> list[Any]:
     """Coerce a JSON value to a list — non-list values yield []."""
     return list(value) if isinstance(value, list) else []
+
+
+def _as_dict_list(value: Any) -> list[dict[str, Any]]:
+    """Coerce a JSON value to a list of dicts — tolerant, item-level.
+
+    Non-list values yield []; non-dict items inside a list are silently
+    dropped. The dict-shaped arrays (``findings``, ``suggested_memories``,
+    ``suggested_precedents``, ``artifacts``) are consumed downstream with
+    ``.get()`` calls, so a string or number smuggled into an otherwise
+    valid array would raise ``AttributeError`` in the drafting node and
+    fail the whole run — worse than this module's tolerant-degradation
+    contract allows. This helper intentionally hardens the three
+    pre-existing dict-shaped loops too, not just ``artifacts``: a uniform
+    posture beats per-loop drift (the failure mode is not "wrong decision"
+    but "different decisions in different files").
+    """
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
 
 
 def parse_structured_output(content: str | None) -> StructuredResult:
@@ -104,11 +141,12 @@ def parse_structured_output(content: str | None) -> StructuredResult:
 
     return StructuredResult(
         is_structured=True,
-        findings=_as_list(parsed.get("findings")),
-        suggested_memories=_as_list(parsed.get("suggested_memories")),
-        suggested_precedents=_as_list(parsed.get("suggested_precedents")),
+        findings=_as_dict_list(parsed.get("findings")),
+        suggested_memories=_as_dict_list(parsed.get("suggested_memories")),
+        suggested_precedents=_as_dict_list(parsed.get("suggested_precedents")),
         privilege_concerns=_as_list(parsed.get("privilege_concerns")),
         scope_concerns=_as_list(parsed.get("scope_concerns")),
+        artifacts=_as_dict_list(parsed.get("artifacts")),
         raw_content=content,
     )
 
