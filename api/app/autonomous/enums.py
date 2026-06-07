@@ -47,6 +47,7 @@ class ToolIntent(StrEnum):
     propose_memory = "propose_memory"
     propose_precedent = "propose_precedent"
     emit_finding = "emit_finding"
+    emit_artifact = "emit_artifact"
     notify = "notify"
 
 
@@ -70,6 +71,9 @@ PHASE_GRANTS: dict[Phase, frozenset[ToolIntent]] = {
             # propose_precedent at drafting: recurring patterns recognized
             # during synthesis (M4-B2, Decision B2-b).
             ToolIntent.propose_precedent,
+            # emit_artifact at drafting ONLY: the memo is synthesized work
+            # product, written exactly once where synthesis happens (Donna #8).
+            ToolIntent.emit_artifact,
         }
     ),
     Phase.ethics_review: frozenset({ToolIntent.emit_finding}),

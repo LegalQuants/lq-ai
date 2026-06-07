@@ -135,6 +135,9 @@ def test_phase_grants_exact_membership() -> None:
             # M4-B2: propose_precedent granted at drafting (patterns recognized
             # during synthesis).
             ToolIntent.propose_precedent,
+            # Donna #8: emit_artifact granted at drafting ONLY (the memo is
+            # synthesized work product).
+            ToolIntent.emit_artifact,
         }
     )
 
@@ -152,7 +155,8 @@ def test_phase_grants_covers_all_phases() -> None:
 
 @pytest.mark.unit
 def test_tool_intent_members() -> None:
-    """ToolIntent has exactly the seven members specified (M4-B2 adds propose_precedent)."""
+    """ToolIntent has exactly the eight members specified (M4-B2 adds
+    propose_precedent; Donna #8 adds emit_artifact)."""
     expected = {
         "retrieve_chunks",
         "run_skill",
@@ -160,6 +164,7 @@ def test_tool_intent_members() -> None:
         "propose_memory",
         "propose_precedent",
         "emit_finding",
+        "emit_artifact",
         "notify",
     }
     actual = {m.value for m in ToolIntent}

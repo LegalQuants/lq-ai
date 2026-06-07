@@ -39,6 +39,10 @@ Local handlers implemented here (A3.3a)
 ----------------------------------------
 ``emit_finding``    — echoes the ``finding`` param as data; zero cost; no
                       DB row.
+``emit_artifact``   — persists a document-grade artifact into the run's
+                      target KB: upload-first to object storage, then
+                      File + Document + chunks + direct KB attach +
+                      an ``autonomous_artifacts`` reference; zero cost.
 ``propose_memory``  — writes a ``proposed`` :class:`~app.models.autonomous.AutonomousMemory`
                       row; zero cost.
 ``propose_precedent`` — upserts a :class:`~app.models.autonomous.PrecedentEntry`
@@ -85,6 +89,7 @@ from app.autonomous.enums import PHASE_GRANTS, HaltState, Phase, ToolIntent
 from app.autonomous.notify_email import send_notification_email
 from app.errors import CostCapReached, SessionHalted, ToolNotGranted
 from app.models.autonomous import (
+    AutonomousArtifact,
     AutonomousFinding,
     AutonomousMemory,
     AutonomousNotification,
@@ -100,6 +105,11 @@ _tracer = get_tracer(__name__)
 
 _DEFAULT_RETRIEVE_TOP_K: int = 4
 _DEFAULT_RETRIEVE_ALPHA: float = 0.5
+
+# emit_artifact: hard ceiling on artifact content length. LLM-emitted
+# content is clamped (truncated, flagged in the result data) rather than
+# rejected — a partial memo in the KB beats a lost run.
+_ARTIFACT_MAX_CHARS: int = 1_000_000
 
 
 @dataclass
@@ -308,6 +318,9 @@ async def _dispatch(
             cost_usd=Decimal("0"), data={**finding, "finding_id": str(finding_row.id)}
         )
 
+    if intent == ToolIntent.emit_artifact:
+        return await _handle_emit_artifact(params, db=db, session=session)
+
     if intent == ToolIntent.propose_memory:
         # Local, zero-cost: write a proposed autonomous_memory row.
         mem = AutonomousMemory(
@@ -417,6 +430,250 @@ async def _dispatch(
 
     # Should be unreachable: PHASE_GRANTS + R6 prevent unknown intents.
     raise ValueError(f"_dispatch: unhandled intent {intent!r}")
+
+
+def _sanitize_artifact_name(raw: Any) -> str:
+    """Normalize an LLM-emitted artifact name into a safe filename.
+
+    Strips NUL bytes and path separators/backslashes (basename), collapses
+    whitespace, clamps to ≤255 chars (the extensionless stem is clamped to
+    252 BEFORE the ``.md`` append so the guarantee actually holds), and
+    guarantees a file extension (``.md`` when none is present). Never
+    returns an empty string.
+    """
+    # Strip NUL bytes: valid JSON (LLM-emittable) but rejected by Postgres
+    # TEXT at flush.
+    name = str(raw or "artifact.md").replace("\x00", "")
+    # Basename: an LLM-emitted "../../etc/passwd" must never become a
+    # path-bearing filename.
+    name = name.replace("\\", "/").rsplit("/", 1)[-1]
+    # Collapse internal whitespace runs; trim edges.
+    name = " ".join(name.split())
+    if not name:
+        name = "artifact.md"
+    # Ensure a file extension so KB listings render sanely; clamp the stem
+    # to 252 BEFORE appending ".md" so the ≤255 guarantee actually holds.
+    name = f"{name[:252]}.md" if "." not in name else name[:255]
+    return name
+
+
+async def _handle_emit_artifact(
+    params: dict[str, Any],
+    *,
+    db: AsyncSession,
+    session: AutonomousSession,
+) -> ToolResult:
+    """Handle ``emit_artifact`` — persist a document-grade artifact into
+    the run's target KB as a REAL document.  Zero cost (local writes).
+
+    Order of operations is load-bearing:
+
+    1. Skip honestly when the session has no target KB or the artifact
+       content is empty — no rows, no upload.
+    2. Upload the bytes to object storage FIRST (client-generated
+       ``file_id`` as the key, per ADR 0005's bare-UUID scheme).  On any
+       storage failure, return an honest ``storage_error`` outcome with
+       NO DB rows (the gateway_error honesty pattern).
+    3. Only then write File + Document + chunks + KB attach +
+       ``autonomous_artifacts`` reference — all flushed, never committed
+       (the executor owns the commit boundary).
+    4. Best-effort embed enqueue; lazy embed-on-read covers the gap.
+
+    Args:
+        params: Must contain ``"artifact"`` — a dict with ``content``
+            and optional ``name`` / ``mime``.  Missing ``"artifact"`` is
+            a programming error at the call site; KeyError is acceptable
+            here (the emit_finding/propose_memory/notify convention).
+            The dict's inner keys are LLM-emitted, so they get tolerant
+            ``.get(...) or default`` guards.
+        db: An open :class:`~sqlalchemy.ext.asyncio.AsyncSession`.
+        session: The active :class:`~app.models.autonomous.AutonomousSession`;
+            the session supplies the target KB (``session.params["kb_id"]``),
+            the owner, and the project scope.
+    """
+    import hashlib
+
+    from app.models.document import Document, DocumentChunk
+    from app.models.file import File as FileModel
+    from app.models.knowledge import KnowledgeBaseFile
+    from app.pipeline.chunker import chunk_document
+    from app.pipeline.parsers import PageSpan, ParsedDocument
+    from app.storage import upload_bytes
+    from app.workers.queue import enqueue_embed_job
+
+    # Missing "artifact" key → KeyError, the established programming-error
+    # convention for local handlers (see emit_finding above).
+    artifact = params["artifact"]
+
+    # ── target KB ────────────────────────────────────────────────────────
+    # No target KB → honest skip, no rows, no upload. The drafting node
+    # surfaces this to the user via an explanatory finding (Task 3).
+    kb_id = (session.params or {}).get("kb_id")
+    if not kb_id:
+        return ToolResult(
+            cost_usd=Decimal("0"), outcome="skipped", data={"skipped": "no_target_kb"}
+        )
+    # Parse BEFORE the upload: a malformed kb_id must fail here, not at the
+    # KB-attach insert after the bytes have already landed in MinIO (orphan).
+    kb_uuid = uuid.UUID(str(kb_id))
+
+    # ── extract + sanitize (inner keys are LLM-emitted) ──────────────────
+    # Strip NUL bytes: "\u0000" is valid JSON (LLM-emittable) but Postgres
+    # TEXT rejects \x00 at flush — post-upload, that's an orphan + failed run.
+    content = str(artifact.get("content") or "").replace("\x00", "")
+    if not content:
+        return ToolResult(
+            cost_usd=Decimal("0"), outcome="skipped", data={"skipped": "empty_content"}
+        )
+
+    truncated = len(content) > _ARTIFACT_MAX_CHARS
+    if truncated:
+        content = content[:_ARTIFACT_MAX_CHARS]
+
+    name = _sanitize_artifact_name(artifact.get("name"))
+    mime = str(artifact.get("mime") or "text/markdown")
+
+    # size_bytes / hash are computed from THE ENCODED BYTES — what object
+    # storage actually holds — not the character count.
+    body = content.encode("utf-8")
+
+    # Client-generated id so the upload can happen BEFORE any DB state
+    # exists (per ADR 0005 the storage key IS the bare file UUID string).
+    file_id = uuid.uuid4()
+
+    # ── upload FIRST — no DB rows on storage failure ─────────────────────
+    # Mirrors the gateway_error honesty pattern: an artifact the user
+    # cannot download must never appear as a File row. A failed-late
+    # orphan MinIO object is acceptable — the same non-reaped class as
+    # ADR 0005's soft-deleted file bytes.
+    try:
+        await upload_bytes(storage_path=str(file_id), body=body, content_type=mime)
+    except Exception as exc:
+        log.warning(
+            "emit_artifact: storage upload failed; no DB rows written",
+            extra={
+                "event": "autonomous_artifact_storage_error",
+                "session_id": str(session.id),
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            },
+        )
+        return ToolResult(
+            cost_usd=Decimal("0"),
+            outcome="storage_error",
+            data={"error": f"{type(exc).__name__}: {exc}"},
+        )
+
+    # ── File row ─────────────────────────────────────────────────────────
+    # ingestion_status='ready' immediately: the Document + chunks are
+    # written synchronously below, so the readiness the KB attach API's
+    # rule guards (chunks exist and are queryable) holds at flush time.
+    file_row = FileModel(
+        id=file_id,
+        owner_id=session.user_id,
+        project_id=session.project_id,
+        filename=name,
+        mime_type=mime,
+        size_bytes=len(body),
+        hash_sha256=hashlib.sha256(body).hexdigest(),
+        storage_path=str(file_id),
+        ingestion_status="ready",
+    )
+    db.add(file_row)
+    await db.flush()
+
+    # ── Document + chunks (direct-text sibling of the ingest pipeline) ──
+    # Synthetic single-page ParsedDocument over the artifact text — no PDF
+    # parser involved; parser/parser_version are honest about that.
+    parsed = ParsedDocument(
+        canonical_text=content,
+        pages=[PageSpan(page_number=1, char_start=0, char_end=len(content))],
+        page_count=1,
+        parser="autonomous-artifact",
+        parser_version="1",
+        structured_content=None,
+    )
+    chunks = chunk_document(parsed)
+
+    # Persisted EXACTLY in the ingest idiom (_persist_document_and_chunks):
+    # normalized_content is the same string the chunker sliced, so the
+    # M2-A1 re-read invariant holds for every chunk —
+    # chunk.content == normalized_content[char_offset_start:char_offset_end].
+    doc = Document(
+        file_id=file_row.id,
+        parser=parsed.parser,
+        parser_version=parsed.parser_version,
+        page_count=parsed.page_count,
+        character_count=len(parsed.canonical_text),
+        structured_content=parsed.structured_content,
+        normalized_content=parsed.canonical_text,
+        was_ocrd=False,
+    )
+    db.add(doc)
+    await db.flush()  # populate doc.id
+
+    for chunk in chunks:
+        db.add(
+            DocumentChunk(
+                document_id=doc.id,
+                chunk_index=chunk.chunk_index,
+                content=chunk.content,
+                page_start=chunk.page_start,
+                page_end=chunk.page_end,
+                char_offset_start=chunk.char_offset_start,
+                char_offset_end=chunk.char_offset_end,
+                tokens=None,
+                metadata_json=chunk.metadata,
+            )
+        )
+
+    # ── KB attach — DIRECT insert on purpose ─────────────────────────────
+    # fire_watches_for_kb only fires from the attach-file API handler, so
+    # a direct KnowledgeBaseFile insert cannot spawn a watch-triggered
+    # run — this is the loop-prevention design (a run's own memo must
+    # never trigger the watch that spawned it). No duplicate-attach
+    # concern: file_id is brand new.
+    db.add(KnowledgeBaseFile(kb_id=kb_uuid, file_id=file_row.id))
+
+    # ── artifact reference ───────────────────────────────────────────────
+    artifact_row = AutonomousArtifact(
+        session_id=session.id,
+        file_id=file_row.id,
+        name=name,
+        mime=mime,
+        size_bytes=len(body),
+    )
+    db.add(artifact_row)
+    await db.flush()
+
+    # ── best-effort embed enqueue ────────────────────────────────────────
+    # enqueue_embed_job already swallows transport errors, but wrap anyway
+    # (the notify-email belt-and-suspenders precedent). There is also a
+    # pre-commit race: the worker may dequeue the job before the executor
+    # commits, see no rows, and no-op — lazy embed-on-read at query time
+    # covers that gap (and any transport failure) either way.
+    try:
+        await enqueue_embed_job(file_row.id)
+    except Exception:
+        log.warning(
+            "emit_artifact: embed enqueue failed; embed-on-read covers the gap",
+            extra={
+                "event": "autonomous_artifact_embed_enqueue_error",
+                "file_id": str(file_row.id),
+            },
+            exc_info=True,
+        )
+
+    data: dict[str, Any] = {
+        "artifact_id": str(artifact_row.id),
+        "file_id": str(file_row.id),
+        "document_id": str(doc.id),
+        "name": name,
+        "size_bytes": len(body),
+    }
+    if truncated:
+        data["truncated"] = True
+    return ToolResult(cost_usd=Decimal("0"), data=data)
 
 
 async def _handle_retrieve_chunks(
@@ -618,6 +875,13 @@ async def _handle_retrieve_chunks_since(
     Soft-deleted files (``files.deleted_at IS NOT NULL``) are excluded
     so a deleted source never leaks back via the autonomous loop.
 
+    Files referenced by ``autonomous_artifacts`` are ALSO excluded —
+    a schedule's next tick retrieves "files attached since last run",
+    and a prior run's own memo lands in the KB as exactly such a file;
+    without the exclusion every tick re-analyzes the previous tick's
+    output (self-ingestion echo).  Query-mode (mode 1) and chat RAG
+    deliberately still see artifacts.
+
     Args:
         since_raw: cutoff as ISO-8601 ``str`` or aware
             :class:`datetime.datetime`.  Naive datetimes are NOT
@@ -671,6 +935,17 @@ async def _handle_retrieve_chunks_since(
                 .where(KnowledgeBaseFile.kb_id == kb_id)
                 .where(KnowledgeBaseFile.attached_at > since_dt)
                 .where(FileModel.deleted_at.is_(None))
+                # Self-ingestion-echo guard: a prior run's emit_artifact memo
+                # is attached to this KB as a real file; "new since last run"
+                # must not feed it back into the next run (mode 1 / chat RAG
+                # deliberately still see artifacts).
+                .where(
+                    ~FileModel.id.in_(
+                        select(AutonomousArtifact.file_id).where(
+                            AutonomousArtifact.file_id.is_not(None)
+                        )
+                    )
+                )
                 .order_by(
                     KnowledgeBaseFile.attached_at,
                     DocumentChunk.char_offset_start,
