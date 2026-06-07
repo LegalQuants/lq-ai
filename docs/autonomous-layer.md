@@ -34,6 +34,7 @@ catalog).
 | Four primitives (watches, schedules, per-user memory, precedent board) | **Shipped**, with API + web dashboard. |
 | Honest per-session receipt (`terminal_reason`) | **Shipped.** Built only from audit rows (counts/types/IDs/enums — never raw values). |
 | Per-user opt-in + per-session/per-trigger cost cap | **Shipped.** Off by default; mutate + spawn paths gated. |
+| Document-grade artifacts from runs (Donna #8) | **Shipped, opt-in (default off).** Markdown/plain-text memos written into the run's target KB as real documents; no PDF/DOCX rendering, no artifact editing/versioning, and interactive chat/playbook paths are NOT covered. |
 | Ethics-review phase | **Light v1.** Summarizes privilege/scope concerns surfaced upstream into one finding; a dedicated ethics LLM gate is a future enhancement. |
 | Gateway error mid-analysis | **Honest path.** Produces one explanatory finding and a *completed* (not fabricated) receipt — no invented analysis. |
 | Contract-Repository auto-relationship graph (PRD §3.16) | **Not built.** No `contract_relationships` table; roadmap (deferred-M4+). |
@@ -115,7 +116,7 @@ state deltas.
 |---|---|---|
 | **intake** | Scope the run. Fetches the arriving file's chunks (watch path: `file_id`) or chunks attached since the last run (schedule path: `kb_id` + `since`). | `retrieve_chunks` |
 | **analysis** | Read the scoped material and run inference (skill/playbook) over it; record whether the inference succeeded or hit a gateway error. | `retrieve_chunks`, `run_skill`, `run_playbook`, `propose_precedent` |
-| **drafting** | Synthesize findings. Parses the analysis output, emits one finding per item, optionally proposes memory/precedent, and forwards `privilege_concerns` / `scope_concerns` downstream. | `run_skill`, `emit_finding`, `propose_memory`, `propose_precedent` |
+| **drafting** | Synthesize findings. Parses the analysis output, emits one finding per item, optionally proposes memory/precedent, and forwards `privilege_concerns` / `scope_concerns` downstream. When the session opted in via `emit_artifacts`, also persists each parsed artifact (a markdown memo) into the target KB. | `run_skill`, `emit_finding`, `emit_artifact` (opt-in), `propose_memory`, `propose_precedent` |
 | **ethics_review** | Light v1: emit one finding summarizing the privilege/scope concerns the drafting node forwarded, or one "no concerns flagged" info finding when both are empty. | `emit_finding` |
 | **delivery** | Notify the user (durable in-app notification; best-effort email). On the expected-stop path the executor builds the receipt. | `notify` |
 
@@ -146,7 +147,7 @@ path to a tool. The closed set of operations is the `ToolIntent`
 enum (`api/app/autonomous/enums.py`):
 
 `retrieve_chunks`, `run_skill`, `run_playbook`, `propose_memory`,
-`propose_precedent`, `emit_finding`, `notify`.
+`propose_precedent`, `emit_finding`, `emit_artifact`, `notify`.
 
 `guarded_tool_call` enforces the three brakes **in this order — R5 →
 R6 → R4** — before dispatching, then records cost + outcome:
@@ -183,8 +184,11 @@ check computed is forwarded into `_dispatch`, so inference handlers
 charge exactly what R4 approved — no double-charge, no divergence
 between what was checked and what was billed.
 
-**Dispatch detail.** Local intents (`emit_finding`, `propose_memory`,
-`propose_precedent`, `notify`) and `retrieve_chunks` are zero-cost.
+**Dispatch detail.** Local intents (`emit_finding`, `emit_artifact`,
+`propose_memory`, `propose_precedent`, `notify`) and `retrieve_chunks`
+are zero-cost (`emit_artifact` writes to the DB and object storage but
+makes no inference call — the artifact content comes from the analysis
+phase's single inference response).
 `propose_precedent` upserts race-safely via `INSERT ... ON CONFLICT`
 against a partial unique index, incrementing `observed_count` on
 recurrence — it **never** touches the `projects` table (promotion into
@@ -239,6 +243,8 @@ sees only their own sessions/memory/precedents/etc.).
 |---|---|---|
 | `GET` | `/autonomous/sessions` | List the user's sessions. |
 | `GET` | `/autonomous/sessions/{session_id}` | Get one session (carries the receipt in `result`). |
+| `GET` | `/autonomous/sessions/{session_id}/findings` | The run's persisted findings (stable `created_at, id` order). |
+| `GET` | `/autonomous/sessions/{session_id}/artifacts` | The run's document-grade artifact references (same stable order; see the artifacts section below). |
 | `POST` | `/autonomous/sessions/{session_id}/halt` | Request an external halt (R5). |
 
 ### Watches (KB-arrival triggers)
@@ -311,6 +317,75 @@ index in `0043`).
 |---|---|---|
 | `GET` | `/autonomous/notifications` | List the user's notifications. |
 | `POST` | `/autonomous/notifications/{notification_id}/read` | Mark one read. |
+
+---
+
+## Document-grade artifacts (opt-in, Donna #8)
+
+An opted-in run can persist **document-grade artifacts** — markdown
+memos synthesized from its analysis — into its target knowledge base as
+*real documents*: visible in the KB file list, chat/RAG-queryable
+(embeddings are enqueued best-effort at emission; the lazy
+embed-on-read path covers any gap), and downloadable like any upload.
+
+**Opt-in, default off.** The `emit_artifacts` boolean on
+`autonomous_schedules` / `autonomous_watches` (migration `0047`; also
+on the `run-now` request body, since a manual run has no trigger row to
+inherit from) is copied into `session.params` at spawn. Existing
+automations see **zero** behavior or cost change: the artifact
+instruction is appended to the analysis prompt only when the flag is
+set, and the drafting node dispatches `emit_artifact` only when the
+session's flag is truthy — even if the model emits the key unasked
+(defense-in-depth; R6 additionally grants `emit_artifact` in `drafting`
+only).
+
+**Where artifacts come from.** The existing single analysis inference
+call — when opted in, the structured-output JSON gains an optional
+`artifacts: [{"name", "content_md"}]` list. There is no second
+inference call; `emit_artifact` is a zero-cost local intent.
+
+**The direct-write shape.** The chokepoint handler
+(`guard.py::_handle_emit_artifact`) uploads the bytes to object storage
+first, then writes a real `File` row + `Document` + chunks + KB attach
++ an `autonomous_artifacts` reference row — all through the normal
+commit boundary (the executor commits). The PDF-only ingest pipeline is
+not involved (markdown is already text); md/txt support for the general
+ingest path is deferred as DE-332.
+
+**Deletion semantics.** The `autonomous_artifacts` reference dies with
+its session (`session_id` FK CASCADE); the KB document **outlives** the
+session — it is the user's deliverable. A hard file-delete SET-NULLs
+the reference's `file_id` while the name/size metadata survives.
+
+**Loop/echo prevention.** The KB attach is a direct DB insert, not the
+attach API — so an artifact arriving in a watched KB does **not** fire
+the watch and spawn a new run. And mode-3 (`since`) retrieval excludes
+artifact-referenced files, so a schedule's next tick does not re-analyze
+the previous tick's memo. Query-mode retrieval and chat RAG deliberately
+*keep* artifacts retrievable — that is the point of the direct-write
+shape.
+
+**Honest fallbacks.** A run with no target KB skips persistence and
+emits one `info` finding saying why; a storage (MinIO) failure writes
+**no** DB rows and emits one `warn` finding per failed artifact
+(correlated-failure dedupe is deferred as DE-333). The delivery
+notification's payload carries `artifact_count` next to
+`finding_count`, and its body mentions documents only when the count is
+non-zero.
+
+**Read endpoint.** `GET /autonomous/sessions/{session_id}/artifacts`
+mirrors the findings read: owner-gated (404 id-probing-safe), stable
+order (`created_at ASC, id ASC` — one run's rows typically share
+`created_at` because server-side `now()` is transaction-stable, so `id`
+is the pagination tiebreaker; repeatable, not a guaranteed emission
+sequence), limit clamped [1, 200]; `document_id` is enriched at read
+time via the unique `documents.file_id` so a client can deep-link the
+KB document.
+
+**Honest scope.** Markdown/plain-text only — no PDF/DOCX rendering
+(deferred), no artifact editing/versioning, and the interactive chat /
+playbook-execution paths do **not** emit artifacts; this is an
+autonomous-run capability.
 
 ---
 
@@ -480,5 +555,6 @@ decision.
 - [docs/db-schema.md](db-schema.md) — `autonomous_sessions`,
   `autonomous_watches`, `autonomous_schedules`, `autonomous_memory`,
   `precedent_entries`, `project_context_proposals`,
-  `autonomous_notifications`
+  `autonomous_notifications`, `autonomous_findings`,
+  `autonomous_artifacts`
 - [docs/observability.md](observability.md) — autonomous spans

@@ -556,7 +556,7 @@ reference is stored unbound.
 > early sketch from before [ADR 0004](adr/0004-skill-loader-locus.md)
 > made skills **filesystem-canonical**. There is no `skills` SQL table,
 > no `skill_reference_files` table, and no `skill_example_files` table in
-> the shipped schema (verified against migrations 0001–0045 and
+> the shipped schema (verified against migrations 0001–0047 and
 > `api/app/models/` — no `Skill` ORM model exists). Built-in skills load
 > from disk at startup; user/team-scoped skills are stored in the
 > **`user_skills`** table (migration 0013, documented below), and the
@@ -1524,6 +1524,10 @@ CREATE TABLE autonomous_schedules (
     skill_ref     TEXT,
     target_kb_id  UUID REFERENCES knowledge_bases(id) ON DELETE SET NULL,         -- fk_autonomous_schedules_target_kb_id
     enabled       BOOLEAN NOT NULL DEFAULT TRUE,
+    -- Donna #8 (migration 0047): opt-in document-grade artifact emission
+    -- for the schedule's sessions; default off — existing automations
+    -- see zero behavior/cost change.
+    emit_artifacts BOOLEAN NOT NULL DEFAULT FALSE,
     last_run_at   TIMESTAMPTZ,
     next_run_at   TIMESTAMPTZ,
     -- M4 real-executor work (migration 0045): per-schedule cost cap.
@@ -1559,6 +1563,10 @@ CREATE TABLE autonomous_watches (
     playbook_id        UUID REFERENCES playbooks(id) ON DELETE SET NULL,          -- fk_autonomous_watches_playbook_id
     skill_ref          TEXT,
     enabled            BOOLEAN NOT NULL DEFAULT TRUE,
+    -- Donna #8 (migration 0047): opt-in document-grade artifact emission
+    -- for the watch's sessions; default off — existing automations see
+    -- zero behavior/cost change.
+    emit_artifacts     BOOLEAN NOT NULL DEFAULT FALSE,
     -- M4 real-executor work (migration 0045): per-watch cost cap.
     -- NULL = fall back to settings.autonomous_default_max_cost_usd at spawn.
     max_cost_usd       NUMERIC(10,4),
@@ -1725,6 +1733,85 @@ CREATE INDEX idx_project_context_proposals_user_state
     ON project_context_proposals (user_id, state);
 ```
 
+### `autonomous_findings` (migration 0046)
+
+Persists one row per finding a run emits via the `emit_finding`
+chokepoint, so the run's work-product can be read back after the run
+(`GET /autonomous/sessions/{id}/findings`, stable `created_at, id`
+order — rows from one run share a transaction-stable `now()`). Before
+0046, findings were echoed into transient LangGraph state and only a
+count survived.
+
+**No `user_id` column.** Authz is via the owning session: the read
+endpoint loads the owned session first (404 id-probing-safe), then
+queries by `session_id`. The `session_id` FK is `ON DELETE CASCADE` — a
+finding belongs to one session and is meaningless without it.
+
+**No CHECK on `severity`.** Unlike the other autonomous enum columns,
+`severity` is LLM-emitted free text (`info` | `warn` | `critical` are
+the intended values, but a stray `high` etc. must store, not reject the
+finding row).
+
+```sql
+CREATE TABLE autonomous_findings (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id  UUID NOT NULL REFERENCES autonomous_sessions(id) ON DELETE CASCADE,  -- fk_autonomous_findings_session_id
+    severity    TEXT NOT NULL,  -- LLM-emitted free text; deliberately NO CHECK
+    title       TEXT NOT NULL,
+    content     TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- The read endpoint's by-session query.
+CREATE INDEX ix_autonomous_findings_session_id ON autonomous_findings(session_id);
+```
+
+### `autonomous_artifacts` (migration 0047, Donna #8)
+
+References to document-grade artifacts (markdown memos) an **opted-in**
+run persisted into its target knowledge base via the `emit_artifact`
+chokepoint. This table is the *reference*, not the document — the
+document itself lives in `files` / the KB like any other upload (the
+handler writes File + Document + chunks + KB attach directly). Read
+back via `GET /autonomous/sessions/{id}/artifacts` (stable
+`created_at, id` order — rows from one run share a transaction-stable
+`now()`);
+`document_id` is enriched at read time via the unique
+`documents.file_id` — it is not a column here.
+
+**Deletion semantics.** `session_id` FK is `ON DELETE CASCADE` — the
+artifact *reference* dies with its session. `file_id` FK is `ON DELETE
+SET NULL` — the KB document **outlives** the session (it is the user's
+deliverable); a hard file-delete nulls the ref while the name/size
+metadata survives here.
+
+**No `user_id` column.** Authz is via the owning session, exactly like
+`autonomous_findings` (the read endpoint owner-gates by loading the
+owned session, then queries by `session_id`).
+
+**No CHECK on `name`/`mime`.** Both are LLM-emitted free text (the
+`autonomous_findings.severity` precedent) — whatever the model produces
+must store.
+
+Migration 0047 also adds the opt-in `emit_artifacts` flag (BOOLEAN NOT
+NULL DEFAULT FALSE) to `autonomous_schedules` and `autonomous_watches`
+(documented in their blocks above).
+
+```sql
+CREATE TABLE autonomous_artifacts (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id  UUID NOT NULL REFERENCES autonomous_sessions(id) ON DELETE CASCADE,  -- fk_autonomous_artifacts_session_id
+    file_id     UUID REFERENCES files(id) ON DELETE SET NULL,                        -- fk_autonomous_artifacts_file_id
+    name        TEXT NOT NULL,    -- LLM-emitted free text; deliberately NO CHECK
+    mime        TEXT NOT NULL,    -- LLM-emitted free text; deliberately NO CHECK
+    size_bytes  BIGINT NOT NULL,  -- of the encoded bytes object storage holds
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- The read endpoint's by-session query.
+CREATE INDEX ix_autonomous_artifacts_session_id ON autonomous_artifacts(session_id);
+```
+
 ## M4+ tables (sketched, land at the indicated milestone)
 
 ### `autonomous_tasks` (M4 — **superseded**)
@@ -1808,8 +1895,8 @@ CREATE INDEX idx_relationships_target ON contract_relationships(target_file_id);
 
 ## Migration approach
 
-- **Alembic** for schema migrations. **Migration head is `0045`.** The
-  `0001`–`0045` sequence in `api/alembic/versions/` is the schema truth;
+- **Alembic** for schema migrations. **Migration head is `0047`.** The
+  `0001`–`0047` sequence in `api/alembic/versions/` is the schema truth;
   this document is reconciled to it.
 - `0001_initial.py` creates the core M1 tables (`users`, `user_sessions`,
   `audit_log`, `inference_routing_log`, and the M1 foundation). Note:
@@ -1833,8 +1920,11 @@ CREATE INDEX idx_relationships_target ON contract_relationships(target_file_id);
   precedent upsert index), `0042` (autonomous_sessions.params +
   schedule due-index), `0043` (notifications read-index), `0044`
   (users.autonomous_enabled), `0045` (per-trigger max_cost_usd on
-  watches + schedules). `contract_relationships` remains a sketch — it is
-  **not** created by any migration (see the M4+ sketched section).
+  watches + schedules), `0046` (autonomous_findings — persisted run
+  work-product), `0047` (autonomous_artifacts + the `emit_artifacts`
+  opt-in flag on schedules/watches, Donna #8). `contract_relationships`
+  remains a sketch — it is **not** created by any migration (see the M4+
+  sketched section).
 
 Migration conventions:
 - Every migration is reversible (`downgrade()` always implemented).

@@ -3907,12 +3907,16 @@ paths:
   /api/v1/autonomous/sessions/{session_id}/findings:
     get:
       tags: [autonomous]
-      summary: List a session's persisted findings (work-product, emission order)
+      summary: List a session's persisted findings (work-product, stable order)
       description: |
         Returns the run's persisted findings (the ``emit_finding`` chokepoint
-        work-product) ordered by ``created_at ASC`` — emission order, the
-        run's output sequence. This differs intentionally from the
-        newest-first autonomous lists: these are one run's sequential output.
+        work-product) ordered by ``created_at ASC, id ASC``. Rows a run
+        emits in its single executor commit typically share one
+        ``created_at`` (transaction-stable ``now()``), so ``id`` is the
+        deterministic tiebreaker that keeps pagination stable — a
+        repeatable order, not a guaranteed emission sequence. This differs
+        intentionally from the newest-first autonomous lists: these are one
+        run's output.
 
         Owner-gated by loading the owned session first (the findings table
         has no ``user_id`` — authz is via the parent session). Another
@@ -3938,11 +3942,65 @@ paths:
           description: Zero-based index of the first result to return.
       responses:
         '200':
-          description: Paginated list of the session's findings (emission order)
+          description: Paginated list of the session's findings (stable created_at, id order)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AutonomousFindingListResponse'
+        '401':
+          description: Not authenticated
+        '404':
+          description: Session not found
+
+  /api/v1/autonomous/sessions/{session_id}/artifacts:
+    get:
+      tags: [autonomous]
+      summary: List a session's persisted document-grade artifacts (work-product, stable order)
+      description: |
+        Returns the run's persisted artifact references (the
+        ``emit_artifact`` chokepoint work-product — markdown memos an
+        opted-in run saved into its target knowledge base as real
+        documents) ordered by ``created_at ASC, id ASC`` — one run's rows
+        typically share ``created_at`` (transaction-stable ``now()``), so
+        ``id`` is the deterministic tiebreaker that keeps pagination
+        stable; a repeatable order, not a guaranteed emission sequence.
+        Mirrors the findings read above.
+
+        Owner-gated by loading the owned session first (the artifacts
+        table has no ``user_id`` — authz is via the parent session).
+        Another user's ``session_id`` — or a missing one — returns 404
+        (not 403) to avoid existence disclosure. ``limit`` is clamped to
+        [1, 200]; ``offset`` to [0, ∞).
+
+        ``document_id`` is enriched at read time via the unique
+        ``documents.file_id``. Deletion semantics: a hard file-delete
+        SET-NULLs ``file_id`` (name/size metadata survives; both refs
+        return null); deleting the session removes these reference rows
+        but never the KB document — the document outlives the session.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, default: 50, minimum: 1, maximum: 200}
+          description: Maximum number of artifacts to return (clamped to [1, 200]).
+        - name: offset
+          in: query
+          required: false
+          schema: {type: integer, default: 0, minimum: 0}
+          description: Zero-based index of the first result to return.
+      responses:
+        '200':
+          description: Paginated list of the session's artifact references (stable created_at, id order)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutonomousArtifactListResponse'
         '401':
           description: Not authenticated
         '404':
@@ -5477,13 +5535,72 @@ components:
     AutonomousFindingListResponse:
       type: object
       description: |
-        Paginated list of a session's findings, in emission order
-        (``created_at ASC``) — one run's sequential output.
+        Paginated list of a session's findings, in stable
+        ``created_at ASC, id ASC`` order — one run's rows typically
+        share ``created_at`` (transaction-stable ``now()``); ``id`` is
+        the pagination tiebreaker. Repeatable, not a guaranteed
+        emission sequence.
       required: [findings, total_count, limit, offset]
       properties:
         findings:
           type: array
           items: {$ref: '#/components/schemas/AutonomousFindingRead'}
+        total_count: {type: integer, minimum: 0}
+        limit: {type: integer, minimum: 1, maximum: 200}
+        offset: {type: integer, minimum: 0}
+
+    # Autonomous run artifacts (document-grade work-product, Donna #8) schemas
+
+    AutonomousArtifactRead:
+      type: object
+      description: |
+        Read-only view of an ``autonomous_artifacts`` row — a reference to
+        one document-grade artifact (a markdown memo) an opted-in run
+        persisted into its target knowledge base via the ``emit_artifact``
+        chokepoint. ``name`` and ``mime`` are LLM-emitted free text (no
+        CHECK; the ``severity`` precedent).
+      required:
+        - id
+        - name
+        - mime
+        - size_bytes
+        - created_at
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        mime: {type: string}
+        size_bytes: {type: integer, minimum: 0}
+        file_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            The backing ``files`` row. The FK is ``ON DELETE SET NULL`` —
+            null means the file was later hard-deleted; the name/size
+            metadata here survives. The KB document itself outlives the
+            session (deleting the session removes only this reference).
+        document_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            NOT a column on ``autonomous_artifacts`` — enriched at read
+            time via the unique ``documents.file_id`` (1:1) so a client
+            can deep-link the KB document. Null when ``file_id`` is null
+            or no ``documents`` row exists for the file.
+        created_at: {type: string, format: date-time}
+
+    AutonomousArtifactListResponse:
+      type: object
+      description: |
+        Paginated list of a session's artifact references, in the same
+        stable ``created_at ASC, id ASC`` order as the findings list —
+        repeatable, not a guaranteed emission sequence.
+      required: [artifacts, total_count, limit, offset]
+      properties:
+        artifacts:
+          type: array
+          items: {$ref: '#/components/schemas/AutonomousArtifactRead'}
         total_count: {type: integer, minimum: 0}
         limit: {type: integer, minimum: 1, maximum: 200}
         offset: {type: integer, minimum: 0}
@@ -5638,6 +5755,7 @@ components:
         - user_id
         - cron_expr
         - enabled
+        - emit_artifacts
         - created_at
         - updated_at
       properties:
@@ -5650,6 +5768,12 @@ components:
         skill_ref: {type: string, nullable: true}
         target_kb_id: {type: string, format: uuid, nullable: true}
         enabled: {type: boolean}
+        emit_artifacts:
+          type: boolean
+          description: |
+            Opt-in document-grade artifact emission (Donna #8) for the
+            schedule's sessions; default off so existing automations are
+            unchanged.
         max_cost_usd: {type: string, nullable: true}
         last_run_at: {type: string, format: date-time, nullable: true}
         next_run_at: {type: string, format: date-time, nullable: true}
@@ -5673,6 +5797,13 @@ components:
         target_kb_id: {type: string, format: uuid, nullable: true}
         project_id: {type: string, format: uuid, nullable: true}
         enabled: {type: boolean, default: true}
+        emit_artifacts:
+          type: boolean
+          default: false
+          description: |
+            Opt-in document-grade artifact emission (Donna #8) for the
+            schedule's sessions; default off so existing automations are
+            unchanged.
         max_cost_usd: {type: string, nullable: true}
 
     AutonomousScheduleUpdate:
@@ -5687,6 +5818,12 @@ components:
         name: {type: string, nullable: true}
         cron_expr: {type: string, nullable: true}
         enabled: {type: boolean, nullable: true}
+        emit_artifacts:
+          type: boolean
+          nullable: true
+          description: |
+            Toggle opt-in document-grade artifact emission (Donna #8)
+            for the schedule's future sessions; omitted/null = unchanged.
         playbook_id: {type: string, format: uuid, nullable: true}
         skill_ref: {type: string, nullable: true}
         target_kb_id: {type: string, format: uuid, nullable: true}
@@ -5700,13 +5837,21 @@ components:
         ``trigger_kind='manual'`` session.  Exactly one of ``playbook_id``
         / ``skill_ref`` must be set (zero or both → 422).  ``target_kb_id``
         / ``project_id`` are optional scope.  ``max_cost_usd`` is the
-        per-run cap (NULL → fall back to the config default).
+        per-run cap (NULL → fall back to the config default).  A manual
+        run has no schedule/watch row to inherit ``emit_artifacts`` from,
+        so this body IS the opt-in source.
       properties:
         playbook_id: {type: string, format: uuid, nullable: true}
         skill_ref: {type: string, nullable: true}
         target_kb_id: {type: string, format: uuid, nullable: true}
         project_id: {type: string, format: uuid, nullable: true}
         max_cost_usd: {type: string, nullable: true}
+        emit_artifacts:
+          type: boolean
+          default: false
+          description: |
+            Opt-in document-grade artifact emission (Donna #8) for this
+            one-off run; default off so existing callers are unchanged.
 
     AutonomousScheduleListResponse:
       type: object
@@ -5733,6 +5878,7 @@ components:
         - user_id
         - knowledge_base_id
         - enabled
+        - emit_artifacts
         - created_at
         - updated_at
       properties:
@@ -5743,6 +5889,12 @@ components:
         playbook_id: {type: string, format: uuid, nullable: true}
         skill_ref: {type: string, nullable: true}
         enabled: {type: boolean}
+        emit_artifacts:
+          type: boolean
+          description: |
+            Opt-in document-grade artifact emission (Donna #8) for the
+            watch's sessions; default off so existing automations are
+            unchanged.
         max_cost_usd: {type: string, nullable: true}
         deleted_at: {type: string, format: date-time, nullable: true}
         created_at: {type: string, format: date-time}
@@ -5762,6 +5914,13 @@ components:
         skill_ref: {type: string, nullable: true}
         project_id: {type: string, format: uuid, nullable: true}
         enabled: {type: boolean, default: true}
+        emit_artifacts:
+          type: boolean
+          default: false
+          description: |
+            Opt-in document-grade artifact emission (Donna #8) for the
+            watch's sessions; default off so existing automations are
+            unchanged.
         max_cost_usd: {type: string, nullable: true}
 
     AutonomousWatchUpdate:
@@ -5775,6 +5934,12 @@ components:
         404 (id-probing-safe).
       properties:
         enabled: {type: boolean, nullable: true}
+        emit_artifacts:
+          type: boolean
+          nullable: true
+          description: |
+            Toggle opt-in document-grade artifact emission (Donna #8)
+            for the watch's future sessions; omitted/null = unchanged.
         playbook_id: {type: string, format: uuid, nullable: true}
         skill_ref: {type: string, nullable: true}
         project_id: {type: string, format: uuid, nullable: true}
@@ -5802,7 +5967,9 @@ components:
         marking read is the dismiss action. ``channel`` is one of
         ``in_app`` / ``email`` / ``webhook`` (``webhook`` reserved).
         ``body``/``payload`` carry counts/IDs + a receipt link — never raw
-        entity values.
+        entity values. A run-completion notification's ``payload`` carries
+        ``finding_count`` and ``artifact_count`` (``artifact_count`` is 0
+        unless the run opted in via ``emit_artifacts``).
       required:
         - id
         - user_id

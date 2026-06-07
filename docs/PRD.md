@@ -4483,6 +4483,30 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 ---
 
+#### DE-332 — Text/markdown ingest-parser support (today the ingest pipeline is PDF-only)
+
+**Priority:** P3 · **Effort:** M · **Good first issue** (community-suitable)
+
+**Context:** The ingest pipeline rejects every non-PDF upload at parse time — `api/app/pipeline/ingest.py` gates on `is_pdf_mime` (`api/app/pipeline/parsers.py`) and marks anything else failed. This surfaced during the autonomous document-grade-artifacts work (Donna ask #8): a run's markdown memo could not ride the normal ingest path, so the `emit_artifact` chokepoint handler writes the `File` + `Document` + chunks **directly** (markdown is already text — no parser needed). That direct-write path is correct and stays, but the underlying gap is general: a user cannot upload `.md` / `.txt` files to a knowledge base at all, even though the chunker (`chunk_document`) operates on plain text and handles them trivially once a `ParsedDocument` exists.
+
+**Specific scope:** Add a plain-text parser branch to the ingest pipeline — accept `text/markdown` and `text/plain` mimes in (or alongside) `is_pdf_mime`'s gate, build a synthetic single-page `ParsedDocument` from the decoded bytes (the same shape `_handle_emit_artifact` constructs), and run the existing chunk/embed path unchanged. Set `parser` to an honest value (e.g. `"plain-text"`), `page_count=1`, `was_ocrd=False`. Update the upload endpoint's accepted-mime documentation in `docs/api/backend-openapi.yaml`, add ingest tests for both mimes (happy path + a non-UTF-8 byte-stream failure case), and update the file-upload docs that currently state PDF-only.
+
+**When to ship:** Post-v0.4.0; well-scoped for community pickup (the artifact handler already demonstrates the exact `ParsedDocument` construction needed).
+
+---
+
+#### DE-333 — Dedupe correlated artifact storage-failure warn findings
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** When an opted-in autonomous run emits N artifacts and object storage (MinIO) is down, the drafting node's dispatch loop produces one `storage_error` result — and therefore one `warn` finding — per artifact: N near-identical "artifact could not be stored" findings for a single underlying outage. A natural bound already exists (the artifact list comes from a single analysis response, so N is limited by the response token budget), and each finding is individually honest, so this is noise rather than harm — which is why it was deferred rather than absorbed into the Donna-#8 work.
+
+**Specific scope:** In the drafting node's artifact dispatch loop (`api/app/autonomous/nodes.py`), collapse consecutive/correlated `storage_error` outcomes into one `warn` finding that names the count and the artifact names (e.g. "3 artifacts could not be stored — object storage unavailable"), instead of one finding per failure. Keep the per-artifact audit `tool_call` rows untouched (the receipt should still show every attempted dispatch); only the user-facing finding is deduplicated. Add a test with ≥2 failing artifacts asserting exactly one warn finding.
+
+**When to ship:** If/when a real storage outage during an artifact-emitting run produces enough duplicate findings to bother a user; pure polish until then.
+
+---
+
 ## 10. Appendices
 
 ### Appendix A — Glossary

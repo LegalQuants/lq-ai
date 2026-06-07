@@ -595,6 +595,36 @@ async def test_create_schedule_computes_next_run_and_audits(
 
 
 @pytest.mark.integration
+async def test_create_schedule_emit_artifacts_round_trip(
+    client: AsyncClient,
+    user_a: User,
+) -> None:
+    """Create with emit_artifacts=true → the read echoes true (Donna #8)."""
+    resp = await client.post(
+        "/api/v1/autonomous/schedules",
+        headers=_bearer(user_a),
+        json={"cron_expr": "*/5 * * * *", "emit_artifacts": True},
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["emit_artifacts"] is True
+
+
+@pytest.mark.integration
+async def test_create_schedule_emit_artifacts_defaults_false(
+    client: AsyncClient,
+    user_a: User,
+) -> None:
+    """Omitting emit_artifacts at create → false (opt-in, default off)."""
+    resp = await client.post(
+        "/api/v1/autonomous/schedules",
+        headers=_bearer(user_a),
+        json={"cron_expr": "*/5 * * * *"},
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["emit_artifacts"] is False
+
+
+@pytest.mark.integration
 async def test_create_schedule_invalid_cron_returns_422(
     client: AsyncClient,
     user_a: User,
@@ -796,6 +826,32 @@ async def test_patch_schedule_toggles_enabled(
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["enabled"] is False
+
+
+@pytest.mark.integration
+async def test_patch_schedule_toggles_emit_artifacts_both_ways(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    user_a: User,
+) -> None:
+    """PATCH flips emit_artifacts false→true and true→false (Donna #8)."""
+    sched = await _make_schedule(db_session, user=user_a, emit_artifacts=False)
+
+    resp = await client.patch(
+        f"/api/v1/autonomous/schedules/{sched.id}",
+        headers=_bearer(user_a),
+        json={"emit_artifacts": True},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["emit_artifacts"] is True
+
+    resp = await client.patch(
+        f"/api/v1/autonomous/schedules/{sched.id}",
+        headers=_bearer(user_a),
+        json={"emit_artifacts": False},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["emit_artifacts"] is False
 
 
 @pytest.mark.integration

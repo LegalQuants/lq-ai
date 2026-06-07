@@ -480,9 +480,12 @@ class AutonomousFindingListResponse(BaseModel):
     """Paginated list of :class:`AutonomousFindingRead` items.
 
     Mirrors ``AutonomousMemoryListResponse`` — total_count / limit /
-    offset envelope. Findings are read in emission order (``created_at
-    ASC``) — one run's sequential output, not a newest-first feed. Uses
-    the ``findings`` key (Donna's UI expects ``findings: [...]``).
+    offset envelope. Findings are read in a stable ``created_at ASC, id
+    ASC`` order — one run's rows typically share ``created_at``
+    (transaction-stable ``now()``), so ``id`` is the pagination
+    tiebreaker; repeatable, not a guaranteed emission sequence. Not a
+    newest-first feed. Uses the ``findings`` key (Donna's UI expects
+    ``findings: [...]``).
     """
 
     findings: list[AutonomousFindingRead]
@@ -521,8 +524,9 @@ class AutonomousArtifactListResponse(BaseModel):
     """Paginated list of :class:`AutonomousArtifactRead` items.
 
     Mirrors ``AutonomousFindingListResponse`` — total_count / limit /
-    offset envelope. Artifacts are read in emission order (``created_at
-    ASC``) — one run's sequential output, not a newest-first feed.
+    offset envelope. Artifacts are read in the same stable ``created_at
+    ASC, id ASC`` order (see that schema's note) — repeatable, not a
+    guaranteed emission sequence; not a newest-first feed.
     """
 
     artifacts: list[AutonomousArtifactRead]

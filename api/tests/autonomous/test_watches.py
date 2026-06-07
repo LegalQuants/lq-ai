@@ -417,6 +417,42 @@ async def test_create_watch_returns_201_and_audits(
 
 
 @pytest.mark.integration
+async def test_create_watch_emit_artifacts_round_trip(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    user_a: User,
+) -> None:
+    """Create with emit_artifacts=true → the read echoes true (Donna #8)."""
+    kb = await _make_kb(db_session, owner=user_a)
+
+    resp = await client.post(
+        "/api/v1/autonomous/watches",
+        headers=_bearer(user_a),
+        json={"knowledge_base_id": str(kb.id), "emit_artifacts": True},
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["emit_artifacts"] is True
+
+
+@pytest.mark.integration
+async def test_create_watch_emit_artifacts_defaults_false(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    user_a: User,
+) -> None:
+    """Omitting emit_artifacts at create → false (opt-in, default off)."""
+    kb = await _make_kb(db_session, owner=user_a)
+
+    resp = await client.post(
+        "/api/v1/autonomous/watches",
+        headers=_bearer(user_a),
+        json={"knowledge_base_id": str(kb.id)},
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["emit_artifacts"] is False
+
+
+@pytest.mark.integration
 async def test_create_watch_on_unowned_kb_returns_404(
     client: AsyncClient,
     db_session: AsyncSession,
@@ -635,6 +671,33 @@ async def test_patch_watch_toggles_enabled(
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["enabled"] is False
+
+
+@pytest.mark.integration
+async def test_patch_watch_toggles_emit_artifacts_both_ways(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    user_a: User,
+) -> None:
+    """PATCH flips emit_artifacts false→true and true→false (Donna #8)."""
+    kb = await _make_kb(db_session, owner=user_a)
+    watch = await _make_watch(db_session, user=user_a, kb=kb, emit_artifacts=False)
+
+    resp = await client.patch(
+        f"/api/v1/autonomous/watches/{watch.id}",
+        headers=_bearer(user_a),
+        json={"emit_artifacts": True},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["emit_artifacts"] is True
+
+    resp = await client.patch(
+        f"/api/v1/autonomous/watches/{watch.id}",
+        headers=_bearer(user_a),
+        json={"emit_artifacts": False},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["emit_artifacts"] is False
 
 
 @pytest.mark.integration
