@@ -67,6 +67,19 @@ gateway_auth:
 # The gateway decrypts in-memory at adapter build time; plaintext keys
 # never touch disk after step 3.
 #
+# THIRD PATH — runtime admin provider-keys API (post-v0.4.0, #128).
+# Admins can manage keys at runtime via `/admin/v1/provider-keys`
+# (proxied by the backend at `/api/v1/admin/provider-keys`) instead of
+# hand-editing this file: POST writes the `api_key_encrypted` field into
+# this `gateway.yaml` automatically (same Fernet wrapping as step 3) AND
+# hot-applies the key to the live adapter in-place — no restart, no
+# SIGHUP. PATCH rotates, DELETE revokes. This path requires
+# LQ_AI_GATEWAY_MASTER_KEY to be set (the API returns 400
+# failed_precondition otherwise). Keys provided via `api_key_env`
+# continue to work and report their source as `env`; runtime-managed
+# keys report `runtime`. The encrypt-CLI path above remains valid for
+# operators who prefer to commit ciphertext by hand.
+#
 # IMPORTANT: tier values reflect the operator's specific
 # agreement with the provider. A standard commercial Anthropic
 # API account is Tier 4. An Anthropic enterprise account with

@@ -71,6 +71,19 @@ naming a session id; the worker dequeues it and calls
 no long-lived autonomous process to operate, monitor, or scale
 separately from the existing worker fleet.
 
+Because the executor runs skills, the arq worker now installs its own
+skill registry at startup. The worker's `on_startup` calls the shared
+`app/skills/bootstrap.py::install_skill_registry` — the *same* bootstrap
+the api lifespan uses — and the compose `arq-worker` service mounts the
+skills corpus (`./skills:/skills:ro` + `LQ_AI_SKILLS_DIR`) to feed it
+(#139). The bootstrap is **uniform fail-fast**: a missing or unreadable
+skills dir aborts startup on both the api and the worker (the api
+previously logged a warning and booted with an empty registry — that is
+a deliberate behavior change). SIGHUP-driven skill reload stays
+**api-only**; a running worker keeps its boot-time registry snapshot
+until it is restarted, so apply a skills change to the worker by
+restarting it.
+
 Inside one job, the executor builds and runs a **LangGraph state
 machine** (`StateGraph`, `api/app/autonomous/executor.py::_build_graph`).
 The five phase nodes are added as sequential nodes with linear edges:
@@ -277,14 +290,30 @@ dependency (`croniter`/`apscheduler`) per the SBOM posture. Table
 | `PATCH` | `/autonomous/schedules/{schedule_id}` | Update a schedule. |
 | `DELETE` | `/autonomous/schedules/{schedule_id}` | Delete a schedule. |
 
+**Matter binding (#133).** Schedules, watches, and the sessions they
+spawn each carry an optional `project_id` (FK to `projects`, `ON DELETE
+SET NULL`) that binds the run to a matter. It can be set at create time
+and reassigned via `PATCH` — passing an explicit null clears the binding.
+Project ownership is validated at all five assignment sites
+(`create_schedule`, `create_watch`, run-now, and the two `PATCH`
+handlers): a caller can only bind a schedule/watch to a project they own.
+This closed a pre-existing **IDOR** where `project_id` was assigned
+without an ownership check, which had let a caller reference another
+user's project id.
+
 ### Per-user memory (proposed → kept / dismissed)
 
 The agent proposes memory rows (`state='proposed'`); the user curates
-them. Table `autonomous_memory` (migration `0039`).
+them. Table `autonomous_memory` (migration `0039`, whose
+`source_session_id` column links each row to the session that proposed
+it). The `?source_session_id=` filter on the list endpoint scopes the response to
+one session's proposals; **precedents are deliberately excluded** from
+this filter because they are recurrence-aggregated across sessions
+(carrying `observed_count`) rather than attributable to a single run.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/autonomous/memory` | List the user's memory. |
+| `GET` | `/autonomous/memory` | List the user's memory. Accepts `?source_session_id=` to narrow to the memories a given session proposed (#135). |
 | `POST` | `/autonomous/memory/{memory_id}/keep` | Keep a proposed memory. |
 | `POST` | `/autonomous/memory/{memory_id}/dismiss` | Dismiss a proposed memory. |
 | `DELETE` | `/autonomous/memory/{memory_id}` | Delete a memory. |

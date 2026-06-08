@@ -130,6 +130,15 @@ configured cap (`max_cost_per_message_usd`), the cascade falls back
 to Stage 3 with a `chat_message_ensemble_budget_fallback` warning
 logged — the operator's budget setting is a hard cap, not advisory.
 
+4. **Tabular per-column** — a fourth activation path, on the Tabular
+   Review surface (post-v0.4.0, #127). A `table`-mode column's
+   `ensemble_verification` flag (resolved column > skill snapshot >
+   deployment default) runs one Stage-4 ensemble pass per cell over the
+   cell's cited chunks, persisting `verification_method` on the cell.
+   Unlike the chat path, the tabular path has **no** per-cell mid-run
+   cost ceiling (the pre-flight preview is the guard; [DE-331]). See
+   [docs/tabular-review.md](tabular-review.md#per-column-ensemble-verification-post-v040-127).
+
 ## Configuration
 
 The api/ pulls Stage 3 and Stage 4 config from the gateway over

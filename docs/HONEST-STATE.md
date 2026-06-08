@@ -1,6 +1,6 @@
 # Honest State
 
-> Catalog of what LQ.AI ships today, what is deferred, and how to verify each. Maintained per release. **Current as of the M4 close (Autonomous Layer shipped; migration head `0045`).**
+> Catalog of what LQ.AI ships today, what is deferred, and how to verify each. Maintained per release. **Current as of the M4 close plus the post-v0.4.0 "Donna" run (#115–#139); migration head `0047`.**
 
 ## What this doc is
 
@@ -52,6 +52,9 @@ The surface in-house counsel touches every day. Every row is wired end-to-end in
 | Audit log of all sensitive actions | M1 | `api/app/audit.py`; admin reads at `/lq-ai/admin/audit-log` |
 | FTS over chat history | M1 | `api/app/api/chats.py` (search route); migration `0016_chat_messages_fts.py` |
 | GDPR-aligned export and account deletion | M1 | `api/app/workers/user_export.py`; `api/app/workers/user_deletion.py`; `api/app/api/users.py` |
+| Per-message ephemeral file attach (`MessageCreate.file_ids` → `applied_file_ids` echo; separate channel from `skill_inputs`, injected as document-context per Decision M2-1) | post-v0.4.0 (#116/#117) | `api/app/schemas/chats.py` (`file_ids`, `applied_file_ids`); `api/app/schemas/gateway.py` (`lq_ai_file_ids`) |
+| Self-service profile edit (`PATCH /api/v1/users/me`, `display_name` only; email is [DE-329](PRD.md#9-deferred-enhancements-and-identified-future-work)) | post-v0.4.0 (#118) | `api/app/api/users.py` |
+| Pending-deletion visibility (`deletion_scheduled_at` on `GET /users/me`; `/users/me/delete/cancel` clears it) | post-v0.4.0 (#120) | `api/app/api/users.py` |
 
 ---
 
@@ -70,6 +73,7 @@ The Inference Gateway is the security boundary — the only component holding pr
 | Routing log (per-inference) | M1 | `gateway/app/routing_log.py` |
 | Provider-key encryption at rest (Fernet master-key) | M1 | `gateway/app/secrets.py`; `docs/security/encrypted-keys.md` |
 | Hot-reload of gateway config via SIGHUP | M1 | `gateway/app/config_holder.py`; `docs/adr/0010-gateway-config-hot-reload.md` |
+| Runtime provider keys / BYOK (gateway `/admin/v1/provider-keys` + backend is_admin proxy `/api/v1/admin/provider-keys`; GET masked last4/configured/source `env`\|`runtime`; POST Fernet-encrypts into `gateway.yaml` and hot-applies the adapter in-place with no restart; PATCH rotates, DELETE revokes; requires `LQ_AI_GATEWAY_MASTER_KEY` else 400 `failed_precondition`; env keys still work and show source `env`) | post-v0.4.0 (#128) | `gateway/app/provider_keys.py`, `gateway/app/api/admin.py`; `api/app/api/admin.py` (proxy); `api/app/clients/gateway.py` |
 
 ---
 
@@ -120,6 +124,8 @@ Run a skill (or ad-hoc column spec) across a document corpus into a document × 
 | Cost preview · execute · list · get · cancel · soft-delete | M3 | `api/app/api/tabular.py`; arq job `api/app/workers/tabular_worker.py`; table `tabular_executions` (migration `0036`) |
 | Export to XLSX (cell comments) / CSV (citation links) | M3 | `GET /api/v1/tabular/executions/{id}/export` |
 | Column-spec snapshot at execution start (auditable invariant) | M3 | `api/app/models/tabular.py` (columns JSONB snapshot) |
+| Navigable per-cell citations (read-side `source_file_id`/`source_page`/`source_text` enrichment on `GET /tabular/executions/{id}`, two batched IN-queries; existing executions included; NOT Citation-Engine-minted — [DE-309](PRD.md#9-deferred-enhancements-and-identified-future-work); untyped in gen:api — [DE-330](PRD.md#9-deferred-enhancements-and-identified-future-work)) | post-v0.4.0 (#125) | `api/app/api/tabular.py` (enrichment); `api/app/schemas/tabular.py` (`source_file_id`/`source_page`/`source_text`) |
+| Per-column ensemble verification honored at execution (ensemble cells run one Stage-4 ensemble pass over cited chunks; `verification_method` `ensemble_strict`/`ensemble_majority`/None persisted on cells + mirrored onto citations; preview adds `ensemble_cells_count` + `ensemble_premium_usd`, included in `estimated_cost_usd`; precedence column > skill snapshot > deployment default; no mid-run ceiling — [DE-331](PRD.md#9-deferred-enhancements-and-identified-future-work)) | post-v0.4.0 (#127) | `api/app/tabular/nodes.py` (`_verify_cell_ensemble`), `api/app/tabular/cost.py`; `api/app/schemas/tabular.py` |
 | Learn viz | M3 | `web/static/learn/playgrounds/tabular-review.html` |
 
 **Caveat (honest):** tabular has unit/component backend coverage (`api/tests/tabular/` — nodes, cost, export, schemas, worker, executor-spans), but no per-endpoint integration test driving the handlers end-to-end against a live DB yet — a known gap. Bulk-op sibling infrastructure (`parent_execution_id`) is present but not yet exercised.
@@ -167,6 +173,10 @@ An opt-in background executor that does real in-loop agentic work under hard bra
 | Honest per-session receipt (`terminal_reason`: completed / cost_cap_reached / external_halt / idle_timeout) | M4 | `api/app/autonomous/receipt.py` (`build_receipt` / `build_receipt_safe`); stored in `autonomous_sessions.result` |
 | In-app notifications (durable; best-effort email transport) | M4 | `/autonomous/notifications/*`; table `autonomous_notifications` (migration `0040`) |
 | Per-user opt-in (off by default) | M4 | `User.autonomous_enabled` (migration `0044`); spawn paths + mutate endpoints gated |
+| Findings persistence (`autonomous_findings` written at the `emit_finding` chokepoint; `GET /autonomous/sessions/{id}/findings`; `?source_session_id=` filter on `GET /autonomous/memory`, precedents excluded — recurrence-aggregated) | post-v0.4.0 (#135) | `api/app/api/autonomous.py`; table `autonomous_findings` (migration `0046`) |
+| Document-grade artifacts (opt-in `emit_artifacts`, default OFF; drafting `emit_artifact` chokepoint direct-writes a real KB document — MinIO upload-first, File `ready` + Document + chunks, direct KB attach bypassing watch-fire so no loop; markdown/plain only; `GET /autonomous/sessions/{id}/artifacts`, owner-gated; notification payload `artifact_count`) | post-v0.4.0 (#138) | `api/app/autonomous/guard.py` (`_handle_emit_artifact`), `api/app/api/autonomous.py`; table `autonomous_artifacts` (migration `0047`, session CASCADE / file SET NULL — the document outlives the session) |
+| Matter binding on schedules/watches (`project_id` accepted on create + PATCH incl. clear-to-null; ownership validated at all five assignment sites — create_schedule/create_watch/run-now/two PATCHes — closing a pre-existing IDOR) | post-v0.4.0 (#133) | `api/app/api/autonomous.py` |
+| Worker-side skill registry (shared `app/skills/bootstrap.py::install_skill_registry` from both the api lifespan and the arq-worker `on_startup`; uniform fail-fast on a missing/unreadable skills dir; arq-worker mounts `./skills:/skills:ro` + `LQ_AI_SKILLS_DIR`; SIGHUP reload stays api-only) | post-v0.4.0 (#139) | `api/app/skills/bootstrap.py`; `api/app/workers/arq_setup.py`; `docker-compose.yml` (arq-worker volume) |
 | Web dashboard (sessions/receipt/halt, memory, precedents, watches, schedules, notifications, proposals) | M4 | `web/src/routes/lq-ai/autonomous/`; opt-in toggle at `settings/autonomous/` |
 | Learn viz | M4 | `web/static/learn/playgrounds/autonomous-flow.html` (phase walk + the four brake scenarios; the four *primitives* are not yet visualized — see §11) |
 
@@ -207,8 +217,8 @@ Engineering rigor is measurable, not asserted. Test **file** counts below are ve
 
 | Practice | Status | Verification |
 |---|---|---|
-| Backend tests (pytest, live Postgres) | M1–M4 | 144 `test_*.py` files in `api/tests/` (incl. `tests/autonomous/` — 361 passing at M4 close); `cd api && DATABASE_URL=… pytest` |
-| Gateway tests (pytest) | M1–M4 | 41 `test_*.py` files in `gateway/tests/`; `cd gateway && pytest` |
+| Backend tests (pytest, live Postgres) | M1–M4 | 144 `test_*.py` files in `api/tests/` (incl. `tests/autonomous/` — 361 passing at M4 close, pre-Donna-run; refresh at next tag); `cd api && DATABASE_URL=… pytest` |
+| Gateway tests (pytest) | M1–M4 | 41 `test_*.py` files in `gateway/tests/` (pre-Donna-run; refresh at next tag); `cd gateway && pytest` |
 | Frontend unit tests (Vitest) | M1–M4 | 71 spec files in `web/src/`; `cd web && npx vitest run` |
 | Cypress E2E (LQ.AI shell) | M1–M4 | 17 specs in `web/cypress/e2e/` |
 | Ruff lint + format (Python) | M1–M4 | `.github/workflows/ci.yml`: `ruff check api scripts` + `ruff format --check` |
@@ -233,6 +243,7 @@ The web frontend is a fork of OpenWebUI (ADR 0001). `npm run check` (full scope)
 | Docker Compose reference deployment | M1–M4 | [`docker-compose.yml`](../docker-compose.yml) — always-on: postgres, redis, minio, gateway, api, ingest-worker, arq-worker, web |
 | Local-only profile (Ollama) | M1 | `docker compose --profile local up` — adds the Ollama sidecar. Scanned-PDF OCR / PaddleOCR is not implemented (DE-320); the prior placeholder sidecar was removed. |
 | Slack / Teams bridge profiles | M3 | `docker compose --profile slack up` / `--profile teams up` |
+| Worker skill-registry bootstrap (operator-visible change, #139) | post-v0.4.0 | The api now **fails fast** on a missing/unreadable skills dir at startup (it previously logged a warning and booted with an empty registry); the arq-worker mounts `./skills:/skills:ro` and installs the same registry. `api/app/skills/bootstrap.py`; `docker-compose.yml` |
 | Helm chart for Kubernetes | drafted | [`deploy/helm/lq-ai/`](../deploy/helm/lq-ai/) (worker-migration parity with the compose single-migrator fix is a community item — DE-327) |
 | OpenTelemetry instrumentation (traces + metrics + domain spans) | M1 baseline + M3 domain spans + M4 autonomous spans | [`docs/observability.md`](observability.md) |
 | Reverse-proxy/TLS recipes · backup tooling · runbooks · SLOs · status page · postmortem · DR cadence | not yet | mini-PRDs / deferred |
@@ -241,7 +252,7 @@ The web frontend is a fork of OpenWebUI (ADR 0001). `npm run check` (full scope)
 
 ## 10. How to verify everything in this doc
 
-1. Clone the repo and follow the [Quickstart](../README.md#quickstart) to stand the stack up (`docker compose up -d --build` — the api runs migrations 0001→0045 on boot).
+1. Clone the repo and follow the [Quickstart](../README.md#quickstart) to stand the stack up (`docker compose up -d --build` — the api runs migrations 0001→0047 on boot).
 2. Browse the file path or run the test command in the Verification column.
 3. To read source without running the stack, the cited paths are all in the repository.
 
@@ -256,4 +267,4 @@ If a claim does not check out, the codebase is canonical — please [open an iss
 
 ## 12. Maintenance note
 
-Maintained per release. Last rewritten at the **M4 close** (Autonomous Layer shipped end-to-end; fresh-install acceptance passed; migration head `0045`). Substantive content drivers: [PRD §3](PRD.md#3-capability-specifications) (capabilities), [PRD §8](PRD.md#8-roadmap) (roadmap), [PRD §9](PRD.md#9-deferred-enhancements-and-identified-future-work) (deferrals), and the per-feature docs (`docs/citation-engine.md`, `docs/playbooks.md`, `docs/tabular-review.md`, `docs/word-addin.md`, `docs/intake-bridges.md`, `docs/autonomous-layer.md`).
+Maintained per release. Last rewritten at the **M4 close** (Autonomous Layer shipped end-to-end; fresh-install acceptance passed), then reconciled against the post-v0.4.0 "Donna" run (#115–#139; migration head `0047`). Substantive content drivers: [PRD §3](PRD.md#3-capability-specifications) (capabilities), [PRD §8](PRD.md#8-roadmap) (roadmap), [PRD §9](PRD.md#9-deferred-enhancements-and-identified-future-work) (deferrals), and the per-feature docs (`docs/citation-engine.md`, `docs/playbooks.md`, `docs/tabular-review.md`, `docs/word-addin.md`, `docs/intake-bridges.md`, `docs/autonomous-layer.md`).

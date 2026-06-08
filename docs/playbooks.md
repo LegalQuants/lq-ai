@@ -484,6 +484,11 @@ The executor surfaces `cited_chunk_ids` + verbatim `matched_text`, not
 the M2 cascade's verified/unverified rows. Tracked alongside the
 Tabular Review analog at [PRD §9
 DE-309](PRD.md#de-309--tabular-cells-real-citation-engine-backed-provenance-m3-e1-finding-f6-follow-on).
+Note that Tabular Review has since gained navigable read-side citations —
+its drawer resolves each cited chunk to its source file/page/text
+(post-v0.4.0, #125) — while the playbook drawer has **not**: the playbook
+surface still shows chunk references + matched text only, so do not read
+the two surfaces as having reached parity on source navigation.
 
 ### Retrieval is lexical-only; `detection_examples` is unused by the executor
 
