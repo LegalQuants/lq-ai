@@ -1,0 +1,302 @@
+# LQ.AI — pre-built image stack (no clone, no build).
+#
+# This compose file runs the LQ.AI core-8 stack entirely from images
+# published to GHCR by .github/workflows/release.yml. There is NO `build:`
+# stanza, and NO bind mounts for the skills corpus or gateway.yaml.example —
+# both are baked into the release images (api/Dockerfile.release bakes the
+# skills corpus at /skills; gateway/Dockerfile.release bakes the seed config
+# at /usr/share/lq-ai/gateway.yaml.example). This is what the macOS launcher
+# ships, and what a stranger curls down to run LQ.AI with zero checkout.
+#
+# Quick install (by hand):
+#   curl -O https://raw.githubusercontent.com/LegalQuants/lq-ai/main/docker-compose.release.yml
+#   curl -o .env https://raw.githubusercontent.com/LegalQuants/lq-ai/main/.env.release.example
+#   # edit .env: set the required secrets (LQ_AI_GATEWAY_KEY, JWT_SECRET,
+#   # POSTGRES_PASSWORD, MINIO_ROOT_PASSWORD) and optionally LQ_AI_IMAGE_TAG.
+#   docker compose -f docker-compose.release.yml up -d
+#
+# Provider keys (OPENAI_API_KEY, ANTHROPIC_API_KEY, …) are OPTIONAL: the
+# stack boots fully healthy with none set. Add them in-app via Configure
+# (BYOK, hot-applied with no restart) after first launch. Chat requires at
+# least one provider key before first use.
+#
+# Project name is "lq-ai" (same as the build-from-source dev stack). If you
+# ALSO run the dev stack on the same Docker host, pass `-p lq-ai-release` to
+# every command AND shift the host ports in .env (see .env.release.example) so the
+# two stacks coexist without project-name or port collisions.
+#
+# Core 8 only: postgres, redis, minio, gateway, api, ingest-worker,
+# arq-worker, web. No ollama, no slack/teams bridges (launcher decision L-2;
+# bridges need OAuth and defeat zero-config). The image namespace is
+# overridable via LQ_AI_IMAGE_NAMESPACE so forks/mirrors are portable.
+
+name: lq-ai
+
+services:
+  # ============================================================
+  # Storage (stock images — identical to the dev compose)
+  # ============================================================
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-lq_ai}
+      POSTGRES_USER: ${POSTGRES_USER:-lq_ai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_BIND_ADDR:-127.0.0.1}:${POSTGRES_HOST_PORT:-5432}:5432"
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-lq_ai} -d $${POSTGRES_DB:-lq_ai}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    ports:
+      - "${REDIS_BIND_ADDR:-127.0.0.1}:${REDIS_HOST_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-lq_ai}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+    volumes:
+      - miniodata:/data
+    ports:
+      - "${MINIO_BIND_ADDR:-127.0.0.1}:${MINIO_API_HOST_PORT:-9000}:9000"
+      - "${MINIO_BIND_ADDR:-127.0.0.1}:${MINIO_CONSOLE_HOST_PORT:-9001}:9001"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  # ============================================================
+  # Application services (pre-built GHCR images — no build:)
+  # ============================================================
+
+  gateway:
+    image: ghcr.io/${LQ_AI_IMAGE_NAMESPACE:-legalquants}/lq-ai-gateway:${LQ_AI_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
+      LQ_AI_API_URL: ${LQ_AI_API_URL:-http://api:8000}
+      LQ_AI_SKILL_CACHE_TTL_SECONDS: ${LQ_AI_SKILL_CACHE_TTL_SECONDS:-60}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-lq_ai}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-lq_ai}}
+      # Provider keys — ALL optional (BYOK in-app, launcher decision L-3).
+      # The stack boots healthy with none set; the user adds keys via the
+      # Configure / runtime provider-keys admin UI after first launch.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_OPENAI_RESOURCE: ${AZURE_OPENAI_RESOURCE:-}
+      # Ollama is NOT part of the release stack (core-8, no local-inference
+      # sidecar); this placeholder only resolves the gateway.yaml default.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      LANGFUSE_HOST: ${LANGFUSE_HOST:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LQ_AI_DEV_MODE: ${LQ_AI_DEV_MODE:-false}
+    # D0.5 — the gateway.yaml.example seed is BAKED into the release image at
+    # /usr/share/lq-ai/gateway.yaml.example (outside CONFIG_DIR), so there is
+    # no bind mount for it. We keep ONLY the writable named volume mounted at
+    # the entrypoint's CONFIG_DIR (/etc/lq-ai): the entrypoint seeds
+    # /etc/lq-ai/gateway.yaml from the baked example on first boot, and
+    # runtime hot-reload writes (admin alias-CRUD, ADR 0010) persist here.
+    volumes:
+      - gateway-config:/etc/lq-ai
+    ports:
+      - "${GATEWAY_BIND_ADDR:-127.0.0.1}:${GATEWAY_HOST_PORT:-8001}:8001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/health', timeout=2).status == 200 else 1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    image: ghcr.io/${LQ_AI_IMAGE_NAMESPACE:-legalquants}/lq-ai-api:${LQ_AI_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      gateway:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-lq_ai}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-lq_ai}}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-${MINIO_ROOT_USER:-lq_ai}}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-${MINIO_ROOT_PASSWORD}}
+      S3_BUCKET: ${S3_BUCKET:-lq-ai-files}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
+      LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_ACCESS_TOKEN_TTL_SECONDS: ${JWT_ACCESS_TOKEN_TTL_SECONDS:-900}
+      JWT_REFRESH_TOKEN_TTL_SECONDS: ${JWT_REFRESH_TOKEN_TTL_SECONDS:-604800}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LQ_AI_DEV_MODE: ${LQ_AI_DEV_MODE:-false}
+      LQ_AI_CORS_ORIGINS: ${LQ_AI_CORS_ORIGINS:-}
+      # Skills corpus is BAKED into the api release image at /skills (the
+      # image already sets LQ_AI_SKILLS_DIR=/skills via ENV; set it here too
+      # for clarity, matching the dev compose). No ./skills bind mount.
+      LQ_AI_SKILLS_DIR: ${LQ_AI_SKILLS_DIR:-/skills}
+      # Bridge secrets — bridges are excluded from the release stack, but the
+      # api reads these (optional, default empty) so leaving them unset is fine.
+      LQ_AI_BRIDGE_TOKEN: ${LQ_AI_BRIDGE_TOKEN:-}
+      LQ_AI_BRIDGE_MASTER_KEY: ${LQ_AI_BRIDGE_MASTER_KEY:-}
+    ports:
+      - "${API_BIND_ADDR:-127.0.0.1}:${API_HOST_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=2).status == 200 else 1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  ingest-worker:
+    # C5 document pipeline worker. Same image as the api; consumes ingest
+    # jobs from Redis. Skips migrations (the api is the single migrator,
+    # DE-326) and waits for the api to be healthy before starting.
+    image: ghcr.io/${LQ_AI_IMAGE_NAMESPACE:-legalquants}/lq-ai-api:${LQ_AI_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-lq_ai}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-lq_ai}}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      LQ_AI_SKIP_MIGRATIONS: "1"
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-${MINIO_ROOT_USER:-lq_ai}}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-${MINIO_ROOT_PASSWORD}}
+      S3_BUCKET: ${S3_BUCKET:-lq-ai-files}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      LQ_AI_INGEST_WORKER_CONCURRENCY: ${LQ_AI_INGEST_WORKER_CONCURRENCY:-2}
+      LQ_AI_DOCLING_TIMEOUT_SECONDS: ${LQ_AI_DOCLING_TIMEOUT_SECONDS:-300}
+      LQ_AI_DOCLING_ENABLED: ${LQ_AI_DOCLING_ENABLED:-true}
+      LQ_AI_CHUNK_TARGET_CHARS: ${LQ_AI_CHUNK_TARGET_CHARS:-2000}
+      LQ_AI_CHUNK_OVERLAP_CHARS: ${LQ_AI_CHUNK_OVERLAP_CHARS:-200}
+      LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
+      LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - ingest-hf-cache:/root/.cache/huggingface
+      - ingest-easyocr-cache:/root/.EasyOCR
+    command: ["arq", "app.workers.document_pipeline.WorkerSettings"]
+    healthcheck:
+      test:
+        ["CMD", "python", "-c", "import os; from redis import Redis; r = Redis.from_url(os.environ['REDIS_URL']); r.ping()"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  arq-worker:
+    # M3-A6 worker. Same image as the api; consumes the dedicated arq queue
+    # for long-running easy-playbook generation. Skips migrations (DE-326)
+    # and waits for the api. Mounts the baked skills corpus via the image
+    # (LQ_AI_SKILLS_DIR=/skills) so skill_ref autonomous sessions resolve.
+    image: ghcr.io/${LQ_AI_IMAGE_NAMESPACE:-legalquants}/lq-ai-api:${LQ_AI_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-lq_ai}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-lq_ai}}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      LQ_AI_SKIP_MIGRATIONS: "1"
+      LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
+      LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Skills corpus is baked at /skills (image ENV); set explicitly for clarity.
+      LQ_AI_SKILLS_DIR: ${LQ_AI_SKILLS_DIR:-/skills}
+    command: ["arq", "app.workers.arq_setup.WorkerSettings"]
+    healthcheck:
+      test:
+        ["CMD", "python", "-c", "import os; from redis import Redis; r = Redis.from_url(os.environ['REDIS_URL']); r.ping()"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  web:
+    # OpenWebUI fork (ADR 0001). The release image bakes the static build;
+    # PUBLIC_LQ_AI_API_BASE_URL is a BUILD-time arg baked at image-build time
+    # (defaults to the relative /api/v1, which works behind the same-origin
+    # launcher), so it is NOT settable here at runtime. The container serves
+    # on 8080 (PORT=8080) and ships its own /health healthcheck.
+    image: ghcr.io/${LQ_AI_IMAGE_NAMESPACE:-legalquants}/lq-ai-web:${LQ_AI_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      LQ_AI_API_URL: ${LQ_AI_API_URL:-http://api:8000}
+      WEBUI_AUTH: ${WEBUI_AUTH:-false}
+      WEBUI_NAME: ${WEBUI_NAME:-LQ.AI}
+      WEBUI_URL: ${WEBUI_URL:-http://localhost:3000}
+    ports:
+      - "${WEB_BIND_ADDR:-127.0.0.1}:${WEB_HOST_PORT:-3000}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+# ============================================================
+# Persistent volumes
+# ============================================================
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
+  # D0.5 — writable directory for the gateway's runtime gateway.yaml,
+  # seeded from the BAKED example on first boot by the gateway entrypoint.
+  gateway-config:
+  # Caches for the ingest-worker (Docling HF models + EasyOCR detection
+  # models). Persisting these avoids repeated ~700MB downloads on first
+  # ingestion. Per ADR 0006.
+  ingest-hf-cache:
+  ingest-easyocr-cache:
