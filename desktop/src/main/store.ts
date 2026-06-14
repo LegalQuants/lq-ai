@@ -7,9 +7,11 @@ import type { LauncherConfig } from '../core/config'
 /** Persist config encrypted at rest via the OS keychain-backed safeStorage. */
 export function saveConfig(cfg: LauncherConfig): void {
 	const json = Buffer.from(JSON.stringify(cfg), 'utf8')
-	// NOTE: LauncherConfig may include an API key. safeStorage encrypts at rest via the OS
-	// keychain. When encryption is unavailable (rare; headless/CI), we fall back to plaintext
-	// JSON — acceptable for those environments, but be aware secrets are then unencrypted.
+	// NOTE: LauncherConfig holds the generated stack secrets (Postgres/MinIO/gateway/JWT) —
+	// not provider API keys (those are added in-app via Configure / BYOK, never persisted here).
+	// safeStorage encrypts at rest via the OS keychain. When encryption is unavailable (rare;
+	// headless/CI), we fall back to plaintext JSON — acceptable for those environments, but be
+	// aware the generated secrets are then unencrypted.
 	const blob = safeStorage.isEncryptionAvailable()
 		? safeStorage.encryptString(json.toString('utf8'))
 		: json
