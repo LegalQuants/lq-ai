@@ -1,8 +1,12 @@
 # LQ.AI for Mac — release verification protocol
 
-> **STATUS: TEMPLATE — to be executed at release time.** Nothing below has been run yet; the result
-> boxes are empty on purpose. Fill in each ✅/❌ + note as you run it against a real published release,
-> then commit this file as that release's evidence. **Do not pre-fill results.**
+> **STATUS: PARTIALLY EXECUTED (2026-06-14).** The signed-`.dmg` Gatekeeper/notarization checks in
+> **Protocol 2 → "Verify the downloaded dmg"** have been run against the real published
+> `desktop-v0.4.0` release and passed (results filled in below). The rest — **Protocol 1** (isolated
+> boot of the published images) and the **Protocol 2 launcher-lifecycle** boxes — are **still pending**:
+> Protocol 1 is blocked until the launcher-ready images are published + made public (the `v0.4.1` image
+> release), and the lifecycle run needs a clean Mac. Unchecked boxes are genuinely not-yet-run — **do
+> not pre-fill them.**
 
 **What this proves:** the **published images** stand up to a real login for a stranger, and the
 **signed/notarized `.dmg`** installs and runs on a Mac with Docker but **no LQ.AI repo cloned**.
@@ -51,7 +55,8 @@ docker compose -f docker-compose.release.yml -p lq-ai-reltest --env-file /tmp/re
 docker compose -f docker-compose.release.yml -p lq-ai-reltest --env-file /tmp/reltest.env down -v
 ```
 
-Results (fill in):
+Results (fill in) — **PENDING:** blocked until the launcher-ready images are published and made public
+(the `v0.4.1` image release + GHCR public flip). Not yet run.
 
 - [ ] All 3 `ghcr.io/legalquants/lq-ai-*:vX.Y.Z` images anonymously pullable (HTTP 200) — _____
 - [ ] All 8 services reach **Healthy** — _____
@@ -77,10 +82,14 @@ spctl -a -vvv -t open --context context:primary-signature /tmp/LQ.AI-*.dmg
 xcrun stapler validate /tmp/LQ.AI-*.dmg     # "The validate action worked!"
 ```
 
-Results (fill in):
+Results — **EXECUTED 2026-06-14** against `desktop-v0.4.0` (asset `LQ.AI-0.1.0-arm64.dmg`, from
+`https://github.com/LegalQuants/lq-ai/releases/tag/desktop-v0.4.0`; built + signed + notarized on the
+`macos-14` runner, [run 27511342826](https://github.com/LegalQuants/lq-ai/actions/runs/27511342826),
+first attempt):
 
-- [ ] `spctl` → **accepted / source=Notarized Developer ID** — _____
-- [ ] `xcrun stapler validate` → **worked** — _____
+- [x] `spctl` → **accepted / source=Notarized Developer ID** — ✅ `origin=Developer ID Application: Tucuxi, Inc. (MC8BT9Z8GD)`
+- [x] `xcrun stapler validate` → **worked** — ✅ "The validate action worked!" (ticket stapled → opens offline)
+- [x] `codesign -dv` authority chain — ✅ `Developer ID Application: Tucuxi, Inc. (MC8BT9Z8GD)` → Developer ID CA → Apple Root CA; `TeamIdentifier=MC8BT9Z8GD`
 
 ### Launcher lifecycle (real Finder launch)
 
