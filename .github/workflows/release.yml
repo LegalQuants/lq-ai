@@ -29,12 +29,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # api + gateway release images bake repo-root assets (skills corpus,
+          # gateway.yaml.example) so they build from the repo root with a
+          # dedicated *.release Dockerfile. web is self-contained → own subdir
+          # context + default Dockerfile.
           - service: api
-            context: ./api
+            context: .
+            file: api/Dockerfile.release
           - service: gateway
-            context: ./gateway
+            context: .
+            file: gateway/Dockerfile.release
           - service: web
             context: ./web
+            file: web/Dockerfile
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,6 +54,10 @@ jobs:
           else
             echo "tag=dryrun-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Set up QEMU
+        # Enables cross-platform (linux/arm64) builds on the amd64 runner.
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -64,6 +75,8 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name == 'push' || !inputs.dry_run }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/lq-ai-${{ matrix.service }}:${{ steps.tag.outputs.tag }}

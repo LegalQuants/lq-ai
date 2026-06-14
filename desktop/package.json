@@ -1,0 +1,30 @@
+{
+	"name": "lq-ai-desktop",
+	"version": "0.1.0",
+	"description": "LQ.AI for Mac — desktop launcher for the LQ.AI release stack",
+	"author": "Kevin Keller",
+	"license": "Apache-2.0",
+	"main": "out/main/index.js",
+	"type": "module",
+	"scripts": {
+		"dev": "electron-vite dev",
+		"build": "electron-vite build",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"typecheck": "tsc --noEmit",
+		"prepack:compose": "node -e \"require('fs').copyFileSync('../docker-compose.release.yml','resources/docker-compose.release.yml')\"",
+		"dist": "npm run prepack:compose && npm run build && electron-builder --mac"
+	},
+	"devDependencies": {
+		"@electron/notarize": "^2.3.0",
+		"electron": "^31.0.0",
+		"electron-vite": "^2.3.0",
+		"electron-builder": "^24.13.3",
+		"typescript": "^5.5.0",
+		"vite": "^5.3.0",
+		"vitest": "^2.0.0"
+	},
+	"dependencies": {
+		"electron-updater": "^6.2.1"
+	}
+}

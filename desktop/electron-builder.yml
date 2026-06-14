@@ -1,0 +1,33 @@
+appId: ai.lq.app.desktop
+productName: LQ.AI
+directories:
+  output: dist
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+extraResources:
+  - from: resources/docker-compose.release.yml
+    to: docker-compose.release.yml
+mac:
+  category: public.app-category.productivity
+  target:
+    - dmg
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # Native electron-builder notarization via notarytool. teamId MUST be in the config
+  # (electron-builder does not read APPLE_TEAM_ID from env for this); APPLE_ID and
+  # APPLE_APP_SPECIFIC_PASSWORD still come from the CI env. Signs + notarizes + staples.
+  # Automatically skipped on unsigned local builds (no signing identity present).
+  notarize:
+    teamId: MC8BT9Z8GD
+# electron-builder notarizes only the .app, then builds a bare .dmg. notarize-dmg.cjs
+# (afterAllArtifactBuild) notarizes + staples the dmg itself; dmg.sign signs it first
+# (Gatekeeper needs the dmg signed for the stapled ticket to be usable). Together this
+# makes the *downloaded* dmg open with no warning. Hook no-ops without Apple creds.
+afterAllArtifactBuild: build/notarize-dmg.cjs
+dmg:
+  sign: true
+  title: Install LQ.AI

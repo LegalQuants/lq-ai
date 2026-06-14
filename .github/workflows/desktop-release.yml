@@ -1,0 +1,62 @@
+name: Desktop launcher (macOS)
+
+# Builds, signs, and notarizes the "LQ.AI for Mac" launcher .dmg and publishes it
+# to a GitHub Release. Separate pipeline from release.yml (which publishes the
+# container images): this one runs on macOS and needs the Apple signing secrets.
+#
+# Triggered by a `desktop-v*` tag push (e.g. desktop-v0.4.0) or manual dispatch.
+# Keep the image release (`v*`) and the desktop release (`desktop-v*`) as distinct
+# tags so they can be cut independently.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag for the .dmg (e.g. desktop-v0.4.0)'
+        required: true
+  push:
+    tags: ['desktop-v*']
+
+# Least privilege: only enough to publish the .dmg asset to a Release.
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Unit tests (pure core)
+        run: npx vitest run
+      - name: Typecheck
+        run: npx tsc --noEmit
+      # `npm run dist` runs prepack:compose first, which copies the repo-root
+      # docker-compose.release.yml into desktop/resources/ before electron-builder
+      # bundles it as an extraResource. The working-directory is `desktop`, so the
+      # script's relative `../docker-compose.release.yml` resolves to the repo root.
+      - name: Build, sign, notarize .dmg
+        env:
+          # electron-builder reads CSC_LINK / CSC_KEY_PASSWORD for the Developer ID
+          # signing identity (stored base64-encoded in MAC_CSC_LINK).
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          # notarytool (native notarize + build/notarize-dmg.cjs for the dmg) reads
+          # these from the env. teamId is ALSO hardcoded in electron-builder.yml
+          # (Part C Trap 1 — electron-builder does not read APPLE_TEAM_ID from env
+          # for the native .app notarize step).
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npm run dist
+      - name: Publish .dmg to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: desktop/dist/*.dmg
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}

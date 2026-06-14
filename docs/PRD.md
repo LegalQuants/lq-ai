@@ -4522,6 +4522,18 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 ---
 
+#### DE-334 — Pin the macOS launcher's image tag to the release version (no floating `latest`)
+
+**Priority:** P2 · **Effort:** S
+
+**Context:** The macOS launcher (`desktop/`) ships with `LQ_AI_IMAGE_TAG` defaulting to `latest` (`desktop/src/main/index.ts`), so an installed `.dmg` pulls whatever `ghcr.io/legalquants/lq-ai-*:latest` points at *at launch time*. A subsequent image release silently changes what an already-installed app runs, and there is no immutable app↔image pinning — a `.dmg` is not reproducibly tied to the image set it was built against. Acceptable for the first launcher releases because the maintainer controls both the `v*` (image) and `desktop-v*` (app) tags and the docs prescribe publishing images first; deferred rather than absorbed so the first launcher ships on the simplest path.
+
+**Specific scope:** Have `desktop-release.yml` stamp `LQ_AI_IMAGE_TAG` to the matching `vX.Y.Z` at build time (e.g. inject it into the bundled config / a baked default) so each `.dmg` pins the exact image set it was released with. Keep `latest` as the dev/default fallback. Document the resulting app↔image version correspondence in `docs/BUILD-AND-RELEASE.md`.
+
+**When to ship:** Before the launcher has a broad enough install base that a `:latest` image change could surprise existing users; until then the manual tag discipline in BUILD-AND-RELEASE.md covers it.
+
+---
+
 ## 10. Appendices
 
 ### Appendix A — Glossary

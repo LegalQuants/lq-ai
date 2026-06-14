@@ -1,0 +1,55 @@
+:root {
+	font-family: -apple-system, system-ui, sans-serif;
+	color: #1d1d1f;
+}
+body {
+	margin: 0;
+}
+#root {
+	max-width: 640px;
+	margin: 0 auto;
+	padding: 40px 24px;
+}
+h1 {
+	font-size: 22px;
+}
+.step {
+	margin: 24px 0;
+}
+button {
+	font-size: 15px;
+	padding: 10px 18px;
+	border-radius: 8px;
+	border: 0;
+	background: #0a84ff;
+	color: #fff;
+	cursor: pointer;
+}
+button.secondary {
+	background: #e5e5ea;
+	color: #1d1d1f;
+}
+input[type='text'],
+input[type='email'],
+input[type='password'] {
+	width: 100%;
+	padding: 10px;
+	font-size: 15px;
+	border: 1px solid #c7c7cc;
+	border-radius: 8px;
+	box-sizing: border-box;
+}
+.state {
+	font-weight: 600;
+}
+#logs {
+	background: #1d1d1f;
+	color: #d1d1d6;
+	font-family: ui-monospace, monospace;
+	font-size: 12px;
+	padding: 12px;
+	height: 220px;
+	overflow: auto;
+	border-radius: 8px;
+	white-space: pre-wrap;
+}
