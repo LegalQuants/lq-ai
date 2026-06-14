@@ -1,0 +1,38 @@
+# syntax=docker/dockerfile:1.7
+#
+# Release image — KEEP BUILD STEPS IN SYNC WITH api/Dockerfile. Exists only to
+# bake the repo-root skills corpus (bind-mounted in dev) for the self-contained
+# launcher images; built with repo-root context by .github/workflows/release.yml.
+
+FROM python:3.12-slim AS base
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+# Install runtime deps from pyproject.toml (no dev extras in the image)
+COPY api/pyproject.toml api/README.md ./
+RUN pip install --no-cache-dir .
+
+# Copy application code, migration files, and the entrypoint script
+COPY api/app/ ./app/
+COPY api/alembic.ini ./alembic.ini
+COPY api/alembic/ ./alembic/
+COPY api/entrypoint.sh /usr/local/bin/lq-ai-entrypoint
+RUN chmod +x /usr/local/bin/lq-ai-entrypoint
+
+# Bake the skills corpus that the dev stack bind-mounts (./skills:/skills:ro),
+# so the published image is self-contained for the zero-checkout macOS launcher.
+COPY skills /skills
+ENV LQ_AI_SKILLS_DIR=/skills
+
+EXPOSE 8000
+
+# The entrypoint runs `alembic upgrade head` before exec'ing uvicorn so a
+# fresh deployment lands a fully-migrated schema before the HTTP server
+# accepts traffic. Operators handling migrations out-of-band can set
+# LQ_AI_SKIP_MIGRATIONS=1 to bypass the step.
+ENTRYPOINT ["/usr/local/bin/lq-ai-entrypoint"]
