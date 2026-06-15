@@ -7,7 +7,7 @@ import type { EngineProbe, LauncherState, ServiceStatus } from './types'
  *   1. engine not usable        -> NO_ENGINE
  *   2. any service failed       -> FAILED   (exited / unhealthy)
  *   3. no services at all       -> STOPPED
- *   4. all 8 services healthy   -> HEALTHY
+ *   4. all 9 services healthy   -> HEALTHY
  *   5. otherwise (coming up)    -> STACK_STARTING
  * The "pulling images" and "models downloading" windows are surfaced separately by the
  * orchestrator from command/log signals; they are not decidable from `ps` alone.

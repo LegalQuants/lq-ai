@@ -25,10 +25,20 @@
 # every command AND shift the host ports in .env (see .env.release.example) so the
 # two stacks coexist without project-name or port collisions.
 #
-# Core 8 only: postgres, redis, minio, gateway, api, ingest-worker,
-# arq-worker, web. No ollama, no slack/teams bridges (launcher decision L-2;
-# bridges need OAuth and defeat zero-config). The image namespace is
-# overridable via LQ_AI_IMAGE_NAMESPACE so forks/mirrors are portable.
+# Core services: postgres, redis, minio, gateway, api, ingest-worker,
+# arq-worker, web, plus a reverse proxy. No ollama, no slack/teams bridges
+# (launcher decision L-2; bridges need OAuth and defeat zero-config). The
+# image namespace is overridable via LQ_AI_IMAGE_NAMESPACE so forks/mirrors
+# are portable.
+#
+# Reverse proxy: the user-facing WEB_HOST_PORT is served by the `proxy`
+# service (not `web` directly). The web image is built with
+# PUBLIC_LQ_AI_API_BASE_URL=/lq/api/v1, so the LQ.AI client calls /lq/api/v1/*;
+# the proxy STRIPS the /lq prefix and forwards to api:8000, and routes
+# everything else (the OpenWebUI shell, /api/config, its own /api/v1/*,
+# websockets, static) to web:8080 — putting the web shell and the api on ONE
+# origin without colliding on /api. Browse to http://127.0.0.1:${WEB_HOST_PORT}
+# as before.
 
 name: lq-ai
 
@@ -262,9 +272,10 @@ services:
   web:
     # OpenWebUI fork (ADR 0001). The release image bakes the static build;
     # PUBLIC_LQ_AI_API_BASE_URL is a BUILD-time arg baked at image-build time
-    # (defaults to the relative /api/v1, which works behind the same-origin
-    # launcher), so it is NOT settable here at runtime. The container serves
-    # on 8080 (PORT=8080) and ships its own /health healthcheck.
+    # (the release web image is built with /lq/api/v1 so the LQ.AI client uses
+    # its own /lq-prefixed origin behind the proxy, never colliding with
+    # OpenWebUI's same-origin /api), so it is NOT settable here at runtime. The
+    # container serves on 8080 (PORT=8080) and ships its own /health healthcheck.
     image: ghcr.io/${LQ_AI_IMAGE_NAMESPACE:-legalquants}/lq-ai-web:${LQ_AI_IMAGE_TAG:-latest}
     restart: unless-stopped
     depends_on:
@@ -275,10 +286,38 @@ services:
       WEBUI_AUTH: ${WEBUI_AUTH:-false}
       WEBUI_NAME: ${WEBUI_NAME:-LQ.AI}
       WEBUI_URL: ${WEBUI_URL:-http://localhost:3000}
+    # No host ports: web is INTERNAL-ONLY now. The proxy below owns the
+    # user-facing WEB_HOST_PORT and routes everything-but-/lq to web:8080 on
+    # the compose network (including /api/config and OpenWebUI's own /api/v1/*).
+    # The LQ.AI client's /lq/api/v1/* calls are stripped to /api/v1/* and sent
+    # to the api — that is the proxy's whole job (fix/launcher-reverse-proxy).
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  proxy:
+    # Reverse proxy (lq-ai-proxy image) that puts the web shell and the api on
+    # ONE origin. The web image bakes PUBLIC_LQ_AI_API_BASE_URL=/lq/api/v1, so
+    # the LQ.AI client calls /lq/api/v1/*; this proxy STRIPS /lq and forwards to
+    # api:8000, and routes everything else (the OpenWebUI shell, /api/config,
+    # its own /api/v1/*, ws, static) to web:8080. A blanket /api proxy would
+    # have stolen OpenWebUI's /api/config (first-paint getBackendConfig ->
+    # /error); the /lq prefix avoids that collision. The proxy OWNS the
+    # user-facing WEB_HOST_PORT (the launcher window loads this origin).
+    image: ghcr.io/${LQ_AI_IMAGE_NAMESPACE:-legalquants}/lq-ai-proxy:${LQ_AI_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
     ports:
       - "${WEB_BIND_ADDR:-127.0.0.1}:${WEB_HOST_PORT:-3000}:8080"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/ >/dev/null 2>&1 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10

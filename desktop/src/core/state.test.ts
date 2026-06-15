@@ -22,8 +22,14 @@ describe('deriveLauncherState', () => {
 		expect(deriveLauncherState(present, [])).toBe('STOPPED')
 	})
 
-	it('HEALTHY only when all 8 services are healthy', () => {
+	it('HEALTHY only when all 9 services are healthy', () => {
 		expect(deriveLauncherState(present, allHealthy())).toBe('HEALTHY')
+	})
+
+	it('STACK_STARTING when the proxy is still coming up (others healthy)', () => {
+		const services = allHealthy()
+		services[8] = { name: 'proxy', state: 'running', health: 'starting' }
+		expect(deriveLauncherState(present, services)).toBe('STACK_STARTING')
 	})
 
 	it('STACK_STARTING when some services are present but not all healthy', () => {
@@ -32,7 +38,7 @@ describe('deriveLauncherState', () => {
 		expect(deriveLauncherState(present, services)).toBe('STACK_STARTING')
 	})
 
-	it('STACK_STARTING when only some of the 8 services have come up yet', () => {
+	it('STACK_STARTING when only some of the 9 services have come up yet', () => {
 		const partial = allHealthy().slice(0, 3)
 		expect(deriveLauncherState(present, partial)).toBe('STACK_STARTING')
 	})

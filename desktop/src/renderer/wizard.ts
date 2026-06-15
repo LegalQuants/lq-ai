@@ -48,7 +48,7 @@ export function renderWizard(root: HTMLElement, onDone: () => void): void {
 		if (s.state === 'STACK_STARTING') {
 			const healthy = (s.services ?? []).filter((x) => x.health === 'healthy').length
 			status.style.color = '#555'
-			status.textContent = `Starting LQ.AI… ${healthy}/8 services ready (first run pulls images + document-processing models; this can take a few minutes).`
+			status.textContent = `Starting LQ.AI… ${healthy}/9 services ready (first run pulls images + document-processing models; this can take a few minutes).`
 		} else if (s.state === 'NO_ENGINE') {
 			status.style.color = '#c00'
 			status.textContent = "Docker isn't running — start Docker Desktop and try again."

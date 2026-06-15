@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { EXPECTED_SERVICES, DEFAULT_PORTS } from './types'
 
 describe('core constants', () => {
-	it('lists all 8 release-stack services (frontend service is "web")', () => {
+	it('lists all 9 release-stack services (web is internal; "proxy" owns the web port)', () => {
 		expect(EXPECTED_SERVICES).toEqual([
 			'postgres',
 			'redis',
@@ -11,7 +11,8 @@ describe('core constants', () => {
 			'api',
 			'ingest-worker',
 			'arq-worker',
-			'web'
+			'web',
+			'proxy'
 		])
 	})
 
