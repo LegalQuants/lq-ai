@@ -27,10 +27,22 @@ Go to the **latest desktop release** on the
 Double-click the downloaded `.dmg`. A window opens — **drag the LQ.AI icon onto the Applications
 folder**, then eject the disk image.
 
+![The opened LQ.AI disk image — drag the LQ.AI.app icon onto the Applications folder.](images/launcher-install-dmg.png)
+
+*The opened `.dmg` — drag **LQ.AI.app** onto **Applications**, then eject the disk image.*
+
 Open LQ.AI from your **Applications** folder (or Launchpad). Because the app is **signed and notarized
 by Apple** (Developer ID: Tucuxi, Inc.), it opens normally — no "unidentified developer" warning.
 
+![macOS confirming the LQ.AI app was checked by Apple and no malicious software was detected.](images/launcher-gatekeeper.png)
+
+*Because the app is signed + notarized (Apple Developer ID), macOS confirms it **checked the app and found no malicious software** — click **Open**.*
+
 ## 3. One-time setup
+
+![The first-run LQ.AI setup wizard — welcome screen with a password field and a Start LQ.AI button.](images/launcher-wizard.png)
+
+*The one-time setup wizard — set a password for `admin@lq.ai` and click **Start LQ.AI**. No provider key is needed to start (that's BYOK, added later in the app).*
 
 The first time you open LQ.AI, a short **Welcome** wizard appears:
 
@@ -50,8 +62,16 @@ minutes the first time only — and shows live progress (e.g. *"5/8 services rea
 
 ## 4. Log in
 
+![The LQ.AI launcher control panel showing Status: Running with an Open LQ.AI button, logs, and a Reset button.](images/launcher-control-panel.png)
+
+*Once the stack is healthy the panel shows **Running** — click **Open LQ.AI**.*
+
 Click **Open LQ.AI** and sign in with **`admin@lq.ai`** and the password you set. You'll land on the
 home workspace.
+
+![The LQ.AI web sign-in form with email and password fields, powered by Open WebUI.](images/launcher-login.png)
+
+*Sign in with `admin@lq.ai` and the password you set in setup.*
 
 ![The LQ.AI home screen after login — your self-hosted legal-AI workspace.](images/launcher-home.png)
 
