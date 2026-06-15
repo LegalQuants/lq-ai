@@ -4534,6 +4534,18 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 ---
 
+#### DE-335 — Harden the OpenWebUI first-run bootstrap in the launcher (WEBUI_AUTH / WAL-mode webui.db)
+
+**Priority:** P2 · **Effort:** S
+
+**Context:** The `web` shell (OpenWebUI fork) keeps its OWN sqlite (`/app/backend/data/webui.db`) and honors `WEBUI_AUTH=false` auto-admin (`admin@localhost`) only on a *truly empty* db. If any non-default OpenWebUI user row exists, `POST /api/v1/auths/signin` returns 400 ("can't turn off authentication … existing users") and the SPA root guard parks at `/auth` with no self-recovery. OpenWebUI runs sqlite in **WAL mode**, so deleting only `webui.db` (leaving `webui.db-wal`/`webui.db-shm`) does NOT clear the user. Surfaced during the v0.4.2 Protocol-1 browser verification. The launcher's Reset does `docker compose down -v` (removes the whole volume incl. WAL/SHM), so a normal first install / Reset is clean — but an *interrupted* first-onboarding, or any path that probes `/auths/signin` before first paint, can wedge the shell with no in-app recovery.
+
+**Specific scope:** Make the first-run robust to a pre-existing OpenWebUI user — e.g. checkpoint/disable WAL for `webui.db`, or have the web entrypoint reset the OpenWebUI auth row to the default when `WEBUI_AUTH=false`, or give the launcher an in-app "repair" that wipes `webui.db*` (the full glob, not just `webui.db`) + restarts web. Until then, the manual remediation is `rm webui.db webui.db-wal webui.db-shm` + restart web (now documented in `desktop/VERIFICATION.md`).
+
+**When to ship:** Before a broad launcher install base; the `down -v` Reset covers the common case meanwhile.
+
+---
+
 ## 10. Appendices
 
 ### Appendix A — Glossary
