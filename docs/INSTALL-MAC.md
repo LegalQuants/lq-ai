@@ -53,11 +53,19 @@ minutes the first time only — and shows live progress (e.g. *"5/8 services rea
 Click **Open LQ.AI** and sign in with **`admin@lq.ai`** and the password you set. You'll land on the
 home workspace.
 
+![The LQ.AI home screen after login — your self-hosted legal-AI workspace.](images/launcher-home.png)
+
+*The Home screen after you log in — everything runs on your Mac (note the **self-hosted** badge). The Featured Tools grid is your jumping-off point: Enhance Prompt, Skill Creator, Knowledge, Playbooks, Tabular Review, Apply a Skill, and Autonomous.*
+
 ## 5. Add a provider key before your first chat (BYOK)
 
 LQ.AI is **bring-your-own-key**: chat and skills call AI providers (OpenAI, Anthropic, …) using **your**
 API key, which you add inside the app. **The stack runs without a key, but chat will not work until you
 add one.**
+
+![A new LQ.AI chat showing a green "no provider · default" badge before any key is added.](images/launcher-chat-byok.png)
+
+*Until you add a provider key, a new chat shows **"no provider · default"** — add one OpenAI or Anthropic key in **Configure** and it's hot-applied (no restart).*
 
 To add a key:
 
@@ -80,6 +88,20 @@ The LQ.AI app window is your **control panel**:
 - **Logs** — a live view of what the engine is doing, handy if something looks stuck.
 - **Reset…** — erases all LQ.AI data on this Mac and re-runs first-time setup (two clicks to confirm).
   Use this only if you want to start completely fresh.
+
+Inside the workspace, the Featured Tools are where the work happens — apply a **Skill** to a document,
+build a **Knowledge** base, run **Tabular Review** across many files, or check a contract against your
+standard positions with a **Playbook**:
+
+![The LQ.AI Playbooks list — DPA-GDPR, MSA-Commercial, MSA-SaaS, NDA-Mutual, NDA-Unilateral — each with an Apply button.](images/launcher-playbooks.png)
+
+*For example, **Playbooks** — review a contract against your standard positions; each position is classified and redlined.*
+
+Because LQ.AI is self-hosted, it's also fully auditable: every state-changing action is recorded.
+
+![The LQ.AI Admin audit log showing user.login and user.session_refreshed rows.](images/launcher-audit-log.png)
+
+*Every state-changing action is written to the **Admin → Audit log** — self-hosted and fully auditable.*
 
 You can quit the app when you're done. Re-opening goes straight to the control panel — the setup wizard
 only runs the very first time.
