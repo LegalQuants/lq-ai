@@ -76,6 +76,7 @@ from app.audit import audit_action
 from app.citation import extract_citations, verify
 from app.citation.cost import estimate_judge_call_cost_usd
 from app.clients.gateway import EnsembleConfig, GatewayClient, get_gateway_client
+from app.config import get_settings
 from app.db.session import get_db
 from app.errors import LQAIError, NotFound, ValidationError
 from app.knowledge.embed import DEFAULT_EMBEDDING_MODEL, request_embedding_vector
@@ -115,6 +116,90 @@ from app.skills.registry import MutableSkillRegistry, SkillRegistry
 
 router = APIRouter(prefix="/chats", tags=["chats"])
 log = logging.getLogger(__name__)
+
+
+def _estimate_tokens(text: str) -> int:
+    """Rough token count for history budgeting — ~4 chars per token.
+
+    Deliberately dependency-free (no tiktoken / model tokenizer) per the
+    SBOM posture in CLAUDE.md. Slightly over-estimates for code/markup,
+    which is the safe direction for a budget cap. Never returns 0.
+    """
+    return max(1, (len(text) + 3) // 4)
+
+
+def _select_history_within_budget(
+    history: list[tuple[str, str]],
+    *,
+    token_budget: int,
+    max_messages: int,
+) -> list[tuple[str, str]]:
+    """Trim ``history`` to the most recent turns that fit the budget.
+
+    ``history`` is ``(role, content)`` in chronological order (oldest
+    first). Returns the most-recent turns that fit within BOTH
+    ``token_budget`` and ``max_messages``, back in chronological order.
+    Oldest turns drop first. The single most-recent turn is always kept
+    even if it alone exceeds the token budget — dropping it would discard
+    the context immediately preceding the live turn, which is the most
+    valuable. ``token_budget`` or ``max_messages`` of 0 disables history.
+    """
+    if token_budget <= 0 or max_messages <= 0:
+        return []
+    selected_rev: list[tuple[str, str]] = []
+    used = 0
+    for role, content in reversed(history):
+        if len(selected_rev) >= max_messages:
+            break
+        cost = _estimate_tokens(content)
+        if selected_rev and used + cost > token_budget:
+            break
+        used += cost
+        selected_rev.append((role, content))
+    selected_rev.reverse()
+    return selected_rev
+
+
+async def _load_history_messages(
+    db: AsyncSession,
+    *,
+    chat_id: uuid.UUID,
+    exclude_message_id: uuid.UUID,
+    token_budget: int,
+    max_messages: int,
+) -> list[ChatCompletionMessage]:
+    """Load prior conversation turns for ``chat_id`` as gateway messages.
+
+    Returns the most-recent ``user``/``assistant`` turns (chronological)
+    that fit the budget, EXCLUDING ``exclude_message_id`` — the just-
+    persisted current user turn, which the caller appends separately as
+    the live turn. Errored assistant rows (``error_code`` set) and rows
+    with empty content are skipped. History messages carry no
+    ``lq_ai_skip_anonymization`` flag, so the gateway pseudonymizes them
+    with the same per-request map as the current turn (consistent entity
+    mapping across the conversation).
+    """
+    if token_budget <= 0 or max_messages <= 0:
+        return []
+    stmt = (
+        select(Message.role, Message.content)
+        .where(
+            Message.chat_id == chat_id,
+            Message.id != exclude_message_id,
+            Message.role.in_(("user", "assistant")),
+            Message.error_code.is_(None),
+        )
+        .order_by(Message.created_at.asc(), Message.id.asc())
+    )
+    rows = (await db.execute(stmt)).all()
+    history: list[tuple[str, str]] = [(row[0], row[1]) for row in rows if row[1]]
+    selected = _select_history_within_budget(
+        history, token_budget=token_budget, max_messages=max_messages
+    )
+    return [
+        ChatCompletionMessage.model_validate({"role": role, "content": content})
+        for role, content in selected
+    ]
 
 
 # Wave D.2 Task 2.7 — send-time slash fallback. If the user's content
@@ -1365,13 +1450,33 @@ async def send_message(
         )
         await db.commit()
 
+    # Multi-turn memory — replay prior conversation turns so chat is
+    # genuinely conversational. Previously this path sent only the current
+    # turn (single-turn requests). History is trimmed most-recent-first to
+    # the configured token budget + message cap (oldest dropped); set
+    # ``LQ_AI_CHAT_HISTORY_TOKEN_BUDGET=0`` to revert to single-turn.
+    # Inserted AFTER the current-turn system context blocks (RAG / attached
+    # files) and BEFORE the live user turn, so the provider sees
+    # ``[system context] + [prior turns] + [current user turn]``. History
+    # turns carry no ``lq_ai_skip_anonymization`` flag, so the gateway
+    # pseudonymizes them with the same per-request map as the current turn
+    # (entities stay consistent across the conversation).
+    settings = get_settings()
+    history_messages = await _load_history_messages(
+        db,
+        chat_id=cid,
+        exclude_message_id=user_message.id,
+        token_budget=settings.lq_ai_chat_history_token_budget,
+        max_messages=settings.lq_ai_chat_history_max_messages,
+    )
+    gw_messages.extend(history_messages)
+
     gw_messages.append(ChatCompletionMessage(role="user", content=effective_content))
 
-    # Build the gateway request. C3 still sends a single-turn request
-    # (the user's content as one ``user`` message); a future task may
-    # widen this to include prior history. The gateway does the skill
-    # prompt assembly per ADR 0007. T7b prepends a system context
-    # block when KB retrieval returned chunks (see above).
+    # Build the gateway request. The gateway does the skill prompt
+    # assembly per ADR 0007. T7b prepends a system context block when KB
+    # retrieval returned chunks (see above); the replayed history sits
+    # between that context and the live user turn.
     #
     # Wave D.2 Task 3.0 — ``lq_ai_inline_skills`` carries inline-body
     # attachments. The gateway assembles them alongside ``lq_ai_skills``

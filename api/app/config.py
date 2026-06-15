@@ -145,6 +145,32 @@ class Settings(BaseSettings):
         description="Shared secret for backend ↔ gateway. Required in prod.",
     )
 
+    # ----- Chat history (multi-turn memory) -----
+    # The chat send path (api/app/api/chats.py) replays prior turns of the
+    # conversation to the model so chat is genuinely multi-turn — previously
+    # only the current turn was sent. History is trimmed most-recent-first to
+    # fit BOTH a token budget and a hard message-count cap; oldest turns drop
+    # first when either is exceeded. Token counts use a cheap ~4-chars/token
+    # heuristic (no tokenizer dependency — CLAUDE.md SBOM posture). Operators
+    # on long-context models can raise the budget; set it to 0 to disable
+    # history replay entirely (revert to single-turn requests).
+    lq_ai_chat_history_token_budget: int = Field(
+        default=6_000,
+        ge=0,
+        description=(
+            "Approximate token budget (~4 chars/token) for prior chat turns "
+            "replayed to the model. 0 disables multi-turn history."
+        ),
+    )
+    lq_ai_chat_history_max_messages: int = Field(
+        default=20,
+        ge=0,
+        description=(
+            "Hard cap on the number of prior chat messages replayed to the "
+            "model, independent of the token budget. 0 disables history."
+        ),
+    )
+
     # ----- JWT (per ADR 0002 — backend owns auth) -----
     jwt_secret: str = Field(
         default="dev-jwt-secret-change-me",
