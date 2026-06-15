@@ -98,9 +98,13 @@ curl -sS -o /dev/null -w "/api/v1/auth/login -> %{http_code}\n" -X POST \
 #    access_token and the URL leaves /login — then:
 #      cd web && npx cypress run --spec '<spec>' --config baseUrl=http://127.0.0.1:${WEB_HOST_PORT}
 #    NOTE: OpenWebUI keeps its OWN sqlite (web container /app/backend/data/webui.db) and honors
-#    WEBUI_AUTH=false only on a FRESH OpenWebUI install. If a prior browser run already created a
-#    non-default OpenWebUI user, auto-signin 400s and the root guard parks the SPA at /auth. On a fresh
-#    boot this is clean; if it happens, rm the web container's webui.db + restart web to re-bootstrap.
+#    WEBUI_AUTH=false only on a TRULY FRESH OpenWebUI db. If any non-default OpenWebUI user exists,
+#    auto-signin 400s ("can't turn off authentication … existing users") and the root guard parks the
+#    SPA at /auth. A throwaway project (or the launcher's Reset = `down -v`) removes the whole web
+#    volume, so it's clean. CAVEAT: OpenWebUI runs sqlite in WAL mode — removing only `webui.db`
+#    leaves `webui.db-wal`/`webui.db-shm`, which still carry the user. To re-bootstrap WITHOUT a full
+#    `down -v`, remove all three (`rm webui.db webui.db-wal webui.db-shm`) then restart web. Tracked
+#    for hardening as DE-335.
 
 # 7. Tear down the throwaway project (NEVER -v the dev stack):
 docker compose -f docker-compose.release.yml -p lq-ai-reltest --env-file /tmp/reltest.env down -v
@@ -134,8 +138,11 @@ REDIS 26700 / MINIO 29700-29701). The dev stack + the live `lq-ai-desktop` launc
       toast + "Welcome back, LQ.AI Administrator" home with the full LQ.AI nav. **Finding:** the first
       browser attempt parked at `/auth` — OpenWebUI keeps its OWN sqlite (`webui.db`) and refuses
       `WEBUI_AUTH=false` once a non-default OpenWebUI user exists (a prior Cypress run had created one).
-      Removing `webui.db` + restarting web re-bootstrapped the clean default user (matching the live dev
-      launcher, whose OpenWebUI user is `admin@localhost`), after which the browser flow passed. This is
+      Removing the webui.db sqlite set (`webui.db` **+ `webui.db-wal` + `webui.db-shm`** — OpenWebUI runs
+      WAL mode, so deleting only `webui.db` leaves the user in the WAL) + restarting web re-bootstrapped
+      the clean default user (matching the live dev launcher, whose OpenWebUI user is `admin@localhost`),
+      after which the browser flow passed. The launcher's Reset (`down -v`) removes the whole volume so
+      this can't bite a normal user; hardening tracked as DE-335. This is
       an OpenWebUI bootstrap-state artifact, NOT a proxy defect — the live dev launcher reaches
       `/lq-ai/login` with the form rendered, confirmed by the same Cypress harness against `:13012`.
 - [x] `down -v` on the throwaway project only; dev stack untouched — ✅ `lqai-lqtest` removed (volumes +
