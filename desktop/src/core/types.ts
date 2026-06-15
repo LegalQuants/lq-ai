@@ -7,7 +7,13 @@ export const EXPECTED_SERVICES = [
 	'api',
 	'ingest-worker',
 	'arq-worker',
-	'web'
+	'web',
+	// The reverse proxy owns the user-facing WEB_HOST_PORT and unifies the
+	// origin: it strips /lq and forwards the lq-ai client's /lq/api/v1/* calls
+	// to the api, while everything else (the OpenWebUI shell, /api/config, its
+	// own /api/v1/*, websockets, static) stays on web. Last in the dependency
+	// order: it depends on both api + web being healthy.
+	'proxy'
 ] as const
 
 export type ServiceName = (typeof EXPECTED_SERVICES)[number]

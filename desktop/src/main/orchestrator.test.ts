@@ -20,14 +20,15 @@ describe('snapshot', () => {
 			'{"Service":"api","State":"running","Health":"healthy"}\n' +
 			'{"Service":"ingest-worker","State":"running","Health":"healthy"}\n' +
 			'{"Service":"arq-worker","State":"running","Health":"healthy"}\n' +
-			'{"Service":"web","State":"running","Health":"healthy"}'
+			'{"Service":"web","State":"running","Health":"healthy"}\n' +
+				'{"Service":"proxy","State":"running","Health":"healthy"}'
 		const runner = fakeRunner({
 			info: { code: 0, stdout: 'Server Version: 27.0.3', stderr: '' },
 			ps: { code: 0, stdout: ps, stderr: '' }
 		})
 		const snap = await snapshot(['compose', '-f', 'x', '-p', 'lq-ai-desktop'], runner)
 		expect(snap.state).toBe('HEALTHY')
-		expect(snap.services).toHaveLength(8)
+		expect(snap.services).toHaveLength(9)
 	})
 
 	it('reports NO_ENGINE when docker info fails', async () => {

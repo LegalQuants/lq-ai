@@ -1,0 +1,33 @@
+# LQ.AI release-stack reverse proxy.
+#
+# The published web image runs the OpenWebUI Python backend AND serves the
+# LQ.AI SPA. BOTH our api and the OpenWebUI backend mount /api/v1/* (with
+# overlapping group names — users, chats, models), and the OpenWebUI backend
+# also serves /api/config, which the SPA root layout fetches at first paint
+# via getBackendConfig() (web/src/routes/+layout.svelte). A blanket /api proxy
+# to our api therefore steals /api/config (404 on our api) → the shell
+# redirects to /error before it can render.
+#
+# Resolution: give the LQ.AI client its OWN path prefix. The web image is
+# built with PUBLIC_LQ_AI_API_BASE_URL=/lq/api/v1
+# (web/src/lib/lq-ai/api/client.ts), so every LQ.AI client call is /lq/api/v1/*
+# and never collides with OpenWebUI's same-origin /api.
+#
+#   /lq/*  -> api:8000   (LQ.AI client; the /lq prefix is STRIPPED before
+#                         forwarding, so the api — which mounts /api/v1 — sees
+#                         /api/v1/*)
+#   *      -> web:8080   (OpenWebUI shell, /api/config, its own /api/v1/*,
+#                         websockets, static bundle)
+:8080 {
+	# lq-ai backend: the web image bakes PUBLIC_LQ_AI_API_BASE_URL=/lq/api/v1,
+	# so the lq-ai client calls /lq/api/v1/*. handle_path strips the /lq prefix
+	# before proxying, so the api (which mounts /api/v1) sees /api/v1/*.
+	handle_path /lq/* {
+		reverse_proxy api:8000
+	}
+	# Everything else — the OpenWebUI shell, /api/config, its own /api/v1/*,
+	# websockets, static assets — stays on the web container.
+	handle {
+		reverse_proxy web:8080
+	}
+}

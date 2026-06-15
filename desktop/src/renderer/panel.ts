@@ -42,7 +42,7 @@ export function renderPanel(root: HTMLElement): void {
 		let label = LABELS[snap.state] ?? snap.state
 		if (snap.state === 'STACK_STARTING') {
 			const healthy = (snap.services ?? []).filter((s) => s.health === 'healthy').length
-			label = `Starting… ${healthy}/8 services ready`
+			label = `Starting… ${healthy}/9 services ready`
 		}
 		stateEl.textContent = label
 		open.disabled = snap.state !== 'HEALTHY'
