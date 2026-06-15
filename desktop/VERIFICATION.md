@@ -1,12 +1,11 @@
 # LQ.AI for Mac — release verification protocol
 
-> **STATUS: PARTIALLY EXECUTED (2026-06-14).** The signed-`.dmg` Gatekeeper/notarization checks in
-> **Protocol 2 → "Verify the downloaded dmg"** have been run against the real published
-> `desktop-v0.4.0` release and passed (results filled in below). The rest — **Protocol 1** (isolated
-> boot of the published images) and the **Protocol 2 launcher-lifecycle** boxes — are **still pending**:
-> Protocol 1 is blocked until the launcher-ready images are published + made public (the `v0.4.1` image
-> release), and the lifecycle run needs a clean Mac. Unchecked boxes are genuinely not-yet-run — **do
-> not pre-fill them.**
+> **STATUS: PARTIALLY EXECUTED (2026-06-14).** **Protocol 1 (isolated boot of the published images) —
+> PASSED** against the public `v0.4.1` images (results below). **Protocol 2 → "Verify the downloaded
+> dmg" (signing/notarization) — PASSED** against the published `desktop-v0.4.0` release (results below).
+> The only remaining piece is the **Protocol 2 launcher-lifecycle** (real Finder double-click → wizard
+> → BYOK → chat), which needs a human clean-Mac run. Unchecked boxes there are genuinely not-yet-run —
+> **do not pre-fill them.**
 
 **What this proves:** the **published images** stand up to a real login for a stranger, and the
 **signed/notarized `.dmg`** installs and runs on a Mac with Docker but **no LQ.AI repo cloned**.
@@ -55,14 +54,18 @@ docker compose -f docker-compose.release.yml -p lq-ai-reltest --env-file /tmp/re
 docker compose -f docker-compose.release.yml -p lq-ai-reltest --env-file /tmp/reltest.env down -v
 ```
 
-Results (fill in) — **PENDING:** blocked until the launcher-ready images are published and made public
-(the `v0.4.1` image release + GHCR public flip). Not yet run.
+Results — **EXECUTED 2026-06-14, PASSED** against the public `v0.4.1` images
+(`ghcr.io/legalquants/lq-ai-{api,gateway,web}:v0.4.1`, published by [release run
+27512135750](https://github.com/LegalQuants/lq-ai/actions/runs/27512135750); booted under throwaway
+project `lq-ai-fulltest` + shifted ports, **no provider keys set** to prove the BYOK boot):
 
-- [ ] All 3 `ghcr.io/legalquants/lq-ai-*:vX.Y.Z` images anonymously pullable (HTTP 200) — _____
-- [ ] All 8 services reach **Healthy** — _____
-- [ ] Admin fixture created the login (exit 0) — _____
-- [ ] `POST /login` (with `Origin` header) returns session cookies — _____
-- [ ] `down -v` on the throwaway project only; dev stack untouched — _____
+- [x] All 3 `ghcr.io/legalquants/lq-ai-*:v0.4.1` images anonymously pullable (HTTP 200) — ✅ also `:latest`; both `linux/amd64` + `linux/arm64` (native on Apple Silicon)
+- [x] All 8 services reach **Healthy** — ✅ 8/8 (postgres, redis, minio, gateway, api, ingest-worker, arq-worker, web); api migrated the fresh DB from the published image
+- [x] Admin fixture created the login (exit 0) — ✅ `reset-admin-password --email admin@lq.ai … --no-force-change`
+- [x] `POST /api/v1/auth/login` (with `Origin` header) returns a session — ✅ HTTP 200, `Bearer` `access_token` + `refresh_token`, `user.email=admin@lq.ai`
+- [x] `down -v` on the throwaway project only; dev stack untouched — ✅
+- [x] **Baked assets present in the published images** (the no-bind-mount crux) — ✅ api `/skills` = 17 skills (`nda-review/SKILL.md` present, `LQ_AI_SKILLS_DIR=/skills`); gateway seeded `/etc/lq-ai/gateway.yaml` from the baked `/usr/share/lq-ai/gateway.yaml.example`
+- [x] Web reachable on the host port — ✅ `http://127.0.0.1:13099` → HTTP 200
 
 ---
 
