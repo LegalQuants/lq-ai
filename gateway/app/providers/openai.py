@@ -137,11 +137,13 @@ class OpenAIAdapter(ProviderAdapter):
         api_key: str,
         timeout_s: float = DEFAULT_TIMEOUT_SECONDS,
         client: httpx.AsyncClient | None = None,
+        use_max_completion_tokens: bool = False,
     ) -> None:
         self.name = name
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self._timeout = timeout_s
+        self._use_max_completion_tokens = use_max_completion_tokens
         self._owns_client = client is None
         self._client = client or httpx.AsyncClient(
             base_url=self._base_url,
@@ -214,6 +216,7 @@ class OpenAIAdapter(ProviderAdapter):
             api_key=api_key,
             timeout_s=timeout_s,
             client=client,
+            use_max_completion_tokens=provider.use_max_completion_tokens,
         )
 
     # --- ProviderAdapter contract --------------------------------------------
@@ -234,7 +237,12 @@ class OpenAIAdapter(ProviderAdapter):
         ``stream`` to match the route handler's decision.
         """
 
-        body = _to_openai_request(request, model=model, stream=stream)
+        body = _to_openai_request(
+            request,
+            model=model,
+            stream=stream,
+            use_max_completion_tokens=self._use_max_completion_tokens,
+        )
 
         if stream:
             return _openai_stream_iter(
@@ -459,6 +467,7 @@ def _to_openai_request(
     *,
     model: str,
     stream: bool,
+    use_max_completion_tokens: bool = False,
 ) -> dict[str, Any]:
     """Build the OpenAI ``POST /chat/completions`` request body.
 
@@ -492,6 +501,15 @@ def _to_openai_request(
             if isinstance(msg, dict):
                 for key in _LQ_AI_MESSAGE_EXTENSION_KEYS:
                     msg.pop(key, None)
+    # GPT-5 / o-series reasoning deployments reject ``max_tokens`` (hard
+    # 400) and require ``max_completion_tokens``. When the provider opts in
+    # (``use_max_completion_tokens``), rename the field and DROP
+    # ``max_tokens`` entirely — its mere presence re-triggers the 400 on
+    # reasoning models. Gated per-provider (not by model name) because
+    # Azure deployment-ids are opaque and OpenAI-compatible local servers
+    # may not accept ``max_completion_tokens``.
+    if use_max_completion_tokens and "max_tokens" in body:
+        body["max_completion_tokens"] = body.pop("max_tokens")
     body["model"] = model
     body["stream"] = stream
     # ``stream_options.include_usage`` is required for OpenAI to emit a

@@ -118,6 +118,18 @@ class ProviderConfig(BaseModel):
     tier: InferenceTier
     models: list[str] = Field(default_factory=list)
     enabled: bool = True
+    use_max_completion_tokens: bool = False
+    """Send ``max_completion_tokens`` instead of ``max_tokens`` to the
+    provider. OpenAI/Azure GPT-5 and o-series reasoning deployments REJECT
+    ``max_tokens`` (hard HTTP 400) and require ``max_completion_tokens``; it
+    is also accepted by gpt-4o. Default off so OpenAI-compatible servers
+    that only recognize ``max_tokens`` (e.g. vLLM < 0.6.4 rejects unknown
+    fields; LM Studio / Ollama / TGI silently drop them) keep working.
+    Honored only by the OpenAI-family adapters (``openai`` /
+    ``openai_compatible`` / ``azure_openai``). NB: ``max_completion_tokens``
+    caps reasoning + visible output combined — pair this with a generous
+    budget on reasoning models or the response can come back empty with
+    ``finish_reason='length'``."""
 
     @model_validator(mode="after")
     def _exactly_one_key_source(self) -> ProviderConfig:
