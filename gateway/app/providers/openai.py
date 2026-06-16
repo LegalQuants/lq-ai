@@ -99,6 +99,8 @@ _LQ_AI_EXTENSION_KEYS = frozenset(
         "lq_ai_message_id",
         "lq_ai_user_id",
         "lq_ai_purpose",
+        "lq_ai_privileged",
+        "lq_ai_file_ids",
     }
 )
 

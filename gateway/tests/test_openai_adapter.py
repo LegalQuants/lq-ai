@@ -437,6 +437,8 @@ async def test_chat_completion_strips_lq_ai_extension_keys() -> None:
         lq_ai_purpose="judge_paraphrase",
         chat_id="audit-tag",
         anonymize=True,
+        lq_ai_privileged=True,
+        lq_ai_file_ids=["44444444-4444-4444-4444-444444444444"],
     )
     with respx.mock(base_url="https://api.openai.com/v1") as router:
         route = router.post("/chat/completions").mock(
@@ -467,6 +469,8 @@ async def test_chat_completion_strips_lq_ai_extension_keys() -> None:
         "lq_ai_message_id",
         "lq_ai_user_id",
         "lq_ai_purpose",
+        "lq_ai_privileged",
+        "lq_ai_file_ids",
     ):
         assert forbidden not in sent, f"LQ.AI extension {forbidden!r} leaked to OpenAI"
 
