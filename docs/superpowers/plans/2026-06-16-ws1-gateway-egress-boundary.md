@@ -21,7 +21,13 @@
 - **No outbound anonymization transform.** ADR 0014 D5 makes anonymization the default, but the transform needs the M2 anonymization mapper + real matter context (which PR1 has neither of). PR1 *parses* the `anonymize_outbound` flag (schema completeness) and writes an honest `anonymization_applied = False`; the transform lands in WS3/WS4 with the first real provider. Leave the typed seam, do not fake it. This mirrors how the gateway already ships `rate_limits` config ahead of global enforcement.
 - **No HTTP route exposing tool calls to the backend.** PR1 wires the *internal* `route_tool_call` path and tests it directly; the `/api/v1/research` surface is PR3.
 
-**Hard rules (from CLAUDE.md / handoff):** gateway is mypy `--strict`; run BOTH `ruff format` and `ruff check`; NEVER run host-side `alembic upgrade` on the dev DB — the api test conftest auto-migrates a throwaway `pgvector/pgvector:pg16` container; commit `-s` with the trailer `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
+**Hard rules (from CLAUDE.md / handoff):** gateway is mypy `--strict`; run BOTH `ruff format` and `ruff check`; NEVER run host-side `alembic upgrade` on the live dev DB (`127.0.0.1:15432/lq_ai`); commit `-s` with the trailer `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
+
+> **⚠️ TEST/LINT RUNNER CORRECTION (discovered during execution).** The canonical runner is the **host venv**, NOT `docker compose` — the compose `api`/`gateway` services bake code into the image (no source bind-mount), so `docker compose run --rm <svc> pytest` would test stale baked code. Translate every command in the tasks below:
+> - `docker compose run --rm gateway pytest tests/X` → `cd ~/Code/lq-ai/gateway && .venv/bin/pytest tests/X -v` (gateway tests are pure unit/respx — no DB needed).
+> - `docker compose run --rm api pytest api/tests/X` → `cd ~/Code/lq-ai/api && DATABASE_URL='postgresql+asyncpg://lq_ai:test@127.0.0.1:15433/lq_ai' .venv/bin/pytest tests/X -v`. The api conftest does NOT spin up its own DB — it needs `DATABASE_URL` pointing at a Postgres and creates isolated `lq_ai_test_*` databases on it. Use a **throwaway `pgvector/pgvector:pg16` container on port 15433** (`docker run -d --name lq-test-pg -p 15433:5432 -e POSTGRES_USER=lq_ai -e POSTGRES_PASSWORD=test -e POSTGRES_DB=lq_ai pgvector/pgvector:pg16`), fully isolated from the running dev stack.
+> - Lint: `cd gateway && .venv/bin/ruff format . && .venv/bin/ruff check . && .venv/bin/mypy app` (mypy is `--strict` via config); api: `cd api && .venv/bin/ruff format . && .venv/bin/ruff check . && .venv/bin/mypy app`.
+> The docker compose stack is the *running* LQ.AI app, not the test harness — leave it alone (never `docker compose down -v`).
 
 ---
 
