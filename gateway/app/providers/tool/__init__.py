@@ -14,8 +14,10 @@ from app.providers.tool.base import (
     ToolResult,
     ToolSpec,
 )
+from app.providers.tool.echo import EchoToolAdapter
 
 __all__ = [
+    "EchoToolAdapter",
     "ToolProviderAdapter",
     "ToolProviderAuthError",
     "ToolProviderError",
