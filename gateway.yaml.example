@@ -107,10 +107,14 @@ providers:
     api_key_env: OPENAI_API_KEY
     tier: 4  # Standard commercial OpenAI API
     # tier: 3  # If operator has zero-data-retention contract
+    # GPT-5 / o-series reasoning models REJECT max_tokens (hard 400) and
+    # require max_completion_tokens. Leave false for gpt-4o / older models
+    # or OpenAI-compatible local servers that only accept max_tokens.
+    use_max_completion_tokens: true
     models:
-      - gpt-4-turbo
-      - gpt-4o
-      - gpt-4o-mini
+      - gpt-5
+      - gpt-5-mini
+      - gpt-5-nano
 
   - name: vertex-anthropic
     type: vertex
@@ -151,13 +155,17 @@ providers:
     # ('2024-10-21' or later) for current chat-completion features.
     api_version: '2024-08-01-preview'
     tier: 3  # Azure OpenAI under enterprise agreement (ZDR + BAA)
+    # GPT-5 / o-series deployments REJECT max_tokens (hard 400) and require
+    # max_completion_tokens. Azure deployment-ids are operator-named, so this
+    # is set per-provider rather than inferred from the model name.
+    use_max_completion_tokens: true
     # CRITICAL: each entry is the Azure DEPLOYMENT-ID (operator-named in
     # the Azure portal), NOT the underlying model name. Many operators
     # run multiple deployments of the same model with different SKUs;
     # the gateway routes by deployment-id via the alias map below.
     models:
-      - gpt-4-turbo-prod       # e.g., a deployment of gpt-4-turbo
-      - gpt-4o-prod            # e.g., a deployment of gpt-4o
+      - gpt-5-prod             # e.g., a deployment of gpt-5
+      - gpt-5-mini-prod        # e.g., a deployment of gpt-5-mini
 
   # --- Local providers (Tier 1) ---
 
@@ -215,21 +223,21 @@ model_aliases:
       model: claude-opus-4-7
     fallback:
       - {provider: vertex-anthropic, model: claude-opus-4-7@anthropic}
-      - {provider: openai-prod, model: gpt-4-turbo}
+      - {provider: openai-prod, model: gpt-5}
 
   fast:
     primary:
       provider: anthropic-prod
       model: claude-sonnet-4-6
     fallback:
-      - {provider: openai-prod, model: gpt-4o-mini}
+      - {provider: openai-prod, model: gpt-5-mini}
 
   budget:
     primary:
       provider: anthropic-prod
       model: claude-haiku-4-5
     fallback:
-      - {provider: openai-prod, model: gpt-4o-mini}
+      - {provider: openai-prod, model: gpt-5-nano}
 
   local:
     primary:
@@ -495,15 +503,26 @@ cost_tracking:
     'anthropic-prod/claude-haiku-4-5':
       input_per_mtok: 0.80
       output_per_mtok: 4.00
-    'openai-prod/gpt-4-turbo':
-      input_per_mtok: 10.00
-      output_per_mtok: 30.00
-    'openai-prod/gpt-4o':
-      input_per_mtok: 2.50
+    'openai-prod/gpt-5':
+      input_per_mtok: 1.25
       output_per_mtok: 10.00
-    'openai-prod/gpt-4o-mini':
-      input_per_mtok: 0.15
-      output_per_mtok: 0.60
+    'openai-prod/gpt-5-mini':
+      input_per_mtok: 0.25
+      output_per_mtok: 2.00
+    'openai-prod/gpt-5-nano':
+      input_per_mtok: 0.05
+      output_per_mtok: 0.40
+    # Azure OpenAI — keyed by the Azure DEPLOYMENT-ID (the `models:` entries
+    # on the azure-openai provider above), NOT the underlying model name.
+    # Rates below mirror OpenAI GPT-5 list pricing; Azure enterprise
+    # agreements (ZDR / BAA / committed-use) and newer point releases
+    # (e.g. gpt-5.4) differ — confirm on the Azure OpenAI pricing page.
+    'azure-openai/gpt-5-prod':
+      input_per_mtok: 1.25
+      output_per_mtok: 10.00
+    'azure-openai/gpt-5-mini-prod':
+      input_per_mtok: 0.25
+      output_per_mtok: 2.00
     'ollama-local/qwen3.5:9b':
       input_per_mtok: 0.0  # Local; no per-token cost
       output_per_mtok: 0.0
