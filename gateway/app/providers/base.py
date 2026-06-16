@@ -93,7 +93,8 @@ class ProviderHTTPError(ProviderAdapterError):
 
     The adapter populates ``details["upstream_status"]`` with the integer
     status code so the route handler can map sensibly (e.g., upstream
-    400 -> gateway 502, upstream 429 -> gateway 429).
+    4xx -> gateway 400 ``invalid_request``, upstream 429 -> gateway 429,
+    upstream 5xx -> gateway 502 ``provider_unavailable``).
     """
 
     code = "provider_unavailable"

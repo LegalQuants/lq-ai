@@ -182,78 +182,97 @@ def _gateway_error(
     )
 
 
+def _classify_provider_error(exc: ProviderAdapterError) -> tuple[str, int]:
+    """Classify a provider adapter error into ``(gateway_code, http_status)``.
+
+    Single source of truth shared by the non-streaming response mapper
+    (:func:`_map_provider_error_to_response`), the streaming SSE error
+    frame, and the routing-log failure writers — so an upstream status is
+    classified identically on every path, not just the non-streaming one.
+
+    An upstream **4xx** (other than 429 and the invalid_model 404) is a
+    request-side, NON-retryable failure: the provider rejected the request
+    we assembled (bad param, oversized prompt, unsupported field, content
+    policy). It maps to ``invalid_request`` / 400 rather than the outage
+    code ``provider_unavailable`` / 502, so clients don't retry a request
+    that can never succeed and outage dashboards aren't polluted with
+    caller/config errors. Upstream 5xx and network failures stay
+    ``provider_unavailable``.
+    """
+
+    if isinstance(exc, ProviderUnsupportedError):
+        return exc.code, status.HTTP_501_NOT_IMPLEMENTED
+    if isinstance(exc, ProviderAuthError):
+        return exc.code, status.HTTP_502_BAD_GATEWAY
+    if isinstance(exc, ProviderHTTPError):
+        upstream = exc.upstream_status
+        if upstream == 429:
+            return "rate_limit_exceeded", status.HTTP_429_TOO_MANY_REQUESTS
+        if upstream == 404 and exc.code == "invalid_model":
+            # Adapter signaled "the request named a model the upstream
+            # can't serve" (e.g., Ollama's "model not found, pull first").
+            return "invalid_model", status.HTTP_400_BAD_REQUEST
+        if 400 <= upstream < 500:
+            return "invalid_request", status.HTTP_400_BAD_REQUEST
+        return exc.code, status.HTTP_502_BAD_GATEWAY
+    if isinstance(exc, ProviderNetworkError):
+        return exc.code, status.HTTP_503_SERVICE_UNAVAILABLE
+    return exc.code, status.HTTP_502_BAD_GATEWAY
+
+
 def _map_provider_error_to_response(exc: ProviderAdapterError) -> JSONResponse:
     """Map a :class:`ProviderAdapterError` to the right HTTP status + envelope.
 
-    Centralizes the mapping so the streaming and non-streaming paths use
-    the same rules. Per the gateway-openapi.yaml error enum:
+    Thin wrapper over :func:`_classify_provider_error` (the shared
+    classifier) plus operator-facing logging. Per the gateway-openapi.yaml
+    error enum:
 
     * Auth errors → ``unauthorized`` / 502 (the gateway is its own auth
       domain; an upstream credential failure is a misconfiguration, not
       the caller's fault).
     * Upstream 429 → ``rate_limit_exceeded`` / 429.
     * Upstream 404 with ``code = "invalid_model"`` (e.g., Ollama
-      "model not pulled") → ``invalid_model`` / 400. The caller named
-      a model the deployment can't serve — that's a request-side
-      mistake, not an upstream outage. Adapters set ``code`` on the
-      :class:`ProviderHTTPError` to opt into this mapping.
-    * Upstream other 4xx → ``provider_unavailable`` / 502.
+      "model not pulled") → ``invalid_model`` / 400.
+    * Upstream other 4xx → ``invalid_request`` / 400. The provider
+      rejected the request we assembled — request-side and non-retryable,
+      so it does NOT wear the outage code ``provider_unavailable``.
     * Upstream 5xx (after fallback exhausted) → ``provider_unavailable`` /
       502.
     * Network / DNS / TLS / timeout → ``provider_unavailable`` / 503.
     * ``ProviderUnsupportedError`` → ``not_implemented`` / 501.
     """
 
-    if isinstance(exc, ProviderUnsupportedError):
-        return _gateway_error(
-            code=exc.code,
-            message=exc.message,
-            http_status=status.HTTP_501_NOT_IMPLEMENTED,
-            details=exc.details,
-        )
+    code, http_status = _classify_provider_error(exc)
     if isinstance(exc, ProviderAuthError):
         logger.warning("provider auth rejected: %s", exc.message)
-        return _gateway_error(
-            code=exc.code,
-            message=exc.message,
-            http_status=status.HTTP_502_BAD_GATEWAY,
-            details=exc.details,
-        )
-    if isinstance(exc, ProviderHTTPError):
-        upstream = exc.upstream_status
-        if upstream == 429:
-            gw_status = status.HTTP_429_TOO_MANY_REQUESTS
-            gw_code = "rate_limit_exceeded"
-        elif upstream == 404 and exc.code == "invalid_model":
-            # Adapter signaled "the request named a model the upstream
-            # can't serve" (e.g., Ollama's "model not found, try
-            # pulling it first"). Surface as 400 invalid_model so
-            # callers see the request-side mistake clearly rather
-            # than a generic upstream-flake 502.
-            gw_status = status.HTTP_400_BAD_REQUEST
-            gw_code = "invalid_model"
-        else:
-            gw_status = status.HTTP_502_BAD_GATEWAY
-            gw_code = exc.code
-        return _gateway_error(
-            code=gw_code,
-            message=exc.message,
-            http_status=gw_status,
-            details=exc.details,
-        )
-    if isinstance(exc, ProviderNetworkError):
-        return _gateway_error(
-            code=exc.code,
-            message=exc.message,
-            http_status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            details=exc.details,
+    elif code == "invalid_request":
+        logger.warning(
+            "provider rejected request: upstream_status=%s provider=%s",
+            getattr(exc, "upstream_status", None),
+            exc.details.get("provider"),
         )
     return _gateway_error(
-        code=exc.code,
+        code=code,
         message=exc.message,
-        http_status=status.HTTP_502_BAD_GATEWAY,
+        http_status=http_status,
         details=exc.details,
     )
+
+
+def _failure_reason(error: ProviderAdapterError) -> str:
+    """Build the routing-log ``refusal_reason`` for an upstream failure.
+
+    Carries the *classified* gateway code (so a 4xx rejection reads
+    ``invalid_request``, not the class-default ``provider_unavailable``)
+    plus the upstream HTTP status when known — the distinguishing signal
+    an operator needs to tell a request rejection from a genuine outage
+    when reading inference_routing_log rows.
+    """
+
+    code, _ = _classify_provider_error(error)
+    if isinstance(error, ProviderHTTPError):
+        return f"upstream_error:{code}:status={error.upstream_status}"
+    return f"upstream_error:{code}"
 
 
 def _config(request: Request) -> GatewayConfig:
@@ -1176,7 +1195,11 @@ async def _stream_openai_sse(
             payload = chunk.model_dump(mode="json", exclude_none=True)
             yield f"data: {json.dumps(payload, separators=(',', ':'))}\n\n".encode()
     except ProviderAdapterError as exc:
-        envelope = {"error": {"code": exc.code, "message": exc.message, "details": exc.details}}
+        # Classify so a streaming upstream 4xx surfaces as invalid_request
+        # (not the raw class-default provider_unavailable) — same rule the
+        # non-streaming path applies via _map_provider_error_to_response.
+        code, _ = _classify_provider_error(exc)
+        envelope = {"error": {"code": code, "message": exc.message, "details": exc.details}}
         yield f"data: {json.dumps(envelope, separators=(',', ':'))}\n\n".encode()
         await _write_failure(
             log_writer,
@@ -1411,7 +1434,7 @@ async def _write_failure(
             latency_ms=latency_ms,
             anonymization_applied=anonymization_applied,
             refused=False,
-            refusal_reason=f"upstream_error:{error.code}",
+            refusal_reason=_failure_reason(error),
             request_id=request_id,
             chat_id=chat_id,
             message_id=message_id,
@@ -1637,7 +1660,7 @@ async def _write_embeddings_failure(
             routed_inference_tier=target.routed_inference_tier,
             latency_ms=latency_ms,
             refused=False,
-            refusal_reason=f"upstream_error:{error.code}",
+            refusal_reason=_failure_reason(error),
             request_id=request_id,
             purpose="embedding",
         )
