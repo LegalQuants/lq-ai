@@ -46,3 +46,12 @@ def test_tool_spec_carries_metadata_flags() -> None:
 def test_tool_provider_error_envelope() -> None:
     err = ToolProviderError("boom", details={"k": "v"})
     assert err.to_envelope()["error"]["code"] == "tool_provider_error"
+
+
+@pytest.mark.unit
+def test_invalid_request_error_code() -> None:
+    from app.providers.tool.base import ToolProviderInvalidRequestError
+
+    err = ToolProviderInvalidRequestError("bad reporter", upstream_status=400)
+    assert err.code == "invalid_request"
+    assert err.to_envelope()["error"]["details"]["upstream_status"] == 400

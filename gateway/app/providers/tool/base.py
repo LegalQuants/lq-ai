@@ -49,6 +49,23 @@ class ToolProviderHTTPError(ToolProviderError):
         self.upstream_status = upstream_status
 
 
+class ToolProviderInvalidRequestError(ToolProviderError):
+    """Upstream rejected the request as malformed (non-auth 4xx).
+
+    Aligns with the inference path's #155 posture: upstream 4xx is the
+    caller's problem (bad citation/query), not a provider outage."""
+
+    code = "invalid_request"
+
+    def __init__(
+        self, message: str, *, upstream_status: int, details: dict[str, object] | None = None
+    ) -> None:
+        merged: dict[str, object] = dict(details or {})
+        merged["upstream_status"] = upstream_status
+        super().__init__(message, details=merged)
+        self.upstream_status = upstream_status
+
+
 class ToolProviderNetworkError(ToolProviderError):
     code = "tool_provider_unavailable"
 
