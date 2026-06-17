@@ -15,9 +15,11 @@ from app.providers.tool.base import (
     ToolResult,
     ToolSpec,
 )
+from app.providers.tool.courtlistener import CourtListenerToolAdapter
 from app.providers.tool.echo import EchoToolAdapter
 
 __all__ = [
+    "CourtListenerToolAdapter",
     "EchoToolAdapter",
     "ToolProviderAdapter",
     "ToolProviderAuthError",
