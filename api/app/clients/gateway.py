@@ -929,12 +929,7 @@ class GatewayClient:
         Malformed entries (non-dict, missing name/type) are silently filtered.
         """
 
-        config = await self._admin_request(
-            method="GET",
-            path="/admin/v1/config",
-            op="list_tool_providers",
-            request_id=request_id,
-        )
+        config = await self.get_admin_config(request_id=request_id)
         providers = config.get("tool_providers") or []
         return [
             {"name": p["name"], "type": p["type"]}
