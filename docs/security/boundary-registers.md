@@ -234,7 +234,7 @@ This boundary is **orthogonal to R1–R6** (which restrain the model) and to the
 - **DNS private/loopback/link-local block.** SSRF guard: the adapter resolves the configured `base_url` and rejects results that resolve to RFC-1918, loopback, or link-local addresses before any connection is attempted.
 - **Per-provider host allowlist.** Each `tool_providers:` entry declares `allowlist.hosts`; the adapter checks the resolved host against the exact allowlist before dispatch. A call whose resolved host is not in the allowlist is refused with a structured error.
 - **No caller `Host` override.** The gateway sets the `Host` header from the configured `base_url`; callers cannot substitute a different host through request parameters.
-- **Outbound header validation.** Only headers in a narrow allowlist (Authorization, Content-Type, Accept, User-Agent) are forwarded. Caller-supplied headers are dropped, not proxied.
+- **Outbound header validation (denylist: rejects caller-supplied `Host` override and smuggled gateway-auth headers; full enforcement wired in WS3 when real adapters egress).**
 - **Egress-tier ceiling.** Each provider carries `egress_tier`. If the provider's egress_tier exceeds the matter's or skill's allowed ceiling, the request is refused with a tier-mismatch error — the same enforcement pattern as the inference-tier floor (R2, above).
 - **Per-provider rate limit.** Each entry declares `rate_limit.requests_per_minute`; the adapter enforces it. Requests over the limit return a structured rate-limit error rather than being forwarded.
 

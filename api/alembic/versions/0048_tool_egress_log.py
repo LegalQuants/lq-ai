@@ -55,7 +55,7 @@ def upgrade() -> None:
             server_default=sa.text("false"),
         ),
         sa.Column("refusal_reason", sa.String(), nullable=True),
-        sa.CheckConstraint("tier BETWEEN 1 AND 5", name="chk_tool_egress_log_tier_range"),
+        sa.CheckConstraint("tier BETWEEN 0 AND 5", name="chk_tool_egress_log_tier_range"),
     )
     op.create_index("ix_tool_egress_log_provider", "tool_egress_log", ["provider"])
     op.create_index("ix_tool_egress_log_timestamp", "tool_egress_log", ["timestamp"])

@@ -1135,7 +1135,7 @@ Gateway-written (ADR 0014 D3); counts/types only, never raw payloads. One row pe
 | `request_id`            | TEXT        | YES      |                      | Correlates with gateway request span              |
 | `provider`              | TEXT        | NO       |                      | Tool provider name (e.g. `courtlistener`)         |
 | `tool`                  | TEXT        | NO       |                      | Tool/endpoint called (e.g. `search_opinions`)     |
-| `tier`                  | INTEGER     | NO       |                      | Inference tier (1–5); CHECK enforced              |
+| `tier`                  | INTEGER     | NO       |                      | Egress tier: `0` = no provider resolved (pre-resolution refusal); `1`–`5` = egress tier; CHECK enforced |
 | `bytes_out`             | INTEGER     | YES      |                      | Bytes sent to provider                            |
 | `bytes_in`              | INTEGER     | YES      |                      | Bytes received from provider                      |
 | `anonymization_applied` | BOOLEAN     | NO       | `false`              | Whether PII anonymization ran before egress       |

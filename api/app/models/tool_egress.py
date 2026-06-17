@@ -22,7 +22,7 @@ from app.db.base import Base
 class ToolEgressLog(Base):
     __tablename__ = "tool_egress_log"
     __table_args__ = (
-        CheckConstraint("tier BETWEEN 1 AND 5", name="chk_tool_egress_log_tier_range"),
+        CheckConstraint("tier BETWEEN 0 AND 5", name="chk_tool_egress_log_tier_range"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

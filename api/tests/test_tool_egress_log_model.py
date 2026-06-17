@@ -14,6 +14,19 @@ import uuid
 from app.models.tool_egress import ToolEgressLog
 
 
+async def test_tool_egress_log_allows_tier_zero_for_unresolved_provider(db_session) -> None:
+    """tier=0 (unknown-provider refusal) must persist — the prod writer
+    relies on this so unresolved-provider refusals are actually audited."""
+    row = ToolEgressLog(
+        provider="missing", tool="echo", tier=0,
+        refused=True, refusal_reason="unknown tool provider",
+    )
+    db_session.add(row)
+    await db_session.flush()
+    assert row.tier == 0
+    assert row.refused is True
+
+
 async def test_tool_egress_log_row_roundtrips(db_session) -> None:
     """A tool_egress_log row persists and reads back with its core fields."""
     row = ToolEgressLog(
