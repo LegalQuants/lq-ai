@@ -4546,6 +4546,29 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 ---
 
+#### DE-336 — Document the `503` responses on the `/api/v1/research/*` OpenAPI entries
+
+**Priority:** P3 · **Effort:** XS
+
+**Context:** Every `/api/v1/research/*` path in `docs/api/backend-openapi.yaml` documents `401` but omits the `503` cases, even though the surface fails with `503` in two distinct, client-meaningful ways: `gateway_unreachable` (transient outage) and `research_not_configured` (no CourtListener tool-provider wired — added in the WS3b-follow capabilities work). The new `/api/v1/research/capabilities` endpoint exists *specifically* to let a UI distinguish "research off" from "research broken," so the missing `503` documentation is most conspicuous there. Surfaced during the WS3b-follow code-quality review (2026-06-17). Deferred rather than absorbed because it's a uniform doc gap across all sibling research endpoints, best fixed in one pass; the typed `code` field already disambiguates the two cases at runtime.
+
+**Specific scope:** Add `503` responses (referencing the shared `Error` schema) to the research entries in `backend-openapi.yaml`, mirroring the existing inference-endpoint pattern (`503`/`504` → `#/components/schemas/Error`). The set of codes differs per endpoint — only the endpoints that actually call the gateway can `503`, and only those that resolve the provider can emit `research_not_configured`:
+
+| Endpoint | Calls gateway? | `503` codes to document |
+|---|---|---|
+| `GET /capabilities` | yes (reads `/admin/v1/config`) | `gateway_unreachable` |
+| `POST /verify-citations` | yes | `gateway_unreachable`, `research_not_configured` |
+| `POST /search` | yes | `gateway_unreachable`, `research_not_configured` |
+| `GET /clusters/{cluster_id}` | yes (on cache miss) | `gateway_unreachable`, `research_not_configured` |
+| `GET /opinions/{opinion_id}` | no (cache read; `404` if absent) | — none |
+| `POST /find-in-case` | no (cache read) | — none |
+
+No code change — the runtime already returns these with the correct typed `code`; this is documentation/contract honesty so consumers (e.g. Donna) can derive both failure modes (`research_not_configured` = feature off vs `gateway_unreachable` = transient outage) from `gen:api`. Do NOT add `503` to the two cache-read endpoints — they never reach the gateway, so it would be inaccurate. `test_openapi.py` pins the path *set* and count, not per-path response codes, so these additions are not test-enforced — review by hand.
+
+**When to ship:** Whenever the research surface's OpenAPI is next revised, or alongside the PR6 transparency work that touches these endpoints.
+
+---
+
 ## 10. Appendices
 
 ### Appendix A — Glossary

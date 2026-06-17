@@ -305,6 +305,7 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("DELETE", "/api/v1/autonomous/watches/{watch_id}"),
     ("PATCH", "/api/v1/autonomous/watches/{watch_id}"),
     # WS3b — case-law research surface
+    ("GET", "/api/v1/research/capabilities"),
     ("POST", "/api/v1/research/verify-citations"),
     ("POST", "/api/v1/research/search"),
     ("GET", "/api/v1/research/clusters/{cluster_id}"),

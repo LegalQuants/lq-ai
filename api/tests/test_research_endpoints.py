@@ -15,7 +15,7 @@ the same fake_storage fixture pattern established in test_research_service.py.
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 
 import httpx
 import pytest
@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.main import app
 from app.models.user import User
+from app.research import service as research_service
 from app.security import create_access_token, hash_password
 
 GW = "http://localhost:8001"  # default settings.lq_ai_gateway_url
@@ -35,6 +36,15 @@ GW = "http://localhost:8001"  # default settings.lq_ai_gateway_url
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _prime_and_reset_provider_cache() -> Iterator[None]:
+    """Prime the resolved-provider cache so existing tool-path tests don't
+    need to mock GET /admin/v1/config, then reset after to prevent leaks."""
+    research_service._resolved_provider = "courtlistener-prod"
+    yield
+    research_service.reset_provider_cache()
 
 
 @pytest_asyncio.fixture
@@ -356,3 +366,52 @@ async def test_find_in_case_404_when_not_cached(
         headers=_h(db_user),
     )
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# GET /capabilities
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+async def test_capabilities_unauthenticated_returns_401(client: AsyncClient) -> None:
+    resp = await client.get("/api/v1/research/capabilities")
+    assert resp.status_code == 401
+
+
+@pytest.mark.integration
+async def test_capabilities_enabled_when_courtlistener_configured(
+    client: AsyncClient, db_user: User, monkeypatch
+) -> None:
+    from app.research import service
+
+    async def _mock_get_capabilities(**_kwargs):
+        return {
+            "enabled": True,
+            "providers": [{"name": "courtlistener-prod", "type": "courtlistener"}],
+        }
+
+    monkeypatch.setattr(service, "get_capabilities", _mock_get_capabilities)
+    resp = await client.get("/api/v1/research/capabilities", headers=_h(db_user))
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["enabled"] is True
+    assert len(body["providers"]) == 1
+    assert body["providers"][0]["name"] == "courtlistener-prod"
+
+
+@pytest.mark.integration
+async def test_capabilities_disabled_when_not_configured(
+    client: AsyncClient, db_user: User, monkeypatch
+) -> None:
+    from app.research import service
+
+    async def _mock_get_capabilities(**_kwargs):
+        return {"enabled": False, "providers": []}
+
+    monkeypatch.setattr(service, "get_capabilities", _mock_get_capabilities)
+    resp = await client.get("/api/v1/research/capabilities", headers=_h(db_user))
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["enabled"] is False
+    assert body["providers"] == []

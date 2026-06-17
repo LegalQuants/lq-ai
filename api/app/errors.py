@@ -66,6 +66,7 @@ CODE_PASSWORD_CHANGE_REQUIRED = "password_change_required"
 CODE_PAYLOAD_TOO_LARGE = "payload_too_large"
 CODE_CONFLICT = "conflict"
 CODE_MFA_ENROLLMENT_REQUIRED = "mfa_enrollment_required"
+CODE_RESEARCH_NOT_CONFIGURED = "research_not_configured"
 
 # Backend↔gateway crossing codes (also declared in gateway/app/errors.py).
 # These propagate from gateway responses into backend exceptions; the
@@ -242,6 +243,15 @@ class MfaEnrollmentRequired(LQAIError):
 
     code = CODE_MFA_ENROLLMENT_REQUIRED
     http_status = status.HTTP_403_FORBIDDEN
+
+
+class ResearchNotConfigured(LQAIError):
+    """No CourtListener tool-provider is configured in the gateway, so the
+    case-law research surface is unavailable. Distinct from a transient
+    gateway outage so the UI renders a calm 'not enabled' gate, not an error."""
+
+    code = CODE_RESEARCH_NOT_CONFIGURED
+    http_status = status.HTTP_503_SERVICE_UNAVAILABLE
 
 
 class PayloadTooLarge(LQAIError):
@@ -540,6 +550,7 @@ __all__ = [
     "CODE_PAYLOAD_TOO_LARGE",
     "CODE_PROVIDER_UNAVAILABLE",
     "CODE_RATE_LIMITED",
+    "CODE_RESEARCH_NOT_CONFIGURED",
     "CODE_SKILL_FETCH_FAILED",
     "CODE_SKILL_INPUT_MISSING",
     "CODE_SKILL_NOT_FOUND",
@@ -562,6 +573,7 @@ __all__ = [
     "PayloadTooLarge",
     "ProviderUnavailable",
     "RateLimited",
+    "ResearchNotConfigured",
     "SessionHalted",
     "SkillFetchFailed",
     "SkillInputMissing",

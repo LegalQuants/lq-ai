@@ -16,6 +16,7 @@ from app.schemas.research import (
     FindInCaseResponse,
     FindMatch,
     OpinionText,
+    ResearchCapabilities,
     SearchRequest,
     SearchResponse,
     VerifyCitationsRequest,
@@ -23,6 +24,11 @@ from app.schemas.research import (
 )
 
 router = APIRouter(prefix="/research", tags=["research"])
+
+
+@router.get("/capabilities", response_model=ResearchCapabilities)
+async def capabilities(user: ActiveUser) -> ResearchCapabilities:
+    return ResearchCapabilities(**await service.get_capabilities())
 
 
 @router.post("/verify-citations", response_model=VerifyCitationsResponse)

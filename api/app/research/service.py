@@ -14,24 +14,77 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.gateway import get_gateway_client
-from app.errors import NotFound
+from app.errors import NotFound, ResearchNotConfigured
 from app.models.research import ResearchClusterMetadata, ResearchOpinionMetadata
 from app.research.html import html_to_text
 from app.storage import stream_download, upload_bytes
 
-_PROVIDER = "courtlistener-prod"
+# The type string that identifies a CourtListener tool-provider in gateway.yaml.
+_COURTLISTENER_TYPE = "courtlistener"
+
+# Process-level cache for the resolved provider name.  A config change requires
+# an api restart, which is already true for how gateway config is loaded — the
+# gateway itself must restart to pick up a yaml change, so the api restarting
+# too is no extra burden.  Use reset_provider_cache() in tests to ensure
+# isolation.
+_resolved_provider: str | None = None
+
+
+async def _courtlistener_providers(*, request_id: str | None = None) -> list[dict[str, str]]:
+    providers = await get_gateway_client().list_tool_providers(request_id=request_id)
+    return [p for p in providers if p.get("type") == _COURTLISTENER_TYPE]
+
+
+async def get_capabilities(*, request_id: str | None = None) -> dict[str, Any]:
+    """Return {enabled, providers} — always reads fresh from the gateway.
+
+    This is the live signal for the UI; it does not use the cached provider
+    name so it reflects the current gateway config without an api restart.
+    """
+    cl = await _courtlistener_providers(request_id=request_id)
+    return {"enabled": bool(cl), "providers": cl}
+
+
+async def _resolve_provider(*, request_id: str | None = None) -> str:
+    """Return the configured CourtListener provider name, caching after first call.
+
+    The resolved name is cached at process level after the first successful
+    call; a config change (e.g. renaming the provider in gateway.yaml) takes
+    effect only after an api restart or an explicit reset_provider_cache() call.
+
+    Raises ResearchNotConfigured (503) when no courtlistener provider is wired
+    in gateway.yaml.  In the rare window between get_capabilities returning
+    enabled=True and this call executing, a provider that just disappeared
+    would also raise here — a transient 503 is correct in that case.
+    """
+    global _resolved_provider
+    if _resolved_provider is not None:
+        return _resolved_provider
+    cl = await _courtlistener_providers(request_id=request_id)
+    if not cl:
+        raise ResearchNotConfigured("Case-law research is not enabled on this server.")
+    _resolved_provider = cl[0]["name"]
+    return _resolved_provider
+
+
+def reset_provider_cache() -> None:
+    """Test/admin hook: clear the cached resolved provider name."""
+    global _resolved_provider
+    _resolved_provider = None
 
 
 async def verify_citations(text: str, *, request_id: str | None = None) -> dict[str, Any]:
+    provider = await _resolve_provider(request_id=request_id)
     result = await get_gateway_client().call_tool(
-        _PROVIDER, "verify_citations", {"text": text}, request_id=request_id
+        provider, "verify_citations", {"text": text}, request_id=request_id
     )
     return result["payload"]
 
 
 async def search_case_law(args: dict[str, Any], *, request_id: str | None = None) -> dict[str, Any]:
+    provider = await _resolve_provider(request_id=request_id)
     result = await get_gateway_client().call_tool(
-        _PROVIDER, "search_case_law", args, request_id=request_id
+        provider, "search_case_law", args, request_id=request_id
     )
     return result["payload"]
 
@@ -84,8 +137,9 @@ async def get_cluster(
         )
         return _cluster_view(cached, ops)
 
+    provider = await _resolve_provider(request_id=request_id)
     result = await get_gateway_client().call_tool(
-        _PROVIDER, "get_cases", {"cluster_id": cluster_id}, request_id=request_id
+        provider, "get_cases", {"cluster_id": cluster_id}, request_id=request_id
     )
     payload = result["payload"]
     cluster = payload["cluster"]

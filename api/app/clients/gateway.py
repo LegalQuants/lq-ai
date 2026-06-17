@@ -913,6 +913,30 @@ class GatewayClient:
             request_id=request_id,
         )
 
+    async def list_tool_providers(
+        self,
+        *,
+        request_id: str | None = None,
+    ) -> list[dict[str, str]]:
+        """GET /admin/v1/config; return configured tool providers as [{name, type}].
+
+        The api holds the gateway key (stamped on every request), so it can read
+        the gateway's sanitized config (env-var names only, never secret values).
+        Used by the research capabilities signal + provider-name resolution.
+
+        Extra fields (base_url, api_key_env, …) are stripped — the capabilities
+        consumer needs only name and type, and we don't want to widen the surface.
+        Malformed entries (non-dict, missing name/type) are silently filtered.
+        """
+
+        config = await self.get_admin_config(request_id=request_id)
+        providers = config.get("tool_providers") or []
+        return [
+            {"name": p["name"], "type": p["type"]}
+            for p in providers
+            if isinstance(p, dict) and "name" in p and "type" in p
+        ]
+
     async def get_tier_config(
         self,
         *,

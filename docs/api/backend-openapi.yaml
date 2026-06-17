@@ -4747,6 +4747,44 @@ paths:
         '422':
           description: Invalid target (need exactly one of playbook_id/skill_ref)
 
+  /api/v1/research/capabilities:
+    get:
+      tags: [research]
+      summary: Report whether case-law research is enabled on this server
+      description: |
+        WS3b. Returns a positive "research enabled?" signal derived from the
+        gateway's sanitised config.  ``enabled`` is ``true`` when at least one
+        ``courtlistener`` tool-provider is declared in ``gateway.yaml``;
+        ``false`` otherwise.  The UI uses this to render a calm "not configured"
+        gate rather than treating an absent CourtListener as an outage.
+        Requires an authenticated user (bearer token).
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Research capability status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [enabled, providers]
+                properties:
+                  enabled:
+                    type: boolean
+                  providers:
+                    type: array
+                    items:
+                      type: object
+                      required: [name, type]
+                      properties:
+                        name: {type: string}
+                        type: {type: string}
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
   /api/v1/research/verify-citations:
     post:
       tags: [research]
