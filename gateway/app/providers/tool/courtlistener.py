@@ -176,7 +176,32 @@ class CourtListenerToolAdapter(ToolProviderAdapter):
         raise ToolProviderError(f"unknown tool {tool!r} for courtlistener provider")
 
     async def _verify_citations(self, args: dict[str, Any]) -> ToolResult:
-        raise NotImplementedError  # Task 3
+        text = args.get("text")
+        if not isinstance(text, str) or not text.strip():
+            raise ToolProviderInvalidRequestError(
+                "verify_citations requires non-empty 'text'", upstream_status=400
+            )
+        body = {"text": text[:64000]}
+        resp = await self._request("POST", "/citation-lookup/", json_body=body)
+        data = resp.json()
+        citations = [
+            {
+                "citation": item.get("citation"),
+                "normalized_citations": item.get("normalized_citations", []),
+                "status": item.get("status"),
+                "error_message": item.get("error_message") or None,
+                "clusters": [
+                    {
+                        "id": c.get("id"),
+                        "case_name": c.get("case_name"),
+                        "absolute_url": c.get("absolute_url"),
+                    }
+                    for c in item.get("clusters", [])
+                ],
+            }
+            for item in data
+        ]
+        return self._result("verify_citations", {"citations": citations}, sent=body, received=data)
 
     async def _search_case_law(self, args: dict[str, Any]) -> ToolResult:
         raise NotImplementedError  # Task 4

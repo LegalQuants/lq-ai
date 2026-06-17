@@ -91,3 +91,52 @@ async def test_invoke_unknown_tool_raises(monkeypatch) -> None:
             await adapter.invoke_tool("nope", {}, request_id="r1")
     finally:
         await adapter.aclose()
+
+
+@pytest.mark.unit
+async def test_verify_citations_shapes_payload(monkeypatch) -> None:
+    adapter = _adapter(monkeypatch)
+    api_resp = [
+        {
+            "citation": "576 U.S. 644",
+            "normalized_citations": ["576 U.S. 644"],
+            "start_index": 0,
+            "end_index": 12,
+            "status": 200,
+            "error_message": "",
+            "clusters": [
+                {
+                    "id": 2812209,
+                    "case_name": "Obergefell v. Hodges",
+                    "absolute_url": "/opinion/2812209/obergefell-v-hodges/",
+                }
+            ],
+        }
+    ]
+    with respx.mock:
+        route = respx.post(f"{BASE}/citation-lookup/").mock(
+            return_value=httpx.Response(200, json=api_resp)
+        )
+        try:
+            result = await adapter.invoke_tool(
+                "verify_citations", {"text": "576 U.S. 644"}, request_id="r1"
+            )
+        finally:
+            await adapter.aclose()
+    assert route.called
+    assert result.skip_anonymization is True
+    cites = result.payload["citations"]
+    assert cites[0]["citation"] == "576 U.S. 644"
+    assert cites[0]["status"] == 200
+    assert cites[0]["clusters"][0]["id"] == 2812209
+    assert cites[0]["clusters"][0]["case_name"] == "Obergefell v. Hodges"
+
+
+@pytest.mark.unit
+async def test_verify_citations_rejects_empty_text(monkeypatch) -> None:
+    adapter = _adapter(monkeypatch)
+    try:
+        with pytest.raises(ToolProviderInvalidRequestError):
+            await adapter.invoke_tool("verify_citations", {"text": "  "}, request_id="r1")
+    finally:
+        await adapter.aclose()
