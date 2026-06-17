@@ -4569,6 +4569,18 @@ No code change — the runtime already returns these with the correct typed `cod
 
 ---
 
+#### DE-337 — Generate `backend-openapi.yaml` from `app.openapi()` so the published contract can't drift from the typed models
+
+**Priority:** P2 · **Effort:** M
+
+**Context:** `docs/api/backend-openapi.yaml` is **hand-maintained**, while the FastAPI app derives its live schema from the typed Pydantic models. The two drift: #163 (`38dbbb0`) typed `VerifyCitationsResponse`/`OpinionTextField` in code but left the yaml's `verify-citations` and `text_field_used` entries loose, so the typed shapes never reached a consumer's `gen:api` (which reads the yaml, not the live app) until a follow-up doc fix. This is the second drift incident (cf. the pre-existing note that the yaml doesn't even `yaml.safe_load` cleanly and `test_openapi.py` is the authoritative conformance check). The hand-maintained file also carries rich prose `description:` blocks that a naive `app.openapi()` dump would lose.
+
+**Specific scope:** Make the typed models the single source of truth. Options to weigh in design: (a) a `make openapi` target that dumps `app.openapi()` to the yaml + a CI check that fails on drift (mirrors the `EXPECTED_PATHS`/`test_openapi.py` machinery), keeping descriptions in the models via `Field(description=...)`/route docstrings; or (b) keep the hand-maintained file but add a CI conformance test that asserts each documented response schema matches the live `response_model` (catches drift without regenerating). Either ends the manual-sync burden. Coordinate with the consumer (Donna) since their `gen:api` pins this file.
+
+**When to ship:** Before the research/MCP OpenAPI surface grows much further (PR4b/PR4c add `/admin/mcp` + `/mcp/oauth/*`); doing it then avoids re-hand-maintaining the new entries.
+
+---
+
 ## 10. Appendices
 
 ### Appendix A — Glossary
