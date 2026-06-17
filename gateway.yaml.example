@@ -197,6 +197,26 @@ providers:
     enabled: ${VLLM_ENABLED:-false}
 
 # ============================================================
+# TOOL / DATA-SOURCE PROVIDERS (ADR 0014) — third-party egress
+# ============================================================
+# A tool provider is third-party egress the gateway brokers and audits
+# (case-law APIs, MCP servers). Distinct from inference `providers:` above.
+# Every entry is SSRF/allowlist-guarded, tier-tagged, rate-limited, and
+# written to `tool_egress_log`. Uncomment and configure to enable.
+#
+# tool_providers:
+#   - name: courtlistener-prod
+#     type: courtlistener          # PR2 (not yet shipped); `echo` is the test type
+#     base_url: https://www.courtlistener.com/api/rest/v4
+#     api_key_env: COURTLISTENER_API_TOKEN   # OR api_key_encrypted (ADR 0011)
+#     egress_tier: 4               # data-egress tier (ADR 0014 D4)
+#     allowlist:
+#       hosts: [www.courtlistener.com]   # exact outbound host allowlist (SSRF)
+#     rate_limit:
+#       requests_per_minute: 60    # per-provider, enforced at the adapter
+#     anonymize_outbound: true     # default; transform lands in WS3/WS4
+
+# ============================================================
 # MODEL ALIASES — friendly names → specific provider/model
 # ============================================================
 # Skills and the backend reference models by alias rather than
