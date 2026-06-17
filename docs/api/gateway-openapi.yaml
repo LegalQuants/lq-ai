@@ -66,6 +66,8 @@ servers:
 tags:
   - name: inference
     description: OpenAI-compatible inference endpoints
+  - name: tools
+    description: Tool-call HTTP transport (WS3 / ADR 0014)
   - name: admin
     description: Gateway configuration and operations
   - name: health
@@ -333,6 +335,76 @@ paths:
               schema: {$ref: '#/components/schemas/GatewayError'}
         '503':
           description: No adapter available for any provider that supports embeddings.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GatewayError'}
+
+  # ----------- TOOLS (WS3 / ADR 0014 — tool-call HTTP transport) -----------
+  /v1/tools/{provider}/{tool}:
+    post:
+      tags: [tools]
+      summary: Invoke a configured tool provider
+      description: |
+        Dispatches a single tool call to the named ``provider`` / ``tool``
+        combination. The gateway validates the caller's gateway key (when
+        ``LQ_AI_GATEWAY_KEY`` is set), checks the provider is in the live
+        tool-provider registry, enforces the ``max_allowed_tier`` ceiling
+        against the provider's configured ``egress_tier``, and delegates to
+        the adapter (echo / CourtListener / MCP). The egress request is
+        written to ``tool_egress_log`` for audit.
+
+        Per ADR 0014: tool providers are distinct from inference providers.
+        They are configured under ``tool_providers`` in ``gateway.yaml`` and
+        carry their own egress tier (1-5) and allowlist policy. The gateway
+        refuses any provider not in the registry with 403.
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: {type: string}
+          description: Name of a configured tool provider (e.g. ``courtlistener``).
+        - name: tool
+          in: path
+          required: true
+          schema: {type: string}
+          description: Tool name within the provider (e.g. ``search_opinions``).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolCallRequest'
+      responses:
+        '200':
+          description: Tool call succeeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolCallResponse'
+        '400':
+          description: Unknown tool name or malformed request
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GatewayError'}
+        '401':
+          description: Missing or invalid X-LQ-AI-Gateway-Key
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GatewayError'}
+        '403':
+          description: Provider not in registry, or egress tier exceeds max_allowed_tier
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GatewayError'}
+        '429':
+          description: Tool provider rate limit exceeded
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GatewayError'}
+        '502':
+          description: Upstream tool provider returned an error
           content:
             application/json:
               schema: {$ref: '#/components/schemas/GatewayError'}
@@ -1177,6 +1249,48 @@ components:
         provider_keys:
           type: array
           items: {$ref: '#/components/schemas/ProviderKeyStatus'}
+
+    ToolCallRequest:
+      type: object
+      required: [args]
+      properties:
+        args:
+          type: object
+          additionalProperties: true
+          description: |
+            Arbitrary key/value arguments forwarded to the tool adapter.
+            Schema is tool-specific; the gateway passes the object through
+            without validation.
+        max_allowed_tier:
+          type: integer
+          minimum: 1
+          maximum: 5
+          nullable: true
+          description: |
+            Optional egress-tier ceiling. If the provider's ``egress_tier``
+            is higher than this value the gateway refuses with 403
+            (``egress_refused``). Omit to allow any tier.
+
+    ToolCallResponse:
+      type: object
+      required: [provider, tool, payload, tier]
+      properties:
+        provider:
+          type: string
+          description: The configured tool provider name that handled the call.
+        tool:
+          type: string
+          description: The tool name that was invoked.
+        payload:
+          type: object
+          additionalProperties: true
+          description: |
+            The raw JSON payload returned by the tool adapter. Schema is
+            tool-specific; callers must handle the shape for the named tool.
+        tier:
+          type: integer
+          enum: [1, 2, 3, 4, 5]
+          description: The egress tier at which the tool call was routed.
 
     GatewayError:
       type: object
