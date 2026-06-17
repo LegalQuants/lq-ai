@@ -4820,7 +4820,21 @@ paths:
                     type: array
                     items:
                       type: object
-                      additionalProperties: true
+                      properties:
+                        citation: {type: string, nullable: true}
+                        normalized_citations:
+                          type: array
+                          items: {type: string}
+                        status: {type: integer, nullable: true}
+                        error_message: {type: string, nullable: true}
+                        clusters:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              id: {type: integer, nullable: true}
+                              case_name: {type: string, nullable: true}
+                              absolute_url: {type: string, nullable: true}
         '401':
           description: Not authenticated
           content:
@@ -4923,7 +4937,10 @@ paths:
                       required: [opinion_id, char_length]
                       properties:
                         opinion_id: {type: integer}
-                        text_field_used: {type: string, nullable: true}
+                        text_field_used:
+                          type: string
+                          nullable: true
+                          enum: [html_with_citations, html_columbia, html_lawbox, xml_harvard, html_anon_2020, html, plain_text]
                         char_length: {type: integer}
         '401':
           description: Not authenticated
@@ -4960,7 +4977,10 @@ paths:
                 properties:
                   opinion_id: {type: integer}
                   cluster_id: {type: integer}
-                  text_field_used: {type: string, nullable: true}
+                  text_field_used:
+                    type: string
+                    nullable: true
+                    enum: [html_with_citations, html_columbia, html_lawbox, xml_harvard, html_anon_2020, html, plain_text]
                   text: {type: string}
         '401':
           description: Not authenticated
