@@ -1,3 +1,5 @@
+from collections.abc import Iterator
+
 import httpx
 import pytest
 import respx
@@ -18,7 +20,7 @@ _CL_CONFIG_RESP = {"tool_providers": [{"name": "courtlistener-prod", "type": "co
 
 
 @pytest.fixture(autouse=True)
-def _prime_and_reset_provider_cache() -> None:
+def _prime_and_reset_provider_cache() -> Iterator[None]:
     """Prime the resolved-provider cache before each test so existing tests
     that call the tool path work without mocking /admin/v1/config, then reset
     it after so no state leaks between tests."""

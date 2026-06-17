@@ -294,6 +294,8 @@ async def test_openapi_paths_match_sketch() -> None:
     # /api/v1/autonomous/sessions/{session_id}/findings
     # Artifacts read-model (Donna #8) adds one new path:
     # /api/v1/autonomous/sessions/{session_id}/artifacts
+    # WS3b-follow adds one new path (123 -> 124):
+    # /api/v1/research/capabilities
     assert len(actual) == 124
 
 

@@ -15,7 +15,7 @@ the same fake_storage fixture pattern established in test_research_service.py.
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 
 import httpx
 import pytest
@@ -39,7 +39,7 @@ GW = "http://localhost:8001"  # default settings.lq_ai_gateway_url
 
 
 @pytest.fixture(autouse=True)
-def _prime_and_reset_provider_cache() -> None:
+def _prime_and_reset_provider_cache() -> Iterator[None]:
     """Prime the resolved-provider cache so existing tool-path tests don't
     need to mock GET /admin/v1/config, then reset after to prevent leaks."""
     research_service._resolved_provider = "courtlistener-prod"

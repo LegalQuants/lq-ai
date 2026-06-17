@@ -48,6 +48,10 @@ async def get_capabilities(*, request_id: str | None = None) -> dict[str, Any]:
 async def _resolve_provider(*, request_id: str | None = None) -> str:
     """Return the configured CourtListener provider name, caching after first call.
 
+    The resolved name is cached at process level after the first successful
+    call; a config change (e.g. renaming the provider in gateway.yaml) takes
+    effect only after an api restart or an explicit reset_provider_cache() call.
+
     Raises ResearchNotConfigured (503) when no courtlistener provider is wired
     in gateway.yaml.  In the rare window between get_capabilities returning
     enabled=True and this call executing, a provider that just disappeared
