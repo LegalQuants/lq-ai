@@ -4747,6 +4747,253 @@ paths:
         '422':
           description: Invalid target (need exactly one of playbook_id/skill_ref)
 
+  /api/v1/research/verify-citations:
+    post:
+      tags: [research]
+      summary: Verify citations found in a text block
+      description: |
+        WS3b. Passes the supplied text to the CourtListener gateway tool
+        ``verify_citations`` and returns the per-citation verification
+        results (HTTP status, matching cluster ids). Stateless — no DB
+        write. Requires an authenticated user (bearer token).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text:
+                  type: string
+                  minLength: 1
+                  maxLength: 64000
+      responses:
+        '200':
+          description: Citation verification results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  citations:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/v1/research/search:
+    post:
+      tags: [research]
+      summary: Search case law via CourtListener
+      description: |
+        WS3b. Proxies a full-text case-law search to the CourtListener
+        gateway tool ``search_case_law``. Returns a paginated result set
+        with case metadata. Stateless — no DB write. Requires an
+        authenticated user (bearer token).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [q]
+              properties:
+                q:
+                  type: string
+                  minLength: 1
+                court:
+                  type: string
+                  nullable: true
+                order_by:
+                  type: string
+                  nullable: true
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                    nullable: true
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  next_cursor:
+                    type: string
+                    nullable: true
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/v1/research/clusters/{cluster_id}:
+    get:
+      tags: [research]
+      summary: Fetch and cache a CourtListener opinion cluster
+      description: |
+        WS3b. Read-through cache: if the cluster is already in the DB
+        the cached metadata is returned immediately; otherwise the
+        gateway tool ``get_cases`` is called, the opinion plaintext is
+        stored in object storage, and the metadata is persisted in the
+        DB. Requires an authenticated user (bearer token).
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: cluster_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Cluster metadata with opinion list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cluster, opinions]
+                properties:
+                  cluster:
+                    type: object
+                    required: [cluster_id]
+                    properties:
+                      cluster_id: {type: integer}
+                      case_name: {type: string, nullable: true}
+                      court: {type: string, nullable: true}
+                      date_filed: {type: string, nullable: true}
+                      absolute_url: {type: string, nullable: true}
+                  opinions:
+                    type: array
+                    items:
+                      type: object
+                      required: [opinion_id, char_length]
+                      properties:
+                        opinion_id: {type: integer}
+                        text_field_used: {type: string, nullable: true}
+                        char_length: {type: integer}
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/v1/research/opinions/{opinion_id}:
+    get:
+      tags: [research]
+      summary: Read cached opinion plaintext
+      description: |
+        WS3b. Returns the full plaintext of a previously fetched opinion
+        from object storage. Returns 404 if the cluster containing this
+        opinion was never fetched (call
+        ``GET /api/v1/research/clusters/{cluster_id}`` first). Requires
+        an authenticated user (bearer token).
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: opinion_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Opinion plaintext
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [opinion_id, cluster_id, text]
+                properties:
+                  opinion_id: {type: integer}
+                  cluster_id: {type: integer}
+                  text_field_used: {type: string, nullable: true}
+                  text: {type: string}
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '404':
+          description: Opinion not yet fetched; call GET /clusters/{id} first
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/v1/research/find-in-case:
+    post:
+      tags: [research]
+      summary: Find keyword matches within a cached opinion
+      description: |
+        WS3b. Performs a case-insensitive substring search over the
+        cached plaintext of ``opinion_id``, returning up to
+        ``max_matches`` snippets with character positions. Returns 404
+        if the opinion was never fetched. Requires an authenticated
+        user (bearer token).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [opinion_id, query]
+              properties:
+                opinion_id:
+                  type: integer
+                query:
+                  type: string
+                  minLength: 1
+                max_matches:
+                  type: integer
+                  minimum: 1
+                  maximum: 10
+                  default: 3
+      responses:
+        '200':
+          description: Match snippets
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [opinion_id, matches]
+                properties:
+                  opinion_id: {type: integer}
+                  matches:
+                    type: array
+                    items:
+                      type: object
+                      required: [position, snippet]
+                      properties:
+                        position: {type: integer}
+                        snippet: {type: string}
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '404':
+          description: Opinion not yet fetched; call GET /clusters/{id} first
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
 # ============================================================
 # COMPONENTS
 # ============================================================

@@ -42,6 +42,7 @@ from app.api import (
     organization_profile,
     playbooks as playbooks_api,
     projects,
+    research,
     saved_prompts,
     skills,
     tabular,
@@ -128,5 +129,9 @@ api_router.include_router(tabular.router, dependencies=_active)
 # lives in the same module but on a separate ``public_router`` mounted
 # above without the ``_active`` gate.
 api_router.include_router(word_addin.admin_router, dependencies=_active)
+# WS3b — case-law research surface (verify-citations, search, clusters,
+# opinions, find-in-case). All five endpoints require an authenticated,
+# password-changed user; auth enforced via the _active dependency group.
+api_router.include_router(research.router, dependencies=_active)
 
 __all__ = ["api_router"]

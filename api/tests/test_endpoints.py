@@ -67,6 +67,9 @@ _PARAM_VALUES: dict[str, str] = {
     # M3-D4 — admin intake-bridges surface
     "workspace_id": _DUMMY_UUID,
     "tenant_id": _DUMMY_UUID,
+    # WS3b — research surface
+    "cluster_id": "1",
+    "opinion_id": "1",
 }
 
 
@@ -301,6 +304,12 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("POST", "/api/v1/autonomous/watches"),
     ("DELETE", "/api/v1/autonomous/watches/{watch_id}"),
     ("PATCH", "/api/v1/autonomous/watches/{watch_id}"),
+    # WS3b — case-law research surface
+    ("POST", "/api/v1/research/verify-citations"),
+    ("POST", "/api/v1/research/search"),
+    ("GET", "/api/v1/research/clusters/{cluster_id}"),
+    ("GET", "/api/v1/research/opinions/{opinion_id}"),
+    ("POST", "/api/v1/research/find-in-case"),
 }
 
 
