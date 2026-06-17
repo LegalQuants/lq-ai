@@ -117,3 +117,43 @@ async def test_tools_route_registered_on_app(gateway_app) -> None:
     paths = gateway_app.openapi()["paths"]
     assert "/v1/tools/{provider}/{tool}" in paths
     assert "post" in paths["/v1/tools/{provider}/{tool}"]
+
+
+# ---------------------------------------------------------------------------
+# user_token transport test (PR4a Task 5)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+async def test_tool_call_forwards_user_token_to_route_tool_call(monkeypatch) -> None:
+    """user_token in the JSON body is forwarded to Router.route_tool_call."""
+    captured: dict[str, object] = {}
+
+    async def _fake_route_tool_call(
+        provider_name: str,
+        tool: str,
+        args: dict[str, object],
+        *,
+        request_id: str,
+        max_allowed_tier: int | None = None,
+        user_token: str | None = None,
+    ) -> object:
+        captured["user_token"] = user_token
+        from app.router import ToolCallRoutedResult
+
+        return ToolCallRoutedResult(provider=provider_name, tool=tool, payload={"ok": True}, tier=2)
+
+    app, adapter = _make_app(monkeypatch)
+    app.state.router.route_tool_call = _fake_route_tool_call  # type: ignore[method-assign]
+
+    try:
+        async with _client(app) as c:
+            resp = await c.post(
+                "/v1/tools/echo-test/echo",
+                json={"args": {"q": "x"}, "user_token": "t"},
+            )
+    finally:
+        await adapter.aclose()
+
+    assert resp.status_code == 200
+    assert captured["user_token"] == "t"

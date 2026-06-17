@@ -741,6 +741,7 @@ class Router:
         *,
         request_id: str,
         max_allowed_tier: int | None = None,
+        user_token: str | None = None,
     ) -> ToolCallRoutedResult:
         """Govern + dispatch one tool call (ADR 0014 D2/D3/D4).
 
@@ -794,7 +795,9 @@ class Router:
             )
 
         try:
-            result: ToolResult = await adapter.invoke_tool(tool, args, request_id=request_id)
+            result: ToolResult = await adapter.invoke_tool(
+                tool, args, request_id=request_id, user_token=user_token
+            )
         except EgressRefused as exc:
             await self._tool_egress_log.write(
                 ToolEgressLogRow(

@@ -35,6 +35,8 @@ class ToolCallRequest(BaseModel):
 
     args: dict[str, Any] = Field(default_factory=dict)
     max_allowed_tier: int | None = Field(default=None, ge=1, le=5)
+    user_token: str | None = Field(default=None)
+    """Per-call OAuth token for ``auth: oauth`` MCP servers. Never logged."""
 
 
 def _router(request: Request) -> Router:
@@ -74,6 +76,7 @@ async def call_tool(
             body.args,
             request_id=request_id,
             max_allowed_tier=body.max_allowed_tier,
+            user_token=body.user_token,
         )
     except ToolEgressRefused as exc:
         return _error(403, "egress_refused", exc.reason)
