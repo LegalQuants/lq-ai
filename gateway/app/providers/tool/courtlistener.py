@@ -50,6 +50,16 @@ def _cursor_from(next_url: str | None) -> str | None:
     return cursor[0] if cursor else None
 
 
+def _select_opinion_text(opinion: dict[str, Any]) -> tuple[str | None, str | None]:
+    """Return (field_name, text) of the first non-empty opinion text field,
+    by CourtListener's documented reliability order."""
+    for field in _OPINION_TEXT_FIELDS:
+        value = opinion.get(field)
+        if isinstance(value, str) and value.strip():
+            return field, value
+    return None, None
+
+
 class CourtListenerToolAdapter(ToolProviderAdapter):
     def __init__(
         self,
@@ -245,7 +255,33 @@ class CourtListenerToolAdapter(ToolProviderAdapter):
         return self._result("search_case_law", payload, sent=params, received=data)
 
     async def _get_cases(self, args: dict[str, Any]) -> ToolResult:
-        raise NotImplementedError  # Task 5
+        cluster_id = args.get("cluster_id")
+        if not isinstance(cluster_id, int) or isinstance(cluster_id, bool):
+            raise ToolProviderInvalidRequestError(
+                "get_cases requires integer 'cluster_id'", upstream_status=400
+            )
+        cluster_resp = await self._request("GET", f"/clusters/{cluster_id}/")
+        cluster = cluster_resp.json()
+        opinions: list[dict[str, Any]] = []
+        for op_url in cluster.get("sub_opinions", []):
+            path = op_url.split("/api/rest/v4", 1)[-1] if "/api/rest/v4" in op_url else op_url
+            op_resp = await self._request("GET", path)
+            op = op_resp.json()
+            field, text = _select_opinion_text(op)
+            opinions.append({"id": op.get("id"), "text_field_used": field, "text": text})
+        payload = {
+            "cluster": {
+                "id": cluster.get("id"),
+                "case_name": cluster.get("case_name"),
+                "case_name_short": cluster.get("case_name_short"),
+                "date_filed": cluster.get("date_filed"),
+                "citations": cluster.get("citations"),
+                "court": cluster.get("court"),
+                "absolute_url": cluster.get("absolute_url"),
+            },
+            "opinions": opinions,
+        }
+        return self._result("get_cases", payload, sent={"cluster_id": cluster_id}, received=cluster)
 
     def _result(self, tool: str, payload: Any, *, sent: Any, received: Any) -> ToolResult:
         """Build a ToolResult with byte counts; mark public data verbatim."""

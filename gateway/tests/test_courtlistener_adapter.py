@@ -183,3 +183,44 @@ async def test_search_case_law_rejects_empty_query(monkeypatch) -> None:
             await adapter.invoke_tool("search_case_law", {"q": ""}, request_id="r1")
     finally:
         await adapter.aclose()
+
+
+@pytest.mark.unit
+async def test_get_cases_fetches_cluster_and_opinion_text(monkeypatch) -> None:
+    adapter = _adapter(monkeypatch)
+    cluster = {
+        "id": 2812209,
+        "case_name": "Obergefell v. Hodges",
+        "case_name_short": "Obergefell",
+        "date_filed": "2015-06-26",
+        "citations": [{"volume": 576, "reporter": "U.S.", "page": "644"}],
+        "court": "https://www.courtlistener.com/api/rest/v4/courts/scotus/",
+        "absolute_url": "/opinion/2812209/obergefell-v-hodges/",
+        "sub_opinions": ["https://www.courtlistener.com/api/rest/v4/opinions/3247759/"],
+    }
+    opinion = {"id": 3247759, "plain_text": "", "html_with_citations": "<p>Held: ...</p>"}
+    with respx.mock:
+        respx.get(f"{BASE}/clusters/2812209/").mock(return_value=httpx.Response(200, json=cluster))
+        respx.get(f"{BASE}/opinions/3247759/").mock(return_value=httpx.Response(200, json=opinion))
+        try:
+            result = await adapter.invoke_tool(
+                "get_cases", {"cluster_id": 2812209}, request_id="r1"
+            )
+        finally:
+            await adapter.aclose()
+    assert result.skip_anonymization is True
+    assert result.payload["cluster"]["case_name"] == "Obergefell v. Hodges"
+    op = result.payload["opinions"][0]
+    assert op["id"] == 3247759
+    assert op["text_field_used"] == "html_with_citations"
+    assert "Held:" in op["text"]
+
+
+@pytest.mark.unit
+async def test_get_cases_requires_integer_cluster_id(monkeypatch) -> None:
+    adapter = _adapter(monkeypatch)
+    try:
+        with pytest.raises(ToolProviderInvalidRequestError):
+            await adapter.invoke_tool("get_cases", {"cluster_id": "x"}, request_id="r1")
+    finally:
+        await adapter.aclose()
