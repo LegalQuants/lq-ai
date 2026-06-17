@@ -110,3 +110,10 @@ async def test_tool_call_requires_gateway_key_when_configured(monkeypatch) -> No
         await adapter.aclose()
     assert missing.status_code == 401
     assert ok.status_code == 200
+
+
+@pytest.mark.unit
+async def test_tools_route_registered_on_app(gateway_app) -> None:
+    paths = gateway_app.openapi()["paths"]
+    assert "/v1/tools/{provider}/{tool}" in paths
+    assert "post" in paths["/v1/tools/{provider}/{tool}"]

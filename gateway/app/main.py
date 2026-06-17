@@ -54,6 +54,7 @@ from fastapi.responses import JSONResponse
 from app import __version__
 from app.anonymization.engine import Anonymizer
 from app.api import admin_router, inference_router
+from app.api.tools import router as tools_router
 from app.clients.backend import (
     BackendClient,
     close_backend_client,
@@ -409,6 +410,7 @@ app = FastAPI(
 
 app.include_router(inference_router)
 app.include_router(admin_router)
+app.include_router(tools_router)
 
 # M-Obs.1 — Prometheus /metrics + OpenTelemetry (PRD §5.4). OTel is
 # off unless OTEL_EXPORTER_OTLP_ENDPOINT is set; that's the "no
