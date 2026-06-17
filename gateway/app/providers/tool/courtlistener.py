@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 
@@ -39,6 +40,14 @@ _OPINION_TEXT_FIELDS = (
     "html",
     "plain_text",
 )
+
+
+def _cursor_from(next_url: str | None) -> str | None:
+    """Extract the opaque ``cursor`` value from a CourtListener ``next`` URL."""
+    if not next_url:
+        return None
+    cursor = parse_qs(urlparse(next_url).query).get("cursor")
+    return cursor[0] if cursor else None
 
 
 class CourtListenerToolAdapter(ToolProviderAdapter):
@@ -204,7 +213,36 @@ class CourtListenerToolAdapter(ToolProviderAdapter):
         return self._result("verify_citations", {"citations": citations}, sent=body, received=data)
 
     async def _search_case_law(self, args: dict[str, Any]) -> ToolResult:
-        raise NotImplementedError  # Task 4
+        q = args.get("q")
+        if not isinstance(q, str) or not q.strip():
+            raise ToolProviderInvalidRequestError(
+                "search_case_law requires non-empty 'q'", upstream_status=400
+            )
+        params: dict[str, Any] = {"q": q, "type": "o"}
+        if isinstance(args.get("court"), str):
+            params["court"] = args["court"]
+        if isinstance(args.get("order_by"), str):
+            params["order_by"] = args["order_by"]
+        resp = await self._request("GET", "/search/", params=params)
+        data = resp.json()
+        results = [
+            {
+                "cluster_id": r.get("cluster_id"),
+                "case_name": r.get("caseName"),
+                "court": r.get("court"),
+                "date_filed": r.get("dateFiled"),
+                "citation": r.get("citation"),
+                "absolute_url": r.get("absolute_url"),
+                "snippet": r.get("snippet"),
+            }
+            for r in data.get("results", [])
+        ]
+        payload = {
+            "count": data.get("count"),
+            "results": results,
+            "next_cursor": _cursor_from(data.get("next")),
+        }
+        return self._result("search_case_law", payload, sent=params, received=data)
 
     async def _get_cases(self, args: dict[str, Any]) -> ToolResult:
         raise NotImplementedError  # Task 5

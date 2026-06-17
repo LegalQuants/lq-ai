@@ -140,3 +140,46 @@ async def test_verify_citations_rejects_empty_text(monkeypatch) -> None:
             await adapter.invoke_tool("verify_citations", {"text": "  "}, request_id="r1")
     finally:
         await adapter.aclose()
+
+
+@pytest.mark.unit
+async def test_search_case_law_returns_count_and_results(monkeypatch) -> None:
+    adapter = _adapter(monkeypatch)
+    api_resp = {
+        "count": 2,
+        "next": "https://www.courtlistener.com/api/rest/v4/search/?cursor=abc&q=privacy",
+        "previous": None,
+        "results": [
+            {
+                "cluster_id": 111,
+                "caseName": "Roe v. Wade",
+                "court": "Supreme Court",
+                "dateFiled": "1973-01-22",
+                "citation": ["410 U.S. 113"],
+                "absolute_url": "/opinion/111/roe-v-wade/",
+                "snippet": "...privacy...",
+            }
+        ],
+    }
+    with respx.mock:
+        route = respx.get(f"{BASE}/search/").mock(return_value=httpx.Response(200, json=api_resp))
+        try:
+            result = await adapter.invoke_tool("search_case_law", {"q": "privacy"}, request_id="r1")
+        finally:
+            await adapter.aclose()
+    assert route.calls.last.request.url.params["type"] == "o"
+    assert route.calls.last.request.url.params["q"] == "privacy"
+    assert result.payload["count"] == 2
+    assert result.payload["results"][0]["cluster_id"] == 111
+    assert result.payload["results"][0]["case_name"] == "Roe v. Wade"
+    assert result.payload["next_cursor"] == "abc"
+
+
+@pytest.mark.unit
+async def test_search_case_law_rejects_empty_query(monkeypatch) -> None:
+    adapter = _adapter(monkeypatch)
+    try:
+        with pytest.raises(ToolProviderInvalidRequestError):
+            await adapter.invoke_tool("search_case_law", {"q": ""}, request_id="r1")
+    finally:
+        await adapter.aclose()
