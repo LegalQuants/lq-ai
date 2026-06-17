@@ -684,6 +684,57 @@ class GatewayClient:
                 details={"status_code": response.status_code},
             ) from exc
 
+    # --- Tool-provider dispatch (PR3a ADR 0014) ------------------------------
+
+    async def call_tool(
+        self,
+        provider: str,
+        tool: str,
+        args: dict[str, Any],
+        *,
+        max_allowed_tier: int | None = None,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        """POST /v1/tools/{provider}/{tool} on the gateway (ADR 0014 transport).
+
+        Returns the gateway's ``{provider, tool, payload, tier}`` dict. Errors
+        translate exactly like ``list_models``: timeout -> GatewayTimeout,
+        transport -> GatewayUnreachable, structured 4xx -> mapped LQAIError."""
+        headers = self._build_headers(request_id=request_id)
+        body: dict[str, Any] = {"args": args}
+        if max_allowed_tier is not None:
+            body["max_allowed_tier"] = max_allowed_tier
+        op = f"call_tool:{provider}/{tool}"
+        try:
+            response = await self._client.post(
+                f"/v1/tools/{provider}/{tool}", json=body, headers=headers
+            )
+        except httpx.TimeoutException as exc:
+            raise GatewayTimeout(
+                "Gateway did not respond within the configured timeout",
+                details={"timeout_seconds": self._timeout},
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise GatewayUnreachable(
+                "Could not reach the Inference Gateway",
+                details={"transport_error": type(exc).__name__},
+            ) from exc
+        if response.status_code >= 400:
+            self._raise_for_gateway_error(
+                status_code=response.status_code,
+                body_bytes=response.content,
+                op=op,
+                request_id=request_id,
+            )
+        try:
+            payload: dict[str, Any] = response.json()
+            return payload
+        except json.JSONDecodeError as exc:
+            raise GatewayInvalidResponse(
+                "Gateway call_tool returned a non-JSON success response",
+                details={"status_code": response.status_code},
+            ) from exc
+
     # --- Admin: alias CRUD (D0.5) -------------------------------------------
 
     async def list_aliases(
