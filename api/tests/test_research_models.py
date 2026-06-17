@@ -15,13 +15,17 @@ Also covers schema-layer typing added in WS3b-follow (Donna asks 2 & 3):
 
 from __future__ import annotations
 
+from typing import get_args
+
 import pytest
+from pydantic import ValidationError
 
 from app.models.research import ResearchClusterMetadata, ResearchOpinionMetadata
 from app.schemas.research import (
     CitationCluster,
     OpinionMeta,
     OpinionText,
+    OpinionTextField,
     VerifiedCitation,
     VerifyCitationsResponse,
 )
@@ -128,15 +132,7 @@ def test_verify_citations_response_empty_default() -> None:
 # OpinionTextField Literal (Donna ask #3)
 # ---------------------------------------------------------------------------
 
-_ALL_TEXT_FIELDS = [
-    "html_with_citations",
-    "html_columbia",
-    "html_lawbox",
-    "xml_harvard",
-    "html_anon_2020",
-    "html",
-    "plain_text",
-]
+_ALL_TEXT_FIELDS = list(get_args(OpinionTextField))
 
 
 @pytest.mark.parametrize("field", _ALL_TEXT_FIELDS)
@@ -167,7 +163,11 @@ def test_opinion_text_text_field_used_none() -> None:
 
 def test_opinion_meta_rejects_invalid_text_field() -> None:
     """OpinionMeta rejects values outside the closed Literal set."""
-    import pydantic
-
-    with pytest.raises(pydantic.ValidationError):
+    with pytest.raises(ValidationError):
         OpinionMeta(opinion_id=1, char_length=0, text_field_used="raw_text")
+
+
+def test_opinion_text_rejects_invalid_text_field() -> None:
+    """OpinionText rejects values outside the closed Literal set."""
+    with pytest.raises(ValidationError):
+        OpinionText(opinion_id=1, cluster_id=2, text_field_used="raw_text", text="x")
