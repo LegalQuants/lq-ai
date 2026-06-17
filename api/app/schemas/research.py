@@ -2,9 +2,22 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+# Closed set of opinion text fields, in the adapter's preference order.
+# MUST stay in sync with _OPINION_TEXT_FIELDS in
+# gateway/app/providers/tool/courtlistener.py.
+OpinionTextField = Literal[
+    "html_with_citations",
+    "html_columbia",
+    "html_lawbox",
+    "xml_harvard",
+    "html_anon_2020",
+    "html",
+    "plain_text",
+]
 
 
 class VerifyCitationsRequest(BaseModel):
@@ -12,8 +25,22 @@ class VerifyCitationsRequest(BaseModel):
     text: str = Field(min_length=1, max_length=64000)
 
 
+class CitationCluster(BaseModel):
+    id: int | None = None
+    case_name: str | None = None
+    absolute_url: str | None = None
+
+
+class VerifiedCitation(BaseModel):
+    citation: str | None = None
+    normalized_citations: list[str] = Field(default_factory=list)
+    status: int | None = None
+    error_message: str | None = None
+    clusters: list[CitationCluster] = Field(default_factory=list)
+
+
 class VerifyCitationsResponse(BaseModel):
-    citations: list[dict[str, Any]] = Field(default_factory=list)
+    citations: list[VerifiedCitation] = Field(default_factory=list)
 
 
 class SearchRequest(BaseModel):
@@ -49,7 +76,7 @@ class ClusterMeta(BaseModel):
 
 class OpinionMeta(BaseModel):
     opinion_id: int
-    text_field_used: str | None = None
+    text_field_used: OpinionTextField | None = None
     char_length: int
 
 
@@ -61,7 +88,7 @@ class ClusterView(BaseModel):
 class OpinionText(BaseModel):
     opinion_id: int
     cluster_id: int
-    text_field_used: str | None = None
+    text_field_used: OpinionTextField | None = None
     text: str
 
 
