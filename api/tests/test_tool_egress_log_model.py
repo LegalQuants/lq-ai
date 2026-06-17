@@ -18,8 +18,11 @@ async def test_tool_egress_log_allows_tier_zero_for_unresolved_provider(db_sessi
     """tier=0 (unknown-provider refusal) must persist — the prod writer
     relies on this so unresolved-provider refusals are actually audited."""
     row = ToolEgressLog(
-        provider="missing", tool="echo", tier=0,
-        refused=True, refusal_reason="unknown tool provider",
+        provider="missing",
+        tool="echo",
+        tier=0,
+        refused=True,
+        refusal_reason="unknown tool provider",
     )
     db_session.add(row)
     await db_session.flush()
