@@ -1149,6 +1149,38 @@ CREATE INDEX ix_tool_egress_log_timestamp ON tool_egress_log(timestamp);
 
 ---
 
+### `research_cluster_metadata` + `research_opinion_metadata` (WS3b)
+
+Read-through metadata cache for CourtListener case law. One row per fetched cluster (case) and one row per fetched opinion. Opinion full-text BODIES live in object storage, referenced by `storage_path`; only metadata is stored in the DB. Introduced by migration `0049_research_metadata.py`.
+
+**`research_cluster_metadata`**
+
+| Column         | Type        | Nullable | Default   | Notes                                    |
+|----------------|-------------|----------|-----------|------------------------------------------|
+| `cluster_id`   | BIGINT      | NO       |           | Primary key; CourtListener cluster ID    |
+| `case_name`    | TEXT        | YES      |           | Case name (e.g. "Obergefell v. Hodges")  |
+| `court`        | TEXT        | YES      |           | Court slug (e.g. `scotus`)               |
+| `date_filed`   | TEXT        | YES      |           | ISO date string from CourtListener       |
+| `absolute_url` | TEXT        | YES      |           | Relative URL on CourtListener            |
+| `cached_at`    | TIMESTAMPTZ | NO       | `now()`   | When this row was fetched and cached     |
+
+**`research_opinion_metadata`**
+
+| Column            | Type        | Nullable | Default   | Notes                                                      |
+|-------------------|-------------|----------|-----------|------------------------------------------------------------|
+| `opinion_id`      | BIGINT      | NO       |           | Primary key; CourtListener opinion ID                      |
+| `cluster_id`      | BIGINT      | NO       |           | FK-by-convention to `research_cluster_metadata.cluster_id` |
+| `text_field_used` | TEXT        | YES      |           | Which CourtListener field supplied the text                |
+| `storage_path`    | TEXT        | NO       |           | Object-storage key for the opinion body (never in DB)      |
+| `char_length`     | INTEGER     | NO       |           | Character count of stored body; used for quota checks      |
+| `cached_at`       | TIMESTAMPTZ | NO       | `now()`   | When this row was fetched and cached                       |
+
+```sql
+CREATE INDEX ix_research_opinion_metadata_cluster_id ON research_opinion_metadata(cluster_id);
+```
+
+---
+
 ## Playbooks (per [PRD §3.7](PRD.md#37-playbooks), M3-A1)
 
 Substrate for the Playbook engine landing in M3. A playbook codifies an
