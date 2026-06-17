@@ -139,3 +139,71 @@ async def test_validate_base_url_rejects_non_allowlisted(monkeypatch: pytest.Mon
     a = MCPToolProviderAdapter.from_config(bad)
     with pytest.raises(EgressRefused):
         a.validate_base_url()
+
+
+# ---------------------------------------------------------------------------
+# Auth header tests (cover MCPToolProviderAdapter._headers branches)
+# ---------------------------------------------------------------------------
+
+
+def _capturing_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    auth: str,
+    api_key: str | None = None,
+) -> tuple[MCPToolProviderAdapter, dict]:
+    """Build an adapter whose session factory captures the headers it receives."""
+    from app.providers.tool import egress
+
+    monkeypatch.setattr(egress, "_resolve_ips", lambda host: ["93.184.216.34"])
+    captured: dict = {}
+
+    @asynccontextmanager
+    async def factory(url: str, headers: object):  # type: ignore[misc]
+        captured["headers"] = headers
+        yield _FakeSession(tools=[])
+
+    a = MCPToolProviderAdapter(
+        name="acme-mcp",
+        server_url="https://mcp.acme.example/sse",
+        auth=auth,
+        api_key=api_key,
+        allowlist=["mcp.acme.example"],
+        session_factory=factory,
+    )
+    return a, captured
+
+
+@pytest.mark.unit
+async def test_oauth_without_user_token_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """oauth auth with no user_token must raise ToolProviderError with the right code."""
+    from app.providers.tool.base import ToolProviderError
+
+    adapter, _ = _capturing_adapter(monkeypatch, auth="oauth")
+    with pytest.raises(ToolProviderError) as exc_info:
+        await adapter.list_tools()
+    assert exc_info.value.details["code"] == "mcp_authorization_required"
+
+
+@pytest.mark.unit
+async def test_oauth_with_user_token_sets_bearer_header(monkeypatch: pytest.MonkeyPatch) -> None:
+    """oauth auth with a user_token must forward it as a Bearer Authorization header."""
+    adapter, captured = _capturing_adapter(monkeypatch, auth="oauth")
+    await adapter.list_tools(user_token="user-tok")
+    assert captured["headers"] == {"Authorization": "Bearer user-tok"}
+
+
+@pytest.mark.unit
+async def test_bearer_auth_sets_operator_key_header(monkeypatch: pytest.MonkeyPatch) -> None:
+    """bearer auth must inject the operator api_key as a Bearer Authorization header."""
+    adapter, captured = _capturing_adapter(monkeypatch, auth="bearer", api_key="op-secret")
+    await adapter.list_tools()
+    assert captured["headers"] == {"Authorization": "Bearer op-secret"}
+
+
+@pytest.mark.unit
+async def test_none_auth_sends_no_auth_header(monkeypatch: pytest.MonkeyPatch) -> None:
+    """auth=none must pass None as headers (no Authorization header sent)."""
+    adapter, captured = _capturing_adapter(monkeypatch, auth="none")
+    await adapter.list_tools()
+    assert captured["headers"] is None
