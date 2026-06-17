@@ -224,3 +224,39 @@ async def test_get_cases_requires_integer_cluster_id(monkeypatch) -> None:
             await adapter.invoke_tool("get_cases", {"cluster_id": "x"}, request_id="r1")
     finally:
         await adapter.aclose()
+
+
+@pytest.mark.unit
+async def test_courtlistener_through_router_writes_audit(monkeypatch) -> None:
+    from app.config import GatewayConfig
+    from app.router import Router
+    from app.tool_egress_log import RecordingToolEgressLogWriter
+
+    monkeypatch.setenv("COURTLISTENER_API_TOKEN", "test-token-123")
+    monkeypatch.setattr("app.providers.tool.egress._resolve_ips", lambda host: ["93.184.216.34"])
+    cfg = GatewayConfig.model_validate({"tool_providers": [_cfg().model_dump()]})
+    adapter = CourtListenerToolAdapter.from_config(cfg.tool_providers[0])
+    writer = RecordingToolEgressLogWriter()
+    router = Router(
+        config=cfg,
+        adapters={},
+        tool_adapters={"courtlistener-prod": adapter},
+        tool_egress_log=writer,
+    )
+    with respx.mock:
+        respx.get(f"{BASE}/search/").mock(
+            return_value=httpx.Response(200, json={"count": 0, "next": None, "results": []})
+        )
+        try:
+            res = await router.route_tool_call(
+                "courtlistener-prod",
+                "search_case_law",
+                {"q": "x"},
+                request_id="r1",
+                max_allowed_tier=4,
+            )
+        finally:
+            await adapter.aclose()
+    assert res.payload["count"] == 0
+    assert writer.rows[-1].refused is False
+    assert writer.rows[-1].bytes_in is not None

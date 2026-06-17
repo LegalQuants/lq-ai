@@ -206,7 +206,7 @@ providers:
 #
 # tool_providers:
 #   - name: courtlistener-prod
-#     type: courtlistener          # PR2 (not yet shipped); `echo` is the test type
+#     type: courtlistener          # courtlistener type is shipped (WS3a); uncomment + set COURTLISTENER_API_TOKEN to enable
 #     base_url: https://www.courtlistener.com/api/rest/v4
 #     api_key_env: COURTLISTENER_API_TOKEN   # OR api_key_encrypted (ADR 0011)
 #     egress_tier: 4               # data-egress tier (ADR 0014 D4)
