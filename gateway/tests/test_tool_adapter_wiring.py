@@ -75,3 +75,30 @@ def test_build_tool_adapter_disabled_returns_none() -> None:
         }
     )
     assert build_tool_adapter(cfg.tool_providers[0]) is None
+
+
+@pytest.mark.unit
+def test_build_tool_adapter_courtlistener(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.providers.tool.courtlistener import CourtListenerToolAdapter
+
+    monkeypatch.setenv("COURTLISTENER_API_TOKEN", "test-token-123")
+    monkeypatch.setattr(
+        "app.providers.tool.egress._resolve_ips",
+        lambda host: ["93.184.216.34"],
+    )
+    cfg = GatewayConfig.model_validate(
+        {
+            "tool_providers": [
+                {
+                    "name": "cl",
+                    "type": "courtlistener",
+                    "base_url": "https://www.courtlistener.com/api/rest/v4",
+                    "api_key_env": "COURTLISTENER_API_TOKEN",
+                    "egress_tier": 4,
+                    "allowlist": {"hosts": ["www.courtlistener.com"]},
+                }
+            ]
+        }
+    )
+    adapter = build_tool_adapter(cfg.tool_providers[0])
+    assert isinstance(adapter, CourtListenerToolAdapter)

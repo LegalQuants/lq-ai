@@ -73,6 +73,7 @@ from app.providers import (
     ProviderAdapter,
 )
 from app.providers.tool.base import ToolProviderAdapter
+from app.providers.tool.courtlistener import CourtListenerToolAdapter
 from app.providers.tool.echo import EchoToolAdapter
 from app.router import Router
 from app.routing_log import NullRoutingLogWriter, RoutingLogWriter, SQLRoutingLogWriter
@@ -155,7 +156,11 @@ def build_tool_adapter(provider: ToolProviderConfig) -> ToolProviderAdapter | No
         adapter = EchoToolAdapter.from_config(provider)
         adapter.validate_base_url()
         return adapter
-    # courtlistener (PR2), mcp (PR4) land later.
+    if provider.type == "courtlistener":
+        cl_adapter = CourtListenerToolAdapter.from_config(provider)
+        cl_adapter.validate_base_url()
+        return cl_adapter
+    # mcp (PR4) lands later.
     return None
 
 
