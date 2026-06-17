@@ -1,0 +1,77 @@
+"""Unit tests for the ``build_tool_adapter`` factory in ``app.main``.
+
+Verifies:
+* echo provider → ``EchoToolAdapter`` instance.
+* base_url outside the allowlist → ``EgressRefused`` at build time.
+* disabled provider → ``None`` (no adapter built).
+"""
+
+import pytest
+
+from app.config import GatewayConfig
+from app.main import build_tool_adapter
+from app.providers.tool.echo import EchoToolAdapter
+from app.providers.tool.egress import EgressRefused
+
+
+@pytest.mark.unit
+def test_build_tool_adapter_echo(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Stub DNS resolution so this unit test works offline / in CI without a
+    # live DNS lookup for the synthetic ``example.test`` domain.
+    monkeypatch.setattr(
+        "app.providers.tool.egress._resolve_ips",
+        lambda host: ["93.184.216.34"],
+    )
+    cfg = GatewayConfig.model_validate(
+        {
+            "tool_providers": [
+                {
+                    "name": "echo-test",
+                    "type": "echo",
+                    "base_url": "https://example.test",
+                    "egress_tier": 4,
+                    "allowlist": {"hosts": ["example.test"]},
+                }
+            ]
+        }
+    )
+    adapter = build_tool_adapter(cfg.tool_providers[0])
+    assert isinstance(adapter, EchoToolAdapter)
+
+
+@pytest.mark.unit
+def test_build_tool_adapter_rejects_base_url_outside_allowlist() -> None:
+    cfg = GatewayConfig.model_validate(
+        {
+            "tool_providers": [
+                {
+                    "name": "bad",
+                    "type": "echo",
+                    "base_url": "https://evil.test",
+                    "egress_tier": 4,
+                    "allowlist": {"hosts": ["example.test"]},
+                }
+            ]
+        }
+    )
+    with pytest.raises(EgressRefused):
+        build_tool_adapter(cfg.tool_providers[0])
+
+
+@pytest.mark.unit
+def test_build_tool_adapter_disabled_returns_none() -> None:
+    cfg = GatewayConfig.model_validate(
+        {
+            "tool_providers": [
+                {
+                    "name": "off",
+                    "type": "echo",
+                    "enabled": False,
+                    "base_url": "https://example.test",
+                    "egress_tier": 4,
+                    "allowlist": {"hosts": ["example.test"]},
+                }
+            ]
+        }
+    )
+    assert build_tool_adapter(cfg.tool_providers[0]) is None

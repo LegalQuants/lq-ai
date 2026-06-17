@@ -144,6 +144,71 @@ class ProviderConfig(BaseModel):
         return self
 
 
+# --- Tool / data-source providers (ADR 0014) ---------------------------------
+
+
+ToolProviderType = Literal["echo", "courtlistener", "mcp"]
+"""Tool-provider family. ``echo`` is the test/proof type (PR1); ``courtlistener``
+and ``mcp`` land in later PRs."""
+
+
+class EgressAllowlistConfig(BaseModel):
+    """Per-provider outbound host allowlist (the SSRF guard's allow set)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    hosts: list[str] = Field(min_length=1)
+    """Non-empty list of exact hostnames the provider may egress to. An empty
+    allowlist is a misconfiguration, not 'allow all' — reject at config load."""
+
+
+class ToolProviderRateLimitConfig(BaseModel):
+    """Per-provider rate limit, enforced at the adapter (ADR 0014).
+
+    NOT the gateway's global ``rate_limits`` (whose enforcement middleware is
+    unwired). This is a self-contained per-provider limit applied by
+    ``Router.route_tool_call`` before each outbound call."""
+
+    model_config = ConfigDict(extra="allow")
+
+    requests_per_minute: int = Field(default=60, ge=1)
+
+
+class ToolProviderConfig(BaseModel):
+    """One entry under ``tool_providers:`` (ADR 0014 D1).
+
+    Sibling of :class:`ProviderConfig`, not a subclass — a tool provider is
+    invoked via ``invoke_tool``, not ``chat_completion``. Reuses the same two
+    API-key sourcing paths as inference providers (ADR 0011)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    name: str = Field(min_length=1)
+    type: ToolProviderType
+    base_url: str = Field(min_length=1)
+    api_key_env: str | None = None
+    api_key_encrypted: str | None = None
+    egress_tier: InferenceTier
+    """Data-egress tier (ADR 0014 D4). The gateway refuses a call whose
+    matter/skill ceiling is more restrictive (a lower tier number) than this
+    provider's egress_tier."""
+    allowlist: EgressAllowlistConfig
+    rate_limit: ToolProviderRateLimitConfig = Field(default_factory=ToolProviderRateLimitConfig)
+    anonymize_outbound: bool = True
+    """Default True per ADR 0014 D5. NOTE: PR1 parses but does not yet apply
+    the transform (no matter context exists); enforcement lands in WS3/WS4."""
+    enabled: bool = True
+
+    @model_validator(mode="after")
+    def _exactly_one_key_source(self) -> ToolProviderConfig:
+        if self.api_key_env and self.api_key_encrypted:
+            raise ValueError(
+                f"Tool provider {self.name!r}: set either api_key_env OR "
+                f"api_key_encrypted, not both."
+            )
+        return self
+
+
 # --- Model aliases ------------------------------------------------------------
 
 
@@ -435,6 +500,7 @@ class GatewayConfig(BaseModel):
     server: ServerConfig = Field(default_factory=ServerConfig)
     gateway_auth: GatewayAuthConfig = Field(default_factory=GatewayAuthConfig)
     providers: list[ProviderConfig] = Field(default_factory=list)
+    tool_providers: list[ToolProviderConfig] = Field(default_factory=list)
     model_aliases: dict[str, ModelAliasConfig] = Field(default_factory=dict)
     inference_tiers: InferenceTiersConfig = Field(default_factory=InferenceTiersConfig)
     tier_policy: TierPolicyConfig = Field(default_factory=TierPolicyConfig)
@@ -538,6 +604,13 @@ class GatewayConfig(BaseModel):
         """
 
         for provider in self.providers:
+            if provider.name == name:
+                return provider
+        return None
+
+    def tool_provider_by_name(self, name: str) -> ToolProviderConfig | None:
+        """Look up a configured tool provider by name; ``None`` if not found."""
+        for provider in self.tool_providers:
             if provider.name == name:
                 return provider
         return None

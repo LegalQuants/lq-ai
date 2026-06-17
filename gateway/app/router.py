@@ -69,6 +69,14 @@ from app.providers import (
     ProviderHTTPError,
     ProviderNetworkError,
 )
+from app.providers.tool.base import ToolProviderAdapter, ToolResult
+from app.providers.tool.egress import EgressRefused
+from app.providers.tool.ratelimit import FixedWindowRateLimiter, RateLimited
+from app.tool_egress_log import (
+    NullToolEgressLogWriter,
+    ToolEgressLogRow,
+    ToolEgressLogWriter,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +138,25 @@ class NoAdapterAvailableError(Exception):
         super().__init__(message)
         self.message = message
         self.last_error = last_error
+
+
+class ToolEgressRefused(Exception):
+    """Raised when a tool call is refused (unknown provider, tier ceiling,
+    rate limit, or SSRF policy). Always paired with an audited refusal row."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+@dataclass(frozen=True)
+class ToolCallRoutedResult:
+    """The router's return value for a governed tool-call dispatch (ADR 0014)."""
+
+    provider: str
+    tool: str
+    payload: object
+    tier: int
 
 
 # --- Resolution data --------------------------------------------------------
@@ -563,6 +590,9 @@ class Router:
         config: GatewayConfig,
         adapters: dict[str, ProviderAdapter],
         config_provider: Callable[[], GatewayConfig] | None = None,
+        tool_adapters: dict[str, ToolProviderAdapter] | None = None,
+        tool_egress_log: ToolEgressLogWriter | None = None,
+        tool_rate_limiter: FixedWindowRateLimiter | None = None,
     ) -> None:
         self._config = config
         self._adapters = adapters
@@ -574,6 +604,18 @@ class Router:
         # without rebuilding the Router. Tests that don't wire the
         # holder still work — the static ``config`` is the fallback.
         self._config_provider = config_provider
+        # ADR 0014 tool-egress additions (keyword-only, defaulted so
+        # existing Router(...) call sites are untouched):
+        self._tool_adapters: dict[str, ToolProviderAdapter] = tool_adapters or {}
+        self._tool_egress_log: ToolEgressLogWriter = tool_egress_log or NullToolEgressLogWriter()
+        if tool_rate_limiter is not None:
+            self._tool_rate_limiter: FixedWindowRateLimiter = tool_rate_limiter
+        else:
+            max_rpm = max(
+                (tp.rate_limit.requests_per_minute for tp in config.tool_providers),
+                default=60,
+            )
+            self._tool_rate_limiter = FixedWindowRateLimiter(requests_per_minute=max_rpm)
 
     @property
     def config(self) -> GatewayConfig:
@@ -689,6 +731,100 @@ class Router:
         raise NoAdapterAvailableError(
             f"no adapter available for model {request.model!r}; tried "
             f"{[t.provider.name for t in candidates]}",
+        )
+
+    async def route_tool_call(
+        self,
+        provider_name: str,
+        tool: str,
+        args: dict[str, object],
+        *,
+        request_id: str,
+        max_allowed_tier: int | None = None,
+    ) -> ToolCallRoutedResult:
+        """Govern + dispatch one tool call (ADR 0014 D2/D3/D4).
+
+        Order: resolve provider -> rate limit -> egress-tier ceiling ->
+        adapter invoke (which validates SSRF) -> write audit row. Every
+        refusal writes a ``refused=True`` row before raising.
+        """
+        provider = self.config.tool_provider_by_name(provider_name)
+        adapter = self._tool_adapters.get(provider_name)
+        if provider is None or adapter is None:
+            await self._tool_egress_log.write(
+                ToolEgressLogRow(
+                    provider=provider_name,
+                    tool=tool,
+                    tier=0,
+                    refused=True,
+                    refusal_reason="unknown tool provider",
+                    request_id=request_id,
+                )
+            )
+            raise ToolEgressRefused(f"unknown tool provider {provider_name!r}")
+
+        try:
+            self._tool_rate_limiter.check(provider_name)
+        except RateLimited as exc:
+            await self._tool_egress_log.write(
+                ToolEgressLogRow(
+                    provider=provider_name,
+                    tool=tool,
+                    tier=provider.egress_tier,
+                    refused=True,
+                    refusal_reason="rate limit exceeded",
+                    request_id=request_id,
+                )
+            )
+            raise ToolEgressRefused(str(exc)) from exc
+
+        if max_allowed_tier is not None and provider.egress_tier > max_allowed_tier:
+            await self._tool_egress_log.write(
+                ToolEgressLogRow(
+                    provider=provider_name,
+                    tool=tool,
+                    tier=provider.egress_tier,
+                    refused=True,
+                    refusal_reason="egress_tier exceeds policy ceiling",
+                    request_id=request_id,
+                )
+            )
+            raise ToolEgressRefused(
+                f"egress_tier {provider.egress_tier} exceeds ceiling {max_allowed_tier}"
+            )
+
+        try:
+            result: ToolResult = await adapter.invoke_tool(tool, args, request_id=request_id)
+        except EgressRefused as exc:
+            await self._tool_egress_log.write(
+                ToolEgressLogRow(
+                    provider=provider_name,
+                    tool=tool,
+                    tier=provider.egress_tier,
+                    refused=True,
+                    refusal_reason=f"ssrf: {exc.reason}",
+                    request_id=request_id,
+                )
+            )
+            raise ToolEgressRefused(f"egress refused: {exc.reason}") from exc
+
+        await self._tool_egress_log.write(
+            ToolEgressLogRow(
+                provider=provider_name,
+                tool=tool,
+                tier=provider.egress_tier,
+                bytes_out=result.bytes_out,
+                bytes_in=result.bytes_in,
+                anonymization_applied=False,
+                refused=False,
+                request_id=request_id,
+            )
+        )
+        return ToolCallRoutedResult(
+            provider=provider_name,
+            tool=tool,
+            payload=result.payload,
+            tier=provider.egress_tier,
         )
 
 

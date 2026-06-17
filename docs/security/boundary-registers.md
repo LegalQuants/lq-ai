@@ -222,6 +222,41 @@ It is named here so a reader doesn't conflate the two boundaries: a deployment c
 
 ---
 
+## Gateway boundary — tool / data-source egress (ADR 0014)
+
+This boundary is **orthogonal to R1–R6** (which restrain the model) and to the Inference Choice Spectrum (which restrains where inference data flows). It restrains *outbound calls the gateway makes on behalf of a skill or user to third-party data sources* — case-law APIs, MCP servers, and similar.
+
+**What it guards.** Any HTTP egress the gateway brokers to a tool provider: case-law retrieval (CourtListener, etc.), MCP server calls, future data-source adapters. These calls carry query terms derived from the user's matter; each is an egress vector that must be allowlisted, tier-tagged, rate-limited, and audited independently of the inference path.
+
+**Controls.**
+
+- **HTTPS-only.** Non-TLS outbound requests are refused at the adapter layer; no plaintext egress.
+- **DNS private/loopback/link-local block.** SSRF guard: the adapter resolves the configured `base_url` and rejects results that resolve to RFC-1918, loopback, or link-local addresses before any connection is attempted.
+- **Per-provider host allowlist.** Each `tool_providers:` entry declares `allowlist.hosts`; the adapter checks the resolved host against the exact allowlist before dispatch. A call whose resolved host is not in the allowlist is refused with a structured error.
+- **No caller `Host` override.** The gateway sets the `Host` header from the configured `base_url`; callers cannot substitute a different host through request parameters.
+- **Outbound header validation (denylist: rejects caller-supplied `Host` override and smuggled gateway-auth headers; full enforcement wired in WS3 when real adapters egress).**
+- **Egress-tier ceiling.** Each provider carries `egress_tier`. If the provider's egress_tier exceeds the matter's or skill's allowed ceiling, the request is refused with a tier-mismatch error — the same enforcement pattern as the inference-tier floor (R2, above).
+- **Per-provider rate limit.** Each entry declares `rate_limit.requests_per_minute`; the adapter enforces it. Requests over the limit return a structured rate-limit error rather than being forwarded.
+
+**Audit surface.** Every dispatched (and refused) tool-provider call is written to `tool_egress_log`: provider name, egress tier, timestamp, and status. Counts and types are logged; raw request/response payloads are never written to the log (anonymize_outbound default: true).
+
+**Current implementation state.** PARTIAL — `tool_providers:` schema and config loading shipped (ADR 0014 D1/D2); `echo` adapter ships as the test type. CourtListener adapter (D3), MCP server adapter (WS3/WS4), and the `tool_egress_log` table (D4) are tracked by the ADR 0014 work plan.
+
+**Reference.** ADR 0014 (`docs/adr/0014-tool-provider-egress-boundary.md`).
+
+**Verification path.**
+
+```bash
+# Schema definition:
+grep -n "ToolProviderConfig\|tool_providers" gateway/app/config.py
+# Example config block (commented, default empty list):
+grep -A 20 "TOOL / DATA-SOURCE PROVIDERS" gateway.yaml.example
+# Regression test (guards commented block → empty list):
+cd gateway && pytest tests/test_example_config_tool_providers.py -v
+```
+
+---
+
 ## Cross-references
 
 - [PRD §1.8 Security Posture](../PRD.md#18-security-posture) — names this catalog as the framework for restraint work.

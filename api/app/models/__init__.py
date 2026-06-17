@@ -34,6 +34,7 @@ from app.models.slack_workspace import SlackWorkspace
 from app.models.tabular import TabularExecution
 from app.models.team import Team, TeamMember
 from app.models.teams_tenant import TeamsTenant
+from app.models.tool_egress import ToolEgressLog
 from app.models.user import User, UserSession
 from app.models.user_export import UserExportJob
 from app.models.user_skill import UserSkill
@@ -70,6 +71,7 @@ __all__ = [
     "Team",
     "TeamMember",
     "TeamsTenant",
+    "ToolEgressLog",
     "User",
     "UserExportJob",
     "UserSession",

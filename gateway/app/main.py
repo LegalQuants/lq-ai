@@ -59,7 +59,7 @@ from app.clients.backend import (
     close_backend_client,
     configure_backend_client,
 )
-from app.config import GatewayConfig, ProviderConfig
+from app.config import GatewayConfig, ProviderConfig, ToolProviderConfig
 from app.config_holder import MutableConfigHolder, install_sighup_reload
 from app.config_loader import ConfigLoadError, load_config
 from app.db import engine_or_none
@@ -72,8 +72,11 @@ from app.providers import (
     OpenAIAdapter,
     ProviderAdapter,
 )
+from app.providers.tool.base import ToolProviderAdapter
+from app.providers.tool.echo import EchoToolAdapter
 from app.router import Router
 from app.routing_log import NullRoutingLogWriter, RoutingLogWriter, SQLRoutingLogWriter
+from app.tool_egress_log import NullToolEgressLogWriter, SQLToolEgressLogWriter
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +142,20 @@ def build_adapter(provider: ProviderConfig) -> ProviderAdapter | None:
         return OllamaAdapter.from_config(provider)
     # B6 lands the remaining adapters (Vertex, Bedrock); until then there
     # is no adapter for those types (or any unknown type).
+    return None
+
+
+def build_tool_adapter(provider: ToolProviderConfig) -> ToolProviderAdapter | None:
+    """Construct the tool adapter for one provider, or ``None`` if disabled
+    or no adapter exists for the type. Validates the base_url against the
+    provider's egress policy at build time so a misconfig fails at startup."""
+    if not provider.enabled:
+        return None
+    if provider.type == "echo":
+        adapter = EchoToolAdapter.from_config(provider)
+        adapter.validate_base_url()
+        return adapter
+    # courtlistener (PR2), mcp (PR4) land later.
     return None
 
 
@@ -231,19 +248,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # lock binds to the right loop.
     app.state.provider_key_lock = asyncio.Lock()
 
-    # B4: build the request router around the loaded config + adapter
-    # registry. Per-request handlers pull this off ``app.state.router``
-    # rather than reconstructing it on every call.
-    # D0.5: pass the holder's ``current`` so the router reads the live
-    # config snapshot on each call. After an admin alias edit lands,
-    # the very next request resolves against the new map without
-    # restart.
-    app.state.router = Router(
-        config=config,
-        adapters=adapters,
-        config_provider=config_holder.current,
-    )
-
     # B4: wire the inference_routing_log writer. ``DATABASE_URL`` is
     # optional — without it the gateway falls back to a no-op writer
     # so the data path keeps working in degraded deployments. The
@@ -261,6 +265,59 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info("inference_routing_log writer wired against DATABASE_URL")
     app.state.routing_log = routing_log
     app.state.db_engine = engine  # held so shutdown can dispose
+
+    # ADR 0014: build tool adapters for every configured tool provider.
+    # Disabled providers and unsupported types return None and are skipped.
+    # base_url is validated against the provider's egress allowlist at
+    # build time so a misconfig fails fast at startup rather than at
+    # request time.
+    tool_adapters: dict[str, ToolProviderAdapter] = {}
+    for tp in config.tool_providers:
+        try:
+            tool_adapter = build_tool_adapter(tp)
+        except Exception:
+            logger.exception(
+                "skipping tool provider %r (type=%s): egress validation failed",
+                tp.name,
+                tp.type,
+            )
+            continue
+        if tool_adapter is not None:
+            tool_adapters[tp.name] = tool_adapter
+            logger.info(
+                "instantiated %s adapter for tool provider %r (type=%s)",
+                type(tool_adapter).__name__,
+                tp.name,
+                tp.type,
+            )
+    app.state.tool_adapters = tool_adapters
+
+    tool_egress_writer = (
+        SQLToolEgressLogWriter(engine) if engine is not None else NullToolEgressLogWriter()
+    )
+    app.state.tool_egress_log = tool_egress_writer
+    if engine is not None:
+        logger.info("tool_egress_log writer wired against DATABASE_URL")
+    else:
+        logger.warning(
+            "DATABASE_URL is not set; tool_egress_log writes are disabled "
+            "(tool calls still work, but no audit rows are persisted)"
+        )
+
+    # B4: build the request router around the loaded config + adapter
+    # registry. Per-request handlers pull this off ``app.state.router``
+    # rather than reconstructing it on every call.
+    # D0.5: pass the holder's ``current`` so the router reads the live
+    # config snapshot on each call. After an admin alias edit lands,
+    # the very next request resolves against the new map without
+    # restart.
+    app.state.router = Router(
+        config=config,
+        adapters=adapters,
+        config_provider=config_holder.current,
+        tool_adapters=tool_adapters,
+        tool_egress_log=tool_egress_writer,
+    )
 
     # C2: backend HTTP client + skill cache. The client reads
     # LQ_AI_API_URL / LQ_AI_GATEWAY_KEY / LQ_AI_SKILL_CACHE_TTL_SECONDS
@@ -308,6 +365,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                     await adapter.aclose()
                 except Exception:
                     logger.exception("error closing retired adapter")
+        # ADR 0014: close tool provider adapters.
+        if tool_adapters:
+            logger.info("closing %d tool adapters", len(tool_adapters))
+        for tool_name, tool_adapter in tool_adapters.items():
+            try:
+                await tool_adapter.aclose()
+            except Exception:
+                logger.exception("error closing tool adapter %r", tool_name)
         try:
             await close_backend_client()
         except Exception:

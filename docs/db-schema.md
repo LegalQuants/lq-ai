@@ -1124,6 +1124,31 @@ CREATE INDEX idx_inference_log_refused ON inference_routing_log(timestamp DESC) 
 
 ---
 
+### `tool_egress_log`
+
+Gateway-written (ADR 0014 D3); counts/types only, never raw payloads. One row per outbound tool/data-source call through the gateway. Distinct from `inference_routing_log` (different access pattern and retention) and from `audit_log` (hot path, per-call counts only).
+
+| Column                  | Type        | Nullable | Default              | Notes                                             |
+|-------------------------|-------------|----------|----------------------|---------------------------------------------------|
+| `id`                    | UUID        | NO       | `gen_random_uuid()`  | Primary key                                       |
+| `timestamp`             | TIMESTAMPTZ | NO       | `now()`              | When the call was made                            |
+| `request_id`            | TEXT        | YES      |                      | Correlates with gateway request span              |
+| `provider`              | TEXT        | NO       |                      | Tool provider name (e.g. `courtlistener`)         |
+| `tool`                  | TEXT        | NO       |                      | Tool/endpoint called (e.g. `search_opinions`)     |
+| `tier`                  | INTEGER     | NO       |                      | Egress tier: `0` = no provider resolved (pre-resolution refusal); `1`–`5` = egress tier; CHECK enforced |
+| `bytes_out`             | INTEGER     | YES      |                      | Bytes sent to provider                            |
+| `bytes_in`              | INTEGER     | YES      |                      | Bytes received from provider                      |
+| `anonymization_applied` | BOOLEAN     | NO       | `false`              | Whether PII anonymization ran before egress       |
+| `refused`               | BOOLEAN     | NO       | `false`              | Whether the call was refused by the gateway       |
+| `refusal_reason`        | TEXT        | YES      |                      | E.g. `tier_below_minimum`, `provider_unavailable` |
+
+```sql
+CREATE INDEX ix_tool_egress_log_provider  ON tool_egress_log(provider);
+CREATE INDEX ix_tool_egress_log_timestamp ON tool_egress_log(timestamp);
+```
+
+---
+
 ## Playbooks (per [PRD §3.7](PRD.md#37-playbooks), M3-A1)
 
 Substrate for the Playbook engine landing in M3. A playbook codifies an
