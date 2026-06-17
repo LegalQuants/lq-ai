@@ -249,6 +249,10 @@ class MCPServerConfig(BaseModel):
     def to_tool_provider_config(self) -> ToolProviderConfig:
         # Build via model_validate so the extra ``auth`` field (permitted by
         # ToolProviderConfig's ``extra="allow"``) passes mypy's strict check.
+        # MCP providers intentionally inherit ToolProviderConfig's
+        # ``anonymize_outbound=True`` default (conservative; no field on
+        # MCPServerConfig — the safe posture is always on until WS3/WS4
+        # enforcement lands).
         return ToolProviderConfig.model_validate(
             {
                 "name": self.name,
@@ -568,6 +572,31 @@ class GatewayConfig(BaseModel):
     circuit_breaker: CircuitBreakerConfig = Field(default_factory=CircuitBreakerConfig)
     request_validation: RequestValidationConfig = Field(default_factory=RequestValidationConfig)
     dev_mode: DevModeConfig = Field(default_factory=DevModeConfig)
+
+    @model_validator(mode="after")
+    def _tool_provider_names_unique(self) -> GatewayConfig:
+        """Reject duplicate tool-provider names.
+
+        ``tool_provider_by_name`` is a linear scan that returns the first
+        match, so a duplicate name would silently shadow the second entry.
+        Catch it at config load — same pattern as inference ``providers``
+        which would also shadow on duplicate names.
+        """
+        names = [tp.name for tp in self.tool_providers]
+        unique_names = {tp.name for tp in self.tool_providers}
+        if len(unique_names) < len(names):
+            seen: set[str] = set()
+            dupes: list[str] = []
+            for name in names:
+                if name in seen:
+                    dupes.append(name)
+                else:
+                    seen.add(name)
+            raise ValueError(
+                f"tool_providers contains duplicate name(s): {sorted(dupes)}. "
+                "Each tool provider must have a unique name."
+            )
+        return self
 
     @model_validator(mode="after")
     def _aliases_reference_known_providers(self) -> GatewayConfig:

@@ -113,6 +113,14 @@ def _resolve_mcp_config_path() -> Path | None:
     override = os.environ.get("MCP_CONFIG_PATH")
     if override:
         candidate = Path(override)
+        if not candidate.exists():
+            logger.warning(
+                "MCP_CONFIG_PATH is set to %r but the file does not exist; "
+                "MCP server config will not be loaded",
+                str(candidate),
+            )
+            return None
+        return candidate
     else:
         gateway_path = _resolve_config_path()
         candidate = gateway_path.parent / DEFAULT_MCP_CONFIG_NAME
