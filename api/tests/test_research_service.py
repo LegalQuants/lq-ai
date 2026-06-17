@@ -3,10 +3,28 @@ import pytest
 import respx
 from sqlalchemy import select
 
+from app.errors import ResearchNotConfigured
 from app.models.research import ResearchOpinionMetadata
 from app.research import service
 
 GW = "http://localhost:8001"  # default settings.lq_ai_gateway_url
+
+# ---------------------------------------------------------------------------
+# Provider-cache isolation — MUST run around every test so a cached name from
+# one test cannot leak into another (the cache is a process-level global).
+# ---------------------------------------------------------------------------
+
+_CL_CONFIG_RESP = {"tool_providers": [{"name": "courtlistener-prod", "type": "courtlistener"}]}
+
+
+@pytest.fixture(autouse=True)
+def _prime_and_reset_provider_cache() -> None:
+    """Prime the resolved-provider cache before each test so existing tests
+    that call the tool path work without mocking /admin/v1/config, then reset
+    it after so no state leaks between tests."""
+    service._resolved_provider = "courtlistener-prod"
+    yield
+    service.reset_provider_cache()
 
 
 @pytest.fixture
@@ -125,3 +143,66 @@ async def test_verify_citations_passthrough(db_session) -> None:
         )
         out = await service.verify_citations("347 U.S. 483")
     assert out["citations"][0]["citation"] == "347 U.S. 483"
+
+
+# ---------------------------------------------------------------------------
+# get_capabilities tests (always reads fresh from gateway)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_capabilities_enabled_when_courtlistener_configured() -> None:
+    service.reset_provider_cache()
+    with respx.mock:
+        respx.get(f"{GW}/admin/v1/config").mock(
+            return_value=httpx.Response(200, json=_CL_CONFIG_RESP)
+        )
+        caps = await service.get_capabilities()
+    assert caps["enabled"] is True
+    assert len(caps["providers"]) == 1
+    assert caps["providers"][0]["name"] == "courtlistener-prod"
+    assert caps["providers"][0]["type"] == "courtlistener"
+
+
+@pytest.mark.asyncio
+async def test_get_capabilities_disabled_when_no_courtlistener_configured() -> None:
+    service.reset_provider_cache()
+    with respx.mock:
+        respx.get(f"{GW}/admin/v1/config").mock(
+            return_value=httpx.Response(200, json={"tool_providers": []})
+        )
+        caps = await service.get_capabilities()
+    assert caps["enabled"] is False
+    assert caps["providers"] == []
+
+
+# ---------------------------------------------------------------------------
+# _resolve_provider tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_resolve_provider_returns_configured_name_and_caches() -> None:
+    service.reset_provider_cache()
+    with respx.mock:
+        route = respx.get(f"{GW}/admin/v1/config").mock(
+            return_value=httpx.Response(200, json=_CL_CONFIG_RESP)
+        )
+        name1 = await service._resolve_provider()
+        name2 = await service._resolve_provider()  # second call uses the cache
+
+    assert name1 == "courtlistener-prod"
+    assert name2 == "courtlistener-prod"
+    # The gateway should only have been called once — second call uses the cache.
+    assert route.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_resolve_provider_raises_when_none_configured() -> None:
+    service.reset_provider_cache()
+    with respx.mock:
+        respx.get(f"{GW}/admin/v1/config").mock(
+            return_value=httpx.Response(200, json={"tool_providers": []})
+        )
+        with pytest.raises(ResearchNotConfigured):
+            await service._resolve_provider()

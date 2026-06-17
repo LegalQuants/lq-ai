@@ -107,3 +107,13 @@ class FindMatch(BaseModel):
 class FindInCaseResponse(BaseModel):
     opinion_id: int
     matches: list[FindMatch] = Field(default_factory=list)
+
+
+class ResearchProvider(BaseModel):
+    name: str
+    type: str
+
+
+class ResearchCapabilities(BaseModel):
+    enabled: bool
+    providers: list[ResearchProvider] = Field(default_factory=list)
