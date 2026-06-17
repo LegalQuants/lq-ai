@@ -144,7 +144,7 @@ class CourtListenerToolAdapter(ToolProviderAdapter):
             )
         return resp
 
-    async def list_tools(self) -> list[ToolSpec]:
+    async def list_tools(self, *, user_token: str | None = None) -> list[ToolSpec]:
         return [
             ToolSpec(
                 name="verify_citations",
@@ -185,7 +185,9 @@ class CourtListenerToolAdapter(ToolProviderAdapter):
             ),
         ]
 
-    async def invoke_tool(self, tool: str, args: dict[str, Any], *, request_id: str) -> ToolResult:
+    async def invoke_tool(
+        self, tool: str, args: dict[str, Any], *, request_id: str, user_token: str | None = None
+    ) -> ToolResult:
         if tool == "verify_citations":
             return await self._verify_citations(args)
         if tool == "search_case_law":

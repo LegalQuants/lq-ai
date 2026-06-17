@@ -57,7 +57,7 @@ class EchoToolAdapter(ToolProviderAdapter):
         egress policy (called at build time so a misconfig fails at startup)."""
         validate_egress_target(self._base_url + "/", allowlist=self._allowlist)
 
-    async def list_tools(self) -> list[ToolSpec]:
+    async def list_tools(self, *, user_token: str | None = None) -> list[ToolSpec]:
         return [
             ToolSpec(
                 name="echo",
@@ -67,7 +67,9 @@ class EchoToolAdapter(ToolProviderAdapter):
             )
         ]
 
-    async def invoke_tool(self, tool: str, args: dict[str, Any], *, request_id: str) -> ToolResult:
+    async def invoke_tool(
+        self, tool: str, args: dict[str, Any], *, request_id: str, user_token: str | None = None
+    ) -> ToolResult:
         if tool != "echo":
             raise ToolProviderError(f"unknown tool {tool!r} for echo provider")
         encoded = json.dumps(args).encode("utf-8")

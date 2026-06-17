@@ -190,7 +190,12 @@ def build_tool_adapter(provider: ToolProviderConfig) -> ToolProviderAdapter | No
         cl_adapter = CourtListenerToolAdapter.from_config(provider)
         cl_adapter.validate_base_url()
         return cl_adapter
-    # mcp (PR4) lands later.
+    if provider.type == "mcp":
+        from app.providers.tool.mcp import MCPToolProviderAdapter
+
+        mcp_adapter = MCPToolProviderAdapter.from_config(provider)
+        mcp_adapter.validate_base_url()
+        return mcp_adapter
     return None
 
 
