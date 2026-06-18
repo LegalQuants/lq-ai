@@ -67,6 +67,9 @@ CODE_PAYLOAD_TOO_LARGE = "payload_too_large"
 CODE_CONFLICT = "conflict"
 CODE_MFA_ENROLLMENT_REQUIRED = "mfa_enrollment_required"
 CODE_RESEARCH_NOT_CONFIGURED = "research_not_configured"
+CODE_MCP_OAUTH_NOT_CONFIGURED = "mcp_oauth_not_configured"
+CODE_MCP_OAUTH_STATE_ERROR = "mcp_oauth_state_error"
+CODE_MCP_OAUTH_EXCHANGE_ERROR = "mcp_oauth_exchange_error"
 
 # Backend↔gateway crossing codes (also declared in gateway/app/errors.py).
 # These propagate from gateway responses into backend exceptions; the
@@ -488,6 +491,38 @@ class SkillInputMissing(LQAIError):
     http_status = status.HTTP_400_BAD_REQUEST
 
 
+# --- PR4c MCP OAuth typed errors ---------------------------------------------
+
+
+class MCPOAuthNotConfigured(LQAIError):
+    """The requested MCP server is not a configured ``auth: oauth`` provider — 404."""
+
+    code = CODE_MCP_OAUTH_NOT_CONFIGURED
+    http_status = status.HTTP_404_NOT_FOUND
+
+
+class MCPOAuthStateError(LQAIError):
+    """Unknown / expired / replayed state, or an ``iss`` validation failure — 400.
+
+    The message is a fixed, non-secret reason slug; no state value, code, or
+    verifier is ever interpolated.
+    """
+
+    code = CODE_MCP_OAUTH_STATE_ERROR
+    http_status = status.HTTP_400_BAD_REQUEST
+
+
+class MCPOAuthExchangeError(LQAIError):
+    """The AS returned an OAuth error on code-exchange or refresh — 502.
+
+    Carries ONLY the AS ``error`` string code (RFC 6749 §5.2) — never the
+    token form, the code, the verifier, or any token value.
+    """
+
+    code = CODE_MCP_OAUTH_EXCHANGE_ERROR
+    http_status = status.HTTP_502_BAD_GATEWAY
+
+
 # --- Code → exception class registry -----------------------------------------
 # Used by the gateway-response translator (in app.clients.gateway) to map
 # a structured gateway error envelope into the right LQAIError subclass.
@@ -544,6 +579,9 @@ __all__ = [
     "CODE_GATEWAY_UNREACHABLE",
     "CODE_INTERNAL_ERROR",
     "CODE_INVALID_MODEL",
+    "CODE_MCP_OAUTH_EXCHANGE_ERROR",
+    "CODE_MCP_OAUTH_NOT_CONFIGURED",
+    "CODE_MCP_OAUTH_STATE_ERROR",
     "CODE_MFA_ENROLLMENT_REQUIRED",
     "CODE_NOT_FOUND",
     "CODE_PASSWORD_CHANGE_REQUIRED",
@@ -567,6 +605,9 @@ __all__ = [
     "InternalError",
     "InvalidModel",
     "LQAIError",
+    "MCPOAuthExchangeError",
+    "MCPOAuthNotConfigured",
+    "MCPOAuthStateError",
     "MfaEnrollmentRequired",
     "NotFound",
     "PasswordChangeRequired",

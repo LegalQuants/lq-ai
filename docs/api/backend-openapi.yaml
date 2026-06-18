@@ -5174,6 +5174,146 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
 
+  # PR4c — per-user MCP OAuth surface
+  /api/v1/mcp/oauth/{server}/authorize:
+    parameters:
+      - name: server
+        in: path
+        required: true
+        schema: {type: string}
+        description: MCP server name (as returned by the gateway config).
+    get:
+      tags: [mcp-oauth]
+      summary: Start the per-user OAuth flow for an MCP server
+      description: |
+        PR4c. ActiveUser-gated (bearer). Mints PKCE state, persists a
+        single-use mcp_oauth_state row, and returns a 302 redirect to the
+        authorization server's authorize endpoint. The callback URL is
+        wired to GET /api/v1/mcp/oauth/{server}/callback.
+      security:
+        - bearerAuth: []
+      responses:
+        '302':
+          description: Redirect to the authorization server authorize endpoint
+          headers:
+            Location:
+              schema: {type: string}
+              description: Authorization server authorize URL with PKCE parameters.
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '404':
+          description: Server is not a configured OAuth MCP provider
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/v1/mcp/oauth/{server}/callback:
+    parameters:
+      - name: server
+        in: path
+        required: true
+        schema: {type: string}
+        description: MCP server name.
+    get:
+      tags: [mcp-oauth]
+      summary: OAuth callback — receive the authorization code from the AS
+      description: |
+        PR4c. PUBLIC (no bearer auth). The browser is redirected here by
+        the authorization server after the user grants consent. The caller
+        is identified via the single-use, TTL-bounded mcp_oauth_state row
+        (``state`` IS the binding). On success, tokens are encrypted and
+        stored and a mcp.oauth_connected audit row is written. Returns 200
+        with the connection summary.
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema: {type: string}
+          description: Authorization code issued by the AS.
+        - name: state
+          in: query
+          required: true
+          schema: {type: string}
+          description: Opaque state value echoed from the authorize request.
+        - name: iss
+          in: query
+          required: false
+          schema: {type: string}
+          description: Issuer identifier (RFC 9207); required when the AS advertised support.
+      responses:
+        '200':
+          description: OAuth flow completed; tokens stored
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MCPOAuthCallbackResponse'}
+        '400':
+          description: Unknown, expired, or replayed state; iss validation failure
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '502':
+          description: Authorization server returned an error on code exchange
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/v1/mcp/oauth/{server}/status:
+    parameters:
+      - name: server
+        in: path
+        required: true
+        schema: {type: string}
+        description: MCP server name.
+    get:
+      tags: [mcp-oauth]
+      summary: Check the calling user's OAuth connection state for an MCP server
+      description: |
+        PR4c. ActiveUser-gated (bearer). Returns whether a stored token
+        exists for the (user, server) pair, the granted scopes, and the
+        token expiry. Token bytes are never exposed.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Connection status
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MCPOAuthStatusResponse'}
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/v1/mcp/oauth/{server}:
+    parameters:
+      - name: server
+        in: path
+        required: true
+        schema: {type: string}
+        description: MCP server name.
+    delete:
+      tags: [mcp-oauth]
+      summary: Revoke the calling user's stored OAuth tokens for an MCP server
+      description: |
+        PR4c. ActiveUser-gated (bearer). Deletes the stored (user, server)
+        token row. Idempotent — returns 204 even when no token was stored.
+        AS-side revocation (RFC 7009) is not called in v1 (DE filed).
+        Writes a mcp.oauth_disconnected audit row when a row was removed.
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Token deleted (or was not present)
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
 # ============================================================
 # COMPONENTS
 # ============================================================
@@ -7963,6 +8103,33 @@ components:
       additionalProperties: false
       properties:
         enabled: {type: boolean}
+
+    MCPOAuthCallbackResponse:
+      type: object
+      required: [connected, server, scopes]
+      properties:
+        connected: {type: boolean}
+        server: {type: string}
+        scopes:
+          type: array
+          items: {type: string}
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    MCPOAuthStatusResponse:
+      type: object
+      required: [connected, scopes]
+      properties:
+        connected: {type: boolean}
+        scopes:
+          type: array
+          items: {type: string}
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
 
     ProviderKeyStatus:
       type: object

@@ -201,6 +201,11 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/admin/mcp",
         "/api/v1/admin/mcp/{server}/refresh",
         "/api/v1/admin/mcp/{server}/tools/{tool}",
+        # PR4c — per-user MCP OAuth surface
+        "/api/v1/mcp/oauth/{server}/authorize",
+        "/api/v1/mcp/oauth/{server}/callback",
+        "/api/v1/mcp/oauth/{server}/status",
+        "/api/v1/mcp/oauth/{server}",
     }
 )
 
@@ -304,7 +309,12 @@ async def test_openapi_paths_match_sketch() -> None:
     # /api/v1/admin/mcp
     # /api/v1/admin/mcp/{server}/refresh
     # /api/v1/admin/mcp/{server}/tools/{tool}
-    assert len(actual) == 127
+    # PR4c adds four new paths (127 -> 131):
+    # /api/v1/mcp/oauth/{server}/authorize
+    # /api/v1/mcp/oauth/{server}/callback
+    # /api/v1/mcp/oauth/{server}/status
+    # /api/v1/mcp/oauth/{server}
+    assert len(actual) == 131
 
 
 @pytest.mark.unit

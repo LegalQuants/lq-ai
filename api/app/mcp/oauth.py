@@ -54,6 +54,7 @@ from sqlalchemy import CursorResult, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.gateway import get_gateway_client
+from app.errors import MCPOAuthExchangeError, MCPOAuthNotConfigured, MCPOAuthStateError
 from app.models.mcp_oauth import MCPOAuthState, MCPOAuthToken
 from app.security.encryption import MCPTokenEncryptor
 
@@ -74,44 +75,28 @@ _VERIFIER_BYTES = 48
 # ---------------------------------------------------------------------------
 # Typed exceptions — carry NO secret material (only the server name + AS error
 # string code).  See module docstring's security invariants.
+#
+# MCPOAuthNotConfigured, MCPOAuthStateError, MCPOAuthExchangeError are
+# LQAIError subclasses defined in app.errors so the global exception handler
+# maps them to structured HTTP responses automatically.  Re-exported here so
+# call-sites can import from this module without caring about the hierarchy.
 # ---------------------------------------------------------------------------
 
-
-class MCPOAuthError(Exception):
-    """Base for MCP OAuth service errors."""
-
-
-class MCPOAuthNotConfigured(MCPOAuthError):
-    """The requested ``server`` is not a configured ``auth: oauth`` MCP provider."""
-
-    def __init__(self, server: str) -> None:
-        self.server = server
-        super().__init__(f"MCP server {server!r} is not configured for OAuth")
-
-
-class MCPOAuthStateError(MCPOAuthError):
-    """Unknown / expired / replayed state, or an ``iss`` validation failure.
-
-    The message is a fixed, non-secret reason slug; no state value, code, or
-    verifier is ever interpolated.
-    """
+# Re-export so callers can `from app.mcp.oauth import MCPOAuth*`.
+__all__ = [
+    "MCPAuthorizationRequired",
+    "MCPOAuthExchangeError",
+    "MCPOAuthNotConfigured",
+    "MCPOAuthStateError",
+    "build_authorize_url",
+    "disconnect",
+    "exchange_code",
+    "get_status",
+    "get_valid_token",
+]
 
 
-class MCPOAuthExchangeError(MCPOAuthError):
-    """The AS returned an OAuth error on code-exchange or refresh.
-
-    Carries ONLY the AS ``error`` string code (RFC 6749 §5.2) — never the
-    token form, the code, the verifier, or any token value.
-    """
-
-    def __init__(self, *, code: str, server: str) -> None:
-        self.code = code
-        self.server = server
-        # The message interpolates only the AS error string + server name.
-        super().__init__(f"OAuth token exchange failed for {server!r}: {code}")
-
-
-class MCPAuthorizationRequired(MCPOAuthError):
+class MCPAuthorizationRequired(Exception):
     """No valid token and no way to refresh — the user must re-authorize.
 
     Raised by the tool-path caller (Task 6) when :func:`get_valid_token`
@@ -138,7 +123,10 @@ async def _resolve_oauth_provider(server: str) -> dict[str, str]:
     for cfg in configs:
         if cfg["name"] == server:
             return cfg
-    raise MCPOAuthNotConfigured(server)
+    raise MCPOAuthNotConfigured(
+        message=f"MCP server {server!r} is not configured for OAuth",
+        details={"server": server},
+    )
 
 
 def _now() -> datetime:
@@ -260,7 +248,11 @@ async def exchange_code(
         # Single-use: consume the state even on the AS-error path.
         await db.execute(delete(MCPOAuthState).where(MCPOAuthState.state == state))
         await db.commit()
-        raise MCPOAuthExchangeError(code=str(body.get("error")), server=row.provider_name)
+        _as_code = str(body.get("error") or "unknown")
+        raise MCPOAuthExchangeError(
+            message=f"OAuth token exchange failed for {row.provider_name!r}: {_as_code}",
+            details={"as_error": _as_code, "server": row.provider_name},
+        )
 
     token_row = _persist_token(
         db,
@@ -273,7 +265,10 @@ async def exchange_code(
         # A 2xx without an access_token is contract drift / a broken AS.
         await db.execute(delete(MCPOAuthState).where(MCPOAuthState.state == state))
         await db.commit()
-        raise MCPOAuthExchangeError(code="missing_access_token", server=row.provider_name)
+        raise MCPOAuthExchangeError(
+            message=f"OAuth token exchange for {row.provider_name!r} returned no access_token",
+            details={"as_error": "missing_access_token", "server": row.provider_name},
+        )
 
     # Consume the state on success (single-use).
     await db.execute(delete(MCPOAuthState).where(MCPOAuthState.state == state))
@@ -427,6 +422,29 @@ async def get_valid_token(
 
     await db.commit()
     return enc.decrypt(updated.access_token)
+
+
+async def get_status(
+    db: AsyncSession,
+    *,
+    user_id: UUID,
+    server: str,
+) -> MCPOAuthToken | None:
+    """Return the stored token row for ``(user_id, server)`` or ``None``.
+
+    The REST status endpoint uses this to report ``connected`` state without
+    exposing any token bytes.  Callers MUST NOT read ``access_token`` or
+    ``refresh_token`` from the returned row — those fields are encrypted
+    ciphertext and only :func:`get_valid_token` should decrypt them.
+    """
+    return (
+        await db.execute(
+            select(MCPOAuthToken).where(
+                MCPOAuthToken.user_id == user_id,
+                MCPOAuthToken.provider_name == server,
+            )
+        )
+    ).scalar_one_or_none()
 
 
 async def disconnect(

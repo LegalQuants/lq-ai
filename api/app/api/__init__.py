@@ -39,6 +39,7 @@ from app.api import (
     integrations_teams,
     internal,
     knowledge_bases,
+    mcp_oauth,
     models,
     organization_profile,
     playbooks as playbooks_api,
@@ -138,5 +139,12 @@ api_router.include_router(research.router, dependencies=_active)
 # Admin-gated at handler level via the AdminUser dependency; mounted
 # under _active so the bearer-token + must-change-password gates fire first.
 api_router.include_router(admin_mcp.router, dependencies=_active)
+# PR4c — per-user MCP OAuth surface (authorize, callback, status, disconnect).
+# Registered WITHOUT _active because the callback endpoint must remain public
+# (the browser redirect from the AS cannot carry a bearer token). Each
+# authenticated handler (authorize, status, disconnect) takes ActiveUser
+# explicitly. The callback endpoint takes no user dependency — the user is
+# recovered from the single-use mcp_oauth_state row inside exchange_code.
+api_router.include_router(mcp_oauth.router)
 
 __all__ = ["api_router"]
