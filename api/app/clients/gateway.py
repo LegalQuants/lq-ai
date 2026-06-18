@@ -735,6 +735,53 @@ class GatewayClient:
                 details={"status_code": response.status_code},
             ) from exc
 
+    # --- MCP tool discovery (PR4b/WS2) --------------------------------------
+
+    async def discover_tools(
+        self,
+        provider: str,
+        *,
+        user_token: str | None = None,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        """GET /v1/tools/{provider} on the gateway (PR4a discovery transport).
+
+        Returns the gateway's ``{provider, tools:[...]}`` dict. ``user_token``
+        (for ``auth: oauth`` MCP servers, PR4c) is sent in the
+        ``X-LQ-AI-User-Token`` header — never a query param (it would land in
+        access logs). Errors translate like ``call_tool``."""
+        headers = self._build_headers(request_id=request_id)
+        if user_token is not None:
+            headers["X-LQ-AI-User-Token"] = user_token
+        op = f"discover_tools:{provider}"
+        try:
+            response = await self._client.get(f"/v1/tools/{provider}", headers=headers)
+        except httpx.TimeoutException as exc:
+            raise GatewayTimeout(
+                "Gateway did not respond within the configured timeout",
+                details={"timeout_seconds": self._timeout},
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise GatewayUnreachable(
+                "Could not reach the Inference Gateway",
+                details={"transport_error": type(exc).__name__},
+            ) from exc
+        if response.status_code >= 400:
+            self._raise_for_gateway_error(
+                status_code=response.status_code,
+                body_bytes=response.content,
+                op=op,
+                request_id=request_id,
+            )
+        try:
+            payload: dict[str, Any] = response.json()
+            return payload
+        except json.JSONDecodeError as exc:
+            raise GatewayInvalidResponse(
+                "Gateway discover_tools returned a non-JSON success response",
+                details={"status_code": response.status_code},
+            ) from exc
+
     # --- Admin: alias CRUD (D0.5) -------------------------------------------
 
     async def list_aliases(
