@@ -25,6 +25,7 @@ from fastapi import APIRouter, Depends
 from app.api import (
     admin,
     admin_intake_bridges,
+    admin_mcp,
     auth,
     autonomous,
     bootstrap,
@@ -133,5 +134,9 @@ api_router.include_router(word_addin.admin_router, dependencies=_active)
 # opinions, find-in-case). All five endpoints require an authenticated,
 # password-changed user; auth enforced via the _active dependency group.
 api_router.include_router(research.router, dependencies=_active)
+# WS2/PR4b — MCP registry admin surface (list, refresh, enable/disable).
+# Admin-gated at handler level via the AdminUser dependency; mounted
+# under _active so the bearer-token + must-change-password gates fire first.
+api_router.include_router(admin_mcp.router, dependencies=_active)
 
 __all__ = ["api_router"]

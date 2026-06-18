@@ -70,6 +70,9 @@ _PARAM_VALUES: dict[str, str] = {
     # WS3b — research surface
     "cluster_id": "1",
     "opinion_id": "1",
+    # WS2/PR4b — MCP registry admin surface
+    "server": "acme-mcp",
+    "tool": "read_doc",
 }
 
 
@@ -311,6 +314,10 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("GET", "/api/v1/research/clusters/{cluster_id}"),
     ("GET", "/api/v1/research/opinions/{opinion_id}"),
     ("POST", "/api/v1/research/find-in-case"),
+    # WS2/PR4b — MCP registry admin surface
+    ("GET", "/api/v1/admin/mcp"),
+    ("POST", "/api/v1/admin/mcp/{server}/refresh"),
+    ("PATCH", "/api/v1/admin/mcp/{server}/tools/{tool}"),
 }
 
 

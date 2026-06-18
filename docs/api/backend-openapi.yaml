@@ -5052,6 +5052,128 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
 
+  # WS2/PR4b — MCP registry admin surface
+  /api/v1/admin/mcp:
+    get:
+      tags: [admin]
+      summary: List configured MCP servers and their cached tools (admin only)
+      description: |
+        WS2/PR4b. Returns the operator's configured MCP servers (sourced
+        from gateway config, type==mcp) together with each server's
+        discovery-cached tools and their ``enabled`` toggle state. The
+        caller's bearer token must have ``is_admin = true`` or the
+        endpoint returns 403 ``forbidden``.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: MCP servers with cached tools
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MCPServersResponse'}
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '403':
+          description: Caller is not an admin
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/v1/admin/mcp/{server}/refresh:
+    parameters:
+      - name: server
+        in: path
+        required: true
+        schema: {type: string}
+        description: MCP server name (as returned by the gateway config).
+    post:
+      tags: [admin]
+      summary: Re-discover and reconcile a server's tools (admin only)
+      description: |
+        WS2/PR4b. Triggers a fresh tool-discovery pass against the named
+        MCP server through the gateway (PR4a's GET /v1/tools/{provider}).
+        The discovery cache is reconciled: new tools are inserted with
+        ``enabled=true``; surviving tools preserve their existing
+        ``enabled`` flag; stale tools (no longer returned) are removed.
+        Writes a ``mcp.tools_refreshed`` audit row. 403 when the caller
+        is not an admin.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Refresh complete; returns the updated tool list
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MCPRefreshResponse'}
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '403':
+          description: Caller is not an admin
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '404':
+          description: Server not found in gateway config
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/v1/admin/mcp/{server}/tools/{tool}:
+    parameters:
+      - name: server
+        in: path
+        required: true
+        schema: {type: string}
+        description: MCP server name.
+      - name: tool
+        in: path
+        required: true
+        schema: {type: string}
+        description: Tool name within the server's discovery cache.
+    patch:
+      tags: [admin]
+      summary: Enable or disable a cached MCP tool (admin only)
+      description: |
+        WS2/PR4b. Toggles the ``enabled`` flag on a single cached tool.
+        Disabled tools are not exposed to the model in the chat tool-loop
+        (PR5). 404 when the tool is not in the discovery cache (run
+        ``POST .../refresh`` first). Writes a ``mcp.tool_enabled`` audit
+        row. 403 when the caller is not an admin.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MCPToolEnableRequest'}
+      responses:
+        '200':
+          description: Tool updated; returns the updated tool view
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MCPToolView'}
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '403':
+          description: Caller is not an admin
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '404':
+          description: Tool not in discovery cache
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
 # ============================================================
 # COMPONENTS
 # ============================================================
@@ -7795,6 +7917,52 @@ components:
           description: |
             Replacement plaintext provider key. Same handling as
             ProviderKeySetRequest.api_key.
+
+    MCPToolView:
+      type: object
+      required: [name, read_only, destructive, requires_confirmation, enabled]
+      properties:
+        name: {type: string}
+        description: {type: string, nullable: true}
+        parameters: {type: object, additionalProperties: true}
+        read_only: {type: boolean}
+        destructive: {type: boolean}
+        requires_confirmation: {type: boolean}
+        enabled: {type: boolean}
+
+    MCPServerView:
+      type: object
+      required: [name, type, tools]
+      properties:
+        name: {type: string}
+        type: {type: string}
+        tools:
+          type: array
+          items: {$ref: '#/components/schemas/MCPToolView'}
+
+    MCPServersResponse:
+      type: object
+      required: [servers]
+      properties:
+        servers:
+          type: array
+          items: {$ref: '#/components/schemas/MCPServerView'}
+
+    MCPRefreshResponse:
+      type: object
+      required: [server, tools]
+      properties:
+        server: {type: string}
+        tools:
+          type: array
+          items: {$ref: '#/components/schemas/MCPToolView'}
+
+    MCPToolEnableRequest:
+      type: object
+      required: [enabled]
+      additionalProperties: false
+      properties:
+        enabled: {type: boolean}
 
     ProviderKeyStatus:
       type: object
