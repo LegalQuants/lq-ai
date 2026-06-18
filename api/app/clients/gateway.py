@@ -60,7 +60,7 @@ import json
 import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, NoReturn
 
 import httpx
 from pydantic import ValidationError as PydanticValidationError
@@ -1258,7 +1258,7 @@ class GatewayClient:
         body_bytes: bytes,
         op: str,
         request_id: str | None,
-    ) -> None:
+    ) -> NoReturn:
         """Parse a non-2xx gateway response and raise the right LQAIError.
 
         ``status_code == 401`` is special-cased per the brief: the user

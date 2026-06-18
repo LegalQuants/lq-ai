@@ -16,7 +16,7 @@ import pytest
 import respx
 
 from app.clients.gateway import GATEWAY_KEY_HEADER, GatewayClient
-from app.errors import GatewayTimeout, LQAIError
+from app.errors import GatewayTimeout, InternalError
 
 GATEWAY_BASE = "http://test-gateway"
 GATEWAY_KEY = "test-secret"
@@ -164,11 +164,11 @@ async def test_oauth_discover_happy_path() -> None:
 
 @pytest.mark.asyncio
 async def test_oauth_discover_gateway_error_raises() -> None:
-    """Gateway 403 envelope (dict error) → raises LQAIError."""
+    """Gateway 403 envelope (dict error) → raises InternalError (egress_refused is unmapped)."""
     body = {"error": {"code": "egress_refused", "message": "egress blocked", "details": {}}}
     with respx.mock(base_url=GATEWAY_BASE) as mock:
         mock.post("/v1/oauth/acme-mcp/discover").mock(return_value=httpx.Response(403, json=body))
-        with pytest.raises(LQAIError):
+        with pytest.raises(InternalError):
             await _client().oauth_discover("acme-mcp")
 
 
@@ -224,11 +224,11 @@ async def test_oauth_token_as_400_string_error_relayed_without_raising() -> None
 
 @pytest.mark.asyncio
 async def test_oauth_token_gateway_403_dict_envelope_raises() -> None:
-    """(c) Gateway 403 with dict error envelope → raises LQAIError (not relayed)."""
+    """(c) Gateway 403 with dict error envelope → raises InternalError (egress_refused is unmapped)."""
     body = {"error": {"code": "egress_refused", "message": "egress blocked", "details": {}}}
     with respx.mock(base_url=GATEWAY_BASE) as mock:
         mock.post("/v1/oauth/acme-mcp/token").mock(return_value=httpx.Response(403, json=body))
-        with pytest.raises(LQAIError):
+        with pytest.raises(InternalError):
             await _client().oauth_token(
                 "acme-mcp",
                 token_endpoint="https://as.example/token",
