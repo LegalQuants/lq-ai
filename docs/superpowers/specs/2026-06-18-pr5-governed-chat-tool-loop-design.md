@@ -86,6 +86,9 @@ If the assembled set is empty, the loop is **not** engaged — single-shot compl
 3. Repeat until the model emits a final answer or the **per-turn cap (8, L4)** is hit (terminal "cap reached" signal → model finalizes).
 4. **Per-turn cluster cache** — a request-scoped dict, discarded at turn end, memoizes CourtListener cluster/opinion fetches so multi-hop within one turn ("read that cluster, now search it for X, now Y") doesn't re-fetch.
 
+### Connect-on-demand (MCP OAuth, added 2026-06-18)
+When a proposed call targets an `auth: oauth` MCP server and the calling user has no valid token, `get_valid_token` returns None → the existing PR4c `MCPAuthorizationRequired` (409) contract. In the loop this surfaces as a terminal SSE event **`mcp_authorization_required`** `{server, authorize_url}` (a sibling of `tool_confirmation_required`): the turn ends cleanly and the UI prompts the user to connect that server inline, then the user re-asks (or the loop resumes after connect). `authorize_url` is `/api/v1/mcp/oauth/{server}/authorize` (the PR4d `return_url` carries the browser back to the frontend after the round-trip). This makes the per-user OAuth connect reachable from a chat tool-call without a separate "manage connections" detour. (Depends on PR4d's `return_url`; PR4d ships first.)
+
 ### Confirmation gate — persist-and-resume (L3)
 1. Persist a `tool_call_log` row in `confirmation_state = pending_confirmation` carrying `{provider, tool, args}`, plus the **assistant-turn resume state** (conversation-so-far incl. inline tool results already gathered, on the partial assistant message).
 2. Emit a terminal SSE event **`tool_confirmation_required`** `{pending_call_id, provider, tool, args_summary, tier, destructive}` and **end the turn** (stream closes cleanly).
