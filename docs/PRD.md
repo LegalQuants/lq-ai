@@ -4591,6 +4591,34 @@ No code change — the runtime already returns these with the correct typed `cod
 
 **When to ship:** Before MCP is used against untrusted/flaky servers at scale; the `initialize` bound covers the common connect-failure case meanwhile.
 
+#### DE-341 — Retire the OpenWebUI `web/backend/open_webui/utils/mcp/client.py` stub once the chat path is gateway-brokered
+
+**Priority:** P3 · **Effort:** M
+
+**Context:** PR4c's plan listed deleting the ported OpenWebUI MCP client stub (`web/backend/open_webui/utils/mcp/client.py`) on the assumption it was unwired. Verified against `main` during PR4c: it is still actively imported in two web-backend call sites — `web/backend/open_webui/routers/configs.py:403` (`MCPClient()` in a tool-server connect/verify endpoint) and `web/backend/open_webui/utils/middleware.py:2671` (`MCPClient()` in the chat middleware — the OLD backend-direct MCP path that PR4a–c replace at the gateway boundary). Deleting the stub in PR4c would break the web backend; properly removing it requires migrating those call sites — chiefly the chat middleware's tool-call connection — onto the gateway-brokered path, which is PR5's scope (the governed chat tool-loop). Surfaced 2026-06-18; PR4c was kept backend-only and the deletion deferred (operator-confirmed).
+
+**Specific scope:** When PR5 rewires the chat tool-loop to call MCP tools through the gateway (`POST /v1/tools/{provider}/{tool}` + the per-user `X-LQ-AI-User-Token` from the PR4c OAuth store), migrate `configs.py`'s tool-server verify path and `middleware.py`'s `mcp_clients` connection off `MCPClient`, then delete `web/backend/open_webui/utils/mcp/client.py` and grep-confirm no remaining importers. (DE-338's teardown-timeout discussion references the same stub — close both together.)
+
+**When to ship:** PR5 (WS4 governed chat tool-loop), alongside the chat-path migration to the gateway.
+
+#### DE-342 — Map the gateway `egress_refused` code to a clearer "connector misconfigured" error (not generic 500)
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** With the PR4c OAuth gateway passthrough (D-c6), the operator must allowlist each MCP server's OAuth authorization-server host in `mcp.yaml` (the AS host is discovered at runtime and may differ from the MCP server host). When they forget, the gateway correctly refuses egress and returns `403 {error:{code:"egress_refused"}}` — but the api's `_GATEWAY_CODE_MAP` (`api/app/errors.py`) has no entry for `egress_refused`, so it falls back to `InternalError` (500). The user/operator sees a generic internal error rather than "this connector's authorization-server host isn't allowlisted." Mis-allowlisting the AS host is the *expected first-run failure* for D-c6, so the opaque mapping has real operator-experience cost. Surfaced in the PR4c whole-branch review (2026-06-18).
+
+**Specific scope:** Add `"egress_refused"` to `_GATEWAY_CODE_MAP` mapping to a clearer typed error (e.g. `ProviderUnavailable`/`502`, or a new `MCPOAuthConnectorMisconfigured`) whose message points at the `mcp.yaml` allowlist. Behaviour is safe today (the request fails closed) — this is purely diagnostics quality.
+
+#### DE-343 — Persist or re-discover the RFC 8707 `resource` for OAuth token refresh
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** PR4c's `app/mcp/oauth.py` `get_valid_token` refresh path omits the RFC 8707 `resource` parameter from the refresh-token form, because `mcp_oauth_tokens` has no `resource` column to recover it from (it is captured in `mcp_oauth_state` at authorize-time but that row is single-use and deleted at callback). An authorization server that *requires* `resource` on every token request (including refresh) would reject the refresh; the api then deletes the token row and the user is silently re-prompted to authorize. Most AS accept refresh without `resource`, so v1 works for them. Surfaced in the PR4c whole-branch review (2026-06-18).
+
+**Specific scope:** Either add a nullable `resource` column to `mcp_oauth_tokens` (set it at exchange time, send it on refresh) or re-run discovery at refresh time to recover the canonical resource URI. Add a test with an AS that requires `resource` on refresh.
+
+**When to ship:** When an MCP OAuth server that enforces RFC 8707 on refresh is encountered, or proactively before GA.
+
 ---
 
 ## 10. Appendices

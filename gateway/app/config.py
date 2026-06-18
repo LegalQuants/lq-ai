@@ -229,6 +229,11 @@ class MCPServerConfig(BaseModel):
     auth: MCPAuthType = "none"
     api_key_env: str | None = None
     api_key_encrypted: str | None = None
+    oauth_client_id: str | None = None
+    """Pre-registered public OAuth client_id for this MCP server.
+    Required when ``auth == "oauth"``; ignored otherwise.  The api reads this
+    via the sanitized ``GET /admin/v1/config`` response to initiate the
+    out-of-band authorization-code flow on behalf of the user (PR4c)."""
     egress_tier: InferenceTier
     allowlist: EgressAllowlistConfig
     rate_limit: ToolProviderRateLimitConfig = Field(default_factory=ToolProviderRateLimitConfig)
@@ -244,11 +249,17 @@ class MCPServerConfig(BaseModel):
             raise ValueError(
                 f"MCP server {self.name!r}: api_key_* is only valid with auth 'bearer'."
             )
+        if self.auth == "oauth" and not self.oauth_client_id:
+            raise ValueError(
+                f"MCP server {self.name!r}: auth 'oauth' requires oauth_client_id "
+                f"(the pre-registered public client_id for the OAuth flow)."
+            )
         return self
 
     def to_tool_provider_config(self) -> ToolProviderConfig:
-        # Build via model_validate so the extra ``auth`` field (permitted by
-        # ToolProviderConfig's ``extra="allow"``) passes mypy's strict check.
+        # Build via model_validate so the extra ``auth`` and ``oauth_client_id``
+        # fields (permitted by ToolProviderConfig's ``extra="allow"``) pass
+        # mypy's strict check.
         # MCP providers intentionally inherit ToolProviderConfig's
         # ``anonymize_outbound=True`` default (conservative; no field on
         # MCPServerConfig — the safe posture is always on until WS3/WS4
@@ -265,6 +276,7 @@ class MCPServerConfig(BaseModel):
                 "rate_limit": self.rate_limit.model_dump(),
                 "enabled": self.enabled,
                 "auth": self.auth,  # extra field; ToolProviderConfig is extra="allow"
+                "oauth_client_id": self.oauth_client_id,  # extra field; None for non-oauth
             }
         )
 

@@ -40,10 +40,68 @@ def test_mcp_server_config_oauth_needs_no_static_key() -> None:
         name="oauth-mcp",
         server_url="https://o.example/sse",
         auth="oauth",
+        oauth_client_id="lqai-acme",
         egress_tier=2,
         allowlist={"hosts": ["o.example"]},
     )
     assert s.to_tool_provider_config().auth == "oauth"
+
+
+# --- PR4c: oauth_client_id field (Task 2) ------------------------------------
+
+
+@pytest.mark.unit
+def test_mcp_server_config_oauth_with_client_id_accepted() -> None:
+    """auth='oauth' + oauth_client_id is accepted; client_id passes through."""
+    s = MCPServerConfig(
+        name="acme-oauth",
+        server_url="https://mcp.acme.example/sse",
+        auth="oauth",
+        oauth_client_id="lqai-acme",
+        egress_tier=2,
+        allowlist={"hosts": ["mcp.acme.example", "auth.acme.example"]},
+    )
+    tp = s.to_tool_provider_config()
+    assert tp.auth == "oauth"
+    assert tp.oauth_client_id == "lqai-acme"
+
+
+@pytest.mark.unit
+def test_mcp_server_config_oauth_without_client_id_rejected() -> None:
+    """auth='oauth' without oauth_client_id must be rejected at validation time."""
+    with pytest.raises(ValidationError, match="oauth_client_id"):
+        MCPServerConfig(
+            name="oauth-no-client-id",
+            server_url="https://mcp.example/sse",
+            auth="oauth",
+            egress_tier=2,
+            allowlist={"hosts": ["mcp.example"]},
+        )
+
+
+@pytest.mark.unit
+def test_mcp_server_config_non_oauth_does_not_require_client_id() -> None:
+    """auth='none' and auth='bearer' do not require oauth_client_id."""
+    # none auth
+    s_none = MCPServerConfig(
+        name="none-mcp",
+        server_url="https://mcp.example/sse",
+        auth="none",
+        egress_tier=2,
+        allowlist={"hosts": ["mcp.example"]},
+    )
+    assert s_none.oauth_client_id is None
+
+    # bearer auth
+    s_bearer = MCPServerConfig(
+        name="bearer-mcp",
+        server_url="https://mcp.example/sse",
+        auth="bearer",
+        api_key_env="MCP_TOKEN",
+        egress_tier=2,
+        allowlist={"hosts": ["mcp.example"]},
+    )
+    assert s_bearer.oauth_client_id is None
 
 
 @pytest.mark.unit

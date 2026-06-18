@@ -318,6 +318,11 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("GET", "/api/v1/admin/mcp"),
     ("POST", "/api/v1/admin/mcp/{server}/refresh"),
     ("PATCH", "/api/v1/admin/mcp/{server}/tools/{tool}"),
+    # PR4c — per-user MCP OAuth surface
+    ("GET", "/api/v1/mcp/oauth/{server}/authorize"),
+    ("GET", "/api/v1/mcp/oauth/{server}/callback"),
+    ("GET", "/api/v1/mcp/oauth/{server}/status"),
+    ("DELETE", "/api/v1/mcp/oauth/{server}"),
 }
 
 

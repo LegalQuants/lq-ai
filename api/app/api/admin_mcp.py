@@ -52,9 +52,15 @@ async def refresh_mcp(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> MCPRefreshResponse:
-    """POST /api/v1/admin/mcp/{server}/refresh — re-discover tools; audited."""
-    # PR4b refreshes none/bearer servers; oauth-server discovery needs a per-user token
-    # (no admin user context here) — handled in PR4c.
+    """POST /api/v1/admin/mcp/{server}/refresh — re-discover tools; audited.
+
+    Covers ``none`` and ``bearer`` MCP servers only.  OAuth servers are
+    per-user — discovery and refresh happen on the user-scoped OAuth-connect
+    path (``/api/v1/mcp/oauth/{server}/authorize``).  Calling this endpoint
+    for an ``auth: oauth`` server raises a typed
+    :class:`~app.errors.MCPAuthorizationRequired` (409) so the caller knows
+    to redirect to the user-scoped flow rather than receiving a silent failure.
+    """
     tools = await service.refresh_server(db, provider=server)
     await audit_action(
         db,
