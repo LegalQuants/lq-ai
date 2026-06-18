@@ -74,6 +74,7 @@ def upgrade() -> None:
         sa.Column("resource", sa.Text(), nullable=True),
         sa.Column("token_endpoint", sa.Text(), nullable=False),
         sa.Column("redirect_uri", sa.Text(), nullable=False),
+        sa.Column("as_iss_supported", sa.Boolean(), nullable=False),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),

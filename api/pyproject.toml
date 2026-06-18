@@ -231,3 +231,10 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = ["pyotp", "pyotp.*"]
 ignore_missing_imports = true
+
+# PR4c — authlib ships no type stubs (no py.typed marker). We use only its
+# PKCE + secure-token-generation helpers in app.mcp.oauth (never its HTTP
+# transport — all OAuth HTTP goes through the gateway passthrough).
+[[tool.mypy.overrides]]
+module = ["authlib", "authlib.*"]
+ignore_missing_imports = true

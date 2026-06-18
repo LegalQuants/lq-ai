@@ -23,7 +23,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, LargeBinary, Text, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, LargeBinary, Text, text
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -117,6 +117,12 @@ class MCPOAuthState(Base):
     redirect_uri: Mapped[str] = mapped_column(Text, nullable=False)
     """The callback redirect_uri used in the authorize request; must match
     at token exchange."""
+    as_iss_supported: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    """Whether the AS advertised the RFC 9207
+    ``authorization_response_iss_parameter_supported`` flag at authorize-time.
+    Captured from discovery so the callback can enforce "iss is REQUIRED when
+    the AS supports it" (RFC 9207 §3) — not just "iss must match when present".
+    No server_default: the app always sets it from discovery metadata."""
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

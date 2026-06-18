@@ -86,6 +86,7 @@ def test_mcp_oauth_state_columns() -> None:
         "resource",
         "token_endpoint",
         "redirect_uri",
+        "as_iss_supported",
         "created_at",
         "expires_at",
     }
@@ -204,6 +205,7 @@ async def test_mcp_oauth_state_row_roundtrips(db_session: AsyncSession) -> None:
         resource="https://api.courtlistener.com/",
         token_endpoint="https://example-as.test/token",
         redirect_uri="https://lq-ai.local/api/v1/oauth/court-listener/callback",
+        as_iss_supported=True,
         expires_at=expires,
     )
     db_session.add(state_row)
@@ -244,6 +246,7 @@ async def test_mcp_oauth_state_resource_nullable(db_session: AsyncSession) -> No
         resource=None,
         token_endpoint="https://issuer.test/token",
         redirect_uri="https://lq-ai.local/api/v1/oauth/no-resource-provider/callback",
+        as_iss_supported=False,
         expires_at=expires,
     )
     db_session.add(state_row)
@@ -273,6 +276,7 @@ async def test_mcp_oauth_state_cascade_delete(db_session: AsyncSession) -> None:
         issuer="https://issuer.test",
         token_endpoint="https://issuer.test/token",
         redirect_uri="https://lq-ai.local/api/v1/oauth/cascade-provider/callback",
+        as_iss_supported=False,
         expires_at=expires,
     )
     db_session.add(state_row)
