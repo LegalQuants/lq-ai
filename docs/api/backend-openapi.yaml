@@ -4869,6 +4869,10 @@ paths:
                 order_by:
                   type: string
                   nullable: true
+                cursor:
+                  type: string
+                  nullable: true
+                  description: "Opaque pagination cursor from a prior response's next_cursor; fetch the next page."
       responses:
         '200':
           description: Search results

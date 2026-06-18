@@ -235,6 +235,8 @@ class CourtListenerToolAdapter(ToolProviderAdapter):
             params["court"] = args["court"]
         if isinstance(args.get("order_by"), str):
             params["order_by"] = args["order_by"]
+        if isinstance(args.get("cursor"), str) and args["cursor"]:
+            params["cursor"] = args["cursor"]
         resp = await self._request("GET", "/search/", params=params)
         data = resp.json()
         results = [

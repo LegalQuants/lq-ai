@@ -48,6 +48,7 @@ class SearchRequest(BaseModel):
     q: str = Field(min_length=1)
     court: str | None = None
     order_by: str | None = None
+    cursor: str | None = None
 
 
 class SearchResultItem(BaseModel):

@@ -227,6 +227,41 @@ async def test_get_cases_requires_integer_cluster_id(monkeypatch) -> None:
 
 
 @pytest.mark.unit
+async def test_search_case_law_forwards_cursor_param(monkeypatch) -> None:
+    """When cursor is in args, it is forwarded as ?cursor= to CourtListener."""
+    adapter = _adapter(monkeypatch)
+    api_resp = {"count": 0, "next": None, "results": []}
+    with respx.mock:
+        route = respx.get(f"{BASE}/search/").mock(return_value=httpx.Response(200, json=api_resp))
+        try:
+            await adapter.invoke_tool(
+                "search_case_law", {"q": "privacy", "cursor": "CUR"}, request_id="r1"
+            )
+        finally:
+            await adapter.aclose()
+    assert route.called
+    params = route.calls.last.request.url.params
+    assert params["cursor"] == "CUR"
+    assert params["q"] == "privacy"
+
+
+@pytest.mark.unit
+async def test_search_case_law_omits_cursor_param_when_absent(monkeypatch) -> None:
+    """When cursor is not in args, no cursor param is sent to CourtListener."""
+    adapter = _adapter(monkeypatch)
+    api_resp = {"count": 0, "next": None, "results": []}
+    with respx.mock:
+        route = respx.get(f"{BASE}/search/").mock(return_value=httpx.Response(200, json=api_resp))
+        try:
+            await adapter.invoke_tool("search_case_law", {"q": "privacy"}, request_id="r1")
+        finally:
+            await adapter.aclose()
+    assert route.called
+    params = route.calls.last.request.url.params
+    assert "cursor" not in params
+
+
+@pytest.mark.unit
 async def test_courtlistener_through_router_writes_audit(monkeypatch) -> None:
     from app.config import GatewayConfig
     from app.router import Router
