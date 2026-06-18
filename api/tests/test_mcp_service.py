@@ -108,3 +108,101 @@ async def test_set_tool_enabled_toggles(db_session) -> None:
 async def test_set_tool_enabled_missing_raises(db_session) -> None:
     with pytest.raises(NotFound):
         await service.set_tool_enabled(db_session, provider="x", tool="y", enabled=True)
+
+
+@pytest.mark.asyncio
+async def test_set_tool_enabled_is_provider_scoped(db_session) -> None:
+    """provider_name filter in set_tool_enabled is load-bearing: toggling a tool
+    on one provider must not affect a same-named tool on a different provider."""
+    db_session.add(
+        MCPToolCache(
+            provider_name="acme-mcp",
+            tool_name="read_doc",
+            parameters={},
+            enabled=True,
+            requires_confirmation=True,
+        )
+    )
+    db_session.add(
+        MCPToolCache(
+            provider_name="other-mcp",
+            tool_name="read_doc",
+            parameters={},
+            enabled=True,
+            requires_confirmation=True,
+        )
+    )
+    await db_session.commit()
+
+    await service.set_tool_enabled(db_session, provider="acme-mcp", tool="read_doc", enabled=False)
+    await db_session.commit()
+
+    acme_row = (
+        await db_session.execute(
+            select(MCPToolCache).where(
+                MCPToolCache.provider_name == "acme-mcp",
+                MCPToolCache.tool_name == "read_doc",
+            )
+        )
+    ).scalar_one()
+    other_row = (
+        await db_session.execute(
+            select(MCPToolCache).where(
+                MCPToolCache.provider_name == "other-mcp",
+                MCPToolCache.tool_name == "read_doc",
+            )
+        )
+    ).scalar_one()
+
+    assert acme_row.enabled is False, "acme-mcp/read_doc should be disabled"
+    assert other_row.enabled is True, "other-mcp/read_doc must not be affected"
+
+
+@pytest.mark.asyncio
+async def test_refresh_is_provider_scoped(db_session) -> None:
+    """refresh_server(provider="acme-mcp") with a narrower tool list must not
+    delete cached rows belonging to a different provider."""
+    db_session.add(
+        MCPToolCache(
+            provider_name="acme-mcp",
+            tool_name="read_doc",
+            parameters={},
+            enabled=True,
+            requires_confirmation=True,
+        )
+    )
+    db_session.add(
+        MCPToolCache(
+            provider_name="other-mcp",
+            tool_name="read_doc",
+            parameters={},
+            enabled=True,
+            requires_confirmation=True,
+        )
+    )
+    await db_session.commit()
+
+    # acme-mcp now returns zero tools — all its cached rows should be deleted
+    with respx.mock(base_url=GW) as mock:
+        mock.get("/v1/tools/acme-mcp").mock(
+            return_value=httpx.Response(200, json=_tools_payload("acme-mcp", []))
+        )
+        await service.refresh_server(db_session, provider="acme-mcp")
+    await db_session.commit()
+
+    acme_rows = (
+        await db_session.execute(
+            select(MCPToolCache).where(MCPToolCache.provider_name == "acme-mcp")
+        )
+    ).scalars().all()
+    other_row = (
+        await db_session.execute(
+            select(MCPToolCache).where(
+                MCPToolCache.provider_name == "other-mcp",
+                MCPToolCache.tool_name == "read_doc",
+            )
+        )
+    ).scalar_one()
+
+    assert acme_rows == [], "acme-mcp's stale rows should have been deleted"
+    assert other_row.enabled is True, "other-mcp/read_doc must survive acme-mcp refresh"
