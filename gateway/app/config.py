@@ -209,6 +209,66 @@ class ToolProviderConfig(BaseModel):
         return self
 
 
+# --- MCP server config (PR4a) ------------------------------------------------
+
+
+MCPAuthType = Literal["none", "bearer", "oauth"]
+"""How the gateway authenticates to an MCP server. ``none``/``bearer`` use
+operator-static config; ``oauth`` uses a per-call user token supplied by the
+api (the gateway stays user-unaware — WS2 spec D4)."""
+
+
+class MCPServerConfig(BaseModel):
+    """One entry under ``mcp_servers:`` in ``mcp.yaml``. Synthesized into a
+    ``type: mcp`` :class:`ToolProviderConfig` at load (WS2 spec D2)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1)
+    server_url: str = Field(min_length=1)
+    auth: MCPAuthType = "none"
+    api_key_env: str | None = None
+    api_key_encrypted: str | None = None
+    egress_tier: InferenceTier
+    allowlist: EgressAllowlistConfig
+    rate_limit: ToolProviderRateLimitConfig = Field(default_factory=ToolProviderRateLimitConfig)
+    enabled: bool = True
+
+    @model_validator(mode="after")
+    def _bearer_needs_key(self) -> MCPServerConfig:
+        if self.auth == "bearer" and not (self.api_key_env or self.api_key_encrypted):
+            raise ValueError(
+                f"MCP server {self.name!r}: auth 'bearer' requires api_key_env or api_key_encrypted."
+            )
+        if self.auth in ("none", "oauth") and (self.api_key_env or self.api_key_encrypted):
+            raise ValueError(
+                f"MCP server {self.name!r}: api_key_* is only valid with auth 'bearer'."
+            )
+        return self
+
+    def to_tool_provider_config(self) -> ToolProviderConfig:
+        # Build via model_validate so the extra ``auth`` field (permitted by
+        # ToolProviderConfig's ``extra="allow"``) passes mypy's strict check.
+        # MCP providers intentionally inherit ToolProviderConfig's
+        # ``anonymize_outbound=True`` default (conservative; no field on
+        # MCPServerConfig — the safe posture is always on until WS3/WS4
+        # enforcement lands).
+        return ToolProviderConfig.model_validate(
+            {
+                "name": self.name,
+                "type": "mcp",
+                "base_url": self.server_url,
+                "api_key_env": self.api_key_env,
+                "api_key_encrypted": self.api_key_encrypted,
+                "egress_tier": self.egress_tier,
+                "allowlist": self.allowlist.model_dump(),
+                "rate_limit": self.rate_limit.model_dump(),
+                "enabled": self.enabled,
+                "auth": self.auth,  # extra field; ToolProviderConfig is extra="allow"
+            }
+        )
+
+
 # --- Model aliases ------------------------------------------------------------
 
 
@@ -512,6 +572,31 @@ class GatewayConfig(BaseModel):
     circuit_breaker: CircuitBreakerConfig = Field(default_factory=CircuitBreakerConfig)
     request_validation: RequestValidationConfig = Field(default_factory=RequestValidationConfig)
     dev_mode: DevModeConfig = Field(default_factory=DevModeConfig)
+
+    @model_validator(mode="after")
+    def _tool_provider_names_unique(self) -> GatewayConfig:
+        """Reject duplicate tool-provider names.
+
+        ``tool_provider_by_name`` is a linear scan that returns the first
+        match, so a duplicate name would silently shadow the second entry.
+        Catch it at config load — same pattern as inference ``providers``
+        which would also shadow on duplicate names.
+        """
+        names = [tp.name for tp in self.tool_providers]
+        unique_names = {tp.name for tp in self.tool_providers}
+        if len(unique_names) < len(names):
+            seen: set[str] = set()
+            dupes: list[str] = []
+            for name in names:
+                if name in seen:
+                    dupes.append(name)
+                else:
+                    seen.add(name)
+            raise ValueError(
+                f"tool_providers contains duplicate name(s): {sorted(dupes)}. "
+                "Each tool provider must have a unique name."
+            )
+        return self
 
     @model_validator(mode="after")
     def _aliases_reference_known_providers(self) -> GatewayConfig:

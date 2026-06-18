@@ -88,6 +88,10 @@ DEFAULT_CONFIG_PATH = Path("gateway.yaml")
 """Default path the gateway looks for its config when ``GATEWAY_CONFIG_PATH``
 is unset. Resolved relative to the process cwd."""
 
+DEFAULT_MCP_CONFIG_NAME = "mcp.yaml"
+"""Default filename for the MCP server config, resolved as a sibling of the
+gateway config file. Overridden by ``MCP_CONFIG_PATH``."""
+
 
 def _resolve_config_path() -> Path:
     """Return the effective config path for this process."""
@@ -96,6 +100,31 @@ def _resolve_config_path() -> Path:
     if override:
         return Path(override)
     return DEFAULT_CONFIG_PATH
+
+
+def _resolve_mcp_config_path() -> Path | None:
+    """Return the effective MCP config path, or ``None`` if not found.
+
+    Checks ``MCP_CONFIG_PATH`` first; falls back to ``mcp.yaml`` as a sibling
+    of the resolved gateway config file. Returns the :class:`Path` only when
+    the file exists so callers don't need to guard themselves.
+    """
+
+    override = os.environ.get("MCP_CONFIG_PATH")
+    if override:
+        candidate = Path(override)
+        if not candidate.exists():
+            logger.warning(
+                "MCP_CONFIG_PATH is set to %r but the file does not exist; "
+                "MCP server config will not be loaded",
+                str(candidate),
+            )
+            return None
+        return candidate
+    else:
+        gateway_path = _resolve_config_path()
+        candidate = gateway_path.parent / DEFAULT_MCP_CONFIG_NAME
+    return candidate if candidate.exists() else None
 
 
 def build_adapter(provider: ProviderConfig) -> ProviderAdapter | None:
@@ -161,7 +190,12 @@ def build_tool_adapter(provider: ToolProviderConfig) -> ToolProviderAdapter | No
         cl_adapter = CourtListenerToolAdapter.from_config(provider)
         cl_adapter.validate_base_url()
         return cl_adapter
-    # mcp (PR4) lands later.
+    if provider.type == "mcp":
+        from app.providers.tool.mcp import MCPToolProviderAdapter
+
+        mcp_adapter = MCPToolProviderAdapter.from_config(provider)
+        mcp_adapter.validate_base_url()
+        return mcp_adapter
     return None
 
 
@@ -174,9 +208,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """
 
     config_path = _resolve_config_path()
+    mcp_config_path = _resolve_mcp_config_path()
     logger.info("loading gateway config from %s", config_path)
+    if mcp_config_path is not None:
+        logger.info("loading mcp server config from %s", mcp_config_path)
     try:
-        config = load_config(config_path)
+        config = load_config(config_path, mcp_path=mcp_config_path)
     except ConfigLoadError:
         logger.exception("gateway config load failed; refusing to start")
         raise

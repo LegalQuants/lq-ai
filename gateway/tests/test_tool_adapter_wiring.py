@@ -4,11 +4,12 @@ Verifies:
 * echo provider → ``EchoToolAdapter`` instance.
 * base_url outside the allowlist → ``EgressRefused`` at build time.
 * disabled provider → ``None`` (no adapter built).
+* mcp provider → ``MCPToolProviderAdapter`` instance.
 """
 
 import pytest
 
-from app.config import GatewayConfig
+from app.config import GatewayConfig, ToolProviderConfig
 from app.main import build_tool_adapter
 from app.providers.tool.echo import EchoToolAdapter
 from app.providers.tool.egress import EgressRefused
@@ -75,6 +76,26 @@ def test_build_tool_adapter_disabled_returns_none() -> None:
         }
     )
     assert build_tool_adapter(cfg.tool_providers[0]) is None
+
+
+@pytest.mark.unit
+def test_build_tool_adapter_mcp(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.providers.tool import egress
+    from app.providers.tool.mcp import MCPToolProviderAdapter
+
+    monkeypatch.setattr(egress, "_resolve_ips", lambda host: ["93.184.216.34"])
+    cfg = ToolProviderConfig.model_validate(
+        {
+            "name": "acme-mcp",
+            "type": "mcp",
+            "base_url": "https://mcp.acme.example/sse",
+            "egress_tier": 2,
+            "allowlist": {"hosts": ["mcp.acme.example"]},
+            "auth": "none",
+        }
+    )
+    adapter = build_tool_adapter(cfg)
+    assert isinstance(adapter, MCPToolProviderAdapter)
 
 
 @pytest.mark.unit

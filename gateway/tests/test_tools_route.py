@@ -117,3 +117,123 @@ async def test_tools_route_registered_on_app(gateway_app) -> None:
     paths = gateway_app.openapi()["paths"]
     assert "/v1/tools/{provider}/{tool}" in paths
     assert "post" in paths["/v1/tools/{provider}/{tool}"]
+    assert "/v1/tools/{provider}" in paths
+    assert "get" in paths["/v1/tools/{provider}"]
+
+
+# ---------------------------------------------------------------------------
+# GET /v1/tools/{provider} — discovery endpoint (PR4a Task 6)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+async def test_discovery_lists_tools(monkeypatch) -> None:
+    """GET /v1/tools/{provider} returns 200 with provider name and tool list."""
+    app, adapter = _make_app(monkeypatch)
+    try:
+        async with _client(app) as c:
+            resp = await c.get("/v1/tools/echo-test")
+    finally:
+        await adapter.aclose()
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["provider"] == "echo-test"
+    tools = body["tools"]
+    assert isinstance(tools, list)
+    assert len(tools) >= 1
+    names = [t["name"] for t in tools]
+    assert "echo" in names
+
+
+@pytest.mark.unit
+async def test_discovery_unknown_provider_404(monkeypatch) -> None:
+    """GET /v1/tools/{unknown} returns 404 with unknown_provider error code."""
+    app, adapter = _make_app(monkeypatch)
+    try:
+        async with _client(app) as c:
+            resp = await c.get("/v1/tools/nope")
+    finally:
+        await adapter.aclose()
+    assert resp.status_code == 404
+    assert resp.json()["error"]["code"] == "unknown_provider"
+
+
+@pytest.mark.unit
+async def test_discovery_requires_gateway_key_when_configured(monkeypatch) -> None:
+    """GET /v1/tools/{provider} is gated by the gateway key when LQ_AI_GATEWAY_KEY is set."""
+    monkeypatch.setenv("LQ_AI_GATEWAY_KEY", "secret-key")
+    app, adapter = _make_app(monkeypatch)
+    try:
+        async with _client(app) as c:
+            missing = await c.get("/v1/tools/echo-test")
+            ok = await c.get(
+                "/v1/tools/echo-test",
+                headers={"X-LQ-AI-Gateway-Key": "secret-key"},
+            )
+    finally:
+        await adapter.aclose()
+    assert missing.status_code == 401
+    assert ok.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# user_token transport test (PR4a Task 5)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+async def test_tool_call_forwards_user_token_to_route_tool_call(monkeypatch) -> None:
+    """user_token sent via X-LQ-AI-User-Token header is forwarded to Router.route_tool_call."""
+    captured: dict[str, object] = {}
+
+    async def _fake_route_tool_call(
+        provider_name: str,
+        tool: str,
+        args: dict[str, object],
+        *,
+        request_id: str,
+        max_allowed_tier: int | None = None,
+        user_token: str | None = None,
+    ) -> object:
+        captured["user_token"] = user_token
+        from app.router import ToolCallRoutedResult
+
+        return ToolCallRoutedResult(provider=provider_name, tool=tool, payload={"ok": True}, tier=2)
+
+    app, adapter = _make_app(monkeypatch)
+    app.state.router.route_tool_call = _fake_route_tool_call  # type: ignore[method-assign]
+
+    try:
+        async with _client(app) as c:
+            resp = await c.post(
+                "/v1/tools/echo-test/echo",
+                json={"args": {"q": "x"}},
+                headers={"X-LQ-AI-User-Token": "t"},
+            )
+    finally:
+        await adapter.aclose()
+
+    assert resp.status_code == 200
+    assert captured["user_token"] == "t"
+
+
+@pytest.mark.unit
+async def test_discovery_returns_502_on_tool_provider_error(monkeypatch) -> None:
+    """GET /v1/tools/{provider} returns 502 with tool_provider_unavailable when list_tools raises."""
+    from app.providers.tool.base import ToolProviderError
+
+    app, adapter = _make_app(monkeypatch)
+
+    async def _failing_list_tools(*, user_token: str | None = None):  # type: ignore[override]
+        raise ToolProviderError("upstream exploded")
+
+    adapter.list_tools = _failing_list_tools  # type: ignore[method-assign]
+
+    try:
+        async with _client(app) as c:
+            resp = await c.get("/v1/tools/echo-test")
+    finally:
+        await adapter.aclose()
+
+    assert resp.status_code == 502
+    assert resp.json()["error"]["code"] == "tool_provider_unavailable"

@@ -118,11 +118,13 @@ class ToolProviderAdapter(ABC):
     name: str
 
     @abstractmethod
-    async def list_tools(self) -> list[ToolSpec]:
+    async def list_tools(self, *, user_token: str | None = None) -> list[ToolSpec]:
         """Return the model-callable tools this provider offers."""
 
     @abstractmethod
-    async def invoke_tool(self, tool: str, args: dict[str, Any], *, request_id: str) -> ToolResult:
+    async def invoke_tool(
+        self, tool: str, args: dict[str, Any], *, request_id: str, user_token: str | None = None
+    ) -> ToolResult:
         """Invoke ``tool`` with ``args``; return structured provenance."""
 
     @abstractmethod

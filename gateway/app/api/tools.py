@@ -52,6 +52,15 @@ def _request_id(request: Request) -> str:
     return synthesize_request_id(None)
 
 
+_USER_TOKEN_HEADER = "X-LQ-AI-User-Token"
+
+
+def _user_token(request: Request) -> str | None:
+    """Per-user MCP token (auth: oauth). A header, NOT a query param/body —
+    query strings land in access logs; this must not. Never logged."""
+    return request.headers.get(_USER_TOKEN_HEADER)
+
+
 def _error(
     status_code: int, code: str, message: str, details: dict[str, Any] | None = None
 ) -> JSONResponse:
@@ -61,12 +70,50 @@ def _error(
     )
 
 
+@router.get("/tools/{provider}")
+async def list_provider_tools(provider: str, request: Request) -> JSONResponse:
+    """Return the live ``list_tools()`` for a configured tool provider.
+
+    The per-user OAuth token for ``auth: oauth`` MCP servers is supplied via
+    the ``X-LQ-AI-User-Token`` request header (PR4c supplies it). Using a
+    header instead of a query parameter ensures the token is never written to
+    uvicorn access logs. For ``none`` / ``bearer`` providers the token is
+    ignored and **never logged**.
+    """
+    user_token = _user_token(request)
+    gw_router = _router(request)
+    adapter = gw_router._tool_adapters.get(provider)
+    if adapter is None:
+        return _error(404, "unknown_provider", f"tool provider {provider!r} not found")
+    try:
+        specs = await adapter.list_tools(user_token=user_token)
+    except ToolProviderError as exc:
+        return _error(502, "tool_provider_unavailable", exc.message, exc.details)
+    return JSONResponse(
+        content={
+            "provider": provider,
+            "tools": [
+                {
+                    "name": s.name,
+                    "description": s.description,
+                    "parameters": s.parameters,
+                    "read_only": s.read_only,
+                    "destructive": s.destructive,
+                    "requires_confirmation": s.requires_confirmation,
+                }
+                for s in specs
+            ],
+        }
+    )
+
+
 @router.post("/tools/{provider}/{tool}")
 async def call_tool(
     provider: str, tool: str, body: ToolCallRequest, request: Request
 ) -> JSONResponse:
     gw_router = _router(request)
     request_id = _request_id(request)
+    user_token = _user_token(request)
     try:
         result = await gw_router.route_tool_call(
             provider,
@@ -74,6 +121,7 @@ async def call_tool(
             body.args,
             request_id=request_id,
             max_allowed_tier=body.max_allowed_tier,
+            user_token=user_token,
         )
     except ToolEgressRefused as exc:
         return _error(403, "egress_refused", exc.reason)

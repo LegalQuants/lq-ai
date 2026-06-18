@@ -83,3 +83,93 @@ async def test_route_tool_call_enforces_rate_limit() -> None:
     with pytest.raises(ToolEgressRefused, match="rate"):
         await router.route_tool_call("echo-test", "echo", {}, request_id="r3", max_allowed_tier=4)
     assert writer.rows[-1].refused is True
+
+
+# ---------------------------------------------------------------------------
+# user_token threading tests (PR4a Task 5)
+# ---------------------------------------------------------------------------
+
+
+class _CaptureAdapter:
+    """Minimal adapter that records the user_token it received."""
+
+    name = "acme-mcp"
+    captured_token: str | None = None
+
+    async def invoke_tool(
+        self,
+        tool: str,
+        args: dict[str, object],
+        *,
+        request_id: str,
+        user_token: str | None = None,
+    ) -> object:
+        type(self).captured_token = user_token
+        from app.providers.tool.base import ToolResult
+
+        return ToolResult(provider=self.name, tool=tool, payload={"ok": True})
+
+    async def list_tools(self, *, user_token: str | None = None) -> list[object]:
+        return []
+
+
+def _mcp_router(writer: RecordingToolEgressLogWriter) -> Router:
+    """Build a Router with a ``type:mcp`` provider named ``acme-mcp``."""
+    cfg = GatewayConfig.model_validate(
+        {
+            "tool_providers": [
+                {
+                    "name": "acme-mcp",
+                    "type": "mcp",
+                    "base_url": "https://mcp.acme.example",
+                    "egress_tier": 2,
+                    "allowlist": {"hosts": ["mcp.acme.example"]},
+                    "auth": "none",
+                }
+            ]
+        }
+    )
+    capture = _CaptureAdapter()
+    limiter = FixedWindowRateLimiter(requests_per_minute=60, now=(lambda: 1000.0))
+    return Router(
+        config=cfg,
+        adapters={},
+        tool_adapters={"acme-mcp": capture},
+        tool_egress_log=writer,
+        tool_rate_limiter=limiter,
+    )
+
+
+@pytest.mark.unit
+async def test_route_tool_call_threads_user_token_to_adapter() -> None:
+    """user_token is forwarded to adapter.invoke_tool (not dropped or logged)."""
+    _CaptureAdapter.captured_token = None
+    writer = RecordingToolEgressLogWriter()
+    router = _mcp_router(writer)
+
+    await router.route_tool_call(
+        "acme-mcp",
+        "read_doc",
+        {"q": "x"},
+        request_id="r1",
+        user_token="secret-user-token",
+    )
+
+    # Token reached the adapter.
+    assert _CaptureAdapter.captured_token == "secret-user-token"
+
+    # Token must NOT appear in any audit-log row.
+    assert len(writer.rows) == 1
+    assert "secret-user-token" not in str(writer.rows[-1].__dict__)
+
+
+@pytest.mark.unit
+async def test_route_tool_call_user_token_none_by_default() -> None:
+    """Omitting user_token passes None to the adapter (backward-compatible)."""
+    _CaptureAdapter.captured_token = "sentinel"
+    writer = RecordingToolEgressLogWriter()
+    router = _mcp_router(writer)
+
+    await router.route_tool_call("acme-mcp", "read_doc", {}, request_id="r2")
+
+    assert _CaptureAdapter.captured_token is None
