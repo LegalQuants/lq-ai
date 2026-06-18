@@ -4591,6 +4591,16 @@ No code change — the runtime already returns these with the correct typed `cod
 
 **When to ship:** Before MCP is used against untrusted/flaky servers at scale; the `initialize` bound covers the common connect-failure case meanwhile.
 
+#### DE-341 — Retire the OpenWebUI `web/backend/open_webui/utils/mcp/client.py` stub once the chat path is gateway-brokered
+
+**Priority:** P3 · **Effort:** M
+
+**Context:** PR4c's plan listed deleting the ported OpenWebUI MCP client stub (`web/backend/open_webui/utils/mcp/client.py`) on the assumption it was unwired. Verified against `main` during PR4c: it is still actively imported in two web-backend call sites — `web/backend/open_webui/routers/configs.py:403` (`MCPClient()` in a tool-server connect/verify endpoint) and `web/backend/open_webui/utils/middleware.py:2671` (`MCPClient()` in the chat middleware — the OLD backend-direct MCP path that PR4a–c replace at the gateway boundary). Deleting the stub in PR4c would break the web backend; properly removing it requires migrating those call sites — chiefly the chat middleware's tool-call connection — onto the gateway-brokered path, which is PR5's scope (the governed chat tool-loop). Surfaced 2026-06-18; PR4c was kept backend-only and the deletion deferred (operator-confirmed).
+
+**Specific scope:** When PR5 rewires the chat tool-loop to call MCP tools through the gateway (`POST /v1/tools/{provider}/{tool}` + the per-user `X-LQ-AI-User-Token` from the PR4c OAuth store), migrate `configs.py`'s tool-server verify path and `middleware.py`'s `mcp_clients` connection off `MCPClient`, then delete `web/backend/open_webui/utils/mcp/client.py` and grep-confirm no remaining importers. (DE-338's teardown-timeout discussion references the same stub — close both together.)
+
+**When to ship:** PR5 (WS4 governed chat tool-loop), alongside the chat-path migration to the gateway.
+
 ---
 
 ## 10. Appendices
