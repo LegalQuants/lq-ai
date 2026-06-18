@@ -183,7 +183,7 @@ async def test_discovery_requires_gateway_key_when_configured(monkeypatch) -> No
 
 @pytest.mark.unit
 async def test_tool_call_forwards_user_token_to_route_tool_call(monkeypatch) -> None:
-    """user_token in the JSON body is forwarded to Router.route_tool_call."""
+    """user_token sent via X-LQ-AI-User-Token header is forwarded to Router.route_tool_call."""
     captured: dict[str, object] = {}
 
     async def _fake_route_tool_call(
@@ -207,10 +207,33 @@ async def test_tool_call_forwards_user_token_to_route_tool_call(monkeypatch) -> 
         async with _client(app) as c:
             resp = await c.post(
                 "/v1/tools/echo-test/echo",
-                json={"args": {"q": "x"}, "user_token": "t"},
+                json={"args": {"q": "x"}},
+                headers={"X-LQ-AI-User-Token": "t"},
             )
     finally:
         await adapter.aclose()
 
     assert resp.status_code == 200
     assert captured["user_token"] == "t"
+
+
+@pytest.mark.unit
+async def test_discovery_returns_502_on_tool_provider_error(monkeypatch) -> None:
+    """GET /v1/tools/{provider} returns 502 with tool_provider_unavailable when list_tools raises."""
+    from app.providers.tool.base import ToolProviderError
+
+    app, adapter = _make_app(monkeypatch)
+
+    async def _failing_list_tools(*, user_token: str | None = None):  # type: ignore[override]
+        raise ToolProviderError("upstream exploded")
+
+    adapter.list_tools = _failing_list_tools  # type: ignore[method-assign]
+
+    try:
+        async with _client(app) as c:
+            resp = await c.get("/v1/tools/echo-test")
+    finally:
+        await adapter.aclose()
+
+    assert resp.status_code == 502
+    assert resp.json()["error"]["code"] == "tool_provider_unavailable"

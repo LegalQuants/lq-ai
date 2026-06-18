@@ -349,9 +349,11 @@ paths:
         Callers use this to discover available tools and their parameter schemas
         before invoking via ``POST /v1/tools/{provider}/{tool}``.
 
-        The ``user_token`` query parameter allows an ``auth: oauth`` MCP server
-        to be discovered using the end-user's OAuth token (PR4c supplies it).
-        For ``none`` / ``bearer`` providers the token is ignored and
+        The per-user OAuth token for ``auth: oauth`` MCP servers is supplied via
+        the ``X-LQ-AI-User-Token`` request header (PR4c supplies it). A header
+        is used instead of a query parameter because query strings are written
+        to uvicorn access logs in plaintext; this token must never appear in
+        logs. For ``none`` / ``bearer`` providers the token is ignored and
         **never logged**.
 
         Gated by the gateway key (same as the invoke transport).
@@ -363,13 +365,15 @@ paths:
           required: true
           schema: {type: string}
           description: Name of a configured tool provider (e.g. ``courtlistener``).
-        - name: user_token
-          in: query
+        - name: X-LQ-AI-User-Token
+          in: header
           required: false
           schema: {type: string}
           description: |
-            Optional OAuth token forwarded to the adapter for ``auth: oauth``
-            MCP servers. Ignored for ``none`` / ``bearer``. Never logged.
+            Optional per-user OAuth token forwarded to the adapter for
+            ``auth: oauth`` MCP servers. Carried as a header (not a query
+            param) so it is never written to access logs. Ignored for
+            ``none`` / ``bearer`` auth providers. Never logged.
       responses:
         '200':
           description: Tool list returned successfully
@@ -423,6 +427,16 @@ paths:
           required: true
           schema: {type: string}
           description: Tool name within the provider (e.g. ``search_opinions``).
+        - name: X-LQ-AI-User-Token
+          in: header
+          required: false
+          schema: {type: string}
+          description: |
+            Optional per-user OAuth token forwarded to the adapter for
+            ``auth: oauth`` MCP servers. Carried as a header (not a query
+            param or request body field) so it is never written to access
+            logs. Ignored for ``none`` / ``bearer`` auth providers. Never
+            logged.
       requestBody:
         required: true
         content:
@@ -1323,13 +1337,6 @@ components:
             Optional egress-tier ceiling. If the provider's ``egress_tier``
             is higher than this value the gateway refuses with 403
             (``egress_refused``). Omit to allow any tier.
-        user_token:
-          type: string
-          nullable: true
-          description: |
-            Per-call OAuth token for ``auth: oauth`` MCP servers (PR4c).
-            Forwarded to the tool adapter and **never logged**. Ignored for
-            ``none`` / ``bearer`` auth providers.
 
     ToolDiscoveryResponse:
       type: object
