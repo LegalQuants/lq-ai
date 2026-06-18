@@ -4581,6 +4581,18 @@ No code change — the runtime already returns these with the correct typed `cod
 
 ---
 
+#### DE-338 — Bound MCP session teardown against a hung server
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** `MCPToolProviderAdapter`'s default session factory (`gateway/app/providers/tool/mcp.py`, PR4a) opens the streamable_http session inside an `AsyncExitStack` and bounds `session.initialize()` with `anyio.fail_after(10)`. But teardown (`AsyncExitStack.__aexit__`) runs inline with **no timeout** — a hung/half-dead MCP server could block the closing task during stream shutdown. The web stub this was ported from (`web/backend/open_webui/utils/mcp/client.py`) carried an explicit ~5s disconnect timeout for exactly this reason (its `disconnect()` comments document the cancel-scope discipline). The port deliberately kept enter+exit lexically scoped (which avoids the stub's cross-task-exit hazard — see the PR4a Task 3 review), so the hang risk is lower, but an unbounded teardown is still a latent availability foot-gun. Surfaced during the PR4a code review (2026-06-17).
+
+**Specific scope:** Bound the session teardown with a timeout that does NOT violate the MCP SDK's same-task cancel-scope requirement (the stub's comments enumerate what NOT to use — no `asyncio.shield`/`wait_for`, no new `anyio.CancelScope`/`fail_after` around the inner `TaskGroup` exit). Likely a connect-level timeout on the transport, or a watchdog that abandons the connection rather than wrapping `aclose()`. Add a test with a fake session whose teardown hangs.
+
+**When to ship:** Before MCP is used against untrusted/flaky servers at scale; the `initialize` bound covers the common connect-failure case meanwhile.
+
+---
+
 ## 10. Appendices
 
 ### Appendix A — Glossary
