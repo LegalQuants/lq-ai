@@ -11,6 +11,9 @@ Also covers schema-layer typing added in WS3b-follow (Donna asks 2 & 3):
 - VerifiedCitation / CitationCluster round-trips the adapter's exact emitted shape.
 - OpinionTextField Literal accepts all 7 values (incl xml_harvard) and is used
   on OpinionMeta and OpinionText.
+
+And cursor pagination (Donna ask — Slice A "load more"):
+- SearchRequest accepts an optional cursor field and flows it through model_dump.
 """
 
 from __future__ import annotations
@@ -26,6 +29,7 @@ from app.schemas.research import (
     OpinionMeta,
     OpinionText,
     OpinionTextField,
+    SearchRequest,
     VerifiedCitation,
     VerifyCitationsResponse,
 )
@@ -171,3 +175,41 @@ def test_opinion_text_rejects_invalid_text_field() -> None:
     """OpinionText rejects values outside the closed Literal set."""
     with pytest.raises(ValidationError):
         OpinionText(opinion_id=1, cluster_id=2, text_field_used="raw_text", text="x")
+
+
+# ---------------------------------------------------------------------------
+# SearchRequest cursor pagination (Donna ask — Slice A "load more")
+# ---------------------------------------------------------------------------
+
+
+def test_search_request_accepts_cursor() -> None:
+    """SearchRequest accepts a cursor and exposes it on the model."""
+    req = SearchRequest(q="privacy", cursor="abc")
+    assert req.cursor == "abc"
+
+
+def test_search_request_cursor_in_model_dump_when_set() -> None:
+    """model_dump(exclude_none=True) includes cursor when it is set."""
+    req = SearchRequest(q="privacy", cursor="abc")
+    dumped = req.model_dump(exclude_none=True)
+    assert dumped["cursor"] == "abc"
+    assert dumped["q"] == "privacy"
+
+
+def test_search_request_cursor_omitted_from_model_dump_when_none() -> None:
+    """model_dump(exclude_none=True) omits cursor when it is None (default)."""
+    req = SearchRequest(q="privacy")
+    dumped = req.model_dump(exclude_none=True)
+    assert "cursor" not in dumped
+
+
+def test_search_request_cursor_default_none() -> None:
+    """cursor defaults to None when not supplied."""
+    req = SearchRequest(q="contract")
+    assert req.cursor is None
+
+
+def test_search_request_rejects_extra_field() -> None:
+    """extra='forbid' is preserved — unknown fields still raise."""
+    with pytest.raises(ValidationError):
+        SearchRequest(q="x", unknown_field="y")
