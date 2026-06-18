@@ -82,7 +82,8 @@ def test_mcp_from_environ_returns_none_when_unset(monkeypatch: pytest.MonkeyPatc
 
 @pytest.mark.unit
 def test_mcp_and_bridge_keys_are_independent() -> None:
-    """A token encrypted under the MCP key must NOT decrypt under a Bridge key."""
+    """A token encrypted under the MCP key must NOT decrypt under a Bridge key,
+    and vice versa — the two namespaces must be strictly independent."""
     from app.security.encryption import BridgeEncryptionError, BridgeTokenEncryptor
 
     mcp_key = generate_master_key()
@@ -90,6 +91,12 @@ def test_mcp_and_bridge_keys_are_independent() -> None:
     mcp_enc = MCPTokenEncryptor(master_key=mcp_key)
     bridge_enc = BridgeTokenEncryptor(master_key=bridge_key)
 
-    ciphertext = mcp_enc.encrypt("ey.fake-oauth-token")
+    # MCP ciphertext must NOT decrypt under the bridge key.
+    mcp_ciphertext = mcp_enc.encrypt("ey.fake-oauth-token")
     with pytest.raises(BridgeEncryptionError):
-        bridge_enc.decrypt(ciphertext)
+        bridge_enc.decrypt(mcp_ciphertext)
+
+    # Bridge ciphertext must NOT decrypt under the MCP key.
+    bridge_ciphertext = bridge_enc.encrypt("ey.fake-oauth-token")
+    with pytest.raises(MCPEncryptionError):
+        mcp_enc.decrypt(bridge_ciphertext)

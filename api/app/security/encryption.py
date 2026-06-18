@@ -85,7 +85,7 @@ def _fernet_from(
     master_key: str | None,
     *,
     env_var: str = BRIDGE_MASTER_KEY_ENV,
-    missing_exc: type[RuntimeError] = BridgeMasterKeyMissing,
+    missing_exc: type[BridgeMasterKeyMissing | MCPMasterKeyMissing] = BridgeMasterKeyMissing,
 ) -> Fernet:
     """Construct a :class:`~cryptography.fernet.Fernet` from *master_key*.
 
