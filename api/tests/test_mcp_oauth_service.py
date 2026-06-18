@@ -585,7 +585,7 @@ async def test_no_credentials_leak_in_logs_or_exceptions(
 
     user = await _make_user(db_session)
 
-    # Happy path: authorize -> exchange -> refresh.
+    # Happy path: authorize -> exchange.
     with respx.mock(base_url=GW) as mock:
         _mock_config(mock)
         _mock_discover(mock)
@@ -603,6 +603,34 @@ async def test_no_credentials_leak_in_logs_or_exceptions(
         )
         await oauth.exchange_code(db_session, state="st-leak", code=AUTH_CODE, iss=ISSUER)
 
+    # Refresh path: force the token row to appear expired, then call
+    # get_valid_token so the refresh branch actually runs.  This makes the
+    # NEW_ACCESS_TOKEN / NEW_REFRESH_TOKEN literals genuinely pass through the
+    # service code, so the no-leak assertion below is non-vacuous.
+    token_row = (
+        await db_session.execute(
+            select(MCPOAuthToken).where(
+                MCPOAuthToken.user_id == user.id,
+                MCPOAuthToken.provider_name == PROVIDER,
+            )
+        )
+    ).scalar_one()
+    token_row.expires_at = datetime.now(UTC) - timedelta(minutes=5)
+    await db_session.flush()
+
+    with respx.mock(base_url=GW) as mock:
+        _mock_config(mock)
+        _mock_discover(mock)
+        mock.post(f"/v1/oauth/{PROVIDER}/token").mock(
+            return_value=httpx.Response(
+                200,
+                json=_token_response(
+                    access=NEW_ACCESS_TOKEN, refresh=NEW_REFRESH_TOKEN, expires_in=3600
+                ),
+            )
+        )
+        await oauth.get_valid_token(db_session, user_id=user.id, server=PROVIDER)
+
     # Error path: an AS 400 on exchange.
     captured_exc_text = ""
     await _seed_state(
@@ -616,7 +644,9 @@ async def test_no_credentials_leak_in_logs_or_exceptions(
         try:
             await oauth.exchange_code(db_session, state="st-leak-err", code=AUTH_CODE, iss=ISSUER)
         except oauth.MCPOAuthExchangeError as exc:
-            captured_exc_text = repr(exc) + str(exc) + str(getattr(exc, "details", ""))
+            # Scan str() and repr() only; MCPOAuthExchangeError has no .details
+            # attribute so that term would always be an empty string.
+            captured_exc_text = repr(exc) + str(exc)
 
     haystack = "\n".join(r.getMessage() for r in caplog.records) + "\n" + captured_exc_text
     for secret in secrets_to_guard:
