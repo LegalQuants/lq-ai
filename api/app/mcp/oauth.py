@@ -54,7 +54,12 @@ from sqlalchemy import CursorResult, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.gateway import get_gateway_client
-from app.errors import MCPOAuthExchangeError, MCPOAuthNotConfigured, MCPOAuthStateError
+from app.errors import (
+    MCPAuthorizationRequired,
+    MCPOAuthExchangeError,
+    MCPOAuthNotConfigured,
+    MCPOAuthStateError,
+)
 from app.models.mcp_oauth import MCPOAuthState, MCPOAuthToken
 from app.security.encryption import MCPTokenEncryptor
 
@@ -96,17 +101,8 @@ __all__ = [
 ]
 
 
-class MCPAuthorizationRequired(Exception):
-    """No valid token and no way to refresh — the user must re-authorize.
-
-    Raised by the tool-path caller (Task 6) when :func:`get_valid_token`
-    returns ``None``; defined here so callers share one type.
-    """
-
-    def __init__(self, server: str) -> None:
-        self.server = server
-        super().__init__(f"MCP server {server!r} requires (re-)authorization")
-
+# MCPAuthorizationRequired is defined in app.errors (Task 6) and re-exported
+# below so callers can ``from app.mcp.oauth import MCPAuthorizationRequired``.
 
 # ---------------------------------------------------------------------------
 # Internal helpers

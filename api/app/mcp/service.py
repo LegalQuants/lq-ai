@@ -7,12 +7,14 @@ The api never speaks MCP directly (ADR 0014)."""
 from __future__ import annotations
 
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.gateway import get_gateway_client
-from app.errors import NotFound
+from app.errors import MCPAuthorizationRequired, NotFound
+from app.mcp import oauth
 from app.models.mcp import MCPToolCache
 
 _MCP_TYPE = "mcp"
@@ -51,12 +53,44 @@ async def refresh_server(
     db: AsyncSession,
     *,
     provider: str,
-    user_token: str | None = None,
+    user_id: UUID | None = None,
     request_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Re-discover ``provider``'s tools through the gateway and reconcile the
     cache: upsert returned tools (preserving each surviving tool's ``enabled``),
-    delete cached tools the server no longer returns."""
+    delete cached tools the server no longer returns.
+
+    For ``auth: oauth`` servers the calling user's valid token is resolved via
+    :func:`app.mcp.oauth.get_valid_token` and forwarded to the gateway.  If no
+    ``user_id`` is provided for an oauth server (e.g., an admin-context call),
+    :class:`~app.errors.MCPAuthorizationRequired` is raised — admin refresh
+    covers ``none``/``bearer`` servers only; oauth discovery is user-scoped.
+    """
+    # Determine whether this is a per-user OAuth server.
+    oauth_servers = {
+        p["name"] for p in await get_gateway_client().list_mcp_oauth_config(request_id=request_id)
+    }
+    user_token: str | None = None
+    if provider in oauth_servers:
+        if user_id is None:
+            raise MCPAuthorizationRequired(
+                message=(
+                    f"MCP server {provider!r} uses per-user OAuth; refresh it via the "
+                    "user-scoped connect flow, not admin refresh."
+                ),
+                details={"server": provider},
+            )
+        token = await oauth.get_valid_token(db, user_id=user_id, server=provider)
+        if token is None:
+            raise MCPAuthorizationRequired(
+                message=(
+                    f"MCP server {provider!r} requires authorization; "
+                    f"connect via /api/v1/mcp/oauth/{provider}/authorize"
+                ),
+                details={"server": provider},
+            )
+        user_token = token
+
     result = await get_gateway_client().discover_tools(
         provider, user_token=user_token, request_id=request_id
     )

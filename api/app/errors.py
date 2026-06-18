@@ -70,6 +70,7 @@ CODE_RESEARCH_NOT_CONFIGURED = "research_not_configured"
 CODE_MCP_OAUTH_NOT_CONFIGURED = "mcp_oauth_not_configured"
 CODE_MCP_OAUTH_STATE_ERROR = "mcp_oauth_state_error"
 CODE_MCP_OAUTH_EXCHANGE_ERROR = "mcp_oauth_exchange_error"
+CODE_MCP_AUTHORIZATION_REQUIRED = "mcp_authorization_required"
 
 # Backend↔gateway crossing codes (also declared in gateway/app/errors.py).
 # These propagate from gateway responses into backend exceptions; the
@@ -523,6 +524,21 @@ class MCPOAuthExchangeError(LQAIError):
     http_status = status.HTTP_502_BAD_GATEWAY
 
 
+class MCPAuthorizationRequired(LQAIError):
+    """Admin refresh was called on a per-user OAuth server — 409.
+
+    Admin refresh covers ``none`` / ``bearer`` servers only. OAuth servers
+    require per-user authorization state that does not exist in the admin
+    context. Callers should direct the user to the user-scoped
+    ``/api/v1/mcp/oauth/{server}/authorize`` flow.
+
+    Carries only the server name — no token or secret material.
+    """
+
+    code = CODE_MCP_AUTHORIZATION_REQUIRED
+    http_status = status.HTTP_409_CONFLICT
+
+
 # --- Code → exception class registry -----------------------------------------
 # Used by the gateway-response translator (in app.clients.gateway) to map
 # a structured gateway error envelope into the right LQAIError subclass.
@@ -579,6 +595,7 @@ __all__ = [
     "CODE_GATEWAY_UNREACHABLE",
     "CODE_INTERNAL_ERROR",
     "CODE_INVALID_MODEL",
+    "CODE_MCP_AUTHORIZATION_REQUIRED",
     "CODE_MCP_OAUTH_EXCHANGE_ERROR",
     "CODE_MCP_OAUTH_NOT_CONFIGURED",
     "CODE_MCP_OAUTH_STATE_ERROR",
@@ -605,6 +622,7 @@ __all__ = [
     "InternalError",
     "InvalidModel",
     "LQAIError",
+    "MCPAuthorizationRequired",
     "MCPOAuthExchangeError",
     "MCPOAuthNotConfigured",
     "MCPOAuthStateError",

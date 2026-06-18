@@ -5,6 +5,8 @@ Covers:
 * ``GET /api/v1/admin/mcp`` — lists configured servers + cached tools.
 * ``POST /api/v1/admin/mcp/{server}/refresh`` — re-discovers tools; writes
   a ``mcp.tools_refreshed`` audit row.
+* ``POST /api/v1/admin/mcp/{oauth-server}/refresh`` — raises
+  ``MCPAuthorizationRequired`` (409) for per-user OAuth servers.
 * ``PATCH /api/v1/admin/mcp/{server}/tools/{tool}`` — toggles enabled;
   writes a ``mcp.tool_enabled`` audit row; missing tool → 404.
 * Non-admin caller → 403 on all three endpoints.
@@ -23,6 +25,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
+from app.errors import MCPAuthorizationRequired
 from app.main import app
 from app.models.audit import AuditLog
 from app.models.mcp import MCPToolCache
@@ -227,6 +230,40 @@ async def test_refresh_returns_tools_and_writes_audit(
     assert len(audit_rows) == 1
     assert audit_rows[0].resource_type == "mcp_server"
     assert audit_rows[0].details["tool_count"] == 1
+
+
+@pytest.mark.integration
+async def test_refresh_oauth_server_returns_409(
+    admin_client: tuple[AsyncClient, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """POST refresh of an oauth server → 409 MCPAuthorizationRequired (not 500).
+
+    Admin refresh covers none/bearer only; oauth servers are user-scoped.
+    The response must not contain any token value.
+    """
+
+    async def _raise_auth_required(db: Any, *, provider: str, **_: Any) -> list[dict[str, Any]]:
+        raise MCPAuthorizationRequired(
+            message=f"MCP server {provider!r} uses per-user OAuth; refresh it via the "
+            "user-scoped connect flow, not admin refresh.",
+            details={"server": provider},
+        )
+
+    monkeypatch.setattr("app.api.admin_mcp.service.refresh_server", _raise_auth_required)
+
+    ac, token = admin_client
+    res = await ac.post(
+        "/api/v1/admin/mcp/oauth-mcp/refresh",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res.status_code == 409, res.text
+    body = res.json()
+    assert body["detail"]["code"] == "mcp_authorization_required"
+    # The response body must not contain any raw token value.
+    assert "secret" not in res.text
+    # The server name appears in the message but no token bytes.
+    assert "oauth-mcp" in body["detail"]["message"]
 
 
 # ---------------------------------------------------------------------------
