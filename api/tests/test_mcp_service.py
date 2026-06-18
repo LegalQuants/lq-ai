@@ -191,10 +191,14 @@ async def test_refresh_is_provider_scoped(db_session) -> None:
     await db_session.commit()
 
     acme_rows = (
-        await db_session.execute(
-            select(MCPToolCache).where(MCPToolCache.provider_name == "acme-mcp")
+        (
+            await db_session.execute(
+                select(MCPToolCache).where(MCPToolCache.provider_name == "acme-mcp")
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     other_row = (
         await db_session.execute(
             select(MCPToolCache).where(
