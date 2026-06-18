@@ -5118,11 +5118,6 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
-        '404':
-          description: Server not found in gateway config
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/Error'}
 
   /api/v1/admin/mcp/{server}/tools/{tool}:
     parameters:
@@ -5144,7 +5139,8 @@ paths:
         Disabled tools are not exposed to the model in the chat tool-loop
         (PR5). 404 when the tool is not in the discovery cache (run
         ``POST .../refresh`` first). Writes a ``mcp.tool_enabled`` audit
-        row. 403 when the caller is not an admin.
+        row when enabling, ``mcp.tool_disabled`` when disabling. 403 when
+        the caller is not an admin.
       security:
         - bearerAuth: []
       requestBody:

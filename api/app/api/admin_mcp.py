@@ -53,6 +53,8 @@ async def refresh_mcp(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> MCPRefreshResponse:
     """POST /api/v1/admin/mcp/{server}/refresh — re-discover tools; audited."""
+    # PR4b refreshes none/bearer servers; oauth-server discovery needs a per-user token
+    # (no admin user context here) — handled in PR4c.
     tools = await service.refresh_server(db, provider=server)
     await audit_action(
         db,
@@ -78,10 +80,11 @@ async def set_mcp_tool_enabled(
 ) -> MCPToolView:
     """PATCH /api/v1/admin/mcp/{server}/tools/{tool} — toggle enabled; audited."""
     updated = await service.set_tool_enabled(db, provider=server, tool=tool, enabled=body.enabled)
+    action = "mcp.tool_enabled" if body.enabled else "mcp.tool_disabled"
     await audit_action(
         db,
         user_id=admin.id,
-        action="mcp.tool_enabled",
+        action=action,
         resource_type="mcp_tool",
         resource_id=f"{server}/{tool}",
         request=request,

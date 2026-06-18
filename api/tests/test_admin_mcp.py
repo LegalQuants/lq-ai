@@ -266,12 +266,12 @@ async def test_patch_tool_enabled_flips_and_audits(
     ).scalar_one()
     assert row.enabled is False
 
-    # Verify audit row.
+    # Verify audit row uses mcp.tool_disabled when enabled=False.
     audit_rows = (
         (
             await db_session.execute(
                 select(AuditLog).where(
-                    AuditLog.action == "mcp.tool_enabled",
+                    AuditLog.action == "mcp.tool_disabled",
                     AuditLog.resource_id == "acme-mcp/read_doc",
                 )
             )
@@ -282,6 +282,43 @@ async def test_patch_tool_enabled_flips_and_audits(
     assert len(audit_rows) == 1
     assert audit_rows[0].resource_type == "mcp_tool"
     assert audit_rows[0].details["enabled"] is False
+
+
+@pytest.mark.integration
+async def test_patch_tool_enable_writes_enabled_audit(
+    admin_client: tuple[AsyncClient, str],
+    db_session: AsyncSession,
+) -> None:
+    """PATCH enables a tool that was disabled; audit action is mcp.tool_enabled."""
+    db_session.add(_tool_row(provider="acme-mcp", tool="write_doc", enabled=False))
+    await db_session.commit()
+
+    ac, token = admin_client
+    res = await ac.patch(
+        "/api/v1/admin/mcp/acme-mcp/tools/write_doc",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"enabled": True},
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["enabled"] is True
+
+    # Verify audit row uses mcp.tool_enabled when enabled=True.
+    await db_session.rollback()
+    audit_rows = (
+        (
+            await db_session.execute(
+                select(AuditLog).where(
+                    AuditLog.action == "mcp.tool_enabled",
+                    AuditLog.resource_id == "acme-mcp/write_doc",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(audit_rows) == 1
+    assert audit_rows[0].resource_type == "mcp_tool"
+    assert audit_rows[0].details["enabled"] is True
 
 
 @pytest.mark.integration
