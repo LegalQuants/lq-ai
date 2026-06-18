@@ -102,6 +102,7 @@ def test_mcp_oauth_state_primary_key() -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 async def test_mcp_oauth_token_row_roundtrips(db_session: AsyncSession) -> None:
     """A token row persists and reads back with bytea ciphertext intact."""
     user = _make_user()
@@ -135,6 +136,7 @@ async def test_mcp_oauth_token_row_roundtrips(db_session: AsyncSession) -> None:
     assert row.expires_at is None  # nullable
 
 
+@pytest.mark.integration
 async def test_mcp_oauth_token_refresh_token_nullable(db_session: AsyncSession) -> None:
     """refresh_token is nullable (some AS omit it)."""
     user = _make_user()
@@ -160,6 +162,7 @@ async def test_mcp_oauth_token_refresh_token_nullable(db_session: AsyncSession) 
     assert row.refresh_token is None
 
 
+@pytest.mark.integration
 async def test_mcp_oauth_token_cascade_delete(db_session: AsyncSession) -> None:
     """Deleting a user CASCADE-deletes their mcp_oauth_tokens rows."""
     user = _make_user()
@@ -184,6 +187,7 @@ async def test_mcp_oauth_token_cascade_delete(db_session: AsyncSession) -> None:
     assert result.scalars().all() == []
 
 
+@pytest.mark.integration
 async def test_mcp_oauth_state_row_roundtrips(db_session: AsyncSession) -> None:
     """A state row persists and reads back with all required fields."""
     user = _make_user()
@@ -216,8 +220,14 @@ async def test_mcp_oauth_state_row_roundtrips(db_session: AsyncSession) -> None:
     assert row.resource == "https://api.courtlistener.com/"
     assert row.token_endpoint == "https://example-as.test/token"
     assert row.redirect_uri == "https://lq-ai.local/api/v1/oauth/court-listener/callback"
+    # expires_at is the only NOT NULL / no-server-default column; confirm it
+    # round-trips faithfully.  asyncpg normalises to UTC-aware datetimes, so
+    # we compare with a 1-second tolerance to absorb any sub-second clock drift.
+    assert row.expires_at is not None
+    assert abs((row.expires_at.replace(tzinfo=UTC) - expires).total_seconds()) < 1
 
 
+@pytest.mark.integration
 async def test_mcp_oauth_state_resource_nullable(db_session: AsyncSession) -> None:
     """resource is nullable (RFC 8707 resource indicator is optional)."""
     user = _make_user()
@@ -246,6 +256,7 @@ async def test_mcp_oauth_state_resource_nullable(db_session: AsyncSession) -> No
     assert row.resource is None
 
 
+@pytest.mark.integration
 async def test_mcp_oauth_state_cascade_delete(db_session: AsyncSession) -> None:
     """Deleting a user CASCADE-deletes their mcp_oauth_state rows."""
     user = _make_user()

@@ -75,6 +75,8 @@ class MCPOAuthToken(Base):
         nullable=False,
         server_default=text("now()"),
     )
+    # NOTE: no DB trigger — the app must set updated_at explicitly on every
+    # write (upsert + refresh path).  Omitting it silently leaves a stale value.
 
     def __repr__(self) -> str:
         return f"<MCPOAuthToken user_id={self.user_id} provider={self.provider_name!r}>"
