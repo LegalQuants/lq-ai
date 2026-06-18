@@ -85,7 +85,11 @@ dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "respx>=0.21",
-    "ruff>=0.6",
+    # Pinned exactly: ruff's formatter output changes across releases, so an
+    # unpinned floor let CI (which resolves latest) drift ahead of dev venvs
+    # and fail `ruff format --check` on code that was clean locally. Pin so
+    # local == CI. Bump deliberately (and reformat) when upgrading.
+    "ruff==0.15.17",
     "mypy>=1.11",
     "types-PyYAML>=6.0",
 ]
