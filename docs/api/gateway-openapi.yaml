@@ -340,6 +340,59 @@ paths:
               schema: {$ref: '#/components/schemas/GatewayError'}
 
   # ----------- TOOLS (WS3 / ADR 0014 — tool-call HTTP transport) -----------
+  /v1/tools/{provider}:
+    get:
+      tags: [tools]
+      summary: Discover a tool provider's available tools
+      description: |
+        Returns the live ``list_tools()`` response from the named tool provider.
+        Callers use this to discover available tools and their parameter schemas
+        before invoking via ``POST /v1/tools/{provider}/{tool}``.
+
+        The ``user_token`` query parameter allows an ``auth: oauth`` MCP server
+        to be discovered using the end-user's OAuth token (PR4c supplies it).
+        For ``none`` / ``bearer`` providers the token is ignored and
+        **never logged**.
+
+        Gated by the gateway key (same as the invoke transport).
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: {type: string}
+          description: Name of a configured tool provider (e.g. ``courtlistener``).
+        - name: user_token
+          in: query
+          required: false
+          schema: {type: string}
+          description: |
+            Optional OAuth token forwarded to the adapter for ``auth: oauth``
+            MCP servers. Ignored for ``none`` / ``bearer``. Never logged.
+      responses:
+        '200':
+          description: Tool list returned successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolDiscoveryResponse'
+        '401':
+          description: Missing or invalid X-LQ-AI-Gateway-Key
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GatewayError'}
+        '404':
+          description: Provider name not in the tool-provider registry
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GatewayError'}
+        '502':
+          description: Upstream tool provider returned an error during list_tools
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GatewayError'}
+
   /v1/tools/{provider}/{tool}:
     post:
       tags: [tools]
@@ -1270,6 +1323,53 @@ components:
             Optional egress-tier ceiling. If the provider's ``egress_tier``
             is higher than this value the gateway refuses with 403
             (``egress_refused``). Omit to allow any tier.
+        user_token:
+          type: string
+          nullable: true
+          description: |
+            Per-call OAuth token for ``auth: oauth`` MCP servers (PR4c).
+            Forwarded to the tool adapter and **never logged**. Ignored for
+            ``none`` / ``bearer`` auth providers.
+
+    ToolDiscoveryResponse:
+      type: object
+      required: [provider, tools]
+      properties:
+        provider:
+          type: string
+          description: The configured tool provider name.
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolSpec'
+
+    ToolSpec:
+      type: object
+      required: [name, description, parameters, read_only, destructive, requires_confirmation]
+      properties:
+        name:
+          type: string
+          description: Tool name, unique within the provider.
+        description:
+          type: string
+          description: Human-readable description of what the tool does.
+        parameters:
+          type: object
+          additionalProperties: true
+          description: |
+            JSON Schema describing the tool's argument object. Callers
+            use this to validate args before invoking via POST.
+        read_only:
+          type: boolean
+          description: True if the tool only reads data (no side-effects).
+        destructive:
+          type: boolean
+          description: True if the tool may permanently destroy or modify data.
+        requires_confirmation:
+          type: boolean
+          description: |
+            True if the tool should prompt the user for confirmation before
+            invoking (e.g. filing a document, sending a message).
 
     ToolCallResponse:
       type: object
@@ -1331,6 +1431,10 @@ components:
                 - internal_error
                 # Runtime provider-key management (Donna #7)
                 - failed_precondition
+                # Tool-call HTTP transport (WS3 / PR4a — ADR 0014)
+                - egress_refused
+                - unknown_provider
+                - tool_provider_unavailable
             message: {type: string}
             details: {type: object, additionalProperties: true}
 

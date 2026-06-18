@@ -63,6 +63,42 @@ def _error(
     )
 
 
+@router.get("/tools/{provider}")
+async def list_provider_tools(
+    provider: str, request: Request, user_token: str | None = None
+) -> JSONResponse:
+    """Return the live ``list_tools()`` for a configured tool provider.
+
+    ``user_token`` is an optional query parameter so an ``auth: oauth`` MCP
+    server can be discovered with the user's token (PR4c supplies it).  For
+    ``none`` / ``bearer`` providers it is ignored and **never logged**.
+    """
+    gw_router = _router(request)
+    adapter = gw_router._tool_adapters.get(provider)
+    if adapter is None:
+        return _error(404, "unknown_provider", f"tool provider {provider!r} not found")
+    try:
+        specs = await adapter.list_tools(user_token=user_token)
+    except ToolProviderError as exc:
+        return _error(502, "tool_provider_unavailable", exc.message, exc.details)
+    return JSONResponse(
+        content={
+            "provider": provider,
+            "tools": [
+                {
+                    "name": s.name,
+                    "description": s.description,
+                    "parameters": s.parameters,
+                    "read_only": s.read_only,
+                    "destructive": s.destructive,
+                    "requires_confirmation": s.requires_confirmation,
+                }
+                for s in specs
+            ],
+        }
+    )
+
+
 @router.post("/tools/{provider}/{tool}")
 async def call_tool(
     provider: str, tool: str, body: ToolCallRequest, request: Request

@@ -117,6 +117,63 @@ async def test_tools_route_registered_on_app(gateway_app) -> None:
     paths = gateway_app.openapi()["paths"]
     assert "/v1/tools/{provider}/{tool}" in paths
     assert "post" in paths["/v1/tools/{provider}/{tool}"]
+    assert "/v1/tools/{provider}" in paths
+    assert "get" in paths["/v1/tools/{provider}"]
+
+
+# ---------------------------------------------------------------------------
+# GET /v1/tools/{provider} — discovery endpoint (PR4a Task 6)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+async def test_discovery_lists_tools(monkeypatch) -> None:
+    """GET /v1/tools/{provider} returns 200 with provider name and tool list."""
+    app, adapter = _make_app(monkeypatch)
+    try:
+        async with _client(app) as c:
+            resp = await c.get("/v1/tools/echo-test")
+    finally:
+        await adapter.aclose()
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["provider"] == "echo-test"
+    tools = body["tools"]
+    assert isinstance(tools, list)
+    assert len(tools) >= 1
+    names = [t["name"] for t in tools]
+    assert "echo" in names
+
+
+@pytest.mark.unit
+async def test_discovery_unknown_provider_404(monkeypatch) -> None:
+    """GET /v1/tools/{unknown} returns 404 with unknown_provider error code."""
+    app, adapter = _make_app(monkeypatch)
+    try:
+        async with _client(app) as c:
+            resp = await c.get("/v1/tools/nope")
+    finally:
+        await adapter.aclose()
+    assert resp.status_code == 404
+    assert resp.json()["error"]["code"] == "unknown_provider"
+
+
+@pytest.mark.unit
+async def test_discovery_requires_gateway_key_when_configured(monkeypatch) -> None:
+    """GET /v1/tools/{provider} is gated by the gateway key when LQ_AI_GATEWAY_KEY is set."""
+    monkeypatch.setenv("LQ_AI_GATEWAY_KEY", "secret-key")
+    app, adapter = _make_app(monkeypatch)
+    try:
+        async with _client(app) as c:
+            missing = await c.get("/v1/tools/echo-test")
+            ok = await c.get(
+                "/v1/tools/echo-test",
+                headers={"X-LQ-AI-Gateway-Key": "secret-key"},
+            )
+    finally:
+        await adapter.aclose()
+    assert missing.status_code == 401
+    assert ok.status_code == 200
 
 
 # ---------------------------------------------------------------------------
