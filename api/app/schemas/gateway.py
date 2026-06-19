@@ -93,6 +93,33 @@ class InlineSkillRef(BaseModel):
     """Provenance tag (``wizard-tryout``, etc.) — surfaced on audit logs."""
 
 
+class FunctionDefinition(BaseModel):
+    """A single function-tool the model may call (OpenAI ``function`` shape).
+
+    Mirrors :class:`gateway.app.providers.openai_schema.FunctionDefinition`.
+    PR5b: the backend assembles these from operator-enabled research / MCP
+    tools and forwards them to the gateway.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    name: str = Field(min_length=1, max_length=128)
+    description: str | None = None
+    parameters: dict[str, Any] = Field(default_factory=dict)
+
+
+class ToolDefinition(BaseModel):
+    """One entry in the request's ``tools`` allowlist (OpenAI ``function`` type).
+
+    Mirrors :class:`gateway.app.providers.openai_schema.ToolDefinition`.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    type: Literal["function"] = "function"
+    function: FunctionDefinition
+
+
 class ChatCompletionRequest(BaseModel):
     """OpenAI Chat Completions request body, plus LQ.AI extensions.
 
@@ -112,6 +139,16 @@ class ChatCompletionRequest(BaseModel):
     stream: bool = False
     stop: list[str] | str | None = None
     n: int | None = Field(default=None, ge=1, le=1)
+
+    # --- PR5b: governed tool-calling (WS4) -----------------------------------
+    tools: list[ToolDefinition] | None = Field(default=None, max_length=64)
+    """Model-visible tool allowlist for this turn (PR5b). Assembled by the
+    chat tool-loop from operator-enabled research + MCP tools and forwarded
+    to the gateway. ``None`` preserves the pre-PR5b single-shot wire shape."""
+
+    tool_choice: str | dict[str, Any] | None = None
+    """How the model chooses among ``tools`` (OpenAI shape:
+    ``auto`` / ``none`` / ``required`` or a specific function)."""
 
     # --- LQ.AI extensions (per gateway-openapi.yaml) -------------------------
     minimum_inference_tier: int | None = Field(default=None, ge=1, le=5)

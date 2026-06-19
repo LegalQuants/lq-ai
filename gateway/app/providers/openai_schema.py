@@ -141,6 +141,35 @@ class InlineSkillRef(BaseModel):
     metadata."""
 
 
+class FunctionDefinition(BaseModel):
+    """A single function-tool the model may call (OpenAI ``function`` shape).
+
+    PR5b: carries the JSON-schema ``parameters`` the model fills in. The
+    gateway forwards this to OpenAI verbatim and translates it to
+    Anthropic's ``input_schema`` shape for the Messages API.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    name: str = Field(min_length=1, max_length=128)
+    description: str | None = None
+    parameters: dict[str, Any] = Field(default_factory=dict)
+
+
+class ToolDefinition(BaseModel):
+    """One entry in the request's ``tools`` allowlist (OpenAI ``function`` type).
+
+    PR5b only models ``type="function"``; other OpenAI tool types
+    (``code_interpreter`` etc.) are out of scope for the governed
+    legal-research / MCP loop and would not pass the closed-set governance.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    type: Literal["function"] = "function"
+    function: FunctionDefinition
+
+
 class ChatCompletionRequest(BaseModel):
     """OpenAI Chat Completions request body, plus LQ.AI extensions.
 
@@ -165,6 +194,24 @@ class ChatCompletionRequest(BaseModel):
     Anthropic Messages doesn't expose an equivalent and supporting it
     multiplies cost without a corresponding skill use case (PRD §7).
     """
+
+    # --- PR5b: governed tool-calling (WS4) -----------------------------------
+    tools: list[ToolDefinition] | None = Field(default=None, max_length=64)
+    """Model-visible tool allowlist for this turn (PR5b). The backend
+    assembles this from operator-enabled research + MCP tools; the gateway
+    forwards it to the provider (OpenAI verbatim; Anthropic translated to
+    ``input_schema`` blocks). Capped at 64 entries as a defense-in-depth
+    bound on the prompt-multiplication surface — the operator allowlist is
+    far smaller in practice. ``None`` (the default) preserves the pre-PR5b
+    single-shot wire shape exactly."""
+
+    tool_choice: str | dict[str, Any] | None = None
+    """How the model should choose among ``tools`` (OpenAI shape):
+    ``"auto"`` / ``"none"`` / ``"required"``, or a specific
+    ``{"type": "function", "function": {"name": ...}}``. Forwarded to
+    OpenAI verbatim; translated to Anthropic's ``tool_choice`` shape
+    (``auto`` / ``any`` / ``tool``). ``None`` lets the provider default
+    (``auto`` when ``tools`` is present)."""
 
     # --- LQ.AI extensions (per gateway-openapi.yaml) -------------------------
     minimum_inference_tier: int | None = Field(default=None, ge=1, le=5)
