@@ -44,7 +44,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import cast
+from typing import Any, cast
 from urllib.parse import urlencode
 from uuid import UUID
 
@@ -96,8 +96,10 @@ __all__ = [
     "build_authorize_url",
     "disconnect",
     "exchange_code",
+    "get_state_return_url",
     "get_status",
     "get_valid_token",
+    "list_connection_status",
 ]
 
 
@@ -140,6 +142,7 @@ async def build_authorize_url(
     user_id: UUID,
     server: str,
     redirect_uri: str,
+    return_url: str | None = None,
 ) -> str:
     """Mint PKCE state and build the AS authorize URL for *server*.
 
@@ -147,6 +150,13 @@ async def build_authorize_url(
     PKCE ``code_verifier``, the discovered issuer / token endpoint / resource,
     and whether the AS supports the RFC 9207 ``iss`` parameter — then returns
     the authorize URL the caller redirects the user to.
+
+    *return_url* is an optional operator-allowlisted frontend URL that the
+    callback will 302 the browser back to after authorization.  It MUST be
+    validated (origin in ``lq_ai_cors_origins``) by the caller BEFORE this
+    function is invoked; this function stores it as-is on the state row.  When
+    *return_url* is ``None`` the callback falls back to the old 200-JSON
+    response (back-compat).
     """
     provider = await _resolve_oauth_provider(server)
     gw = get_gateway_client()
@@ -187,10 +197,33 @@ async def build_authorize_url(
             redirect_uri=redirect_uri,
             as_iss_supported=bool(meta.get("authorization_response_iss_parameter_supported")),
             expires_at=_now() + STATE_TTL,
+            return_url=return_url,
         )
     )
     await db.commit()
     return authorize_url
+
+
+async def get_state_return_url(db: AsyncSession, *, state: str) -> str | None:
+    """Peek at the ``return_url`` on the state row without consuming it.
+
+    Returns the ``return_url`` stored at authorize-time, or ``None`` when the
+    row does not exist or carries no ``return_url``.  Does NOT validate, TTL-
+    check, or delete the state row — the full consume happens in
+    :func:`exchange_code` immediately after this peek.
+
+    The callback uses this to decide whether to 302 or return JSON before
+    calling ``exchange_code``, so that on a state-error the handler knows
+    whether it can redirect to a trusted frontend with an error query, or
+    must fall back to JSON (the state row is gone, so there is no trusted
+    return_url to redirect to).
+    """
+    row = (
+        await db.execute(select(MCPOAuthState).where(MCPOAuthState.state == state))
+    ).scalar_one_or_none()
+    if row is None:
+        return None
+    return row.return_url
 
 
 async def exchange_code(
@@ -418,6 +451,46 @@ async def get_valid_token(
 
     await db.commit()
     return enc.decrypt(updated.access_token)
+
+
+async def list_connection_status(
+    db: AsyncSession,
+    *,
+    user_id: UUID,
+) -> list[dict[str, Any]]:
+    """Return per-user connection status for every configured OAuth MCP server.
+
+    Fetches the list of OAuth-type MCP servers from the gateway config and
+    cross-references the user's stored token rows (loaded once, then mapped in
+    memory).  Returns one entry per configured OAuth server, ordered by name.
+
+    Token bytes (``access_token``, ``refresh_token``) are NEVER read or
+    returned — only the non-secret status fields (``connected``,
+    ``scopes``, ``expires_at``).
+    """
+    servers = await get_gateway_client().list_mcp_oauth_config()
+
+    # Load ALL of the user's token rows in a single query — map by provider_name.
+    rows = (
+        (await db.execute(select(MCPOAuthToken).where(MCPOAuthToken.user_id == user_id)))
+        .scalars()
+        .all()
+    )
+    token_map: dict[str, MCPOAuthToken] = {r.provider_name: r for r in rows}
+
+    result: list[dict[str, Any]] = []
+    for srv in sorted(servers, key=lambda s: s["name"]):
+        name = srv["name"]
+        row = token_map.get(name)
+        result.append(
+            {
+                "server": name,
+                "connected": row is not None,
+                "scopes": row.scopes if row is not None else [],
+                "expires_at": row.expires_at if row is not None else None,
+            }
+        )
+    return result
 
 
 async def get_status(

@@ -21,9 +21,27 @@ _MCP_TYPE = "mcp"
 
 
 async def list_servers(*, request_id: str | None = None) -> list[dict[str, str]]:
-    """Configured MCP servers, from gateway config (name + type)."""
-    providers = await get_gateway_client().list_tool_providers(request_id=request_id)
-    return [p for p in providers if p.get("type") == _MCP_TYPE]
+    """Configured MCP servers from gateway config (name, type, auth).
+
+    Reads the full ``/admin/v1/config`` payload so the ``auth`` mode is
+    available alongside ``name`` and ``type``.  ``list_tool_providers`` is NOT
+    used here — that helper strips to name+type for its own callers; we need the
+    extra field without changing that helper's contract.
+
+    Malformed entries (non-dict, missing name/type) are silently filtered,
+    mirroring ``list_tool_providers``'s guard.
+    """
+    config = await get_gateway_client().get_admin_config(request_id=request_id)
+    providers = config.get("tool_providers") or []
+    return [
+        {
+            "name": p["name"],
+            "type": p["type"],
+            "auth": p.get("auth", "none"),
+        }
+        for p in providers
+        if isinstance(p, dict) and "name" in p and "type" in p and p.get("type") == _MCP_TYPE
+    ]
 
 
 def _tool_dict(row: MCPToolCache) -> dict[str, Any]:

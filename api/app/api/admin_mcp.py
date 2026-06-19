@@ -6,7 +6,7 @@ AdminUser-gated. The api never speaks MCP directly (ADR 0014)."""
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal, cast
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,6 +39,7 @@ async def list_mcp(
             MCPServerView(
                 name=s["name"],
                 type=s["type"],
+                auth=cast(Literal["none", "bearer", "oauth"], s["auth"]),
                 tools=[MCPToolView(**t) for t in tools],
             )
         )

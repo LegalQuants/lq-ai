@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -20,6 +20,7 @@ class MCPToolView(BaseModel):
 class MCPServerView(BaseModel):
     name: str
     type: str
+    auth: Literal["none", "bearer", "oauth"]
     tools: list[MCPToolView] = Field(default_factory=list)
 
 
