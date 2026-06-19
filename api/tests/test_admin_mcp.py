@@ -130,7 +130,7 @@ async def test_list_mcp_returns_servers_with_tools(
 
     # Mock service.list_servers so no gateway call is needed.
     async def _fake_list_servers(**_: Any) -> list[dict[str, str]]:
-        return [{"name": "acme-mcp", "type": "mcp"}]
+        return [{"name": "acme-mcp", "type": "mcp", "auth": "none"}]
 
     monkeypatch.setattr("app.api.admin_mcp.service.list_servers", _fake_list_servers)
 
@@ -145,6 +145,7 @@ async def test_list_mcp_returns_servers_with_tools(
     srv = body["servers"][0]
     assert srv["name"] == "acme-mcp"
     assert srv["type"] == "mcp"
+    assert srv["auth"] == "none"
     tool_names = {t["name"] for t in srv["tools"]}
     assert tool_names == {"read_doc", "write_doc"}
     enabled_map = {t["name"]: t["enabled"] for t in srv["tools"]}
@@ -170,7 +171,8 @@ async def test_list_mcp_empty_when_no_servers(
         headers={"Authorization": f"Bearer {token}"},
     )
     assert res.status_code == 200, res.text
-    assert res.json()["servers"] == []
+    body = res.json()
+    assert body["servers"] == []
 
 
 # ---------------------------------------------------------------------------
@@ -383,7 +385,7 @@ async def test_non_admin_gets_403_on_list(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def _fake_list_servers(**_: Any) -> list[dict[str, str]]:
-        return []
+        return []  # won't be reached — 403 fires before handler body
 
     monkeypatch.setattr("app.api.admin_mcp.service.list_servers", _fake_list_servers)
 
@@ -418,3 +420,88 @@ async def test_non_admin_gets_403_on_patch(
         json={"enabled": False},
     )
     assert res.status_code == 403, res.text
+
+
+# ---------------------------------------------------------------------------
+# PR4d Ask 3 — auth field on MCPServerView
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+async def test_list_mcp_carries_auth_field(
+    admin_client: tuple[AsyncClient, str],
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GET /admin/mcp returns auth for each server (oauth / bearer / none)."""
+    db_session.add(_tool_row(provider="oauth-server", tool="read_doc"))
+    db_session.add(_tool_row(provider="bearer-server", tool="fetch_data"))
+    db_session.add(_tool_row(provider="plain-server", tool="query"))
+    await db_session.commit()
+
+    async def _fake_list_servers(**_: Any) -> list[dict[str, str]]:
+        return [
+            {"name": "oauth-server", "type": "mcp", "auth": "oauth"},
+            {"name": "bearer-server", "type": "mcp", "auth": "bearer"},
+            {"name": "plain-server", "type": "mcp", "auth": "none"},
+        ]
+
+    monkeypatch.setattr("app.api.admin_mcp.service.list_servers", _fake_list_servers)
+
+    ac, token = admin_client
+    res = await ac.get(
+        "/api/v1/admin/mcp",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    auth_map = {s["name"]: s["auth"] for s in body["servers"]}
+    assert auth_map["oauth-server"] == "oauth"
+    assert auth_map["bearer-server"] == "bearer"
+    assert auth_map["plain-server"] == "none"
+
+
+@pytest.mark.unit
+async def test_list_servers_reads_auth_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    """list_servers returns auth field from the full gateway config.
+
+    Unit-level check: the service reads auth from get_admin_config (not the
+    stripped list_tool_providers helper, which drops all fields beyond name/type).
+    """
+    from app.mcp import service
+
+    fake_config: dict[str, Any] = {
+        "tool_providers": [
+            {
+                "name": "oauth-mcp",
+                "type": "mcp",
+                "auth": "oauth",
+                "base_url": "https://o.example.com",
+            },
+            {
+                "name": "bearer-mcp",
+                "type": "mcp",
+                "auth": "bearer",
+                "base_url": "https://b.example.com",
+            },
+            {"name": "no-auth-mcp", "type": "mcp", "base_url": "https://n.example.com"},
+            {"name": "non-mcp-tool", "type": "http"},  # filtered out — not an MCP provider
+        ]
+    }
+
+    async def _fake_get_admin_config(*, request_id: str | None = None) -> dict[str, Any]:
+        return fake_config
+
+    class _FakeGW:
+        get_admin_config = staticmethod(_fake_get_admin_config)
+
+    monkeypatch.setattr("app.mcp.service.get_gateway_client", lambda: _FakeGW())
+
+    result = await service.list_servers()
+
+    assert len(result) == 3
+    by_name = {r["name"]: r for r in result}
+    assert by_name["oauth-mcp"]["auth"] == "oauth"
+    assert by_name["bearer-mcp"]["auth"] == "bearer"
+    assert by_name["no-auth-mcp"]["auth"] == "none"  # defaults to "none" when absent
+    assert "non-mcp-tool" not in by_name

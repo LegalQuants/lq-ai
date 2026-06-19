@@ -20,6 +20,7 @@ class MCPToolView(BaseModel):
 class MCPServerView(BaseModel):
     name: str
     type: str
+    auth: str
     tools: list[MCPToolView] = Field(default_factory=list)
 
 

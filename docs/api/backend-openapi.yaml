@@ -5174,6 +5174,31 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
 
+  # PR4d Ask 1 — per-user OAuth connections list
+  /api/v1/mcp/oauth:
+    get:
+      tags: [mcp-oauth]
+      summary: List OAuth connection status for all connectable MCP servers (per-user)
+      description: |
+        PR4d Ask 1. ActiveUser-gated (bearer). Returns one entry per
+        configured OAuth-type MCP server together with the calling user's
+        connection state (``connected``, ``scopes``, ``expires_at``).
+        Token bytes are never exposed. Results are ordered by server name
+        for stable output.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Per-user OAuth connection list
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MCPOAuthServersResponse'}
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
   # PR4c — per-user MCP OAuth surface
   /api/v1/mcp/oauth/{server}/authorize:
     parameters:
@@ -8072,10 +8097,16 @@ components:
 
     MCPServerView:
       type: object
-      required: [name, type, tools]
+      required: [name, type, auth, tools]
       properties:
         name: {type: string}
         type: {type: string}
+        auth:
+          type: string
+          description: |
+            Authentication mode for this MCP server. One of ``none``,
+            ``bearer``, or ``oauth``. Read from the gateway config
+            ``auth`` field; defaults to ``none`` when absent.
         tools:
           type: array
           items: {$ref: '#/components/schemas/MCPToolView'}
@@ -8130,6 +8161,34 @@ components:
           type: string
           format: date-time
           nullable: true
+
+    MCPOAuthServerStatus:
+      type: object
+      required: [server, connected, scopes]
+      description: |
+        PR4d Ask 1. Per-server OAuth connection status for a single user.
+        Token bytes are never included.
+      properties:
+        server: {type: string}
+        connected: {type: boolean}
+        scopes:
+          type: array
+          items: {type: string}
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    MCPOAuthServersResponse:
+      type: object
+      required: [servers]
+      description: |
+        PR4d Ask 1. Response body for GET /api/v1/mcp/oauth — list of all
+        connectable OAuth MCP servers with the calling user's connection state.
+      properties:
+        servers:
+          type: array
+          items: {$ref: '#/components/schemas/MCPOAuthServerStatus'}
 
     ProviderKeyStatus:
       type: object

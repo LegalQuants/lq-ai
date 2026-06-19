@@ -904,3 +904,119 @@ async def test_callback_not_configured_with_return_url_redirects_with_error(
     # Must NOT contain the auth code, state, or any token material.
     assert "some-code" not in location
     assert "some-state" not in location
+
+
+# ---------------------------------------------------------------------------
+# PR4d Ask 1: GET /api/v1/mcp/oauth — per-user OAuth connections list
+# ---------------------------------------------------------------------------
+
+_SERVER2 = "beta-mcp"
+
+_OAUTH_CONFIG = [
+    {"name": _SERVER, "server_url": "https://acme.example.com", "oauth_client_id": "client-a"},
+    {"name": _SERVER2, "server_url": "https://beta.example.com", "oauth_client_id": "client-b"},
+]
+
+
+@pytest.mark.integration
+async def test_list_mcp_oauth_one_connected_one_not(
+    authed_client: tuple[AsyncClient, str, User],
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GET /mcp/oauth authed → lists every configured oauth server.
+
+    One server is connected (token row present), the other is not.
+    Response must contain no token bytes.
+    """
+    ac, token, user = authed_client
+
+    # Seed a token row for _SERVER only (not _SERVER2).
+    token_row = _make_token_row(user.id, server=_SERVER)
+    db_session.add(token_row)
+    await db_session.commit()
+
+    # Patch list_connection_status directly — this is the function the route calls.
+    async def _fake_list_connection_status(db: Any, *, user_id: Any) -> list[dict]:
+        return [
+            {
+                "server": _SERVER,
+                "connected": True,
+                "scopes": ["read", "write"],
+                "expires_at": token_row.expires_at,
+            },
+            {
+                "server": _SERVER2,
+                "connected": False,
+                "scopes": [],
+                "expires_at": None,
+            },
+        ]
+
+    monkeypatch.setattr(
+        "app.api.mcp_oauth.oauth.list_connection_status",
+        _fake_list_connection_status,
+    )
+
+    res = await ac.get(
+        "/api/v1/mcp/oauth",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    servers = body["servers"]
+
+    assert len(servers) == 2
+    assert servers[0]["server"] == _SERVER
+    assert servers[1]["server"] == _SERVER2
+
+    # acme-mcp is connected.
+    acme = servers[0]
+    assert acme["connected"] is True
+    assert "read" in acme["scopes"]
+    assert acme["expires_at"] is not None
+
+    # beta-mcp is not connected.
+    beta = servers[1]
+    assert beta["connected"] is False
+    assert beta["scopes"] == []
+    assert beta["expires_at"] is None
+
+    # No token bytes in response — access_token / refresh_token must be absent.
+    raw_text = res.text
+    assert "access_token" not in raw_text
+    assert "refresh_token" not in raw_text
+    assert "fake-access-token" not in raw_text
+
+
+@pytest.mark.integration
+async def test_list_mcp_oauth_unauthed_returns_401(
+    anon_client: AsyncClient,
+) -> None:
+    """GET /mcp/oauth without auth → 401."""
+    res = await anon_client.get("/api/v1/mcp/oauth")
+    assert res.status_code == 401, res.text
+
+
+@pytest.mark.integration
+async def test_list_mcp_oauth_empty_when_no_servers_configured(
+    authed_client: tuple[AsyncClient, str, User],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GET /mcp/oauth when gateway has no OAuth servers → empty list."""
+    ac, token, _user = authed_client
+
+    async def _fake_list_connection_status(db: Any, *, user_id: Any) -> list[dict]:
+        return []
+
+    monkeypatch.setattr(
+        "app.api.mcp_oauth.oauth.list_connection_status",
+        _fake_list_connection_status,
+    )
+
+    res = await ac.get(
+        "/api/v1/mcp/oauth",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["servers"] == []

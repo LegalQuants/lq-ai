@@ -323,6 +323,8 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("GET", "/api/v1/mcp/oauth/{server}/callback"),
     ("GET", "/api/v1/mcp/oauth/{server}/status"),
     ("DELETE", "/api/v1/mcp/oauth/{server}"),
+    # PR4d Ask 1 — per-user OAuth connections list
+    ("GET", "/api/v1/mcp/oauth"),
 }
 
 

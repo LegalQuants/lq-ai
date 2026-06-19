@@ -43,9 +43,30 @@ from app.errors import (
     ValidationError,
 )
 from app.mcp import oauth
-from app.schemas.mcp_oauth import MCPOAuthCallbackResponse, MCPOAuthStatusResponse
+from app.schemas.mcp_oauth import (
+    MCPOAuthCallbackResponse,
+    MCPOAuthServersResponse,
+    MCPOAuthServerStatus,
+    MCPOAuthStatusResponse,
+)
 
 router = APIRouter(prefix="/mcp/oauth", tags=["mcp-oauth"])
+
+
+@router.get("", response_model=MCPOAuthServersResponse)
+async def list_mcp_oauth(
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> MCPOAuthServersResponse:
+    """GET /api/v1/mcp/oauth — per-user OAuth connection status for all connectable servers.
+
+    PR4d Ask 1.  ActiveUser-gated (bearer).  Returns one entry per configured
+    OAuth-type MCP server with the calling user's connection state
+    (``connected``, ``scopes``, ``expires_at``).  Token bytes are NEVER
+    returned — this is a status-only surface.
+    """
+    statuses = await oauth.list_connection_status(db, user_id=user.id)
+    return MCPOAuthServersResponse(servers=[MCPOAuthServerStatus(**s) for s in statuses])
 
 
 @router.get("/{server}/authorize", status_code=status.HTTP_302_FOUND)

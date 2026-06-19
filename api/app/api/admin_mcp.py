@@ -39,6 +39,7 @@ async def list_mcp(
             MCPServerView(
                 name=s["name"],
                 type=s["type"],
+                auth=s["auth"],
                 tools=[MCPToolView(**t) for t in tools],
             )
         )
