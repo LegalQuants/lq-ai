@@ -508,3 +508,107 @@ async def test_loop_mcp_auth_emits_gate_event_no_pending_row(
     stmt = select(ChatPendingToolCall).where(ChatPendingToolCall.chat_id == uuid.UUID(chat_id))
     rows = (await db_session.execute(stmt)).scalars().all()
     assert not rows, f"ChatPendingToolCall rows found after LoopMcpAuth — should not be: {rows}"
+
+
+# ---------------------------------------------------------------------------
+# Fix 1: gate-persist failure emits an error frame, not a silent [DONE]
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_gate_persist_failure_emits_error_frame(
+    client: AsyncClient,
+    db_user: User,
+    db_session: AsyncSession,
+) -> None:
+    """Streaming LoopConfirmation with a simulated db.commit failure.
+
+    When the ChatPendingToolCall + ToolCallLog persist step raises, the
+    stream must:
+    - NOT emit a tool_confirmation_required frame (no partial state)
+    - Emit an error SSE frame ({"detail": {...}}) before [DONE]
+    - End with [DONE]
+    - NOT persist a ChatPendingToolCall row (the commit failed)
+    - NOT persist an assistant Message row
+    """
+    headers = _h(db_user)
+    chat_resp = await client.post(
+        "/api/v1/chats", headers=headers, json={"title": "gate-persist-fail"}
+    )
+    assert chat_resp.status_code == 201, chat_resp.text
+    chat_id = chat_resp.json()["id"]
+
+    spec = _make_tool_spec()
+    loop_outcome = LoopConfirmation(
+        spec=spec,
+        args={"doc_id": "xyz", "reason": "test persist fail"},
+        tier=2,
+        args_summary="digest-x",
+        messages=[{"role": "user", "content": "delete it"}],
+        calls_used=0,
+    )
+
+    non_empty_allowlist = _make_non_empty_allowlist()
+
+    # Monkeypatch db.commit so that early commits (user message persist) succeed
+    # but the gate-branch commit (2nd call inside the /messages endpoint) fails.
+    # The send_message endpoint commits at least once before reaching the gate branch
+    # (user message + auto-rename), so we let the first commit through and raise on
+    # the second to simulate a gate-persistence failure.
+    _original_commit = db_session.commit
+    _commit_call_count = 0
+
+    async def _fail_on_second_commit() -> None:
+        nonlocal _commit_call_count
+        _commit_call_count += 1
+        if _commit_call_count >= 2:
+            raise RuntimeError("simulated db commit failure")
+        await _original_commit()
+
+    with (
+        patch(
+            "app.api.chats.assemble_allowlist",
+            new=AsyncMock(return_value=non_empty_allowlist),
+        ),
+        patch(
+            "app.api.chats.run_chat_tool_loop",
+            new=AsyncMock(return_value=loop_outcome),
+        ),
+        patch.object(db_session, "commit", side_effect=_fail_on_second_commit),
+    ):
+        resp = await client.post(
+            f"/api/v1/chats/{chat_id}/messages",
+            headers=headers,
+            json={"content": "delete doc xyz", "stream": True},
+        )
+
+    assert resp.status_code == 200, resp.text
+    body_text = resp.content.decode("utf-8")
+
+    # [DONE] must be present — stream must terminate cleanly.
+    assert "[DONE]" in body_text, f"No [DONE] in stream: {body_text!r}"
+
+    frames = _parse_sse_frames(resp.content)
+    types = [f.get("type") for f in frames]
+
+    # No tool_confirmation_required — persist failed before it was emitted.
+    assert "tool_confirmation_required" not in types, (
+        f"tool_confirmation_required emitted despite persist failure: {types}"
+    )
+
+    # An error frame must be present ({"detail": {...}}).
+    error_frames = [f for f in frames if "detail" in f]
+    assert error_frames, f"No error frame emitted after gate persist failure; frames: {frames}"
+    err_detail = error_frames[0]["detail"]
+    assert "code" in err_detail, f"Error detail missing 'code': {err_detail}"
+    assert err_detail["code"] == "internal_error", f"Unexpected error code: {err_detail['code']!r}"
+    # Confirm no exception internals / args leaked into the message.
+    assert "simulated" not in err_detail.get("message", ""), (
+        f"Exception internals leaked into error message: {err_detail['message']!r}"
+    )
+
+    # No assistant Message row (gate failed; resume path would write it).
+    stmt = select(Message).where(Message.chat_id == uuid.UUID(chat_id), Message.role == "assistant")
+    msg_rows = (await db_session.execute(stmt)).scalars().all()
+    assert not msg_rows, f"Unexpected assistant Message row after gate persist failure: {msg_rows}"

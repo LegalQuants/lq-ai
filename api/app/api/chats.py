@@ -75,13 +75,13 @@ from app.api.skills import _resolve_skill_for_user
 from app.audit import audit_action
 from app.autonomous.guard import _args_digest
 from app.chat.tool_loop import LoopConfirmation, LoopFinal, LoopMcpAuth, run_chat_tool_loop
-from app.chat.tool_schemas import assemble_allowlist
+from app.chat.tool_schemas import ChatToolAllowlist, assemble_allowlist
 from app.citation import extract_citations, verify
 from app.citation.cost import estimate_judge_call_cost_usd
 from app.clients.gateway import EnsembleConfig, GatewayClient, get_gateway_client
 from app.config import get_settings
 from app.db.session import get_db
-from app.errors import LQAIError, NotFound, ValidationError
+from app.errors import InternalError, LQAIError, NotFound, ValidationError
 from app.knowledge.embed import DEFAULT_EMBEDDING_MODEL, request_embedding_vector
 from app.knowledge.retrieval import HybridSearchResult, hybrid_search
 from app.models.chat import Chat, Message, MessageCitation
@@ -1577,13 +1577,11 @@ async def send_message(
     try:
         allowlist = await assemble_allowlist(db, request_id=request_id)
     except Exception:
-        log.debug(
+        log.warning(
             "chat send_message: assemble_allowlist failed — falling back to empty allowlist",
             exc_info=True,
         )
-        from app.chat.tool_schemas import ChatToolAllowlist as _ChatToolAllowlist
-
-        allowlist = _ChatToolAllowlist(specs={})
+        allowlist = ChatToolAllowlist(specs={})
 
     if payload.stream:
         return await _stream_response(
@@ -2213,7 +2211,7 @@ async def _non_streaming_response(
     slash_unresolved: bool = False,
     attached_skill_provenance: list[dict[str, str | None]] | None = None,
     project_ensemble_verification: bool = False,
-    allowlist: Any = None,
+    allowlist: ChatToolAllowlist | None = None,
 ) -> JSONResponse:
     """Run the non-streaming path: forward, persist, return JSON.
 
@@ -2229,10 +2227,7 @@ async def _non_streaming_response(
     """
 
     # ── PR5b Task 6: tool-loop branch ──────────────────────────────────────
-    from app.chat.tool_schemas import ChatToolAllowlist
-
-    _allowlist: ChatToolAllowlist | None = allowlist
-    if _allowlist is not None and _allowlist.specs:
+    if allowlist is not None and allowlist.specs:
         # Non-empty allowlist → run the agentic loop.
         try:
             outcome = await run_chat_tool_loop(
@@ -2240,7 +2235,7 @@ async def _non_streaming_response(
                 user=user,
                 gateway=gateway,
                 base_request=request,
-                allowlist=_allowlist,
+                allowlist=allowlist,
                 assistant_message_id=assistant_message_id,
                 cluster_cache={},
                 request_id=request_id,
@@ -2549,7 +2544,7 @@ async def _stream_response(
     http_request: Request | None = None,
     attached_skill_provenance: list[dict[str, str | None]] | None = None,
     project_ensemble_verification: bool = False,
-    allowlist: Any = None,
+    allowlist: ChatToolAllowlist | None = None,
 ) -> StreamingResponse:
     """Run the streaming path: forward, stream SSE, persist at end.
 
@@ -2579,10 +2574,7 @@ async def _stream_response(
         yield f"data: {_json.dumps(opening, separators=(',', ':'))}\n\n".encode()
 
         # ── PR5b Task 6: tool-loop branch ─────────────────────────────────────
-        from app.chat.tool_schemas import ChatToolAllowlist
-
-        _allowlist: ChatToolAllowlist | None = allowlist
-        if _allowlist is not None and _allowlist.specs:
+        if allowlist is not None and allowlist.specs:
             # Non-empty allowlist → agentic loop (non-streaming internally).
             loop_outcome = None
             try:
@@ -2591,7 +2583,7 @@ async def _stream_response(
                     user=user,
                     gateway=gateway,
                     base_request=request,
-                    allowlist=_allowlist,
+                    allowlist=allowlist,
                     assistant_message_id=assistant_message_id,
                     cluster_cache={},
                     request_id=request_id,
@@ -2702,6 +2694,18 @@ async def _stream_response(
                             "error": repr(gate_persist_exc),
                         },
                     )
+                    # Persist failure — no gate frame was emitted, no tool was
+                    # executed.  Emit a generic error frame so the client is not
+                    # left with a silent dead-end.  Never leak exception internals
+                    # or tool args into the message.
+                    _gate_persist_err = InternalError(
+                        "Failed to record tool confirmation; please retry.",
+                        details={"event": "chat_gate_persist_failed"},
+                    )
+                    _gate_persist_envelope = _gate_persist_err.to_envelope()
+                    yield (
+                        f"data: {_json.dumps(_gate_persist_envelope, separators=(',', ':'))}\n\n"
+                    ).encode()
                 # Do NOT persist a final assistant Message — Task 7 (resume) does.
                 yield b"data: [DONE]\n\n"
                 return
