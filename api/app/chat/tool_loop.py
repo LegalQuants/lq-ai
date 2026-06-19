@@ -40,6 +40,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
@@ -51,6 +52,10 @@ from app.autonomous.guard import ToolResult
 from app.clients.gateway import GatewayClient
 from app.mcp import service as mcp_service
 from app.schemas.gateway import (
+    ChatCompletionChoice,
+    ChatCompletionChunk,
+    ChatCompletionChunkChoice,
+    ChatCompletionDelta,
     ChatCompletionMessage,
     ChatCompletionRequest,
     ChatCompletionResponse,
@@ -115,6 +120,35 @@ class ToolConfirmationRequired(Exception):
         self.destructive = destructive
         self.messages_so_far = messages_so_far
         super().__init__(f"tool {provider}/{tool} requires confirmation")
+
+
+def confirmation_notice_response(
+    exc: ToolConfirmationRequired, *, model: str
+) -> ChatCompletionResponse:
+    """Interim final answer when a confirm-gated tool is proposed (PR5b-ii part 2).
+
+    Part 3 replaces this with the real persist-and-resume gate (a
+    ``tool_confirmation_required`` SSE event + the approve/deny endpoint). Until
+    then the loop degrades to an honest notice rather than crashing or silently
+    skipping a human-gated action.
+    """
+
+    notice = (
+        f'I started to use the "{exc.tool}" tool, but it needs your approval before it can run, '
+        "and the approval step isn't available in this interface yet."
+    )
+    return ChatCompletionResponse(
+        id="chatcmpl-confirm",
+        created=0,
+        model=model,
+        choices=[
+            ChatCompletionChoice(
+                index=0,
+                message=ChatCompletionMessage(role="assistant", content=notice),
+                finish_reason="stop",
+            )
+        ],
+    )
 
 
 def args_digest(args: dict[str, Any]) -> str:
@@ -363,3 +397,67 @@ async def run_tool_loop(
                     content=_tool_result_content(result),
                 )
             )
+
+
+async def run_tool_loop_as_stream(
+    db: AsyncSession,
+    *,
+    gateway: GatewayClient,
+    base_request: ChatCompletionRequest,
+    tools: AssembledTools,
+    user_id: UUID,
+    chat_id: UUID,
+    message_id: UUID,
+    request_id: str | None = None,
+    max_allowed_tier: int | None = None,
+    max_tool_calls: int = DEFAULT_MAX_TOOL_CALLS,
+) -> AsyncIterator[ChatCompletionChunk]:
+    """Run the loop, then re-emit the final answer as OpenAI streaming chunks.
+
+    The chat streaming path relays chunks from a source iterator; this adapter
+    lets that path swap in the tool-loop without changing its accumulate /
+    persist / citation / audit logic. Tool-resolving turns run server-side
+    (non-streaming); the final answer is delivered as a role chunk, one content
+    chunk, and a terminal chunk carrying usage + finish_reason.
+
+    :class:`ToolConfirmationRequired` propagates out of the first iteration so
+    the caller can run the confirmation gate (the chat endpoint owns the
+    custom SSE event).
+    """
+
+    resp = await run_tool_loop(
+        db,
+        gateway=gateway,
+        base_request=base_request,
+        tools=tools,
+        user_id=user_id,
+        chat_id=chat_id,
+        message_id=message_id,
+        request_id=request_id,
+        max_allowed_tier=max_allowed_tier,
+        max_tool_calls=max_tool_calls,
+    )
+    text = resp.choices[0].message.content if resp.choices else ""
+    common: dict[str, Any] = {
+        "id": resp.id,
+        "created": resp.created,
+        "model": resp.model,
+        "routed_inference_tier": resp.routed_inference_tier,
+        "routed_provider": resp.routed_provider,
+    }
+    yield ChatCompletionChunk(
+        choices=[ChatCompletionChunkChoice(index=0, delta=ChatCompletionDelta(role="assistant"))],
+        **common,
+    )
+    if text:
+        yield ChatCompletionChunk(
+            choices=[ChatCompletionChunkChoice(index=0, delta=ChatCompletionDelta(content=text))],
+            **common,
+        )
+    yield ChatCompletionChunk(
+        choices=[
+            ChatCompletionChunkChoice(index=0, delta=ChatCompletionDelta(), finish_reason="stop")
+        ],
+        usage=resp.usage,
+        **common,
+    )

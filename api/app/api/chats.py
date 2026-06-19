@@ -73,6 +73,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import ActiveUser
 from app.api.skills import _resolve_skill_for_user
 from app.audit import audit_action
+from app.chat.tool_loop import (
+    AssembledTools,
+    ToolConfirmationRequired,
+    assemble_mcp_tools,
+    confirmation_notice_response,
+    run_tool_loop,
+    run_tool_loop_as_stream,
+)
 from app.citation import extract_citations, verify
 from app.citation.cost import estimate_judge_call_cost_usd
 from app.clients.gateway import EnsembleConfig, GatewayClient, get_gateway_client
@@ -1533,6 +1541,11 @@ async def send_message(
         },
     )
 
+    # PR5b-ii: assemble the per-turn tool allowlist from operator-enabled MCP
+    # tools. Empty (the default deployment) → the loop is not engaged and the
+    # send path is byte-for-byte the pre-PR5b single-shot completion.
+    tools = await assemble_mcp_tools(db, request_id=request_id)
+
     if payload.stream:
         return await _stream_response(
             db=db,
@@ -1547,6 +1560,7 @@ async def send_message(
             http_request=request,
             attached_skill_provenance=attached_skill_provenance,
             project_ensemble_verification=project_ensemble_verification,
+            tools=tools,
         )
     return await _non_streaming_response(
         db=db,
@@ -1563,6 +1577,7 @@ async def send_message(
         slash_unresolved=slash_unresolved,
         attached_skill_provenance=attached_skill_provenance,
         project_ensemble_verification=project_ensemble_verification,
+        tools=tools,
     )
 
 
@@ -2159,16 +2174,37 @@ async def _non_streaming_response(
     slash_unresolved: bool = False,
     attached_skill_provenance: list[dict[str, str | None]] | None = None,
     project_ensemble_verification: bool = False,
+    tools: AssembledTools | None = None,
 ) -> JSONResponse:
     """Run the non-streaming path: forward, persist, return JSON.
 
     Wave D.2 Task 2.7 — ``attached_skill_names`` and ``slash_unresolved``
     are propagated from :func:`send_message`'s slash-fallback path.
     Defaults preserve the pre-Task-2.7 wire contract for any caller
-    that doesn't pass them in."""
+    that doesn't pass them in.
+
+    PR5b-ii — when ``tools`` is non-empty the governed tool-loop runs
+    (read-only tools execute inline + feed back); otherwise this is the
+    unchanged single-shot completion."""
 
     try:
-        response = await gateway.chat_completion(request, request_id=request_id)
+        if tools:
+            try:
+                response = await run_tool_loop(
+                    db,
+                    gateway=gateway,
+                    base_request=request,
+                    tools=tools,
+                    user_id=user.id,
+                    chat_id=chat.id,
+                    message_id=assistant_message_id,
+                    request_id=request_id,
+                )
+            except ToolConfirmationRequired as confirm_exc:
+                # PR5b-ii part 3 will run the real persist-and-resume gate here.
+                response = confirmation_notice_response(confirm_exc, model=request.model)
+        else:
+            response = await gateway.chat_completion(request, request_id=request_id)
     except LQAIError as exc:
         # Gateway-side failure: the user message is already persisted.
         # We do NOT persist an assistant row — the assistant produced
@@ -2280,8 +2316,14 @@ async def _stream_response(
     http_request: Request | None = None,
     attached_skill_provenance: list[dict[str, str | None]] | None = None,
     project_ensemble_verification: bool = False,
+    tools: AssembledTools | None = None,
 ) -> StreamingResponse:
-    """Run the streaming path: forward, stream SSE, persist at end."""
+    """Run the streaming path: forward, stream SSE, persist at end.
+
+    PR5b-ii — when ``tools`` is non-empty the governed tool-loop resolves tool
+    calls server-side and the final answer is re-emitted through the same SSE
+    frames (so the accumulate / persist / citation / audit logic below is
+    unchanged); otherwise this relays the gateway's token stream as before."""
 
     async def _generate() -> AsyncIterator[bytes]:
         accumulated: list[str] = []
@@ -2303,8 +2345,25 @@ async def _stream_response(
         }
         yield f"data: {_json.dumps(opening, separators=(',', ':'))}\n\n".encode()
 
+        # PR5b-ii: when tools are offered, the loop resolves them server-side
+        # and re-emits the final answer as chunks; otherwise relay the token
+        # stream. Either way the accumulate/persist logic below is identical.
+        stream_source = (
+            run_tool_loop_as_stream(
+                db,
+                gateway=gateway,
+                base_request=request,
+                tools=tools,
+                user_id=user.id,
+                chat_id=chat.id,
+                message_id=assistant_message_id,
+                request_id=request_id,
+            )
+            if tools
+            else gateway.chat_completion_stream(request, request_id=request_id)
+        )
         try:
-            async for chunk in gateway.chat_completion_stream(request, request_id=request_id):
+            async for chunk in stream_source:
                 last_tier = chunk.routed_inference_tier or last_tier
                 last_provider = chunk.routed_provider or last_provider
                 last_model = chunk.model
@@ -2334,6 +2393,23 @@ async def _stream_response(
                     if last_applied_skills is not None:
                         frame["applied_skills"] = list(last_applied_skills)
                     yield f"data: {_json.dumps(frame, separators=(',', ':'))}\n\n".encode()
+        except ToolConfirmationRequired as confirm_exc:
+            # PR5b-ii part 3 will persist a pending_tool_call row and emit a
+            # ``tool_confirmation_required`` SSE event here. Part 2 degrades to
+            # an honest notice streamed as the answer so the turn completes.
+            notice = (
+                confirmation_notice_response(confirm_exc, model=request.model)
+                .choices[0]
+                .message.content
+                or ""
+            )
+            accumulated.append(notice)
+            notice_frame = {
+                "type": "delta",
+                "delta": notice,
+                "lq_ai_message_id": str(assistant_message_id),
+            }
+            yield f"data: {_json.dumps(notice_frame, separators=(',', ':'))}\n\n".encode()
         except LQAIError as exc:
             # Stream ended in failure. We persist a partial assistant
             # row with whatever content the client already saw, and
