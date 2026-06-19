@@ -36,7 +36,7 @@ dependencies = [
     # by the operator at gateway startup via LQ_AI_GATEWAY_MASTER_KEY;
     # individual provider keys live encrypted in gateway.yaml under
     # api_key_encrypted: <fernet-token>.
-    "cryptography>=42,<46",
+    "cryptography>=42,<50",
     # M-Obs.1 — Prometheus /metrics (PRD §5.4). The official client
     # exposes a stdlib-only counter/histogram/gauge API plus an ASGI
     # app for mounting at /metrics. Small, BSD-licensed, no transitive
