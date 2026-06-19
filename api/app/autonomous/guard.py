@@ -378,6 +378,7 @@ async def _governed_external_dispatch(
         user_id=session.user_id,
         session_id=session.id,
         args_digest=_args_digest(params),
+        denied_on=(ToolNotGranted,),  # D4 policy refusals → outcome="denied", not "error"
     )
 
 

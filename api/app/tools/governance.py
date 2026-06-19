@@ -152,6 +152,7 @@ async def governed_tool_invocation(
     session_id: UUID | None = None,
     request_id: str | None = None,
     args_digest: str | None = None,
+    denied_on: tuple[type[Exception], ...] = (),
 ) -> ToolResult:
     """Shared per-call governance: tier-check → audit row → dispatch → record.
 
@@ -194,6 +195,16 @@ async def governed_tool_invocation(
         request_id: Cross-service trace correlation header value.
         args_digest: A short hash/summary of the call arguments produced
             by the caller.  NEVER the raw args.
+        denied_on: A tuple of exception types (supplied by the caller)
+            that represent a **policy refusal** rather than a tool
+            failure.  When ``dispatch`` raises an exception that is an
+            instance of one of these types, the audit row is labeled
+            ``outcome="denied"`` instead of ``outcome="error"`` before
+            the exception is re-raised.  Passing the empty tuple
+            (default) preserves the existing behaviour: all dispatch
+            exceptions → ``"error"``.  Callers pass the specific
+            exception classes — this module never imports autonomous
+            symbols directly (no circular-import risk).
 
     Returns:
         The :class:`~app.autonomous.guard.ToolResult` from ``dispatch``.
@@ -204,7 +215,9 @@ async def governed_tool_invocation(
             ``outcome="refused_tier"`` is written and flushed before
             the raise.
         Any exception raised by ``dispatch`` is re-raised after updating
-        the audit row to ``outcome="error"`` and flushing.
+        the audit row to ``outcome="denied"`` (if the exception type is
+        listed in ``denied_on``) or ``outcome="error"`` (all other
+        exceptions) and flushing.
     """
     # ── D-a2 tier check ────────────────────────────────────────────────────
     if max_allowed_tier is not None and provider_tier > max_allowed_tier:
@@ -266,15 +279,16 @@ async def governed_tool_invocation(
     # ── Dispatch ────────────────────────────────────────────────────────────
     try:
         result = await dispatch()
-    except Exception:
-        row.outcome = "error"
+    except Exception as exc:
+        outcome = "denied" if (denied_on and isinstance(exc, denied_on)) else "error"
+        row.outcome = outcome
         row.updated_at = datetime.now(UTC)
         await db.flush()
         if span is not None:
             record_attributes(
                 span,
                 **{
-                    "tool_call.outcome": "error",
+                    "tool_call.outcome": outcome,
                     "tool_call.provider": provider,
                     "tool_call.tool": tool,
                     "tool_call.tier": provider_tier,

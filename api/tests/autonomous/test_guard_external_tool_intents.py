@@ -319,11 +319,13 @@ async def test_call_mcp_tool_d4_refuses_gated_tool_no_gateway_call(
     # D4: NO gateway call.
     call_tool_mock.assert_not_called()
 
-    # The governance helper wrote a pending row then marked it error
-    # (the dispatch closure raised ToolNotGranted inside the helper).
+    # The governance helper wrote a pending row then marked it "denied"
+    # (the dispatch closure raised ToolNotGranted inside the helper, and
+    # the caller passed denied_on=(ToolNotGranted,) — D4 is a policy
+    # refusal, not a tool failure).
     rows = await _tool_call_rows(db_session, sess.id)
     assert len(rows) == 1
-    assert rows[0].outcome == "error"
+    assert rows[0].outcome == "denied"
 
 
 async def test_call_mcp_tool_unknown_tool_refused_no_gateway_call(
@@ -359,6 +361,12 @@ async def test_call_mcp_tool_unknown_tool_refused_no_gateway_call(
 
     assert exc_info.value.details["reason"] == "tool_not_cached"
     call_tool_mock.assert_not_called()
+
+    # D4: governance helper wrote a pending row then marked it "denied"
+    # (unknown tool is a policy refusal, not a tool failure).
+    rows = await _tool_call_rows(db_session, sess.id)
+    assert len(rows) == 1
+    assert rows[0].outcome == "denied"
 
 
 # ---------------------------------------------------------------------------

@@ -520,6 +520,78 @@ async def test_dispatch_raises_writes_error_row_and_reraises(db_session: AsyncSe
 
 
 @pytest.mark.asyncio
+async def test_denied_on_matching_exception_writes_denied_row(db_session: AsyncSession):
+    """When dispatch raises an exception listed in denied_on, outcome='denied' (not 'error')."""
+
+    class PolicyRefusal(Exception):
+        pass
+
+    exc = PolicyRefusal("D4 policy block")
+    dispatch = _make_failing_dispatch(exc)
+
+    with pytest.raises(PolicyRefusal):
+        await governed_tool_invocation(
+            db_session,
+            origin="autonomous",
+            provider="acme-mcp",
+            tool="danger_op",
+            intent=ToolIntent.run_skill,
+            provider_tier=2,
+            max_allowed_tier=5,
+            estimated_cost=Decimal("0.02"),
+            dispatch=dispatch,
+            args_digest="sha256:denieddigest",
+            denied_on=(PolicyRefusal,),
+        )
+
+    dispatch.assert_called_once()
+
+    rows = (await db_session.execute(select(ToolCallLog))).scalars().all()
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.outcome == "denied", (
+        f"expected outcome='denied' for a policy-refusal exception; got {row.outcome!r}"
+    )
+    assert row.args_digest == "sha256:denieddigest"
+
+
+@pytest.mark.asyncio
+async def test_denied_on_non_matching_exception_writes_error_row(db_session: AsyncSession):
+    """When dispatch raises an exception NOT in denied_on, outcome='error' (unchanged)."""
+
+    class PolicyRefusal(Exception):
+        pass
+
+    exc = RuntimeError("genuine tool failure")
+    dispatch = _make_failing_dispatch(exc)
+
+    with pytest.raises(RuntimeError):
+        await governed_tool_invocation(
+            db_session,
+            origin="autonomous",
+            provider="acme-mcp",
+            tool="danger_op",
+            intent=ToolIntent.run_skill,
+            provider_tier=2,
+            max_allowed_tier=5,
+            estimated_cost=Decimal("0.02"),
+            dispatch=dispatch,
+            args_digest="sha256:errordigest",
+            denied_on=(PolicyRefusal,),  # RuntimeError is NOT in this tuple
+        )
+
+    dispatch.assert_called_once()
+
+    rows = (await db_session.execute(select(ToolCallLog))).scalars().all()
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.outcome == "error", (
+        f"expected outcome='error' for a non-policy exception; got {row.outcome!r}"
+    )
+    assert row.args_digest == "sha256:errordigest"
+
+
+@pytest.mark.asyncio
 async def test_dispatch_raises_annotates_span(db_session: AsyncSession):
     """On dispatch failure the span is annotated with outcome=error (not the exception)."""
     exc = ValueError("inner error")
