@@ -328,6 +328,58 @@ async def test_call_mcp_tool_d4_refuses_gated_tool_no_gateway_call(
     assert rows[0].outcome == "denied"
 
 
+async def test_call_mcp_tool_d4_refuses_disabled_tool_no_gateway_call(
+    db_session: AsyncSession,
+) -> None:
+    """D4: an operator-disabled cached tool (enabled=False) → ToolNotGranted,
+    no gateway call, and the tool_call_log row has outcome="denied"."""
+    from app.autonomous import guard as guard_mod
+
+    user = await _make_user(db_session)
+    sess = await _make_session(db_session, user=user, current_phase="analysis")
+    # read_only, non-destructive — disabled only via the operator toggle.
+    row = MCPToolCache(
+        provider_name="acme-mcp",
+        tool_name="disabled_op",
+        read_only=True,
+        destructive=False,
+        requires_confirmation=False,
+        enabled=False,
+    )
+    db_session.add(row)
+    await db_session.flush()
+
+    call_tool_mock = AsyncMock()
+
+    class _Client:
+        call_tool = call_tool_mock
+
+    with (
+        patch("app.clients.gateway.get_gateway_client", return_value=_Client()),
+        patch(
+            "app.tools.governance.resolve_provider_tier",
+            new=AsyncMock(return_value=2),
+        ),
+        pytest.raises(ToolNotGranted) as exc_info,
+    ):
+        await guard_mod.guarded_tool_call(
+            sess,
+            ToolIntent.call_mcp_tool,
+            {"provider": "acme-mcp", "tool": "disabled_op", "args": {}},
+            db_session,
+            _StubGateway(),
+        )
+
+    assert exc_info.value.details["reason"] == "tool_disabled"
+    # D4: the gateway must NEVER be called for a disabled tool.
+    call_tool_mock.assert_not_called()
+
+    # The governance helper wrote a pending row then marked it "denied".
+    rows = await _tool_call_rows(db_session, sess.id)
+    assert len(rows) == 1
+    assert rows[0].outcome == "denied"
+
+
 async def test_call_mcp_tool_unknown_tool_refused_no_gateway_call(
     db_session: AsyncSession,
 ) -> None:

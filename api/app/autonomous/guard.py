@@ -625,9 +625,11 @@ async def _handle_call_mcp_tool(
     **ADR 0015 D4 enforcement (FIRST, before any gateway call):** load the
     cached :class:`~app.models.mcp.MCPToolCache` row for
     ``(params["provider"], params["tool"])``.  If the row is **missing**, or
-    its ``destructive`` is true, or its ``requires_confirmation`` is true,
-    raise :exc:`~app.errors.ToolNotGranted` and make NO gateway call — the
-    autonomous layer in v1 NEVER fires a human-gated or unknown tool.
+    its ``destructive`` is true, or its ``requires_confirmation`` is true, or
+    its ``enabled`` is false (operator-disabled toggle), raise
+    :exc:`~app.errors.ToolNotGranted` and make NO gateway call — the
+    autonomous layer in v1 NEVER fires a human-gated, operator-disabled, or
+    unknown tool.
 
     Otherwise call the gateway's
     :meth:`~app.clients.gateway.GatewayClient.call_tool` with no per-user
@@ -641,8 +643,9 @@ async def _handle_call_mcp_tool(
     Zero cost in v1 (D-a3 / DE-344).
 
     Raises:
-        ToolNotGranted: the tool is unknown to the cache, ``destructive``, or
-            ``requires_confirmation`` (D4 — no gateway call is made).
+        ToolNotGranted: the tool is unknown to the cache, ``destructive``,
+            ``requires_confirmation``, or operator-disabled (``enabled=False``)
+            (D4 — no gateway call is made).
     """
     provider = str(params["provider"])
     tool = str(params["tool"])
@@ -652,14 +655,16 @@ async def _handle_call_mcp_tool(
     from app.models.mcp import MCPToolCache
 
     cached = await db.get(MCPToolCache, (provider, tool))
-    if cached is None or cached.destructive or cached.requires_confirmation:
+    if cached is None or cached.destructive or cached.requires_confirmation or not cached.enabled:
         # Counts/types only in the reason — never the args.
         if cached is None:
             reason = "tool_not_cached"
         elif cached.destructive:
             reason = "destructive"
-        else:
+        elif cached.requires_confirmation:
             reason = "requires_confirmation"
+        else:
+            reason = "tool_disabled"
         raise ToolNotGranted(
             "MCP tool refused for the autonomous layer (D4)",
             intent=str(ToolIntent.call_mcp_tool),
@@ -668,6 +673,8 @@ async def _handle_call_mcp_tool(
         )
 
     # ── gateway call — no per-user OAuth token (D-a5) ───────────────────────
+    # call_tool carries no per-user token (D-a5); auth:oauth MCP servers
+    # therefore fail at the gateway.
     from app.clients.gateway import get_gateway_client
 
     result = await get_gateway_client().call_tool(provider, tool, args, max_allowed_tier=None)
