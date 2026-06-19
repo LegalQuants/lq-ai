@@ -20,6 +20,7 @@ from app.models.autonomous import (
     PrecedentEntry,
 )
 from app.models.chat import Chat, Message
+from app.models.chat_pending_tool_call import ChatPendingToolCall
 from app.models.document import Document, DocumentChunk
 from app.models.enhance_prompt import EnhancePromptInteraction
 from app.models.file import File
@@ -52,6 +53,7 @@ __all__ = [
     "AutonomousSession",
     "AutonomousWatch",
     "Chat",
+    "ChatPendingToolCall",
     "Document",
     "DocumentChunk",
     "EnhancePromptInteraction",
