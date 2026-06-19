@@ -28,6 +28,7 @@ from app.models.knowledge import KnowledgeBase, KnowledgeBaseFile
 from app.models.mcp import MCPToolCache
 from app.models.mcp_oauth import MCPOAuthState, MCPOAuthToken
 from app.models.organization_profile import OrganizationProfile
+from app.models.pending_tool_call import PendingToolCall
 from app.models.playbook import Playbook, PlaybookExecution, PlaybookPosition
 from app.models.project import Project, ProjectFile, ProjectSkill
 from app.models.project_knowledge_base import ProjectKnowledgeBase
@@ -64,6 +65,7 @@ __all__ = [
     "MCPToolCache",
     "Message",
     "OrganizationProfile",
+    "PendingToolCall",
     "Playbook",
     "PlaybookExecution",
     "PlaybookPosition",
