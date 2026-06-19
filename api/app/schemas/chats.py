@@ -585,6 +585,19 @@ class MessagePostResponse(BaseModel):
     this flag lets the UI surface a "couldn't resolve /foo" hint so
     typos don't silently produce non-skill answers."""
 
+    pending_tool_call: dict[str, Any] | None = None
+    """PR5b Task 6 — populated when the chat tool-loop surfaces a
+    confirmation gate (``LoopConfirmation``).  Carries the
+    ``tool_confirmation_required`` payload (``pending_call_id``,
+    ``provider``, ``tool``, ``function_name``, ``args_summary``,
+    ``tier``, ``destructive``).  ``None`` on all normal (non-gate) turns
+    so the existing wire shape is preserved."""
+
+    mcp_authorization_required: dict[str, Any] | None = None
+    """PR5b Task 6 — populated when the chat tool-loop surfaces an OAuth
+    gate (``LoopMcpAuth``).  Carries ``server`` and ``authorize_url``.
+    ``None`` on all normal turns."""
+
 
 # --- Internal: helpers exposed for tests -------------------------------------
 
