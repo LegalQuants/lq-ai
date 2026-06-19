@@ -49,6 +49,8 @@ class ToolIntent(StrEnum):
     emit_finding = "emit_finding"
     emit_artifact = "emit_artifact"
     notify = "notify"
+    retrieve_caselaw = "retrieve_caselaw"
+    call_mcp_tool = "call_mcp_tool"
 
 
 PHASE_GRANTS: dict[Phase, frozenset[ToolIntent]] = {
@@ -61,6 +63,10 @@ PHASE_GRANTS: dict[Phase, frozenset[ToolIntent]] = {
             # propose_precedent at analysis: document/clause patterns are
             # observed while reading docs (M4-B2, Decision B2-b).
             ToolIntent.propose_precedent,
+            # retrieve_caselaw + call_mcp_tool: gateway-brokered external
+            # lookups; granted at analysis only (PR5a D-a4).
+            ToolIntent.retrieve_caselaw,
+            ToolIntent.call_mcp_tool,
         }
     ),
     Phase.drafting: frozenset(

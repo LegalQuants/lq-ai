@@ -275,6 +275,68 @@ async def test_notify_returns_zero_no_estimator_call() -> None:
     assert result == Decimal("0")
 
 
+@pytest.mark.unit
+def test_retrieve_caselaw_intent_exists() -> None:
+    """retrieve_caselaw is a member of ToolIntent."""
+    assert ToolIntent.retrieve_caselaw == "retrieve_caselaw"
+
+
+@pytest.mark.unit
+def test_call_mcp_tool_intent_exists() -> None:
+    """call_mcp_tool is a member of ToolIntent."""
+    assert ToolIntent.call_mcp_tool == "call_mcp_tool"
+
+
+@pytest.mark.unit
+def test_retrieve_caselaw_granted_only_in_analysis() -> None:
+    """retrieve_caselaw is in PHASE_GRANTS[analysis] and NO other phase."""
+    from app.autonomous.enums import PHASE_GRANTS, Phase
+
+    assert ToolIntent.retrieve_caselaw in PHASE_GRANTS[Phase.analysis]
+    for phase in Phase:
+        if phase is not Phase.analysis:
+            assert ToolIntent.retrieve_caselaw not in PHASE_GRANTS[phase], (
+                f"retrieve_caselaw must not be granted in phase {phase!r}"
+            )
+
+
+@pytest.mark.unit
+def test_call_mcp_tool_granted_only_in_analysis() -> None:
+    """call_mcp_tool is in PHASE_GRANTS[analysis] and NO other phase."""
+    from app.autonomous.enums import PHASE_GRANTS, Phase
+
+    assert ToolIntent.call_mcp_tool in PHASE_GRANTS[Phase.analysis]
+    for phase in Phase:
+        if phase is not Phase.analysis:
+            assert ToolIntent.call_mcp_tool not in PHASE_GRANTS[phase], (
+                f"call_mcp_tool must not be granted in phase {phase!r}"
+            )
+
+
+@pytest.mark.unit
+async def test_retrieve_caselaw_returns_zero_no_estimator_call() -> None:
+    """retrieve_caselaw → Decimal("0"), estimator NOT called (D-a3 / DE-344 deferral)."""
+    from app.autonomous.cost import estimate_tool_cost
+
+    mock_estimator = AsyncMock(return_value=Decimal("9.99"))
+    with patch("app.autonomous.cost.estimate_judge_call_cost_usd", mock_estimator):
+        result = await estimate_tool_cost(ToolIntent.retrieve_caselaw, {}, db=None)
+    mock_estimator.assert_not_called()
+    assert result == Decimal("0")
+
+
+@pytest.mark.unit
+async def test_call_mcp_tool_returns_zero_no_estimator_call() -> None:
+    """call_mcp_tool → Decimal("0"), estimator NOT called (D-a3 / DE-344 deferral)."""
+    from app.autonomous.cost import estimate_tool_cost
+
+    mock_estimator = AsyncMock(return_value=Decimal("9.99"))
+    with patch("app.autonomous.cost.estimate_judge_call_cost_usd", mock_estimator):
+        result = await estimate_tool_cost(ToolIntent.call_mcp_tool, {}, db=None)
+    mock_estimator.assert_not_called()
+    assert result == Decimal("0")
+
+
 # ===========================================================================
 # Piece 3 — autonomous_audit (closed-enum audit wrapper)
 # ===========================================================================

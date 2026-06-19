@@ -4619,6 +4619,16 @@ No code change — the runtime already returns these with the correct typed `cod
 
 **When to ship:** When an MCP OAuth server that enforces RFC 8707 on refresh is encountered, or proactively before GA.
 
+#### DE-344 — Per-provider external-tool cost model for `retrieve_caselaw` / `call_mcp_tool`
+
+**Priority:** P3 · **Effort:** M
+
+**Context:** PR5a wired the two external-tool intents (`retrieve_caselaw`, `call_mcp_tool`) into the autonomous governance path, but their cost estimator (`api/app/autonomous/cost.py`) returns `Decimal("0")` in v1 — they burn no provider-inference tokens (CourtListener is free-tier; MCP tool cost is provider-specific and unknown), so the R4 economic brake does not throttle them. The per-turn tool-call cap (PR5b, chat) and the autonomous session cost cap (inference) bound spend meanwhile, but a tool that proxies a metered/paid third-party API (a future MCP server, or CourtListener rate-tier overages) would not register cost against R4. Surfaced in the PR5a plan (2026-06-19).
+
+**Specific scope:** Add a per-provider external-tool cost model (e.g. a configured cost-per-call or cost-per-unit on the gateway `tool_providers` / `mcp.yaml` entry, or a rolling-average like the inference estimator) so `estimate_tool_cost` returns a real projection for `retrieve_caselaw` / `call_mcp_tool` and the R4 brake throttles expensive external tools. Record the realized cost on the `tool_call_log` row.
+
+**When to ship:** Before the autonomous layer (or chat) is pointed at a metered/paid third-party tool provider.
+
 ---
 
 ## 10. Appendices
