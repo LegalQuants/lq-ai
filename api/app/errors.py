@@ -97,6 +97,7 @@ CODE_SKILL_INPUT_MISSING = "skill_input_missing"
 CODE_AUTONOMOUS_HALTED = "autonomous_halted"
 CODE_AUTONOMOUS_TOOL_NOT_GRANTED = "autonomous_tool_not_granted"
 CODE_AUTONOMOUS_COST_CAP_REACHED = "autonomous_cost_cap_reached"
+CODE_TOOL_TIER_REFUSED = "tool_tier_refused"
 
 
 # --- Base class --------------------------------------------------------------
@@ -384,6 +385,40 @@ class CostCapReached(AutonomousBrake):
         super().__init__(message, details=merged, http_status=http_status, code=code)
 
 
+class ToolTierRefused(LQAIError):
+    """A tool call was refused because the provider's egress tier exceeds the
+    caller's ceiling (PR5a D-a2).
+
+    Raised by :func:`~app.tools.governance.governed_tool_invocation` when
+    ``provider_tier > max_allowed_tier``.  An audit row with
+    ``outcome="refused_tier"`` is written before the raise so the refusal
+    is always persisted regardless of how the caller handles the exception.
+
+    Carries ONLY tier integers — no args or result payload.  Maps to 403
+    (the tier ceiling is an authorization boundary, not a server error).
+    """
+
+    code = CODE_TOOL_TIER_REFUSED
+    http_status = status.HTTP_403_FORBIDDEN
+
+    def __init__(
+        self,
+        *,
+        provider: str,
+        tool: str,
+        tier: int,
+        ceiling: int,
+    ) -> None:
+        message = (
+            f"Tool call refused: provider '{provider}' tool '{tool}' "
+            f"requires tier {tier} but ceiling is {ceiling}"
+        )
+        super().__init__(
+            message,
+            details={"provider": provider, "tool": tool, "tier": tier, "ceiling": ceiling},
+        )
+
+
 # --- Gateway-crossing subclasses ---------------------------------------------
 # Raised by the GatewayClient (or by handlers that translate gateway
 # responses) when the backend↔gateway hop fails or surfaces a structured
@@ -610,6 +645,7 @@ __all__ = [
     "CODE_SKILL_INPUT_MISSING",
     "CODE_SKILL_NOT_FOUND",
     "CODE_TIER_BELOW_MINIMUM",
+    "CODE_TOOL_TIER_REFUSED",
     "CODE_UNAUTHORIZED",
     "CODE_VALIDATION_ERROR",
     "AutonomousBrake",
@@ -639,6 +675,7 @@ __all__ = [
     "SkillNotFound",
     "TierBelowMinimum",
     "ToolNotGranted",
+    "ToolTierRefused",
     "Unauthorized",
     "ValidationError",
     "map_gateway_error_code",
