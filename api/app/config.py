@@ -369,6 +369,23 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ----- Chat tool-loop (PR5b / L4) -----
+    # Hard cap on tool-call rounds per chat turn. Once calls_used reaches this
+    # limit the loop issues one final gateway round WITHOUT tools (tool_choice
+    # "none") so the model can synthesise what it has gathered, then returns
+    # LoopFinal. Operator-overridable; 8 is the conservative M1 default that
+    # keeps turn latency bounded while allowing multi-hop research workflows.
+    # Referenced in docs/PRD.md §L4 (chat tool-loop).
+    chat_tool_call_cap: int = Field(
+        default=8,
+        ge=1,
+        description=(
+            "Maximum number of tool calls the chat tool-loop will execute in a "
+            "single turn before issuing a final no-tools round (PRD §L4). "
+            "Default: 8. Operator-overridable via LQ_AI_CHAT_TOOL_CALL_CAP."
+        ),
+    )
+
     # ----- Operational -----
     log_level: LogLevel = Field(default="info", description="Log level for the api/ service.")
     lq_ai_dev_mode: bool = Field(
