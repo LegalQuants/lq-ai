@@ -26,7 +26,7 @@ string — origin-validated, state-bound only.
 from __future__ import annotations
 
 from typing import Annotated
-from urllib.parse import urlencode
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import RedirectResponse
@@ -49,6 +49,28 @@ from app.schemas.mcp_oauth import (
     MCPOAuthServerStatus,
     MCPOAuthStatusResponse,
 )
+
+
+def _append_query_params(url: str, **params: str) -> str:
+    """Append *params* to *url* without corrupting existing query or fragment.
+
+    Handles three tricky cases that naive ``f"{url}?{qs}"`` misses:
+
+    * ``url`` already has a query string → params are merged, not doubled.
+    * ``url`` has a ``#fragment`` → params land in the query component,
+      never inside the fragment (where they'd be invisible to the server).
+    * Both present → existing query merged, fragment preserved after params.
+
+    The fragment is intentionally preserved so callers that store an anchor
+    in their ``return_url`` (e.g. ``/settings#mcp``) still land in the right
+    place after the status param is appended to the query.
+    """
+    split = urlsplit(url)
+    existing = parse_qsl(split.query, keep_blank_values=True)
+    combined = existing + list(params.items())
+    new_query = urlencode(combined)
+    return urlunsplit((split.scheme, split.netloc, split.path, new_query, split.fragment))
+
 
 router = APIRouter(prefix="/mcp/oauth", tags=["mcp-oauth"])
 
@@ -150,9 +172,10 @@ async def mcp_oauth_callback(
         if return_url is not None:
             # Redirect to frontend with a non-secret error slug; never include
             # the code, state, verifier, or any token value in the redirect.
-            qs = urlencode({"mcp_error": exc.effective_code, "server": server})
+            # _append_query_params handles an existing query string or fragment
+            # on return_url so we never produce a malformed Location header.
             return RedirectResponse(
-                f"{return_url}?{qs}",
+                _append_query_params(return_url, mcp_error=exc.effective_code, server=server),
                 status_code=status.HTTP_302_FOUND,
             )
         raise  # back-compat: re-raise → global handler returns JSON error
@@ -169,9 +192,8 @@ async def mcp_oauth_callback(
     await db.commit()
 
     if return_url is not None:
-        qs = urlencode({"mcp_connected": server})
         return RedirectResponse(
-            f"{return_url}?{qs}",
+            _append_query_params(return_url, mcp_connected=server),
             status_code=status.HTTP_302_FOUND,
         )
 

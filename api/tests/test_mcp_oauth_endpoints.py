@@ -1020,3 +1020,178 @@ async def test_list_mcp_oauth_empty_when_no_servers_configured(
     )
     assert res.status_code == 200, res.text
     assert res.json()["servers"] == []
+
+
+# ---------------------------------------------------------------------------
+# PR4d robustness: redirect URL composer (_append_query_params regression)
+# ---------------------------------------------------------------------------
+#
+# These tests verify that the callback builds a well-formed Location header
+# when the stored return_url already carries a query string or a fragment.
+# Both the success path (mcp_connected) and the error path (mcp_error) are
+# covered for each case.
+#
+# They stub the same oauth helpers used by the existing PR4d tests above and
+# do NOT hit the database — they run as regular (non-@integration) tests so
+# they will always be collected regardless of marks.
+
+
+_RETURN_URL_WITH_QUERY = "https://frontend.example.com/settings/connections?tab=mcp"
+_RETURN_URL_WITH_FRAGMENT = "https://frontend.example.com/settings#mcp"
+
+
+@pytest.mark.integration
+async def test_callback_success_return_url_with_existing_query(
+    authed_client: tuple[AsyncClient, str, User],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Success redirect: return_url with existing query → Location merges params, exactly one '?'."""
+    ac, _token, user = authed_client
+
+    async def _fake_get_state_return_url(db: Any, *, state: str) -> str | None:
+        return _RETURN_URL_WITH_QUERY
+
+    token_row = _make_token_row(user.id)
+
+    async def _fake_exchange_code(
+        db: Any, *, state: str, code: str, iss: str | None
+    ) -> MCPOAuthToken:
+        return token_row
+
+    monkeypatch.setattr("app.api.mcp_oauth.oauth.get_state_return_url", _fake_get_state_return_url)
+    monkeypatch.setattr("app.api.mcp_oauth.oauth.exchange_code", _fake_exchange_code)
+
+    res = await ac.get(
+        f"/api/v1/mcp/oauth/{_SERVER}/callback",
+        params={"code": "c", "state": "s"},
+        follow_redirects=False,
+    )
+    assert res.status_code == 302, res.text
+    location = res.headers["location"]
+
+    # Both the original query param AND the new status param must be present.
+    assert "tab=mcp" in location, f"existing query param missing: {location!r}"
+    assert "mcp_connected=" in location, f"mcp_connected missing: {location!r}"
+    assert _SERVER in location
+
+    # Exactly one '?' — no double-query-marker.
+    assert location.count("?") == 1, f"malformed URL (multiple '?'): {location!r}"
+
+
+@pytest.mark.integration
+async def test_callback_error_return_url_with_existing_query(
+    anon_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Error redirect: return_url with existing query → Location merges params, exactly one '?'."""
+    from app.errors import MCPOAuthExchangeError
+
+    async def _fake_get_state_return_url(db: Any, *, state: str) -> str | None:
+        return _RETURN_URL_WITH_QUERY
+
+    async def _fake_exchange_code(
+        db: Any, *, state: str, code: str, iss: str | None
+    ) -> MCPOAuthToken:
+        raise MCPOAuthExchangeError(
+            message="token exchange failed",
+            details={"as_error": "invalid_client", "server": _SERVER},
+        )
+
+    monkeypatch.setattr("app.api.mcp_oauth.oauth.get_state_return_url", _fake_get_state_return_url)
+    monkeypatch.setattr("app.api.mcp_oauth.oauth.exchange_code", _fake_exchange_code)
+
+    res = await anon_client.get(
+        f"/api/v1/mcp/oauth/{_SERVER}/callback",
+        params={"code": "bad", "state": "s"},
+        follow_redirects=False,
+    )
+    assert res.status_code == 302, res.text
+    location = res.headers["location"]
+
+    assert "tab=mcp" in location, f"existing query param missing: {location!r}"
+    assert "mcp_error=" in location, f"mcp_error missing: {location!r}"
+    assert "server=" in location
+
+    assert location.count("?") == 1, f"malformed URL (multiple '?'): {location!r}"
+
+
+@pytest.mark.integration
+async def test_callback_success_return_url_with_fragment(
+    authed_client: tuple[AsyncClient, str, User],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Success redirect: return_url with #fragment → status param lands in query, not fragment."""
+    ac, _token, user = authed_client
+
+    async def _fake_get_state_return_url(db: Any, *, state: str) -> str | None:
+        return _RETURN_URL_WITH_FRAGMENT
+
+    token_row = _make_token_row(user.id)
+
+    async def _fake_exchange_code(
+        db: Any, *, state: str, code: str, iss: str | None
+    ) -> MCPOAuthToken:
+        return token_row
+
+    monkeypatch.setattr("app.api.mcp_oauth.oauth.get_state_return_url", _fake_get_state_return_url)
+    monkeypatch.setattr("app.api.mcp_oauth.oauth.exchange_code", _fake_exchange_code)
+
+    res = await ac.get(
+        f"/api/v1/mcp/oauth/{_SERVER}/callback",
+        params={"code": "c", "state": "s"},
+        follow_redirects=False,
+    )
+    assert res.status_code == 302, res.text
+    location = res.headers["location"]
+
+    # Fragment must be preserved at the end.
+    assert "#mcp" in location, f"fragment missing: {location!r}"
+
+    # The status param must appear in the query (before the fragment, or at least
+    # not inside the fragment text).  The fragment must be the last component.
+    fragment_start = location.index("#")
+    query_part = location[:fragment_start]
+    assert "mcp_connected=" in query_part, (
+        f"mcp_connected swallowed into fragment — should be in query: {location!r}"
+    )
+    assert _SERVER in query_part
+
+
+@pytest.mark.integration
+async def test_callback_error_return_url_with_fragment(
+    anon_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Error redirect: return_url with #fragment → status param lands in query, not fragment."""
+    from app.errors import MCPOAuthExchangeError
+
+    async def _fake_get_state_return_url(db: Any, *, state: str) -> str | None:
+        return _RETURN_URL_WITH_FRAGMENT
+
+    async def _fake_exchange_code(
+        db: Any, *, state: str, code: str, iss: str | None
+    ) -> MCPOAuthToken:
+        raise MCPOAuthExchangeError(
+            message="token exchange failed",
+            details={"as_error": "invalid_client", "server": _SERVER},
+        )
+
+    monkeypatch.setattr("app.api.mcp_oauth.oauth.get_state_return_url", _fake_get_state_return_url)
+    monkeypatch.setattr("app.api.mcp_oauth.oauth.exchange_code", _fake_exchange_code)
+
+    res = await anon_client.get(
+        f"/api/v1/mcp/oauth/{_SERVER}/callback",
+        params={"code": "bad", "state": "s"},
+        follow_redirects=False,
+    )
+    assert res.status_code == 302, res.text
+    location = res.headers["location"]
+
+    assert "#mcp" in location, f"fragment missing: {location!r}"
+
+    fragment_start = location.index("#")
+    query_part = location[:fragment_start]
+    assert "mcp_error=" in query_part, (
+        f"mcp_error swallowed into fragment — should be in query: {location!r}"
+    )
+    assert "server=" in query_part

@@ -474,4 +474,5 @@ def is_allowed_return_url(url: str, settings: Settings) -> bool:
     allowed = [o.strip() for o in (settings.lq_ai_cors_origins or "").split(",") if o.strip()]
     if not allowed:
         return False
+    # Case-sensitive exact membership — intentional, matches CORS-allowlist semantics.
     return origin in allowed
