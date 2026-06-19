@@ -443,3 +443,35 @@ def get_settings() -> Settings:
     monkeypatching environment variables.
     """
     return Settings()
+
+
+def is_allowed_return_url(url: str, settings: Settings) -> bool:
+    """Return True iff *url*'s origin is in the operator's CORS allowlist.
+
+    Parses ``settings.lq_ai_cors_origins`` the same way ``app/main.py`` does —
+    comma-split, strip, drop empties.  Builds the origin
+    (``{scheme}://{netloc}``) from *url* and checks membership.
+
+    Security invariants:
+    * Only ``http`` and ``https`` schemes are accepted; ``javascript:``,
+      ``data:``, etc. always return False.
+    * An empty allowlist returns False (fail closed — no redirect allowed when
+      the operator has not configured any origins).
+    * The check is exact origin membership, not substring/prefix matching.
+
+    Callers (the ``/authorize`` handler) validate BEFORE storing ``return_url``
+    on the state row; the callback reads from the row, never from the query
+    string — so this validator is the only enforcement point needed.
+    """
+    from urllib.parse import urlparse  # stdlib — no new dependency
+
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    if not parsed.netloc:
+        return False
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    allowed = [o.strip() for o in (settings.lq_ai_cors_origins or "").split(",") if o.strip()]
+    if not allowed:
+        return False
+    return origin in allowed

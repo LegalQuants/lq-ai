@@ -123,6 +123,12 @@ class MCPOAuthState(Base):
     Captured from discovery so the callback can enforce "iss is REQUIRED when
     the AS supports it" (RFC 9207 §3) — not just "iss must match when present".
     No server_default: the app always sets it from discovery metadata."""
+    return_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    """Operator-allowlisted frontend URL to 302-redirect the browser to after
+    the callback.  Validated at authorize-time against ``lq_ai_cors_origins``
+    (origin match); stored here so the callback reads it from the state row —
+    NOT from its own query string.  NULL when the caller omits ``return_url``
+    (back-compat: callback returns 200 JSON)."""
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

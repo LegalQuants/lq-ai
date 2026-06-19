@@ -180,6 +180,7 @@ async def test_authorize_authed_returns_302(
         user_id: Any,
         server: str,
         redirect_uri: str,
+        return_url: str | None = None,
     ) -> str:
         return _AUTHORIZE_URL
 
@@ -228,6 +229,9 @@ async def test_callback_valid_state_returns_200_and_audit(
     # Build the token row that exchange_code will return.
     token_row = _make_token_row(user.id)
 
+    async def _fake_get_state_return_url(db: Any, *, state: str) -> str | None:
+        return None  # no return_url → back-compat 200 JSON path
+
     async def _fake_exchange_code(
         db: Any,
         *,
@@ -237,6 +241,7 @@ async def test_callback_valid_state_returns_200_and_audit(
     ) -> MCPOAuthToken:
         return token_row
 
+    monkeypatch.setattr("app.api.mcp_oauth.oauth.get_state_return_url", _fake_get_state_return_url)
     monkeypatch.setattr("app.api.mcp_oauth.oauth.exchange_code", _fake_exchange_code)
 
     res = await ac.get(
@@ -277,6 +282,9 @@ async def test_callback_bad_state_returns_400(
     """Unknown/expired state → 400 (MCPOAuthStateError maps to 400)."""
     from app.errors import MCPOAuthStateError
 
+    async def _fake_get_state_return_url(db: Any, *, state: str) -> str | None:
+        return None  # state unknown → no return_url → JSON error path
+
     async def _fake_exchange_code(
         db: Any,
         *,
@@ -286,6 +294,7 @@ async def test_callback_bad_state_returns_400(
     ) -> MCPOAuthToken:
         raise MCPOAuthStateError(message="unknown state")
 
+    monkeypatch.setattr("app.api.mcp_oauth.oauth.get_state_return_url", _fake_get_state_return_url)
     monkeypatch.setattr("app.api.mcp_oauth.oauth.exchange_code", _fake_exchange_code)
 
     res = await anon_client.get(
@@ -305,6 +314,9 @@ async def test_callback_no_bearer_reaches_handler(
     """A request without a bearer token is judged by state, not auth — public endpoint."""
     from app.errors import MCPOAuthStateError
 
+    async def _fake_get_state_return_url(db: Any, *, state: str) -> str | None:
+        return None
+
     async def _fake_exchange_code(
         db: Any,
         *,
@@ -315,6 +327,7 @@ async def test_callback_no_bearer_reaches_handler(
         # Reaches the handler; state is bad → 400 (not 401).
         raise MCPOAuthStateError(message="unknown state")
 
+    monkeypatch.setattr("app.api.mcp_oauth.oauth.get_state_return_url", _fake_get_state_return_url)
     monkeypatch.setattr("app.api.mcp_oauth.oauth.exchange_code", _fake_exchange_code)
 
     res = await anon_client.get(
@@ -467,3 +480,357 @@ async def test_disconnect_unauthed_returns_401(
     """No bearer token → 401 on DELETE."""
     res = await anon_client.delete(f"/api/v1/mcp/oauth/{_SERVER}")
     assert res.status_code == 401, res.text
+
+
+# ---------------------------------------------------------------------------
+# PR4d: is_allowed_return_url unit tests (validator correctness)
+# ---------------------------------------------------------------------------
+
+
+def test_allowed_return_url_matching_origin(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A return_url whose origin exactly matches an allowlisted origin → True."""
+    from app.config import Settings, is_allowed_return_url
+
+    monkeypatch.setenv("LQ_AI_CORS_ORIGINS", "https://app.example.com")
+    s = Settings()
+    assert is_allowed_return_url("https://app.example.com/oauth/callback", s) is True
+
+
+def test_allowed_return_url_different_origin(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A return_url whose origin is NOT in the allowlist → False."""
+    from app.config import Settings, is_allowed_return_url
+
+    monkeypatch.setenv("LQ_AI_CORS_ORIGINS", "https://app.example.com")
+    s = Settings()
+    assert is_allowed_return_url("https://evil.example.com/steal", s) is False
+
+
+def test_allowed_return_url_different_port(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Same host but different port is a different origin → False."""
+    from app.config import Settings, is_allowed_return_url
+
+    monkeypatch.setenv("LQ_AI_CORS_ORIGINS", "https://app.example.com")
+    s = Settings()
+    assert is_allowed_return_url("https://app.example.com:9000/callback", s) is False
+
+
+def test_allowed_return_url_empty_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Empty lq_ai_cors_origins → always False (fail closed)."""
+    from app.config import Settings, is_allowed_return_url
+
+    monkeypatch.setenv("LQ_AI_CORS_ORIGINS", "")
+    s = Settings()
+    assert is_allowed_return_url("https://app.example.com/callback", s) is False
+
+
+def test_allowed_return_url_non_http_scheme(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Non-http(s) scheme is rejected even if it would otherwise match."""
+    from app.config import Settings, is_allowed_return_url
+
+    monkeypatch.setenv("LQ_AI_CORS_ORIGINS", "javascript://app.example.com")
+    s = Settings()
+    assert is_allowed_return_url("javascript://app.example.com/evil", s) is False
+
+
+def test_allowed_return_url_http_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """http (non-TLS) origin is accepted when the operator explicitly allows it."""
+    from app.config import Settings, is_allowed_return_url
+
+    monkeypatch.setenv("LQ_AI_CORS_ORIGINS", "http://localhost:3000")
+    s = Settings()
+    assert is_allowed_return_url("http://localhost:3000/connect", s) is True
+
+
+# ---------------------------------------------------------------------------
+# PR4d: /authorize with return_url
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+async def test_authorize_with_allowed_return_url_stores_on_state_row(
+    authed_client: tuple[AsyncClient, str, User],
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Authed /authorize with an allowed return_url → 302 to AS AND state row stores return_url."""
+    ac, token, _user = authed_client
+
+    monkeypatch.setenv("LQ_AI_CORS_ORIGINS", "https://frontend.example.com")
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+
+    captured_state: dict[str, Any] = {}
+
+    async def _fake_build_authorize_url(
+        db: Any,
+        *,
+        user_id: Any,
+        server: str,
+        redirect_uri: str,
+        return_url: str | None = None,
+    ) -> str:
+        captured_state["return_url"] = return_url
+        return _AUTHORIZE_URL
+
+    monkeypatch.setattr("app.api.mcp_oauth.oauth.build_authorize_url", _fake_build_authorize_url)
+
+    res = await ac.get(
+        f"/api/v1/mcp/oauth/{_SERVER}/authorize",
+        params={"return_url": "https://frontend.example.com/connect"},
+        headers={"Authorization": f"Bearer {token}"},
+        follow_redirects=False,
+    )
+    assert res.status_code == 302, res.text
+    assert res.headers["location"] == _AUTHORIZE_URL
+    assert captured_state["return_url"] == "https://frontend.example.com/connect"
+
+    get_settings.cache_clear()
+
+
+@pytest.mark.integration
+async def test_authorize_with_disallowed_return_url_returns_400(
+    authed_client: tuple[AsyncClient, str, User],
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Disallowed return_url origin → 400, no state row written."""
+    ac, token, _user = authed_client
+
+    monkeypatch.setenv("LQ_AI_CORS_ORIGINS", "https://frontend.example.com")
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+
+    build_called = {"called": False}
+
+    async def _fake_build_authorize_url(db: Any, **_kwargs: Any) -> str:
+        build_called["called"] = True
+        return _AUTHORIZE_URL
+
+    monkeypatch.setattr("app.api.mcp_oauth.oauth.build_authorize_url", _fake_build_authorize_url)
+
+    res = await ac.get(
+        f"/api/v1/mcp/oauth/{_SERVER}/authorize",
+        params={"return_url": "https://evil.example.com/steal"},
+        headers={"Authorization": f"Bearer {token}"},
+        follow_redirects=False,
+    )
+    assert res.status_code == 400, res.text
+    body = res.json()
+    assert body["detail"]["code"] == "validation_error"
+    # build_authorize_url must NOT have been called — no state row written.
+    assert not build_called["called"]
+
+    get_settings.cache_clear()
+
+
+@pytest.mark.integration
+async def test_authorize_without_return_url_state_row_return_url_is_none(
+    authed_client: tuple[AsyncClient, str, User],
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No return_url query param → build_authorize_url called with return_url=None (back-compat)."""
+    ac, token, _user = authed_client
+
+    captured: dict[str, Any] = {}
+
+    async def _fake_build_authorize_url(
+        db: Any,
+        *,
+        user_id: Any,
+        server: str,
+        redirect_uri: str,
+        return_url: str | None = None,
+    ) -> str:
+        captured["return_url"] = return_url
+        return _AUTHORIZE_URL
+
+    monkeypatch.setattr("app.api.mcp_oauth.oauth.build_authorize_url", _fake_build_authorize_url)
+
+    res = await ac.get(
+        f"/api/v1/mcp/oauth/{_SERVER}/authorize",
+        headers={"Authorization": f"Bearer {token}"},
+        follow_redirects=False,
+    )
+    assert res.status_code == 302, res.text
+    assert captured["return_url"] is None
+
+
+# ---------------------------------------------------------------------------
+# PR4d: callback with return_url (redirect branching)
+# ---------------------------------------------------------------------------
+
+_RETURN_URL = "https://frontend.example.com/connect"
+
+
+@pytest.mark.integration
+async def test_callback_success_with_return_url_redirects(
+    authed_client: tuple[AsyncClient, str, User],
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Callback with return_url stored on state → 302 to return_url?mcp_connected=server."""
+    ac, _token, user = authed_client
+
+    state_val = "state-with-return-url"
+
+    async def _fake_get_state_return_url(db: Any, *, state: str) -> str | None:
+        return _RETURN_URL
+
+    token_row = _make_token_row(user.id)
+
+    async def _fake_exchange_code(
+        db: Any,
+        *,
+        state: str,
+        code: str,
+        iss: str | None,
+    ) -> MCPOAuthToken:
+        return token_row
+
+    monkeypatch.setattr("app.api.mcp_oauth.oauth.get_state_return_url", _fake_get_state_return_url)
+    monkeypatch.setattr("app.api.mcp_oauth.oauth.exchange_code", _fake_exchange_code)
+
+    res = await ac.get(
+        f"/api/v1/mcp/oauth/{_SERVER}/callback",
+        params={"code": "auth-code-123", "state": state_val},
+        follow_redirects=False,
+    )
+    assert res.status_code == 302, res.text
+    location = res.headers["location"]
+    assert location.startswith(_RETURN_URL), f"Location={location!r}"
+    assert "mcp_connected=" in location
+    assert _SERVER in location
+
+    # Ensure no token/code/state material leaked into the redirect.
+    assert "auth-code-123" not in location
+    assert state_val not in location
+
+    # Audit row was written.
+    await db_session.rollback()
+    audit_rows = (
+        (
+            await db_session.execute(
+                select(AuditLog).where(
+                    AuditLog.action == "mcp.oauth_connected",
+                    AuditLog.resource_id == _SERVER,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(audit_rows) == 1
+
+
+@pytest.mark.integration
+async def test_callback_success_without_return_url_returns_200_json(
+    authed_client: tuple[AsyncClient, str, User],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Callback with no return_url on state → 200 JSON (back-compat preserved)."""
+    ac, _token, user = authed_client
+
+    async def _fake_get_state_return_url(db: Any, *, state: str) -> str | None:
+        return None
+
+    token_row = _make_token_row(user.id)
+
+    async def _fake_exchange_code(
+        db: Any,
+        *,
+        state: str,
+        code: str,
+        iss: str | None,
+    ) -> MCPOAuthToken:
+        return token_row
+
+    monkeypatch.setattr("app.api.mcp_oauth.oauth.get_state_return_url", _fake_get_state_return_url)
+    monkeypatch.setattr("app.api.mcp_oauth.oauth.exchange_code", _fake_exchange_code)
+
+    res = await ac.get(
+        f"/api/v1/mcp/oauth/{_SERVER}/callback",
+        params={"code": "c", "state": "s"},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["connected"] is True
+    assert body["server"] == _SERVER
+
+
+@pytest.mark.integration
+async def test_callback_exchange_error_with_return_url_redirects_with_error(
+    anon_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Exchange error with return_url → 302 to return_url?mcp_error=...&server=...; no secrets."""
+    from app.errors import MCPOAuthExchangeError
+
+    async def _fake_get_state_return_url(db: Any, *, state: str) -> str | None:
+        return _RETURN_URL
+
+    async def _fake_exchange_code(
+        db: Any,
+        *,
+        state: str,
+        code: str,
+        iss: str | None,
+    ) -> MCPOAuthToken:
+        raise MCPOAuthExchangeError(
+            message="OAuth token exchange failed for 'acme-mcp': invalid_client",
+            details={"as_error": "invalid_client", "server": _SERVER},
+        )
+
+    monkeypatch.setattr("app.api.mcp_oauth.oauth.get_state_return_url", _fake_get_state_return_url)
+    monkeypatch.setattr("app.api.mcp_oauth.oauth.exchange_code", _fake_exchange_code)
+
+    res = await anon_client.get(
+        f"/api/v1/mcp/oauth/{_SERVER}/callback",
+        params={"code": "bad-code", "state": "some-state"},
+        follow_redirects=False,
+    )
+    assert res.status_code == 302, res.text
+    location = res.headers["location"]
+    assert location.startswith(_RETURN_URL), f"Location={location!r}"
+    assert "mcp_error=" in location
+    assert "server=" in location
+    # Must NOT contain the code, state, or any secret in the redirect.
+    assert "bad-code" not in location
+    assert "some-state" not in location
+    # The error code is the stable slug — check it's present and non-empty.
+    assert "mcp_oauth_exchange_error" in location
+
+
+@pytest.mark.integration
+async def test_callback_unknown_state_no_return_url_returns_json_error(
+    anon_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unknown/expired state (return_url unrecoverable) → JSON error, not a redirect."""
+    from app.errors import MCPOAuthStateError
+
+    # State row not found → get_state_return_url returns None.
+    async def _fake_get_state_return_url(db: Any, *, state: str) -> str | None:
+        return None
+
+    async def _fake_exchange_code(
+        db: Any,
+        *,
+        state: str,
+        code: str,
+        iss: str | None,
+    ) -> MCPOAuthToken:
+        raise MCPOAuthStateError(message="unknown state")
+
+    monkeypatch.setattr("app.api.mcp_oauth.oauth.get_state_return_url", _fake_get_state_return_url)
+    monkeypatch.setattr("app.api.mcp_oauth.oauth.exchange_code", _fake_exchange_code)
+
+    res = await anon_client.get(
+        f"/api/v1/mcp/oauth/{_SERVER}/callback",
+        params={"code": "c", "state": "nonexistent"},
+    )
+    assert res.status_code == 400, res.text
+    body = res.json()
+    assert body["detail"]["code"] == "mcp_oauth_state_error"
