@@ -36,7 +36,12 @@ from app.api.dependencies import ActiveUser
 from app.audit import audit_action
 from app.config import get_settings, is_allowed_return_url
 from app.db.session import get_db
-from app.errors import MCPOAuthExchangeError, MCPOAuthStateError, ValidationError
+from app.errors import (
+    MCPOAuthExchangeError,
+    MCPOAuthNotConfigured,
+    MCPOAuthStateError,
+    ValidationError,
+)
 from app.mcp import oauth
 from app.schemas.mcp_oauth import MCPOAuthCallbackResponse, MCPOAuthStatusResponse
 
@@ -120,7 +125,7 @@ async def mcp_oauth_callback(
 
     try:
         token = await oauth.exchange_code(db, state=state, code=code, iss=iss)
-    except (MCPOAuthStateError, MCPOAuthExchangeError) as exc:
+    except (MCPOAuthStateError, MCPOAuthExchangeError, MCPOAuthNotConfigured) as exc:
         if return_url is not None:
             # Redirect to frontend with a non-secret error slug; never include
             # the code, state, verifier, or any token value in the redirect.

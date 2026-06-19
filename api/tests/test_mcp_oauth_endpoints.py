@@ -541,6 +541,28 @@ def test_allowed_return_url_http_allowed(monkeypatch: pytest.MonkeyPatch) -> Non
     assert is_allowed_return_url("http://localhost:3000/connect", s) is True
 
 
+def test_allowed_return_url_userinfo_smuggling(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Userinfo-smuggling attack: https://app.example.com@evil.com/steal → False.
+
+    The URL looks like it starts with the allowlisted host but the actual
+    authority (netloc) is ``evil.com``.  The validator must reject it.
+    """
+    from app.config import Settings, is_allowed_return_url
+
+    monkeypatch.setenv("LQ_AI_CORS_ORIGINS", "https://app.example.com")
+    s = Settings()
+    assert is_allowed_return_url("https://app.example.com@evil.com/steal", s) is False
+
+
+def test_allowed_return_url_data_scheme_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    """data: URI scheme is rejected — not http(s), so never allowed."""
+    from app.config import Settings, is_allowed_return_url
+
+    monkeypatch.setenv("LQ_AI_CORS_ORIGINS", "https://app.example.com")
+    s = Settings()
+    assert is_allowed_return_url("data:text/html,<script>alert(1)</script>", s) is False
+
+
 # ---------------------------------------------------------------------------
 # PR4d: /authorize with return_url
 # ---------------------------------------------------------------------------
@@ -834,3 +856,51 @@ async def test_callback_unknown_state_no_return_url_returns_json_error(
     assert res.status_code == 400, res.text
     body = res.json()
     assert body["detail"]["code"] == "mcp_oauth_state_error"
+
+
+@pytest.mark.integration
+async def test_callback_not_configured_with_return_url_redirects_with_error(
+    anon_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """MCPOAuthNotConfigured with a return_url → 302 to return_url?mcp_error=...&server=...
+
+    When the OAuth service raises MCPOAuthNotConfigured (e.g. the server has no
+    OAuth config in gateway.yaml), and a return_url was stored on the state row,
+    the browser must be redirected to the frontend error URL — not to a JSON
+    response from the global error handler.  No token, code, or state value may
+    appear in the Location header.
+    """
+    from app.errors import MCPOAuthNotConfigured
+
+    async def _fake_get_state_return_url(db: Any, *, state: str) -> str | None:
+        return _RETURN_URL
+
+    async def _fake_exchange_code(
+        db: Any,
+        *,
+        state: str,
+        code: str,
+        iss: str | None,
+    ) -> MCPOAuthToken:
+        raise MCPOAuthNotConfigured(
+            message="MCP server 'acme-mcp' has no OAuth configuration",
+            details={"server": _SERVER},
+        )
+
+    monkeypatch.setattr("app.api.mcp_oauth.oauth.get_state_return_url", _fake_get_state_return_url)
+    monkeypatch.setattr("app.api.mcp_oauth.oauth.exchange_code", _fake_exchange_code)
+
+    res = await anon_client.get(
+        f"/api/v1/mcp/oauth/{_SERVER}/callback",
+        params={"code": "some-code", "state": "some-state"},
+        follow_redirects=False,
+    )
+    assert res.status_code == 302, res.text
+    location = res.headers["location"]
+    assert location.startswith(_RETURN_URL), f"Location={location!r}"
+    assert "mcp_error=" in location
+    assert "server=" in location
+    # Must NOT contain the auth code, state, or any token material.
+    assert "some-code" not in location
+    assert "some-state" not in location
