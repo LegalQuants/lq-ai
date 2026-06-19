@@ -124,6 +124,10 @@ def test_phase_grants_exact_membership() -> None:
             # M4-B2: propose_precedent granted at analysis (patterns observed
             # while reading docs).
             ToolIntent.propose_precedent,
+            # PR5a D-a4: the two external-tool intents are granted at analysis
+            # ONLY (gateway-brokered case-law + MCP lookups).
+            ToolIntent.retrieve_caselaw,
+            ToolIntent.call_mcp_tool,
         }
     )
 
@@ -155,8 +159,9 @@ def test_phase_grants_covers_all_phases() -> None:
 
 @pytest.mark.unit
 def test_tool_intent_members() -> None:
-    """ToolIntent has exactly the eight members specified (M4-B2 adds
-    propose_precedent; Donna #8 adds emit_artifact)."""
+    """ToolIntent has exactly the ten members specified (M4-B2 adds
+    propose_precedent; Donna #8 adds emit_artifact; PR5a adds the two
+    external-tool intents retrieve_caselaw + call_mcp_tool)."""
     expected = {
         "retrieve_chunks",
         "run_skill",
@@ -166,6 +171,9 @@ def test_tool_intent_members() -> None:
         "emit_finding",
         "emit_artifact",
         "notify",
+        # PR5a: gateway-brokered external-tool intents.
+        "retrieve_caselaw",
+        "call_mcp_tool",
     }
     actual = {m.value for m in ToolIntent}
     assert actual == expected

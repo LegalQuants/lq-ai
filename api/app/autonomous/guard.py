@@ -72,6 +72,8 @@ and what the session is charged.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import uuid
 from dataclasses import dataclass, field
@@ -110,6 +112,29 @@ _DEFAULT_RETRIEVE_ALPHA: float = 0.5
 # content is clamped (truncated, flagged in the result data) rather than
 # rejected — a partial memo in the KB beats a lost run.
 _ARTIFACT_MAX_CHARS: int = 1_000_000
+
+# External-tool intents (PR5a): these reach OUTSIDE the operator's environment
+# through the gateway, so they are governed per-call by
+# ``governed_tool_invocation`` (a ``tool_call_log`` row + the egress-tier
+# pre-check + span annotation). Every OTHER intent is a local write or a local
+# retrieval and stays on ``autonomous_audit`` only — no ``tool_call_log`` noise.
+_EXTERNAL_TOOL_INTENTS: frozenset[ToolIntent] = frozenset(
+    {ToolIntent.retrieve_caselaw, ToolIntent.call_mcp_tool}
+)
+
+
+def _args_digest(params: dict[str, Any]) -> str:
+    """Return a short, stable digest of *params* for the audit row.
+
+    COUNTS/TYPES ONLY — never the raw args. The digest is a sha256 over a
+    canonical (sorted-key) JSON projection of the param TYPES and the
+    top-level KEY NAMES, never the values; values that are not JSON-stable
+    fall back to their type name. Truncated to 16 hex chars — enough to
+    correlate two identical calls without ever reconstructing the payload.
+    """
+    shape = {k: type(v).__name__ for k, v in sorted(params.items())}
+    blob = json.dumps(shape, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
 
 
 @dataclass
@@ -234,9 +259,30 @@ async def guarded_tool_call(
 
         # ── dispatch ────────────────────────────────────────────────────────
         await autonomous_audit(db, session, "tool_call", tool=str(intent), outcome="started")
-        result = await _dispatch(
-            intent, params, gateway=gateway, db=db, session=session, estimated_cost=estimate
-        )
+        if intent in _EXTERNAL_TOOL_INTENTS:
+            # External tools reach outside the operator's environment via the
+            # gateway, so they flow through the shared governance substrate:
+            # a tool_call_log row + the egress-tier pre-check + span
+            # annotation. The single R4 estimate computed above is forwarded
+            # as estimated_cost — the helper NEVER re-estimates (single-estimate
+            # invariant). The dispatch closure runs the same per-intent handler
+            # every other intent uses; this only ADDS the external-tool audit.
+            result = await _governed_external_dispatch(
+                intent,
+                params,
+                db=db,
+                session=session,
+                gateway=gateway,
+                estimate=estimate,
+                span=span,
+            )
+        else:
+            # Local writes (emit_finding/propose_memory/…) and local retrieval
+            # (retrieve_chunks) are NOT external tool calls — they stay on
+            # autonomous_audit only, exactly as before. No tool_call_log row.
+            result = await _dispatch(
+                intent, params, gateway=gateway, db=db, session=session, estimated_cost=estimate
+            )
 
         # ── record cost + outcome ────────────────────────────────────────────
         session.cost_total_usd += result.cost_usd
@@ -257,6 +303,82 @@ async def guarded_tool_call(
             cost_usd=float(result.cost_usd),
         )
         return result
+
+
+async def _resolve_external_call(intent: ToolIntent, params: dict[str, Any]) -> tuple[str, str]:
+    """Resolve the ``(provider, tool)`` marker for a governed external call.
+
+    For ``retrieve_caselaw`` the provider is the configured CourtListener
+    provider name (resolved via the research service's provider-resolution
+    helper — PR3b retired the hardcoded name) and the ``tool`` is the research
+    op (e.g. ``"search_case_law"``).  For ``call_mcp_tool`` the provider/tool
+    come straight from the params the model supplied.
+
+    These markers are the ``provider``/``tool`` columns on the ``tool_call_log``
+    row and the key into ``resolve_provider_tier`` — counts/types only, never
+    raw args.
+    """
+    if intent == ToolIntent.retrieve_caselaw:
+        from app.research import service as research_service
+
+        provider = await research_service._resolve_provider()
+        op = str(params.get("op") or "")
+        return provider, op
+    if intent == ToolIntent.call_mcp_tool:
+        return str(params["provider"]), str(params["tool"])
+    raise ValueError(f"_resolve_external_call: not an external intent {intent!r}")
+
+
+async def _governed_external_dispatch(
+    intent: ToolIntent,
+    params: dict[str, Any],
+    *,
+    db: AsyncSession,
+    session: AutonomousSession,
+    gateway: Any,
+    estimate: Decimal,
+    span: Any,
+) -> ToolResult:
+    """Route an external-tool intent through ``governed_tool_invocation``.
+
+    Resolves ``provider``/``tool`` + ``provider_tier``, then delegates the
+    tier-check → ``tool_call_log`` row → dispatch → record primitives to the
+    shared helper, annotating the caller-owned ``autonomous.tool_call`` span
+    (D-a1).  The ``estimate`` from R4 is forwarded verbatim as
+    ``estimated_cost`` (single-estimate invariant — the helper never
+    re-estimates).  ``max_allowed_tier=None`` because an
+    :class:`~app.models.autonomous.AutonomousSession` carries no per-session
+    tier ceiling in v1 (the gateway still enforces the ceiling on the actual
+    call — defence in depth).  ``origin="autonomous"`` and there is no
+    per-user OAuth token (D-a5).
+    """
+    # Local import: governance.py imports ToolResult from this module, so a
+    # top-level import here would be circular.
+    from app.tools.governance import governed_tool_invocation, resolve_provider_tier
+
+    provider, tool = await _resolve_external_call(intent, params)
+    provider_tier = await resolve_provider_tier(provider)
+
+    async def _dispatch_closure() -> ToolResult:
+        return await _dispatch(
+            intent, params, gateway=gateway, db=db, session=session, estimated_cost=estimate
+        )
+
+    return await governed_tool_invocation(
+        db,
+        origin="autonomous",
+        provider=provider,
+        tool=tool,
+        intent=intent,
+        provider_tier=provider_tier,
+        max_allowed_tier=None,  # AutonomousSession has no tier ceiling in v1
+        estimated_cost=estimate,  # single-estimate — forwarded, never re-estimated
+        dispatch=_dispatch_closure,
+        span=span,
+        user_id=session.user_id,
+        session_id=session.id,
+        args_digest=_args_digest(params),
+    )
 
 
 async def _dispatch(
@@ -428,8 +550,127 @@ async def _dispatch(
             intent, params, gateway=gateway, estimated_cost=estimated_cost
         )
 
+    if intent == ToolIntent.retrieve_caselaw:
+        return await _handle_retrieve_caselaw(params, db=db)
+
+    if intent == ToolIntent.call_mcp_tool:
+        return await _handle_call_mcp_tool(params, db=db)
+
     # Should be unreachable: PHASE_GRANTS + R6 prevent unknown intents.
     raise ValueError(f"_dispatch: unhandled intent {intent!r}")
+
+
+async def _handle_retrieve_caselaw(
+    params: dict[str, Any],
+    *,
+    db: AsyncSession,
+) -> ToolResult:
+    """Handle ``retrieve_caselaw`` — gateway-brokered case-law research (PR5a).
+
+    Routes ``params["op"]`` to the already-built research service
+    (:mod:`app.research.service`, ADR 0014: the backend never calls
+    CourtListener directly — every op goes through the gateway):
+
+    - ``verify_citations`` → ``{text}``
+    - ``search_case_law``  → ``{args}`` (or the remaining params as the search args)
+    - ``get_cluster``      → ``{cluster_id}``
+    - ``read_opinion``     → ``{opinion_id}``
+    - ``find_in_case``     → ``{opinion_id, query[, max_matches]}``
+
+    Zero cost in v1 (D-a3: no provider-inference tokens; a per-provider
+    external-tool cost model is DE-344).  The provider/tool/tier audit was
+    already written by ``governed_tool_invocation``; this handler only does
+    the call.
+
+    Raises:
+        ValueError: if ``op`` is missing or not a recognised research op.
+            (Unreachable via the executor, which only emits valid ops.)
+    """
+    from app.research import service as research_service
+
+    op = str(params.get("op") or "")
+    if op == "verify_citations":
+        data = await research_service.verify_citations(params["text"])
+    elif op == "search_case_law":
+        args = params.get("args")
+        if args is None:
+            args = {k: v for k, v in params.items() if k != "op"}
+        data = await research_service.search_case_law(args)
+    elif op == "get_cluster":
+        data = await research_service.get_cluster(db, cluster_id=int(params["cluster_id"]))
+    elif op == "read_opinion":
+        data = await research_service.read_opinion(db, opinion_id=int(params["opinion_id"]))
+    elif op == "find_in_case":
+        matches = await research_service.find_in_case(
+            db,
+            opinion_id=int(params["opinion_id"]),
+            query=str(params["query"]),
+            max_matches=int(params.get("max_matches", 3)),
+        )
+        data = {"matches": matches}
+    else:
+        raise ValueError(f"_handle_retrieve_caselaw: unknown research op {op!r}")
+
+    return ToolResult(cost_usd=Decimal("0"), data=data)
+
+
+async def _handle_call_mcp_tool(
+    params: dict[str, Any],
+    *,
+    db: AsyncSession,
+) -> ToolResult:
+    """Handle ``call_mcp_tool`` — a gateway-brokered MCP tool call (PR5a).
+
+    **ADR 0015 D4 enforcement (FIRST, before any gateway call):** load the
+    cached :class:`~app.models.mcp.MCPToolCache` row for
+    ``(params["provider"], params["tool"])``.  If the row is **missing**, or
+    its ``destructive`` is true, or its ``requires_confirmation`` is true,
+    raise :exc:`~app.errors.ToolNotGranted` and make NO gateway call — the
+    autonomous layer in v1 NEVER fires a human-gated or unknown tool.
+
+    Otherwise call the gateway's
+    :meth:`~app.clients.gateway.GatewayClient.call_tool` with no per-user
+    OAuth token (D-a5: the autonomous layer has no interactive user; an
+    ``auth: oauth`` MCP server therefore raises
+    :exc:`~app.errors.MCPAuthorizationRequired` from the gateway adapter,
+    which is left to propagate — correct, autonomous cannot use per-user-OAuth
+    servers).  ``max_allowed_tier=None`` (no per-session ceiling in v1; the
+    gateway still enforces its configured ceiling).
+
+    Zero cost in v1 (D-a3 / DE-344).
+
+    Raises:
+        ToolNotGranted: the tool is unknown to the cache, ``destructive``, or
+            ``requires_confirmation`` (D4 — no gateway call is made).
+    """
+    provider = str(params["provider"])
+    tool = str(params["tool"])
+    args: dict[str, Any] = params.get("args") or {}
+
+    # ── D4: load cached metadata FIRST; refuse before any gateway call ──────
+    from app.models.mcp import MCPToolCache
+
+    cached = await db.get(MCPToolCache, (provider, tool))
+    if cached is None or cached.destructive or cached.requires_confirmation:
+        # Counts/types only in the reason — never the args.
+        if cached is None:
+            reason = "tool_not_cached"
+        elif cached.destructive:
+            reason = "destructive"
+        else:
+            reason = "requires_confirmation"
+        raise ToolNotGranted(
+            "MCP tool refused for the autonomous layer (D4)",
+            intent=str(ToolIntent.call_mcp_tool),
+            phase="analysis",
+            details={"provider": provider, "tool": tool, "reason": reason},
+        )
+
+    # ── gateway call — no per-user OAuth token (D-a5) ───────────────────────
+    from app.clients.gateway import get_gateway_client
+
+    result = await get_gateway_client().call_tool(provider, tool, args, max_allowed_tier=None)
+    return ToolResult(cost_usd=Decimal("0"), data=result.get("payload"))
 
 
 def _sanitize_artifact_name(raw: Any) -> str:
