@@ -623,3 +623,130 @@ async def test_loop_mcp_oauth_no_token_returns_auth(db: AsyncSession, user: User
     # messages and calls_used present for Task 6/7 resume
     assert outcome.messages is not None
     assert outcome.calls_used == 0
+
+
+# ---------------------------------------------------------------------------
+# Scenario (i): hallucination-only round — cap NOT consumed, terminates via guard
+# ---------------------------------------------------------------------------
+
+
+def _resp_tool_call_multi(calls: list[tuple[str, dict, str]]) -> ChatCompletionResponse:
+    """Build a response that requests multiple tool calls (arbitrary count)."""
+    tool_calls = [
+        {
+            "id": call_id,
+            "type": "function",
+            "function": {"name": fn, "arguments": json.dumps(args)},
+        }
+        for fn, args, call_id in calls
+    ]
+    return ChatCompletionResponse(
+        id=f"chatcmpl-{uuid.uuid4().hex[:8]}",
+        created=1_700_000_000,
+        model="claude-opus-4",
+        choices=[
+            ChatCompletionChoice(
+                index=0,
+                finish_reason="tool_calls",
+                message=ChatCompletionMessage(
+                    role="assistant",
+                    content=None,
+                    tool_calls=tool_calls,
+                ),
+            )
+        ],
+        usage=ChatCompletionUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+        routed_inference_tier=2,
+        routed_provider="anthropic",
+    )
+
+
+@pytest.mark.asyncio
+async def test_loop_hallucinated_calls_do_not_increment_cap(db: AsyncSession, user: User) -> None:
+    """Hallucinated tool names (spec is None) do not advance calls_used toward the cap.
+
+    A round where the model proposes only unknown function names must:
+    - NOT increment calls_used (no governed calls were made).
+    - Trigger the zero-governed termination guard, yielding LoopFinal.
+    - NOT write any tool_call_log rows (hallucinated calls never reach governance).
+    """
+    from app.chat.tool_loop import LoopFinal, run_chat_tool_loop
+
+    gateway = AsyncMock()
+    # Round 1: model proposes two hallucinated tool names not in the allowlist.
+    # The zero-governed guard fires after this round and issues the final round.
+    # Round 2 (final, no-tools): model returns a text answer.
+    gateway.chat_completion.side_effect = [
+        _resp_tool_call_multi(
+            [
+                ("nonexistent_tool_alpha", {"x": 1}, "h1"),
+                ("nonexistent_tool_beta", {"y": 2}, "h2"),
+            ]
+        ),
+        _resp_final("I could not find the right tools."),
+    ]
+
+    al = _research_allowlist(provider="cl-prod")  # only search_case_law is valid
+
+    with patch("app.chat.tool_loop.list_servers", new=AsyncMock(return_value=[])):
+        outcome = await run_chat_tool_loop(
+            db,
+            user=user,
+            gateway=gateway,
+            base_request=_req([_user_msg("do something")]),
+            allowlist=al,
+            assistant_message_id=uuid.uuid4(),
+        )
+
+    assert isinstance(outcome, LoopFinal)
+    # cap was NOT consumed by hallucinated calls
+    assert outcome.calls_used == 0
+    # Exactly two gateway calls: one tool round + one final no-tools round
+    assert gateway.chat_completion.call_count == 2
+    # Confirm the final call had no tools (zero-governed guard fired)
+    final_call_req: ChatCompletionRequest = gateway.chat_completion.call_args_list[1].args[0]
+    assert final_call_req.tools is None or final_call_req.tool_choice == "none"
+
+    # No tool_call_log rows should exist — hallucinated calls never reached governance
+    rows = (
+        (await db.execute(select(ToolCallLog).where(ToolCallLog.origin == "chat"))).scalars().all()
+    )
+    assert len(rows) == 0
+
+
+@pytest.mark.asyncio
+async def test_loop_hallucination_only_round_terminates_finitely(
+    db: AsyncSession, user: User
+) -> None:
+    """A hallucination-only round must terminate via the zero-governed guard, not loop forever.
+
+    The gateway side_effect list is finite.  If the loop were infinite, it would
+    exhaust the list and raise StopIteration — the test passing proves termination.
+    """
+    from app.chat.tool_loop import LoopFinal, run_chat_tool_loop
+
+    gateway = AsyncMock()
+    # Only two responses: one hallucinated round + one final answer.
+    # An infinite loop would consume more than two and raise StopIteration.
+    gateway.chat_completion.side_effect = [
+        _resp_tool_call("ghost_tool", {"arg": "val"}, call_id="hx1"),
+        _resp_final("Terminating gracefully."),
+    ]
+
+    al = _research_allowlist(provider="cl-prod")  # ghost_tool not in allowlist
+
+    with patch("app.chat.tool_loop.list_servers", new=AsyncMock(return_value=[])):
+        outcome = await run_chat_tool_loop(
+            db,
+            user=user,
+            gateway=gateway,
+            base_request=_req([_user_msg("try ghost tool")]),
+            allowlist=al,
+            assistant_message_id=uuid.uuid4(),
+        )
+
+    # Must terminate as LoopFinal (not raise StopIteration, not loop infinitely)
+    assert isinstance(outcome, LoopFinal)
+    assert outcome.calls_used == 0
+    # Exactly two gateway calls consumed — no extras that would signal infinite loop
+    assert gateway.chat_completion.call_count == 2

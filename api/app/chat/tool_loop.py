@@ -457,6 +457,14 @@ async def run_chat_tool_loop(
         #  results at once per the OpenAI multi-turn tool pattern.)
         tool_result_msgs: list[dict[str, Any]] = []
 
+        # governed_count: number of calls routed to execute_tool this round
+        # (both successfully executed AND ToolTierRefused counts — those calls
+        # DID reach governance and wrote an audit row).  Hallucinated calls
+        # (spec is None) are NOT counted: they never reached governance, so
+        # they must not consume cap budget.  This ensures the cap bounds real
+        # governed tool work, not model confusion about available tools.
+        governed_count: int = 0
+
         for tc in msg.tool_calls:
             tc_id: str = tc["id"]
             fn_name: str = tc["function"]["name"]
@@ -492,7 +500,8 @@ async def run_chat_tool_loop(
                     calls_used=calls_used,
                 )
 
-            # ── (b.4) Read-only — execute ─────────────────────────────────
+            # ── (b.4) Read-only — execute (counts as governed) ───────────
+            governed_count += 1
             try:
                 result = await execute_tool(
                     db,
@@ -514,6 +523,8 @@ async def run_chat_tool_loop(
                     calls_used=calls_used,
                 )
             except ToolTierRefused:
+                # ToolTierRefused still counts as governed: governed_tool_invocation
+                # was called and wrote an audit row before raising.
                 log.info(
                     "chat_tool_loop: ToolTierRefused for %r/%r — appending error message",
                     spec.provider,
@@ -532,9 +543,22 @@ async def run_chat_tool_loop(
         messages.append(asst_dict)
         messages.extend(tool_result_msgs)
 
-        # Increment by the number of tool calls that produced a result
-        # (refusals / tier-refused also count: we attempted the resolution).
-        calls_used += len(msg.tool_calls)
+        # Increment by governed calls only (executed + tier-refused).
+        # Hallucinated calls (unknown function names) are excluded: they never
+        # reached governance so they must not consume the per-turn cap budget.
+        calls_used += governed_count
+
+        # ── Termination guard: all-hallucination round ────────────────────
+        # If every proposed call this round was hallucinated (governed_count
+        # == 0) the model made no progress toward the cap and would loop
+        # forever.  Break out immediately to the final no-tools round so the
+        # model synthesises from whatever it has gathered so far.
+        if governed_count == 0:
+            final_resp = await gateway.chat_completion(
+                _build_request(base_request, messages, tools=None, tool_choice="none"),
+                request_id=request_id,
+            )
+            return _build_loop_final(final_resp, messages, calls_used)
 
         # ── Cap check AFTER incrementing ─────────────────────────────────
         if calls_used >= settings.chat_tool_call_cap:
