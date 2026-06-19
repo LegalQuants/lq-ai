@@ -285,7 +285,7 @@ async def execute_mcp_tool(
     )
 
 
-def _tool_result_content(result: ToolResult) -> str:
+def tool_result_content(result: ToolResult) -> str:
     """Render a tool result for the ``role="tool"`` reply message."""
 
     data = result.data
@@ -394,7 +394,7 @@ async def run_tool_loop(
                 ChatCompletionMessage(
                     role="tool",
                     tool_call_id=call_id,
-                    content=_tool_result_content(result),
+                    content=tool_result_content(result),
                 )
             )
 

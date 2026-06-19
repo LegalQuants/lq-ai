@@ -51,6 +51,7 @@ _PARAM_VALUES: dict[str, str] = {
     "project_id": _DUMMY_UUID,
     "chat_id": _DUMMY_UUID,
     "message_id": _DUMMY_UUID,
+    "pending_call_id": "pending-test-token",  # opaque token (not a UUID)
     "file_id": _DUMMY_UUID,
     "kb_id": _DUMMY_UUID,
     "prompt_id": _DUMMY_UUID,
@@ -127,6 +128,7 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("DELETE", "/api/v1/chats/{chat_id}"),
     ("GET", "/api/v1/chats/{chat_id}/messages"),
     ("POST", "/api/v1/chats/{chat_id}/messages"),
+    ("POST", "/api/v1/chats/{chat_id}/tool-calls/{pending_call_id}"),
     ("GET", "/api/v1/chats/{chat_id}/messages/{message_id}/citations"),
     # C1 — Skill Service: filesystem loading
     ("GET", "/api/v1/skills"),

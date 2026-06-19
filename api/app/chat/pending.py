@@ -24,7 +24,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.pending_tool_call import PendingToolCall
-from app.schemas.gateway import ChatCompletionMessage
+from app.schemas.gateway import ChatCompletionRequest
 from app.security.encryption import MCPTokenEncryptor
 
 PENDING_TTL = timedelta(minutes=15)
@@ -45,12 +45,15 @@ def _now() -> datetime:
 class ResumePayload:
     """Everything the resume path needs to continue the assistant turn."""
 
+    message_id: UUID
     provider: str
     tool: str
     destructive: bool
     args: dict[str, Any]
     tool_call_id: str
-    messages: list[ChatCompletionMessage]
+    request: ChatCompletionRequest
+    """The resume request: the original send request with ``messages`` set to
+    the conversation-so-far (incl. the assistant tool-call turn that gated)."""
     max_allowed_tier: int | None
 
 
@@ -65,20 +68,22 @@ async def create_pending_tool_call(
     destructive: bool,
     args: dict[str, Any],
     tool_call_id: str,
-    messages: list[ChatCompletionMessage],
+    resume_request: ChatCompletionRequest,
     max_allowed_tier: int | None,
 ) -> str:
     """Persist an encrypted pending tool call; return its opaque handle.
 
     Flushes (does not commit) — the caller owns the transaction boundary, like
-    the rest of the chat send path.
+    the rest of the chat send path. ``resume_request`` is the full send request
+    with ``messages`` already set to the conversation-so-far, so the resume path
+    can continue the turn faithfully (model, skills, tier floors all preserved).
     """
 
     token = secrets.token_urlsafe(32)
     payload = {
         "args": args,
         "tool_call_id": tool_call_id,
-        "messages": [m.model_dump(mode="json") for m in messages],
+        "request": resume_request.model_dump(mode="json"),
         "max_allowed_tier": max_allowed_tier,
     }
     cipher = MCPTokenEncryptor.from_environ().encrypt(json.dumps(payload))
@@ -132,11 +137,12 @@ async def consume_pending_tool_call(
 
     data = json.loads(MCPTokenEncryptor.from_environ().decrypt(row.payload_cipher))
     return ResumePayload(
+        message_id=row.message_id,
         provider=row.provider,
         tool=row.tool,
         destructive=row.destructive,
         args=data["args"],
         tool_call_id=data["tool_call_id"],
-        messages=[ChatCompletionMessage.model_validate(m) for m in data["messages"]],
+        request=ChatCompletionRequest.model_validate(data["request"]),
         max_allowed_tier=data.get("max_allowed_tier"),
     )

@@ -59,7 +59,7 @@ import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -73,20 +73,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import ActiveUser
 from app.api.skills import _resolve_skill_for_user
 from app.audit import audit_action
+from app.chat.pending import (
+    PendingToolCallUnavailable,
+    consume_pending_tool_call,
+    create_pending_tool_call,
+)
 from app.chat.tool_loop import (
     AssembledTools,
     ToolConfirmationRequired,
+    ToolMeta,
     assemble_mcp_tools,
-    confirmation_notice_response,
+    execute_mcp_tool,
     run_tool_loop,
     run_tool_loop_as_stream,
+    tool_result_content,
 )
 from app.citation import extract_citations, verify
 from app.citation.cost import estimate_judge_call_cost_usd
 from app.clients.gateway import EnsembleConfig, GatewayClient, get_gateway_client
 from app.config import get_settings
 from app.db.session import get_db
-from app.errors import LQAIError, NotFound, ValidationError
+from app.errors import Conflict, LQAIError, NotFound, ValidationError
 from app.knowledge.embed import DEFAULT_EMBEDDING_MODEL, request_embedding_vector
 from app.knowledge.retrieval import HybridSearchResult, hybrid_search
 from app.models.chat import Chat, Message, MessageCitation
@@ -2109,6 +2116,308 @@ async def _persist_assistant_message(
     return row
 
 
+async def _persist_pending_tool_call(
+    db: AsyncSession,
+    *,
+    user: User,
+    request: ChatCompletionRequest,
+    confirm_exc: ToolConfirmationRequired,
+    chat: Chat,
+    assistant_message_id: uuid.UUID,
+) -> dict[str, Any]:
+    """PR5b-ii: persist a human-gated tool call + a placeholder assistant row,
+    and return the ``tool_confirmation_required`` envelope (SSE frame / JSON
+    body). ``_persist_assistant_message`` commits, so the encrypted pending row
+    and the placeholder land in the same transaction. No raw args in the
+    envelope — only the arg key names (``args_summary``)."""
+
+    resume_request = request.model_copy(
+        update={
+            "messages": confirm_exc.messages_so_far,
+            "stream": False,
+            "tools": None,
+            "tool_choice": None,
+        }
+    )
+    pending_id = await create_pending_tool_call(
+        db,
+        user_id=user.id,
+        chat_id=chat.id,
+        message_id=assistant_message_id,
+        provider=confirm_exc.provider,
+        tool=confirm_exc.tool,
+        destructive=confirm_exc.destructive,
+        args=confirm_exc.tool_args,
+        tool_call_id=confirm_exc.tool_call_id,
+        resume_request=resume_request,
+        max_allowed_tier=None,
+    )
+    await _persist_assistant_message(
+        db,
+        message_id=assistant_message_id,
+        chat_id=chat.id,
+        content="",
+        requested_model=request.model,
+        routed_provider=None,
+        routed_model=None,
+        routed_inference_tier=None,
+        prompt_tokens=None,
+        completion_tokens=None,
+        cost_estimate_usd=None,
+        applied_skills=[],
+        error_code=None,
+    )
+    return {
+        "type": "tool_confirmation_required",
+        "lq_ai_message_id": str(assistant_message_id),
+        "pending_call_id": pending_id,
+        "provider": confirm_exc.provider,
+        "tool": confirm_exc.tool,
+        "args_summary": sorted(confirm_exc.tool_args.keys()),
+        "destructive": confirm_exc.destructive,
+    }
+
+
+class ToolCallDecisionRequest(BaseModel):
+    """Body for the confirmation-gate resolve endpoint (PR5b-ii)."""
+
+    decision: Literal["approve", "deny"]
+
+
+@router.post(
+    "/{chat_id}/tool-calls/{pending_call_id}",
+    summary="Approve or deny a pending chat tool call (PR5b-ii confirmation gate)",
+)
+async def resolve_tool_call(
+    chat_id: str,
+    pending_call_id: str,
+    body: ToolCallDecisionRequest,
+    user: ActiveUser,
+    http_request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    gateway: Annotated[GatewayClient, Depends(get_gateway_client)],
+) -> StreamingResponse:
+    """Resolve a human-gated tool call and resume the assistant turn (spec L3).
+
+    ActiveUser-gated + chat-owner-checked (404 cross-user). Single-use + TTL:
+    an unknown / foreign / already-resolved / expired ``pending_call_id`` → 410.
+    ``approve`` executes the tool and continues the loop; ``deny`` tells the
+    model the user declined and lets it finalize. Streams the continued answer.
+    """
+
+    cid = _validate_chat_id(chat_id)
+    chat = await _load_visible_chat(db, cid, user.id, include_archived=False)
+    try:
+        payload = await consume_pending_tool_call(
+            db, pending_call_id=pending_call_id, chat_id=cid, user_id=user.id
+        )
+    except PendingToolCallUnavailable as exc:
+        raise Conflict(
+            "This tool-call request is no longer available (already resolved or expired).",
+            http_status=status.HTTP_410_GONE,
+        ) from exc
+
+    request_id = (
+        http_request.headers.get("x-request-id")
+        or http_request.headers.get("x-correlation-id")
+        or f"req_{uuid.uuid4().hex}"
+    )
+    return await _resume_stream_response(
+        db=db,
+        user=user,
+        gateway=gateway,
+        payload=payload,
+        decision=body.decision,
+        chat=chat,
+        request_id=request_id,
+        http_request=http_request,
+    )
+
+
+async def _resume_stream_response(
+    *,
+    db: AsyncSession,
+    user: User,
+    gateway: GatewayClient,
+    payload: Any,  # app.chat.pending.ResumePayload
+    decision: str,
+    chat: Chat,
+    request_id: str,
+    http_request: Request | None = None,
+) -> StreamingResponse:
+    """Continue a gated assistant turn after approve/deny, streaming the result."""
+
+    assistant_message_id = payload.message_id
+
+    async def _generate() -> AsyncIterator[bytes]:
+        accumulated: list[str] = []
+        last_tier: int | None = None
+        last_provider: str | None = None
+        last_model: str | None = None
+        prompt_tokens: int | None = None
+        completion_tokens: int | None = None
+        error_code: str | None = None
+        error_envelope: dict[str, Any] | None = None
+        cont_req = payload.request
+
+        opening = {
+            "type": "start",
+            "lq_ai_message_id": str(assistant_message_id),
+            "chat_id": str(chat.id),
+        }
+        yield f"data: {_json.dumps(opening, separators=(',', ':'))}\n\n".encode()
+
+        try:
+            messages = list(payload.request.messages)
+            if decision == "approve":
+                meta = ToolMeta(
+                    provider=payload.provider,
+                    tool=payload.tool,
+                    read_only=False,
+                    destructive=payload.destructive,
+                    requires_confirmation=True,
+                )
+                result = await execute_mcp_tool(
+                    db,
+                    gateway=gateway,
+                    meta=meta,
+                    args=payload.args,
+                    user_id=user.id,
+                    chat_id=chat.id,
+                    message_id=assistant_message_id,
+                    request_id=request_id,
+                    max_allowed_tier=payload.max_allowed_tier,
+                    confirmation_state="approved",
+                )
+                messages.append(
+                    ChatCompletionMessage(
+                        role="tool",
+                        tool_call_id=payload.tool_call_id,
+                        content=tool_result_content(result),
+                    )
+                )
+            else:
+                messages.append(
+                    ChatCompletionMessage(
+                        role="tool",
+                        tool_call_id=payload.tool_call_id,
+                        content=_json.dumps(
+                            {"status": "denied", "note": "The user denied this tool."}
+                        ),
+                    )
+                )
+            cont_req = payload.request.model_copy(update={"messages": messages, "stream": False})
+            tools = await assemble_mcp_tools(db, request_id=request_id)
+            if tools:
+                resp = await run_tool_loop(
+                    db,
+                    gateway=gateway,
+                    base_request=cont_req,
+                    tools=tools,
+                    user_id=user.id,
+                    chat_id=chat.id,
+                    message_id=assistant_message_id,
+                    request_id=request_id,
+                    max_allowed_tier=payload.max_allowed_tier,
+                )
+            else:
+                resp = await gateway.chat_completion(cont_req, request_id=request_id)
+            choice = resp.choices[0] if resp.choices else None
+            text = (choice.message.content or "") if choice is not None else ""
+            last_tier = resp.routed_inference_tier
+            last_provider = resp.routed_provider
+            last_model = resp.model
+            if resp.usage is not None:
+                prompt_tokens = resp.usage.prompt_tokens
+                completion_tokens = resp.usage.completion_tokens
+            if text:
+                accumulated.append(text)
+                delta_frame = {
+                    "type": "delta",
+                    "delta": text,
+                    "lq_ai_message_id": str(assistant_message_id),
+                }
+                yield f"data: {_json.dumps(delta_frame, separators=(',', ':'))}\n\n".encode()
+        except ToolConfirmationRequired as confirm_exc:
+            # A follow-on gated tool: persist a new pending call + re-emit.
+            try:
+                info = await _persist_pending_tool_call(
+                    db,
+                    user=user,
+                    request=cont_req,
+                    confirm_exc=confirm_exc,
+                    chat=chat,
+                    assistant_message_id=assistant_message_id,
+                )
+            except Exception:
+                log.error("tool_confirmation_persist_failed", exc_info=True)
+                info = {
+                    "type": "tool_confirmation_required",
+                    "lq_ai_message_id": str(assistant_message_id),
+                    "pending_call_id": None,
+                    "provider": confirm_exc.provider,
+                    "tool": confirm_exc.tool,
+                    "args_summary": sorted(confirm_exc.tool_args.keys()),
+                    "destructive": confirm_exc.destructive,
+                }
+            yield f"data: {_json.dumps(info, separators=(',', ':'))}\n\n".encode()
+            yield b"data: [DONE]\n\n"
+            return
+        except LQAIError as exc:
+            error_code = exc.effective_code
+            error_envelope = exc.to_envelope()
+
+        try:
+            await _persist_assistant_message(
+                db,
+                message_id=assistant_message_id,
+                chat_id=chat.id,
+                content="".join(accumulated),
+                requested_model=payload.request.model,
+                routed_provider=last_provider,
+                routed_model=last_model,
+                routed_inference_tier=last_tier,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                cost_estimate_usd=None,
+                applied_skills=[],
+                error_code=error_code,
+            )
+        except Exception:
+            log.error("resume_persist_failed", exc_info=True)
+
+        if error_envelope is not None:
+            yield f"data: {_json.dumps(error_envelope, separators=(',', ':'))}\n\n".encode()
+        else:
+            complete: dict[str, Any] = {
+                "type": "complete",
+                "lq_ai_message_id": str(assistant_message_id),
+                "message": {
+                    "id": str(assistant_message_id),
+                    "chat_id": str(chat.id),
+                    "role": "assistant",
+                    "content": "".join(accumulated),
+                    "model": last_model,
+                    "provider": last_provider,
+                    "routed_inference_tier": last_tier,
+                    "tokens_in": prompt_tokens,
+                    "tokens_out": completion_tokens,
+                    "created_at": datetime.now(tz=UTC).isoformat(),
+                },
+                "citations": [],
+                "routed_inference_tier": last_tier,
+                "routed_provider": last_provider,
+            }
+            yield f"data: {_json.dumps(complete, separators=(',', ':'))}\n\n".encode()
+        yield b"data: [DONE]\n\n"
+
+    return StreamingResponse(
+        _generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 async def _write_work_product_attribution(
     db: AsyncSession,
     *,
@@ -2201,8 +2510,18 @@ async def _non_streaming_response(
                     request_id=request_id,
                 )
             except ToolConfirmationRequired as confirm_exc:
-                # PR5b-ii part 3 will run the real persist-and-resume gate here.
-                response = confirmation_notice_response(confirm_exc, model=request.model)
+                # Persist the pending call + placeholder assistant row, then
+                # return the confirmation envelope. The client approves/denies
+                # via POST /chats/{id}/tool-calls/{pending_call_id}.
+                info = await _persist_pending_tool_call(
+                    db,
+                    user=user,
+                    request=request,
+                    confirm_exc=confirm_exc,
+                    chat=chat,
+                    assistant_message_id=assistant_message_id,
+                )
+                return JSONResponse(status_code=status.HTTP_200_OK, content=info)
         else:
             response = await gateway.chat_completion(request, request_id=request_id)
     except LQAIError as exc:
@@ -2394,22 +2713,34 @@ async def _stream_response(
                         frame["applied_skills"] = list(last_applied_skills)
                     yield f"data: {_json.dumps(frame, separators=(',', ':'))}\n\n".encode()
         except ToolConfirmationRequired as confirm_exc:
-            # PR5b-ii part 3 will persist a pending_tool_call row and emit a
-            # ``tool_confirmation_required`` SSE event here. Part 2 degrades to
-            # an honest notice streamed as the answer so the turn completes.
-            notice = (
-                confirmation_notice_response(confirm_exc, model=request.model)
-                .choices[0]
-                .message.content
-                or ""
-            )
-            accumulated.append(notice)
-            notice_frame = {
-                "type": "delta",
-                "delta": notice,
-                "lq_ai_message_id": str(assistant_message_id),
-            }
-            yield f"data: {_json.dumps(notice_frame, separators=(',', ':'))}\n\n".encode()
+            # Human-gated tool: persist the pending call (encrypted) + a
+            # placeholder assistant row, emit a terminal
+            # ``tool_confirmation_required`` event, and end the turn (spec L3
+            # persist-and-resume). The client resolves it via
+            # POST /chats/{id}/tool-calls/{pending_call_id}.
+            try:
+                info = await _persist_pending_tool_call(
+                    db,
+                    user=user,
+                    request=request,
+                    confirm_exc=confirm_exc,
+                    chat=chat,
+                    assistant_message_id=assistant_message_id,
+                )
+            except Exception:
+                log.error("tool_confirmation_persist_failed", exc_info=True)
+                info = {
+                    "type": "tool_confirmation_required",
+                    "lq_ai_message_id": str(assistant_message_id),
+                    "pending_call_id": None,
+                    "provider": confirm_exc.provider,
+                    "tool": confirm_exc.tool,
+                    "args_summary": sorted(confirm_exc.tool_args.keys()),
+                    "destructive": confirm_exc.destructive,
+                }
+            yield f"data: {_json.dumps(info, separators=(',', ':'))}\n\n".encode()
+            yield b"data: [DONE]\n\n"
+            return
         except LQAIError as exc:
             # Stream ended in failure. We persist a partial assistant
             # row with whatever content the client already saw, and

@@ -900,6 +900,49 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
 
+  /api/v1/chats/{chat_id}/tool-calls/{pending_call_id}:
+    parameters:
+      - name: chat_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: pending_call_id
+        in: path
+        required: true
+        schema: {type: string}
+        description: Opaque single-use token for the pending tool call.
+    post:
+      tags: [messages]
+      summary: Approve or deny a human-gated chat tool call (PR5b-ii confirmation gate)
+      description: |
+        Resolves a `tool_confirmation_required` pending call and resumes the
+        assistant turn (SSE stream). ActiveUser-gated + chat-owner-checked
+        (404 cross-user). Single-use + TTL: an unknown / already-resolved /
+        expired token returns 410.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: {type: string, enum: [approve, deny]}
+      responses:
+        '200':
+          description: SSE stream resuming the assistant turn (text/event-stream)
+        '404':
+          description: Chat not found for this user
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '410':
+          description: Pending tool call unknown, already resolved, or expired
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
   /api/v1/chats/{chat_id}/messages:
     parameters:
       - name: chat_id
