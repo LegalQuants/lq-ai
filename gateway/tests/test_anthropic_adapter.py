@@ -562,3 +562,268 @@ def test_from_config_succeeds_with_env_set() -> None:
     )
     adapter = AnthropicAdapter.from_config(provider, env={"ANTHROPIC_API_KEY": "sk-ant-x"})
     assert adapter.name == "anthropic-test"
+
+
+# --- PR5b: tool-calling bridge ------------------------------------------------
+
+
+_WEATHER_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "get_weather",
+        "description": "Look up the weather.",
+        "parameters": {
+            "type": "object",
+            "properties": {"city": {"type": "string"}},
+            "required": ["city"],
+        },
+    },
+}
+
+
+@pytest.mark.unit
+def test_to_anthropic_request_translates_tools_and_auto_choice() -> None:
+    """OpenAI ``tools`` become Anthropic tool blocks (name / description /
+    input_schema). ``tool_choice="auto"`` is Anthropic's default, so it is
+    omitted from the body."""
+
+    req = _basic_request(tools=[_WEATHER_TOOL], tool_choice="auto")
+    body = _to_anthropic_request(req, model="claude-sonnet-4-6", stream=False)
+    assert body["tools"] == [
+        {
+            "name": "get_weather",
+            "description": "Look up the weather.",
+            "input_schema": {
+                "type": "object",
+                "properties": {"city": {"type": "string"}},
+                "required": ["city"],
+            },
+        }
+    ]
+    assert "tool_choice" not in body
+
+
+@pytest.mark.unit
+def test_to_anthropic_request_tool_choice_required_and_specific() -> None:
+    """``required`` -> Anthropic ``any``; a specific function -> ``tool``."""
+
+    req = _basic_request(tools=[_WEATHER_TOOL], tool_choice="required")
+    body = _to_anthropic_request(req, model="claude-sonnet-4-6", stream=False)
+    assert body["tool_choice"] == {"type": "any"}
+
+    req2 = _basic_request(
+        tools=[_WEATHER_TOOL],
+        tool_choice={"type": "function", "function": {"name": "get_weather"}},
+    )
+    body2 = _to_anthropic_request(req2, model="claude-sonnet-4-6", stream=False)
+    assert body2["tool_choice"] == {"type": "tool", "name": "get_weather"}
+
+
+@pytest.mark.unit
+def test_to_anthropic_request_tool_choice_none_drops_tools() -> None:
+    """``tool_choice="none"`` means do not use tools this turn; we omit the
+    tools block entirely rather than send an unusable Anthropic choice."""
+
+    req = _basic_request(tools=[_WEATHER_TOOL], tool_choice="none")
+    body = _to_anthropic_request(req, model="claude-sonnet-4-6", stream=False)
+    assert "tools" not in body
+    assert "tool_choice" not in body
+
+
+@pytest.mark.unit
+def test_to_anthropic_request_tool_without_params_gets_empty_schema() -> None:
+    """A no-argument tool still needs a valid Anthropic ``input_schema``."""
+
+    tool = {"type": "function", "function": {"name": "ping"}}
+    req = _basic_request(tools=[tool])
+    body = _to_anthropic_request(req, model="claude-sonnet-4-6", stream=False)
+    assert body["tools"] == [{"name": "ping", "input_schema": {"type": "object", "properties": {}}}]
+
+
+@pytest.mark.unit
+def test_to_anthropic_request_assistant_tool_calls_become_tool_use() -> None:
+    """An assistant message replaying its own tool_calls (the multi-step
+    loop) becomes Anthropic ``tool_use`` blocks; JSON-string arguments are
+    parsed into ``input``. The following ``tool`` result stays a
+    ``tool_result`` block."""
+
+    req = ChatCompletionRequest.model_validate(
+        {
+            "model": "claude-sonnet-4-6",
+            "messages": [
+                {"role": "user", "content": "weather in Paris?"},
+                {
+                    "role": "assistant",
+                    "content": "Let me check.",
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {
+                                "name": "get_weather",
+                                "arguments": '{"city": "Paris"}',
+                            },
+                        }
+                    ],
+                },
+                {"role": "tool", "content": "Sunny", "tool_call_id": "call_1"},
+            ],
+        }
+    )
+    body = _to_anthropic_request(req, model="claude-sonnet-4-6", stream=False)
+    assert body["messages"][1] == {
+        "role": "assistant",
+        "content": [
+            {"type": "text", "text": "Let me check."},
+            {
+                "type": "tool_use",
+                "id": "call_1",
+                "name": "get_weather",
+                "input": {"city": "Paris"},
+            },
+        ],
+    }
+    assert body["messages"][2]["content"][0]["type"] == "tool_result"
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_from_anthropic_response_reconstructs_tool_calls() -> None:
+    """A ``tool_use`` content block becomes an OpenAI ``tool_calls`` entry
+    with JSON-string arguments; ``content`` is null on a pure tool turn and
+    ``finish_reason`` is ``tool_calls``."""
+
+    respx.post(f"{ANTHROPIC_BASE}/v1/messages").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "msg_tool",
+                "model": "claude-sonnet-4-6",
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "toolu_01",
+                        "name": "get_weather",
+                        "input": {"city": "Paris"},
+                    }
+                ],
+                "stop_reason": "tool_use",
+                "usage": {"input_tokens": 10, "output_tokens": 4},
+            },
+        )
+    )
+    adapter = _make_adapter()
+    try:
+        result = await adapter.chat_completion(
+            _basic_request(), model="claude-sonnet-4-6", stream=False
+        )
+    finally:
+        await adapter.aclose()
+    assert isinstance(result, ChatCompletionResponse)
+    msg = result.choices[0].message
+    assert msg.content is None
+    assert result.choices[0].finish_reason == "tool_calls"
+    assert msg.tool_calls is not None
+    assert len(msg.tool_calls) == 1
+    call = msg.tool_calls[0]
+    assert call["id"] == "toolu_01"
+    assert call["type"] == "function"
+    assert call["function"]["name"] == "get_weather"
+    assert json.loads(call["function"]["arguments"]) == {"city": "Paris"}
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_from_anthropic_response_text_plus_tool_call() -> None:
+    """Text *and* a tool call both survive: ``content`` is the text,
+    ``tool_calls`` carries the call."""
+
+    respx.post(f"{ANTHROPIC_BASE}/v1/messages").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "msg_mix",
+                "model": "claude-sonnet-4-6",
+                "content": [
+                    {"type": "text", "text": "Checking the weather."},
+                    {
+                        "type": "tool_use",
+                        "id": "toolu_02",
+                        "name": "get_weather",
+                        "input": {"city": "Lyon"},
+                    },
+                ],
+                "stop_reason": "tool_use",
+                "usage": {"input_tokens": 8, "output_tokens": 6},
+            },
+        )
+    )
+    adapter = _make_adapter()
+    try:
+        result = await adapter.chat_completion(
+            _basic_request(), model="claude-sonnet-4-6", stream=False
+        )
+    finally:
+        await adapter.aclose()
+    assert isinstance(result, ChatCompletionResponse)
+    msg = result.choices[0].message
+    assert msg.content == "Checking the weather."
+    assert msg.tool_calls is not None and len(msg.tool_calls) == 1
+
+
+SSE_TOOL_FIXTURE_BODY = (
+    "event: message_start\n"
+    'data: {"type":"message_start","message":{"id":"msg_tstream","model":"claude-sonnet-4-6",'
+    '"usage":{"input_tokens":9,"output_tokens":0}}}\n\n'
+    "event: content_block_start\n"
+    'data: {"type":"content_block_start","index":0,"content_block":'
+    '{"type":"tool_use","id":"toolu_s1","name":"get_weather","input":{}}}\n\n'
+    "event: content_block_delta\n"
+    'data: {"type":"content_block_delta","index":0,"delta":'
+    '{"type":"input_json_delta","partial_json":"{\\"city\\":"}}\n\n'
+    "event: content_block_delta\n"
+    'data: {"type":"content_block_delta","index":0,"delta":'
+    '{"type":"input_json_delta","partial_json":" \\"Paris\\"}"}}\n\n'
+    "event: content_block_stop\n"
+    'data: {"type":"content_block_stop","index":0}\n\n'
+    "event: message_delta\n"
+    'data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},'
+    '"usage":{"output_tokens":12}}\n\n'
+    "event: message_stop\n"
+    'data: {"type":"message_stop"}\n\n'
+)
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_streaming_accumulates_tool_use_into_tool_calls_delta() -> None:
+    """Streamed ``tool_use`` (content_block_start + input_json_delta chunks +
+    stop) becomes ONE OpenAI ``tool_calls`` delta carrying the full
+    accumulated JSON arguments; the final chunk reports
+    ``finish_reason="tool_calls"``."""
+
+    respx.post(f"{ANTHROPIC_BASE}/v1/messages").mock(
+        return_value=httpx.Response(
+            200,
+            text=SSE_TOOL_FIXTURE_BODY,
+            headers={"content-type": "text/event-stream"},
+        )
+    )
+    adapter = _make_adapter()
+    try:
+        result = await adapter.chat_completion(
+            _basic_request(stream=True), model="claude-sonnet-4-6", stream=True
+        )
+        assert not isinstance(result, ChatCompletionResponse)
+        chunks = [chunk async for chunk in result]
+    finally:
+        await adapter.aclose()
+
+    tool_chunks = [c for c in chunks if c.choices[0].delta.tool_calls]
+    assert len(tool_chunks) == 1
+    call = tool_chunks[0].choices[0].delta.tool_calls[0]
+    assert call["index"] == 0
+    assert call["id"] == "toolu_s1"
+    assert call["function"]["name"] == "get_weather"
+    assert json.loads(call["function"]["arguments"]) == {"city": "Paris"}
+    assert chunks[-1].choices[0].finish_reason == "tool_calls"

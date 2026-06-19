@@ -471,15 +471,14 @@ def _to_ollama_request(
 
     # Tool calls / tool choice forward through ``tools`` per Ollama's
     # 0.4+ tool-use surface. The OpenAI ``tools`` schema maps directly:
-    # both use the OpenAI tool-definition shape. ``tool_choice``
-    # similarly forwards verbatim.
-    extra = request.model_extra or {}
-    tools = extra.get("tools")
-    if tools is not None:
-        body["tools"] = tools
-    tool_choice = extra.get("tool_choice")
-    if tool_choice is not None:
-        body["tool_choice"] = tool_choice
+    # both use the OpenAI tool-definition shape, so we dump the typed
+    # ``ToolDefinition`` models straight back to their OpenAI dict form.
+    # ``tool_choice`` similarly forwards verbatim. (PR5b promoted ``tools`` /
+    # ``tool_choice`` from extra-allow fields to typed request fields.)
+    if request.tools is not None:
+        body["tools"] = [tool.model_dump(mode="json", exclude_none=True) for tool in request.tools]
+    if request.tool_choice is not None:
+        body["tool_choice"] = request.tool_choice
 
     return body
 

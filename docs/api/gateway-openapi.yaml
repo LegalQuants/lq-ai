@@ -1012,6 +1012,40 @@ components:
         temperature: {type: number, minimum: 0, maximum: 2}
         top_p: {type: number}
         stream: {type: boolean, default: false}
+        # PR5b: governed tool-calling (WS4)
+        tools:
+          type: array
+          maxItems: 64
+          description: |
+            Model-visible tool allowlist for this turn (PR5b). The backend
+            assembles this from operator-enabled research + MCP tools; the
+            gateway forwards it to the provider (OpenAI verbatim; Anthropic
+            translated to `input_schema` blocks). Omitted preserves the
+            pre-PR5b single-shot wire shape.
+          items:
+            type: object
+            required: [type, function]
+            properties:
+              type: {type: string, enum: [function], default: function}
+              function:
+                type: object
+                required: [name]
+                properties:
+                  name: {type: string, maxLength: 128}
+                  description: {type: string}
+                  parameters:
+                    type: object
+                    description: JSON Schema for the tool's arguments.
+        tool_choice:
+          description: |
+            How the model chooses among `tools` (OpenAI shape): `auto`,
+            `none`, `required`, or a specific
+            `{type: function, function: {name}}`. Translated to Anthropic's
+            `auto` / `any` / `tool` shape.
+          oneOf:
+            - type: string
+              enum: [auto, none, required]
+            - type: object
         # LQ.AI extensions
         minimum_inference_tier:
           type: integer
