@@ -167,22 +167,30 @@ async def test_refresh_none_bearer_server_passes_no_token(db_session, monkeypatc
 
 
 # ---------------------------------------------------------------------------
-# Original tests (unchanged, except that we patch list_mcp_oauth_config in the
-# respx-based tests so they still pass without a gateway /admin/v1/config route)
+# Original tests (updated to patch get_admin_config now that list_servers reads
+# the full config dict instead of calling list_tool_providers)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_list_servers_filters_mcp(monkeypatch) -> None:
-    async def fake_list(*, request_id=None):
-        return [{"name": "acme-mcp", "type": "mcp"}, {"name": "cl", "type": "courtlistener"}]
+    """list_servers returns only MCP-type providers WITH auth field populated."""
 
-    monkeypatch.setattr(
-        "app.mcp.service.get_gateway_client",
-        lambda: type("C", (), {"list_tool_providers": staticmethod(fake_list)})(),
-    )
+    async def _fake_get_admin_config(*, request_id=None):
+        return {
+            "tool_providers": [
+                {"name": "acme-mcp", "type": "mcp", "auth": "none"},
+                {"name": "cl", "type": "courtlistener"},
+            ]
+        }
+
+    class _FakeGW:
+        get_admin_config = staticmethod(_fake_get_admin_config)
+
+    monkeypatch.setattr("app.mcp.service.get_gateway_client", lambda: _FakeGW())
     servers = await service.list_servers()
     assert [s["name"] for s in servers] == ["acme-mcp"]
+    assert servers[0]["auth"] == "none"
 
 
 @pytest.mark.asyncio

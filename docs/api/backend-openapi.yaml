@@ -8103,6 +8103,7 @@ components:
         type: {type: string}
         auth:
           type: string
+          enum: [none, bearer, oauth]
           description: |
             Authentication mode for this MCP server. One of ``none``,
             ``bearer``, or ``oauth``. Read from the gateway config
