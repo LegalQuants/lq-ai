@@ -12,7 +12,7 @@
 
 - **Branch:** `feat/pr6c-external-source-citations` off `main` (`47d9bed`). Push `origin` + `tucuxi`. `origin/main` PROTECTED — PR + GitHub merge only; sync tucuxi after. **Not security-gated** (new product table + read endpoint in `api/`, plus `web/` + docs; no `gateway/**`, no `docs/security/**`, no audit-log/auth/crypto) → self-merge after CI green.
 - **Retrieval-provenance only.** Persist every case the case-law tool *returned*; no claim-level marker grounding; no verification path. `message_citations` is NOT modified.
-- **Case-law tools only:** `search_case_law` and `get_cluster` produce sources (they carry full cluster metadata: `case_name`, `court`, `date_filed`, `absolute_url`, `cluster_id`). `read_opinion`/`find_in_case`/`verify_citations`/MCP → no sources (DE-360 defers generic MCP).
+- **Case-law tools only:** `search_case_law` and `get_cluster` produce sources (they carry full cluster metadata: `case_name`, `court`, `date_filed`, `absolute_url`, `cluster_id`). `read_opinion`/`find_in_case`/`verify_citations`/MCP → no sources (DE-350 defers generic MCP).
 - **No new SSE frames.** Frontend fetches sources post-stream (`!isStreaming`), exactly like `fetchedCitations`.
 - **Migration head is 0054 → new migration is 0055.** Verify on a throwaway `pgvector/pgvector:pg16` (conftest auto-migrates) — **NEVER** host-side `alembic upgrade` on the live dev DB. When 0055 lands, rebuild `api` + `arq-worker` + `ingest-worker` together.
 - **Test-suite collision guards (crash the whole api suite at collection if wrong):** add the new route to `IMPLEMENTED_ROUTES` (`api/tests/test_endpoints.py`); bump the pinned path count `133 → 134` (`api/tests/test_openapi.py:325`) AND add the path to `EXPECTED_PATHS` (`api/tests/test_openapi.py:18`); add the path to `docs/api/backend-openapi.yaml`. `test_openapi.py` is the authoritative conformance check — run it, don't eyeball.
@@ -150,7 +150,7 @@ One row per external source (a case-law cluster) that a research tool *returned*
 during an assistant turn. This is retrieval-provenance — "sources consulted" —
 NOT quote-verification: it deliberately lives apart from ``message_citations``
 (which is byte-offset quote-matching against uploaded documents). Case-law only
-in PR6c (``source_kind='caselaw'``); generic MCP results are DE-360.
+in PR6c (``source_kind='caselaw'``); generic MCP results are DE-350.
 """
 
 from __future__ import annotations
@@ -981,7 +981,7 @@ Then in a chat, run a case-law lookup (or inject `message_tool_sources` rows for
 cd ~/Code/lq-ai && git push -u origin feat/pr6c-external-source-citations && git push -u tucuxi feat/pr6c-external-source-citations
 gh pr create --repo LegalQuants/lq-ai --base main --head feat/pr6c-external-source-citations \
   --title "PR6c/WS5: external-source citations — case-law retrieval provenance" \
-  --body-file <(printf '%s\n' "<PR body: the new message_tool_sources table + 0055; retrieval-provenance capture in the tool-loop; the read endpoint; the inline Sources-consulted sidecar + caselaw pill; the D6 flip; not security-gated (product table + read endpoint); screenshots; DE-360 (generic MCP) deferred>")
+  --body-file <(printf '%s\n' "<PR body: the new message_tool_sources table + 0055; retrieval-provenance capture in the tool-loop; the read endpoint; the inline Sources-consulted sidecar + caselaw pill; the D6 flip; not security-gated (product table + read endpoint); screenshots; DE-350 (generic MCP) deferred>")
 ```
 Frontend + api product code → **self-merge after CI green**. After merge, sync tucuxi main. The D6 obligation for 6c is discharged by Task 8.
 
@@ -989,7 +989,7 @@ Frontend + api product code → **self-merge after CI green**. After merge, sync
 
 ## Self-Review (run before dispatching execution)
 
-**Spec coverage:** New `message_tool_sources` table + migration 0055 (spec §Data model) → Task 1 ✓. `extract_tool_sources` case-law-only + dedup + retrieval-provenance (§Backend/Capture, §Non-goals) → Task 2 ✓. Persist at turn-end mirroring citations (§Backend/Persist) → Task 3 ✓. Read endpoint + collision guards + OpenAPI (§Backend/Endpoint) → Task 4 ✓. `ToolSource` type + api (§Frontend) → Task 5 ✓. `caselaw` pill + inline `ToolSourcesPanel` sidecar (§Frontend, §Panel placement) → Task 6 ✓. `MessageBubble` lazy-fetch like citations, no SSE change (§Architecture) → Task 7 ✓. D6 flip → 6d (§D6) → Task 8 ✓. Non-goals respected: case-law-only (Task 2 returns [] for other tools), no marker grounding, no drawer, no SSE frame, `message_citations` untouched, no cost model. DE-360 noted (§9).
+**Spec coverage:** New `message_tool_sources` table + migration 0055 (spec §Data model) → Task 1 ✓. `extract_tool_sources` case-law-only + dedup + retrieval-provenance (§Backend/Capture, §Non-goals) → Task 2 ✓. Persist at turn-end mirroring citations (§Backend/Persist) → Task 3 ✓. Read endpoint + collision guards + OpenAPI (§Backend/Endpoint) → Task 4 ✓. `ToolSource` type + api (§Frontend) → Task 5 ✓. `caselaw` pill + inline `ToolSourcesPanel` sidecar (§Frontend, §Panel placement) → Task 6 ✓. `MessageBubble` lazy-fetch like citations, no SSE change (§Architecture) → Task 7 ✓. D6 flip → 6d (§D6) → Task 8 ✓. Non-goals respected: case-law-only (Task 2 returns [] for other tools), no marker grounding, no drawer, no SSE frame, `message_citations` untouched, no cost model. DE-350 noted (§9).
 
 **Placeholder scan:** Deterministic backend code (model, migration, extractor, persist, endpoint) is verbatim. Test setup uses a module-local `owner_user` fixture + `_assistant_message` helper + a `client` fixture copied verbatim from `tests/test_chat_citations.py` (no fictional shared fixtures — there are none in `conftest.py`); the auth token uses the real `create_access_token(user_id, email, is_admin)` signature. Svelte components are concrete skeletons that name the file to mirror (`M2Citations`, `ProvenancePill`) and the exact data-testids — the house-style classes are copied from the live files (as 6a/6b did). PR body is a ship-time fill-in.
 

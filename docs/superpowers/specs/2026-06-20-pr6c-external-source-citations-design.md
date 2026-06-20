@@ -15,7 +15,7 @@ When a chat turn consults external case law (CourtListener, via the governed too
 
 ## Non-goals (explicit scope guard)
 
-- **Case-law tools only.** Only research/case-law tools (`search_case_law`, `get_cluster`, `read_opinion`, `find_in_case`) produce source rows in 6c — that is where structured metadata already exists (`ResearchClusterMetadata`). Generic MCP tool results are **out of scope**; `source_kind` is designed to extend to them later → **DE-360** (see §9 follow-ups).
+- **Case-law tools only.** Only research/case-law tools (`search_case_law`, `get_cluster`, `read_opinion`, `find_in_case`) produce source rows in 6c — that is where structured metadata already exists (`ResearchClusterMetadata`). Generic MCP tool results are **out of scope**; `source_kind` is designed to extend to them later → **DE-350** (see §9 follow-ups).
 - **No claim-level grounding.** We do not tie a specific sentence to a specific case.
 - **No chat-wide aggregation drawer.** Inline sidecar only.
 - **No new SSE frames / protocol change.** The frontend fetches sources post-stream, exactly like citations. The streaming tool-loop (PR5b/6b) is untouched on the wire.
@@ -139,7 +139,7 @@ One PR, two phases:
 
 ## §9 follow-ups (file as DEs, don't expand 6c)
 
-- **DE-360:** extend `message_tool_sources` to generic MCP tool results (`source_kind='mcp'`) with a per-server label/url convention.
+- **DE-350:** extend `message_tool_sources` to generic MCP tool results (`source_kind='mcp'`) with a per-server label/url convention.
 - (Existing) **DE-344:** per-provider research cost model — unchanged here.
 
 ## Acceptance criteria

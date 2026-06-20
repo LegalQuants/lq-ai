@@ -679,7 +679,7 @@ The API endpoint `GET /api/v1/skills/{id}/inputs` returns the skill's input sche
 
 ### 3.6 Research
 
-**M1+M2 status:** Not yet started in code. No web-search backend or legal-source connector exists in the codebase. `grep -r "research" api/app/api/` returns no research-specific handler; `api/alembic/versions/` has no `research_queries` migration. The Citation Engine pipeline dependency (§3.3) was met when M2 shipped — Research is now unblocked for contribution. The capability is fully spec'd here and in [PRD §9](PRD.md#9-deferred-enhancements-and-identified-future-work); a contributor picking it up should open a discussion before starting because the integration surface (citation-aware retrieval + ephemeral-document handling) is substantial. See [HONEST-STATE.md §6](HONEST-STATE.md#6-capabilities-not-yet-started-in-source).
+**PR6 status: PARTIAL — case-law retrieval shipped; full research surface still deferred.** The governed tool-loop + CourtListener research provider (search_case_law, get_cluster, read_opinion, find_in_case, verify_citations — WS3/PR1) and the procedural case-law research skill (`skills/case-law-research/`) landed in PR6. Rich case-law provenance (`message_tool_sources`, inline Sources-consulted sidecar, PR6c) surfaces which cases a tool call pulled in. **The broader research surface — web search, GovInfo, Congress.gov, Federal Register, EUR-Lex, SEC EDGAR, the `POST /api/v1/research` endpoint, and the `ResearchQuery` data model — is not yet started.** A contributor picking it up should open a discussion first; the integration surface (citation-aware retrieval + ephemeral-document handling) is substantial. See [HONEST-STATE.md §6](HONEST-STATE.md#6-capabilities-not-yet-started-in-source) and [§9 DE entries](#9-deferred-enhancements-and-identified-future-work) for the deferred scope.
 
 **Description.** Real-time legal information retrieval from authoritative sources, with the same Citation Engine fidelity as document-based citations. Web sources are fetched, parsed, and treated as ephemeral documents in the citation pipeline.
 
@@ -4668,6 +4668,12 @@ No code change — the runtime already returns these with the correct typed `cod
 **Context:** The gateway's `_to_anthropic_request` (`gateway/app/providers/anthropic.py`) translates each incoming `role="tool"` message into its own Anthropic `user` message carrying one `tool_result` block. The PR5b chat tool-loop, when the model proposes **multiple** read-only tools in a single round, appends the assistant `tool_calls` turn followed by several `role="tool"` result messages — which become consecutive same-role `user` messages on the Anthropic hop. The Anthropic Messages API expects roles to alternate, so a multi-tool round could be rejected. PR5b's confirmation-resume path is unaffected (it reconstructs a single-call assistant turn + one tool result), and single-tool rounds are fine; this only bites multi-read-only-tool rounds against Anthropic. Surfaced in the PR5b final whole-branch review (2026-06-19).
 
 **Specific scope:** In `_to_anthropic_request`, coalesce a run of consecutive `role="tool"` messages into a single Anthropic `user` message containing multiple `tool_result` content blocks. Add a gateway adapter test feeding `assistant(tool_calls=[A,B]) → tool(A) → tool(B)` and asserting one merged user message with two `tool_result` blocks.
+
+#### DE-350 — Generic-MCP-result provenance (`source_kind='mcp'` on `message_tool_sources`)
+
+**Priority:** P3 · **Effort:** M
+
+**Context:** PR6c shipped retrieval-provenance for **case-law** tool results only (`source_kind='caselaw'`, from `search_case_law`/`get_cluster`). Extend `message_tool_sources` capture to generic MCP connector results (`source_kind='mcp'`) so a tool call to any operator-wired MCP server surfaces in the "Sources consulted" panel with a per-server label/url convention. Needs a label/url extraction strategy per MCP result shape (no structured cluster metadata to lean on).
 
 ---
 

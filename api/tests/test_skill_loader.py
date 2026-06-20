@@ -246,6 +246,7 @@ def test_load_registry_happy_path() -> None:
     assert sorted(registry.names()) == [
         "alpha-test-skill",
         "beta-minimal",
+        "delta-tooluser",
         "gamma-tagged",
     ]
 
@@ -461,6 +462,30 @@ def test_install_sighup_reload_replaces_signal_handler(tmp_path: Path) -> None:
         # Restore whatever was there before so the global state isn't
         # leaked across the test session.
         signal.signal(signal.SIGHUP, prior if prior is not None else signal.SIG_DFL)
+
+
+@pytest.mark.unit
+def test_case_law_research_skill_registered() -> None:
+    """The `case-law-research` built-in skill registers cleanly with
+    ``tool_usage: [courtlistener]`` declared in its frontmatter.
+
+    Verifies the C5 (PR6d) skill is present in the real skills corpus and
+    that its connector declaration survives the full loader parse cycle.
+    """
+
+    if not REAL_SKILLS_DIR.is_dir():
+        pytest.skip(f"real skills directory not present: {REAL_SKILLS_DIR}")
+
+    registry = load_registry(REAL_SKILLS_DIR)
+    names = {s.name for s in registry.list_summaries()}
+    assert "case-law-research" in names, (
+        f"'case-law-research' not found in registry; loaded: {sorted(names)}"
+    )
+    detail = registry.get_skill("case-law-research")
+    assert detail is not None
+    assert detail.tool_usage == ["courtlistener"], (
+        f"expected tool_usage=['courtlistener'], got {detail.tool_usage!r}"
+    )
 
 
 @pytest.mark.unit

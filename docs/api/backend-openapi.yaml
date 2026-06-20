@@ -7495,6 +7495,16 @@ components:
                 non-empty ``columns`` list at load time.
               items:
                 $ref: '#/components/schemas/ColumnSpec'
+            tool_usage:
+              type: array
+              items: {type: string}
+              nullable: true
+              description: Connector identifiers the skill declares it uses (C5).
+            unavailable_tool_usage:
+              type: array
+              items: {type: string}
+              nullable: true
+              description: Declared connectors not configured in this deployment; null when undeterminable. Informational, never gating.
 
     # Wave A — Skill inputs (form schema for the skill-input-form pattern).
     SkillInputDef:

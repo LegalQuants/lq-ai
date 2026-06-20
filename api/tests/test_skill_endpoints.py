@@ -19,6 +19,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import AsyncIterator
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
@@ -410,3 +411,38 @@ async def test_inputs_reads_from_user_skill_shadow(
     assert body["required"][0]["enum"] == ["a", "b"]
     assert len(body["optional"]) == 1
     assert body["optional"][0]["name"] == "override_optional"
+
+
+# ---------------------------------------------------------------------------
+# C5 — tool_usage / unavailable_tool_usage surfacing (PR6d Task 3)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+async def test_skill_detail_surfaces_tool_usage(client: AsyncClient, db_user: User) -> None:
+    """skill-detail returns ``tool_usage`` (echoed) + ``unavailable_tool_usage``
+    (computed) for a skill that declares ``lq_ai.tool_usage``."""
+
+    token = _bearer(db_user)
+    h = {"Authorization": f"Bearer {token}"}
+
+    # connector available → unavailable_tool_usage is empty
+    with patch(
+        "app.api.skills.resolve_available_connectors", new=AsyncMock(return_value={"courtlistener"})
+    ):
+        resp = await client.get("/api/v1/skills/delta-tooluser", headers=h)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["tool_usage"] == ["courtlistener"]
+    assert body["unavailable_tool_usage"] == []
+
+    # connector not configured → declared connector appears in unavailable list
+    with patch("app.api.skills.resolve_available_connectors", new=AsyncMock(return_value=set())):
+        resp2 = await client.get("/api/v1/skills/delta-tooluser", headers=h)
+    assert resp2.json()["unavailable_tool_usage"] == ["courtlistener"]
+
+    # resolver failure (returns None) → unavailable_tool_usage is null; still 200
+    with patch("app.api.skills.resolve_available_connectors", new=AsyncMock(return_value=None)):
+        resp3 = await client.get("/api/v1/skills/delta-tooluser", headers=h)
+    assert resp3.status_code == 200
+    assert resp3.json()["unavailable_tool_usage"] is None

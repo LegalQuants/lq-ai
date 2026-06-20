@@ -485,7 +485,7 @@ research tool *returned* during an assistant turn. This is
 **retrieval-provenance** — "sources consulted" — and is deliberately distinct
 from `message_citations` (which is byte-offset quote-verification against
 uploaded documents). PR6c scope: `source_kind='caselaw'` only; generic MCP
-result provenance is deferred to DE-360.
+result provenance is deferred to DE-350.
 
 ```sql
 CREATE TABLE message_tool_sources (
@@ -512,7 +512,7 @@ CREATE INDEX ix_message_tool_sources_message_id ON message_tool_sources(message_
 | Input | Uploaded documents (KB / project files) | External provider APIs (CourtListener, etc.) |
 | Verification | Byte-offset exact-match → tolerant → LLM judge | None — provenance only |
 | Granularity | Byte span within a document chunk | One row per returned source cluster |
-| Scope | M2+ (all document types) | PR6c (case-law); DE-360 for generic MCP |
+| Scope | M2+ (all document types) | PR6c (case-law); DE-350 for generic MCP |
 
 The `(message_id)` index supports the per-turn sources fetch used by the
 sources endpoint (Task 4) and the frontend citation rail (Task 5).

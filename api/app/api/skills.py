@@ -41,6 +41,7 @@ from app.errors import NotFound
 from app.models.chat import Chat, Message
 from app.models.user import User
 from app.models.user_skill import UserSkill
+from app.skills.connectors import resolve_available_connectors, unavailable_tool_usage
 from app.skills.registry import MutableSkillRegistry
 from app.skills.schema import (
     SkillFrontmatter,
@@ -611,11 +612,18 @@ async def _resolve_full_skill_payload(
             details={"skill_name": skill_name},
         )
 
+    available = await resolve_available_connectors(request_id=request.headers.get("x-request-id"))
+    skill.unavailable_tool_usage = unavailable_tool_usage(skill.tool_usage, available)
+
     raw = skill.model_dump()
+    # Keep tool_usage and unavailable_tool_usage even when None/[] — both are
+    # meaningful verdicts ([] = "all connectors available"; None = "unknown").
+    # Preserve the existing None/empty-tags filtering for all other keys.
     return {
         k: v
         for k, v in raw.items()
-        if v is not None and not (isinstance(v, list) and len(v) == 0 and k in {"tags"})
+        if k in {"tool_usage", "unavailable_tool_usage"}
+        or (v is not None and not (isinstance(v, list) and len(v) == 0 and k in {"tags"}))
     }
 
 

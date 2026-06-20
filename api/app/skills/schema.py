@@ -150,6 +150,14 @@ class LQAIFrontmatter(BaseModel):
 
     trigger_examples: list[str] = Field(default_factory=list)
 
+    tool_usage: list[str] | None = Field(
+        default=None,
+        description="C5 (PR6d) — connector identifiers this skill calls "
+        "(e.g. ['courtlistener'], extensible to MCP server names). Parsed and "
+        "SURFACED against the operator's configured connectors; never enforced "
+        "(a skill with an unconfigured connector still loads and runs).",
+    )
+
     @model_validator(mode="after")
     def _table_mode_requires_columns(self) -> LQAIFrontmatter:
         """``output_format: table`` requires a non-empty ``columns`` list.
@@ -216,6 +224,7 @@ class SkillSummary(BaseModel):
     minimum_inference_tier: int | None = None
     ensemble_verification: bool | None = None
     output_format: str | None = None
+    tool_usage: list[str] | None = None
 
 
 class SkillFile(BaseModel):
@@ -245,6 +254,12 @@ class Skill(SkillSummary):
     """
 
     id: str | None = None
+    unavailable_tool_usage: list[str] | None = None
+    """C5 (PR6d) — declared connectors NOT configured in this deployment.
+    ``[]`` = all available; non-empty = the gaps; ``None`` = could not be
+    determined (gateway unreachable). Computed at skill-detail time; never
+    gates the skill. Default ``None`` so ``materialise()`` (which doesn't set
+    it) leaves it for the endpoint to fill."""
     content_yaml: str
     content_md: str
     reference_files: list[SkillFile] = Field(default_factory=list)
@@ -399,6 +414,7 @@ def derive_summary(
         minimum_inference_tier=lq.minimum_inference_tier,
         ensemble_verification=lq.ensemble_verification,
         output_format=lq.output_format,
+        tool_usage=lq.tool_usage,
     )
 
 
