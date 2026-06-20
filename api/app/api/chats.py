@@ -67,7 +67,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 # `trace` is for add_event() on the active span; spans use app.observability_helpers.
 from opentelemetry import trace
 from pydantic import BaseModel, ValidationError as PydanticValidationError
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import ActiveUser
@@ -1757,29 +1757,57 @@ async def resume_tool_call(
             },
         ) from exc
 
-    # Load the pending row owner-scoped (id-probing-safe).
-    pending = (
-        await db.execute(
-            select(ChatPendingToolCall).where(
-                ChatPendingToolCall.id == pid,
-                ChatPendingToolCall.chat_id == cid,
-                ChatPendingToolCall.user_id == user.id,
-            )
-        )
-    ).scalar_one_or_none()
-    if pending is None:
-        raise NotFound("pending tool-call not found", details={"pending_call_id": pending_call_id})
-    if pending.status != "pending":
-        raise Conflict("tool-call already resolved")
+    # Atomically claim the pending row — single-use gate, concurrency-safe.
+    #
+    # Under PostgreSQL READ COMMITTED, an uncommitted UPDATE is invisible to
+    # a concurrent transaction, so two simultaneous approve POSTs would BOTH
+    # read status="pending" if we used SELECT-then-flush.  Instead, we use a
+    # conditional UPDATE with WHERE status='pending' AND expires_at >= now and
+    # commit the status flip BEFORE doing any tool work.  Only ONE concurrent
+    # caller can win the DB-side atomic claim; the other gets claimed_id=None.
     now = datetime.now(UTC)
-    if pending.expires_at < now:
-        pending.status = "resolved"
-        await db.commit()
-        raise Conflict("tool-call confirmation expired")
+    claim = await db.execute(
+        update(ChatPendingToolCall)
+        .where(
+            ChatPendingToolCall.id == pid,
+            ChatPendingToolCall.chat_id == cid,
+            ChatPendingToolCall.user_id == user.id,
+            ChatPendingToolCall.status == "pending",
+            ChatPendingToolCall.expires_at >= now,
+        )
+        .values(status="resolved", updated_at=now)
+        .returning(ChatPendingToolCall.id)
+    )
+    claimed_id = claim.scalar_one_or_none()
+    # Durably commit the claim BEFORE any tool execution / gateway call.
+    await db.commit()
 
-    # Mark resolved BEFORE doing work — single-use gate.
-    pending.status = "resolved"
-    await db.flush()
+    if claimed_id is None:
+        # Did not win the claim — disambiguate 404 vs 409.
+        # Owner-scoped follow-up SELECT: if the row exists it was either
+        # already-resolved or expired (409); if it does not exist at all
+        # (unknown id or non-owner) → 404 (id-probing-safe).
+        check = (
+            await db.execute(
+                select(ChatPendingToolCall).where(
+                    ChatPendingToolCall.id == pid,
+                    ChatPendingToolCall.chat_id == cid,
+                    ChatPendingToolCall.user_id == user.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if check is None:
+            raise NotFound(
+                "pending tool-call not found", details={"pending_call_id": pending_call_id}
+            )
+        # Row exists but was non-pending or expired → conflict.
+        raise Conflict("tool-call already resolved or expired")
+
+    # We won the claim — re-load the full row (now status="resolved") to get
+    # resume_state, tool_call_args, function_name, provider, tool, etc.
+    pending = (
+        await db.execute(select(ChatPendingToolCall).where(ChatPendingToolCall.id == claimed_id))
+    ).scalar_one()
 
     # Extract resume state.
     resume_state: dict = pending.resume_state
@@ -1839,6 +1867,15 @@ async def resume_tool_call(
                     server_auth_map = {}
 
                 # Execute the pending tool call.
+                #
+                # Two-row audit model:
+                # - Gate row (pending.tool_call_log_id): the confirmation-request
+                #   lifecycle record (pending_confirmation → approved | denied).
+                #   Its outcome stays as-is; we only flip confirmation_state.
+                # - Execute_tool row (written inside governed_tool_invocation):
+                #   the actual approved execution, stamped confirmation_state=
+                #   "approved" / outcome="executed".  This is the authoritative
+                #   record that the tool ran with user approval.
                 try:
                     result = await execute_tool(
                         db,
@@ -1851,13 +1888,19 @@ async def resume_tool_call(
                         assistant_message_id=assistant_message_id,
                         chat_id=cid,
                         request_id=request_id,
+                        confirmation_state="approved",
                     )
-                    # Update the gate ToolCallLog to approved.
+                    # Update the gate row's confirmation_state to "approved"
+                    # (the confirmation-REQUEST lifecycle: pending_confirmation →
+                    # approved).  We do NOT set outcome="executed" here — that
+                    # would misrepresent the gate row as the execution record.
+                    # The execution record is the separate row written above by
+                    # governed_tool_invocation with confirmation_state="approved"
+                    # and outcome="executed".
                     if pending.tool_call_log_id is not None:
                         gate_tcl = await db.get(ToolCallLog, pending.tool_call_log_id)
                         if gate_tcl is not None:
                             gate_tcl.confirmation_state = "approved"
-                            gate_tcl.outcome = "executed"
                             await db.flush()
 
                     # Build the tool result message with a synthetic tc_id.

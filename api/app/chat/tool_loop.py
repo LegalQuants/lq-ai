@@ -280,6 +280,7 @@ async def execute_tool(
     assistant_message_id: UUID,
     chat_id: UUID | None = None,
     request_id: str | None = None,
+    confirmation_state: str = "not_required",
 ) -> ToolResult:
     """Execute a single approved read_only tool call through the governance substrate.
 
@@ -299,6 +300,13 @@ async def execute_tool(
         assistant_message_id: The chat message id for the audit row.
         chat_id: Chat id for the audit row (optional).
         request_id: Correlation header value (optional).
+        confirmation_state: Human-gate lifecycle label written to the
+            ``tool_call_log`` row.  Default ``"not_required"`` preserves
+            all existing callers (the loop's read_only inline path).
+            Pass ``"approved"`` from the resume route's approve path so
+            the EXECUTING audit row is stamped ``approved``/``executed``
+            (separate from the gate row, which is the confirmation-request
+            lifecycle record).
 
     Returns:
         :class:`~app.autonomous.guard.ToolResult` on success.
@@ -332,7 +340,7 @@ async def execute_tool(
         estimated_cost=estimated_cost,
         dispatch=_dispatch,
         span=None,  # OTel for chat tool-path is a follow-on DE
-        confirmation_state="not_required",
+        confirmation_state=confirmation_state,
         user_id=user.id,
         chat_id=chat_id,
         message_id=assistant_message_id,

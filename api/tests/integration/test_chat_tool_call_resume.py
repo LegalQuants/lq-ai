@@ -289,9 +289,7 @@ async def test_approve_executes_tool_and_streams_loop_final(
 
     # Assert pending row is resolved.
     await db_session.refresh(
-
-            await db_session.get(ChatPendingToolCall, pending_id)  # type: ignore[arg-type]
-
+        await db_session.get(ChatPendingToolCall, pending_id)  # type: ignore[arg-type]
     )
     pending_row = await db_session.get(ChatPendingToolCall, pending_id)
     assert pending_row is not None
@@ -521,3 +519,247 @@ async def test_unknown_pending_call_id_returns_404(
     body = resp.json()
     assert "detail" in body
     assert body["detail"]["code"] == "not_found"
+
+
+# ---------------------------------------------------------------------------
+# (g) C1: already-resolved row returns 409 WITHOUT executing the tool
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_already_resolved_does_not_execute_tool(
+    client: AsyncClient,
+    db_user: User,
+    db_session: AsyncSession,
+) -> None:
+    """A replay POST on an already-resolved row must return 409 and never call execute_tool.
+
+    This verifies the atomic claim gate: once a row is resolved, a second
+    POST claiming the same row should lose the conditional UPDATE and return
+    409 without executing the destructive tool.
+    """
+    chat_id, pending_id, _ = await _create_chat_and_pending(
+        db_session,
+        user=db_user,
+        client=client,
+        status="resolved",
+    )
+
+    execute_tool_mock = AsyncMock()
+
+    # The handler imports execute_tool via `from app.chat.tool_loop import execute_tool`
+    # inside _generate(); patch at the source module so the local reference is replaced.
+    with patch("app.chat.tool_loop.execute_tool", new=execute_tool_mock):
+        resp = await client.post(
+            f"/api/v1/chats/{chat_id}/tool-calls/{pending_id}",
+            headers=_h(db_user),
+            json={"decision": "approve"},
+        )
+
+    assert resp.status_code == 409, resp.text
+    # execute_tool must NEVER be called when the claim fails (the atomic gate rejected it)
+    execute_tool_mock.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# (h) C1: claim is committed before execute_tool is called — verified via DB read
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_claim_committed_before_execute_tool(
+    client: AsyncClient,
+    db_user: User,
+    db_session: AsyncSession,
+) -> None:
+    """On approve, the pending row must be status='resolved' in the DB
+    (committed, not just flushed) before execute_tool begins execution.
+
+    Strategy: intercept execute_tool at app.api.chats (the bound name from the
+    handler-level 'from app.chat.tool_loop import execute_tool') and have it
+    inspect the row's status through the SAME db session that the handler uses.
+    The handler committed before calling execute_tool, so the session should
+    see status='resolved' on a fresh get().
+    """
+    chat_id, pending_id, _assistant_message_id = await _create_chat_and_pending(
+        db_session, user=db_user, client=client
+    )
+
+    status_at_execute: list[str] = []
+
+    # We capture the db argument passed to execute_tool (the handler's session).
+    # After db.commit() the session's identity map is updated, so db.get() returns
+    # the committed state.
+    async def _capture_and_succeed(db: AsyncSession, *args: object, **kwargs: object) -> ToolResult:
+        row = await db.get(ChatPendingToolCall, pending_id)
+        if row is not None:
+            status_at_execute.append(row.status)
+        return ToolResult(cost_usd=Decimal("0"), data={"ok": True}, outcome="success")
+
+    spec = _make_tool_spec()
+    loop_final = LoopFinal(
+        text="Done.",
+        usage_prompt=10,
+        usage_completion=5,
+        tier=2,
+        provider="anthropic-prod",
+        model="claude-sonnet-4-6",
+        applied_skills=[],
+        calls_used=1,
+    )
+    non_empty_allowlist = ChatToolAllowlist(specs={spec.function_name: spec})
+
+    # Patch the name as imported by the handler module (function-level import
+    # 'from app.chat.tool_loop import execute_tool' runs at call time, so patching
+    # the source attribute covers it).
+    with (
+        patch(
+            "app.api.chats.assemble_allowlist",
+            new=AsyncMock(return_value=non_empty_allowlist),
+        ),
+        patch(
+            "app.chat.tool_loop.execute_tool",
+            new=AsyncMock(side_effect=_capture_and_succeed),
+        ),
+        patch(
+            "app.api.chats.run_chat_tool_loop",
+            new=AsyncMock(return_value=loop_final),
+        ),
+    ):
+        resp = await client.post(
+            f"/api/v1/chats/{chat_id}/tool-calls/{pending_id}",
+            headers=_h(db_user),
+            json={"decision": "approve"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    # The status observed inside execute_tool must already be 'resolved' (committed)
+    assert status_at_execute, "execute_tool was not called — test setup issue"
+    assert status_at_execute[0] == "resolved", (
+        f"Claim was not committed before execute_tool: status was {status_at_execute[0]!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# (i) I1: approve path writes EXECUTING tool_call_log row with confirmation_state=approved
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_approve_executing_audit_row_has_approved_confirmation_state(
+    client: AsyncClient,
+    db_user: User,
+    db_session: AsyncSession,
+) -> None:
+    """On approve, the EXECUTING tool_call_log row written by governed_tool_invocation
+    must have confirmation_state='approved' and outcome='executed'.
+
+    Two-row audit model:
+    - Gate row (pending.tool_call_log_id): the confirmation-request lifecycle
+      record (pending_confirmation → approved).  confirmation_state='approved',
+      but outcome is NOT 'executed' (it is the gate record, not the execution).
+    - Execution row: written by execute_tool → governed_tool_invocation with
+      confirmation_state='approved' and outcome='executed'.
+    """
+    chat_id, pending_id, _assistant_msg_id = await _create_chat_and_pending(
+        db_session, user=db_user, client=client
+    )
+
+    # Reload the pending row to get its gate tool_call_log_id.
+    pending_row = await db_session.get(ChatPendingToolCall, pending_id)
+    assert pending_row is not None
+    gate_tcl_id = pending_row.tool_call_log_id
+    assert gate_tcl_id is not None
+
+    spec = _make_tool_spec()
+    loop_final = LoopFinal(
+        text="Executed successfully.",
+        usage_prompt=10,
+        usage_completion=5,
+        tier=2,
+        provider="anthropic-prod",
+        model="claude-sonnet-4-6",
+        applied_skills=[],
+        calls_used=1,
+    )
+    non_empty_allowlist = ChatToolAllowlist(specs={spec.function_name: spec})
+
+    # Use the real execute_tool path (but mock governed_tool_invocation to avoid
+    # actual tool dispatch) so the confirmation_state param flows through correctly.
+    from app.autonomous.guard import ToolResult as _ToolResult
+
+    execute_result = _ToolResult(cost_usd=Decimal("0"), data={"ok": True}, outcome="success")
+
+    captured_kwargs: list[dict] = []
+
+    async def _fake_gov(db: object, *args: object, **kwargs: object) -> _ToolResult:
+        captured_kwargs.append(dict(kwargs))
+        return execute_result
+
+    with (
+        patch(
+            "app.api.chats.assemble_allowlist",
+            new=AsyncMock(return_value=non_empty_allowlist),
+        ),
+        patch(
+            "app.api.chats.run_chat_tool_loop",
+            new=AsyncMock(return_value=loop_final),
+        ),
+        # Patch governed_tool_invocation at the name bound in tool_loop (the
+        # from-import: 'from app.tools.governance import governed_tool_invocation').
+        patch(
+            "app.chat.tool_loop.governed_tool_invocation",
+            new=AsyncMock(side_effect=_fake_gov),
+        ),
+        # Also patch resolve_provider_tier to avoid gateway calls.
+        patch(
+            "app.chat.tool_loop.resolve_provider_tier",
+            new=AsyncMock(return_value=2),
+        ),
+        # patch estimate_tool_cost to avoid DB/gateway calls.
+        patch(
+            "app.chat.tool_loop.estimate_tool_cost",
+            new=AsyncMock(return_value=Decimal("0")),
+        ),
+        # patch list_servers to avoid gateway calls.
+        patch(
+            "app.mcp.service.list_servers",
+            new=AsyncMock(return_value=[]),
+        ),
+    ):
+        resp = await client.post(
+            f"/api/v1/chats/{chat_id}/tool-calls/{pending_id}",
+            headers=_h(db_user),
+            json={"decision": "approve"},
+        )
+
+    assert resp.status_code == 200, resp.text
+
+    # governed_tool_invocation must have been called with confirmation_state="approved"
+    assert captured_kwargs, "governed_tool_invocation was never called"
+    got_state = captured_kwargs[0].get("confirmation_state", "MISSING")
+    assert got_state == "approved", (
+        f"Expected confirmation_state='approved' passed to governed_tool_invocation, "
+        f"got {got_state!r}"
+    )
+
+    # The gate row must have confirmation_state="approved" but NOT outcome="executed".
+    # (The gate row is the confirmation-request lifecycle record; only the execution
+    # row — written by governed_tool_invocation — carries outcome="executed".)
+    gate_row = await db_session.get(ToolCallLog, gate_tcl_id)
+    assert gate_row is not None
+    db_session.expire(gate_row)
+    gate_row = await db_session.get(ToolCallLog, gate_tcl_id)
+    assert gate_row is not None
+    assert gate_row.confirmation_state == "approved", (
+        f"Gate row confirmation_state expected 'approved', got {gate_row.confirmation_state!r}"
+    )
+    # Gate row outcome must NOT be "executed" — it is the confirmation-request record,
+    # not the execution record.
+    assert gate_row.outcome != "executed", (
+        f"Gate row must not have outcome='executed' (it is the confirmation-request record, "
+        f"not the execution record); got outcome={gate_row.outcome!r}"
+    )
