@@ -80,6 +80,7 @@ class LoopFinal:
     applied_skills: list[str] | None = None
     messages: list[dict[str, Any]] = field(default_factory=list)
     calls_used: int = 0
+    tool_sources: list[ToolSourceRecord] = field(default_factory=list)
 
 
 @dataclass
@@ -120,6 +121,21 @@ class LoopMcpAuth:
 
 LoopOutcome = LoopFinal | LoopConfirmation | LoopMcpAuth
 
+_COURTLISTENER_BASE = "https://www.courtlistener.com"
+
+
+@dataclass
+class ToolSourceRecord:
+    """One external source (a case-law cluster) a research tool returned this turn."""
+
+    source_kind: str
+    label: str
+    subtitle: str | None
+    url: str | None
+    external_ref: str | None
+    provider: str
+    tool: str
+
 
 # ---------------------------------------------------------------------------
 # tool_result_message helper
@@ -148,6 +164,64 @@ def _tool_error_message(tool_call_id: str, error: str) -> dict[str, Any]:
         "tool_call_id": tool_call_id,
         "content": json.dumps({"error": error}),
     }
+
+
+# ---------------------------------------------------------------------------
+# Retrieval-provenance extraction (PR6c)
+# ---------------------------------------------------------------------------
+
+
+def _absolutize_cl_url(url: str | None) -> str | None:
+    if not url:
+        return None
+    if url.startswith("http://") or url.startswith("https://"):
+        return url
+    return f"{_COURTLISTENER_BASE}{url}"
+
+
+def _cluster_record(cluster: dict[str, Any], tool: str) -> ToolSourceRecord | None:
+    """Map a CourtListener cluster dict → a ToolSourceRecord (None if no identity)."""
+    cluster_id = cluster.get("cluster_id")
+    case_name = cluster.get("case_name")
+    if cluster_id is None and not case_name:
+        return None
+    court = cluster.get("court")
+    date_filed = cluster.get("date_filed")
+    subtitle_parts = [p for p in (court, date_filed) if p]
+    return ToolSourceRecord(
+        source_kind="caselaw",
+        label=case_name or f"Cluster {cluster_id}",
+        subtitle=" · ".join(subtitle_parts) if subtitle_parts else None,
+        url=_absolutize_cl_url(cluster.get("absolute_url")),
+        external_ref=str(cluster_id) if cluster_id is not None else None,
+        provider="courtlistener",
+        tool=tool,
+    )
+
+
+def extract_tool_sources(tool_name: str, data: Any) -> list[ToolSourceRecord]:
+    """Map a research tool's structured result into retrieval-provenance records.
+
+    Only ``search_case_law`` (each returned cluster) and ``get_cluster`` (the one
+    cluster) carry full case identity, so only they produce sources. All other
+    tools (read_opinion / find_in_case / verify_citations / MCP) → ``[]``.
+    """
+    if not isinstance(data, dict):
+        return []
+    out: list[ToolSourceRecord] = []
+    if tool_name == "search_case_law":
+        for item in data.get("results", []) or []:
+            if isinstance(item, dict):
+                rec = _cluster_record(item, tool_name)
+                if rec is not None:
+                    out.append(rec)
+    elif tool_name == "get_cluster":
+        cluster = data.get("cluster")
+        if isinstance(cluster, dict):
+            rec = _cluster_record(cluster, tool_name)
+            if rec is not None:
+                out.append(rec)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -429,6 +503,10 @@ async def run_chat_tool_loop(
         m.model_dump(exclude_none=True) for m in base_request.messages
     ]
 
+    # PR6c — retrieval-provenance: accumulate case-law sources across all rounds.
+    collected_sources: list[ToolSourceRecord] = []
+    _seen_source_refs: set[str] = set()
+
     while True:
         # ── Check cap BEFORE calling gateway ─────────────────────────────────
         # When the cap is already reached (e.g. resuming from a confirmed
@@ -439,7 +517,7 @@ async def run_chat_tool_loop(
                 _build_request(base_request, messages, tools=None, tool_choice="none"),
                 request_id=request_id,
             )
-            return _build_loop_final(final_resp, messages, calls_used)
+            return _build_loop_final(final_resp, messages, calls_used, collected_sources)
 
         # ── Build this round's request with tools ──────────────────────────
         round_request = _build_request(
@@ -456,7 +534,7 @@ async def run_chat_tool_loop(
 
         # ── Terminal: no tool calls ──────────────────────────────────────────
         if finish_reason != "tool_calls" or not msg.tool_calls:
-            return _build_loop_final(resp, messages, calls_used)
+            return _build_loop_final(resp, messages, calls_used, collected_sources)
 
         # ── Process tool calls in this round ─────────────────────────────────
         # The assistant message (with its tool_calls) goes into the working
@@ -523,6 +601,12 @@ async def run_chat_tool_loop(
                     request_id=request_id,
                 )
                 tool_result_msgs.append(tool_result_message(tc_id, result))
+                # PR6c — retrieval-provenance: record case-law sources this call surfaced.
+                for rec in extract_tool_sources(spec.tool, result.data):
+                    if rec.external_ref is None or rec.external_ref not in _seen_source_refs:
+                        if rec.external_ref is not None:
+                            _seen_source_refs.add(rec.external_ref)
+                        collected_sources.append(rec)
             except MCPAuthorizationRequired:
                 return LoopMcpAuth(
                     server=spec.provider,
@@ -566,7 +650,7 @@ async def run_chat_tool_loop(
                 _build_request(base_request, messages, tools=None, tool_choice="none"),
                 request_id=request_id,
             )
-            return _build_loop_final(final_resp, messages, calls_used)
+            return _build_loop_final(final_resp, messages, calls_used, collected_sources)
 
         # ── Cap check AFTER incrementing ─────────────────────────────────
         if calls_used >= settings.chat_tool_call_cap:
@@ -574,7 +658,7 @@ async def run_chat_tool_loop(
                 _build_request(base_request, messages, tools=None, tool_choice="none"),
                 request_id=request_id,
             )
-            return _build_loop_final(final_resp, messages, calls_used)
+            return _build_loop_final(final_resp, messages, calls_used, collected_sources)
 
 
 # ---------------------------------------------------------------------------
@@ -613,6 +697,7 @@ def _build_loop_final(
     resp: Any,
     messages: list[dict[str, Any]],
     calls_used: int,
+    tool_sources: list[ToolSourceRecord] | None = None,
 ) -> LoopFinal:
     """Build a :class:`LoopFinal` from a gateway response."""
     choice = resp.choices[0]
@@ -627,4 +712,5 @@ def _build_loop_final(
         applied_skills=resp.lq_ai_applied_skills,
         messages=messages,
         calls_used=calls_used,
+        tool_sources=tool_sources or [],
     )
