@@ -834,8 +834,10 @@
 					tokens travel in a header and are never logged; and a destructive tool pauses for your explicit
 					approval. Step through the flow, then flip any guardrail off to see the boundary refuse, prompt,
 					or pause. <strong>Available today:</strong> the governed backend tool-loop, egress boundary,
-					per-user OAuth, audit, and the confirmation-gate protocol. <strong>Coming next:</strong> the
-					in-chat confirmation and connect prompts that render this gate inside the chat.
+					per-user OAuth, audit, the confirmation-gate protocol, and the in-chat confirmation and connect
+					prompts that render this gate inside the chat. <strong>Coming next:</strong> rich case-law
+					provenance — source-kinded citations with provenance pills for the external sources a tool call
+					pulled in.
 				</p>
 				<div class="lq-playground-wrap">
 					<iframe
