@@ -11,6 +11,7 @@ export * as projectsApi from './projects';
 export * as chatsApi from './chats';
 export * as messagesApi from './messages';
 export * as citationsApi from './citations';
+export * as sourcesApi from './sources';
 export * as skillsApi from './skills';
 export * as filesApi from './files';
 export * as knowledgeBasesApi from './knowledgeBases';

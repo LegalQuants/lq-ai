@@ -74,7 +74,13 @@ from app.api.dependencies import ActiveUser
 from app.api.skills import _resolve_skill_for_user
 from app.audit import audit_action
 from app.autonomous.guard import _args_digest
-from app.chat.tool_loop import LoopConfirmation, LoopFinal, LoopMcpAuth, run_chat_tool_loop
+from app.chat.tool_loop import (
+    LoopConfirmation,
+    LoopFinal,
+    LoopMcpAuth,
+    ToolSourceRecord,
+    run_chat_tool_loop,
+)
 from app.chat.tool_schemas import ChatToolAllowlist, assemble_allowlist
 from app.citation import extract_citations, verify
 from app.citation.cost import estimate_judge_call_cost_usd
@@ -90,6 +96,7 @@ from app.models.document import Document
 from app.models.file import File
 from app.models.inference import InferenceRoutingLog
 from app.models.knowledge import KnowledgeBase
+from app.models.message_tool_source import MessageToolSource
 from app.models.project import Project
 from app.models.project_knowledge_base import ProjectKnowledgeBase
 from app.models.tool_call_log import ToolCallLog
@@ -1697,6 +1704,60 @@ async def get_citations(
     ]
 
 
+@router.get(
+    "/{chat_id}/messages/{message_id}/sources",
+    summary="Get external-source provenance (case law consulted) for a message (PR6c)",
+)
+async def get_message_sources(
+    chat_id: str,
+    message_id: str,
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> list[dict[str, Any]]:
+    """Return the external sources (case-law clusters) a message's turn consulted.
+
+    Retrieval-provenance from ``message_tool_sources`` — "sources consulted,"
+    distinct from the verified quote rows of ``message_citations``. Returns ``[]``
+    for a turn that consulted nothing; 404 when the message doesn't exist in the
+    chat. Chat ownership enforced as in :func:`get_citations`.
+    """
+    cid = _validate_chat_id(chat_id)
+    try:
+        mid = uuid.UUID(message_id)
+    except ValueError as exc:
+        raise ValidationError(
+            "message_id must be a UUID", details={"message_id": message_id}
+        ) from exc
+
+    await _load_visible_chat(db, cid, user.id, include_archived=True)
+
+    msg_stmt = select(Message.id).where(Message.id == mid, Message.chat_id == cid)
+    if (await db.execute(msg_stmt)).scalar_one_or_none() is None:
+        raise NotFound(f"Message {mid} not found.", details={"message_id": str(mid)})
+
+    src_stmt = (
+        select(MessageToolSource)
+        .where(MessageToolSource.message_id == mid)
+        .order_by(MessageToolSource.created_at, MessageToolSource.id)
+    )
+    rows = (await db.execute(src_stmt)).scalars().all()
+    return [
+        {
+            "id": str(s.id),
+            "message_id": str(s.message_id),
+            "source_kind": s.source_kind,
+            "label": s.label,
+            "subtitle": s.subtitle,
+            "url": s.url,
+            "external_ref": s.external_ref,
+            "provider": s.provider,
+            "tool": s.tool,
+            "created_at": s.created_at.isoformat(),
+        }
+        for s in rows
+    ]
+
+
 # ---------------------------------------------------------------------------
 # PR5b Task 7 — resume pending tool-call gate
 # ---------------------------------------------------------------------------
@@ -2546,6 +2607,38 @@ async def _persist_message_citations(
     )
 
 
+async def _persist_message_tool_sources(
+    db: AsyncSession,
+    *,
+    message_id: uuid.UUID,
+    records: list[ToolSourceRecord],
+) -> None:
+    """Persist retrieval-provenance rows for the external sources a turn consulted.
+
+    Runs after :func:`_persist_assistant_message` (so ``message_id`` is a real FK
+    target). No-op when ``records`` is empty. Retrieval-provenance only — these
+    rows are NOT verified (contrast ``message_citations``).
+    """
+    if not records:
+        return
+    db.add_all(
+        [
+            MessageToolSource(
+                message_id=message_id,
+                source_kind=r.source_kind,
+                label=r.label,
+                subtitle=r.subtitle,
+                url=r.url,
+                external_ref=r.external_ref,
+                provider=r.provider,
+                tool=r.tool,
+            )
+            for r in records
+        ]
+    )
+    await db.flush()
+
+
 async def _persist_assistant_message(
     db: AsyncSession,
     *,
@@ -2756,6 +2849,9 @@ async def _non_streaming_response(
                 project_ensemble_verification=project_ensemble_verification,
                 skill_registry=_skill_registry_from_request(http_request),
             )
+            await _persist_message_tool_sources(
+                db, message_id=assistant_message_id, records=outcome.tool_sources
+            )
             await _audit_message_sent(
                 db,
                 user=user,
@@ -2965,6 +3061,7 @@ async def _non_streaming_response(
         project_ensemble_verification=project_ensemble_verification,
         skill_registry=_skill_registry_from_request(http_request),
     )
+    await _persist_message_tool_sources(db, message_id=assistant_message_id, records=[])
 
     await _audit_message_sent(
         db,
@@ -3036,6 +3133,7 @@ async def _stream_response(
         last_applied_skills: list[str] | None = None
         prompt_tokens: int | None = None
         completion_tokens: int | None = None
+        loop_outcome: LoopFinal | LoopConfirmation | LoopMcpAuth | None = None
         error_code: str | None = None
         error_envelope: dict[str, Any] | None = None
 
@@ -3051,7 +3149,6 @@ async def _stream_response(
         # ── PR5b Task 6: tool-loop branch ─────────────────────────────────────
         if allowlist is not None and allowlist.specs:
             # Non-empty allowlist → agentic loop (non-streaming internally).
-            loop_outcome = None
             try:
                 loop_outcome = await run_chat_tool_loop(
                     db,
@@ -3293,6 +3390,13 @@ async def _stream_response(
                         applied_skills=last_applied_skills,
                         project_ensemble_verification=project_ensemble_verification,
                         skill_registry=_skill_registry_from_request(http_request),
+                    )
+                    await _persist_message_tool_sources(
+                        db,
+                        message_id=assistant_message_id,
+                        records=loop_outcome.tool_sources
+                        if isinstance(loop_outcome, LoopFinal)
+                        else [],
                     )
                 except Exception as cite_exc:
                     log.warning(

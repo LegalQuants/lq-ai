@@ -18,10 +18,10 @@
 	import { marked } from 'marked';
 
 	import { captureAffordanceInline } from '$lib/lq-ai/preferences/capture-affordance';
-	import { citationsApi, LQAIApiError } from '$lib/lq-ai/api';
+	import { citationsApi, sourcesApi, LQAIApiError } from '$lib/lq-ai/api';
 	import { decorateCitationsInline } from '$lib/lq-ai/citations/decorate-inline';
 
-	import type { Citation, Message } from '../types';
+	import type { Citation, Message, ToolSource } from '../types';
 	import AppliedSkillsChip from './AppliedSkillsChip.svelte';
 	import CaptureSkillModal from './CaptureSkillModal.svelte';
 	import EnhancedDiffModal from './EnhancedDiffModal.svelte';
@@ -32,6 +32,7 @@
 	import TierBadge from './TierBadge.svelte';
 	import TierDetailsPanel from './TierDetailsPanel.svelte';
 	import ToolGatePrompt from './ToolGatePrompt.svelte';
+	import ToolSourcesPanel, { sourcesPillLabel } from './ToolSourcesPanel.svelte';
 	import type { PendingGate } from '../chat/toolGate';
 
 	export let message: Message;
@@ -123,6 +124,41 @@
 		!citationFetchInflight
 	) {
 		void loadCitations(message.chat_id, message.id);
+	}
+
+	// PR6c — Tool-source provenance. Lazy-fetch per-message sources from
+	// `GET /messages/{id}/sources` once the assistant message has finished
+	// streaming (mirrors the citations lazy-fetch above). `fetchedSources === null`
+	// means "not yet fetched"; `[]` means "fetched, no rows".
+	let fetchedSources: ToolSource[] | null = null;
+	let sourcesFetchInflight = false;
+
+	async function loadSources(chatId: string, messageId: string): Promise<void> {
+		sourcesFetchInflight = true;
+		try {
+			fetchedSources = await sourcesApi.getMessageSources(chatId, messageId);
+		} catch (err) {
+			// Degrade gracefully — a 404 means no tool-source rows for this
+			// message (non-caselaw turns, pre-PR6c history). Anything else is
+			// logged but the bubble keeps rendering its content cleanly.
+			if (!(err instanceof LQAIApiError) || err.status !== 404) {
+				console.warn('[PR6c] failed to load tool sources', err);
+			}
+			fetchedSources = [];
+		} finally {
+			sourcesFetchInflight = false;
+		}
+	}
+
+	$: if (
+		message.role === 'assistant' &&
+		message.id &&
+		message.chat_id &&
+		!isStreaming &&
+		fetchedSources === null &&
+		!sourcesFetchInflight
+	) {
+		void loadSources(message.chat_id, message.id);
 	}
 
 	$: bubbleClasses =
@@ -223,6 +259,9 @@
 					appliedSkills={message.applied_skills ?? []}
 					onSkillClicked={onAppliedSkillClicked}
 				/>
+				{#if fetchedSources && fetchedSources.length > 0}
+					<ProvenancePill kind="caselaw" summary={sourcesPillLabel(fetchedSources.length)} />
+				{/if}
 			</div>
 			<div class="flex items-center gap-1">
 				{#if $captureAffordanceInline}
@@ -294,6 +333,10 @@
 					messageContent={message.content}
 				/>
 			</div>
+		{/if}
+
+		{#if fetchedSources && fetchedSources.length > 0}
+			<ToolSourcesPanel sources={fetchedSources} />
 		{/if}
 	{/if}
 </div>

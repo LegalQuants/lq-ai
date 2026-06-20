@@ -28,6 +28,7 @@ from app.models.inference import InferenceRoutingLog
 from app.models.knowledge import KnowledgeBase, KnowledgeBaseFile
 from app.models.mcp import MCPToolCache
 from app.models.mcp_oauth import MCPOAuthState, MCPOAuthToken
+from app.models.message_tool_source import MessageToolSource
 from app.models.organization_profile import OrganizationProfile
 from app.models.playbook import Playbook, PlaybookExecution, PlaybookPosition
 from app.models.project import Project, ProjectFile, ProjectSkill
@@ -65,6 +66,7 @@ __all__ = [
     "MCPOAuthToken",
     "MCPToolCache",
     "Message",
+    "MessageToolSource",
     "OrganizationProfile",
     "Playbook",
     "PlaybookExecution",

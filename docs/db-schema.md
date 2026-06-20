@@ -478,6 +478,45 @@ Candidates that fail Stage 1 are dropped (not persisted) until later
 stages ship; the M2-C2 UI work decides what to render for "model
 emitted but we couldn't verify."
 
+### `message_tool_sources` (migration 0055, PR6c)
+
+One row per external source (e.g. a CourtListener case-law cluster) that a
+research tool *returned* during an assistant turn. This is
+**retrieval-provenance** — "sources consulted" — and is deliberately distinct
+from `message_citations` (which is byte-offset quote-verification against
+uploaded documents). PR6c scope: `source_kind='caselaw'` only; generic MCP
+result provenance is deferred to DE-360.
+
+```sql
+CREATE TABLE message_tool_sources (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    message_id   UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,  -- fk_message_tool_sources_message
+    source_kind  VARCHAR(32) NOT NULL,   -- 'caselaw' in PR6c
+    label        TEXT NOT NULL,          -- display name, e.g. "Roe v. Wade"
+    subtitle     TEXT,                   -- e.g. "scotus · 1973-01-22"
+    url          TEXT,                   -- canonical URL (CourtListener permalink)
+    external_ref TEXT,                   -- provider's opaque identifier (e.g. cluster id)
+    provider     VARCHAR(64) NOT NULL,   -- e.g. 'courtlistener'
+    tool         VARCHAR(64) NOT NULL,   -- tool name that returned this source, e.g. 'search_case_law'
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX ix_message_tool_sources_message_id ON message_tool_sources(message_id);
+```
+
+**Contrast with `message_citations`:**
+
+| Concern | `message_citations` | `message_tool_sources` |
+|---|---|---|
+| What it records | Quote extracted from assistant response, byte-matched against uploaded document | External source a research tool returned during a turn |
+| Input | Uploaded documents (KB / project files) | External provider APIs (CourtListener, etc.) |
+| Verification | Byte-offset exact-match → tolerant → LLM judge | None — provenance only |
+| Granularity | Byte span within a document chunk | One row per returned source cluster |
+| Scope | M2+ (all document types) | PR6c (case-law); DE-360 for generic MCP |
+
+The `(message_id)` index supports the per-turn sources fetch used by the
+sources endpoint (Task 4) and the frontend citation rail (Task 5).
+
 ### `enhance_prompt_interactions` (migration 0015)
 
 One row per Enhance Prompt (⌘E) invocation. Records the raw input, the

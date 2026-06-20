@@ -1038,6 +1038,40 @@ paths:
                 type: array
                 items: {$ref: '#/components/schemas/Citation'}
 
+  /api/v1/chats/{chat_id}/messages/{message_id}/sources:
+    parameters:
+      - name: chat_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: message_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      tags: [messages]
+      summary: Get external-source provenance (case law consulted) for a message (PR6c)
+      responses:
+        '200':
+          description: External sources consulted during the message turn
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: {type: string, format: uuid}
+                    message_id: {type: string, format: uuid}
+                    source_kind: {type: string}
+                    label: {type: string}
+                    subtitle: {type: string, nullable: true}
+                    url: {type: string, nullable: true}
+                    external_ref: {type: string, nullable: true}
+                    provider: {type: string}
+                    tool: {type: string}
+                    created_at: {type: string, format: date-time}
+
   # ----------- SKILLS -----------
   /api/v1/skills:
     get:
