@@ -1704,6 +1704,60 @@ async def get_citations(
     ]
 
 
+@router.get(
+    "/{chat_id}/messages/{message_id}/sources",
+    summary="Get external-source provenance (case law consulted) for a message (PR6c)",
+)
+async def get_message_sources(
+    chat_id: str,
+    message_id: str,
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> list[dict[str, Any]]:
+    """Return the external sources (case-law clusters) a message's turn consulted.
+
+    Retrieval-provenance from ``message_tool_sources`` — "sources consulted,"
+    distinct from the verified quote rows of ``message_citations``. Returns ``[]``
+    for a turn that consulted nothing; 404 when the message doesn't exist in the
+    chat. Chat ownership enforced as in :func:`get_citations`.
+    """
+    cid = _validate_chat_id(chat_id)
+    try:
+        mid = uuid.UUID(message_id)
+    except ValueError as exc:
+        raise ValidationError(
+            "message_id must be a UUID", details={"message_id": message_id}
+        ) from exc
+
+    await _load_visible_chat(db, cid, user.id, include_archived=True)
+
+    msg_stmt = select(Message.id).where(Message.id == mid, Message.chat_id == cid)
+    if (await db.execute(msg_stmt)).scalar_one_or_none() is None:
+        raise NotFound(f"Message {mid} not found.", details={"message_id": str(mid)})
+
+    src_stmt = (
+        select(MessageToolSource)
+        .where(MessageToolSource.message_id == mid)
+        .order_by(MessageToolSource.created_at, MessageToolSource.id)
+    )
+    rows = (await db.execute(src_stmt)).scalars().all()
+    return [
+        {
+            "id": str(s.id),
+            "message_id": str(s.message_id),
+            "source_kind": s.source_kind,
+            "label": s.label,
+            "subtitle": s.subtitle,
+            "url": s.url,
+            "external_ref": s.external_ref,
+            "provider": s.provider,
+            "tool": s.tool,
+            "created_at": s.created_at.isoformat(),
+        }
+        for s in rows
+    ]
+
+
 # ---------------------------------------------------------------------------
 # PR5b Task 7 — resume pending tool-call gate
 # ---------------------------------------------------------------------------

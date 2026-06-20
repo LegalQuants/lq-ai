@@ -1,18 +1,46 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import AsyncIterator
 
 import pytest
 import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.clients.gateway import GatewayClient, set_gateway_client
+from app.db.session import get_db
+from app.main import app
 from app.models import MessageToolSource
 from app.models.chat import Chat, Message
 from app.models.user import User
-from app.security import hash_password
+from app.security import create_access_token, hash_password
 
 pytestmark = pytest.mark.integration
+
+GATEWAY_BASE = "http://test-gateway"
+GATEWAY_KEY = "test-gw-key"
+
+
+def _override_get_db(db_session: AsyncSession):
+    async def _override() -> AsyncIterator[AsyncSession]:
+        yield db_session
+
+    return _override
+
+
+@pytest_asyncio.fixture
+async def client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
+    app.dependency_overrides[get_db] = _override_get_db(db_session)
+    gw = GatewayClient(base_url=GATEWAY_BASE, gateway_key=GATEWAY_KEY)
+    set_gateway_client(gw)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+    set_gateway_client(None)
+    await gw.aclose()
+    app.dependency_overrides.pop(get_db, None)
 
 
 @pytest_asyncio.fixture
@@ -110,3 +138,40 @@ async def test_message_tool_source_roundtrips(db_session: AsyncSession, owner_us
     assert got.source_kind == "caselaw"
     assert got.external_ref == "42"
     assert got.created_at is not None
+
+
+@pytest.mark.asyncio
+async def test_get_sources_endpoint(
+    client: AsyncClient, db_session: AsyncSession, owner_user: User
+):
+    chat, msg = await _assistant_message(db_session, owner_user)
+    db_session.add(
+        MessageToolSource(
+            message_id=msg.id,
+            source_kind="caselaw",
+            label="Roe v. Wade",
+            subtitle="scotus · 1973-01-22",
+            url="https://www.courtlistener.com/opinion/42/",
+            external_ref="42",
+            provider="courtlistener",
+            tool="search_case_law",
+        )
+    )
+    await db_session.flush()
+
+    token = create_access_token(user_id=owner_user.id, email=owner_user.email, is_admin=False)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = await client.get(f"/api/v1/chats/{chat.id}/messages/{msg.id}/sources", headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 1
+    assert body[0]["label"] == "Roe v. Wade"
+    assert body[0]["url"] == "https://www.courtlistener.com/opinion/42/"
+    assert body[0]["source_kind"] == "caselaw"
+
+    # Unknown message → 404.
+    resp404 = await client.get(
+        f"/api/v1/chats/{chat.id}/messages/{uuid.uuid4()}/sources", headers=headers
+    )
+    assert resp404.status_code == 404
