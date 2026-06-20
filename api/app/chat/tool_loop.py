@@ -252,6 +252,15 @@ async def execute_mcp_tool(
 
     Shared by the inline read-only path and the confirmation-gate resume path
     (which passes ``confirmation_state="approved"``).
+
+    Known limitation / follow-up (deferred): callers currently pass
+    ``max_allowed_tier=None``, so the api imposes no *extra* per-chat tier
+    ceiling on tool egress — it relies on the gateway's own per-provider
+    ``egress_tier`` + SSRF host-allowlist enforcement, which IS applied to every
+    call (the gateway is the egress boundary). Deriving an api-side ceiling from
+    the chat/skill tier (spec §"Tier ceiling source") is defense-in-depth to add
+    later; it is not a bypass — `governed_tool_invocation` still tier-checks
+    against ``provider_tier`` whenever ``max_allowed_tier`` is non-None.
     """
 
     provider_tier = await resolve_provider_tier(meta.provider, request_id=request_id)
