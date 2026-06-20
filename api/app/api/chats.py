@@ -2125,11 +2125,13 @@ async def _persist_pending_tool_call(
     chat: Chat,
     assistant_message_id: uuid.UUID,
 ) -> dict[str, Any]:
-    """PR5b-ii: persist a human-gated tool call + a placeholder assistant row,
-    and return the ``tool_confirmation_required`` envelope (SSE frame / JSON
-    body). ``_persist_assistant_message`` commits, so the encrypted pending row
-    and the placeholder land in the same transaction. No raw args in the
-    envelope — only the arg key names (``args_summary``)."""
+    """PR5b-ii: persist a human-gated tool call and return the
+    ``tool_confirmation_required`` envelope (SSE frame / JSON body). Commits the
+    encrypted pending row. Does **not** write a placeholder assistant message —
+    the resume path creates the assistant row exactly once when the turn
+    finalizes; writing it here too would duplicate-key on the resume's INSERT
+    (the re-gate / final-save crash this avoids). No raw args in the envelope —
+    only the arg key names (``args_summary``)."""
 
     resume_request = request.model_copy(
         update={
@@ -2152,21 +2154,11 @@ async def _persist_pending_tool_call(
         resume_request=resume_request,
         max_allowed_tier=None,
     )
-    await _persist_assistant_message(
-        db,
-        message_id=assistant_message_id,
-        chat_id=chat.id,
-        content="",
-        requested_model=request.model,
-        routed_provider=None,
-        routed_model=None,
-        routed_inference_tier=None,
-        prompt_tokens=None,
-        completion_tokens=None,
-        cost_estimate_usd=None,
-        applied_skills=[],
-        error_code=None,
-    )
+    # Commit the encrypted pending row. We deliberately do NOT persist a
+    # placeholder assistant message here — the resume path creates that row once
+    # when the turn finalizes; writing it twice violates messages_pkey (the
+    # re-gate / final-save crash this avoids).
+    await db.commit()
     return {
         "type": "tool_confirmation_required",
         "lq_ai_message_id": str(assistant_message_id),

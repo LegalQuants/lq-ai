@@ -228,3 +228,59 @@ async def test_replay_after_resolve_returns_410(
     assert first.status_code == 200
     replay = await client.post(path, json={"decision": "deny"}, headers=headers)
     assert replay.status_code == 410
+
+
+@pytest.mark.integration
+async def test_gate_does_not_write_placeholder_message(
+    db_session: AsyncSession, chat: Chat, db_user: User
+) -> None:
+    """Regression: the gate must NOT persist a placeholder assistant message.
+
+    It used to write a content="" assistant row at gate time; the resume path's
+    re-gate / final-save then tried to INSERT the same message_id again ->
+    ``UniqueViolationError messages_pkey`` (surfaced as a null pending_call_id
+    + a 410 on the next approve). The resume path owns the single message write.
+    """
+
+    from app.api.chats import _persist_pending_tool_call
+    from app.chat.tool_loop import ToolConfirmationRequired
+    from app.models.chat import Message
+
+    assistant_message_id = uuid.uuid4()
+    request = ChatCompletionRequest(
+        model="claude-haiku-4-5",
+        messages=[ChatCompletionMessage(role="user", content="hi")],
+    )
+    exc = ToolConfirmationRequired(
+        provider="deepwiki",
+        tool="ask_question",
+        args={"q": "x"},
+        tool_call_id="call_1",
+        destructive=False,
+        messages_so_far=[ChatCompletionMessage(role="user", content="hi")],
+    )
+
+    info = await _persist_pending_tool_call(
+        db_session,
+        user=db_user,
+        request=request,
+        confirm_exc=exc,
+        chat=chat,
+        assistant_message_id=assistant_message_id,
+    )
+
+    assert info["pending_call_id"]  # a real handle, not None
+    # No placeholder assistant message row — the resume path writes it once.
+    msg = (
+        await db_session.execute(select(Message).where(Message.id == assistant_message_id))
+    ).scalar_one_or_none()
+    assert msg is None
+    # The pending row IS persisted.
+    pending = (
+        await db_session.execute(
+            select(PendingToolCall).where(
+                PendingToolCall.pending_call_id == info["pending_call_id"]
+            )
+        )
+    ).scalar_one_or_none()
+    assert pending is not None
