@@ -2,6 +2,7 @@
 	import { afterUpdate } from 'svelte';
 
 	import type { Message } from '../types';
+	import type { PendingGate } from '../chat/toolGate';
 	import MessageBubble from './MessageBubble.svelte';
 
 	export let messages: Message[] = [];
@@ -22,6 +23,15 @@
 	// not currently persisted — see EnhancedDiffModal docstring). Empty
 	// map is fine: MessageBubble renders a graceful fallback.
 	export let enhancementOriginals: Record<string, string> = {};
+
+	// PR6b — governed tool-loop gate. ChatPanel owns the pending gate + the
+	// resume/connect handlers; MessageList is a pure pass-through, rendering the
+	// gate card only on the assistant message whose turn paused.
+	export let pendingGate: PendingGate | null = null;
+	export let gateBusy = false;
+	export let onGateApprove: () => void = () => {};
+	export let onGateDeny: () => void = () => {};
+	export let onGateConnect: () => void = () => {};
 
 	let scroller: HTMLDivElement;
 
@@ -50,6 +60,11 @@
 			{onRefusalOverrideRequested}
 			{onRefusalExplainerRequested}
 			originalEnhancedPrompt={enhancementOriginals[msg.content]}
+			gateForMessage={pendingGate && pendingGate.assistantId === msg.id ? pendingGate : null}
+			{gateBusy}
+			{onGateApprove}
+			{onGateDeny}
+			{onGateConnect}
 		/>
 	{/each}
 

@@ -1,5 +1,19 @@
 /** Pure helpers for the chat tool-gate UI (PR6b). No Svelte, no network. */
 
+import type {
+	ToolConfirmationRequiredFrame,
+	McpAuthorizationRequiredFrame
+} from '../types';
+
+/**
+ * A paused tool-loop gate, keyed to the assistant message whose turn paused.
+ * Shared across ChatPanel (owner), MessageList (pass-through), and MessageBubble
+ * (renderer) so the shape stays identical at every layer.
+ */
+export type PendingGate =
+	| { assistantId: string; kind: 'confirm'; frame: ToolConfirmationRequiredFrame }
+	| { assistantId: string; kind: 'connect'; frame: McpAuthorizationRequiredFrame };
+
 export interface OAuthReturn {
 	status: 'connected' | 'error' | 'none';
 	server: string | null;
