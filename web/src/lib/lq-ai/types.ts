@@ -390,11 +390,32 @@ export interface MessageErrorFrame {
 	};
 }
 
+export interface ToolConfirmationRequiredFrame {
+	type: 'tool_confirmation_required';
+	lq_ai_message_id: string;
+	pending_call_id: string;
+	provider: string;
+	tool: string;
+	function_name: string;
+	args_summary: string;
+	tier: number | null;
+	destructive: boolean;
+}
+
+export interface McpAuthorizationRequiredFrame {
+	type: 'mcp_authorization_required';
+	lq_ai_message_id: string;
+	server: string;
+	authorize_url: string;
+}
+
 export type MessageStreamEvent =
 	| MessageStartFrame
 	| MessageDeltaFrame
 	| MessageCompleteFrame
-	| MessageErrorFrame;
+	| MessageErrorFrame
+	| ToolConfirmationRequiredFrame
+	| McpAuthorizationRequiredFrame;
 
 // ----- Skills -----
 
