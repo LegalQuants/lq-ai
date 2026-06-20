@@ -1,6 +1,6 @@
 # ADR 0014 — Gateway egress boundary for tool / data-source providers
 
-**Status:** Proposed
+**Status:** Accepted (2026-06-19)
 **Date:** 2026-06-16
 **Owner:** Legal-research + MCP milestone kickoff (feature branch `feat/legal-research-mcp-plan`)
 

@@ -1,6 +1,6 @@
 # ADR 0015 — Governed tool-calling model (closed-intent posture extended, not abandoned)
 
-**Status:** Proposed
+**Status:** Accepted (2026-06-19)
 **Date:** 2026-06-16
 **Owner:** Legal-research + MCP milestone kickoff (feature branch `feat/legal-research-mcp-plan`)
 
