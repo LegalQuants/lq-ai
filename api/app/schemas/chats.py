@@ -614,6 +614,13 @@ def decode_cursor(value: str) -> Cursor:
     return Cursor.decode(value)
 
 
+class ToolCallDecisionRequest(BaseModel):
+    """Request body for POST /api/v1/chats/{chat_id}/tool-calls/{pending_call_id}."""
+
+    model_config = ConfigDict(extra="forbid")
+    decision: Literal["approve", "deny"]
+
+
 __all__ = [
     "ATTACHED_SKILLS_MAX_LEN",
     "AUTO_RENAME_MAX_CHARS",
@@ -635,6 +642,7 @@ __all__ = [
     "MessageListResponse",
     "MessagePostResponse",
     "MessageResponse",
+    "ToolCallDecisionRequest",
     "decode_cursor",
     "derive_chat_title",
     "encode_cursor",
