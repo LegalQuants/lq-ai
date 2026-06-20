@@ -42,6 +42,51 @@ async def _assistant_message(db_session: AsyncSession, owner: User) -> tuple[Cha
 
 
 @pytest.mark.asyncio
+async def test_persist_message_tool_sources_writes_rows(db_session: AsyncSession, owner_user: User):
+    from app.api.chats import _persist_message_tool_sources
+    from app.chat.tool_loop import ToolSourceRecord
+
+    _chat, msg = await _assistant_message(db_session, owner_user)
+    recs = [
+        ToolSourceRecord(
+            "caselaw",
+            "Roe v. Wade",
+            "scotus · 1973-01-22",
+            "https://www.courtlistener.com/opinion/42/",
+            "42",
+            "courtlistener",
+            "search_case_law",
+        ),
+    ]
+    await _persist_message_tool_sources(db_session, message_id=msg.id, records=recs)
+    rows = (
+        (
+            await db_session.execute(
+                select(MessageToolSource).where(MessageToolSource.message_id == msg.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0].label == "Roe v. Wade"
+
+    # No-op on empty.
+    _chat2, msg2 = await _assistant_message(db_session, owner_user)
+    await _persist_message_tool_sources(db_session, message_id=msg2.id, records=[])
+    rows2 = (
+        (
+            await db_session.execute(
+                select(MessageToolSource).where(MessageToolSource.message_id == msg2.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert rows2 == []
+
+
+@pytest.mark.asyncio
 async def test_message_tool_source_roundtrips(db_session: AsyncSession, owner_user: User):
     _chat, msg = await _assistant_message(db_session, owner_user)
     row = MessageToolSource(

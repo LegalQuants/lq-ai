@@ -74,7 +74,13 @@ from app.api.dependencies import ActiveUser
 from app.api.skills import _resolve_skill_for_user
 from app.audit import audit_action
 from app.autonomous.guard import _args_digest
-from app.chat.tool_loop import LoopConfirmation, LoopFinal, LoopMcpAuth, run_chat_tool_loop
+from app.chat.tool_loop import (
+    LoopConfirmation,
+    LoopFinal,
+    LoopMcpAuth,
+    ToolSourceRecord,
+    run_chat_tool_loop,
+)
 from app.chat.tool_schemas import ChatToolAllowlist, assemble_allowlist
 from app.citation import extract_citations, verify
 from app.citation.cost import estimate_judge_call_cost_usd
@@ -90,6 +96,7 @@ from app.models.document import Document
 from app.models.file import File
 from app.models.inference import InferenceRoutingLog
 from app.models.knowledge import KnowledgeBase
+from app.models.message_tool_source import MessageToolSource
 from app.models.project import Project
 from app.models.project_knowledge_base import ProjectKnowledgeBase
 from app.models.tool_call_log import ToolCallLog
@@ -2546,6 +2553,38 @@ async def _persist_message_citations(
     )
 
 
+async def _persist_message_tool_sources(
+    db: AsyncSession,
+    *,
+    message_id: uuid.UUID,
+    records: list[ToolSourceRecord],
+) -> None:
+    """Persist retrieval-provenance rows for the external sources a turn consulted.
+
+    Runs after :func:`_persist_assistant_message` (so ``message_id`` is a real FK
+    target). No-op when ``records`` is empty. Retrieval-provenance only — these
+    rows are NOT verified (contrast ``message_citations``).
+    """
+    if not records:
+        return
+    db.add_all(
+        [
+            MessageToolSource(
+                message_id=message_id,
+                source_kind=r.source_kind,
+                label=r.label,
+                subtitle=r.subtitle,
+                url=r.url,
+                external_ref=r.external_ref,
+                provider=r.provider,
+                tool=r.tool,
+            )
+            for r in records
+        ]
+    )
+    await db.flush()
+
+
 async def _persist_assistant_message(
     db: AsyncSession,
     *,
@@ -2756,6 +2795,9 @@ async def _non_streaming_response(
                 project_ensemble_verification=project_ensemble_verification,
                 skill_registry=_skill_registry_from_request(http_request),
             )
+            await _persist_message_tool_sources(
+                db, message_id=assistant_message_id, records=outcome.tool_sources
+            )
             await _audit_message_sent(
                 db,
                 user=user,
@@ -2965,6 +3007,7 @@ async def _non_streaming_response(
         project_ensemble_verification=project_ensemble_verification,
         skill_registry=_skill_registry_from_request(http_request),
     )
+    await _persist_message_tool_sources(db, message_id=assistant_message_id, records=[])
 
     await _audit_message_sent(
         db,
@@ -3036,6 +3079,7 @@ async def _stream_response(
         last_applied_skills: list[str] | None = None
         prompt_tokens: int | None = None
         completion_tokens: int | None = None
+        loop_outcome: LoopFinal | LoopConfirmation | LoopMcpAuth | None = None
         error_code: str | None = None
         error_envelope: dict[str, Any] | None = None
 
@@ -3051,7 +3095,6 @@ async def _stream_response(
         # ── PR5b Task 6: tool-loop branch ─────────────────────────────────────
         if allowlist is not None and allowlist.specs:
             # Non-empty allowlist → agentic loop (non-streaming internally).
-            loop_outcome = None
             try:
                 loop_outcome = await run_chat_tool_loop(
                     db,
@@ -3293,6 +3336,13 @@ async def _stream_response(
                         applied_skills=last_applied_skills,
                         project_ensemble_verification=project_ensemble_verification,
                         skill_registry=_skill_registry_from_request(http_request),
+                    )
+                    await _persist_message_tool_sources(
+                        db,
+                        message_id=assistant_message_id,
+                        records=loop_outcome.tool_sources
+                        if isinstance(loop_outcome, LoopFinal)
+                        else [],
                     )
                 except Exception as cite_exc:
                     log.warning(
