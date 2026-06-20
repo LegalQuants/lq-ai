@@ -260,6 +260,20 @@ export interface Citation {
 	created_at?: string;
 }
 
+/** External-source provenance row returned by GET /api/v1/chats/{chat_id}/messages/{message_id}/sources (PR6c). */
+export interface ToolSource {
+	id: string;
+	message_id: string;
+	source_kind: string;
+	label: string;
+	subtitle?: string | null;
+	url?: string | null;
+	external_ref?: string | null;
+	provider: string;
+	tool: string;
+	created_at?: string;
+}
+
 export type MessageRole = 'user' | 'assistant' | 'system' | 'tool';
 
 /**
