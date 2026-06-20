@@ -87,6 +87,7 @@
 	import {
 		consumeMessageStream
 	} from '$lib/lq-ai/sse/parser';
+	import { buildAuthorizeUrl, type PendingGate } from '$lib/lq-ai/chat/toolGate';
 	import type {
 		Chat,
 		FileMeta,
@@ -166,6 +167,15 @@
 	let streamingMessageId: string | null = null;
 	let streamAbort: AbortController | null = null;
 	let sendError: string | null = null;
+
+	// PR6b — governed tool-loop gate. When the stream pauses on a
+	// `tool_confirmation_required` or `mcp_authorization_required` terminal
+	// frame, `pendingGate` holds the gate keyed to the assistant message whose
+	// turn paused; the resume/connect handlers act on it. `gateBusy` disables
+	// the card's buttons while a resume POST is in flight. Both reset whenever a
+	// new stream starts for that message (see `consumeIntoMessage`).
+	let pendingGate: PendingGate | null = null;
+	let gateBusy = false;
 
 	// T6 — Enhance Prompt panel reference. Parent calls expansionPanel.open().
 	let expansionPanel: EnhancePromptExpansion | null = null;
@@ -442,6 +452,87 @@
 	}
 
 	// ---- send + stream ----
+
+	/**
+	 * Consume one SSE stream into a single assistant message bubble. Shared by
+	 * the initial send and the resume-after-confirmation POST so a chained gate
+	 * (the resumed turn pausing again) is handled identically. `assistantId0` is
+	 * the message id the stream should write into — the optimistic draft id on
+	 * the initial send (reconciled to the persisted id on `start`), or the
+	 * already-persisted id on a resume.
+	 */
+	async function consumeIntoMessage(
+		body: ReadableStream<Uint8Array>,
+		assistantId0: string
+	): Promise<void> {
+		let assistantId = assistantId0;
+		await consumeMessageStream(body, {
+			onStart: (frame) => {
+				// Reconcile the optimistic draft id with the persisted id on the
+				// initial send; on resume the id is already persisted so this is a
+				// no-op remap.
+				const newId = frame.lq_ai_message_id;
+				if (newId !== assistantId) {
+					const prev = assistantId;
+					messagesStore.update(($m) =>
+						$m.map((m) => (m.id === prev ? { ...m, id: newId } : m))
+					);
+					assistantId = newId;
+				}
+				streamingMessageId = assistantId;
+				// A fresh stream supersedes any prior gate card on this message.
+				pendingGate = null;
+			},
+			onDelta: (frame) => {
+				messagesStore.update(($m) =>
+					$m.map((m) =>
+						m.id === assistantId
+							? {
+									...m,
+									content: (m.content ?? '') + frame.delta,
+									routed_inference_tier: frame.routed_inference_tier ?? m.routed_inference_tier,
+									applied_skills: frame.applied_skills ?? m.applied_skills
+							  }
+							: m
+					)
+				);
+			},
+			onComplete: (frame) => {
+				streamingMessageId = null;
+				messagesStore.update(($m) =>
+					$m.map((m) =>
+						m.id === assistantId
+							? {
+									...m,
+									...frame.message,
+									applied_skills: frame.applied_skills ?? frame.message.applied_skills,
+									routed_inference_tier:
+										frame.routed_inference_tier ?? frame.message.routed_inference_tier,
+									routed_provider: frame.routed_provider ?? frame.message.routed_provider,
+									citations: frame.citations ?? frame.message.citations ?? []
+							  }
+							: m
+					)
+				);
+			},
+			onError: (frame) => {
+				streamingMessageId = null;
+				sendError = `${frame.error.code}: ${frame.error.message}`;
+				messagesStore.update(($m) =>
+					$m.map((m) => (m.id === assistantId ? { ...m, error_code: frame.error.code } : m))
+				);
+			},
+			onToolConfirmation: (frame) => {
+				streamingMessageId = null;
+				pendingGate = { assistantId, kind: 'confirm', frame };
+			},
+			onMcpAuthorization: (frame) => {
+				streamingMessageId = null;
+				pendingGate = { assistantId, kind: 'connect', frame };
+			}
+		});
+	}
+
 	async function sendMessage() {
 		const chat = $activeChatStore;
 		if (!chat) return;
@@ -466,6 +557,9 @@
 		}
 
 		sendError = null;
+		// Clear any prior gate card up front: a new turn supersedes a stranded
+		// gate even if this send throws before the stream's `onStart` fires.
+		pendingGate = null;
 
 		// Wave D.1 T20 follow-on: if the operator clicked "Use enhanced"
 		// and the composer still holds the AI-enhanced text, inject
@@ -558,59 +652,7 @@
 				throw new Error('Empty stream body');
 			}
 
-			let assistantId = draftAssistantId;
-
-			await consumeMessageStream(res.body, {
-				onStart: (frame) => {
-					// Replace the draft id with the persisted id.
-					assistantId = frame.lq_ai_message_id;
-					streamingMessageId = assistantId;
-					messagesStore.update(($m) =>
-						$m.map((m) => (m.id === draftAssistantId ? { ...m, id: assistantId } : m))
-					);
-				},
-				onDelta: (frame) => {
-					messagesStore.update(($m) =>
-						$m.map((m) =>
-							m.id === assistantId
-								? {
-										...m,
-										content: (m.content ?? '') + frame.delta,
-										routed_inference_tier: frame.routed_inference_tier ?? m.routed_inference_tier,
-										applied_skills: frame.applied_skills ?? m.applied_skills
-								  }
-								: m
-						)
-					);
-				},
-				onComplete: (frame) => {
-					streamingMessageId = null;
-					messagesStore.update(($m) =>
-						$m.map((m) =>
-							m.id === assistantId
-								? {
-										...m,
-										...frame.message,
-										applied_skills: frame.applied_skills ?? frame.message.applied_skills,
-										routed_inference_tier:
-											frame.routed_inference_tier ?? frame.message.routed_inference_tier,
-										routed_provider: frame.routed_provider ?? frame.message.routed_provider,
-										citations: frame.citations ?? frame.message.citations ?? []
-								  }
-								: m
-						)
-					);
-				},
-				onError: (frame) => {
-					streamingMessageId = null;
-					sendError = `${frame.error.code}: ${frame.error.message}`;
-					messagesStore.update(($m) =>
-						$m.map((m) =>
-							m.id === assistantId ? { ...m, error_code: frame.error.code } : m
-						)
-					);
-				}
-			});
+			await consumeIntoMessage(res.body, draftAssistantId);
 		} catch (e: unknown) {
 			streamingMessageId = null;
 			console.error('lq-ai: stream failed', e);
@@ -623,6 +665,60 @@
 	function abortStream() {
 		streamAbort?.abort();
 		streamingMessageId = null;
+	}
+
+	// PR6b — resume a paused turn after the user approves/denies the gated
+	// tool. The resume POST returns a fresh SSE stream that finalizes the SAME
+	// assistant bubble (via `consumeIntoMessage`), so a chained gate just pauses
+	// again on the same message. A 409/410 means the pending call expired or was
+	// already resolved — surface the inline re-send hint rather than a raw error.
+	async function decideToolCall(decision: 'approve' | 'deny') {
+		if (!pendingGate || pendingGate.kind !== 'confirm') return;
+		const chat = $activeChatStore;
+		if (!chat) return;
+		const { assistantId, frame } = pendingGate;
+		gateBusy = true;
+		try {
+			const res = await messagesApi.resumeToolCall(chat.id, frame.pending_call_id, decision);
+			if (!res.body) throw new Error('Empty stream body');
+			pendingGate = null;
+			await consumeIntoMessage(res.body, assistantId);
+		} catch (e: unknown) {
+			const status = (e as { status?: number })?.status;
+			if (status === 409 || status === 410) {
+				pendingGate = null;
+				sendError = 'This confirmation expired — re-send your message to continue.';
+			} else {
+				sendError = e instanceof Error ? e.message : 'Could not resume the tool call.';
+			}
+		} finally {
+			gateBusy = false;
+		}
+	}
+
+	// PR6b — connect-on-demand. Same-tab redirect to the gateway's authorize URL
+	// with a `return_url` back to this chat; PR4d lands back here with
+	// `?mcp_connected` (handled by the chats route, which then re-sends).
+	function connectMcp() {
+		if (!pendingGate || pendingGate.kind !== 'connect') return;
+		const returnUrl = window.location.href;
+		window.location.href = buildAuthorizeUrl(pendingGate.frame.authorize_url, returnUrl);
+	}
+
+	// PR6b — re-send the last user message. Exposed so the chats route can drive
+	// the "Continue" button after an OAuth return (`?mcp_connected`). Reuses the
+	// normal send path so streaming + skills + model selection stay consistent.
+	export function resendLastUserMessage(): void {
+		const list = get(messagesStore);
+		for (let i = list.length - 1; i >= 0; i--) {
+			const candidate = list[i];
+			const isUser = candidate.kind === 'user' || candidate.role === 'user';
+			if (isUser && candidate.content) {
+				composerText = candidate.content;
+				void sendMessage();
+				return;
+			}
+		}
 	}
 
 	function handleAppliedSkillClicked(name: string) {
@@ -892,6 +988,11 @@
 			onRefusalOverrideRequested={handleRefusalOverrideRequested}
 			onRefusalExplainerRequested={handleRefusalExplainerRequested}
 			{enhancementOriginals}
+			{pendingGate}
+			{gateBusy}
+			onGateApprove={() => decideToolCall('approve')}
+			onGateDeny={() => decideToolCall('deny')}
+			onGateConnect={connectMcp}
 		/>
 
 		{#if activeChat}

@@ -55,3 +55,22 @@ export async function sendMessageStream(
 		signal
 	});
 }
+
+/**
+ * Resume a paused tool-loop turn after the user approves/denies a destructive
+ * tool. POST /api/v1/chats/{chat_id}/tool-calls/{pending_call_id}; returns the
+ * raw `Response` whose body is a fresh SSE stream (same frames as a send).
+ * Throws (errorFor) on non-2xx — a 409/410 means the pending call expired or
+ * was already resolved.
+ */
+export async function resumeToolCall(
+	chatId: string,
+	pendingCallId: string,
+	decision: 'approve' | 'deny',
+	signal?: AbortSignal
+): Promise<Response> {
+	return apiStreamRequest(
+		`/chats/${encodeURIComponent(chatId)}/tool-calls/${encodeURIComponent(pendingCallId)}`,
+		{ method: 'POST', body: { decision }, stream: true, signal }
+	);
+}

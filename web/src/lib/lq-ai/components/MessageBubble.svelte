@@ -31,6 +31,8 @@
 	import RefusalMessageBubble from './RefusalMessageBubble.svelte';
 	import TierBadge from './TierBadge.svelte';
 	import TierDetailsPanel from './TierDetailsPanel.svelte';
+	import ToolGatePrompt from './ToolGatePrompt.svelte';
+	import type { PendingGate } from '../chat/toolGate';
 
 	export let message: Message;
 	export let isStreaming: boolean = false;
@@ -53,6 +55,15 @@
 	export let onRefusalRerun: (msg: Message) => void = () => {};
 	export let onRefusalOverrideRequested: (msg: Message) => void = () => {};
 	export let onRefusalExplainerRequested: (msg: Message) => void = () => {};
+
+	// PR6b — governed tool-loop gate. Non-null only on the assistant message
+	// whose turn paused on a confirmation/connect frame; the card renders below
+	// the assistant content. Defaults keep every existing caller unaffected.
+	export let gateForMessage: PendingGate | null = null;
+	export let gateBusy: boolean = false;
+	export let onGateApprove: () => void = () => {};
+	export let onGateDeny: () => void = () => {};
+	export let onGateConnect: () => void = () => {};
 
 	// D2: tier badge opens a click-for-details panel surfacing the
 	// resolved provider/model + token usage. Per PRD §1.3 the user
@@ -163,6 +174,20 @@
 			</div>
 		{/if}
 	</div>
+
+	{#if gateForMessage}
+		<div class="mt-2 w-full max-w-full" data-testid="lq-ai-tool-gate">
+			<ToolGatePrompt
+				variant={gateForMessage.kind}
+				confirm={gateForMessage.kind === 'confirm' ? gateForMessage.frame : null}
+				connect={gateForMessage.kind === 'connect' ? gateForMessage.frame : null}
+				busy={gateBusy}
+				onApprove={onGateApprove}
+				onDeny={onGateDeny}
+				onConnect={onGateConnect}
+			/>
+		</div>
+	{/if}
 
 	{#if message.role === 'user' && message.is_enhanced}
 		<div

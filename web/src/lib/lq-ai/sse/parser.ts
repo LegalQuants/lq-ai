@@ -44,6 +44,9 @@ export function normalizeFrame(raw: unknown): MessageStreamEvent | null {
 			case 'delta':
 			case 'complete':
 				return obj as unknown as MessageStreamEvent;
+			case 'tool_confirmation_required':
+			case 'mcp_authorization_required':
+				return obj as unknown as MessageStreamEvent;
 			case 'error':
 				return obj as unknown as MessageErrorFrame;
 			default:
@@ -93,6 +96,8 @@ export interface MessageStreamCallbacks {
 	onDelta?: (frame: import('../types').MessageDeltaFrame) => void;
 	onComplete?: (frame: import('../types').MessageCompleteFrame) => void;
 	onError?: (frame: import('../types').MessageErrorFrame) => void;
+	onToolConfirmation?: (frame: import('../types').ToolConfirmationRequiredFrame) => void;
+	onMcpAuthorization?: (frame: import('../types').McpAuthorizationRequiredFrame) => void;
 }
 
 /**
@@ -140,6 +145,12 @@ export async function consumeMessageStream(
 			case 'complete':
 				callbacks.onComplete?.(frame);
 				break;
+			case 'tool_confirmation_required':
+				callbacks.onToolConfirmation?.(frame);
+				return;
+			case 'mcp_authorization_required':
+				callbacks.onMcpAuthorization?.(frame);
+				return;
 			case 'error':
 				callbacks.onError?.(frame);
 				return;
