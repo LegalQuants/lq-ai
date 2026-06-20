@@ -1,0 +1,630 @@
+"""Chat tool-loop engine — PR5b Task 5.
+
+Implements the agentic tool-calling loop for chat turns. The loop calls the
+gateway in NON-streaming mode each round; when the model requests tool calls,
+this module dispatches them through the governance substrate
+(:func:`~app.tools.governance.governed_tool_invocation`) and feeds results
+back to the model. The loop terminates on one of three outcomes:
+
+- :class:`LoopFinal` — model produced a final text answer (no more tools).
+- :class:`LoopConfirmation` — model requested a destructive / confirmation-
+  gated tool; the loop surfaces the gate to the caller (Task 6/7) which
+  handles the human-approval flow and resumes by calling back with
+  ``calls_used`` and ``messages`` from the partial outcome. **Only the FIRST
+  such call in a round triggers the gate; remaining proposed calls are
+  abandoned for this turn** (the model re-plans after the human decision).
+- :class:`LoopMcpAuth` — model requested an OAuth MCP tool but no valid token
+  is stored; the caller redirects the user through the authorize flow.
+
+When ``calls_used >= settings.chat_tool_call_cap`` the loop issues ONE final
+gateway round WITHOUT tools (``tool_choice="none"``) so the model can
+synthesise what it has gathered before returning :class:`LoopFinal`.
+
+**OTel note:** span annotation for the chat tool-path is a follow-on DE (DE-XXX);
+pass ``span=None`` throughout.
+
+Security invariants (never weaken):
+- Raw args are NEVER written to audit rows or logs.  Only ``args_digest`` flows
+  into :func:`~app.tools.governance.governed_tool_invocation`.
+- Per-user OAuth token is threaded from :func:`~app.mcp.oauth.get_valid_token`
+  to :meth:`~app.clients.gateway.GatewayClient.call_tool` header-only; it never
+  touches the DB row or any log line.
+- Estimated cost is always ``Decimal("0")`` for both ``retrieve_caselaw`` and
+  ``call_mcp_tool`` (DE-344: per-provider tool cost model deferred).
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from dataclasses import dataclass, field
+from decimal import Decimal
+from typing import Any
+from uuid import UUID
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.autonomous.cost import estimate_tool_cost
+from app.autonomous.enums import ToolIntent
+from app.autonomous.guard import ToolResult, _args_digest
+from app.chat.tool_schemas import ChatToolAllowlist, ToolSpec
+from app.config import get_settings
+from app.errors import MCPAuthorizationRequired, ToolTierRefused
+from app.mcp.oauth import get_valid_token
+from app.mcp.service import list_servers
+from app.models.user import User
+from app.research import service as research_service
+from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
+from app.tools.governance import governed_tool_invocation, resolve_provider_tier
+
+log = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Outcome dataclasses
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class LoopFinal:
+    """The model produced a final text answer; no more tool calls needed.
+
+    Carries the full message list so the caller can persist the turn.
+    """
+
+    text: str
+    usage_prompt: int = 0
+    usage_completion: int = 0
+    tier: int | None = None
+    provider: str | None = None
+    model: str | None = None
+    applied_skills: list[str] | None = None
+    messages: list[dict[str, Any]] = field(default_factory=list)
+    calls_used: int = 0
+
+
+@dataclass
+class LoopConfirmation:
+    """A destructive or requires_confirmation tool was requested.
+
+    Task 6/7 persists the partial state and emits the human gate.
+    ``messages`` and ``calls_used`` are included so the caller can resume
+    the loop after the user confirms or cancels.
+
+    **Note:** Only the first such call in a round triggers the gate;
+    remaining proposed calls in the same round are abandoned. The model
+    re-plans after the human decision is relayed back.
+    """
+
+    spec: ToolSpec
+    args: dict[str, Any]
+    tier: int | None
+    args_summary: str  # the args_digest — counts/types only, never raw args
+    messages: list[dict[str, Any]] = field(default_factory=list)
+    calls_used: int = 0
+
+
+@dataclass
+class LoopMcpAuth:
+    """An OAuth MCP server was called but no valid token is stored.
+
+    The caller should redirect the user through the authorize flow at
+    ``/api/v1/mcp/oauth/{server}/authorize``.
+    ``messages`` and ``calls_used`` allow resuming after authorization.
+    """
+
+    server: str
+    authorize_url: str | None = None  # populated by Task 6/7 if needed
+    messages: list[dict[str, Any]] = field(default_factory=list)
+    calls_used: int = 0
+
+
+LoopOutcome = LoopFinal | LoopConfirmation | LoopMcpAuth
+
+
+# ---------------------------------------------------------------------------
+# tool_result_message helper
+# ---------------------------------------------------------------------------
+
+
+def tool_result_message(tool_call_id: str, result: ToolResult) -> dict[str, Any]:
+    """Build the ``role="tool"`` message fed back to the model.
+
+    The ``content`` field serialises the tool's ``data`` payload as JSON
+    so the model can parse structured results.  On ``None`` data, an empty
+    JSON object is returned.
+    """
+    data = result.data if result.data is not None else {}
+    return {
+        "role": "tool",
+        "tool_call_id": tool_call_id,
+        "content": json.dumps(data, default=str),
+    }
+
+
+def _tool_error_message(tool_call_id: str, error: str) -> dict[str, Any]:
+    """Build a ``role="tool"`` error message for a refused / failed call."""
+    return {
+        "role": "tool",
+        "tool_call_id": tool_call_id,
+        "content": json.dumps({"error": error}),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Research dispatch
+# ---------------------------------------------------------------------------
+
+
+async def _dispatch_research(
+    db: AsyncSession,
+    spec: ToolSpec,
+    args: dict[str, Any],
+    cluster_cache: dict[Any, Any],
+    request_id: str | None,
+) -> ToolResult:
+    """Dispatch a research (CourtListener) tool call.
+
+    Checks/fills ``cluster_cache`` for ``get_cluster`` and ``read_opinion``
+    to avoid redundant gateway round-trips within a single turn.
+
+    Cost is ``Decimal("0")`` in v1 — DE-344 defers per-provider tool cost.
+    """
+    op = spec.tool
+    data: Any
+    if op == "verify_citations":
+        data = await research_service.verify_citations(args["text"], request_id=request_id)
+    elif op == "search_case_law":
+        data = await research_service.search_case_law(args, request_id=request_id)
+    elif op == "get_cluster":
+        key = ("cluster", int(args["cluster_id"]))
+        cached = cluster_cache.get(key)
+        if cached is None:
+            data = await research_service.get_cluster(
+                db, cluster_id=int(args["cluster_id"]), request_id=request_id
+            )
+            cluster_cache[key] = data
+        else:
+            data = cached
+    elif op == "read_opinion":
+        key = ("opinion", int(args["opinion_id"]))
+        cached = cluster_cache.get(key)
+        if cached is None:
+            data = await research_service.read_opinion(db, opinion_id=int(args["opinion_id"]))
+            cluster_cache[key] = data
+        else:
+            data = cached
+    elif op == "find_in_case":
+        data = await research_service.find_in_case(
+            db,
+            opinion_id=int(args["opinion_id"]),
+            query=args["query"],
+            max_matches=int(args.get("max_matches", 3)),
+        )
+    else:
+        from app.errors import ToolNotGranted
+
+        raise ToolNotGranted(
+            f"_dispatch_research: unknown research op {op!r}",
+            intent=str(ToolIntent.retrieve_caselaw),
+            phase="chat",
+        )
+    return ToolResult(cost_usd=Decimal("0"), data=data, outcome="success")
+
+
+# ---------------------------------------------------------------------------
+# MCP dispatch
+# ---------------------------------------------------------------------------
+
+
+async def _dispatch_mcp(
+    db: AsyncSession,
+    user: User,
+    gateway: Any,
+    spec: ToolSpec,
+    args: dict[str, Any],
+    server_auth_map: dict[str, str],
+    request_id: str | None,
+) -> ToolResult:
+    """Dispatch an MCP tool call through the gateway.
+
+    Resolves the per-user OAuth token when ``auth == "oauth"`` for the server.
+    Returns ``None`` token (raises :class:`MCPAuthorizationRequired`) when no
+    valid token is stored.
+
+    For ``none``/``bearer`` servers, ``user_token=None`` is passed to the
+    gateway call.
+
+    Cost is ``Decimal("0")`` in v1 — DE-344 defers per-provider tool cost.
+    """
+    auth_mode = server_auth_map.get(spec.provider, "none")
+    user_token: str | None = None
+
+    if auth_mode == "oauth":
+        token = await get_valid_token(db, user_id=user.id, server=spec.provider)
+        if token is None:
+            # No stored token — direct the user through the authorize flow.
+            raise MCPAuthorizationRequired(
+                message=(
+                    f"MCP server {spec.provider!r} requires authorization; "
+                    f"connect via /api/v1/mcp/oauth/{spec.provider}/authorize"
+                ),
+                details={"server": spec.provider},
+            )
+        user_token = token
+
+    result = await gateway.call_tool(
+        spec.provider,
+        spec.tool,
+        args,
+        max_allowed_tier=None,
+        user_token=user_token,
+        request_id=request_id,
+    )
+    return ToolResult(cost_usd=Decimal("0"), data=result.get("payload"), outcome="success")
+
+
+# ---------------------------------------------------------------------------
+# execute_tool
+# ---------------------------------------------------------------------------
+
+
+async def execute_tool(
+    db: AsyncSession,
+    *,
+    user: User,
+    gateway: Any,
+    spec: ToolSpec,
+    args: dict[str, Any],
+    cluster_cache: dict[Any, Any],
+    server_auth_map: dict[str, str],
+    assistant_message_id: UUID,
+    chat_id: UUID | None = None,
+    request_id: str | None = None,
+    confirmation_state: str = "not_required",
+) -> ToolResult:
+    """Execute a single approved read_only tool call through the governance substrate.
+
+    Wraps the appropriate dispatch closure in
+    :func:`~app.tools.governance.governed_tool_invocation` with
+    ``origin="chat"``.
+
+    Args:
+        db: Active async ORM session.
+        user: Authenticated user owning the turn.
+        gateway: Gateway client (used for MCP dispatch).
+        spec: The resolved :class:`~app.chat.tool_schemas.ToolSpec`.
+        args: Parsed arguments from the model's ``tool_calls`` entry.
+        cluster_cache: Request-scoped cache for research cluster/opinion data.
+        server_auth_map: ``{server_name: auth_mode}`` — built once per turn
+            from :func:`~app.mcp.service.list_servers`.
+        assistant_message_id: The chat message id for the audit row.
+        chat_id: Chat id for the audit row (optional).
+        request_id: Correlation header value (optional).
+        confirmation_state: Human-gate lifecycle label written to the
+            ``tool_call_log`` row.  Default ``"not_required"`` preserves
+            all existing callers (the loop's read_only inline path).
+            Pass ``"approved"`` from the resume route's approve path so
+            the EXECUTING audit row is stamped ``approved``/``executed``
+            (separate from the gate row, which is the confirmation-request
+            lifecycle record).
+
+    Returns:
+        :class:`~app.autonomous.guard.ToolResult` on success.
+
+    Raises:
+        :class:`~app.errors.ToolTierRefused`: When the provider's tier exceeds
+            ``max_allowed_tier`` (``None`` in the chat path, so this only fires
+            when the governance config explicitly blocks the call).
+        :class:`~app.errors.MCPAuthorizationRequired`: When the MCP server
+            requires OAuth and no valid token is stored.
+    """
+    intent = ToolIntent.retrieve_caselaw if spec.kind == "research" else ToolIntent.call_mcp_tool
+
+    estimated_cost = await estimate_tool_cost(intent, args, db)
+    provider_tier = await resolve_provider_tier(spec.provider, request_id=request_id)
+
+    async def _dispatch() -> ToolResult:
+        if spec.kind == "research":
+            return await _dispatch_research(db, spec, args, cluster_cache, request_id)
+        else:
+            return await _dispatch_mcp(db, user, gateway, spec, args, server_auth_map, request_id)
+
+    return await governed_tool_invocation(
+        db,
+        origin="chat",
+        provider=spec.provider,
+        tool=spec.tool,
+        intent=intent,
+        provider_tier=provider_tier,
+        max_allowed_tier=None,  # chat path: no per-session tier ceiling in v1
+        estimated_cost=estimated_cost,
+        dispatch=_dispatch,
+        span=None,  # OTel for chat tool-path is a follow-on DE
+        confirmation_state=confirmation_state,
+        user_id=user.id,
+        chat_id=chat_id,
+        message_id=assistant_message_id,
+        args_digest=_args_digest(args),
+        denied_on=(),
+        request_id=request_id,
+    )
+
+
+# ---------------------------------------------------------------------------
+# run_chat_tool_loop
+# ---------------------------------------------------------------------------
+
+
+async def run_chat_tool_loop(
+    db: AsyncSession,
+    *,
+    user: User,
+    gateway: Any,
+    base_request: ChatCompletionRequest,
+    allowlist: ChatToolAllowlist,
+    assistant_message_id: UUID,
+    calls_used: int = 0,
+    cluster_cache: dict[Any, Any] | None = None,
+    request_id: str | None = None,
+) -> LoopOutcome:
+    """Run the agentic chat tool-loop until a terminal outcome is reached.
+
+    Each round:
+    1. Call the gateway (NON-streaming) with the current message list and
+       ``tools=allowlist.function_schemas()`` / ``tool_choice="auto"``.
+    2. If ``finish_reason != "tool_calls"`` or no ``tool_calls`` on the
+       message → return :class:`LoopFinal`.
+    3. For each tool call in the round:
+       a. Resolve ``spec = allowlist.resolve(fn_name)``.
+       b. If ``spec is None`` (model hallucinated) → append a policy-refusal
+          ``role="tool"`` error message for that ``tool_call_id``; continue.
+       c. If ``spec.destructive or spec.requires_confirmation`` → return
+          :class:`LoopConfirmation` for the first such call (remaining calls
+          in the round are abandoned; documented above).
+       d. Otherwise (read_only & not destructive & not requires_confirmation)
+          → call :func:`execute_tool`; on :class:`~app.errors.ToolTierRefused`
+          append an error tool message and continue; on
+          :class:`~app.errors.MCPAuthorizationRequired` → return
+          :class:`LoopMcpAuth`.
+    4. Append the assistant tool_calls message + the collected tool result
+       messages to ``messages``; increment ``calls_used``.
+    5. If ``calls_used >= settings.chat_tool_call_cap`` → fire one final
+       round WITHOUT tools to let the model synthesise.
+
+    Args:
+        db: Active async ORM session.
+        user: Authenticated user owning the turn.
+        gateway: Gateway client (must implement ``chat_completion``).
+        base_request: The base :class:`~app.schemas.gateway.ChatCompletionRequest`
+            used for this turn. Rebuilt each round with the growing ``messages``
+            list. The caller sets ``model``, ``stream=False``, and any LQ.AI
+            extensions; the loop handles ``tools`` and ``tool_choice``.
+        allowlist: The per-turn :class:`~app.chat.tool_schemas.ChatToolAllowlist`
+            assembled by Task 3.
+        assistant_message_id: UUID of the assistant message row (used as
+            ``message_id`` in the governance audit row).
+        calls_used: Number of tool calls already executed this turn (non-zero
+            when resuming after :class:`LoopConfirmation`).
+        cluster_cache: Request-scoped cache for research cluster/opinion data.
+            ``None`` initialises to an empty dict.
+        request_id: Correlation header value forwarded to gateway / services.
+
+    Returns:
+        One of :class:`LoopFinal`, :class:`LoopConfirmation`, or
+        :class:`LoopMcpAuth`.
+    """
+    settings = get_settings()
+
+    if cluster_cache is None:
+        cluster_cache = {}
+
+    # Build the server-auth map once per turn from list_servers.  Only
+    # ``auth == "oauth"`` servers need per-user token resolution; for
+    # ``none``/``bearer`` we pass user_token=None to the gateway.
+    raw_servers = await list_servers(request_id=request_id)
+    server_auth_map: dict[str, str] = {s["name"]: s.get("auth", "none") for s in raw_servers}
+
+    # Working message list — grows as tool results are appended.
+    messages: list[dict[str, Any]] = [
+        m.model_dump(exclude_none=True) for m in base_request.messages
+    ]
+
+    while True:
+        # ── Check cap BEFORE calling gateway ─────────────────────────────────
+        # When the cap is already reached (e.g. resuming from a confirmed
+        # destructive call that pushed us to the limit), fire the final round
+        # immediately without tools.
+        if calls_used >= settings.chat_tool_call_cap:
+            final_resp = await gateway.chat_completion(
+                _build_request(base_request, messages, tools=None, tool_choice="none"),
+                request_id=request_id,
+            )
+            return _build_loop_final(final_resp, messages, calls_used)
+
+        # ── Build this round's request with tools ──────────────────────────
+        round_request = _build_request(
+            base_request,
+            messages,
+            tools=allowlist.function_schemas(),
+            tool_choice="auto",
+        )
+        resp = await gateway.chat_completion(round_request, request_id=request_id)
+
+        choice = resp.choices[0]
+        finish_reason = choice.finish_reason
+        msg = choice.message
+
+        # ── Terminal: no tool calls ──────────────────────────────────────────
+        if finish_reason != "tool_calls" or not msg.tool_calls:
+            return _build_loop_final(resp, messages, calls_used)
+
+        # ── Process tool calls in this round ─────────────────────────────────
+        # The assistant message (with its tool_calls) goes into the working
+        # message list AFTER we collect all result messages for this round.
+        # (We collect results first, then append the assistant message + all
+        #  results at once per the OpenAI multi-turn tool pattern.)
+        tool_result_msgs: list[dict[str, Any]] = []
+
+        # governed_count: number of calls routed to execute_tool this round
+        # (both successfully executed AND ToolTierRefused counts — those calls
+        # DID reach governance and wrote an audit row).  Hallucinated calls
+        # (spec is None) are NOT counted: they never reached governance, so
+        # they must not consume cap budget.  This ensures the cap bounds real
+        # governed tool work, not model confusion about available tools.
+        governed_count: int = 0
+
+        for tc in msg.tool_calls:
+            tc_id: str = tc["id"]
+            fn_name: str = tc["function"]["name"]
+            try:
+                tc_args: dict[str, Any] = json.loads(tc["function"]["arguments"])
+            except (json.JSONDecodeError, KeyError):
+                tc_args = {}
+
+            # ── (b.2) Hallucinated tool name — policy refusal ──────────────
+            spec = allowlist.resolve(fn_name)
+            if spec is None:
+                log.warning(
+                    "chat_tool_loop: hallucinated tool %r — appending policy refusal",
+                    fn_name,
+                    extra={"event": "chat_tool_loop_hallucinated_tool", "tool": fn_name},
+                )
+                tool_result_msgs.append(_tool_error_message(tc_id, "tool not permitted"))
+                continue
+
+            # ── (b.3) Destructive / requires_confirmation gate ────────────
+            if spec.destructive or spec.requires_confirmation:
+                # Only the FIRST such call in a round triggers the gate;
+                # remaining proposed calls are abandoned for this turn.
+                tier = await resolve_provider_tier(spec.provider, request_id=request_id)
+                return LoopConfirmation(
+                    spec=spec,
+                    args=tc_args,
+                    tier=tier,
+                    args_summary=_args_digest(tc_args),
+                    # Carry current messages (BEFORE appending assistant msg)
+                    # so Task 6/7 can resume correctly.
+                    messages=messages,
+                    calls_used=calls_used,
+                )
+
+            # ── (b.4) Read-only — execute (counts as governed) ───────────
+            governed_count += 1
+            try:
+                result = await execute_tool(
+                    db,
+                    user=user,
+                    gateway=gateway,
+                    spec=spec,
+                    args=tc_args,
+                    cluster_cache=cluster_cache,
+                    server_auth_map=server_auth_map,
+                    assistant_message_id=assistant_message_id,
+                    request_id=request_id,
+                )
+                tool_result_msgs.append(tool_result_message(tc_id, result))
+            except MCPAuthorizationRequired:
+                return LoopMcpAuth(
+                    server=spec.provider,
+                    authorize_url=None,
+                    messages=messages,
+                    calls_used=calls_used,
+                )
+            except ToolTierRefused:
+                # ToolTierRefused still counts as governed: governed_tool_invocation
+                # was called and wrote an audit row before raising.
+                log.info(
+                    "chat_tool_loop: ToolTierRefused for %r/%r — appending error message",
+                    spec.provider,
+                    spec.tool,
+                    extra={
+                        "event": "chat_tool_loop_tier_refused",
+                        "provider": spec.provider,
+                        "tool": spec.tool,
+                    },
+                )
+                tool_result_msgs.append(_tool_error_message(tc_id, "tool tier refused"))
+
+        # ── Append assistant tool_calls message + all result messages ─────
+        # Convert the assistant message to dict, preserving tool_calls.
+        asst_dict = msg.model_dump(exclude_none=True)
+        messages.append(asst_dict)
+        messages.extend(tool_result_msgs)
+
+        # Increment by governed calls only (executed + tier-refused).
+        # Hallucinated calls (unknown function names) are excluded: they never
+        # reached governance so they must not consume the per-turn cap budget.
+        calls_used += governed_count
+
+        # ── Termination guard: all-hallucination round ────────────────────
+        # If every proposed call this round was hallucinated (governed_count
+        # == 0) the model made no progress toward the cap and would loop
+        # forever.  Break out immediately to the final no-tools round so the
+        # model synthesises from whatever it has gathered so far.
+        if governed_count == 0:
+            final_resp = await gateway.chat_completion(
+                _build_request(base_request, messages, tools=None, tool_choice="none"),
+                request_id=request_id,
+            )
+            return _build_loop_final(final_resp, messages, calls_used)
+
+        # ── Cap check AFTER incrementing ─────────────────────────────────
+        if calls_used >= settings.chat_tool_call_cap:
+            final_resp = await gateway.chat_completion(
+                _build_request(base_request, messages, tools=None, tool_choice="none"),
+                request_id=request_id,
+            )
+            return _build_loop_final(final_resp, messages, calls_used)
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
+def _build_request(
+    base: ChatCompletionRequest,
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]] | None,
+    tool_choice: str | None,
+) -> ChatCompletionRequest:
+    """Rebuild the request for each gateway round.
+
+    Copies all fields from ``base`` but replaces ``messages``, ``tools``,
+    and ``tool_choice``.  Uses ``model_copy`` (Pydantic v2) so LQ.AI
+    extension fields (skill refs, anonymize, etc.) are preserved.
+    """
+    # Reconstruct the message objects from dicts
+    msg_objects = [
+        ChatCompletionMessage(**m) if not isinstance(m, ChatCompletionMessage) else m
+        for m in messages
+    ]
+    return base.model_copy(
+        update={
+            "messages": msg_objects,
+            "tools": tools,
+            "tool_choice": tool_choice,
+            "stream": False,
+        }
+    )
+
+
+def _build_loop_final(
+    resp: Any,
+    messages: list[dict[str, Any]],
+    calls_used: int,
+) -> LoopFinal:
+    """Build a :class:`LoopFinal` from a gateway response."""
+    choice = resp.choices[0]
+    usage = resp.usage
+    return LoopFinal(
+        text=choice.message.content or "",
+        usage_prompt=usage.prompt_tokens if usage else 0,
+        usage_completion=usage.completion_tokens if usage else 0,
+        tier=resp.routed_inference_tier,
+        provider=resp.routed_provider,
+        model=resp.model,
+        applied_skills=resp.lq_ai_applied_skills,
+        messages=messages,
+        calls_used=calls_used,
+    )

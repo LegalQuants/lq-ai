@@ -112,6 +112,11 @@ class ChatCompletionRequest(BaseModel):
     stream: bool = False
     stop: list[str] | str | None = None
     n: int | None = Field(default=None, ge=1, le=1)
+    tools: list[dict[str, Any]] | None = None
+    """PR5b: per-turn closed allowlist of function schemas the backend
+    assembles (research + operator-enabled MCP tools). Forwarded to the
+    gateway, which forwards to the provider."""
+    tool_choice: str | dict[str, Any] | None = None
 
     # --- LQ.AI extensions (per gateway-openapi.yaml) -------------------------
     minimum_inference_tier: int | None = Field(default=None, ge=1, le=5)

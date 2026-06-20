@@ -4629,6 +4629,46 @@ No code change — the runtime already returns these with the correct typed `cod
 
 **When to ship:** Before the autonomous layer (or chat) is pointed at a metered/paid third-party tool provider.
 
+#### DE-345 — Extract a shared `_stream_loop_outcome` renderer for the chat tool-loop
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** PR5b renders a tool-loop `LoopOutcome` (`LoopFinal` / `LoopConfirmation` / `LoopMcpAuth`) to SSE frames + DB persistence in two places — the initial-send streaming generator (`_stream_response`) and the resume route (`resume_tool_call`) in `api/app/api/chats.py`. The plan preferred a single shared `_stream_loop_outcome` generator, but the implementer kept the resume route's rendering inline to avoid restructuring the keystone send path mid-feature (the two have different live state: send has the live `chat`/`request`; resume reconstructs from `resume_state`). The duplication is bounded but real — a future change to the `tool_confirmation_required`/`complete` frame shapes or the gate-persistence rows must be made in both places. Surfaced in the PR5b Task 7 review (2026-06-19).
+
+**Specific scope:** Extract the outcome→frames+persistence logic into one reusable async generator both call sites drive, once both paths are stable and the no-regression risk to the send path is understood.
+
+#### DE-346 — Unify the `find_in_case` tool-result shape across chat-loop and autonomous dispatch
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** The chat tool-loop's research dispatch (`api/app/chat/tool_loop.py`) feeds the raw `find_in_case` service output (a list of match dicts) into the conversation, while the autonomous guard's dispatch wraps it as `{"matches": [...]}`. The same logical tool returns a different JSON shape to the model depending on origin (chat vs autonomous), which can confuse a skill author who relies on a stable contract. Surfaced in the PR5b Task 5 review (2026-06-19).
+
+**Specific scope:** Pick one canonical tool-result envelope for `find_in_case` (and audit the other research ops for the same divergence) and apply it in both dispatch paths.
+
+#### DE-347 — Chat tool-path OpenTelemetry span (`chat.tool_call`)
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** PR5b's chat tool-loop calls `governed_tool_invocation` with `span=None` — the helper is span-agnostic (it annotates a caller-supplied span per ADR 0015 D5 / D-a1) but the chat loop does not yet open a `chat.tool_call` domain span the way the autonomous path opens `autonomous.tool_call`. This is the chat-side slice of the standing tool-path-OTel deferred work (the inference path has `inference.dispatch`; the tool/research path has only the `tool_egress_log`/`tool_call_log` audit). Surfaced in the PR5b Task 5 review (2026-06-19).
+
+**Specific scope:** Open a `chat.tool_call` span (attributes = tool/provider/tier/outcome/cost, counts/types only) in the chat tool-loop and thread it into `governed_tool_invocation(span=...)`, mirroring `inference.dispatch` and the autonomous span. Fold into the broader tool-path-OTel follow-on.
+
+#### DE-348 — Resolve an expired confirmation-gate `tool_call_log` row to an `expired` state
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** When a chat destructive-tool confirmation expires (the `chat_pending_tool_call` row passes its TTL and a resume POST returns 409), the corresponding `tool_call_log` gate row (written at gate time with `confirmation_state="pending_confirmation"`, `outcome="pending"`) is left unchanged — it reads as perpetually pending in the audit trail even though it was never acted on. Surfaced in the PR5b Task 7 review (2026-06-19).
+
+**Specific scope:** On expiry (or via a background sweep of expired `chat_pending_tool_call` rows), flip the linked gate `tool_call_log` row to a terminal `confirmation_state="expired"` (and an `outcome` that reflects no execution) so the audit trail is honest. Pairs naturally with a TTL pruner for `chat_pending_tool_call` (the model already carries `expires_at` + an index).
+
+#### DE-349 — Merge consecutive `tool_result` messages into one Anthropic user message
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** The gateway's `_to_anthropic_request` (`gateway/app/providers/anthropic.py`) translates each incoming `role="tool"` message into its own Anthropic `user` message carrying one `tool_result` block. The PR5b chat tool-loop, when the model proposes **multiple** read-only tools in a single round, appends the assistant `tool_calls` turn followed by several `role="tool"` result messages — which become consecutive same-role `user` messages on the Anthropic hop. The Anthropic Messages API expects roles to alternate, so a multi-tool round could be rejected. PR5b's confirmation-resume path is unaffected (it reconstructs a single-call assistant turn + one tool result), and single-tool rounds are fine; this only bites multi-read-only-tool rounds against Anthropic. Surfaced in the PR5b final whole-branch review (2026-06-19).
+
+**Specific scope:** In `_to_anthropic_request`, coalesce a run of consecutive `role="tool"` messages into a single Anthropic `user` message containing multiple `tool_result` content blocks. Add a gateway adapter test feeding `assistant(tool_calls=[A,B]) → tool(A) → tool(B)` and asserting one merged user message with two `tool_result` blocks.
+
 ---
 
 ## 10. Appendices

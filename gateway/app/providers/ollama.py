@@ -472,12 +472,17 @@ def _to_ollama_request(
     # Tool calls / tool choice forward through ``tools`` per Ollama's
     # 0.4+ tool-use surface. The OpenAI ``tools`` schema maps directly:
     # both use the OpenAI tool-definition shape. ``tool_choice``
-    # similarly forwards verbatim.
+    # similarly forwards verbatim.  Prefer the explicit typed field
+    # (PR5b added ``tools``/``tool_choice`` as first-class fields on
+    # ``ChatCompletionRequest``); fall back to ``model_extra`` so legacy
+    # callers that passed them as unknown extras still work.
     extra = request.model_extra or {}
-    tools = extra.get("tools")
+    tools = request.tools if request.tools is not None else extra.get("tools")
     if tools is not None:
         body["tools"] = tools
-    tool_choice = extra.get("tool_choice")
+    tool_choice = (
+        request.tool_choice if request.tool_choice is not None else extra.get("tool_choice")
+    )
     if tool_choice is not None:
         body["tool_choice"] = tool_choice
 

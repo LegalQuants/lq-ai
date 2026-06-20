@@ -166,6 +166,17 @@ class ChatCompletionRequest(BaseModel):
     multiplies cost without a corresponding skill use case (PRD §7).
     """
 
+    # --- Function/tool calling (PR5b) ---------------------------------------
+    tools: list[dict[str, Any]] | None = None
+    """OpenAI-style tool/function declarations. Forwarded to the provider
+    so the model may emit ``tool_calls``. The backend assembles a closed
+    allowlist per turn (research + operator-enabled MCP tools); the
+    gateway's egress-tier / SSRF guards still gate the eventual call."""
+
+    tool_choice: str | dict[str, Any] | None = None
+    """OpenAI-style tool_choice (``"auto"`` / ``"none"`` / a forced
+    function). Forwarded verbatim to providers that support it."""
+
     # --- LQ.AI extensions (per gateway-openapi.yaml) -------------------------
     minimum_inference_tier: int | None = Field(default=None, ge=1, le=5)
     """D1: per-call request override of the tier floor. The most restrictive

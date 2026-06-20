@@ -3677,6 +3677,44 @@ paths:
           description: Chat not found
 
   # ============================================================
+  # PR5b Task 7 — chat tool-call resume gate
+  # ============================================================
+
+  /api/v1/chats/{chat_id}/tool-calls/{pending_call_id}:
+    post:
+      summary: Approve or deny a pending destructive chat tool-call; resumes the turn
+      tags: [chats]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: chat_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: pending_call_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolCallDecisionRequest'
+      responses:
+        '200':
+          description: SSE stream — resumes the turn after approval or denial
+          content:
+            text/event-stream:
+              schema: { type: string }
+        '400':
+          description: Malformed request body
+        '404':
+          description: Chat or pending tool-call not found (id-probing-safe)
+        '409':
+          description: Tool-call already resolved or confirmation expired
+
+  # ============================================================
   # M3-D1 — slack-bridge persistence surface
   # ============================================================
 
@@ -8234,6 +8272,15 @@ components:
         provider_keys:
           type: array
           items: {$ref: '#/components/schemas/ProviderKeyStatus'}
+
+    ToolCallDecisionRequest:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [approve, deny]
+          description: Whether to approve or deny the pending tool call.
 
     Error:
       type: object

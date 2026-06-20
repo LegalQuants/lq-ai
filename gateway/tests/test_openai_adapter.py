@@ -834,3 +834,63 @@ async def test_health_check_auth_rejected() -> None:
             await client.aclose()
     assert health.reachable is True
     assert "auth" in (health.error or "").lower()
+
+
+# --- PR5b regression: tools / tool_choice passthrough -----------------------
+
+
+@pytest.mark.unit
+async def test_chat_completion_forwards_tools_and_tool_choice_to_openai() -> None:
+    """PR5b regression: ``tools`` and ``tool_choice`` set on the request
+    appear verbatim in the upstream body sent to the OpenAI-compatible
+    provider.  They must not be stripped by the LQ.AI extension-key filter."""
+
+    payload = {
+        "id": "chatcmpl-t1",
+        "object": "chat.completion",
+        "created": 1715000000,
+        "model": "gpt-4o",
+        "choices": [
+            {
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {"name": "get_time", "arguments": "{}"},
+                        }
+                    ],
+                },
+                "finish_reason": "tool_calls",
+            }
+        ],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+    }
+    with respx.mock(base_url="https://api.openai.com/v1") as router:
+        route = router.post("/chat/completions").mock(
+            return_value=httpx.Response(200, json=payload)
+        )
+        client = httpx.AsyncClient(base_url="https://api.openai.com/v1")
+        try:
+            adapter = OpenAIAdapter(
+                name="openai-prod",
+                base_url="https://api.openai.com/v1",
+                api_key="sk-test",
+                client=client,
+            )
+            request = ChatCompletionRequest(
+                model="gpt-4o",
+                messages=[ChatCompletionMessage(role="user", content="what time is it?")],
+                tools=[{"type": "function", "function": {"name": "get_time", "parameters": {}}}],
+                tool_choice="auto",
+            )
+            await adapter.chat_completion(request, model="gpt-4o", stream=False)
+        finally:
+            await client.aclose()
+    sent = json.loads(route.calls.last.request.content)
+    # Regression pin: tools/tool_choice must appear in the upstream body.
+    assert "tools" in sent and sent["tools"][0]["function"]["name"] == "get_time"
+    assert sent["tool_choice"] == "auto"

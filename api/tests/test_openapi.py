@@ -208,6 +208,8 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/mcp/oauth/{server}",
         # PR4d Ask 1 — per-user OAuth connections list
         "/api/v1/mcp/oauth",
+        # PR5b Task 7 — resume pending tool call
+        "/api/v1/chats/{chat_id}/tool-calls/{pending_call_id}",
     }
 )
 
@@ -318,7 +320,9 @@ async def test_openapi_paths_match_sketch() -> None:
     # /api/v1/mcp/oauth/{server}
     # PR4d Ask 1 adds one new path (131 -> 132):
     # /api/v1/mcp/oauth
-    assert len(actual) == 132
+    # PR5b Task 7 adds one new path (132 -> 133):
+    # /api/v1/chats/{chat_id}/tool-calls/{pending_call_id}
+    assert len(actual) == 133
 
 
 @pytest.mark.unit

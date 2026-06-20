@@ -5,6 +5,7 @@ import pytest
 import respx
 
 from app.clients.gateway import GatewayClient
+from app.schemas.gateway import ChatCompletionRequest
 
 GW = "http://gw.test"
 
@@ -63,3 +64,44 @@ async def test_call_tool_maps_gateway_4xx_envelope() -> None:
         )
         with pytest.raises(ValidationError):
             await client.call_tool("courtlistener-prod", "verify_citations", {"text": ""})
+
+
+def test_api_chat_request_carries_tools() -> None:
+    req = ChatCompletionRequest(
+        model="smart",
+        messages=[{"role": "user", "content": "hi"}],
+        tools=[{"type": "function", "function": {"name": "x", "parameters": {}}}],
+        tool_choice="auto",
+    )
+    assert req.tools[0]["function"]["name"] == "x"  # type: ignore[index]
+    assert req.tool_choice == "auto"
+
+
+@pytest.mark.asyncio
+async def test_call_tool_sets_user_token_header() -> None:
+    captured: dict[str, str | None] = {}
+
+    def _cap(request: httpx.Request) -> httpx.Response:
+        captured["hdr"] = request.headers.get("X-LQ-AI-User-Token")
+        return httpx.Response(200, json={"provider": "p", "tool": "t", "payload": {}, "tier": 1})
+
+    client = _client()
+    with respx.mock:
+        respx.post(f"{GW}/v1/tools/p/t").mock(side_effect=_cap)
+        await client.call_tool("p", "t", {"a": 1}, user_token="secret-tok")
+    assert captured["hdr"] == "secret-tok"
+
+
+@pytest.mark.asyncio
+async def test_call_tool_omits_user_token_header_when_none() -> None:
+    captured: dict[str, str | None] = {}
+
+    def _cap(request: httpx.Request) -> httpx.Response:
+        captured["hdr"] = request.headers.get("X-LQ-AI-User-Token")
+        return httpx.Response(200, json={"provider": "p", "tool": "t", "payload": {}, "tier": 1})
+
+    client = _client()
+    with respx.mock:
+        respx.post(f"{GW}/v1/tools/p/t").mock(side_effect=_cap)
+        await client.call_tool("p", "t", {"a": 1})
+    assert captured["hdr"] is None

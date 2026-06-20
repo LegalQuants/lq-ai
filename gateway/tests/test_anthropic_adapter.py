@@ -562,3 +562,186 @@ def test_from_config_succeeds_with_env_set() -> None:
     )
     adapter = AnthropicAdapter.from_config(provider, env={"ANTHROPIC_API_KEY": "sk-ant-x"})
     assert adapter.name == "anthropic-test"
+
+
+# --- PR5b: tools / tool_choice forwarding + tool_use bridging ----------------
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_anthropic_forwards_tools_and_surfaces_tool_calls() -> None:
+    """PR5b Step 5/6: gateway forwards OpenAI-shaped tools to Anthropic and
+    translates the ``tool_use`` response into OpenAI ``tool_calls``."""
+
+    captured: dict[str, object] = {}
+
+    def _capture(request: httpx.Request) -> httpx.Response:
+        import json as _j
+
+        captured["body"] = _j.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "id": "msg_1",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-sonnet-4-6",
+                "stop_reason": "tool_use",
+                "content": [
+                    {"type": "text", "text": "Let me check."},
+                    {
+                        "type": "tool_use",
+                        "id": "toolu_1",
+                        "name": "verify_citations",
+                        "input": {"text": "Brown v. Board"},
+                    },
+                ],
+                "usage": {"input_tokens": 10, "output_tokens": 5},
+            },
+        )
+
+    respx.post(f"{ANTHROPIC_BASE}/v1/messages").mock(side_effect=_capture)
+
+    adapter = _make_adapter()
+    try:
+        req = ChatCompletionRequest(
+            model="claude-sonnet-4-6",
+            messages=[{"role": "user", "content": "verify this"}],
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "verify_citations",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"text": {"type": "string"}},
+                        },
+                    },
+                }
+            ],
+            tool_choice="auto",
+        )
+        resp = await adapter.chat_completion(req, model="claude-sonnet-4-6", stream=False)
+    finally:
+        await adapter.aclose()
+
+    # Request side: Anthropic-shaped tools forwarded.
+    body = captured["body"]
+    assert isinstance(body, dict)
+    assert body["tools"][0]["name"] == "verify_citations"
+    assert "input_schema" in body["tools"][0]
+    assert body["tool_choice"] == {"type": "auto"}
+
+    # Response side: tool_use -> OpenAI tool_calls.
+    msg = resp.choices[0].message
+    assert resp.choices[0].finish_reason == "tool_calls"
+    assert msg.tool_calls is not None
+    assert msg.tool_calls[0]["id"] == "toolu_1"
+    assert msg.tool_calls[0]["function"]["name"] == "verify_citations"
+    import json as _j
+
+    assert _j.loads(msg.tool_calls[0]["function"]["arguments"]) == {"text": "Brown v. Board"}
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_anthropic_round_trips_assistant_tool_use_for_follow_up() -> None:
+    """PR5b Step 10: multi-hop — assistant tool_use turn round-trips back to
+    Anthropic so the follow-up tool_result is accepted, returning stop."""
+
+    call_count = 0
+
+    def _two_shot(request: httpx.Request) -> httpx.Response:
+        nonlocal call_count
+        call_count += 1
+        body = json.loads(request.content)
+        if call_count == 1:
+            # First call: return tool_use
+            return httpx.Response(
+                200,
+                json={
+                    "id": "msg_2",
+                    "type": "message",
+                    "role": "assistant",
+                    "model": "claude-sonnet-4-6",
+                    "stop_reason": "tool_use",
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_2",
+                            "name": "verify_citations",
+                            "input": {"text": "Plessy v. Ferguson"},
+                        }
+                    ],
+                    "usage": {"input_tokens": 8, "output_tokens": 4},
+                },
+            )
+        # Second call: verify the assistant turn contains tool_use block
+        msgs = body.get("messages", [])
+        assistant_msgs = [m for m in msgs if m.get("role") == "assistant"]
+        assert any(
+            isinstance(m.get("content"), list)
+            and any(b.get("type") == "tool_use" for b in m["content"])
+            for m in assistant_msgs
+        ), "assistant tool_use block missing from second Anthropic call"
+        return httpx.Response(
+            200,
+            json={
+                "id": "msg_3",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-sonnet-4-6",
+                "stop_reason": "end_turn",
+                "content": [{"type": "text", "text": "Confirmed."}],
+                "usage": {"input_tokens": 20, "output_tokens": 3},
+            },
+        )
+
+    respx.post(f"{ANTHROPIC_BASE}/v1/messages").mock(side_effect=_two_shot)
+
+    adapter = _make_adapter()
+    try:
+        # --- First turn: user asks, model returns tool_use ---
+        req1 = ChatCompletionRequest(
+            model="claude-sonnet-4-6",
+            messages=[{"role": "user", "content": "verify this"}],
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "verify_citations",
+                        "parameters": {"type": "object", "properties": {}},
+                    },
+                }
+            ],
+            tool_choice="auto",
+        )
+        resp1 = await adapter.chat_completion(req1, model="claude-sonnet-4-6", stream=False)
+        assert resp1.choices[0].finish_reason == "tool_calls"
+        tool_calls = resp1.choices[0].message.tool_calls
+        assert tool_calls is not None
+
+        # --- Second turn: include assistant tool_use + tool_result ---
+        req2 = ChatCompletionRequest(
+            model="claude-sonnet-4-6",
+            messages=[
+                {"role": "user", "content": "verify this"},
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": tool_calls,
+                },
+                {
+                    "role": "tool",
+                    "content": "Citation verified.",
+                    "tool_call_id": tool_calls[0]["id"],
+                },
+            ],
+        )
+        resp2 = await adapter.chat_completion(req2, model="claude-sonnet-4-6", stream=False)
+    finally:
+        await adapter.aclose()
+
+    assert resp2.choices[0].finish_reason == "stop"
+    assert resp2.choices[0].message.content == "Confirmed."
+    assert call_count == 2

@@ -73,6 +73,8 @@ _PARAM_VALUES: dict[str, str] = {
     # WS2/PR4b — MCP registry admin surface
     "server": "acme-mcp",
     "tool": "read_doc",
+    # PR5b Task 7 — resume pending tool call
+    "pending_call_id": _DUMMY_UUID,
 }
 
 
@@ -325,6 +327,8 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("DELETE", "/api/v1/mcp/oauth/{server}"),
     # PR4d Ask 1 — per-user OAuth connections list
     ("GET", "/api/v1/mcp/oauth"),
+    # PR5b Task 7 — resume pending tool call
+    ("POST", "/api/v1/chats/{chat_id}/tool-calls/{pending_call_id}"),
 }
 
 

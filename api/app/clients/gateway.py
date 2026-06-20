@@ -693,14 +693,24 @@ class GatewayClient:
         args: dict[str, Any],
         *,
         max_allowed_tier: int | None = None,
+        user_token: str | None = None,
         request_id: str | None = None,
     ) -> dict[str, Any]:
         """POST /v1/tools/{provider}/{tool} on the gateway (ADR 0014 transport).
 
         Returns the gateway's ``{provider, tool, payload, tier}`` dict. Errors
         translate exactly like ``list_models``: timeout -> GatewayTimeout,
-        transport -> GatewayUnreachable, structured 4xx -> mapped LQAIError."""
+        transport -> GatewayUnreachable, structured 4xx -> mapped LQAIError.
+
+        ``user_token`` (for ``auth: oauth`` MCP servers, PR4c) is sent in the
+        ``X-LQ-AI-User-Token`` header — never a query param or body field (it
+        would land in access logs). Mirrors ``discover_tools``."""
         headers = self._build_headers(request_id=request_id)
+        if user_token is not None:
+            # Per-user OAuth token for `auth: oauth` MCP servers. Header,
+            # never query/body (PR4c discipline — keeps it out of access
+            # logs and never written to tool_egress_log).
+            headers["X-LQ-AI-User-Token"] = user_token
         body: dict[str, Any] = {"args": args}
         if max_allowed_tier is not None:
             body["max_allowed_tier"] = max_allowed_tier

@@ -348,19 +348,18 @@ def _to_anthropic_request(
     * ``messages[role=system]`` are pulled out and concatenated into the
       top-level ``system`` string.
     * ``messages[role=user|assistant]`` keep their order. Tool messages
-      are passed through as ``role="user"`` with content blocks shaped
-      ``{"type": "tool_result", ...}``; tool-call assistant messages are
-      currently passed through as text only (see DE note below).
+      are translated to ``role="user"`` with ``tool_result`` content blocks.
+      Assistant messages with ``tool_calls`` are translated to ``role="assistant"``
+      with ``tool_use`` content blocks so a follow-up ``tool_result`` is accepted.
+    * ``tools`` (OpenAI ``{type:function,function:{name,description,parameters}}``)
+      are translated to Anthropic ``{name,description,input_schema}`` and forwarded.
+      ``tool_choice`` is mapped: ``auto``->``{type:auto}``, ``required``->``{type:any}``,
+      ``none``->drop tools, forced function->``{type:tool,name}``.
     * ``max_tokens`` is required by Anthropic; we substitute
       :data:`DEFAULT_MAX_TOKENS` if the caller omits it.
     * ``temperature`` and ``top_p`` are forwarded if set; otherwise
       Anthropic uses its defaults.
     * ``stop`` (OpenAI) becomes ``stop_sequences`` (Anthropic, list-only).
-
-    Tool calls (DE-XXX, future): full OpenAI tool-call/tool-result bridging
-    requires translating to Anthropic's ``tool_use``/``tool_result``
-    content blocks. B3 ships text-only translation; tool-call coverage
-    arrives with the skills work in M1 Phase C.
     """
 
     system_chunks: list[str] = []
@@ -387,7 +386,29 @@ def _to_anthropic_request(
                 }
             )
             continue
-        # user / assistant
+        if msg.role == "assistant" and msg.tool_calls:
+            # Round-trip the assistant tool_use turn as Anthropic content
+            # blocks so a follow-up tool_result is accepted.
+            content_blocks: list[dict[str, Any]] = []
+            if msg.content:
+                content_blocks.append({"type": "text", "text": msg.content})
+            for tc in msg.tool_calls:
+                fn = tc.get("function", {})
+                try:
+                    parsed_input = json.loads(fn.get("arguments") or "{}")
+                except (ValueError, TypeError):
+                    parsed_input = {}
+                content_blocks.append(
+                    {
+                        "type": "tool_use",
+                        "id": tc.get("id", ""),
+                        "name": fn.get("name", ""),
+                        "input": parsed_input,
+                    }
+                )
+            chat_messages.append({"role": "assistant", "content": content_blocks})
+            continue
+        # user / assistant (no tool_calls)
         chat_messages.append({"role": msg.role, "content": content})
 
     body: dict[str, Any] = {
@@ -406,6 +427,36 @@ def _to_anthropic_request(
         body["stop_sequences"] = (
             [request.stop] if isinstance(request.stop, str) else list(request.stop)
         )
+    # PR5b: forward tools / tool_choice (OpenAI shape -> Anthropic shape).
+    extra = request.model_extra or {}
+    raw_tools = request.tools if request.tools is not None else extra.get("tools")
+    if raw_tools:
+        anthropic_tools: list[dict[str, Any]] = []
+        for t in raw_tools:
+            fn = t.get("function", t) if isinstance(t, dict) else {}
+            anthropic_tools.append(
+                {
+                    "name": fn.get("name", ""),
+                    "description": fn.get("description", "") or "",
+                    "input_schema": fn.get("parameters") or {"type": "object", "properties": {}},
+                }
+            )
+        body["tools"] = anthropic_tools
+
+        raw_choice = (
+            request.tool_choice if request.tool_choice is not None else extra.get("tool_choice")
+        )
+        if raw_choice is None or raw_choice == "auto":
+            body["tool_choice"] = {"type": "auto"}
+        elif raw_choice == "none":
+            # Anthropic has no "none"; honor by dropping tools entirely.
+            body.pop("tools", None)
+        elif raw_choice == "required":
+            body["tool_choice"] = {"type": "any"}
+        elif isinstance(raw_choice, dict):
+            fn_choice = raw_choice.get("function", {})
+            if fn_choice.get("name"):
+                body["tool_choice"] = {"type": "tool", "name": fn_choice["name"]}
     return body
 
 
@@ -426,6 +477,22 @@ def _from_anthropic_response(
             text_parts.append(str(block.get("text", "")))
     text = "".join(text_parts)
 
+    # PR5b: extract tool_use blocks into OpenAI-shaped tool_calls.
+    tool_calls: list[dict[str, Any]] = []
+    for block in blocks:
+        if isinstance(block, dict) and block.get("type") == "tool_use":
+            tool_calls.append(
+                {
+                    "id": str(block.get("id", "")),
+                    "type": "function",
+                    "function": {
+                        "name": str(block.get("name", "")),
+                        # OpenAI tool_calls carry arguments as a JSON STRING.
+                        "arguments": json.dumps(block.get("input") or {}),
+                    },
+                }
+            )
+
     stop_reason_raw = payload.get("stop_reason")
     finish_reason: FinishReason | None = None
     if isinstance(stop_reason_raw, str):
@@ -443,6 +510,11 @@ def _from_anthropic_response(
     # when present so downstream consumers see what actually ran.
     response_model = str(payload.get("model") or requested_model)
 
+    message = ChatCompletionMessage(
+        role="assistant",
+        content=text or None,
+        tool_calls=tool_calls or None,
+    )
     return ChatCompletionResponse(
         id=response_id,
         created=int(time.time()),
@@ -450,7 +522,7 @@ def _from_anthropic_response(
         choices=[
             ChatCompletionChoice(
                 index=0,
-                message=ChatCompletionMessage(role="assistant", content=text),
+                message=message,
                 finish_reason=finish_reason,
             )
         ],
