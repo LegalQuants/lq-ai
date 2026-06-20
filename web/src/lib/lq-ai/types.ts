@@ -464,6 +464,11 @@ export interface SkillSummary {
 	 * spawned the row. Null for from-scratch creates.
 	 */
 	forked_from?: string | null;
+	/**
+	 * C5 (PR6d) — tool integrations declared in the skill's frontmatter.
+	 * Null/absent = skill makes no tool declarations.
+	 */
+	tool_usage?: string[] | null;
 }
 
 export interface SkillReferenceFile {
@@ -493,6 +498,12 @@ export interface Skill extends SkillSummary {
 	 * iteration; for now the LQ.AI shell parses YAML.
 	 */
 	inputs?: SkillInputDef[];
+	/**
+	 * C5 (PR6d) — tools declared in tool_usage that are not configured in
+	 * this deployment. Empty array = all declared tools available; null/absent
+	 * = availability undeterminable (e.g. gateway did not report).
+	 */
+	unavailable_tool_usage?: string[] | null;
 }
 
 /** Response shape for GET /api/v1/skills/{name}/inputs. Resolves user > team > built-in. */
