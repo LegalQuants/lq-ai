@@ -557,6 +557,9 @@
 		}
 
 		sendError = null;
+		// Clear any prior gate card up front: a new turn supersedes a stranded
+		// gate even if this send throws before the stream's `onStart` fires.
+		pendingGate = null;
 
 		// Wave D.1 T20 follow-on: if the operator clicked "Use enhanced"
 		// and the composer still holds the AI-enhanced text, inject
