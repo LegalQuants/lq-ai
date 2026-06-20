@@ -835,9 +835,10 @@
 					approval. Step through the flow, then flip any guardrail off to see the boundary refuse, prompt,
 					or pause. <strong>Available today:</strong> the governed backend tool-loop, egress boundary,
 					per-user OAuth, audit, the confirmation-gate protocol, and the in-chat confirmation and connect
-					prompts that render this gate inside the chat. <strong>Coming next:</strong> rich case-law
-					provenance — source-kinded citations with provenance pills for the external sources a tool call
-					pulled in.
+					prompts that render this gate inside the chat, and rich case-law provenance — source-kinded
+					citations with provenance pills for the external sources a tool call pulled in.
+					<strong>Coming next:</strong> the case-law research skill and retirement of the legacy
+					OpenWebUI MCP stub.
 				</p>
 				<div class="lq-playground-wrap">
 					<iframe
