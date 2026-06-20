@@ -237,22 +237,35 @@ This boundary is **orthogonal to R1–R6** (which restrain the model) and to the
 - **Outbound header validation (denylist: rejects caller-supplied `Host` override and smuggled gateway-auth headers; full enforcement wired in WS3 when real adapters egress).**
 - **Egress-tier ceiling.** Each provider carries `egress_tier`. If the provider's egress_tier exceeds the matter's or skill's allowed ceiling, the request is refused with a tier-mismatch error — the same enforcement pattern as the inference-tier floor (R2, above).
 - **Per-provider rate limit.** Each entry declares `rate_limit.requests_per_minute`; the adapter enforces it. Requests over the limit return a structured rate-limit error rather than being forwarded.
+- **Gateway is the sole egress + the only MCP-protocol speaker.** MCP servers are operator-allowlisted in `mcp.yaml` and synthesized into `type: mcp` tool providers behind this same boundary; the gateway holds the MCP session, so the backend never speaks MCP or reaches a third party directly (ADR 0014; WS2).
+- **Per-user OAuth, out-of-band, header-only.** For `auth: oauth` connectors the api drives the authorization-code + PKCE flow and stores Fernet-encrypted tokens; the gateway takes a per-call token via the `X-LQ-AI-User-Token` request header (never a query/body param, so it never lands in access logs) and stays user-unaware. Tokens are never written to `tool_egress_log` (WS2 / PR4c).
+- **Closed allowlist, governed per call.** The chat tool-loop offers the model only a closed, per-turn allowlist of operator-enabled tools (the model cannot reach beyond it); every call is tier-checked, cost-accounted, and audited through the shared `governed_tool_invocation` substrate before dispatch (ADR 0015; WS4).
+- **Confirmation gate for destructive tools.** A tool annotated `destructive`/`requires_confirmation` (un-annotated MCP tools default to requires-confirmation, safe-by-default) is held by a persist-and-resume confirmation gate until a human approves; the autonomous layer is never auto-granted destructive tools (ADR 0015 D4; WS4).
 
-**Audit surface.** Every dispatched (and refused) tool-provider call is written to `tool_egress_log`: provider name, egress tier, timestamp, and status. Counts and types are logged; raw request/response payloads are never written to the log (anonymize_outbound default: true).
+**Audit surface.** Two layers, both counts/types only. The gateway writes `tool_egress_log` (the egress-boundary audit): provider name, egress tier, timestamp, status. The api writes `tool_call_log` (the governance audit): origin, provider, tool, tier, confirmation state, outcome, cost, and an `args_digest`. Raw request arguments and tool results are **never** written to either row or to any log line — only the digest and outcome labels (the same two-layer split as `inference_routing_log` vs. the api audit).
 
-**Current implementation state.** PARTIAL — `tool_providers:` schema and config loading shipped (ADR 0014 D1/D2); `echo` adapter ships as the test type. CourtListener adapter (D3), MCP server adapter (WS3/WS4), and the `tool_egress_log` table (D4) are tracked by the ADR 0014 work plan.
+**Current implementation state.** SHIPPED — `tool_providers:` schema + config loading + SSRF/allowlist guard + per-provider rate limit + egress-tier refusal + `tool_egress_log` (ADR 0014, PR1); the CourtListener research provider (WS3); the MCP server adapter + per-user OAuth passthrough, Fernet-at-rest, header-only token (WS2); and the governed chat tool-loop + `tool_call_log` + persist-and-resume confirmation gate (WS4). The backend protocol is complete and running. The in-chat confirmation/connect prompts that render the gate inside the chat UI are the next transparency release (WS5 6b).
 
-**Reference.** ADR 0014 (`docs/adr/0014-tool-provider-egress-boundary.md`).
+**Reference.** ADR 0014 (`docs/adr/0014-gateway-egress-boundary-for-tool-providers.md`) — the egress boundary; ADR 0015 (`docs/adr/0015-governed-tool-calling-model.md`) — the governed tool-calling model.
 
 **Verification path.**
 
 ```bash
-# Schema definition:
-grep -n "ToolProviderConfig\|tool_providers" gateway/app/config.py
-# Example config block (commented, default empty list):
+# Egress-boundary schema + SSRF/allowlist/tier guards (gateway):
+grep -n "tool_providers\|egress_tier" gateway/app/config.py
+ls gateway/app/providers/tool/                       # adapters incl. courtlistener + mcp + oauth_passthrough
+grep -n "def route_tool_call" gateway/app/router.py  # tier/rate/allowlist enforcement
+less gateway/app/tool_egress_log.py                  # gateway egress audit (counts/types only)
+# Per-user OAuth (header-only, Fernet at rest):
+less api/app/mcp/oauth.py
+# Governed tool-loop + governance substrate + confirmation gate (api):
+less api/app/chat/tool_loop.py                        # closed allowlist + confirmation gate
+less api/app/tools/governance.py                      # tier -> tool_call_log(args_digest) -> dispatch
+less api/app/models/tool_call_log.py                  # governance audit row (no raw payloads)
+# Example config + regression tests (gateway):
 grep -A 20 "TOOL / DATA-SOURCE PROVIDERS" gateway.yaml.example
-# Regression test (guards commented block → empty list):
-cd gateway && pytest tests/test_example_config_tool_providers.py -v
+cat mcp.yaml.example
+cd gateway && pytest tests/test_example_config_tool_providers.py tests/test_tool_egress_integration.py -v
 ```
 
 ---
