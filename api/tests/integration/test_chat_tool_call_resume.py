@@ -763,3 +763,235 @@ async def test_approve_executing_audit_row_has_approved_confirmation_state(
         f"Gate row must not have outcome='executed' (it is the confirmation-request record, "
         f"not the execution record); got outcome={gate_row.outcome!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# (j) C1-fix: approve path — gateway receives valid assistant tool_calls turn
+#             before the tool result (NOT an orphaned tool message)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_approve_gateway_receives_assistant_turn_before_tool_result(
+    client: AsyncClient,
+    db_user: User,
+    db_session: AsyncSession,
+) -> None:
+    """Regression: on approve, the conversation sent to run_chat_tool_loop must end with
+    an assistant message carrying a tool_calls entry, immediately followed by a role='tool'
+    message whose tool_call_id matches that assistant entry's id.
+
+    Without the C1 fix the resume path appended an orphaned role='tool' message with no
+    preceding assistant tool_calls turn, causing Anthropic/OpenAI to return 400.
+    This test asserts the conversation structure is valid — it FAILS against pre-fix code
+    (where no assistant turn is reconstructed) and PASSES after the fix.
+    """
+    chat_id, pending_id, _assistant_message_id = await _create_chat_and_pending(
+        db_session, user=db_user, client=client
+    )
+
+    spec = _make_tool_spec()
+    loop_final = LoopFinal(
+        text="Approved and done.",
+        usage_prompt=80,
+        usage_completion=30,
+        tier=2,
+        provider="anthropic-prod",
+        model="claude-sonnet-4-6",
+        applied_skills=[],
+        calls_used=1,
+    )
+    tool_result_val = ToolResult(
+        cost_usd=Decimal("0"),
+        data={"deleted": "abc123"},
+        outcome="success",
+    )
+    non_empty_allowlist = ChatToolAllowlist(specs={spec.function_name: spec})
+
+    # Capture the messages argument passed to run_chat_tool_loop.
+    captured_messages: list[list] = []
+
+    async def _capture_loop(
+        db: object,
+        *,
+        base_request: object,
+        **kwargs: object,
+    ) -> LoopFinal:
+        from app.schemas.gateway import ChatCompletionRequest as _CCR
+
+        assert isinstance(base_request, _CCR)
+        captured_messages.append(list(base_request.messages))
+        return loop_final
+
+    with (
+        patch(
+            "app.api.chats.assemble_allowlist",
+            new=AsyncMock(return_value=non_empty_allowlist),
+        ),
+        patch(
+            "app.chat.tool_loop.execute_tool",
+            new=AsyncMock(return_value=tool_result_val),
+        ),
+        patch(
+            "app.api.chats.run_chat_tool_loop",
+            new=AsyncMock(side_effect=_capture_loop),
+        ),
+    ):
+        resp = await client.post(
+            f"/api/v1/chats/{chat_id}/tool-calls/{pending_id}",
+            headers=_h(db_user),
+            json={"decision": "approve"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert captured_messages, "run_chat_tool_loop was never called — test setup issue"
+
+    msgs = captured_messages[0]
+    # Find the last assistant message with tool_calls.
+    assistant_tool_msg = None
+    for m in msgs:
+        role = m.role if hasattr(m, "role") else m.get("role")
+        tool_calls = m.tool_calls if hasattr(m, "tool_calls") else m.get("tool_calls")
+        if role == "assistant" and tool_calls:
+            assistant_tool_msg = m
+    assert assistant_tool_msg is not None, (
+        "No assistant message with tool_calls found in conversation sent to loop — "
+        "the reconstructed assistant turn is missing (pre-fix orphan bug)"
+    )
+
+    # The role='tool' message must have a tool_call_id matching the assistant turn's id.
+    tool_calls_list = (
+        assistant_tool_msg.tool_calls
+        if hasattr(assistant_tool_msg, "tool_calls")
+        else assistant_tool_msg["tool_calls"]
+    )
+    assistant_tc_id = tool_calls_list[0]["id"]
+
+    tool_msg = None
+    for m in msgs:
+        role = m.role if hasattr(m, "role") else m.get("role")
+        if role == "tool":
+            tool_call_id_val = (
+                m.tool_call_id if hasattr(m, "tool_call_id") else m.get("tool_call_id")
+            )
+            tool_msg = m
+            assert tool_call_id_val == assistant_tc_id, (
+                f"role='tool' message has tool_call_id={tool_call_id_val!r} but "
+                f"assistant turn has id={assistant_tc_id!r} — orphaned tool message!"
+            )
+            break
+
+    assert tool_msg is not None, (
+        "No role='tool' message found in conversation — tool result was not appended"
+    )
+
+
+# ---------------------------------------------------------------------------
+# (k) C1-fix: deny path — gateway receives valid assistant tool_calls turn
+#             before the denial error message (NOT an orphaned tool message)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_deny_gateway_receives_assistant_turn_before_denial_message(
+    client: AsyncClient,
+    db_user: User,
+    db_session: AsyncSession,
+) -> None:
+    """Regression: on deny, the conversation sent to run_chat_tool_loop must end with
+    an assistant message carrying a tool_calls entry, immediately followed by a role='tool'
+    denial message whose tool_call_id matches that assistant entry's id.
+
+    Without the C1 fix the deny path appended an orphaned role='tool' denial message with
+    no preceding assistant tool_calls turn, causing Anthropic/OpenAI to return 400.
+    This test FAILS against pre-fix code and PASSES after the fix.
+    """
+    chat_id, pending_id, _assistant_message_id = await _create_chat_and_pending(
+        db_session, user=db_user, client=client
+    )
+
+    spec = _make_tool_spec()
+    loop_final = LoopFinal(
+        text="The deletion was denied. No changes were made.",
+        usage_prompt=60,
+        usage_completion=25,
+        tier=2,
+        provider="anthropic-prod",
+        model="claude-sonnet-4-6",
+        applied_skills=[],
+        calls_used=0,
+    )
+    non_empty_allowlist = ChatToolAllowlist(specs={spec.function_name: spec})
+
+    captured_messages: list[list] = []
+
+    async def _capture_loop(
+        db: object,
+        *,
+        base_request: object,
+        **kwargs: object,
+    ) -> LoopFinal:
+        from app.schemas.gateway import ChatCompletionRequest as _CCR
+
+        assert isinstance(base_request, _CCR)
+        captured_messages.append(list(base_request.messages))
+        return loop_final
+
+    with (
+        patch(
+            "app.api.chats.assemble_allowlist",
+            new=AsyncMock(return_value=non_empty_allowlist),
+        ),
+        patch(
+            "app.api.chats.run_chat_tool_loop",
+            new=AsyncMock(side_effect=_capture_loop),
+        ),
+    ):
+        resp = await client.post(
+            f"/api/v1/chats/{chat_id}/tool-calls/{pending_id}",
+            headers=_h(db_user),
+            json={"decision": "deny"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert captured_messages, "run_chat_tool_loop was never called — test setup issue"
+
+    msgs = captured_messages[0]
+    # Find any assistant message with tool_calls.
+    assistant_tool_msg = None
+    for m in msgs:
+        role = m.role if hasattr(m, "role") else m.get("role")
+        tool_calls = m.tool_calls if hasattr(m, "tool_calls") else m.get("tool_calls")
+        if role == "assistant" and tool_calls:
+            assistant_tool_msg = m
+    assert assistant_tool_msg is not None, (
+        "No assistant message with tool_calls found in conversation sent to loop on deny — "
+        "the reconstructed assistant turn is missing (pre-fix orphan bug)"
+    )
+
+    tool_calls_list = (
+        assistant_tool_msg.tool_calls
+        if hasattr(assistant_tool_msg, "tool_calls")
+        else assistant_tool_msg["tool_calls"]
+    )
+    assistant_tc_id = tool_calls_list[0]["id"]
+
+    tool_msg = None
+    for m in msgs:
+        role = m.role if hasattr(m, "role") else m.get("role")
+        if role == "tool":
+            tool_call_id_val = (
+                m.tool_call_id if hasattr(m, "tool_call_id") else m.get("tool_call_id")
+            )
+            tool_msg = m
+            assert tool_call_id_val == assistant_tc_id, (
+                f"role='tool' denial message has tool_call_id={tool_call_id_val!r} but "
+                f"assistant turn has id={assistant_tc_id!r} — orphaned tool message on deny!"
+            )
+            break
+
+    assert tool_msg is not None, (
+        "No role='tool' denial message found in conversation — denial message was not appended"
+    )

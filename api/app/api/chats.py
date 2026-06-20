@@ -1832,7 +1832,30 @@ async def resume_tool_call(
         }
         yield f"data: {_json.dumps(opening, separators=(',', ':'))}\n\n".encode()
 
-        tool_call_id = str(uuid.uuid4())  # synthetic tc_id for the denial/approval message
+        # One shared tool_call_id is used for BOTH the reconstructed assistant
+        # turn and the trailing tool result/denial message.  Real providers
+        # (Anthropic, OpenAI) reject an orphaned role="tool" message that is
+        # not a response to a preceding assistant tool_calls turn — the
+        # resume_state.messages saved at gate-time contain only the user turn
+        # and the pre-gate conversation; they do NOT contain the assistant turn
+        # that proposed the gated call.  We reconstruct it here so the
+        # conversation is valid before handing it to run_chat_tool_loop.
+        tool_call_id = str(uuid.uuid4())
+        assistant_turn: dict[str, Any] = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": tool_call_id,
+                    "type": "function",
+                    "function": {
+                        "name": pending.function_name,
+                        "arguments": _json.dumps(dict(pending.tool_call_args)),
+                    },
+                }
+            ],
+        }
+        messages.append(assistant_turn)
 
         # ── Approve path ─────────────────────────────────────────────────────
         if body.decision == "approve":
