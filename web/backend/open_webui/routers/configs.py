@@ -17,12 +17,10 @@ from open_webui.utils.tools import (
     set_tool_servers,
     set_terminal_servers,
 )
-from open_webui.utils.mcp.client import MCPClient
 from open_webui.models.oauth_sessions import OAuthSessions
 
 
 from open_webui.utils.oauth import (
-    get_discovery_urls,
     get_oauth_client_info_with_dynamic_client_registration,
     get_oauth_client_info_with_static_credentials,
     encrypt_data,
@@ -30,7 +28,6 @@ from open_webui.utils.oauth import (
     resolve_oauth_client_info,
     OAuthClientInformationFull,
 )
-from mcp.shared.auth import OAuthMetadata
 
 router = APIRouter()
 
@@ -367,114 +364,42 @@ async def verify_tool_servers_config(request: Request, form_data: ToolServerConn
     """
     try:
         if form_data.type == 'mcp':
-            if form_data.auth_type in ('oauth_2.1', 'oauth_2.1_static'):
-                discovery_urls = await get_discovery_urls(form_data.url)
-                for discovery_url in discovery_urls:
-                    log.debug(f'Trying to fetch OAuth 2.1 discovery document from {discovery_url}')
-                    async with aiohttp.ClientSession(
-                        trust_env=True,
-                        timeout=aiohttp.ClientTimeout(total=AIOHTTP_CLIENT_TIMEOUT),
-                    ) as session:
-                        async with session.get(
-                            discovery_url, ssl=AIOHTTP_CLIENT_SESSION_SSL
-                        ) as oauth_server_metadata_response:
-                            if oauth_server_metadata_response.status == 200:
-                                try:
-                                    oauth_server_metadata = OAuthMetadata.model_validate(
-                                        await oauth_server_metadata_response.json()
-                                    )
-                                    return {
-                                        'status': True,
-                                        'oauth_server_metadata': oauth_server_metadata.model_dump(mode='json'),
-                                    }
-                                except Exception as e:
-                                    log.info(f'Failed to parse OAuth 2.1 discovery document: {e}')
-                                    raise HTTPException(
-                                        status_code=400,
-                                        detail=f'Failed to parse OAuth 2.1 discovery document from {discovery_url}',
-                                    )
+            raise HTTPException(
+                status_code=400,
+                detail='MCP tool servers are configured by the operator via the gateway, not added here.',
+            )
 
-                raise HTTPException(
-                    status_code=400,
-                    detail=f'Failed to fetch OAuth 2.1 discovery document from {discovery_urls}',
-                )
-            else:
-                try:
-                    client = MCPClient()
-                    headers = None
-
-                    token = None
-                    if form_data.auth_type == 'bearer':
-                        token = form_data.key
-                    elif form_data.auth_type == 'session':
-                        token = request.state.token.credentials
-                    elif form_data.auth_type == 'system_oauth':
-                        oauth_token = None
-                        try:
-                            if request.cookies.get('oauth_session_id', None):
-                                oauth_token = await request.app.state.oauth_manager.get_oauth_token(
-                                    user.id,
-                                    request.cookies.get('oauth_session_id', None),
-                                )
-
-                                if oauth_token:
-                                    token = oauth_token.get('access_token', '')
-                        except Exception as e:
-                            pass
-                    if token:
-                        headers = {'Authorization': f'Bearer {token}'}
-
-                    if form_data.headers and isinstance(form_data.headers, dict):
-                        if headers is None:
-                            headers = {}
-                        headers.update(form_data.headers)
-
-                    await client.connect(form_data.url, headers=headers)
-                    specs = await client.list_tool_specs()
-                    return {
-                        'status': True,
-                        'specs': specs,
-                    }
-                except Exception as e:
-                    log.debug(f'Failed to create MCP client: {e}')
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f'Failed to create MCP client',
+        # openapi
+        token = None
+        headers = None
+        if form_data.auth_type == 'bearer':
+            token = form_data.key
+        elif form_data.auth_type == 'session':
+            token = request.state.token.credentials
+        elif form_data.auth_type == 'system_oauth':
+            try:
+                if request.cookies.get('oauth_session_id', None):
+                    oauth_token = await request.app.state.oauth_manager.get_oauth_token(
+                        user.id,
+                        request.cookies.get('oauth_session_id', None),
                     )
-                finally:
-                    if client:
-                        await client.disconnect()
-        else:  # openapi
-            token = None
-            headers = None
-            if form_data.auth_type == 'bearer':
-                token = form_data.key
-            elif form_data.auth_type == 'session':
-                token = request.state.token.credentials
-            elif form_data.auth_type == 'system_oauth':
-                try:
-                    if request.cookies.get('oauth_session_id', None):
-                        oauth_token = await request.app.state.oauth_manager.get_oauth_token(
-                            user.id,
-                            request.cookies.get('oauth_session_id', None),
-                        )
 
-                        if oauth_token:
-                            token = oauth_token.get('access_token', '')
+                    if oauth_token:
+                        token = oauth_token.get('access_token', '')
 
-                except Exception as e:
-                    pass
+            except Exception as e:
+                pass
 
-            if token:
-                headers = {'Authorization': f'Bearer {token}'}
+        if token:
+            headers = {'Authorization': f'Bearer {token}'}
 
-            if form_data.headers and isinstance(form_data.headers, dict):
-                if headers is None:
-                    headers = {}
-                headers.update(form_data.headers)
+        if form_data.headers and isinstance(form_data.headers, dict):
+            if headers is None:
+                headers = {}
+            headers.update(form_data.headers)
 
-            url = get_tool_server_url(form_data.url, form_data.path)
-            return await get_tool_server_data(url, headers=headers)
+        url = get_tool_server_url(form_data.url, form_data.path)
+        return await get_tool_server_data(url, headers=headers)
     except HTTPException as e:
         raise e
     except Exception as e:

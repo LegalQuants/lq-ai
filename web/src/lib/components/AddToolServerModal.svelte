@@ -470,26 +470,9 @@
 								<div class=" text-xs text-gray-500">{$i18n.t('Type')}</div>
 
 								<div class="">
-									{#if !direct}
-										<button
-											on:click={() => {
-												type = ['', 'openapi'].includes(type) ? 'mcp' : 'openapi';
-											}}
-											type="button"
-											class=" text-xs text-gray-700 dark:text-gray-300"
-										>
-											{#if ['', 'openapi'].includes(type)}
-												{$i18n.t('OpenAPI')}
-											{:else if type === 'mcp'}
-												{$i18n.t('MCP')}
-												<span class="text-gray-500">{$i18n.t('Streamable HTTP')}</span>
-											{/if}
-										</button>
-									{:else}
-										<div class="text-xs text-gray-700 dark:text-gray-300">
-											{$i18n.t('OpenAPI')}
-										</div>
-									{/if}
+									<div class="text-xs text-gray-700 dark:text-gray-300">
+										{$i18n.t('OpenAPI')}
+									</div>
 								</div>
 							</div>
 						</div>

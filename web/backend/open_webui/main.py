@@ -1919,26 +1919,6 @@ async def chat_completion(
                     detail=error_detail,
                 )
         finally:
-            # MCP cleanup — MUST run in the SAME asyncio task as
-            # connect() because the MCP SDK's streamablehttp_client
-            # uses anyio task groups whose cancel scopes enforce
-            # same-task exit.  Do NOT wrap in asyncio.shield() or
-            # asyncio.wait_for() — both create a new task.
-            try:
-                if mcp_clients := metadata.get('mcp_clients'):
-                    for client in reversed(list(mcp_clients.values())):
-                        try:
-                            await client.disconnect()
-                        except Exception as e:
-                            log.debug(f'Error disconnecting MCP client: {e}')
-                        except asyncio.CancelledError:
-                            # Let the client close asynchronously by GC
-                            pass
-            except Exception as e:
-                log.debug(f'Error cleaning up MCP clients: {e}')
-            except asyncio.CancelledError:
-                pass
-
             try:
                 if metadata.get('chat_id'):
 

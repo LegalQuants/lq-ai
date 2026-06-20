@@ -4601,6 +4601,8 @@ No code change — the runtime already returns these with the correct typed `cod
 
 **When to ship:** PR5 (WS4 governed chat tool-loop), alongside the chat-path migration to the gateway.
 
+**Resolved in PR6e (2026-06-20):** deleted `web/backend/open_webui/utils/mcp/client.py` and excised its importers — `configs.py`'s tool-server verify path now rejects MCP with a clear "configured by the operator via the gateway, not added here" error; the dead `middleware.py` chat-loop MCP branch (LQ.AI chat runs through the `api/` service + gateway, not `web/backend`) and the `main.py` teardown-disconnect were removed; the web UI no longer offers MCP as an add-tool-server type. `grep -rn "MCPClient\|utils.mcp.client\|mcp_clients" web/backend/` is clean. The OpenAPI tool-server paths are untouched, and LQ.AI's gateway-brokered MCP path (ADR 0014 / PR4–5) is the sole MCP egress — so this also closes the non-gateway-egress gap (the same stub DE-338 referenced).
+
 #### DE-342 — Map the gateway `egress_refused` code to a clearer "connector misconfigured" error (not generic 500)
 
 **Priority:** P3 · **Effort:** S

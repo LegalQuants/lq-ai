@@ -114,7 +114,6 @@ from open_webui.utils.filter import (
 from open_webui.utils.code_interpreter import execute_code_jupyter
 from open_webui.utils.payload import apply_system_prompt_to_body
 from open_webui.utils.response import normalize_usage
-from open_webui.utils.mcp.client import MCPClient
 
 
 from open_webui.config import (
@@ -2600,127 +2599,7 @@ async def process_chat_payload(request, form_data, user, metadata, model):
 
         tools_dict = {}
 
-        mcp_clients = {}
-        mcp_tools_dict = {}
-
         if tool_ids:
-            for tool_id in tool_ids:
-                if tool_id.startswith('server:mcp:'):
-                    try:
-                        server_id = tool_id[len('server:mcp:') :]
-
-                        mcp_server_connection = None
-                        for server_connection in request.app.state.config.TOOL_SERVER_CONNECTIONS:
-                            if (
-                                server_connection.get('type', '') == 'mcp'
-                                and server_connection.get('info', {}).get('id') == server_id
-                            ):
-                                mcp_server_connection = server_connection
-                                break
-
-                        if not mcp_server_connection:
-                            log.error(f'MCP server with id {server_id} not found')
-                            continue
-
-                        # Check access control for MCP server
-                        if not await has_connection_access(user, mcp_server_connection):
-                            log.warning(f'Access denied to MCP server {server_id} for user {user.id}')
-                            continue
-
-                        auth_type = mcp_server_connection.get('auth_type', '')
-                        headers = {}
-                        if auth_type == 'bearer':
-                            headers['Authorization'] = f'Bearer {mcp_server_connection.get("key", "")}'
-                        elif auth_type == 'none':
-                            # No authentication
-                            pass
-                        elif auth_type == 'session':
-                            headers['Authorization'] = f'Bearer {request.state.token.credentials}'
-                        elif auth_type == 'system_oauth':
-                            oauth_token = extra_params.get('__oauth_token__', None)
-                            if oauth_token:
-                                headers['Authorization'] = f'Bearer {oauth_token.get("access_token", "")}'
-                        elif auth_type in ('oauth_2.1', 'oauth_2.1_static'):
-                            try:
-                                splits = server_id.split(':')
-                                server_id = splits[-1] if len(splits) > 1 else server_id
-
-                                oauth_token = await request.app.state.oauth_client_manager.get_oauth_token(
-                                    user.id, f'mcp:{server_id}'
-                                )
-
-                                if oauth_token:
-                                    headers['Authorization'] = f'Bearer {oauth_token.get("access_token", "")}'
-                            except Exception as e:
-                                log.error(f'Error getting OAuth token: {e}')
-                                oauth_token = None
-
-                        connection_headers = mcp_server_connection.get('headers', None)
-                        if connection_headers and isinstance(connection_headers, dict):
-                            for key, value in connection_headers.items():
-                                headers[key] = value
-
-                        # Add user info headers if enabled
-                        if ENABLE_FORWARD_USER_INFO_HEADERS and user:
-                            headers = include_user_info_headers(headers, user)
-                            if metadata and metadata.get('chat_id'):
-                                headers[FORWARD_SESSION_INFO_HEADER_CHAT_ID] = metadata.get('chat_id')
-                            if metadata and metadata.get('message_id'):
-                                headers[FORWARD_SESSION_INFO_HEADER_MESSAGE_ID] = metadata.get('message_id')
-
-                        mcp_clients[server_id] = MCPClient()
-                        await mcp_clients[server_id].connect(
-                            url=mcp_server_connection.get('url', ''),
-                            headers=headers if headers else None,
-                        )
-
-                        function_name_filter_list = mcp_server_connection.get('config', {}).get(
-                            'function_name_filter_list', ''
-                        )
-
-                        if isinstance(function_name_filter_list, str):
-                            function_name_filter_list = function_name_filter_list.split(',')
-
-                        tool_specs = await mcp_clients[server_id].list_tool_specs()
-                        for tool_spec in tool_specs:
-
-                            async def make_tool_function(client, function_name):
-                                async def tool_function(**kwargs):
-                                    return await client.call_tool(
-                                        function_name,
-                                        function_args=kwargs,
-                                    )
-
-                                return tool_function
-
-                            if function_name_filter_list:
-                                if not is_string_allowed(tool_spec['name'], function_name_filter_list):
-                                    # Skip this function
-                                    continue
-
-                            tool_function = await make_tool_function(mcp_clients[server_id], tool_spec['name'])
-
-                            mcp_tools_dict[f'{server_id}_{tool_spec["name"]}'] = {
-                                'spec': {
-                                    **tool_spec,
-                                    'name': f'{server_id}_{tool_spec["name"]}',
-                                },
-                                'callable': tool_function,
-                                'type': 'mcp',
-                                'client': mcp_clients[server_id],
-                                'direct': False,
-                            }
-                    except Exception as e:
-                        log.debug(e)
-                        if event_emitter:
-                            await event_emitter(
-                                {
-                                    'type': 'chat:message:error',
-                                    'data': {'error': {'content': f"Failed to connect to MCP server '{server_id}'"}},
-                                }
-                            )
-                        continue
-
             tools_dict = await get_tools(
                 request,
                 tool_ids,
@@ -2732,9 +2611,6 @@ async def process_chat_payload(request, form_data, user, metadata, model):
                     '__files__': metadata.get('files', []),
                 },
             )
-
-            if mcp_tools_dict:
-                tools_dict = {**tools_dict, **mcp_tools_dict}
 
         # Resolve terminal tools if terminal_id is set (outside tool_ids check
         # so system terminals work even when no other tools are selected)
@@ -2781,9 +2657,6 @@ async def process_chat_payload(request, form_data, user, metadata, model):
                         'direct': True,
                         'server': tool_server,
                     }
-
-        if mcp_clients:
-            metadata['mcp_clients'] = mcp_clients
 
         # Inject builtin tools for native function calling based on enabled features and model capability
         # Check if builtin_tools capability is enabled for this model (defaults to True if not specified)
