@@ -396,6 +396,53 @@ async def test_ingest_corrupt_pdf_marks_failed(
 
 
 @pytest.mark.integration
+async def test_ingest_parse_timeout_marks_failed(
+    db_session: AsyncSession,
+    db_user: User,
+    fake_s3: FakeS3Client,
+    patched_storage: FakeS3Client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A parse that exceeds the docling soft timeout flips the row to
+    ``failed`` with ``ingestion_timeout`` — never left stuck in
+    ``processing`` (DE-351 regression)."""
+
+    import time
+
+    from app.config import get_settings
+
+    settings = get_settings()
+    # Tiny soft timeout so the test is fast; the fake parser blocks past it.
+    monkeypatch.setattr(settings, "lq_ai_docling_timeout_seconds", 1)
+
+    def _slow_parse(*args: object, **kwargs: object) -> object:
+        # Blocks the worker thread well past the 1s soft timeout, standing
+        # in for a slow first-run docling model download.
+        time.sleep(3)
+        return None
+
+    monkeypatch.setattr("app.pipeline.ingest.parse_pdf", _slow_parse)
+
+    storage_key = f"{uuid.uuid4()}"
+    _put_in_fake_s3(fake_s3, storage_key, b"%PDF-1.4 fake")
+
+    file_row = await _create_file_row(
+        db_session,
+        db_user,
+        storage_path=storage_key,
+        pdf_bytes=b"%PDF-1.4 fake",
+    )
+
+    result = await ingest_file(db_session, file_row.id)
+    assert result.status == "failed"
+    assert result.error == "ingestion_timeout"
+
+    await db_session.refresh(file_row)
+    assert file_row.ingestion_status == "failed"
+    assert file_row.ingestion_error == "ingestion_timeout"
+
+
+@pytest.mark.integration
 async def test_ingest_soft_deleted_row_skipped(
     db_session: AsyncSession,
     db_user: User,

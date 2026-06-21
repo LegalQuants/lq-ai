@@ -50,6 +50,13 @@ from app.workers.user_export import export_gc_job, export_user_data_job
 
 log = logging.getLogger(__name__)
 
+# DE-351: arq's hard ``job_timeout`` is set strictly ABOVE the in-job docling
+# soft timeout (``app.pipeline.ingest`` wraps the parse in ``asyncio.wait_for``
+# at ``lq_ai_docling_timeout_seconds``). The buffer guarantees the soft path
+# fires first and can persist a terminal ``failed`` row, rather than arq
+# killing the worker mid-parse and leaving the file stuck in ``processing``.
+_ARQ_JOB_TIMEOUT_BUFFER_SECONDS = 60
+
 
 # ---------------------------------------------------------------------------
 # Job functions
@@ -266,7 +273,9 @@ class WorkerSettings:
             "on_shutdown": cls.on_shutdown,
             "redis_settings": _build_redis_settings(),
             "max_jobs": settings.lq_ai_ingest_worker_concurrency,
-            "job_timeout": settings.lq_ai_docling_timeout_seconds,
+            "job_timeout": (
+                settings.lq_ai_docling_timeout_seconds + _ARQ_JOB_TIMEOUT_BUFFER_SECONDS
+            ),
             # arq's queue-name default is "arq:queue"; we override
             # only if a future config wants to namespace.
         }
@@ -288,7 +297,9 @@ def _populate_class_attrs() -> None:
         WorkerSettings.cron_jobs = _build_cron_jobs()  # type: ignore[attr-defined]
         settings = get_settings()
         WorkerSettings.max_jobs = settings.lq_ai_ingest_worker_concurrency  # type: ignore[attr-defined]
-        WorkerSettings.job_timeout = settings.lq_ai_docling_timeout_seconds  # type: ignore[attr-defined]
+        WorkerSettings.job_timeout = (  # type: ignore[attr-defined]
+            settings.lq_ai_docling_timeout_seconds + _ARQ_JOB_TIMEOUT_BUFFER_SECONDS
+        )
     except ImportError:  # pragma: no cover - arq missing in some envs
         pass
 
