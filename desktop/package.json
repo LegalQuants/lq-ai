@@ -1,6 +1,6 @@
 {
 	"name": "lq-ai-desktop",
-	"version": "0.1.0",
+	"version": "0.5.1",
 	"description": "LQ.AI for Mac — desktop launcher for the LQ.AI release stack",
 	"author": "Kevin Keller",
 	"license": "Apache-2.0",
