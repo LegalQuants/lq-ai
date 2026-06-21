@@ -4691,6 +4691,12 @@ No code change — the runtime already returns these with the correct typed `cod
 
 **Context:** Found during the v0.5.0 release-readiness verification. Ingestion is PDF-only today (DOCX/RTF/TXT are M2), but the upload endpoint accepts a TXT/DOCX file (HTTP 2xx) and only marks it `failed` with `unsupported_type` after the worker picks it up — so a user learns the format is unsupported only after upload + a poll cycle. Add a pre-upload MIME/extension guard that rejects unsupported types synchronously with a clear error (or a documented "PDF only for now" note on the upload surface) until the M2 format expansion lands.
 
+#### DE-353 — `web` (OpenWebUI) container blocks first-boot on an unnecessary HuggingFace model fetch
+
+**Priority:** P2 · **Effort:** M
+
+**Context:** Found during the v0.5.0 release-readiness verification (isolated boot of the **published** GHCR images; applies equally to the macOS launcher). On first boot the `web` container (OpenWebUI fork) downloads ~30 files from the HuggingFace Hub — OpenWebUI's default *local* RAG embedding + Whisper STT models — **before** binding `:8080`. Its healthcheck (`curl :8080/health`) therefore fails, and the dependent user-facing `proxy` does not start until the fetch finishes. Unauthenticated HF requests are rate-limited, so this took **~10 minutes** in testing (it self-heals — slow first boot, not a hard failure; web reached `healthy` once "Fetching 30 files" hit 100%). **LQ.AI uses its own embeddings** (api/gateway via OpenAI `text-embedding-3-*`) and does **not** use OpenWebUI's local RAG, so this fetch is unnecessary on the LQ.AI path. **Fix options:** configure the `web` image/compose to skip the local-model fetch (point OpenWebUI's RAG embedding + STT engines at remote/disabled via its env, e.g. `RAG_EMBEDDING_ENGINE`/`AUDIO_STT_ENGINE`), bake the models into the `web` image at build time, or set `HF_TOKEN` to lift the rate limit. Distinct from [DE-351](#de-351--first-run-document-ingestion-times-out-on-the-docling-model-download-and-the-file-is-left-stuck-in-processing) (ingest-worker docling models). Improves both the compose Quickstart and the launcher first-run experience (the launcher shows `N/8 ready` until `web` heals — so it degrades gracefully, but a ~10-min wait for the UI is poor first-run UX).
+
 ---
 
 ## 10. Appendices
