@@ -19,10 +19,18 @@ editing. Replicate Donna's experience for LQ-AI, which (owning its code) publish
   every notarized artifact).
 - **L-2 Service scope:** **Core 8** — postgres, redis, minio, gateway, api, ingest-worker,
   arq-worker, web. No ollama, no slack/teams bridges (they need OAuth, defeat zero-config).
-- **L-3 Provider keys:** **in-app BYOK after launch** — the stack boots healthy with zero
-  provider keys; the user adds OpenAI/Anthropic keys via the runtime provider-keys admin UI
-  (#128, hot-applied no restart). Wizard collects NO provider secrets. (Chat needs a key
-  before first use; the launcher messaging says so.)
+- **L-3 Provider keys:** **REVISED 2026-06-21.** Original decision: "in-app BYOK after launch;
+  wizard collects no provider secrets." That decision assumed two things that did not actually
+  ship in the launcher: (1) the runtime provider-keys admin UI (#128) had a backend + gateway
+  but **no web page**, and (2) the launcher never minted `LQ_AI_GATEWAY_MASTER_KEY`, so the
+  runtime store returned `400 failed_precondition`. Net effect: a fresh `.dmg` install had **no
+  way to make chat work**. Revised decision — two complementary key paths, both shipping:
+  - **First-run wizard** offers ONE optional key field (auto-detects Anthropic `sk-ant-…` vs
+    OpenAI by prefix) → written to `.env` as `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`. Blank is
+    allowed; the stack still boots healthy keyless.
+  - **In-app Configure → Provider keys** page (admin) manages runtime keys, encrypted at rest;
+    the launcher now mints + forwards `LQ_AI_GATEWAY_MASTER_KEY` so this works.
+  Either path makes the default `smart` chat answer. The stack still boots with zero keys.
 - **L-4 Execution:** build everything that needs no Kevin credentials; hand Kevin a short
   manual-steps checklist (5 Apple secrets, GHCR public visibility, cut tag).
 - **L-5 Dev-stack safety (derived):** the actively-used dev stack stays **100% untouched**.

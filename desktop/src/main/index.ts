@@ -5,7 +5,7 @@ import { resolvePorts } from '../core/ports'
 import { generateSecrets } from '../core/secrets'
 import { DEFAULT_PORTS } from '../core/types'
 import type { LauncherConfig } from '../core/config'
-import { loadConfig, saveConfig, writeEnvFile, clearConfig } from './store'
+import { loadConfig, saveConfig, writeEnvFile, clearConfig, ensureMasterKey } from './store'
 import { composeFilePath, envPath, PROJECT_NAME } from './paths'
 import {
 	snapshot,
@@ -26,6 +26,8 @@ const base = (): string[] => [...composeBaseArgs(composeFilePath(), PROJECT_NAME
 interface WizardInput {
 	adminEmail: string
 	adminPassword: string
+	/** Optional provider key (sk-ant-… → Anthropic, else OpenAI). Written to .env, never persisted. */
+	providerKey?: string
 }
 
 function createWindow(): void {
@@ -65,6 +67,18 @@ ipcMain.handle('wizard:complete', async (_e, input: WizardInput) => {
 		if (typeof input?.adminEmail !== 'string' || typeof input?.adminPassword !== 'string') {
 			return { ok: false, error: 'Invalid setup input.' }
 		}
+		// Optional provider key: must be a single token if present (renderEnv drops malformed
+		// values defensively, but reject here so a bad paste surfaces as a clear error).
+		const providerKey =
+			typeof input.providerKey === 'string' && input.providerKey.trim() ? input.providerKey.trim() : undefined
+		if (providerKey && /\s/.test(providerKey)) {
+			return { ok: false, error: 'Provider key contains whitespace — paste just the key.' }
+		}
+		// Anthropic + OpenAI keys both start with "sk-"; reject other shapes so a wrong
+		// paste isn't silently written as OPENAI_API_KEY (providerKeyVar's default branch).
+		if (providerKey && !providerKey.startsWith('sk-')) {
+			return { ok: false, error: 'That key should start with "sk-" (Anthropic or OpenAI).' }
+		}
 		const cfg: LauncherConfig = {
 			secrets: generateSecrets(),
 			ports: resolvePorts(DEFAULT_PORTS, isPortFreeSync),
@@ -72,7 +86,8 @@ ipcMain.handle('wizard:complete', async (_e, input: WizardInput) => {
 			// (e.g. v0.4.0) when cutting a release. Namespace is overridable for forks/mirrors.
 			imageTag: 'latest',
 			imageNamespace: 'legalquants',
-			adminEmail: input.adminEmail
+			adminEmail: input.adminEmail,
+			providerKey
 		}
 		// Write the .env (needed before startStack) but DON'T persist the config blob yet —
 		// only mark the wizard complete after the stack is healthy and the admin exists, so a
@@ -95,7 +110,10 @@ ipcMain.handle('wizard:complete', async (_e, input: WizardInput) => {
 				`Could not set up the login: ${admin.stderr.trim() || admin.stdout.trim() || 'admin fixture failed'}`
 			)
 		}
-		saveConfig(cfg)
+		// Persist everything EXCEPT the provider key — it's already written to the .env;
+		// keeping it out of the config blob matches the store.ts BYOK note (provider keys
+		// are not persisted here) and avoids a second at-rest copy.
+		saveConfig({ ...cfg, providerKey: undefined })
 		return { ok: true }
 	} catch (err) {
 		return { ok: false, error: String(err) }
@@ -127,6 +145,9 @@ ipcMain.handle('engine:installDocker', () =>
 )
 
 app.whenReady().then(() => {
+	// Backfill the BYOK master key into installs that predate it, before the
+	// renderer can trigger a stack start (no-op on first run / already-migrated).
+	ensureMasterKey()
 	createWindow()
 	// Tail web logs into the renderer (best-effort; ignored before the stack exists).
 	const stopLogTail = streamDocker(logsArgs(base(), 'web'), (line) =>

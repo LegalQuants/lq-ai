@@ -40,21 +40,25 @@ by Apple** (Developer ID: Tucuxi, Inc.), it opens normally — no "unidentified 
 
 ## 3. One-time setup
 
-![The first-run LQ.AI setup wizard — welcome screen with a password field and a Start LQ.AI button.](images/launcher-wizard.png)
+<!-- TODO: regenerate launcher-wizard.png to show the optional provider-key field (added 2026-06-21). -->
+![The first-run LQ.AI setup wizard — welcome screen with a password field, an optional API-key field, and a Start LQ.AI button.](images/launcher-wizard.png)
 
-*The one-time setup wizard — set a password for `admin@lq.ai` and click **Start LQ.AI**. No provider key is needed to start (that's BYOK, added later in the app).*
+*The one-time setup wizard — set a password for `admin@lq.ai`, optionally paste an AI provider key, and click **Start LQ.AI**.*
 
 The first time you open LQ.AI, a short **Welcome** wizard appears:
 
 - **Set your password.** Your login is **`admin@lq.ai`** (shown on screen); choose a password of at
   least 12 characters. You can change the email and password later in **Settings → Account**.
+- **AI provider key (optional).** Paste an **Anthropic** (`sk-ant-…`) or **OpenAI** key so chat works
+  the moment you sign in. The provider is detected automatically from the key. You can leave this blank
+  to start — the engine runs fine without it — and add a key later (see step 5).
 
 Click **Start LQ.AI**. The first start **downloads the engine and document-processing models** — a few
 minutes the first time only — and shows live progress (e.g. *"5/8 services ready"*). When it reaches
 **Running**, you're set.
 
-> **Note:** the wizard does **not** ask for any AI provider key. The stack boots fully healthy with no
-> provider keys at all. You add a key in-app after first launch — see step 5.
+> **Note:** the provider-key field is optional. The stack boots fully healthy with no provider key at
+> all — but chat can't answer until a key is present, either from this field or added in-app (step 5).
 
 > **Note:** those first-run downloads are LQ.AI's **document-reading models** (search, highlighting,
 > OCR) — not the chat AI. You don't have to wait for them to finish to sign in; they keep loading in
@@ -77,24 +81,31 @@ home workspace.
 
 *The Home screen after you log in — everything runs on your Mac (note the **self-hosted** badge). The Featured Tools grid is your jumping-off point: Enhance Prompt, Skill Creator, Knowledge, Playbooks, Tabular Review, Apply a Skill, and Autonomous.*
 
-## 5. Add a provider key before your first chat (BYOK)
+## 5. Provider keys (BYOK)
 
 LQ.AI is **bring-your-own-key**: chat and skills call AI providers (OpenAI, Anthropic, …) using **your**
-API key, which you add inside the app. **The stack runs without a key, but chat will not work until you
-add one.**
+API key. **The stack runs without a key, but chat will not answer until one is present.** There are two
+ways to supply one — use whichever fits:
+
+**A. In the setup wizard (easiest).** If you pasted a key in step 3, you're already done — chat works as
+soon as you sign in. Skip the rest of this section.
+
+**B. In the app, any time after launch.** Add, replace, or revoke keys from the admin **Provider keys**
+page — useful if you skipped the wizard field, want to add a second provider, or need to rotate a key.
 
 ![A new LQ.AI chat showing a green "no provider · default" badge before any key is added.](images/launcher-chat-byok.png)
 
-*Until you add a provider key, a new chat shows **"no provider · default"** — add one OpenAI or Anthropic key in **Configure** and it's hot-applied (no restart).*
+*Until a provider key is present, a new chat shows **"no provider · default"**. Add one on the **Provider keys** page and it's hot-applied (no restart).*
 
-To add a key:
+To add a key in the app:
 
-1. Open the **Configure** area (admin) in the app.
-2. Add an **OpenAI** and/or **Anthropic** API key (whichever provider you use).
-3. Save. Keys are **hot-applied with no restart** — your next chat uses them immediately.
+1. Open the admin area and go to **Provider keys**.
+2. Find your provider (e.g. `anthropic-prod` or `openai-prod`) and click **Set key**.
+3. Paste the key and **Save**. It's **encrypted at rest** and **hot-applied with no restart** — your next
+   chat uses it immediately. Only the last four characters are ever shown back.
 
-Your provider keys are held by the engine's Inference Gateway on your Mac; the launcher never stores
-them and the setup wizard never asks for them.
+Your provider keys are held by the engine's Inference Gateway on your Mac and never leave it; the launcher
+stores a key only in the local `.env` (wizard path) or encrypted in the gateway (in-app path).
 
 ---
 

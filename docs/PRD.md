@@ -4705,6 +4705,14 @@ No code change — the runtime already returns these with the correct typed `cod
 
 ---
 
+#### DE-355 — Document ingestion requires an OpenAI key specifically (the `embedding` alias is OpenAI-only)
+
+**Priority:** P2 · **Effort:** M · **Status: OPEN**
+
+**Context:** Surfaced during the v0.5.0 launcher provider-key work. The default `smart` chat alias works with *either* an Anthropic or an OpenAI key (Anthropic primary, OpenAI fallback), so first-use chat is provider-agnostic. But the `embedding` alias in `gateway.yaml.example` points only at OpenAI `text-embedding-3-small` (1536-dim, matching the `document_chunks.embedding` column). So a user who supplies **only an Anthropic key** — via the first-run wizard field or the in-app Provider keys page — gets working chat but **silently broken document ingestion / knowledge-base search** (embedding calls fail with no resolvable OpenAI key). **Proposed fix(es):** (a) detect the missing-embedding-provider case and surface a clear, actionable message at upload time ("document search needs an OpenAI key — add one under Provider keys") rather than a late failure; and/or (b) offer a non-OpenAI embedding path (a local/Ollama embedding model, or an Anthropic-compatible embedding) so an Anthropic-only operator can run ingestion. Until then, the install docs should note that **document upload + search specifically need an OpenAI key**, even though chat does not.
+
+---
+
 ## 10. Appendices
 
 ### Appendix A — Glossary

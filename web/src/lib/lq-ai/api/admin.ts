@@ -6,7 +6,13 @@
  * into a redirect to /lq-ai with a flash error.
  */
 import { apiRequest } from './client';
-import type { UsageResponse, UsageQuery, AdminUserListResponse, AdminUserListQuery, AdminUserRow } from '../types';
+import type {
+	UsageResponse,
+	UsageQuery,
+	AdminUserListResponse,
+	AdminUserListQuery,
+	AdminUserRow
+} from '../types';
 
 export interface AliasFallback {
 	provider: string;
@@ -88,6 +94,50 @@ export interface AdminConfigSnapshot {
 
 export async function getAdminConfig(): Promise<AdminConfigSnapshot> {
 	return apiRequest<AdminConfigSnapshot>('/admin/config');
+}
+
+/**
+ * Provider-key (BYOK) management — runtime keys the gateway encrypts at rest
+ * (ADR 0011) and hot-applies with no restart. Proxied by the backend at
+ * /api/v1/admin/provider-keys (admin-gated). No full key is ever returned; the
+ * status carries only the last 4 characters of a resolvable key.
+ *
+ * The set endpoint returns 400 ``failed_precondition`` when the gateway has no
+ * LQ_AI_GATEWAY_MASTER_KEY (runtime storage disabled), 404 for an unknown
+ * provider; revoke returns 409 for an env-sourced key (owned by the operator's
+ * .env, not the runtime store). Callers surface these to the admin.
+ */
+export interface ProviderKeyStatus {
+	provider: string;
+	type: string;
+	configured: boolean;
+	/** Last 4 chars of a resolvable key, else null. Never a full key. */
+	last4: string | null;
+	/** Where the key comes from: encrypted runtime store, the env/.env, or none. */
+	source: 'runtime' | 'env' | null;
+}
+
+export interface ProviderKeyListResponse {
+	provider_keys: ProviderKeyStatus[];
+}
+
+export async function listProviderKeys(): Promise<ProviderKeyListResponse> {
+	return apiRequest<ProviderKeyListResponse>('/admin/provider-keys');
+}
+
+/** Set or replace a provider's runtime key (POST replaces in place). */
+export async function setProviderKey(provider: string, apiKey: string): Promise<ProviderKeyStatus> {
+	return apiRequest<ProviderKeyStatus>('/admin/provider-keys', {
+		method: 'POST',
+		body: { provider, api_key: apiKey }
+	});
+}
+
+/** Revoke a provider's runtime key (retires its live adapter). 204 on success. */
+export async function revokeProviderKey(provider: string): Promise<void> {
+	return apiRequest<void>(`/admin/provider-keys/${encodeURIComponent(provider)}`, {
+		method: 'DELETE'
+	});
 }
 
 /**

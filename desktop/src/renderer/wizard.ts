@@ -4,9 +4,12 @@
  * command (no create-user), so the login email is admin@lq.ai — the user can change it
  * later in the app's Settings.
  *
- * NO provider keys are collected here (launcher decision L-3). The stack boots fully
- * healthy with zero provider keys; the user adds an OpenAI/Anthropic key in-app via
- * Configure (BYOK, hot-applied, no restart) — chat needs one key before first use.
+ * An OPTIONAL provider key is collected here (launcher decision L-3, revised): the stack
+ * boots fully healthy with zero provider keys, but chat can't answer until one is present
+ * and the shipped launcher has no in-app key-entry page. So the wizard offers one optional
+ * field — paste an Anthropic (sk-ant-…) or OpenAI key and chat works on first use; leave it
+ * blank to start keyless and supply a key later by editing the .env. The provider is
+ * auto-detected from the key prefix (see core/env.ts providerKeyVar).
  */
 const ADMIN_EMAIL = 'admin@lq.ai'
 
@@ -29,8 +32,10 @@ export function renderWizard(root: HTMLElement, onDone: () => void): void {
 		</div>
 
 		<div class="step">
-			<p style="color:#555">You'll add an AI provider key (OpenAI or Anthropic) in the app under
-			Configure after setup — chat needs one key before first use. No provider key is required to start.</p>
+			<h3>AI provider key <span style="font-weight:normal; color:#888">(optional)</span></h3>
+			<p style="margin:4px 0 8px; color:#555">Paste an Anthropic (<code>sk-ant-…</code>) or OpenAI key so chat
+			works right away. You can leave this blank to start — the engine runs without it — and add a key later.</p>
+			<input id="providerKey" type="password" placeholder="sk-ant-… or sk-… (optional)" autocomplete="off" />
 		</div>
 
 		<div class="step">
@@ -57,10 +62,27 @@ export function renderWizard(root: HTMLElement, onDone: () => void): void {
 
 	$('go').addEventListener('click', async () => {
 		const password = $<HTMLInputElement>('password').value
+		const providerKey = $<HTMLInputElement>('providerKey').value.trim()
 
 		if (password.length < 12) {
 			status.style.color = '#c00'
 			status.textContent = 'Choose a password of at least 12 characters.'
+			return
+		}
+
+		// Optional, but if supplied it must be a single token — catch the fat-fingered
+		// paste here rather than silently dropping it in renderEnv.
+		if (providerKey && /\s/.test(providerKey)) {
+			status.style.color = '#c00'
+			status.textContent = 'That API key contains a space — paste just the key (no quotes or extra text).'
+			return
+		}
+		// Both Anthropic (sk-ant-…) and OpenAI (sk-… / sk-proj-…) keys start with "sk-".
+		// Reject anything else so a wrong paste isn't silently filed under OpenAI.
+		if (providerKey && !providerKey.startsWith('sk-')) {
+			status.style.color = '#c00'
+			status.textContent =
+				'That doesn’t look like an Anthropic or OpenAI key (they start with "sk-"). Check the value, or leave it blank and add a key later.'
 			return
 		}
 
@@ -70,7 +92,8 @@ export function renderWizard(root: HTMLElement, onDone: () => void): void {
 		status.textContent = 'Starting LQ.AI…'
 		const res = await window.lqai.completeWizard({
 			adminEmail: ADMIN_EMAIL,
-			adminPassword: password
+			adminPassword: password,
+			providerKey: providerKey || undefined
 		})
 		if (res.ok) onDone()
 		else {

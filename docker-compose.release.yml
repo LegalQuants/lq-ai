@@ -111,12 +111,18 @@ services:
         condition: service_healthy
     environment:
       LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
+      # Enables the runtime BYOK provider-key store (encrypts keys at rest, ADR 0011).
+      # Optional for boot, but the launcher always mints it so the in-app "Provider keys"
+      # admin page works; without it that API returns 400 failed_precondition.
+      LQ_AI_GATEWAY_MASTER_KEY: ${LQ_AI_GATEWAY_MASTER_KEY:-}
       LQ_AI_API_URL: ${LQ_AI_API_URL:-http://api:8000}
       LQ_AI_SKILL_CACHE_TTL_SECONDS: ${LQ_AI_SKILL_CACHE_TTL_SECONDS:-60}
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-lq_ai}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-lq_ai}}
-      # Provider keys — ALL optional (BYOK in-app, launcher decision L-3).
-      # The stack boots healthy with none set; the user adds keys via the
-      # Configure / runtime provider-keys admin UI after first launch.
+      # Provider keys — ALL optional (launcher decision L-3, revised 2026-06-21).
+      # The stack boots healthy with none set. Keys arrive two ways: (1) the first-run
+      # wizard's optional field writes ANTHROPIC_API_KEY / OPENAI_API_KEY here; (2) the
+      # in-app Configure → Provider keys page stores runtime keys encrypted at rest
+      # (needs LQ_AI_GATEWAY_MASTER_KEY above). Either makes the default "smart" chat work.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
