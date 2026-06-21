@@ -31,3 +31,26 @@ A written **readiness verdict** with evidence: per claim/flow — works / broken
 - Dev-stack rules (CLAUDE.md): NEVER host `alembic upgrade` on live dev DB (15432); NEVER `docker compose down -v`; rebuild `api`+`arq-worker`+`ingest-worker` together on a migration; `web` is a pre-built bundle (rebuild to view UI changes).
 - Branch-first always (commit spec/plan on the branch, never local main — see `[[feedback-commit-planning-docs-on-branch]]`). Push origin + tucuxi (kept identical on main). Commit `-s` + `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
 - Migration head 0055; `EXPECTED_PATHS` 134 (6c added `…/sources`).
+
+---
+
+## OUTCOME — v0.5.0 shipped + launcher verified (2026-06-21)
+
+**Verdict: PASS. v0.5.0 honestly works and the claims are true.** Both arms run; the code was found honest, the drift was documentation, and the two real bugs the gate surfaced are fixed.
+
+**Arm A (claims-vs-reality, 6 parallel auditors):** every headline claim verified TRUE, no overreach — gateway sole egress (api has exactly one outbound client → the gateway), 4-stage citation cascade, confirmation gate fires, tier-floor 403 `tier_below_minimum`, anonymization round-trip + no-leak test, per-user OAuth tokens Fernet-at-rest + never logged. The drift was docs pinned at the M4 close (head 0047), most dangerously the false §6 "MCP deferred-M5 / grep empty" claim. **Reconciled in #195** (HONEST-STATE.md → head 0055 + new §5.5; README/PRD/proposals fixed).
+
+**Arm B (honest fresh-clone bring-up):** fresh clone → `docker compose up -d --build` built from source and self-migrated 0001→0055; verified LIVE — chat (real Anthropic stream+persist), tier-floor 403, skills incl. `case-law-research` `tool_usage`, KB → exact-match-verified citation, audit log, and case-law end-to-end (governed tool-loop → real CourtListener → `message_tool_sources` → `/sources` → `tool_call_log` → `tool_egress_log`).
+
+**Bugs the gate caught + fixed:**
+- **CourtListener gateway wiring** — `docker-compose.yml` never forwarded `COURTLISTENER_API_TOKEN` to the gateway, so case-law was dark on a fresh clone despite the documented enable-path. Fixed + re-verified live (#195) + README "Enabling legal-research connectors" opt-in section.
+- **DE-351** — first PDF ingest timed out on the docling model download and left the file stuck in `processing`. Fixed the stuck-state (in-job soft timeout marks `failed`) in **#196**.
+- **DE-353** — the `web` (OpenWebUI) container blocked boot on an unnecessary local-RAG model fetch → web unhealthy → launcher "Stack failed to start." Fixed (`RAG_EMBEDDING_ENGINE=openai`, compose-only) in **#200**; empirically web `/health` 200 in ~11s.
+- **DE-354** — the macOS launcher regenerated secrets on a retried first-run without `down -v` → stale-volume `password authentication failed` crash-loop. Fixed (`resetStack()` before first-run start) in **#200**.
+- DE-352 (pre-upload format guard) filed, deferred.
+
+**Shipped:** `__version__` 0.5.0 (#197); **`v0.5.0`** tag → multi-arch GHCR images (api/gateway/web/proxy) + SBOMs + Cosign-signed + public; **`desktop-v0.5.1`** signed/notarized launcher (`spctl` accepted, Notarized Developer ID — Tucuxi, Inc.). Desktop `package.json` bumped to 0.5.1 so `.dmg` filenames carry the real version (the 0.1.0 collision caused a re-test mix-up).
+
+**Launcher first-run verified working (desktop-v0.5.1, installed to /Applications):** all 9 services healthy, web healthy fast (DE-353), api `RestartCount=0` (DE-354), api migrated 0055, UI `/lq-ai` 200, `/api/config` 200, served at `http://localhost:13012`. A stranger can download → install → Start → login with no terminal/manual steps.
+
+**Remaining (hands-on, non-blocking):** operator confirms login + a chat (with a provider key or local Ollama). PRs: #195 (docs+wiring), #196 (DE-351), #197 (version), #200 (DE-353/354 launcher); #198/#199 superseded. Main at the v0.5.0 line; origin == tucuxi throughout.
