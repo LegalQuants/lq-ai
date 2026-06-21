@@ -286,6 +286,13 @@ services:
       WEBUI_AUTH: ${WEBUI_AUTH:-false}
       WEBUI_NAME: ${WEBUI_NAME:-LQ.AI}
       WEBUI_URL: ${WEBUI_URL:-http://localhost:3000}
+      # DE-353: LQ.AI does its own embeddings/citations in api+gateway; OpenWebUI's
+      # local RAG is unused. A non-empty engine makes get_ef() return None instead
+      # of constructing a local SentenceTransformer at import — which skips the
+      # boot-time "Fetching 30 files" HuggingFace download that otherwise blocks
+      # web from binding :8080 (HF-rate-limited; can stall for many minutes →
+      # web never goes healthy → the macOS launcher reports "Stack failed to start").
+      RAG_EMBEDDING_ENGINE: ${RAG_EMBEDDING_ENGINE:-openai}
     # No host ports: web is INTERNAL-ONLY now. The proxy below owns the
     # user-facing WEB_HOST_PORT and routes everything-but-/lq to web:8080 on
     # the compose network (including /api/config and OpenWebUI's own /api/v1/*).

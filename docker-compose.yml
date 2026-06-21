@@ -389,6 +389,11 @@ services:
       WEBUI_AUTH: ${WEBUI_AUTH:-false}
       WEBUI_NAME: ${WEBUI_NAME:-LQ.AI}
       WEBUI_URL: ${WEBUI_URL:-http://localhost:3000}
+      # DE-353: LQ.AI does its own embeddings/citations in api+gateway; OpenWebUI's
+      # local RAG is unused. A non-empty engine makes get_ef() return None instead
+      # of building a local SentenceTransformer at import, skipping the boot-time
+      # "Fetching 30 files" HuggingFace download that otherwise delays web health.
+      RAG_EMBEDDING_ENGINE: ${RAG_EMBEDDING_ENGINE:-openai}
       # OpenWebUI's full env-var surface (DATABASE_URL, OLLAMA_BASE_URL,
       # ENABLE_*, etc.) lands when Task A1.d imports the fork and we know
       # the exact set to override vs. default.
