@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { renderEnv, parseEnv } from './env'
+import { renderEnv, parseEnv, providerKeyVar, ensureMasterKeyLine } from './env'
 import type { LauncherConfig } from './config'
 
 const base: LauncherConfig = {
@@ -8,7 +8,8 @@ const base: LauncherConfig = {
 		MINIO_ROOT_PASSWORD: 'minio-secret',
 		S3_SECRET_KEY: 'minio-secret',
 		LQ_AI_GATEWAY_KEY: 'gw-secret',
-		JWT_SECRET: 'jwt-secret'
+		JWT_SECRET: 'jwt-secret',
+		LQ_AI_GATEWAY_MASTER_KEY: 'master-key-fernet='
 	},
 	ports: {
 		web: 13012,
@@ -32,6 +33,8 @@ describe('renderEnv', () => {
 		expect(env.S3_SECRET_KEY).toBe('minio-secret')
 		expect(env.LQ_AI_GATEWAY_KEY).toBe('gw-secret')
 		expect(env.JWT_SECRET).toBe('jwt-secret')
+		// Forwarded so the gateway's runtime BYOK provider-key store is enabled.
+		expect(env.LQ_AI_GATEWAY_MASTER_KEY).toBe('master-key-fernet=')
 	})
 
 	it('writes the MinIO/S3 user pair the compose defaults read', () => {
@@ -59,7 +62,7 @@ describe('renderEnv', () => {
 		expect(env.LQ_AI_IMAGE_NAMESPACE).toBe('legalquants')
 	})
 
-	it('writes NO provider keys (BYOK in-app, launcher decision L-3)', () => {
+	it('writes NO provider key when the wizard collected none (stack boots keyless)', () => {
 		const env = parseEnv(renderEnv(base))
 		expect(env.OPENAI_API_KEY).toBeUndefined()
 		expect(env.ANTHROPIC_API_KEY).toBeUndefined()
@@ -68,11 +71,72 @@ describe('renderEnv', () => {
 		expect(env.OLLAMA_BASE_URL).toBeUndefined()
 	})
 
+	it('writes ANTHROPIC_API_KEY for an sk-ant- key and no OpenAI var', () => {
+		const env = parseEnv(renderEnv({ ...base, providerKey: 'sk-ant-api03-abc123' }))
+		expect(env.ANTHROPIC_API_KEY).toBe('sk-ant-api03-abc123')
+		expect(env.OPENAI_API_KEY).toBeUndefined()
+	})
+
+	it('writes OPENAI_API_KEY for a non-Anthropic key (sk-proj / sk-) and no Anthropic var', () => {
+		const env = parseEnv(renderEnv({ ...base, providerKey: 'sk-proj-xyz789' }))
+		expect(env.OPENAI_API_KEY).toBe('sk-proj-xyz789')
+		expect(env.ANTHROPIC_API_KEY).toBeUndefined()
+	})
+
+	it('trims surrounding whitespace from a pasted key', () => {
+		const env = parseEnv(renderEnv({ ...base, providerKey: '  sk-ant-trimmed  \n' }))
+		expect(env.ANTHROPIC_API_KEY).toBe('sk-ant-trimmed')
+	})
+
+	it('writes no provider key for an empty/whitespace-only field', () => {
+		const env = parseEnv(renderEnv({ ...base, providerKey: '   ' }))
+		expect(env.ANTHROPIC_API_KEY).toBeUndefined()
+		expect(env.OPENAI_API_KEY).toBeUndefined()
+	})
+
+	it('drops a malformed key that contains internal whitespace (no corrupt .env line)', () => {
+		const env = parseEnv(renderEnv({ ...base, providerKey: 'sk-ant-aaa bbb' }))
+		expect(env.ANTHROPIC_API_KEY).toBeUndefined()
+		expect(env.OPENAI_API_KEY).toBeUndefined()
+	})
+
 	it('emits KEY=VALUE lines whose values carry no whitespace (no newline-injection)', () => {
-		const text = renderEnv(base)
+		const text = renderEnv({ ...base, providerKey: 'sk-ant-with-key' })
 		for (const line of text.split('\n')) {
 			if (!line || line.startsWith('#')) continue
 			expect(line).toMatch(/^[A-Z0-9_]+=\S*$/)
 		}
+	})
+})
+
+describe('ensureMasterKeyLine', () => {
+	it('appends the key when missing, preserving existing lines (e.g. a hand-added provider key)', () => {
+		const before = 'LQ_AI_GATEWAY_KEY=gw\nANTHROPIC_API_KEY=sk-ant-manual\n'
+		const after = parseEnv(ensureMasterKeyLine(before, 'master-abc='))
+		expect(after.LQ_AI_GATEWAY_MASTER_KEY).toBe('master-abc=')
+		expect(after.ANTHROPIC_API_KEY).toBe('sk-ant-manual') // preserved
+		expect(after.LQ_AI_GATEWAY_KEY).toBe('gw') // preserved
+	})
+
+	it('is idempotent — leaves text unchanged when the key already exists', () => {
+		const text = 'LQ_AI_GATEWAY_MASTER_KEY=already=\nFOO=bar\n'
+		expect(ensureMasterKeyLine(text, 'new-key=')).toBe(text)
+	})
+
+	it('inserts a separating newline when the file does not end in one', () => {
+		const out = ensureMasterKeyLine('FOO=bar', 'mk=')
+		expect(out).toBe('FOO=bar\nLQ_AI_GATEWAY_MASTER_KEY=mk=\n')
+	})
+})
+
+describe('providerKeyVar', () => {
+	it('routes sk-ant- keys to ANTHROPIC_API_KEY (case-insensitive prefix)', () => {
+		expect(providerKeyVar('sk-ant-api03-abc')).toBe('ANTHROPIC_API_KEY')
+		expect(providerKeyVar('SK-ANT-loud')).toBe('ANTHROPIC_API_KEY')
+	})
+
+	it('routes everything else to OPENAI_API_KEY', () => {
+		expect(providerKeyVar('sk-proj-abc')).toBe('OPENAI_API_KEY')
+		expect(providerKeyVar('sk-abc')).toBe('OPENAI_API_KEY')
 	})
 })

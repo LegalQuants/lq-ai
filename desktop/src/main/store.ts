@@ -1,7 +1,8 @@
 import { safeStorage } from 'electron'
 import { writeFileSync, readFileSync, existsSync, chmodSync, rmSync } from 'node:fs'
 import { configPath, envPath } from './paths'
-import { renderEnv } from '../core/env'
+import { renderEnv, ensureMasterKeyLine } from '../core/env'
+import { generateMasterKey } from '../core/secrets'
 import type { LauncherConfig } from '../core/config'
 
 /** Persist config encrypted at rest via the OS keychain-backed safeStorage. */
@@ -38,4 +39,38 @@ export function writeEnvFile(cfg: LauncherConfig): string {
 	writeFileSync(path, renderEnv(cfg), { mode: 0o600 })
 	chmodSync(path, 0o600) // belt-and-suspenders if the file pre-existed
 	return path
+}
+
+/**
+ * Backfill LQ_AI_GATEWAY_MASTER_KEY into an EXISTING install's .env + config.
+ *
+ * Installs created before the BYOK master key existed have a persisted config and
+ * an .env with no master key, so the in-app Provider-keys page returns 400 and the
+ * wizard (which writes the key) never re-runs. This runs at launch for non-first-run
+ * installs: mints the key if the config lacks it, then appends ONLY the missing line
+ * to the .env (append-only — a full renderEnv would wipe a hand-added provider key).
+ * No-op on first run (the wizard handles it) and idempotent thereafter. The running
+ * gateway picks the key up on its next start/recreate.
+ */
+export function ensureMasterKey(): void {
+	const cfg = loadConfig()
+	if (!cfg) return // first run — wizard:complete writes a full .env with the key
+
+	let changed = false
+	if (!cfg.secrets.LQ_AI_GATEWAY_MASTER_KEY) {
+		cfg.secrets.LQ_AI_GATEWAY_MASTER_KEY = generateMasterKey()
+		changed = true
+	}
+
+	const path = envPath()
+	if (existsSync(path)) {
+		const before = readFileSync(path, 'utf8')
+		const after = ensureMasterKeyLine(before, cfg.secrets.LQ_AI_GATEWAY_MASTER_KEY)
+		if (after !== before) {
+			writeFileSync(path, after, { mode: 0o600 })
+			chmodSync(path, 0o600)
+		}
+	}
+
+	if (changed) saveConfig(cfg)
 }
