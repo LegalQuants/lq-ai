@@ -4691,6 +4691,18 @@ No code change — the runtime already returns these with the correct typed `cod
 
 **Context:** Found during the v0.5.0 release-readiness verification. Ingestion is PDF-only today (DOCX/RTF/TXT are M2), but the upload endpoint accepts a TXT/DOCX file (HTTP 2xx) and only marks it `failed` with `unsupported_type` after the worker picks it up — so a user learns the format is unsupported only after upload + a poll cycle. Add a pre-upload MIME/extension guard that rejects unsupported types synchronously with a clear error (or a documented "PDF only for now" note on the upload surface) until the M2 format expansion lands.
 
+#### DE-353 — `web` (OpenWebUI) container blocked first-boot on an unnecessary HuggingFace model fetch — **RESOLVED**
+
+**Priority:** P2 · **Effort:** S · **Status: RESOLVED** in the v0.5.0 launcher-readiness pass.
+
+**Context:** Found during the v0.5.0 release-readiness verification (isolated boot of the published images + the macOS launcher first-run). At import, `web/backend/open_webui/main.py` calls `get_ef(RAG_EMBEDDING_ENGINE, …)` **before** uvicorn binds `:8080`; with the default empty engine it builds a local SentenceTransformer → `snapshot_download` → the "Fetching 30 files" HuggingFace download. Under HF rate-limiting this stalled near 0% for many minutes, so the `web` healthcheck failed → `web` went `unhealthy` after its 20s start_period → the dependent user-facing `proxy` never started, and the macOS launcher (which fails the moment any service is `unhealthy`) reported "Stack failed to start." LQ.AI does its **own** embeddings/citations (api/gateway via OpenAI `text-embedding-3-*`) and does not use OpenWebUI's local RAG, so the fetch was pure waste. **Fix:** set `RAG_EMBEDDING_ENGINE=openai` (a non-empty sentinel) on the `web` service in `docker-compose.yml` and `docker-compose.release.yml` — `get_ef()` then returns `None` and the local-model construction/download is skipped. Empirically verified on `lq-ai-web:v0.5.0`: `/health` → 200 in **~11s** (vs never/183s+ baseline), no "Fetching" line, UI shell intact. Compose-only — no image re-cut required.
+
+#### DE-354 — macOS launcher regenerated secrets on a retried first-run without `down -v` → stale-volume auth crash-loop — **RESOLVED**
+
+**Priority:** P1 · **Effort:** S · **Status: RESOLVED** in the v0.5.0 launcher-readiness pass.
+
+**Context:** Found during the v0.5.0 launcher first-run test. `wizard:complete` (`desktop/src/main/index.ts`) calls `generateSecrets()` every run and only `saveConfig()`s on success, and `down -v` was wired only to the Reset button. So a first start that failed for any reason (e.g. [DE-353](#de-353--web-openwebui-container-blocked-first-boot-on-an-unnecessary-huggingface-model-fetch--resolved)) left an orphaned postgres volume initialized with the first attempt's password; the next start generated fresh secrets, but POSTGRES only honors the password on first init of an empty volume, so the api hit `password authentication failed` and crash-looped — unrecoverable without a manual Reset. **Fix:** `wizard:complete` now calls `resetStack()` (`down -v`) before `startStack()`, guaranteeing fresh secrets always meet a fresh postgres init (safe because the wizard only runs on first-run, when there is no real data yet). With DE-353 fixed, the first start succeeds outright; DE-354 makes any future failed attempt cleanly recoverable.
+
 ---
 
 ## 10. Appendices

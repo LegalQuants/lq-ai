@@ -79,6 +79,14 @@ ipcMain.handle('wizard:complete', async (_e, input: WizardInput) => {
 		// failed first run re-shows the wizard instead of stranding a half-configured install.
 		writeEnvFile(cfg)
 		const b = base()
+		// A prior failed first-run attempt can leave an orphaned postgres volume
+		// initialized with a now-discarded password (we regenerate secrets each
+		// wizard run, and POSTGRES only honors the password on first init of an
+		// empty volume). Without this, the second attempt's fresh secrets meet
+		// the old volume → api "password authentication failed" crash-loop. Since
+		// the wizard only runs on first-run (no persisted config), wiping volumes
+		// here is safe and guarantees fresh secrets meet a fresh postgres init.
+		await resetStack(b)
 		await startStack(b, process.env)
 		await waitHealthy(b)
 		const admin = await runAdminFixture(b, input.adminEmail, input.adminPassword)
