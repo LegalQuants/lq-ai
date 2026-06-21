@@ -105,6 +105,12 @@ services:
       AWS_REGION: ${AWS_REGION:-us-east-1}
       AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
       AZURE_OPENAI_RESOURCE: ${AZURE_OPENAI_RESOURCE:-}
+      # Tool-provider keys (legal-research + MCP milestone). Forwarded so an
+      # enabled tool_providers entry in gateway.yaml whose `api_key_env:` names
+      # COURTLISTENER_API_TOKEN resolves at config-load time. Unset by default
+      # (case-law is operator-opt-in: uncomment the courtlistener block in
+      # gateway.yaml AND set this token to enable). See gateway.yaml.example.
+      COURTLISTENER_API_TOKEN: ${COURTLISTENER_API_TOKEN:-}
       # B6 partial — Ollama (Mode-2 / Tier-1). Forwarded so the
       # gateway.yaml's ${OLLAMA_BASE_URL:-http://ollama:11434}
       # placeholder resolves at config-load time. Operators running

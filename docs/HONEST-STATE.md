@@ -1,6 +1,6 @@
 # Honest State
 
-> Catalog of what LQ.AI ships today, what is deferred, and how to verify each. Maintained per release. **Current as of the M4 close plus the post-v0.4.0 "Donna" run (#115–#139); migration head `0047`.**
+> Catalog of what LQ.AI ships today, what is deferred, and how to verify each. Maintained per release. **Current as of the legal-research + connectors (MCP) milestone close (#158–#193); migration head `0055`.** (Prior baseline: the M4 close plus the post-v0.4.0 "Donna" run, #115–#139, head `0047`.)
 
 ## What this doc is
 
@@ -29,7 +29,9 @@ Status markers reference the roadmap milestones (M1 → M4) documented in [READM
 
 **M4 — Autonomous Layer (shipped).** The background autonomous executor runs real in-loop work: a five-phase LangGraph state machine (intake → analysis → drafting → ethics_review → delivery) where every external action routes through a single `guarded_tool_call` chokepoint enforcing three brakes — R4 (per-session/per-trigger cost cap), R5 (external halt + idle watchdog), R6 (phase-gated tool grants). It ships the four primitives (watches, schedules, per-user memory, precedent board), honest per-session receipts, per-user opt-in, and a full web dashboard. The **Contract Repository auto-relationship graph** (a separate M4-roadmap capability) is **not** built.
 
-**The honest reading:** an operator can deploy LQ.AI today for everyday in-house work on the starter skills, with character-verified citation grounding, operator-configurable pseudonymization, codified-position playbooks, multi-document tabular review, and an opt-in autonomous background layer with hard economic/temporal/contextual brakes. The deferred edges are: in-Word feature surfaces (scaffold today), live-verified chat-platform intake (plumbing today), the contract relationship graph, and the MCP client subsystem.
+**Legal research + connectors (MCP) — gateway-brokered (shipped after M4; #158–#193).** The assistant can now reach external tools — case-law lookup (CourtListener) and operator-approved MCP connectors — but only through the Inference Gateway, which is extended from sole *inference* egress to sole *tool* egress (ADR [0014](adr/0014-gateway-egress-boundary-for-tool-providers.md)/[0015](adr/0015-governed-tool-calling-model.md)). A governed chat tool-loop routes every tool call through a single `governed_tool_invocation` chokepoint; destructive/connector tools pause for an in-chat **persist-and-resume confirmation gate**; case-law results carry **external-source retrieval provenance** ("Sources consulted", kept architecturally distinct from the Citation Engine's character-verified quotes); per-user connector tokens are Fernet-encrypted at rest and never logged. Detailed in [§5.5](#55-legal-research-and-connectors-mcp-gateway-brokered-shipped-after-m4).
+
+**The honest reading:** an operator can deploy LQ.AI today for everyday in-house work on the starter skills, with character-verified citation grounding, operator-configurable pseudonymization, codified-position playbooks, multi-document tabular review, an opt-in autonomous background layer with hard economic/temporal/contextual brakes, and gateway-brokered legal-research + connector (MCP) access under a governed, human-gated tool-loop. The deferred edges are: in-Word feature surfaces (scaffold today), live-verified chat-platform intake (plumbing today), and the contract relationship graph.
 
 ---
 
@@ -60,7 +62,7 @@ The surface in-house counsel touches every day. Every row is wired end-to-end in
 
 ## 2. Inference gateway and providers
 
-The Inference Gateway is the security boundary — the only component holding privileged provider API keys and the only component making outbound calls to inference providers. Four provider adapters ship: Anthropic, OpenAI, Azure OpenAI, Ollama (local Tier 1). Google Vertex AI and AWS Bedrock are spec'd in PRD §9 as contributor-friendly work and remain deferred.
+The Inference Gateway is the security boundary — the only component holding privileged provider API keys and the only component making outbound calls. As of the legal-research + MCP milestone this extends from inference egress to **tool egress**: case-law (CourtListener) and MCP-connector calls also leave only through the gateway, SSRF-guarded and audited (see [§5.5](#55-legal-research-and-connectors-mcp-gateway-brokered-shipped-after-m4)). The backend (`api/app`) holds exactly one outbound HTTP client, pointed at the gateway. Four provider adapters ship: Anthropic, OpenAI, Azure OpenAI, Ollama (local Tier 1). Google Vertex AI and AWS Bedrock are spec'd in PRD §9 as contributor-friendly work and remain deferred.
 
 | Capability | Status | Verification |
 |---|---|---|
@@ -184,6 +186,36 @@ An opt-in background executor that does real in-loop agentic work under hard bra
 
 ---
 
+## 5.5 Legal research and connectors (MCP), gateway-brokered (shipped after M4)
+
+After M4, LQ.AI gained the ability to reach *external* tools — case-law lookup and operator-approved MCP connectors — without weakening the gateway boundary. The gateway is extended from sole *inference* egress to sole *tool* egress; a governed chat tool-loop routes every call through one chokepoint; destructive/connector calls pause for explicit human approval; and case-law results carry retrieval provenance kept architecturally distinct from character-verified citations. Shipped across #158–#193 (migrations `0048`–`0055`); design in [ADR 0014](adr/0014-gateway-egress-boundary-for-tool-providers.md) / [ADR 0015](adr/0015-governed-tool-calling-model.md) and [`docs/proposals/legal-research-and-mcp.md`](proposals/legal-research-and-mcp.md) (delivered).
+
+| Capability | Status | Verification |
+|---|---|---|
+| Gateway tool-provider egress boundary — sole tool egress, SSRF-guarded, audited (`tool_egress_log`, counts/types only) | shipped | `gateway/app/providers/tool/` (`validate_egress_target`); migration `0048_tool_egress_log.py`; ADR 0014; `api/app` holds exactly one outbound client → the gateway (`api/app/clients/gateway.py`) |
+| CourtListener case-law provider (search / clusters / citation-lookup against REST v4) | shipped | `gateway/app/providers/tool/courtlistener.py`; `cd gateway && pytest tests/test_courtlistener_adapter.py` |
+| Research API subsystem (`/api/v1/research/*`: capabilities, search + cursor pagination, verify-citations, clusters/opinions/find-in-case) | shipped | `api/app/api/research.py`, `api/app/research/service.py`; migration `0049_research_metadata.py`; `cd api && pytest tests/test_research_endpoints.py tests/test_research_service.py` |
+| MCP client subsystem — gateway adapter (streamable_http, per-call OAuth token injection, tool discovery) | shipped | `gateway/app/providers/tool/mcp.py`; `cd gateway && pytest tests/test_mcp_adapter.py` |
+| MCP registry + discovery-cache + `/api/v1/admin/mcp` surface | shipped | `api/app/api/admin_mcp.py`, `api/app/mcp/service.py`; migration `0050_mcp_tools.py`; `cd api && pytest tests/test_admin_mcp.py tests/test_mcp_service.py` |
+| Per-user MCP OAuth (api flow, tokens Fernet-encrypted at rest, gateway passthrough, `return_url` + connections list) | shipped | `api/app/api/mcp_oauth.py`, `api/app/models/mcp_oauth.py`, `api/app/security/encryption.py`; migrations `0051`/`0052`; `cd api && pytest tests/test_mcp_oauth_service.py tests/test_mcp_encryption.py` |
+| Tool-governance substrate — single `governed_tool_invocation` chokepoint (shared with the autonomous layer) + `tool_call_log` | shipped | `api/app/tools/governance.py`; migration `0053_tool_call_log.py`; ADR 0015; `cd api && pytest tests/test_tool_governance.py` |
+| Governed chat tool-loop + persist-and-resume confirmation gate (in-chat approve/deny resumes the turn; connect-on-demand) | shipped | `api/app/chat/tool_loop.py`, `api/app/api/chats.py` (resume route); migration `0054_chat_pending_tool_call.py`; UI `web/src/lib/lq-ai/components/ToolGatePrompt.svelte`; `cd api && pytest tests/integration/test_chat_tool_call_resume.py` |
+| External-source citations — case-law retrieval provenance ("Sources consulted"), distinct from Citation-Engine verified quotes | shipped | `api/app/models/message_tool_source.py`, `api/app/chat/tool_loop.py` (`extract_tool_sources`); migration `0055_message_tool_sources.py`; UI `web/src/lib/lq-ai/components/ToolSourcesPanel.svelte` + `ProvenancePill.svelte`; `cd api && pytest tests/test_message_tool_sources.py` |
+| `case-law-research` skill + C5 tool-usage (declared via `lq_ai.tool_usage`, surfaced as "Uses: …" in the skill UI; surface-not-enforce) | shipped | `skills/case-law-research/SKILL.md`; `api/app/skills/schema.py`; `web/src/lib/lq-ai/skills/toolUsageNote.ts`; `cd api && pytest tests/test_skills_tool_usage.py` |
+| OpenWebUI MCP stub retired (DE-341) | shipped | `web/backend/open_webui/utils/mcp/` removed; `grep -r "utils.mcp.client" web/backend` is empty; PRD §DE-341 (Resolved in PR6e) |
+| Learn viz — governed-tool-boundary explorer | shipped | `web/static/learn/playgrounds/governed-tool-flow.html` (Learn → How it works) |
+
+**Caveats (honest):**
+
+- **Tool connectors are operator-opt-in, off by default.** The gateway makes no outbound tool calls until an operator enables a `tool_providers` entry (external egress is operator-controlled — ADR 0014). Case-law requires setting `COURTLISTENER_API_TOKEN` in `.env` (forwarded into the gateway container by `docker-compose.yml`) **and** uncommenting the `courtlistener-prod` block in `gateway.yaml` (template in `gateway.yaml.example`), then restarting the gateway; `/api/v1/research/capabilities` reports `enabled: true` once on. MCP connectors register via `/api/v1/admin/mcp` + per-user OAuth. See the README "Enabling legal-research connectors" section. Verified live on a fresh clone (build → migrate `0055` → enable → real CourtListener retrieval → `message_tool_sources` → `tool_egress_log`).
+- The legal-research surface is intentionally scoped: case-law **retrieval** and external-source **provenance** ship; result-content accuracy judging ([DE-280](PRD.md#9-deferred-enhancements-and-identified-future-work)) remains deferred. PRD §3.6 marks the research capability **PARTIAL** accordingly.
+- "Sources consulted" is **retrieval provenance**, not character-verified grounding — it records which external sources a tool call pulled in, and lives in a separate table (`message_tool_sources`) from the Citation Engine's verified quotes (`message_citations`). The two are deliberately never conflated.
+- The Anthropic tool-loop has a known gap when a single turn fans out to multiple read-only tools (consecutive same-role messages the provider rejects) — deferred; single-tool and resume paths are unaffected.
+- Chat-side governed tool calls are audit-logged (`tool_call_log` — counts/types/`args_digest` only, never raw arguments) but do not yet emit a dedicated OTel `chat.tool_call` span (deferred).
+- Runtime BYOK admin provider-keys require `LQ_AI_GATEWAY_MASTER_KEY`; env-configured keys work without it.
+
+---
+
 ## 6. Capabilities not yet started in source
 
 Honest milestone deferrals — the subsystem does not yet exist (or only as plumbing). Verifiable by absence.
@@ -193,7 +225,6 @@ Honest milestone deferrals — the subsystem does not yet exist (or only as plum
 | In-Word feature surfaces (chat/skills/playbooks in the add-in) | deferred (M4 / community) | `word-addin/` tabs are deep-link cards; [DE-287](PRD.md#9-deferred-enhancements-and-identified-future-work) |
 | `/lq` Slack/Teams slash-command intake | deferred | Bridge webhook handlers inert; [DE-288](PRD.md#9-deferred-enhancements-and-identified-future-work) |
 | Contract Repository auto-relationship detection (PRD §3.16) | deferred-M4+ | No `contract_relationships` table in `api/alembic/versions/` |
-| MCP-client subsystem (M5+) | deferred-M5 | `grep -r "mcp" api/app gateway/app` is empty; PRD §8.5 |
 
 ---
 
@@ -217,10 +248,10 @@ Engineering rigor is measurable, not asserted. Test **file** counts below are ve
 
 | Practice | Status | Verification |
 |---|---|---|
-| Backend tests (pytest, live Postgres) | M1–M4 | 144 `test_*.py` files in `api/tests/` (incl. `tests/autonomous/` — 361 passing at M4 close, pre-Donna-run; refresh at next tag); `cd api && DATABASE_URL=… pytest` |
-| Gateway tests (pytest) | M1–M4 | 41 `test_*.py` files in `gateway/tests/` (pre-Donna-run; refresh at next tag); `cd gateway && pytest` |
-| Frontend unit tests (Vitest) | M1–M4 | 71 spec files in `web/src/`; `cd web && npx vitest run` |
-| Cypress E2E (LQ.AI shell) | M1–M4 | 17 specs in `web/cypress/e2e/` |
+| Backend tests (pytest, live Postgres) | M1–milestone | 183 `test_*.py` files in `api/tests/` (incl. `tests/autonomous/`, `tests/citation/`, `tests/tabular/`; pass count refreshed in CI per the `.github/workflows/ci.yml` API gate); `cd api && DATABASE_URL=… pytest` |
+| Gateway tests (pytest) | M1–milestone | 64 `test_*.py` files in `gateway/tests/`; `cd gateway && pytest` |
+| Frontend unit tests (Vitest) | M1–milestone | 76 `*.test.ts` files in `web/src/`; `cd web && npx vitest run` |
+| Cypress E2E (LQ.AI shell) | M1–milestone | 17 specs in `web/cypress/e2e/` |
 | Ruff lint + format (Python) | M1–M4 | `.github/workflows/ci.yml`: `ruff check api scripts` + `ruff format --check` |
 | mypy (api standard, gateway strict) | M1–M4 | CI `mypy app` per subsystem |
 | svelte-check (LQ.AI-owned code) | M1–M4 | `cd web && npm run check:lq-ai` (0 errors on `src/{lib,routes}/lq-ai/**`); inherited OpenWebUI debt tracked as DE-262 (§8.1) |
@@ -252,7 +283,7 @@ The web frontend is a fork of OpenWebUI (ADR 0001). `npm run check` (full scope)
 
 ## 10. How to verify everything in this doc
 
-1. Clone the repo and follow the [Quickstart](../README.md#quickstart) to stand the stack up (`docker compose up -d --build` — the api runs migrations 0001→0047 on boot).
+1. Clone the repo and follow the [Quickstart](../README.md#quickstart) to stand the stack up (`docker compose up -d --build` — the api runs migrations 0001→0055 on boot).
 2. Browse the file path or run the test command in the Verification column.
 3. To read source without running the stack, the cited paths are all in the repository.
 
@@ -267,4 +298,4 @@ If a claim does not check out, the codebase is canonical — please [open an iss
 
 ## 12. Maintenance note
 
-Maintained per release. Last rewritten at the **M4 close** (Autonomous Layer shipped end-to-end; fresh-install acceptance passed), then reconciled against the post-v0.4.0 "Donna" run (#115–#139; migration head `0047`). Substantive content drivers: [PRD §3](PRD.md#3-capability-specifications) (capabilities), [PRD §8](PRD.md#8-roadmap) (roadmap), [PRD §9](PRD.md#9-deferred-enhancements-and-identified-future-work) (deferrals), and the per-feature docs (`docs/citation-engine.md`, `docs/playbooks.md`, `docs/tabular-review.md`, `docs/word-addin.md`, `docs/intake-bridges.md`, `docs/autonomous-layer.md`).
+Maintained per release. Last rewritten at the **M4 close** (Autonomous Layer shipped end-to-end; fresh-install acceptance passed), reconciled against the post-v0.4.0 "Donna" run (#115–#139; head `0047`), then reconciled against the **legal-research + connectors (MCP) milestone** (#158–#193; migration head `0055`; the release-readiness verification pass for v0.5.0). Substantive content drivers: [PRD §3](PRD.md#3-capability-specifications) (capabilities), [PRD §8](PRD.md#8-roadmap) (roadmap), [PRD §9](PRD.md#9-deferred-enhancements-and-identified-future-work) (deferrals), and the per-feature docs (`docs/citation-engine.md`, `docs/playbooks.md`, `docs/tabular-review.md`, `docs/word-addin.md`, `docs/intake-bridges.md`, `docs/autonomous-layer.md`, and the ADRs `docs/adr/0014`/`0015` + `docs/proposals/legal-research-and-mcp.md` for the tool-egress/MCP milestone).

@@ -1,6 +1,8 @@
 # Mini-PRD: Legal Research Sources + MCP Client — gateway-brokered, governed, operator-controlled
 
-> **Status:** Architecture pinned — decisions promoted to [ADR 0014](../adr/0014-gateway-egress-boundary-for-tool-providers.md) (egress boundary) and [ADR 0015](../adr/0015-governed-tool-calling-model.md) (governed tool-calling). Open for contribution.
+> **✅ DELIVERED — shipped across PR1–PR6 (#158–#193); migration head `0055`; ADRs [0014](../adr/0014-gateway-egress-boundary-for-tool-providers.md)/[0015](../adr/0015-governed-tool-calling-model.md) Accepted.** This mini-PRD is retained as the design record; the present-tense planning language below (e.g. "today only a stub exists", "no routes exist yet") describes the *pre-build* state and is no longer current. For the shipped-vs-deferred catalog see [HONEST-STATE.md §5.5](../HONEST-STATE.md). Remaining deferral: result-content accuracy judging (DE-280).
+>
+> **Status (original):** Architecture pinned — decisions promoted to [ADR 0014](../adr/0014-gateway-egress-boundary-for-tool-providers.md) (egress boundary) and [ADR 0015](../adr/0015-governed-tool-calling-model.md) (governed tool-calling). Open for contribution.
 > **Effort:** L (a milestone, split into ~6 PRs across two architectural cores and two features).
 > **Contributor profile:** Backend engineer comfortable in the `gateway/` security boundary and `api/` (FastAPI + httpx + LangGraph). MCP familiarity helpful. The two ADR-level pieces want a contributor who has read [PRD §1.8](../PRD.md#18-security-posture) and the autonomous-layer ADR ([0013](../adr/0013-autonomous-layer-design-influences.md)).
 > **Mentor:** Maintainer (via PR review); security review required (`gateway/**`).
