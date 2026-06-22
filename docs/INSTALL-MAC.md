@@ -104,6 +104,10 @@ To add a key in the app:
 3. Paste the key and **Save**. It's **encrypted at rest** and **hot-applied with no restart** — your next
    chat uses it immediately. Only the last four characters are ever shown back.
 
+![The LQ.AI admin Provider keys page — a table of providers with their type, status (e.g. •••• EgAA), key source (.env or runtime), and Set/Replace/Revoke actions.](images/launcher-provider-keys.png)
+
+*The **Admin → Provider keys** page. A key set in the setup wizard shows source **`.env`**; a key added here is stored **encrypted in the gateway** (source **runtime**) and can be revoked in place. Only the last four characters are ever shown.*
+
 Your provider keys are held by the engine's Inference Gateway on your Mac and never leave it; the launcher
 stores a key only in the local `.env` (wizard path) or encrypted in the gateway (in-app path).
 
