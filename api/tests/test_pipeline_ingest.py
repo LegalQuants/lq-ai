@@ -493,7 +493,9 @@ async def test_ingest_unsupported_mime_marks_failed(
     fake_s3: FakeS3Client,
     patched_storage: FakeS3Client,
 ) -> None:
-    """A non-PDF MIME flips the row to failed with unsupported_type."""
+    """A MIME that is neither PDF nor text/Markdown flips the row to failed
+    with unsupported_type. (text/plain is now supported — see DE-332 — so this
+    uses an image, which is still unsupported.)"""
 
     storage_key = f"{uuid.uuid4()}"
     _put_in_fake_s3(fake_s3, storage_key, b"hello world")
@@ -503,8 +505,8 @@ async def test_ingest_unsupported_mime_marks_failed(
         db_user,
         storage_path=storage_key,
         pdf_bytes=b"hello world",
-        mime="text/plain",
-        filename="x.txt",
+        mime="image/png",
+        filename="x.png",
     )
 
     result = await ingest_file(db_session, file_row.id)
