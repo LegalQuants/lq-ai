@@ -1,6 +1,8 @@
-"""PDF parser adapters — PyMuPDF (canonical) and Docling (structure).
+"""Document parser adapters — PyMuPDF/Docling for PDF, a stdlib decode for text.
 
-Per ADR 0006:
+Plain text and Markdown (:func:`parse_text`) need no parsing library: the
+decoded bytes are themselves the canonical character stream, stored verbatim
+so citations resolve byte-for-byte. PDF needs real extraction, per ADR 0006:
 
 * **PyMuPDF** is the source of truth for the canonical character
   stream. Every chunk's ``content`` slices the PyMuPDF output by
@@ -56,8 +58,19 @@ class ParserError(Exception):
 class ParserUnsupported(ParserError):
     """The file type or content is not supported by any installed parser.
 
-    Currently raised for non-PDF MIME types (DOCX, RTF, TXT — M2)
-    and for encrypted PDFs (the M1 pipeline does not unlock them).
+    Currently raised for non-PDF MIME types (DOCX, RTF — M2) and for
+    encrypted PDFs (the M1 pipeline does not unlock them).
+    """
+
+
+class ParserDecodeError(ParserError):
+    """A text/markdown upload could not be decoded as UTF-8.
+
+    Distinct from :class:`ParserUnsupported`: the MIME *is* a supported
+    text type, but the bytes are not valid UTF-8. We fail loud rather
+    than guess an encoding — a silent mis-decode would corrupt the
+    canonical text a citation later verifies against. The orchestrator
+    maps this to ``ingestion_error='decode_error'``.
     """
 
 
@@ -116,9 +129,9 @@ class ParsedDocument:
 # Public entry point
 # ---------------------------------------------------------------------------
 
-# Sentinel MIME types we accept for M1 PDFs. C5 is PDF-only; DOCX/RTF/TXT
-# stay at ``ingestion_status='failed'`` with ``unsupported_type`` per the
-# C5 brief.
+# Sentinel MIME types we accept for PDFs. DOCX/RTF still stay at
+# ``ingestion_status='failed'`` with ``unsupported_type``; plain
+# text / Markdown are handled by the :func:`parse_text` branch below.
 SUPPORTED_PDF_MIMES = frozenset(
     {
         "application/pdf",
@@ -127,6 +140,18 @@ SUPPORTED_PDF_MIMES = frozenset(
         "applications/vnd.pdf",
         "text/pdf",
         "text/x-pdf",
+    }
+)
+
+# Plain-text and Markdown uploads. These need no parsing library — the
+# decoded bytes are themselves the canonical character stream — so they
+# take the :func:`parse_text` branch rather than the PyMuPDF/Docling
+# cascade.
+SUPPORTED_TEXT_MIMES = frozenset(
+    {
+        "text/plain",
+        "text/markdown",
+        "text/x-markdown",
     }
 )
 
@@ -139,6 +164,93 @@ def is_pdf_mime(mime_type: str) -> bool:
     """
 
     return mime_type.lower() in SUPPORTED_PDF_MIMES
+
+
+def is_text_mime(mime_type: str) -> bool:
+    """Return True if the MIME indicates plain text or Markdown.
+
+    Text uploads commonly carry a charset parameter
+    (``text/plain; charset=utf-8``), so we match on the bare type and
+    ignore parameters. The charset is *not* honoured for decoding —
+    :func:`parse_text` always decodes strict UTF-8 (see its docstring).
+    """
+
+    base = mime_type.split(";", 1)[0].strip().lower()
+    return base in SUPPORTED_TEXT_MIMES
+
+
+# Filename extensions treated as text when the browser-supplied MIME is
+# unreliable. Browsers and operating systems disagree on the MIME for ``.md``
+# (frequently ``application/octet-stream`` or empty), so the extension is the
+# dependable signal. This only *routes* the upload to :func:`parse_text`, which
+# still validates the bytes (strict UTF-8, no NUL) — so a binary file with a
+# ``.md`` name fails cleanly as ``decode_error`` rather than being trusted.
+TEXT_EXTENSIONS = (".md", ".markdown", ".txt")
+
+
+def is_text_filename(filename: str) -> bool:
+    """Return True if the filename has a known text/Markdown extension.
+
+    The fallback for generic-MIME uploads (e.g. ``application/octet-stream``),
+    which is what many browsers send for ``.md``.
+    """
+
+    return filename.lower().endswith(TEXT_EXTENSIONS)
+
+
+def parse_text(raw_bytes: bytes) -> ParsedDocument:
+    """Build a canonical :class:`ParsedDocument` from a text/Markdown upload.
+
+    Unlike PDF, plain text needs no parsing library: the decoded bytes
+    *are* the canonical character stream. Storing them verbatim makes the
+    offset-fidelity contract
+    (``canonical_text[char_offset_start:char_offset_end] == chunk.content``)
+    hold exactly, so the Citation Engine re-reads byte-for-byte and the
+    strongest (exact-match) citation tier resolves for every text document.
+
+    Markdown is stored **verbatim, never rendered** — a citation must
+    resolve against the source the user uploaded, not a derived rendering,
+    and rendering would also add a non-deterministic dependency.
+
+    Decoding is strict UTF-8 (``utf-8-sig`` transparently drops an optional
+    BOM). A non-UTF-8 byte stream raises :class:`ParserDecodeError` rather
+    than guessing an encoding — a silent mis-decode would corrupt the text a
+    citation later verifies against. This is a pure, deterministic function:
+    same bytes in, same canonical text out, with no model, OCR, or network.
+
+    A NUL byte (``0x00``) is also rejected: it decodes as valid Unicode but
+    PostgreSQL ``text`` columns cannot store it, so ``normalized_content``
+    would fail to persist downstream. A NUL almost always means the upload is
+    binary (or UTF-16) mislabeled as text — failing loud here is correct, and
+    keeps the failure a clean ``decode_error`` rather than a DB exception that
+    strands the row mid-ingest.
+    """
+
+    try:
+        text = raw_bytes.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise ParserDecodeError(
+            f"upload is not valid UTF-8 text (offset {exc.start}): {exc.reason}. "
+            "Save the file as UTF-8 (not UTF-16 / ANSI / Latin-1) and retry."
+        ) from exc
+
+    if "\x00" in text:
+        raise ParserDecodeError(
+            "upload contains a NUL byte (0x00); this is not a valid text "
+            "document (likely a binary or UTF-16 file mislabeled as text)."
+        )
+
+    # Single synthetic page over the whole stream — text has no pagination;
+    # this mirrors the autonomous-artifact construction in
+    # ``app.autonomous.guard`` and keeps the chunker's page lookup happy.
+    return ParsedDocument(
+        canonical_text=text,
+        pages=[PageSpan(page_number=1, char_start=0, char_end=len(text))],
+        page_count=1,
+        parser="plain-text",
+        parser_version="1",
+        structured_content=None,
+    )
 
 
 def parse_pdf(pdf_bytes: bytes, *, run_docling: bool = True) -> ParsedDocument:

@@ -371,7 +371,7 @@
 					</button>
 					<input
 						type="file"
-						accept="application/pdf,.pdf"
+						accept="application/pdf,.pdf,text/plain,text/markdown,.md,.markdown,.txt"
 						bind:this={fileInput}
 						on:change={handleFileSelected}
 						class="lq-file-input"

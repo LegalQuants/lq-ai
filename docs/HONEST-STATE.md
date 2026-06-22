@@ -49,6 +49,7 @@ The surface in-house counsel touches every day. Every row is wired end-to-end in
 | Skill capture / wizard authoring / fork / versions tab | M1 | `web/cypress/e2e/wave-d2-skill-creator.cy.ts` Tests 1–6 |
 | Saved Prompts library with one-click "Use in chat" | M1 | `api/app/api/saved_prompts.py`; `web/cypress/e2e/wave-m1-final-surfaces.cy.ts` Test 1 |
 | Knowledge bases — create, attach documents, ingest to `ready` (hybrid BM25 + vector retrieval) | M1 | `api/app/api/knowledge_bases.py`; `api/app/workers/document_pipeline.py` |
+| Ingest formats — **PDF** (PyMuPDF/Docling) and **plain text / Markdown** (`parse_text`, verbatim canonical text → exact-match citations; non-UTF-8 → `decode_error`). DOCX is roadmap. | M1 (PDF); post-v0.5.0 (text/md, DE-332) | `api/app/pipeline/parsers.py`; `api/app/pipeline/ingest.py` |
 | Receipts drawer with per-event provenance | M1 | `api/app/api/chat_receipts.py`; `web/cypress/e2e/wave-m1-final-surfaces.cy.ts` Test 3 |
 | Enhance Prompt (⌘E) | M1 | `api/app/api/enhance_prompt.py` |
 | Audit log of all sensitive actions | M1 | `api/app/audit.py`; admin reads at `/lq-ai/admin/audit-log` |
