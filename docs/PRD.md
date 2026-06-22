@@ -4713,6 +4713,29 @@ No code change — the runtime already returns these with the correct typed `cod
 
 ---
 
+#### DE-356 — First-run launcher shows no progress during the image-pull + model-download phases
+
+**Priority:** P2 · **Effort:** M · **Status: OPEN**
+
+**Context:** Surfaced during the v0.5.2 fresh-install verification. A first run downloads ~17 GB of images (`api` ~9.5 GB, `web` ~6 GB, `gateway` ~1.6 GB, `proxy`) and then document-processing models — 10–30 min depending on bandwidth — but the wizard sits on a static "Starting LQ.AI…" with **no progress** for the whole time, reading as a hang. Root cause: `startStack` (`desktop/src/main/orchestrator.ts`) runs `docker compose up -d` via `runDocker`, which **buffers output and awaits completion**, and `wizard:complete` (`desktop/src/main/index.ts`) only begins the health-polling that emits the `X/9 services ready` snapshots **after** `up` returns:
+
+```
+await startStack(b, …)   // blocks for the entire pull; output buffered, nothing emitted
+await waitHealthy(b)      // the X/9 snapshots only start here, after up completes
+```
+
+So the single longest phase (image pull) has neither a stream nor a poll. The renderer already has the channels to fix this (`onState` / `onLog`; `streamDocker` is used for web log tailing).
+
+**Option ladder (defer to a launcher cycle — touching this means re-cutting the `.dmg`):**
+
+1. **Cheap / high-impact (S):** start the snapshot polling **concurrently** with `up` (don't await `up` first), and add an **elapsed timer + one-time reassurance** ("Downloading the engine — a one-time ~17 GB download; this can take 10–30 min"). No output parsing; a reorder + copy. Removes the "is it frozen?" feeling.
+2. **Target (M):** stream `docker compose up`/`pull` stdout to the wizard via the existing `streamDocker`, surfacing real Docker progress, optionally parsed into a **per-image checklist** (proxy ✓, gateway ✓, web ⏳, api ⏳).
+3. **Full (L):** a multi-phase progress UI — **Downloading engine** (parsed % bar) → **Starting services (X/9)** → **Loading document models** (tail the `ingest-worker` logs for the docling/OCR model fetch, the *second* invisible wait) → **Ready**.
+
+**Recommendation:** ship (1) as the floor and (2) as the target together; (3) is the polished follow-up. Verified live 2026-06-21 on the `desktop-v0.5.2` fresh install (wizard frozen on "Starting LQ.AI…" through the multi-GB pull).
+
+---
+
 ## 10. Appendices
 
 ### Appendix A — Glossary
