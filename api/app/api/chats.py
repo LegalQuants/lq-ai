@@ -512,6 +512,7 @@ async def _serialize_chat(
         created_at=chat.created_at,
         updated_at=chat.updated_at,
         message_count=message_count,
+        sticky_skills=list(chat.sticky_skills or []),
     )
 
 
@@ -1312,6 +1313,25 @@ async def send_message(
             attached_skill_provenance.append(
                 {"name": resolved_slug, "source": "slash", "kind": "slug"}
             )
+
+    # Sticky skills (issue #207 finding 4) — opt-in, per-chat. ``chat.sticky_skills``
+    # is the persisted set (empty = toggle OFF, fail-restrictive). While active it
+    # is unioned into this turn's skills so a follow-up turn keeps applying them
+    # without the client re-sending; per-turn explicit skills are kept too (union).
+    # ``set_sticky`` is the toggle: True snapshots the current set, False clears it,
+    # None leaves it unchanged.
+    if payload.set_sticky is False:
+        # Toggle off: clear the set; this turn applies only explicitly-chosen skills.
+        chat.sticky_skills = []
+    else:
+        for slug in chat.sticky_skills or []:
+            if slug not in effective_skills:
+                effective_skills.append(slug)
+            if slug not in {e["name"] for e in attached_skill_provenance}:
+                attached_skill_provenance.append({"name": slug, "source": "sticky", "kind": "slug"})
+        if payload.set_sticky is True:
+            # Snapshot everything applied this turn as the chat's sticky set.
+            chat.sticky_skills = list(effective_skills)
 
     # Persist the user message FIRST. This is unconditionally written,
     # even if the gateway call ultimately fails — the user did say

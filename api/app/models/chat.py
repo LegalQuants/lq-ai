@@ -93,6 +93,15 @@ class Chat(Base):
         server_default=text("'New chat'"),
     )
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Opt-in "sticky skills" set (issue #207 finding 4). Empty = toggle OFF
+    # (fail-restrictive; a new chat never inherits stickiness). When non-empty,
+    # the chat send path unions these skill slugs into each turn's effective
+    # skills so follow-up turns keep applying them without the client re-sending.
+    sticky_skills: Mapped[list[str]] = mapped_column(
+        ARRAY(Text),
+        nullable=False,
+        server_default=text("'{}'::text[]"),
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

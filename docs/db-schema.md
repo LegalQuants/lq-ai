@@ -317,6 +317,11 @@ CREATE TABLE chats (
     title       TEXT NOT NULL DEFAULT 'New chat'
                   CHECK (char_length(title) > 0 AND char_length(title) <= 200),
     archived_at TIMESTAMPTZ,
+    -- Opt-in per-chat "sticky skills" set (issue #207 finding 4, migration 0056).
+    -- Empty = sticky toggle OFF (fail-restrictive; a new chat never inherits it).
+    -- When non-empty, these skill slugs are unioned into every turn's effective
+    -- skills until cleared. Set via MessageCreate.set_sticky.
+    sticky_skills TEXT[] NOT NULL DEFAULT '{}',
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );

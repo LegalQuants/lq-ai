@@ -7095,6 +7095,15 @@ components:
         message_count:
           type: integer
           description: "Count of persisted messages in this chat."
+        sticky_skills:
+          type: array
+          items: {type: string}
+          description: |
+            Opt-in per-chat "sticky skills" set (issue #207 finding 4).
+            Empty means the sticky toggle is off (a new chat never inherits
+            stickiness). When non-empty, these skill slugs are auto-applied
+            (unioned) to every turn in this chat until cleared. Set via
+            `MessageCreate.set_sticky`.
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
 
@@ -7191,6 +7200,16 @@ components:
             C2: skill names to attach. The backend forwards these as
             `lq_ai_skills` to the gateway, which fetches each from the
             backend's internal-skills endpoint and assembles the prompt.
+        set_sticky:
+          type: boolean
+          nullable: true
+          default: null
+          description: |
+            Issue #207 finding 4 — opt-in per-chat "sticky skills" toggle.
+            `true` snapshots this turn's applied skills as the chat's sticky
+            set (auto-applied to later turns without re-sending); `false`
+            clears it; omitted/null leaves it unchanged. Off by default — a
+            new chat never inherits stickiness (fail-restrictive).
         skill_inputs:
           type: object
           additionalProperties:
