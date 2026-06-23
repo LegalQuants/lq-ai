@@ -384,6 +384,11 @@ class Settings(BaseSettings):
             "single turn before issuing a final no-tools round (PRD §L4). "
             "Default: 8. Operator-overridable via LQ_AI_CHAT_TOOL_CALL_CAP."
         ),
+        # Settings has no env_prefix, so the field name alone would bind to the
+        # bare CHAT_TOOL_CALL_CAP. Accept the documented LQ_AI_-prefixed name
+        # (matching the autonomous settings convention) while keeping the bare
+        # name working for any existing deployment that set it.
+        validation_alias=AliasChoices("LQ_AI_CHAT_TOOL_CALL_CAP", "CHAT_TOOL_CALL_CAP"),
     )
 
     # ----- Operational -----

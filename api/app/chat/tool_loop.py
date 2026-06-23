@@ -437,6 +437,7 @@ async def run_chat_tool_loop(
     base_request: ChatCompletionRequest,
     allowlist: ChatToolAllowlist,
     assistant_message_id: UUID,
+    chat_id: UUID | None = None,
     calls_used: int = 0,
     cluster_cache: dict[Any, Any] | None = None,
     request_id: str | None = None,
@@ -595,6 +596,7 @@ async def run_chat_tool_loop(
                     cluster_cache=cluster_cache,
                     server_auth_map=server_auth_map,
                     assistant_message_id=assistant_message_id,
+                    chat_id=chat_id,
                     request_id=request_id,
                 )
                 tool_result_msgs.append(tool_result_message(tc_id, result))

@@ -2045,6 +2045,7 @@ async def resume_tool_call(
                 base_request=base_request,
                 allowlist=resume_allowlist,
                 assistant_message_id=assistant_message_id,
+                chat_id=cid,
                 calls_used=calls_used,
                 cluster_cache={},
                 request_id=request_id,
@@ -2804,6 +2805,7 @@ async def _non_streaming_response(
                 base_request=request,
                 allowlist=allowlist,
                 assistant_message_id=assistant_message_id,
+                chat_id=chat.id,
                 cluster_cache={},
                 request_id=request_id,
             )
@@ -3157,6 +3159,7 @@ async def _stream_response(
                     base_request=request,
                     allowlist=allowlist,
                     assistant_message_id=assistant_message_id,
+                    chat_id=chat.id,
                     cluster_cache={},
                     request_id=request_id,
                 )
