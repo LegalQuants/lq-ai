@@ -4500,7 +4500,9 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 ---
 
-#### DE-332 — Text/markdown ingest-parser support (today the ingest pipeline is PDF-only)
+#### DE-332 — Text/markdown ingest-parser support
+
+**Status: Shipped (post-v0.5.0).** `parse_text` (`api/app/pipeline/parsers.py`) accepts `text/plain` / `text/markdown`, stores the verbatim decoded bytes as canonical text so exact-match citations resolve against the source, and fails a non-UTF-8 upload as `decode_error` rather than guessing an encoding. Markdown is stored verbatim, never rendered. Tests: `api/tests/test_pipeline_parsers_text.py` (unit, no PyMuPDF) + `api/tests/test_pipeline_ingest.py` (ingest happy-path + decode_error). DOCX remains roadmap.
 
 **Priority:** P3 · **Effort:** M · **Good first issue** (community-suitable)
 

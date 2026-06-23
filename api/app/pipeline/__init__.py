@@ -21,16 +21,20 @@ architectural decisions behind this layout.
 from app.pipeline.chunker import Chunk, chunk_document
 from app.pipeline.parsers import (
     ParsedDocument,
+    ParserDecodeError,
     ParserError,
     ParserUnsupported,
     parse_pdf,
+    parse_text,
 )
 
 __all__ = [
     "Chunk",
     "ParsedDocument",
+    "ParserDecodeError",
     "ParserError",
     "ParserUnsupported",
     "chunk_document",
     "parse_pdf",
+    "parse_text",
 ]
