@@ -19,9 +19,7 @@
 	 *   - Empty query is allowed (`/` alone opens the popover with the
 	 *     "no-query" empty state per SlashPopover.emptyStateKind()).
 	 */
-	export type SlashDetection =
-		| { open: false }
-		| { open: true; query: string; slashIndex: number };
+	export type SlashDetection = { open: false } | { open: true; query: string; slashIndex: number };
 
 	export function isAtLineStart(text: string, pos: number): boolean {
 		if (pos === 0) return true;
@@ -84,17 +82,9 @@
 		projectsStore,
 		skillsStore
 	} from '$lib/lq-ai/stores';
-	import {
-		consumeMessageStream
-	} from '$lib/lq-ai/sse/parser';
+	import { consumeMessageStream } from '$lib/lq-ai/sse/parser';
 	import { buildAuthorizeUrl, type PendingGate } from '$lib/lq-ai/chat/toolGate';
-	import type {
-		Chat,
-		FileMeta,
-		Message,
-		Project,
-		Skill
-	} from '$lib/lq-ai/types';
+	import type { Chat, FileMeta, Message, Project, Skill } from '$lib/lq-ai/types';
 
 	import ChatSidebar from '$lib/lq-ai/components/ChatSidebar.svelte';
 	import AttachedFilesPanel from '$lib/lq-ai/components/AttachedFilesPanel.svelte';
@@ -137,6 +127,22 @@
 	// `attachedSkillNames` whenever the chat changes. Plain Record
 	// (not Map) so Svelte 4 reactivity tracks the assignment.
 	let attachmentSources: Record<string, string> = {};
+
+	// Issue #207 finding 4 — opt-in "sticky skills" toggle. `stickyEnabled`
+	// mirrors the chat's persisted sticky set (on when non-empty). `stickyDirty`
+	// marks that the user flipped the toggle since the last send, so we send
+	// `set_sticky` ONLY on a real change — otherwise the backend leaves the set
+	// unchanged and just carries it forward (we must not re-snapshot every turn).
+	// `stickyInitChatId` tracks which chat we initialized from so a chat switch
+	// re-syncs the toggle without clobbering an in-progress toggle mid-chat.
+	let stickyEnabled = false;
+	let stickyDirty = false;
+	let stickyInitChatId: string | null = null;
+
+	function toggleSticky(): void {
+		stickyEnabled = !stickyEnabled;
+		stickyDirty = true;
+	}
 
 	// Wave D.1 T20 follow-on (deferral A + B) — Enhance Prompt tracking.
 	// `pendingEnhancement` holds the most recent "Use enhanced" outcome
@@ -279,9 +285,7 @@
 		// the assistant rendering path takes over for that slot.
 		const replacing = overrideMessage;
 		if (replacing) {
-			messagesStore.update(($m) =>
-				$m.map((m) => (m.id === replacing.id ? newAiMessage : m))
-			);
+			messagesStore.update(($m) => $m.map((m) => (m.id === replacing.id ? newAiMessage : m)));
 		}
 		closeOverrideModal();
 	}
@@ -474,9 +478,7 @@
 				const newId = frame.lq_ai_message_id;
 				if (newId !== assistantId) {
 					const prev = assistantId;
-					messagesStore.update(($m) =>
-						$m.map((m) => (m.id === prev ? { ...m, id: newId } : m))
-					);
+					messagesStore.update(($m) => $m.map((m) => (m.id === prev ? { ...m, id: newId } : m)));
 					assistantId = newId;
 				}
 				streamingMessageId = assistantId;
@@ -492,7 +494,7 @@
 									content: (m.content ?? '') + frame.delta,
 									routed_inference_tier: frame.routed_inference_tier ?? m.routed_inference_tier,
 									applied_skills: frame.applied_skills ?? m.applied_skills
-							  }
+								}
 							: m
 					)
 				);
@@ -510,7 +512,7 @@
 										frame.routed_inference_tier ?? frame.message.routed_inference_tier,
 									routed_provider: frame.routed_provider ?? frame.message.routed_provider,
 									citations: frame.citations ?? frame.message.citations ?? []
-							  }
+								}
 							: m
 					)
 				);
@@ -631,17 +633,21 @@
 				{
 					content: composerText,
 					model: currentModelId ?? undefined,
-					attached_skills:
-						attachedSkillsPayload.length > 0 ? attachedSkillsPayload : undefined,
+					attached_skills: attachedSkillsPayload.length > 0 ? attachedSkillsPayload : undefined,
 					skill_inputs:
 						Object.keys(skillInputs).length > 0
 							? (skillInputs as Record<string, Record<string, unknown>>)
 							: undefined,
+					// Issue #207 finding 4 — only send set_sticky on a real toggle
+					// change; otherwise leave the chat's sticky set unchanged.
+					set_sticky: stickyDirty ? stickyEnabled : undefined,
 					stream: true
 				},
 				streamAbort.signal
 			);
 			composerText = '';
+			// The toggle change has now been applied server-side for this turn.
+			stickyDirty = false;
 			// Clear the pending-enhancement marker now that the send is in
 			// flight. The enhancementOriginals map keeps the captured
 			// original keyed by content so the pill's tap-to-diff still
@@ -866,8 +872,17 @@
 			: groups;
 	$: activeChat = $activeChatStore;
 	$: messages = $messagesStore;
+	// Issue #207 finding 4 — re-sync the sticky toggle from the chat's persisted
+	// set whenever the active chat changes (initial load + switches). Fires only
+	// on an id change so it never clobbers an in-progress toggle within a chat;
+	// a brand-new chat has an empty set → toggle off (fail-restrictive).
+	$: if (activeChat && activeChat.id !== stickyInitChatId) {
+		stickyInitChatId = activeChat.id;
+		stickyEnabled = (activeChat.sticky_skills?.length ?? 0) > 0;
+		stickyDirty = false;
+	}
 	$: projectAttachedSkills = activeChat?.project_id
-		? $projectsStore.find((p) => p.id === activeChat?.project_id)?.attached_skill_names ?? []
+		? ($projectsStore.find((p) => p.id === activeChat?.project_id)?.attached_skill_names ?? [])
 		: [];
 
 	// T12 — derive the project id + attached-KB ids the AttachKBModal needs.
@@ -876,7 +891,7 @@
 	// modal's "currently attached" badge without a manual refresh.
 	$: composerProjectId = activeChat?.project_id ?? null;
 	$: composerAttachedKbIds = composerProjectId
-		? $projectsStore.find((p) => p.id === composerProjectId)?.attached_knowledge_base_ids ?? []
+		? ($projectsStore.find((p) => p.id === composerProjectId)?.attached_knowledge_base_ids ?? [])
 		: [];
 
 	// Wave D.1 T19 — Restore receipts drawer open-state when the active
@@ -890,9 +905,7 @@
 	// picker's default (``smart`` if available, else the first row) when
 	// the user hasn't picked yet for this chat.
 	$: currentModelId = activeChat
-		? modelByChat[activeChat.id] ??
-		  defaultSelection(groupModels(availableModels))?.id ??
-		  null
+		? (modelByChat[activeChat.id] ?? defaultSelection(groupModels(availableModels))?.id ?? null)
 		: null;
 
 	// Wave D.1 T15 — role for the refusal-bubble override-button gate.
@@ -1006,6 +1019,27 @@
 						selectedId={currentModelId}
 						onSelect={selectModel}
 					/>
+					<!-- Issue #207 finding 4 — opt-in "sticky skills" toggle. Off by
+					     default; when on, the skills applied here stay applied to
+					     follow-up messages in this chat (resets for a new chat). -->
+					<button
+						type="button"
+						role="switch"
+						aria-checked={stickyEnabled}
+						on:click={toggleSticky}
+						data-testid="lq-ai-sticky-toggle"
+						title="Keep the skills applied here active for follow-up messages in this chat. Off by default; a new chat starts fresh."
+						class="flex items-center gap-2 text-xs font-medium px-2 py-1 rounded-md border transition-colors {stickyEnabled
+							? 'border-emerald-500 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40'
+							: 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'}"
+					>
+						<span
+							class="inline-block w-2 h-2 rounded-full {stickyEnabled
+								? 'bg-emerald-500'
+								: 'bg-gray-300 dark:bg-gray-600'}"
+						></span>
+						Keep skills on
+					</button>
 				</div>
 
 				<SkillPicker
@@ -1021,9 +1055,7 @@
 
 				<SavedPromptsPanel
 					onInsert={(text) => {
-						composerText = composerText.trim()
-							? `${composerText.trimEnd()}\n\n${text}`
-							: text;
+						composerText = composerText.trim() ? `${composerText.trimEnd()}\n\n${text}` : text;
 					}}
 				/>
 

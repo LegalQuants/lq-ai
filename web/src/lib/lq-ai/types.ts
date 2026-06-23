@@ -168,6 +168,12 @@ export interface Chat {
 	message_count?: number;
 	created_at: string;
 	updated_at: string;
+	/**
+	 * Issue #207 finding 4 — the chat's active "sticky skills" set. Empty (or
+	 * absent) means the sticky toggle is off; a new chat never inherits it.
+	 * When non-empty, these skills are auto-applied to every turn until cleared.
+	 */
+	sticky_skills?: string[];
 }
 
 export interface ChatCreate {
@@ -358,6 +364,12 @@ export interface MessageCreate {
 		source?: string;
 		inputs?: Record<string, unknown>;
 	}>;
+	/**
+	 * Issue #207 finding 4 — opt-in "sticky skills" toggle. `true` makes this
+	 * turn's applied skills sticky for the chat (auto-applied to later turns);
+	 * `false` clears the set; omitted leaves it unchanged. Off by default.
+	 */
+	set_sticky?: boolean | null;
 }
 
 export interface MessagePostResponse {
@@ -1074,12 +1086,7 @@ export interface EasyPlaybookGeneration {
  * execution surface does NOT have — tabular runs can be hours long, so
  * cancellation matters.
  */
-export type TabularExecutionStatus =
-	| 'pending'
-	| 'running'
-	| 'completed'
-	| 'failed'
-	| 'cancelled';
+export type TabularExecutionStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 
 /**
  * Per-cell confidence from the Citation Engine cascade. `failed` is
