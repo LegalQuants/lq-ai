@@ -750,3 +750,72 @@ async def test_loop_hallucination_only_round_terminates_finitely(
     assert outcome.calls_used == 0
     # Exactly two gateway calls consumed — no extras that would signal infinite loop
     assert gateway.chat_completion.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# Scenario (j): cap-triggered final round injects an explicit synthesis directive
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_loop_cap_final_round_injects_synthesis_directive(
+    db: AsyncSession, user: User
+) -> None:
+    """Regression: the cap-triggered final no-tools round must carry an explicit
+    synthesis directive so the model writes its answer instead of returning empty.
+
+    Bug: a research turn that exhausts the tool-call cap mid-research issued a
+    plain ``tool_choice="none"`` round (tools off, identical message list). With
+    no instruction to stop researching and write, the model returned empty
+    content and the turn persisted a zero-length assistant message. The final
+    round must append a user directive instructing synthesis from what was
+    already gathered — and that directive must NOT leak into the persisted turn.
+    """
+    from app.chat.tool_loop import LoopFinal, run_chat_tool_loop
+
+    gateway = AsyncMock()
+    gateway.chat_completion.side_effect = [
+        _resp_tool_call("search_case_law", {"q": "x"}, call_id="c1"),
+        _resp_final("Here is the synthesized answer."),
+    ]
+    al = _research_allowlist(provider="cl-prod")
+
+    with (
+        patch(
+            "app.chat.tool_loop.research_service.search_case_law",
+            new=AsyncMock(return_value={"results": []}),
+        ),
+        patch("app.chat.tool_loop.resolve_provider_tier", new=AsyncMock(return_value=1)),
+        patch("app.chat.tool_loop.list_servers", new=AsyncMock(return_value=[])),
+        patch("app.chat.tool_loop.get_settings") as mock_settings,
+    ):
+        settings_obj = MagicMock()
+        settings_obj.chat_tool_call_cap = 1  # trip the cap after one executed call
+        mock_settings.return_value = settings_obj
+
+        outcome = await run_chat_tool_loop(
+            db,
+            user=user,
+            gateway=gateway,
+            base_request=_req([_user_msg("research it")]),
+            allowlist=al,
+            assistant_message_id=uuid.uuid4(),
+        )
+
+    assert isinstance(outcome, LoopFinal)
+    assert outcome.text == "Here is the synthesized answer."
+
+    # Final (2nd) round: tools disabled AND a synthesis directive appended last.
+    assert gateway.chat_completion.call_count == 2
+    final_req: ChatCompletionRequest = gateway.chat_completion.call_args_list[1].args[0]
+    assert final_req.tools is None
+    last_msg = final_req.messages[-1]
+    assert last_msg.role == "user"
+    assert "final answer" in (last_msg.content or "").lower()
+
+    # The directive must NOT leak into the persisted turn messages.
+    assert all(
+        "final answer" not in (m.get("content") or "").lower()
+        for m in outcome.messages
+        if isinstance(m, dict)
+    )

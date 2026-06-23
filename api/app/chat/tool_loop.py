@@ -513,10 +513,7 @@ async def run_chat_tool_loop(
         # destructive call that pushed us to the limit), fire the final round
         # immediately without tools.
         if calls_used >= settings.chat_tool_call_cap:
-            final_resp = await gateway.chat_completion(
-                _build_request(base_request, messages, tools=None, tool_choice="none"),
-                request_id=request_id,
-            )
+            final_resp = await _final_synthesis_round(gateway, base_request, messages, request_id)
             return _build_loop_final(final_resp, messages, calls_used, collected_sources)
 
         # ── Build this round's request with tools ──────────────────────────
@@ -646,24 +643,52 @@ async def run_chat_tool_loop(
         # forever.  Break out immediately to the final no-tools round so the
         # model synthesises from whatever it has gathered so far.
         if governed_count == 0:
-            final_resp = await gateway.chat_completion(
-                _build_request(base_request, messages, tools=None, tool_choice="none"),
-                request_id=request_id,
-            )
+            final_resp = await _final_synthesis_round(gateway, base_request, messages, request_id)
             return _build_loop_final(final_resp, messages, calls_used, collected_sources)
 
         # ── Cap check AFTER incrementing ─────────────────────────────────
         if calls_used >= settings.chat_tool_call_cap:
-            final_resp = await gateway.chat_completion(
-                _build_request(base_request, messages, tools=None, tool_choice="none"),
-                request_id=request_id,
-            )
+            final_resp = await _final_synthesis_round(gateway, base_request, messages, request_id)
             return _build_loop_final(final_resp, messages, calls_used, collected_sources)
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+_SYNTHESIS_DIRECTIVE = (
+    "Tool access is now disabled for this turn (the per-turn tool-call limit "
+    "was reached). Do not request any further tools. Using only the "
+    "information already gathered in the tool results above, write your "
+    "complete final answer to the user's request now. If some information is "
+    "missing, answer with what you have and note the gap explicitly."
+)
+
+
+async def _final_synthesis_round(
+    gateway: Any,
+    base_request: ChatCompletionRequest,
+    messages: list[dict[str, Any]],
+    request_id: str | None,
+) -> Any:
+    """Issue the final no-tools round with an explicit synthesis directive.
+
+    Flipping tools off and re-sending the message list verbatim leaves the
+    model mid-research with no instruction to stop and write — empirically it
+    then returns empty content (the cap-hit "blank answer" bug: a turn that
+    exhausts the tool-call cap mid-research persisted a zero-length assistant
+    message). Appending an explicit synthesis directive makes the model
+    compose its answer from what it has already gathered.
+
+    The directive is appended to a COPY of ``messages`` so it is sent to the
+    model for this round only and never leaks into the persisted turn history.
+    """
+    synth_messages = [*messages, {"role": "user", "content": _SYNTHESIS_DIRECTIVE}]
+    return await gateway.chat_completion(
+        _build_request(base_request, synth_messages, tools=None, tool_choice="none"),
+        request_id=request_id,
+    )
 
 
 def _build_request(
