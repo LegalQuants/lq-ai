@@ -816,3 +816,129 @@ async def test_attached_file_writes_audit_row(
     assert row.details["file_ids"] == [str(f.id)]
     assert row.details["attached_count"] == 1
     assert row.details["injected_count"] == 1
+
+
+# --- Sticky skills (issue #207 finding 4) -----------------------------------
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_set_sticky_true_snapshots_applied_skills(
+    client: AsyncClient, db_user: User, db_chat: Chat, db_session: AsyncSession
+) -> None:
+    """``set_sticky=True`` snapshots this turn's applied skills as the chat set."""
+
+    route = respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json=_success_payload(applied_skills=["nda-review"]))
+    )
+    token = _bearer_for(db_user)
+    resp = await client.post(
+        f"/api/v1/chats/{_DUMMY_CHAT_ID}/messages",
+        json={"content": "review", "model": "smart", "skills": ["nda-review"], "set_sticky": True},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert _json.loads(route.calls[0].request.read())["lq_ai_skills"] == ["nda-review"]
+    await db_session.refresh(db_chat)
+    assert db_chat.sticky_skills == ["nda-review"]
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_sticky_set_carries_into_follow_up_turn(
+    client: AsyncClient, db_user: User, db_chat: Chat, db_session: AsyncSession
+) -> None:
+    """With a sticky set, a follow-up turn that sends NO skills still applies them."""
+
+    db_chat.sticky_skills = ["nda-review"]
+    await db_session.flush()
+
+    route = respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json=_success_payload(applied_skills=["nda-review"]))
+    )
+    token = _bearer_for(db_user)
+    resp = await client.post(
+        f"/api/v1/chats/{_DUMMY_CHAT_ID}/messages",
+        json={"content": "and the indemnity clause?", "model": "smart"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert _json.loads(route.calls[0].request.read())["lq_ai_skills"] == ["nda-review"]
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_explicit_skill_unions_with_sticky_set_unchanged(
+    client: AsyncClient, db_user: User, db_chat: Chat, db_session: AsyncSession
+) -> None:
+    """An explicit skill on a turn unions with the sticky set; the set is unchanged."""
+
+    db_chat.sticky_skills = ["nda-review"]
+    await db_session.flush()
+
+    route = respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json=_success_payload())
+    )
+    token = _bearer_for(db_user)
+    resp = await client.post(
+        f"/api/v1/chats/{_DUMMY_CHAT_ID}/messages",
+        json={"content": "also apply US overlay", "model": "smart", "skills": ["us-overlay"]},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert resp.status_code == 200, resp.text
+    # Union for this turn: explicit first, then the sticky slug.
+    assert _json.loads(route.calls[0].request.read())["lq_ai_skills"] == [
+        "us-overlay",
+        "nda-review",
+    ]
+    await db_session.refresh(db_chat)
+    assert db_chat.sticky_skills == ["nda-review"]  # set NOT changed by a one-off skill
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_set_sticky_false_clears_and_does_not_apply(
+    client: AsyncClient, db_user: User, db_chat: Chat, db_session: AsyncSession
+) -> None:
+    """``set_sticky=False`` clears the set; that turn applies only explicit skills."""
+
+    db_chat.sticky_skills = ["nda-review"]
+    await db_session.flush()
+
+    route = respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json=_success_payload())
+    )
+    token = _bearer_for(db_user)
+    resp = await client.post(
+        f"/api/v1/chats/{_DUMMY_CHAT_ID}/messages",
+        json={"content": "stop applying it", "model": "smart", "set_sticky": False},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert _json.loads(route.calls[0].request.read()).get("lq_ai_skills", []) == []
+    await db_session.refresh(db_chat)
+    assert db_chat.sticky_skills == []
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_get_chat_exposes_sticky_skills(
+    client: AsyncClient, db_user: User, db_chat: Chat, db_session: AsyncSession
+) -> None:
+    """GET /chats/{id} surfaces ``sticky_skills`` so the client reflects the toggle."""
+
+    db_chat.sticky_skills = ["nda-review"]
+    await db_session.flush()
+
+    token = _bearer_for(db_user)
+    resp = await client.get(
+        f"/api/v1/chats/{_DUMMY_CHAT_ID}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["sticky_skills"] == ["nda-review"]

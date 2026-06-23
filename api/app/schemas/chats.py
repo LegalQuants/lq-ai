@@ -387,6 +387,13 @@ class MessageCreateRequest(BaseModel):
     to bound workload multiplication (I1 — a single message attaching
     thousands of inline refs x 32 KB each is a DoS vector)."""
 
+    set_sticky: bool | None = Field(default=None)
+    """Issue #207 finding 4 — opt-in per-chat "sticky skills" toggle. ``True``
+    snapshots this turn's applied skills as the chat's sticky set (carried into
+    later turns without the client re-sending); ``False`` clears the set;
+    ``None``/omitted leaves it unchanged. Off by default — a new chat never
+    inherits stickiness (fail-restrictive)."""
+
     skill_inputs: dict[str, dict[str, Any]] = Field(default_factory=dict)
     """C2: per-skill input bindings, keyed by skill name. Forwarded as
     ``lq_ai_skill_inputs``. Per-attachment ``inputs`` on
@@ -447,6 +454,9 @@ class ChatResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     message_count: int = 0
+    sticky_skills: list[str] = Field(default_factory=list)
+    """Issue #207 finding 4 — the chat's active sticky-skill set (empty = the
+    sticky toggle is off). Lets the client reflect the toggle state on load."""
 
 
 class MessageResponse(BaseModel):
