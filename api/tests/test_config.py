@@ -89,6 +89,22 @@ def test_overrides_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
+def test_chat_tool_call_cap_env_alias(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regression (issue #207, finding 2): the cap honors the documented
+    ``LQ_AI_CHAT_TOOL_CALL_CAP`` var, and still accepts the bare
+    ``CHAT_TOOL_CALL_CAP`` so existing deployments don't break."""
+    # The documented, LQ_AI_-prefixed var now works (it silently did not before).
+    monkeypatch.delenv("CHAT_TOOL_CALL_CAP", raising=False)
+    monkeypatch.setenv("LQ_AI_CHAT_TOOL_CALL_CAP", "3")
+    assert Settings(_env_file=None).chat_tool_call_cap == 3  # type: ignore[call-arg]
+
+    # The bare name still binds (back-compat for anyone relying on the accident).
+    monkeypatch.delenv("LQ_AI_CHAT_TOOL_CALL_CAP", raising=False)
+    monkeypatch.setenv("CHAT_TOOL_CALL_CAP", "5")
+    assert Settings(_env_file=None).chat_tool_call_cap == 5  # type: ignore[call-arg]
+
+
+@pytest.mark.unit
 def test_get_settings_is_cached() -> None:
     """`get_settings()` returns the same instance until the cache is cleared."""
     a = get_settings()

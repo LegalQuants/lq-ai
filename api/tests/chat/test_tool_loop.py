@@ -819,3 +819,52 @@ async def test_loop_cap_final_round_injects_synthesis_directive(
         for m in outcome.messages
         if isinstance(m, dict)
     )
+
+
+# ---------------------------------------------------------------------------
+# Scenario (k): the tool-call audit row is chat-scoped (chat_id threaded through)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_loop_threads_chat_id_into_tool_call_audit(db: AsyncSession, user: User) -> None:
+    """Regression (issue #207, finding 3): ``run_chat_tool_loop`` must pass
+    ``chat_id`` through to ``execute_tool`` so the ``tool_call_log`` audit row is
+    chat-scoped. It was previously omitted, leaving ``chat_id`` NULL and making
+    chat-scoped audit queries miss the rows.
+    """
+    from app.chat.tool_loop import LoopFinal, run_chat_tool_loop
+
+    chat_id = uuid.uuid4()
+    gateway = AsyncMock()
+    gateway.chat_completion.side_effect = [
+        _resp_tool_call("search_case_law", {"q": "Brown"}, call_id="c1"),
+        _resp_final("Found Brown v. Board."),
+    ]
+    al = _research_allowlist(provider="cl-prod")
+
+    with (
+        patch(
+            "app.chat.tool_loop.research_service.search_case_law",
+            new=AsyncMock(return_value={"results": [{"cluster_id": 1}]}),
+        ),
+        patch("app.chat.tool_loop.resolve_provider_tier", new=AsyncMock(return_value=1)),
+        patch("app.chat.tool_loop.list_servers", new=AsyncMock(return_value=[])),
+    ):
+        outcome = await run_chat_tool_loop(
+            db,
+            user=user,
+            gateway=gateway,
+            base_request=_req([_user_msg("find Brown")]),
+            allowlist=al,
+            assistant_message_id=uuid.uuid4(),
+            chat_id=chat_id,
+        )
+
+    assert isinstance(outcome, LoopFinal)
+
+    rows = (
+        (await db.execute(select(ToolCallLog).where(ToolCallLog.origin == "chat"))).scalars().all()
+    )
+    assert len(rows) == 1
+    assert rows[0].chat_id == chat_id
