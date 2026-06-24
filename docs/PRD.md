@@ -4738,6 +4738,14 @@ So the single longest phase (image pull) has neither a stream nor a poll. The re
 
 ---
 
+#### DE-357 — Default chat tool-call cap (8) is low for multi-call-per-case research skills
+
+**Priority:** P3 · **Effort:** S–M · **Status: OPEN** · **Tracking:** [#212](https://github.com/LegalQuants/lq-ai/issues/212)
+
+**Context:** Split from [#207](https://github.com/LegalQuants/lq-ai/issues/207) finding 1. `settings.chat_tool_call_cap` defaults to **8**. Skills that issue several tool calls *per item* — `case-law-research` runs `search_case_law` → `get_cluster` → `read_opinion`/`find_in_case` for each case — exhaust the cap after only a handful of cases and drop into the final no-tools synthesis round earlier than the user expects. This is a tuning/UX gap, not a correctness bug: the empty-answer-at-cap case is already fixed (#208), and the operator override now works via `LQ_AI_CHAT_TOOL_CALL_CAP` / `CHAT_TOOL_CALL_CAP` after #210. **Options:** (1) raise the global default (e.g. 8 → 16/24) — simplest, but raises worst-case per-turn tool spend/latency for every skill; (2) per-skill cap override declared in the skill's frontmatter, applied as `max(default, skill_cap)` under a hard ceiling — targeted but more surface; (3) document per-deployment tuning of the env var prominently. Likely a sensible default bump + documented override now, with per-skill caps as a later enhancement.
+
+---
+
 ## 10. Appendices
 
 ### Appendix A — Glossary
