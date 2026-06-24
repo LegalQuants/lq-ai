@@ -4746,6 +4746,21 @@ So the single longest phase (image pull) has neither a stream nor a poll. The re
 
 ---
 
+#### DE-358 — Tool-use hardening backlog (harvested from parallel PRs #185/#186)
+
+**Priority:** P3 · **Effort:** S each · **Status: OPEN**
+
+**Context:** Contributor PRs [#185](https://github.com/LegalQuants/lq-ai/pull/185) (PR5b-i) and [#186](https://github.com/LegalQuants/lq-ai/pull/186) (PR5b-ii) rebuilt the PR5b governed chat tool-loop in parallel and were closed as duplicative of merged `main` (governed tool-calling per ADR 0015; the gateway Anthropic `tool_use` bridge; `api/app/chat/tool_loop.py`; the `chat_pending_tool_call` store + migration `0054`; the `POST /chats/{chat_id}/tool-calls/{pending_call_id}` confirmation endpoint). A line-by-line review of both branches against `main` surfaced the following genuinely-additive items. Each is to be **re-built against current `main`**, not cherry-picked from the now-stale branches.
+
+1. **Gateway Anthropic streaming `tool_use` accumulation.** `main`'s streaming adapter (`_anthropic_stream_iter` in `gateway/app/providers/anthropic.py`) emits no `tool_calls` delta for an Anthropic `tool_use` content block. This is **latent, not an active bug**: the chat tool-loop drives non-streaming gateway calls (`api/app/chat/tool_loop.py` `run_chat_tool_loop`, `stream=False`), so the gap is not reached today. **Verify reachability before fixing** — a future streaming-with-tools consumer would otherwise silently drop tool calls. Port an equivalent `input_json_delta` → `tool_calls` accumulator (emit at `content_block_stop`), plus a streaming-tool test (`main` has none).
+2. **OpenAPI documentation of `tools`/`tool_choice`.** `docs/api/gateway-openapi.yaml` `ChatCompletionRequest` forwards both fields but documents neither (a "documentation is part of the change" gap).
+3. **`tools` count cap.** No cap today on the gateway or api boundary; the PRs proposed 64. Cheap defense-in-depth on the prompt-multiplication surface — add as a `Field(max_length=...)` / `maxItems:` bound on `main`'s existing fields (not the full typed-model rewrite the PRs carried).
+4. **Granular `tool_choice` unit tests.** `main`'s adapter handles `auto`/`required`/`none`/forced-function/no-params modes but the tests exercise only `auto` + round-trip. Add per-mode coverage (note `main` emits `{"type":"auto"}` where the PR omitted the field — adapt assertions to `main`'s behavior).
+5. **Encryption-at-rest for the pending-tool-call resume payload.** `main` stores `resume_state`/`tool_call_args` on `chat_pending_tool_call` as plaintext JSONB (intentional — same sensitivity class as `messages.content`). The PR encrypted the bundled payload with Fernet (`MCPTokenEncryptor`). Optional defense-in-depth hardening to weigh against the schema/operability cost (the api process would need `LQ_AI_MCP_MASTER_KEY`).
+6. **Api-side per-chat tier ceiling.** `main`'s chat loop passes `max_allowed_tier=None` to `execute_mcp_tool` (relies on the gateway's per-provider `egress_tier` + SSRF allowlist — always enforced). Deriving an *additional* api-side ceiling from the chat/skill tier is defense-in-depth, not a bypass fix. Already flagged in-code; captured here so it has a tracking home.
+
+---
+
 ## 10. Appendices
 
 ### Appendix A — Glossary
