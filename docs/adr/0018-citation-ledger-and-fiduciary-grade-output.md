@@ -1,6 +1,6 @@
 # ADR 0018 — The Citation Ledger & fiduciary-grade output
 
-**Status:** Proposed (proposal for maintainer decision)
+**Status:** Accepted (2026-06-24) — maintainer-accepted; Phase 1 implementation PRs (P1-A1+) carry security review per CODEOWNERS (new content store derived from egress; citation/audit surface)
 **Date:** 2026-06-24
 **Owner:** Fiduciary-grade agentic legal work milestone (feature branch `feat/fiduciary-grade-phase1-spec`)
 **Supersedes / relates to:** [ADR 0014](0014-gateway-egress-boundary-for-tool-providers.md) (where egress lives), [ADR 0015](0015-governed-tool-calling-model.md) (how a tool call is governed), [ADR 0016](0016-transparency-and-governance-invariants.md) (the binding invariants), and the [fiduciary-grade mini-PRD](../proposals/fiduciary-grade-agentic-legal-work.md) WS-A/WS-B/WS-C.
