@@ -36,7 +36,7 @@ api/tests/
 ├── test_pipeline_parsers_docx.py   # NEW — offset-fidelity + redline/comment/footnote fixtures
 └── test_pipeline_ingest.py         # flip: a .docx now SUCCEEDS (was unsupported_type)
 docs/
-├── adr/0014-docx-ingest-via-pandoc.md     # NEW — the structural decision + alternatives
+├── adr/0017-docx-ingest-via-pandoc.md     # NEW — the structural decision + alternatives
 ├── api/backend-openapi.yaml               # accepted-mime documentation for POST /files
 ├── PRD.md                                 # register DE for DOCX (§9) + §3 format note
 └── HONEST-STATE.md                        # DOCX = shipped, with honest caveats
@@ -108,4 +108,4 @@ On comments specifically — a correction worth recording so the next contributo
 
 ## Definition of "merged"
 
-The PR is merged when (a) the acceptance checklist is fully checked off; (b) the maintainer has approved **the dependency decision (Pandoc) and the redline policy** recorded in the companion ADR 0014; (c) CI is green including the DOCX offset-fidelity test and the redline/comment/footnote fixtures; and (d) the docs in the same PR (OpenAPI accepted-mimes, HONEST-STATE, PRD DE registration, the PDF-only statements that become stale) are reconciled. Because this touches `api/` (non-authz) the change is self-mergeable after CI per [§6](../coding-agent-onboarding.md) — **except** that the dependency + architectural decision must be maintainer-approved first, which is the entire purpose of this document. Commits carry DCO sign-off and the co-author trailer; the branch is pushed to both `origin` and `tucuxi` and preserved after merge.
+The PR is merged when (a) the acceptance checklist is fully checked off; (b) the maintainer has approved **the dependency decision (Pandoc) and the redline policy** recorded in the companion ADR 0017; (c) CI is green including the DOCX offset-fidelity test and the redline/comment/footnote fixtures; and (d) the docs in the same PR (OpenAPI accepted-mimes, HONEST-STATE, PRD DE registration, the PDF-only statements that become stale) are reconciled. Because this touches `api/` (non-authz) the change is self-mergeable after CI per [§6](../coding-agent-onboarding.md) — **except** that the dependency + architectural decision must be maintainer-approved first, which is the entire purpose of this document. Commits carry DCO sign-off and the co-author trailer; the branch is pushed to both `origin` and `tucuxi` and preserved after merge.

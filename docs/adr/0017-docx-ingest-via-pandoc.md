@@ -1,6 +1,6 @@
-# ADR 0014 — DOCX ingest via Pandoc (canonical text) with an OOXML comment fallback
+# ADR 0017 — DOCX ingest via Pandoc (canonical text) with an OOXML comment fallback
 
-**Status:** Proposed (2026-06-21) — pending maintainer decision
+**Status:** Accepted (2026-06-23) — maintainer approved the Pandoc dependency and the redline policy; implementation lands in a separate build PR per the [mini-PRD](../contribute/mini-prds/docx-ingest-support.md).
 **Decision-makers:** Kevin Keller (maintainer)
 **Affected components:** `api/` (`pipeline/`, `ingest`, tests), `api` + `ingest-worker` container images
 **Related:** [ADR 0006 — Document pipeline](0006-document-pipeline-architecture.md), [DE-332 — Text/markdown ingest](../PRD.md#9-deferred-enhancements-and-identified-future-work), [Mini-PRD — DOCX ingest support](../contribute/mini-prds/docx-ingest-support.md), [PRD §3 — Knowledge Bases](../PRD.md#3-capability-specifications), `api/app/citation/verification.py`
