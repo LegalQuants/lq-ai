@@ -77,3 +77,116 @@ async def test_caselaw_citation_row_roundtrips(
     assert got.verified is True
     assert got.verification_method == "exact_match"
     assert got.id is not None
+
+
+# ---------------------------------------------------------------------------
+# Orchestrator tests (Task 4 additions)
+# ---------------------------------------------------------------------------
+
+from app.chat.tool_loop import ToolSourceRecord  # noqa: E402
+from app.citation.caselaw import verify_and_persist_caselaw_citations  # noqa: E402
+from app.models.research import ResearchOpinionMetadata  # noqa: E402
+
+_OPINION_TEXT = "Intro. The covenant of good faith is implied in every contract. End."
+
+
+def _caselaw_source(cluster_id: int) -> ToolSourceRecord:
+    return ToolSourceRecord(
+        source_kind="caselaw",
+        label=f"Cluster {cluster_id}",
+        subtitle=None,
+        url=None,
+        external_ref=str(cluster_id),
+        provider="courtlistener",
+        tool="get_cluster",
+    )
+
+
+@pytest.mark.asyncio
+async def test_verbatim_quote_persists_verified_row(db_session, seeded_chat_message):
+    message_id = seeded_chat_message
+    db_session.add(
+        ResearchOpinionMetadata(
+            opinion_id=501,
+            cluster_id=42,
+            text_field_used="plain_text",
+            storage_path="courtlistener/opinions/by-cluster/42/501",
+            char_length=len(_OPINION_TEXT),
+        )
+    )
+    await db_session.flush()
+
+    async def fake_loader(db, opinion_id):
+        return _OPINION_TEXT
+
+    answer = "**Relevant passage:**\n> The covenant of good faith is implied in every contract.\n"
+    n = await verify_and_persist_caselaw_citations(
+        db_session,
+        message_id=message_id,
+        assistant_text=answer,
+        tool_sources=[_caselaw_source(42)],
+        load_opinion_text=fake_loader,
+    )
+    await db_session.flush()
+    rows = (
+        await db_session.execute(
+            select(MessageCaselawCitation).where(MessageCaselawCitation.message_id == message_id)
+        )
+    ).scalars().all()
+    assert n == 1
+    assert len(rows) == 1
+    assert rows[0].verified is True
+    assert rows[0].verification_method == "exact_match"
+    assert rows[0].opinion_id == 501
+
+
+@pytest.mark.asyncio
+async def test_invented_quote_persists_nothing(db_session, seeded_chat_message):
+    message_id = seeded_chat_message
+    db_session.add(
+        ResearchOpinionMetadata(
+            opinion_id=502,
+            cluster_id=43,
+            text_field_used="plain_text",
+            storage_path="p",
+            char_length=len(_OPINION_TEXT),
+        )
+    )
+    await db_session.flush()
+
+    async def fake_loader(db, opinion_id):
+        return _OPINION_TEXT
+
+    answer = "> The court invented a rule that appears in no opinion whatsoever.\n"
+    n = await verify_and_persist_caselaw_citations(
+        db_session,
+        message_id=message_id,
+        assistant_text=answer,
+        tool_sources=[_caselaw_source(43)],
+        load_opinion_text=fake_loader,
+    )
+    assert n == 0
+
+
+@pytest.mark.asyncio
+async def test_storage_miss_is_skipped_not_fatal(db_session, seeded_chat_message):
+    message_id = seeded_chat_message
+    db_session.add(
+        ResearchOpinionMetadata(
+            opinion_id=503, cluster_id=44, text_field_used=None, storage_path="gone", char_length=1
+        )
+    )
+    await db_session.flush()
+
+    async def boom_loader(db, opinion_id):
+        raise RuntimeError("object storage unavailable")
+
+    answer = "> The covenant of good faith is implied in every contract.\n"
+    n = await verify_and_persist_caselaw_citations(
+        db_session,
+        message_id=message_id,
+        assistant_text=answer,
+        tool_sources=[_caselaw_source(44)],
+        load_opinion_text=boom_loader,
+    )
+    assert n == 0  # skipped, no exception
