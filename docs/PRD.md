@@ -4769,6 +4769,28 @@ So the single longest phase (image pull) has neither a stream nor a poll. The re
 
 ---
 
+#### DE-360 — Gateway-native quality-escalation routing (cheap→capable), reasoning logged to the ledger
+
+**Priority:** P3 · **Effort:** L · **Status: OPEN**
+
+> Relocated from a standalone `docs/` draft and **renumbered from DE-345 → DE-360** to resolve a number collision (DE-345 is the `_stream_loop_outcome` renderer extraction, above). Surfaced while assessing Tucuxi-Inc's FLO project for reuse (2026-06-25).
+
+**Context:** A recurring cost pattern in the autonomous layer and the planned transparent validity/treatment layer (see the *Fiduciary-grade agentic legal work* proposal, WS-G) is running an LLM-judge over *many* small inputs — e.g. classifying the treatment of a case from each of its citing passages, or grading intermediate agent steps. Doing that fan-out on a frontier model is expensive; doing it on a small/cheap model risks quality. The standard mitigation is **escalation routing**: run the cheap model by default, judge the output, and escalate to a more capable model only when the judge's confidence is low. Tucuxi-Inc's MIT-licensed FLO project ("Focused Learning Optimizer") implements exactly this as its "small-model co-pilot" mode (cheap model + quality score → `escalation_needed` / `recommended_large_model`), and claims 70–80% cost savings; its eval rigor is light (≈20 cases, no independent audit) and, critically, its quality scores are **opaque** — the opposite of LQ.AI's posture. The useful, importable thing is the *pattern* (and possibly specific MIT code), not the service: a gateway-native escalation router whose judge **reasoning is exposed and logged**, not a black-box score.
+
+**Specific scope:**
+
+- A **gateway-native** escalation primitive — the Inference Gateway is the sole provider-key holder, so the cheap call, the quality judge, and any escalated call **must all route through the gateway**; no second key-holder, no direct provider calls from a sidecar. (This is the hard constraint that rules out adopting FLO as a standalone service.)
+- A configurable routing policy on the relevant call site: `default_model`, `escalation_model`, and an `escalation_threshold` on the judge's confidence. Below threshold → re-run on `escalation_model`; record both attempts.
+- The quality judge must be **transparent, not opaque**: it emits a confidence *and* a short rationale, and both the cheap-model output, the judge's rationale, and the escalation decision land in the **citation ledger / audit layer** (per ADR 0018 WS-A and ADR 0016 P3 — counts/types-and-pointers, no raw payloads) so a user can see *why* a step was escalated. A bare numeric score is explicitly out of scope — it reproduces the "trust us" opacity LQ.AI exists to replace.
+- Cost accounting: the escalation router's spend (cheap + judge + any escalated call) must register against the R4 economic brake and the autonomous session cost cap, and the realized cost recorded on the relevant `tool_call_log` / inference row (relates to [DE-344](#de-344)'s cost-model work).
+- First proving ground: the WS-G validity judge's citing-passage fan-out, where the cost lever is largest. Style/voice and learner-understanding monitoring (FLO modes 1/2/4) are **not** in scope.
+
+**Non-goals / boundaries:** Do **not** adopt FLO as a runtime dependency or co-deployed service (a second provider-key holder violates the gateway boundary; its opaque scoring violates the transparency mandate; its eval rigor is below the "works on a real lawyer's real documents" bar). Any code reuse is a *lift* of MIT-licensed logic into a gateway-native, transparency-preserving feature, reviewed as new gateway code under the `gateway/**` security-review path. FLO's factual-consistency test corpus may separately be useful as **eval scaffolding** for benchmarking the citation engine / WS-G judge — track that as its own small follow-up if pursued.
+
+**When to ship:** When the WS-G validity layer (or another high-fan-out LLM-judge workload) makes frontier-model judge cost a felt constraint. Until then, the existing per-turn tool-call cap and autonomous session cost cap bound spend, so this stays deferred.
+
+---
+
 ## 10. Appendices
 
 ### Appendix A — Glossary
