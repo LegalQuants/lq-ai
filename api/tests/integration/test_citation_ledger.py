@@ -247,7 +247,7 @@ async def test_resolve_shapes_all_three_source_kinds(db_session, seeded_message)
         {"text": "hello", "offset_start": 0, "offset_end": 5, "page": 3}
     ]
 
-    case = next(e for e in out if e["source"]["kind"] == "caselaw")
+    case = next(e for e in out if "opinion_id" in e["source"])
     assert case["source"]["opinion_id"] == 11
     assert case["source"]["passages"][0]["text"] == "world"
     assert case["confidence"] == 0.95
@@ -288,7 +288,7 @@ async def test_resolve_message_id_filter_and_empty(db_session, seeded_message):
 
 
 @pytest.mark.asyncio
-async def test_resolve_skips_dangling_reference(db_session, seeded_message, caplog):
+async def test_resolve_skips_dangling_reference(db_session, seeded_message):
     """An entry whose referenced row is absent is skipped, not fatal."""
     _chat_id = (
         await db_session.execute(select(Message.chat_id).where(Message.id == seeded_message))
