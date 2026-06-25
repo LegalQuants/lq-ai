@@ -14,7 +14,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, Float, ForeignKey, Index, Text
+from sqlalchemy import TIMESTAMP, CheckConstraint, Float, ForeignKey, Index, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -87,6 +87,6 @@ class CitationLedgerEntry(Base):
     verification_status: Mapped[str] = mapped_column(Text, nullable=False)
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     provider: Mapped[str | None] = mapped_column(Text, nullable=True)
-    retrieved_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    retrieved_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     treatment_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())

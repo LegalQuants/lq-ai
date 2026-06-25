@@ -9,7 +9,6 @@ lands). Holds no content; references by id.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,13 +17,6 @@ from app.models.chat import Chat, Message, MessageCitation
 from app.models.citation_ledger_entry import CitationLedgerEntry
 from app.models.message_caselaw_citation import MessageCaselawCitation
 from app.models.message_tool_source import MessageToolSource
-
-
-def _naive(dt: datetime | None) -> datetime | None:
-    """Strip tzinfo so TIMESTAMP WITHOUT TIME ZONE columns accept the value."""
-    if dt is None:
-        return None
-    return dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
 
 
 async def assemble_ledger_entries(db: AsyncSession, *, message_id: uuid.UUID) -> int:
@@ -88,7 +80,7 @@ async def assemble_ledger_entries(db: AsyncSession, *, message_id: uuid.UUID) ->
                 verification_status=cc.verification_method or "verified",
                 confidence=cc.verification_confidence,
                 provider="courtlistener",
-                retrieved_at=_naive(cc.created_at),
+                retrieved_at=cc.created_at,
             )
         )
 
@@ -112,7 +104,7 @@ async def assemble_ledger_entries(db: AsyncSession, *, message_id: uuid.UUID) ->
                 verification_status="provenance",
                 confidence=None,
                 provider=ts.provider,
-                retrieved_at=_naive(ts.created_at),
+                retrieved_at=ts.created_at,
             )
         )
 
