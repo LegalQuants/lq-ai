@@ -78,7 +78,7 @@ Registered in `__all__` at the bottom of the module like its siblings.
 ## Testing
 
 - **Unit (resolver):** a turn with one `message_citations` row, one `message_caselaw_citations` row, one `message_tool_sources` row → three resolved dicts with correct `source_kind`, the right `source` block (passages present for the two quote kinds, absent for provenance), and mirrored `verification_status`/`confidence`. Empty ledger → `[]`. `message_id` filter narrows to one turn. A missing referenced row is skipped, not raised. Assert no N+1 (one query per referenced table).
-- **Integration (real Postgres, host venv + throwaway pgvector):** seed a chat + assistant message + the three artifact rows + ledger entries; `GET /chats/{id}/ledger` → 200 with the resolved entries; `?message_id=` filters; cross-user → 404; unknown chat → 404; unknown `message_id` → 404; non-UUID → 422.
+- **Integration (real Postgres, host venv + throwaway pgvector):** seed a chat + assistant message + the three artifact rows + ledger entries; `GET /chats/{id}/ledger` → 200 with the resolved entries; `?message_id=` filters; cross-user → 404; unknown chat → 404; unknown `message_id` → 404; non-UUID → 400 (via `_validate_chat_id`, matching sibling endpoints).
 - **OpenAPI conformance:** `test_openapi.py` green at count 135; `test_endpoints.py` green with the new route in `IMPLEMENTED_ROUTES`.
 - Gates: `ruff format` + `ruff check` + `mypy app` + full `pytest` (coverage no-decrease).
 
