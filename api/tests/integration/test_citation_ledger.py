@@ -1,12 +1,15 @@
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from app.models.chat import Chat, Message
+from app.citation.ledger import assemble_ledger_entries
+from app.models.chat import Chat, Message, MessageCitation
 from app.models.citation_ledger_entry import CitationLedgerEntry
+from app.models.message_caselaw_citation import MessageCaselawCitation
 from app.models.message_tool_source import MessageToolSource
 from app.models.user import User
 
@@ -91,3 +94,56 @@ async def test_exactly_one_fk_check_rejects_zero_and_two(db_session, seeded_mess
     with pytest.raises(IntegrityError):
         await db_session.flush()
     await db_session.rollback()
+
+
+@pytest.mark.asyncio
+async def test_assembles_one_entry_per_source_row(db_session, seeded_message):
+    mid = seeded_message
+    # A KB-document citation (verified) — needs a real source_file_id (files row).
+    # Reuse the message_tool_sources + caselaw rows that DON'T need a file FK,
+    # plus a caselaw citation, to exercise all three source kinds without a file.
+    db_session.add(
+        MessageCaselawCitation(
+            message_id=mid, opinion_id=11, cluster_id=22,
+            source_offset_start=0, source_offset_end=5, source_text="hello",
+            verified=True, verification_method="exact_match", verification_confidence=1.0,
+        )
+    )
+    db_session.add(
+        MessageToolSource(
+            message_id=mid, source_kind="caselaw", label="Cluster 22",
+            subtitle=None, url=None, external_ref="22", provider="courtlistener", tool="get_cluster",
+        )
+    )
+    await db_session.flush()
+
+    n = await assemble_ledger_entries(db_session, message_id=mid)
+    await db_session.flush()
+
+    entries = (
+        await db_session.execute(
+            select(CitationLedgerEntry).where(CitationLedgerEntry.message_id == mid)
+        )
+    ).scalars().all()
+    assert n == 2
+    kinds = {e.source_kind for e in entries}
+    assert kinds == {"caselaw"}  # one from the caselaw citation, one from the tool source
+    by_fk = {
+        "caselaw_citation": [e for e in entries if e.message_caselaw_citation_id is not None],
+        "tool_source": [e for e in entries if e.message_tool_source_id is not None],
+    }
+    assert len(by_fk["caselaw_citation"]) == 1
+    assert by_fk["caselaw_citation"][0].verification_status == "exact_match"
+    assert by_fk["caselaw_citation"][0].confidence == 1.0
+    assert by_fk["caselaw_citation"][0].provider == "courtlistener"
+    assert len(by_fk["tool_source"]) == 1
+    assert by_fk["tool_source"][0].verification_status == "provenance"
+    assert by_fk["tool_source"][0].confidence is None
+    assert by_fk["tool_source"][0].provider == "courtlistener"
+    assert by_fk["tool_source"][0].retrieved_at is not None
+
+
+@pytest.mark.asyncio
+async def test_no_sources_yields_no_entries(db_session, seeded_message):
+    n = await assemble_ledger_entries(db_session, message_id=seeded_message)
+    assert n == 0
