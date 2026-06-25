@@ -290,7 +290,7 @@ async def test_resolve_message_id_filter_and_empty(db_session, seeded_message):
 @pytest.mark.asyncio
 async def test_resolve_skips_dangling_reference(db_session, seeded_message, caplog):
     """An entry whose referenced row is absent is skipped, not fatal."""
-    chat_id = (
+    _chat_id = (
         await db_session.execute(select(Message.chat_id).where(Message.id == seeded_message))
     ).scalar_one()
     # Insert an entry pointing at a tool-source id that does not exist by

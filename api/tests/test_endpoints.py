@@ -131,6 +131,7 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("POST", "/api/v1/chats/{chat_id}/messages"),
     ("GET", "/api/v1/chats/{chat_id}/messages/{message_id}/citations"),
     ("GET", "/api/v1/chats/{chat_id}/messages/{message_id}/sources"),
+    ("GET", "/api/v1/chats/{chat_id}/ledger"),
     # C1 — Skill Service: filesystem loading
     ("GET", "/api/v1/skills"),
     ("GET", "/api/v1/skills/{skill_name}"),

@@ -85,7 +85,7 @@ from app.chat.tool_schemas import ChatToolAllowlist, assemble_allowlist
 from app.citation import extract_citations, verify
 from app.citation.caselaw import verify_and_persist_caselaw_citations
 from app.citation.cost import estimate_judge_call_cost_usd
-from app.citation.ledger import assemble_ledger_entries
+from app.citation.ledger import assemble_ledger_entries, resolve_ledger_entries
 from app.clients.gateway import EnsembleConfig, GatewayClient, get_gateway_client
 from app.config import get_settings
 from app.db.session import get_db
@@ -1778,6 +1778,44 @@ async def get_message_sources(
         }
         for s in rows
     ]
+
+
+@router.get(
+    "/{chat_id}/ledger",
+    summary="Citation Ledger for a chat (one-click trace) — P1-A3",
+)
+async def get_chat_ledger(
+    chat_id: str,
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    message_id: str | None = None,
+) -> dict[str, Any]:
+    """Return the Citation Ledger for a chat, each entry resolved to its source
+    identity + passage(s) read + verification status + provenance (ADR 0018 D4).
+
+    Chat-scoped; ``?message_id=`` narrows to a single assistant turn. Ownership is
+    enforced as in :func:`get_citations` (cross-user → 404). The ledger row holds
+    no content — passages are resolved from the content layer at read time (P3).
+    """
+    cid = _validate_chat_id(chat_id)
+    mid: uuid.UUID | None = None
+    if message_id is not None:
+        try:
+            mid = uuid.UUID(message_id)
+        except ValueError as exc:
+            raise ValidationError(
+                "message_id must be a UUID", details={"message_id": message_id}
+            ) from exc
+
+    await _load_visible_chat(db, cid, user.id, include_archived=True)
+
+    if mid is not None:
+        msg_stmt = select(Message.id).where(Message.id == mid, Message.chat_id == cid)
+        if (await db.execute(msg_stmt)).scalar_one_or_none() is None:
+            raise NotFound(f"Message {mid} not found.", details={"message_id": str(mid)})
+
+    entries = await resolve_ledger_entries(db, chat_id=cid, message_id=mid)
+    return {"chat_id": str(cid), "entries": entries}
 
 
 # ---------------------------------------------------------------------------
@@ -3671,6 +3709,7 @@ __all__ = [
     "create_chat",
     "delete_chat",
     "get_chat",
+    "get_chat_ledger",
     "get_citations",
     "list_chats",
     "list_messages",
