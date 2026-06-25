@@ -30,6 +30,7 @@ from sqlalchemy import Table
 
 import app
 from app.models.audit import AuditLog
+from app.models.citation_ledger_entry import CitationLedgerEntry
 from app.models.inference import InferenceRoutingLog
 from app.models.tool_call_log import ToolCallLog
 from app.models.tool_egress import ToolEgressLog
@@ -50,6 +51,7 @@ _AUDIT_MODELS: tuple[type, ...] = (
     AuditLog,
     ToolEgressLog,
     InferenceRoutingLog,
+    CitationLedgerEntry,
 )
 
 # Column names that, by name alone, signal raw-content storage. Matched

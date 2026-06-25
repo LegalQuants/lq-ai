@@ -53,6 +53,8 @@ Introduce `citation_ledger_entry` — one row per *(assistant turn, source broug
 
 *Rejected — read-model/view only:* no durable home for the reserved treatment slot, no re-run survival, and WS-G would have nowhere to write. *Rejected — denormalized snapshot:* duplicates content (P3 surface) and drifts from the source rows. The thin referencing table is the maintainer's selected option (2026-06-24).
 
+> **Reconciliation (P1-A2, 2026-06-24):** as built, the ledger references the three concrete per-turn artifacts via three nullable FKs — `message_citation_id`, `message_caselaw_citation_id`, `message_tool_source_id` (exactly one non-null). The earlier `citable_source_id` slot is realized as `message_caselaw_citation_id` (P1-A1 reused research-opinion storage + a caselaw-citation table rather than creating a standalone `citable_source`). The sketched `tier` column is deferred — `message_tool_sources` carries no tier to populate.
+
 ### D2 — External sources become quote-verifiable by **materializing** their text as a citable source
 
 To character-verify a quote drawn from an external authoritative source (a CourtListener/MCP opinion), the fetched source text is **materialized as a citable source** in the content layer — normalized text + char offsets — and **the existing cascade runs against it unchanged**. This keeps one verification path (P6): a quote from a KB document and a quote from a fetched opinion both verify by slicing stored `normalized_content[start:end]` and running exact → tolerant → paraphrase.

@@ -85,6 +85,7 @@ from app.chat.tool_schemas import ChatToolAllowlist, assemble_allowlist
 from app.citation import extract_citations, verify
 from app.citation.caselaw import verify_and_persist_caselaw_citations
 from app.citation.cost import estimate_judge_call_cost_usd
+from app.citation.ledger import assemble_ledger_entries
 from app.clients.gateway import EnsembleConfig, GatewayClient, get_gateway_client
 from app.config import get_settings
 from app.db.session import get_db
@@ -2884,6 +2885,10 @@ async def _non_streaming_response(
                 )
             except Exception as caselaw_exc:  # never block the turn
                 log.warning("caselaw citation verification failed: %r", caselaw_exc)
+            try:
+                await assemble_ledger_entries(db, message_id=assistant_message_id)
+            except Exception as ledger_exc:  # never block the turn
+                log.warning("citation ledger assembly failed: %r", ledger_exc)
             await _audit_message_sent(
                 db,
                 user=user,
@@ -3094,6 +3099,10 @@ async def _non_streaming_response(
         skill_registry=_skill_registry_from_request(http_request),
     )
     await _persist_message_tool_sources(db, message_id=assistant_message_id, records=[])
+    try:
+        await assemble_ledger_entries(db, message_id=assistant_message_id)
+    except Exception as ledger_exc:  # never block the turn
+        log.warning("citation ledger assembly failed: %r", ledger_exc)
 
     await _audit_message_sent(
         db,
@@ -3453,6 +3462,10 @@ async def _stream_response(
                     )
                 except Exception as caselaw_exc:  # never block the turn
                     log.warning("caselaw citation verification failed: %r", caselaw_exc)
+                try:
+                    await assemble_ledger_entries(db, message_id=assistant_message_id)
+                except Exception as ledger_exc:  # never block the turn
+                    log.warning("citation ledger assembly failed: %r", ledger_exc)
             # D3 audit row — best-effort, must not break the stream.
             try:
                 await _audit_message_sent(
