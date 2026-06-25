@@ -235,8 +235,7 @@ async def test_resolve_shapes_all_three_source_kinds(db_session, seeded_message)
     await db_session.flush()
 
     out = await resolve_ledger_entries(db_session, chat_id=chat_id)
-    by_kind = {e["source_kind"]: e for e in out}
-    assert set(by_kind) == {"kb_document", "caselaw"}  # tool source has source_kind "caselaw"
+    assert {e["source_kind"] for e in out} == {"kb_document", "caselaw"}
     # there are three entries (two share source_kind "caselaw"); assert count
     assert len(out) == 3
 
@@ -293,13 +292,9 @@ async def test_resolve_skips_dangling_reference(db_session, seeded_message):
     _chat_id = (
         await db_session.execute(select(Message.chat_id).where(Message.id == seeded_message))
     ).scalar_one()
-    # Insert an entry pointing at a tool-source id that does not exist by
-    # creating then deleting the row it referenced (FK is ON DELETE CASCADE,
-    # so instead point a fresh entry at a random id via raw construction).
-    # Simplest: build a valid entry, then None-out the in-memory map by
-    # referencing a tool source we never persisted is impossible (FK). So
-    # delete the source after the entry to force the resolver's miss path is
-    # also blocked by CASCADE. We therefore test the resolver helper directly:
+    # FK constraints make a truly dangling row unpersistable, so the conservative
+    # skip branch is exercised at the _resolve_source unit level: a present FK whose
+    # referenced row is absent resolves to None.
     from app.citation.ledger import _resolve_source
 
     class _E:
