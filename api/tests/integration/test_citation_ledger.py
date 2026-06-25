@@ -1,5 +1,4 @@
 import uuid
-from datetime import datetime, timezone
 
 import pytest
 import pytest_asyncio
@@ -7,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.citation.ledger import assemble_ledger_entries
-from app.models.chat import Chat, Message, MessageCitation
+from app.models.chat import Chat, Message
 from app.models.citation_ledger_entry import CitationLedgerEntry
 from app.models.message_caselaw_citation import MessageCaselawCitation
 from app.models.message_tool_source import MessageToolSource
@@ -42,8 +41,14 @@ async def test_ledger_entry_roundtrips(db_session, seeded_message):
         await db_session.execute(select(Message.chat_id).where(Message.id == seeded_message))
     ).scalar_one()
     source = MessageToolSource(
-        message_id=seeded_message, source_kind="caselaw", label="Cluster 1",
-        subtitle=None, url=None, external_ref="1", provider="courtlistener", tool="get_cluster",
+        message_id=seeded_message,
+        source_kind="caselaw",
+        label="Cluster 1",
+        subtitle=None,
+        url=None,
+        external_ref="1",
+        provider="courtlistener",
+        tool="get_cluster",
     )
     db_session.add(source)
     await db_session.flush()
@@ -76,8 +81,10 @@ async def test_exactly_one_fk_check_rejects_zero_and_two(db_session, seeded_mess
     # zero FKs -> CHECK violation
     db_session.add(
         CitationLedgerEntry(
-            chat_id=chat_id, message_id=seeded_message,
-            source_kind="kb_document", verification_status="exact_match",
+            chat_id=chat_id,
+            message_id=seeded_message,
+            source_kind="kb_document",
+            verification_status="exact_match",
         )
     )
     with pytest.raises(IntegrityError):
@@ -86,9 +93,12 @@ async def test_exactly_one_fk_check_rejects_zero_and_two(db_session, seeded_mess
     # two FKs -> CHECK violation
     db_session.add(
         CitationLedgerEntry(
-            chat_id=chat_id, message_id=seeded_message,
-            source_kind="kb_document", verification_status="exact_match",
-            message_citation_id=uuid.uuid4(), message_tool_source_id=uuid.uuid4(),
+            chat_id=chat_id,
+            message_id=seeded_message,
+            source_kind="kb_document",
+            verification_status="exact_match",
+            message_citation_id=uuid.uuid4(),
+            message_tool_source_id=uuid.uuid4(),
         )
     )
     with pytest.raises(IntegrityError):
@@ -104,15 +114,27 @@ async def test_assembles_one_entry_per_source_row(db_session, seeded_message):
     # plus a caselaw citation, to exercise all three source kinds without a file.
     db_session.add(
         MessageCaselawCitation(
-            message_id=mid, opinion_id=11, cluster_id=22,
-            source_offset_start=0, source_offset_end=5, source_text="hello",
-            verified=True, verification_method="exact_match", verification_confidence=1.0,
+            message_id=mid,
+            opinion_id=11,
+            cluster_id=22,
+            source_offset_start=0,
+            source_offset_end=5,
+            source_text="hello",
+            verified=True,
+            verification_method="exact_match",
+            verification_confidence=1.0,
         )
     )
     db_session.add(
         MessageToolSource(
-            message_id=mid, source_kind="caselaw", label="Cluster 22",
-            subtitle=None, url=None, external_ref="22", provider="courtlistener", tool="get_cluster",
+            message_id=mid,
+            source_kind="caselaw",
+            label="Cluster 22",
+            subtitle=None,
+            url=None,
+            external_ref="22",
+            provider="courtlistener",
+            tool="get_cluster",
         )
     )
     await db_session.flush()
@@ -121,10 +143,14 @@ async def test_assembles_one_entry_per_source_row(db_session, seeded_message):
     await db_session.flush()
 
     entries = (
-        await db_session.execute(
-            select(CitationLedgerEntry).where(CitationLedgerEntry.message_id == mid)
+        (
+            await db_session.execute(
+                select(CitationLedgerEntry).where(CitationLedgerEntry.message_id == mid)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert n == 2
     kinds = {e.source_kind for e in entries}
     assert kinds == {"caselaw"}  # one from the caselaw citation, one from the tool source

@@ -585,6 +585,76 @@ verifier.
 | Method values | `exact_match`, `tolerant_match`, `llm_judge`, `ensemble`, `failed` | `exact_match`, `tolerant_match` (P1-A1) |
 | Confidence type | `NUMERIC(3,2)` | `FLOAT` |
 
+### `citation_ledger_entry` (migration 0058, P1-A2)
+
+The Citation Ledger (ADR 0018 D1) — one thin referencing row per (turn, source), unifying KB-document citations, caselaw citations, and tool-source provenance; metadata-only (no content), in the P3 tripwire.
+
+One row per *(assistant turn, source brought into context)*, accumulated per matter (`project_id`). It **references** exactly one of `message_citations`, `message_caselaw_citations`, or `message_tool_sources` by id (a CHECK constraint enforces exactly-one-non-null) and mirrors that source's verification status as a queryable label. It holds **no content** (`source_text` and payloads live on the referenced rows); it is a metadata index.
+
+```sql
+CREATE TABLE citation_ledger_entry (
+    id                          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id                  UUID REFERENCES projects(id) ON DELETE CASCADE,         -- fk_citation_ledger_entry_project; nullable (chat may be matter-less)
+    chat_id                     UUID NOT NULL REFERENCES chats(id) ON DELETE CASCADE,   -- fk_citation_ledger_entry_chat
+    message_id                  UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE, -- fk_citation_ledger_entry_message
+    source_kind                 TEXT NOT NULL,    -- 'kb_document' | 'caselaw' | 'mcp' | 'kb_chunk'
+    message_citation_id         UUID REFERENCES message_citations(id) ON DELETE CASCADE,          -- fk_citation_ledger_entry_msg_citation; nullable
+    message_caselaw_citation_id UUID REFERENCES message_caselaw_citations(id) ON DELETE CASCADE,  -- fk_citation_ledger_entry_caselaw_citation; nullable
+    message_tool_source_id      UUID REFERENCES message_tool_sources(id) ON DELETE CASCADE,       -- fk_citation_ledger_entry_tool_source; nullable
+    verification_status         TEXT NOT NULL,    -- mirrored cascade label: 'exact_match' | 'tolerant_match' | 'provenance' | etc.
+    confidence                  FLOAT,            -- mirrored cascade confidence [0,1] or NULL
+    provider                    TEXT,             -- retrieval provider (e.g. 'courtlistener') or NULL for KB sources
+    retrieved_at                TIMESTAMPTZ,      -- time the external source was fetched, or NULL for KB sources
+    treatment_id                UUID,             -- reserved for WS-G derived treatment (ADR 0018 D6); always NULL in Phase 1
+    created_at                  TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT chk_citation_ledger_entry_exactly_one_source
+        CHECK (
+            (message_citation_id IS NOT NULL)::int
+            + (message_caselaw_citation_id IS NOT NULL)::int
+            + (message_tool_source_id IS NOT NULL)::int = 1
+        ),
+    CONSTRAINT chk_citation_ledger_entry_confidence_range
+        CHECK (confidence IS NULL OR (confidence >= 0 AND confidence <= 1))
+);
+
+CREATE INDEX ix_citation_ledger_entry_chat_id    ON citation_ledger_entry(chat_id);
+CREATE INDEX ix_citation_ledger_entry_message_id ON citation_ledger_entry(message_id);
+CREATE INDEX ix_citation_ledger_entry_project_id ON citation_ledger_entry(project_id);
+```
+
+**Columns:**
+
+| Column | Type | Nullable | Purpose |
+|---|---|---|---|
+| `id` | UUID PK | NOT NULL | Entry identity |
+| `project_id` | UUID FK → `projects.id` CASCADE | nullable | Matter scope; NULL when the chat belongs to no project |
+| `chat_id` | UUID FK → `chats.id` CASCADE | NOT NULL | Conversation scope |
+| `message_id` | UUID FK → `messages.id` CASCADE | NOT NULL | The assistant turn that brought this source into context |
+| `source_kind` | TEXT | NOT NULL | Kind label: `kb_document`, `caselaw`, `mcp`, `kb_chunk` |
+| `message_citation_id` | UUID FK → `message_citations.id` CASCADE | nullable | Set when source produced a `MessageCitation` (KB quote-verified) |
+| `message_caselaw_citation_id` | UUID FK → `message_caselaw_citations.id` CASCADE | nullable | Set when source produced a `MessageCaselawCitation` (external quote-verified) |
+| `message_tool_source_id` | UUID FK → `message_tool_sources.id` CASCADE | nullable | Set when source is retrieval-provenance only (no quote verification) |
+| `verification_status` | TEXT | NOT NULL | Mirrored cascade label (e.g. `exact_match`, `tolerant_match`, `provenance`) — a label, never payload |
+| `confidence` | FLOAT | nullable | Mirrored cascade confidence [0, 1]; NULL for provenance-only rows |
+| `provider` | TEXT | nullable | Retrieval provider (e.g. `courtlistener`); NULL for KB-document sources |
+| `retrieved_at` | TIMESTAMPTZ | nullable | When the external source was fetched; NULL for KB-document sources |
+| `treatment_id` | UUID | nullable | **Reserved** for WS-G derived treatment (ADR 0018 D6); always NULL in Phase 1 |
+| `created_at` | TIMESTAMPTZ | NOT NULL | Append time; server default `now()` |
+
+**CHECK constraints:**
+
+- `chk_citation_ledger_entry_exactly_one_source` — `(message_citation_id IS NOT NULL)::int + (message_caselaw_citation_id IS NOT NULL)::int + (message_tool_source_id IS NOT NULL)::int = 1`. Exactly one source FK must be non-null; the other two must be null. Enforces the ledger's single-source-per-row invariant.
+- `chk_citation_ledger_entry_confidence_range` — `confidence IS NULL OR (confidence >= 0 AND confidence <= 1)`. Mirrors the range constraint on the underlying citation tables.
+
+**Indexes:**
+
+- `ix_citation_ledger_entry_chat_id` on `(chat_id)` — supports the per-conversation ledger read endpoint (ADR 0018 D4).
+- `ix_citation_ledger_entry_message_id` on `(message_id)` — supports per-turn ledger queries.
+- `ix_citation_ledger_entry_project_id` on `(project_id)` — supports matter-scoped ledger queries and P9 export/delete.
+
+**P3 note:** the ledger intentionally holds **no content** (no `source_text`, no tool payloads). It is added to the `test_transparency_invariants.py` no-raw-payload tripwire scan (ADR 0018 D5) so any future content-bearing column fails CI at collection.
+
 ### `enhance_prompt_interactions` (migration 0015)
 
 One row per Enhance Prompt (⌘E) invocation. Records the raw input, the
