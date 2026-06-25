@@ -225,6 +225,73 @@ def extract_tool_sources(tool_name: str, data: Any) -> list[ToolSourceRecord]:
 
 
 # ---------------------------------------------------------------------------
+# Generic-MCP provenance (DE-350)
+# ---------------------------------------------------------------------------
+
+_MCP_TITLE_KEYS: tuple[str, ...] = ("title", "name", "label")
+_MCP_URL_KEYS: tuple[str, ...] = ("url", "link", "href")
+
+
+def _mcp_label_url(data: Any) -> tuple[str | None, str | None]:
+    """Best-effort (title, url) from a heterogeneous MCP payload. Never raises.
+
+    Reads a title/url only from dict-shaped data (a top-level dict, or the first
+    dict element inside a list — the standard MCP ``content`` block list). Plain
+    text blocks yield ``(None, None)``. Any odd shape or error → ``(None, None)``.
+    """
+
+    def _from_dict(d: dict[str, Any]) -> tuple[str | None, str | None]:
+        title = next((d[k] for k in _MCP_TITLE_KEYS if isinstance(d.get(k), str) and d[k]), None)
+        url = next((d[k] for k in _MCP_URL_KEYS if isinstance(d.get(k), str) and d[k]), None)
+        return title, url
+
+    try:
+        if isinstance(data, dict):
+            return _from_dict(data)
+        if isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict):
+                    title, url = _from_dict(item)
+                    if title is not None or url is not None:
+                        return title, url
+        return None, None
+    except Exception:
+        return None, None
+
+
+def extract_mcp_tool_source(spec: ToolSpec, data: Any) -> ToolSourceRecord | None:
+    """One retrieval-provenance record for a successful MCP tool call (DE-350).
+
+    Per-call provenance: ``source_kind='mcp'``, provider/tool from the spec, a
+    best-effort label/url, ``external_ref=None``. Returns ``None`` for a
+    non-MCP spec (defensive; the router only calls it for ``kind == 'mcp'``).
+    """
+    if spec.kind != "mcp":
+        return None
+    title, url = _mcp_label_url(data)
+    return ToolSourceRecord(
+        source_kind="mcp",
+        label=title or f"{spec.provider} · {spec.tool}",
+        subtitle=None,
+        url=url,
+        external_ref=None,
+        provider=spec.provider,
+        tool=spec.tool,
+    )
+
+
+def collect_tool_sources(spec: ToolSpec, data: Any) -> list[ToolSourceRecord]:
+    """Route a tool result to its provenance records by ``spec.kind`` (DE-350).
+
+    MCP → one ``mcp`` record; research → the existing case-law extraction.
+    """
+    if spec.kind == "mcp":
+        rec = extract_mcp_tool_source(spec, data)
+        return [rec] if rec is not None else []
+    return extract_tool_sources(spec.tool, data)
+
+
+# ---------------------------------------------------------------------------
 # Research dispatch
 # ---------------------------------------------------------------------------
 
@@ -600,8 +667,9 @@ async def run_chat_tool_loop(
                     request_id=request_id,
                 )
                 tool_result_msgs.append(tool_result_message(tc_id, result))
-                # PR6c — retrieval-provenance: record case-law sources this call surfaced.
-                for rec in extract_tool_sources(spec.tool, result.data):
+                # retrieval-provenance: record the sources this call surfaced
+                # (case-law clusters and, per DE-350, generic MCP consultations).
+                for rec in collect_tool_sources(spec, result.data):
                     if rec.external_ref is None or rec.external_ref not in _seen_source_refs:
                         if rec.external_ref is not None:
                             _seen_source_refs.add(rec.external_ref)

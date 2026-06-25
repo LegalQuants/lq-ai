@@ -4677,9 +4677,9 @@ No code change — the runtime already returns these with the correct typed `cod
 
 #### DE-350 — Generic-MCP-result provenance (`source_kind='mcp'` on `message_tool_sources`)
 
-**Priority:** P3 · **Effort:** M
+**Priority:** P3 · **Effort:** M · **Status: SHIPPED** (2026-06-24)
 
-**Context:** PR6c shipped retrieval-provenance for **case-law** tool results only (`source_kind='caselaw'`, from `search_case_law`/`get_cluster`). Extend `message_tool_sources` capture to generic MCP connector results (`source_kind='mcp'`) so a tool call to any operator-wired MCP server surfaces in the "Sources consulted" panel with a per-server label/url convention. Needs a label/url extraction strategy per MCP result shape (no structured cluster metadata to lean on).
+**Context:** PR6c shipped retrieval-provenance for **case-law** tool results only (`source_kind='caselaw'`, from `search_case_law`/`get_cluster`). Extend `message_tool_sources` capture to generic MCP connector results (`source_kind='mcp'`) so a tool call to any operator-wired MCP server surfaces in the "Sources consulted" panel with a per-server label/url convention. Needs a label/url extraction strategy per MCP result shape (no structured cluster metadata to lean on). Shipped: one `message_tool_sources` row per MCP call (`source_kind='mcp'`, provider=server, tool=tool) with a defensive best-effort label/url; per-result-item parsing and per-server label/url conventions remain deferred. Design: `docs/superpowers/specs/2026-06-24-de-350-mcp-provenance-design.md`.
 
 #### DE-351 — First-run document ingestion times out on the docling model download, and the file is left stuck in `processing`
 

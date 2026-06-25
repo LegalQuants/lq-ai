@@ -3,8 +3,8 @@
 One row per external source (a case-law cluster) that a research tool *returned*
 during an assistant turn. This is retrieval-provenance — "sources consulted" —
 NOT quote-verification: it deliberately lives apart from ``message_citations``
-(which is byte-offset quote-matching against uploaded documents). Case-law only
-in PR6c (``source_kind='caselaw'``); generic MCP results are DE-350.
+(which is byte-offset quote-matching against uploaded documents). Case-law (``source_kind='caselaw'``, PR6c) and generic MCP connector results
+(``source_kind='mcp'``, DE-350).
 """
 
 from __future__ import annotations
