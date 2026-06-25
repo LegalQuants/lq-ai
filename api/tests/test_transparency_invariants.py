@@ -34,6 +34,7 @@ from app.models.citation_ledger_entry import CitationLedgerEntry
 from app.models.inference import InferenceRoutingLog
 from app.models.tool_call_log import ToolCallLog
 from app.models.tool_egress import ToolEgressLog
+from app.models.work_product_fiduciary_gate import WorkProductFiduciaryGate
 from app.tools.governance import _MAX_TIER
 
 # Root of the importable ``app`` package (``api/app``).
@@ -52,6 +53,7 @@ _AUDIT_MODELS: tuple[type, ...] = (
     ToolEgressLog,
     InferenceRoutingLog,
     CitationLedgerEntry,
+    WorkProductFiduciaryGate,
 )
 
 # Column names that, by name alone, signal raw-content storage. Matched
