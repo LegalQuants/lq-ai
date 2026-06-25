@@ -83,6 +83,7 @@ from app.chat.tool_loop import (
 )
 from app.chat.tool_schemas import ChatToolAllowlist, assemble_allowlist
 from app.citation import extract_citations, verify
+from app.citation.caselaw import verify_and_persist_caselaw_citations
 from app.citation.cost import estimate_judge_call_cost_usd
 from app.clients.gateway import EnsembleConfig, GatewayClient, get_gateway_client
 from app.config import get_settings
@@ -2874,6 +2875,15 @@ async def _non_streaming_response(
             await _persist_message_tool_sources(
                 db, message_id=assistant_message_id, records=outcome.tool_sources
             )
+            try:
+                await verify_and_persist_caselaw_citations(
+                    db,
+                    message_id=assistant_message_id,
+                    assistant_text=outcome.text,
+                    tool_sources=outcome.tool_sources,
+                )
+            except Exception as caselaw_exc:  # never block the turn
+                log.warning("caselaw citation verification failed: %r", caselaw_exc)
             await _audit_message_sent(
                 db,
                 user=user,
@@ -3432,6 +3442,17 @@ async def _stream_response(
                             "error": str(cite_exc),
                         },
                     )
+                try:
+                    await verify_and_persist_caselaw_citations(
+                        db,
+                        message_id=assistant_message_id,
+                        assistant_text="".join(accumulated),
+                        tool_sources=loop_outcome.tool_sources
+                        if isinstance(loop_outcome, LoopFinal)
+                        else [],
+                    )
+                except Exception as caselaw_exc:  # never block the turn
+                    log.warning("caselaw citation verification failed: %r", caselaw_exc)
             # D3 audit row — best-effort, must not break the stream.
             try:
                 await _audit_message_sent(

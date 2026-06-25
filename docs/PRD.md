@@ -4761,6 +4761,14 @@ So the single longest phase (image pull) has neither a stream nor a poll. The re
 
 ---
 
+#### DE-359 — Savepoint-isolate the chat-finalize persistence flushes
+
+**Priority:** P3 · **Effort:** S · **Status: OPEN**
+
+**Context:** Surfaced by the P1-A1 final whole-branch review (caselaw quote-verification). The chat-finalize path persists several artifacts in sequence — `_persist_message_citations`, `_persist_message_tool_sources`, and (P1-A1) the caselaw-citation orchestrator — before `_audit_message_sent` issues the turn's `db.commit()` (`api/app/api/chats.py`). Each persistence helper's `db.flush()` is wrapped in a `try/except … log` so a failure doesn't abort the turn, **but** a swallowed `DBAPIError` leaves the async session needing a rollback; the *next* unguarded statement (the audit `commit`) would then raise and break the turn. This is currently **unreachable in practice** — every row these helpers write satisfies its table CHECK constraints by construction, so the only path to a flush error is raw connection loss (which breaks the turn regardless) — and it is a **pre-existing** risk class (the `_persist_message_tool_sources` flush predates P1-A1; P1-A1 did not regress it). **Hardening:** wrap each finalize-time flush in a savepoint (`async with db.begin_nested():`) so a flush failure cannot poison the outer transaction before the audit commit. Defense-in-depth, not a correctness fix.
+
+---
+
 ## 10. Appendices
 
 ### Appendix A — Glossary

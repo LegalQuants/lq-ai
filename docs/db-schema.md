@@ -522,6 +522,69 @@ CREATE INDEX ix_message_tool_sources_message_id ON message_tool_sources(message_
 The `(message_id)` index supports the per-turn sources fetch used by the
 sources endpoint (Task 4) and the frontend citation rail (Task 5).
 
+### `message_caselaw_citations` (migration 0057, P1-A1)
+
+Quote-verified citations against external CourtListener opinions (P1-A1);
+parallels `message_citations` but keyed to `opinion_id`/`cluster_id` with
+offsets into the stored opinion plaintext, no `file_id`. One row per
+verbatim passage in an assistant turn that was character-verified against a
+CourtListener opinion the turn consulted. Written by the chat-finalize path
+after the assistant message is persisted. ADR 0018 D2.
+
+```sql
+CREATE TABLE message_caselaw_citations (
+    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    message_id                UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,  -- fk_message_caselaw_citations_message
+    opinion_id                BIGINT NOT NULL,
+    cluster_id                BIGINT NOT NULL,
+    source_offset_start       INTEGER NOT NULL,
+    source_offset_end         INTEGER NOT NULL,
+    source_text               TEXT NOT NULL,
+    verified                  BOOLEAN NOT NULL DEFAULT FALSE,
+    verification_method       TEXT,   -- 'exact_match' | 'tolerant_match' | NULL
+    verification_confidence   FLOAT,
+    partial                   BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT chk_message_caselaw_citations_offset_start_nonneg
+        CHECK (source_offset_start >= 0),
+    CONSTRAINT chk_message_caselaw_citations_offset_end_gt_start
+        CHECK (source_offset_end > source_offset_start),
+    CONSTRAINT chk_message_caselaw_citations_method_values
+        CHECK (
+            verification_method IS NULL
+            OR verification_method IN ('exact_match', 'tolerant_match')
+        ),
+    CONSTRAINT chk_message_caselaw_citations_confidence_range
+        CHECK (
+            verification_confidence IS NULL
+            OR (verification_confidence >= 0 AND verification_confidence <= 1)
+        ),
+    CONSTRAINT chk_message_caselaw_citations_verified_has_method
+        CHECK ((verified = false) OR (verification_method IS NOT NULL))
+);
+
+CREATE INDEX ix_message_caselaw_citations_message_id ON message_caselaw_citations(message_id);
+```
+
+Unlike `message_citations`, there is no `source_file_id` — CourtListener opinions
+are external sources, not uploaded `files`. `opinion_id` and `cluster_id` are
+CourtListener's numeric identifiers; offsets are into the opinion plaintext stored
+by the research service. The `partial` flag indicates the quote was found but only
+partially matched. Stages 3–4 (LLM judge, ensemble) are deferred to a later
+milestone; only `'exact_match'` and `'tolerant_match'` are written by the P1-A1
+verifier.
+
+**Contrast with `message_citations`:**
+
+| Concern | `message_citations` | `message_caselaw_citations` |
+|---|---|---|
+| Source | Uploaded documents (KB / project files) | External CourtListener opinions |
+| Key | `source_file_id` (FK to `files`) | `opinion_id` / `cluster_id` (BigInt) |
+| Offset target | Uploaded document normalized content | Stored opinion plaintext |
+| Method values | `exact_match`, `tolerant_match`, `llm_judge`, `ensemble`, `failed` | `exact_match`, `tolerant_match` (P1-A1) |
+| Confidence type | `NUMERIC(3,2)` | `FLOAT` |
+
 ### `enhance_prompt_interactions` (migration 0015)
 
 One row per Enhance Prompt (⌘E) invocation. Records the raw input, the
