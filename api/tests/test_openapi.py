@@ -53,6 +53,7 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/chats/{chat_id}/messages",
         "/api/v1/chats/{chat_id}/messages/{message_id}/citations",
         "/api/v1/chats/{chat_id}/messages/{message_id}/sources",
+        "/api/v1/chats/{chat_id}/ledger",
         # skills
         "/api/v1/skills",
         "/api/v1/skills/{skill_name}",
@@ -325,7 +326,9 @@ async def test_openapi_paths_match_sketch() -> None:
     # /api/v1/chats/{chat_id}/tool-calls/{pending_call_id}
     # PR6c Task 4 adds one new path (133 -> 134):
     # /api/v1/chats/{chat_id}/messages/{message_id}/sources
-    assert len(actual) == 134
+    # P1-A3 adds one new path (134 -> 135):
+    # /api/v1/chats/{chat_id}/ledger
+    assert len(actual) == 135
 
 
 @pytest.mark.unit

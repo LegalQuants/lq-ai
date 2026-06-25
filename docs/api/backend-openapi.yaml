@@ -1072,6 +1072,38 @@ paths:
                     tool: {type: string}
                     created_at: {type: string, format: date-time}
 
+  /api/v1/chats/{chat_id}/ledger:
+    parameters:
+      - name: chat_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: message_id
+        in: query
+        required: false
+        schema: {type: string, format: uuid}
+        description: Narrow to a single assistant turn.
+    get:
+      tags: [messages]
+      summary: Citation Ledger for a chat — one-click trace (P1-A3)
+      responses:
+        '200':
+          description: Ledger entries resolved to source + passage(s) + status + provenance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  chat_id: {type: string, format: uuid}
+                  entries:
+                    type: array
+                    items: {$ref: '#/components/schemas/LedgerEntry'}
+        '404':
+          description: Chat (or filtered message) does not exist
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
   # ----------- SKILLS -----------
   /api/v1/skills:
     get:
@@ -8409,6 +8441,23 @@ components:
                 - skill_input_missing
             message: {type: string}
             details: {type: object, additionalProperties: true}
+
+    LedgerEntry:
+      type: object
+      description: One citation-ledger entry resolved to its source (ADR 0018 D4).
+      properties:
+        id: {type: string, format: uuid}
+        message_id: {type: string, format: uuid}
+        source_kind: {type: string, enum: [kb_document, caselaw, mcp]}
+        verification_status: {type: string}
+        confidence: {type: number, nullable: true}
+        provider: {type: string, nullable: true}
+        retrieved_at: {type: string, format: date-time, nullable: true}
+        treatment_id: {type: string, format: uuid, nullable: true}
+        created_at: {type: string, format: date-time}
+        source:
+          type: object
+          description: Resolved source block; shape varies by kind. Quote kinds carry passages[].
 
 security:
   - bearerAuth: []
