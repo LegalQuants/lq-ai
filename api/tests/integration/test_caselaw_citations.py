@@ -13,8 +13,11 @@ import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.chat.tool_loop import ToolSourceRecord
+from app.citation.caselaw import verify_and_persist_caselaw_citations
 from app.models.chat import Chat, Message
 from app.models.message_caselaw_citation import MessageCaselawCitation
+from app.models.research import ResearchOpinionMetadata
 from app.models.user import User
 from app.security import hash_password
 
@@ -83,10 +86,6 @@ async def test_caselaw_citation_row_roundtrips(
 # Orchestrator tests (Task 4 additions)
 # ---------------------------------------------------------------------------
 
-from app.chat.tool_loop import ToolSourceRecord  # noqa: E402
-from app.citation.caselaw import verify_and_persist_caselaw_citations  # noqa: E402
-from app.models.research import ResearchOpinionMetadata  # noqa: E402
-
 _OPINION_TEXT = "Intro. The covenant of good faith is implied in every contract. End."
 
 
@@ -129,10 +128,16 @@ async def test_verbatim_quote_persists_verified_row(db_session, seeded_chat_mess
     )
     await db_session.flush()
     rows = (
-        await db_session.execute(
-            select(MessageCaselawCitation).where(MessageCaselawCitation.message_id == message_id)
+        (
+            await db_session.execute(
+                select(MessageCaselawCitation).where(
+                    MessageCaselawCitation.message_id == message_id
+                )
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert n == 1
     assert len(rows) == 1
     assert rows[0].verified is True
