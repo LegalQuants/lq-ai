@@ -11,6 +11,7 @@ declarative base, so Alembic's autogenerate (when used) sees them.
 from __future__ import annotations
 
 from app.models.audit import AuditLog
+from app.models.citation_ledger_entry import CitationLedgerEntry
 from app.models.autonomous import (
     AutonomousMemory,
     AutonomousNotification,
@@ -49,6 +50,7 @@ from app.models.work_product import WorkProductAttribution
 
 __all__ = [
     "AuditLog",
+    "CitationLedgerEntry",
     "AutonomousMemory",
     "AutonomousNotification",
     "AutonomousSchedule",
