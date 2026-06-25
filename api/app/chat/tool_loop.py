@@ -667,8 +667,9 @@ async def run_chat_tool_loop(
                     request_id=request_id,
                 )
                 tool_result_msgs.append(tool_result_message(tc_id, result))
-                # PR6c — retrieval-provenance: record case-law sources this call surfaced.
-                for rec in extract_tool_sources(spec.tool, result.data):
+                # retrieval-provenance: record the sources this call surfaced
+                # (case-law clusters and, per DE-350, generic MCP consultations).
+                for rec in collect_tool_sources(spec, result.data):
                     if rec.external_ref is None or rec.external_ref not in _seen_source_refs:
                         if rec.external_ref is not None:
                             _seen_source_refs.add(rec.external_ref)
