@@ -47,6 +47,8 @@ async def derive_treatment_for_message(
     Returns the number of caselaw ledger entries linked to a treatment row.
     Never raises on a per-case failure (logged and skipped).
     """
+    if now.tzinfo is None:
+        raise ValueError("derive_treatment_for_message requires a timezone-aware 'now'")
     citations = (
         (
             await db.execute(

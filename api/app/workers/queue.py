@@ -51,6 +51,11 @@ playbook worker (see :mod:`app.workers.arq_setup`) consumes from the
 shared playbook queue, walks the document corpus, and writes the
 assembled draft playbook back to the ``easy_playbook_generations`` row."""
 
+TREATMENT_DERIVATION_JOB_NAME = "treatment_derivation_job"
+"""WS-G PR1 — citation-graph treatment derivation job. Enqueued best-effort
+after each assistant turn finalizes; the ingest worker consumes it and derives
+the citation-graph treatment signal for all caselaw citations in the turn."""
+
 AUTONOMOUS_SESSION_JOB_NAME = "autonomous_session_job"
 """M4-A2 / M4-B3 — Autonomous Session execution pipeline. Enqueued by the
 B3 schedule dispatcher (and future watch/manual triggers) onto the shared
@@ -339,6 +344,37 @@ async def enqueue_user_export_job(job_id: uuid.UUID) -> bool:
             extra={
                 "event": "user_export_enqueue_failed",
                 "job_id": str(job_id),
+                "error": str(exc),
+            },
+        )
+        return False
+
+
+async def enqueue_treatment_derivation_job(message_id: uuid.UUID) -> bool:
+    """Enqueue a citation-graph treatment-derivation job (WS-G PR1).
+
+    Best-effort: failures are logged at WARNING and return False. The
+    caller (turn-finalize path in ``app.api.chats``) never blocks on this;
+    a missed derivation is silent — no retry sweep (treatment is
+    re-derived on demand when the Ledger UI queries the signal).
+    """
+    try:
+        pool = await _get_pool()
+        await pool.enqueue_job(TREATMENT_DERIVATION_JOB_NAME, str(message_id))
+        log.info(
+            "enqueue_treatment_derivation_job: enqueued",
+            extra={
+                "event": "treatment_derivation_enqueue",
+                "message_id": str(message_id),
+            },
+        )
+        return True
+    except Exception as exc:
+        log.warning(
+            "enqueue_treatment_derivation_job: failed",
+            extra={
+                "event": "treatment_derivation_enqueue_failed",
+                "message_id": str(message_id),
                 "error": str(exc),
             },
         )
