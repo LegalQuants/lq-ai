@@ -4815,6 +4815,18 @@ So the single longest phase (image pull) has neither a stream nor a poll. The re
 
 ---
 
+#### DE-363 — WS-G lazy-on-trace-open treatment fallback
+
+**Priority:** P2 · **Effort:** S · **Status: OPEN (committed to land within Phase 2 / WS-G)**
+
+**Context:** [ADR 0019](adr/0019-transparent-validity-treatment-layer.md) D2 specifies a **lazy-on-first-trace-open** fallback for deriving a cited case's treatment when the async derivation job has not yet populated it (worker backlog, a failed/dropped enqueue, or a row that expired its staleness TTL between turns). WS-G PR1 (the citation-graph signal) ships **async-only** to keep the ledger read path fast and egress-free; an entry whose treatment is not yet derived renders nothing / "pending." That is an honest interim state, not a silent gap — but the ADR's fallback is part of the intended design, and the maintainer approved deferring it (2026-06-26) **on the condition that it lands by the end of Phase 2.**
+
+**Specific scope:** When `GET /chats/{chat_id}/ledger` resolves a caselaw entry whose `treatment_id` is null (or whose `citation_treatment.as_of` is stale beyond the TTL), trigger a best-effort derivation — most likely by **enqueuing the existing `treatment_derivation_job`** for that turn (keeping egress off the synchronous read path) and returning `treatment: null` / "deriving" for that read, rather than blocking the response on a live CourtListener fetch. Decide in the implementing PR whether the fallback ever derives **synchronously** on read (latency + egress cost) or strictly re-enqueues; the re-enqueue path is the conservative default.
+
+**When to ship:** Within WS-G (Phase 2) — alongside or immediately after PR2, before the milestone closes. Not optional; tracked here so the PR1 async-only simplification cannot silently become permanent.
+
+---
+
 ## 10. Appendices
 
 ### Appendix A — Glossary
