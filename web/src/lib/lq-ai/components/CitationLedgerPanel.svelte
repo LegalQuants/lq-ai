@@ -37,10 +37,12 @@
 		if (event.target === event.currentTarget) onClose();
 	}
 
-	onMount(() => {
-		document.addEventListener('keydown', handleKeydown);
-		return () => document.removeEventListener('keydown', handleKeydown);
-	});
+	$: if (typeof document !== 'undefined') {
+		if (open) document.addEventListener('keydown', handleKeydown);
+		else document.removeEventListener('keydown', handleKeydown);
+	}
+
+	onMount(() => () => document.removeEventListener('keydown', handleKeydown));
 </script>
 
 {#if open}
