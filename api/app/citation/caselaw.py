@@ -22,6 +22,7 @@ See docs/superpowers/specs/2026-06-24-p1a1-external-caselaw-quote-verification-d
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import uuid
@@ -211,6 +212,30 @@ def _fail_row(
     )
 
 
+def _judge_returned_explicit_no(response: Any) -> bool:
+    """True only if the judge returned a parseable ``{"verdict": "no"}``.
+
+    A reject must be an *explicit* "no". Non-substantive failures — truncated or
+    non-JSON output (the judge caps at 400 tokens), an unknown verdict, or a
+    "yes"/"partial" with an unrecognized confidence — all collapse to the same
+    _MISS in _parse_judge_response, but they are NOT rejections: treating them as
+    FAIL would flag good work product on judge-output noise (the exact
+    false-positive this tier exists to avoid). Those cases drop, like a transient
+    error.
+    """
+    try:
+        choices = response.choices
+        if not choices:
+            return False
+        content = choices[0].message.content
+        if not content:
+            return False
+        payload = json.loads(content)
+    except (AttributeError, json.JSONDecodeError, TypeError):
+        return False
+    return isinstance(payload, dict) and payload.get("verdict") == "no"
+
+
 async def _judge_attributed_passage(
     db: AsyncSession,
     *,
@@ -249,6 +274,7 @@ async def _judge_attributed_passage(
             request = _build_case_content_prompt(passage, text, judge_model=judge_model)
             response = await gateway.chat_completion(request)
             result = _parse_judge_response(response)
+            explicit_no = _judge_returned_explicit_no(response)
         except Exception as exc:
             log.warning("case-content judge error on opinion %s: %r", opinion_id, exc)
             continue  # transient on this opinion -> try the next
@@ -265,7 +291,10 @@ async def _judge_attributed_passage(
                 verification_confidence=result.confidence,
                 partial=True,
             )
-        saw_reject = True  # a real "no" from the judge
+        if explicit_no:
+            saw_reject = True  # an explicit "no" from the judge -> reject
+        # else: non-substantive output (unparseable/unknown verdict/missing
+        # confidence) -> drop this opinion, like a transient error.
     if saw_reject:
         log.info(
             "case-content judge: attributed passage rejected; flagging FAIL",

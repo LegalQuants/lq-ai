@@ -270,3 +270,49 @@ async def test_attributed_transient_error_drops(db_session: AsyncSession, seeded
     assert n == 0
     assert await _rows(db_session, message_id) == []
     assert gw.calls >= 1
+
+
+@pytest.mark.asyncio
+async def test_attributed_yes_without_confidence_drops(db_session: AsyncSession, seeded) -> None:
+    """A 'yes' verdict without a confidence field is non-substantive -> drop, no row.
+
+    _parse_judge_response returns _MISS for {"verdict": "yes"} with no confidence.
+    That MISS must NOT set saw_reject=True; only an explicit "no" may do that.
+    """
+    message_id, _opinion_id, cluster_id = seeded
+    # verdict "yes" but no confidence field -> _parse_judge_response -> _MISS
+    gw = _FakeGateway(json.dumps({"verdict": "yes"}))
+    n = await verify_and_persist_caselaw_citations(
+        db_session,
+        message_id=message_id,
+        assistant_text=_attributed_answer(),
+        tool_sources=[_caselaw_source(cluster_id)],
+        load_opinion_text=_loader,
+        gateway=gw,
+        judge_model="fast",
+    )
+    assert n == 0, "a yes-without-confidence should drop, not write a FAIL row"
+    assert await _rows(db_session, message_id) == []
+
+
+@pytest.mark.asyncio
+async def test_attributed_nonjson_output_drops(db_session: AsyncSession, seeded) -> None:
+    """Truncated / non-JSON judge output is non-substantive -> drop, no row.
+
+    The judge caps at max_tokens=400; a verbose justification can truncate the
+    JSON. That non-JSON body must NOT set saw_reject=True.
+    """
+    message_id, _opinion_id, cluster_id = seeded
+    # plain prose, not JSON -> _parse_judge_response -> _MISS
+    gw = _FakeGateway("the opinion does support this, frankly")
+    n = await verify_and_persist_caselaw_citations(
+        db_session,
+        message_id=message_id,
+        assistant_text=_attributed_answer(),
+        tool_sources=[_caselaw_source(cluster_id)],
+        load_opinion_text=_loader,
+        gateway=gw,
+        judge_model="fast",
+    )
+    assert n == 0, "non-JSON judge output should drop, not write a FAIL row"
+    assert await _rows(db_session, message_id) == []
