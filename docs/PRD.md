@@ -4803,6 +4803,18 @@ So the single longest phase (image pull) has neither a stream nor a poll. The re
 
 ---
 
+#### DE-362 — Caselaw FAIL severity split in the Citation Ledger trace UI
+
+**Priority:** P3 · **Effort:** S · **Status: OPEN**
+
+**Context:** Surfaced by P1-B1c (the caselaw FAIL tier). P1-B1c writes a `message_caselaw_citations` FAIL row (`verified=False`, `verification_method=NULL`) in two distinct situations: (a) the whole-opinion judge **explicitly rejected** an attributed quote (the quote is likely fabricated or materially misquoted), and (b) the quote was **confidently attributed but could not be judged** because the per-turn cost budget was exhausted ("claims case X, not checked"). Both collapse to the same ledger `verification_status="unverified"` → gate `flagged`, and the C1 trace panel renders them identically. The distinction lives only in structured log events (`caselaw_fail_judge_rejected` vs `caselaw_fail_over_budget`). For a fiduciary tool the severity gap matters: "we checked and the cited case does not support this" is materially different from "we could not afford to check."
+
+**Specific scope:** Carry the FAIL reason from `_judge_attributed_passage` (`api/app/citation/caselaw.py`) through to the ledger/trace so the C1 panel can distinguish "judge-rejected" from "unverified — not checked." Likely needs a discriminating field on `message_caselaw_citations` (a nullable `fail_reason` enum) and a small ledger/UI change; weigh against simply surfacing the existing log distinction. Pairs with DE-279 (format-independent case-citation attribution), which would also let the same surface explain *why* a quote could not be attributed.
+
+**When to ship:** When the C1 trace UI is next iterated, or sooner if operators report confusion between the two FAIL kinds. Until then both honestly read "unverified" / flagged — conservative and correct, just coarse.
+
+---
+
 ## 10. Appendices
 
 ### Appendix A — Glossary
