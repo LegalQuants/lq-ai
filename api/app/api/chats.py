@@ -2916,12 +2916,17 @@ async def _non_streaming_response(
             await _persist_message_tool_sources(
                 db, message_id=assistant_message_id, records=outcome.tool_sources
             )
+            _caselaw_judge_model = "fast"
+            if gateway is not None:
+                _caselaw_judge_model = await gateway.get_citation_engine_judge_model()
             try:
                 await verify_and_persist_caselaw_citations(
                     db,
                     message_id=assistant_message_id,
                     assistant_text=outcome.text,
                     tool_sources=outcome.tool_sources,
+                    gateway=gateway,
+                    judge_model=_caselaw_judge_model,
                 )
             except Exception as caselaw_exc:  # never block the turn
                 log.warning("caselaw citation verification failed: %r", caselaw_exc)
@@ -3499,6 +3504,9 @@ async def _stream_response(
                             "error": str(cite_exc),
                         },
                     )
+                _caselaw_judge_model = "fast"
+                if gateway is not None:
+                    _caselaw_judge_model = await gateway.get_citation_engine_judge_model()
                 try:
                     await verify_and_persist_caselaw_citations(
                         db,
@@ -3507,6 +3515,8 @@ async def _stream_response(
                         tool_sources=loop_outcome.tool_sources
                         if isinstance(loop_outcome, LoopFinal)
                         else [],
+                        gateway=gateway,
+                        judge_model=_caselaw_judge_model,
                     )
                 except Exception as caselaw_exc:  # never block the turn
                     log.warning("caselaw citation verification failed: %r", caselaw_exc)

@@ -107,12 +107,13 @@ async def estimate_judge_call_cost_usd(
     db: AsyncSession | None,
     *,
     judge_model: str,
+    purpose: str = "judge_paraphrase",
 ) -> Decimal:
     """Return the estimated USD cost of one judge call to ``judge_model``.
 
     Computes the rolling average ``cost_estimate`` across the last
     :data:`_WINDOW_SAMPLES` ``inference_routing_log`` rows where
-    ``routed_model = judge_model`` AND ``purpose = 'judge_paraphrase'``.
+    ``routed_model = judge_model`` AND ``purpose = purpose``.
     Returns :data:`DEFAULT_PER_JUDGE_USD` if fewer than
     :data:`_MIN_SAMPLES` such rows exist.
 
@@ -120,6 +121,11 @@ async def estimate_judge_call_cost_usd(
     Honored by tests that exercise the activation-resolver logic without
     caring about cost calibration; production callers always pass a real
     session.
+
+    ``purpose`` selects which routing-log rows to average. The default
+    (``'judge_paraphrase'``) preserves all existing callers. Pass
+    ``'judge_case_content'`` (or any other tag) to calibrate against a
+    different inference purpose — e.g., the whole-opinion caselaw judge.
 
     Cached in-process per :data:`_CACHE_TTL_SECONDS`. Tests can use
     :func:`invalidate_cache` to reset between assertions.
@@ -129,7 +135,8 @@ async def estimate_judge_call_cost_usd(
         return DEFAULT_PER_JUDGE_USD
 
     now = time.monotonic()
-    cached = _cache.get(judge_model)
+    cache_key = f"{judge_model}:{purpose}"
+    cached = _cache.get(cache_key)
     if cached is not None:
         cached_at, cached_value = cached
         if now - cached_at < _CACHE_TTL_SECONDS:
@@ -140,7 +147,7 @@ async def estimate_judge_call_cost_usd(
         select(InferenceRoutingLog.cost_estimate)
         .where(
             InferenceRoutingLog.routed_model == judge_model,
-            InferenceRoutingLog.purpose == "judge_paraphrase",
+            InferenceRoutingLog.purpose == purpose,
             InferenceRoutingLog.cost_estimate.is_not(None),
             InferenceRoutingLog.timestamp >= cutoff,
         )
@@ -177,11 +184,11 @@ async def estimate_judge_call_cost_usd(
         # deployments don't query repeatedly. Caching the fallback
         # also limits DB load if a misconfigured model name is asked
         # about hundreds of times per minute.
-        _cache[judge_model] = (now, DEFAULT_PER_JUDGE_USD)
+        _cache[cache_key] = (now, DEFAULT_PER_JUDGE_USD)
         return DEFAULT_PER_JUDGE_USD
 
     estimate = Decimal(str(avg_raw))
-    _cache[judge_model] = (now, estimate)
+    _cache[cache_key] = (now, estimate)
     return estimate
 
 
@@ -191,9 +198,18 @@ def invalidate_cache(judge_model: str | None = None) -> None:
     Tests call this between assertions. Operators can call it via an
     admin endpoint (not currently exposed) when they know prices have
     shifted out of band. ``judge_model=None`` clears all entries.
+
+    Since the cache key is ``"<model>:<purpose>"``, passing a
+    ``judge_model`` clears *all* purposes for that model (i.e., every
+    key that starts with ``judge_model + ":"``) — the common case in
+    tests is "reset everything for this model". Pass ``None`` to clear
+    the whole cache.
     """
 
     if judge_model is None:
         _cache.clear()
     else:
-        _cache.pop(judge_model, None)
+        prefix = judge_model + ":"
+        keys_to_delete = [k for k in _cache if k.startswith(prefix)]
+        for k in keys_to_delete:
+            del _cache[k]

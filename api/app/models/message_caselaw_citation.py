@@ -33,7 +33,7 @@ class MessageCaselawCitation(Base):
         ),
         CheckConstraint(
             "verification_method IS NULL OR verification_method IN "
-            "('exact_match', 'tolerant_match')",
+            "('exact_match', 'tolerant_match', 'paraphrase_judge')",
             name="chk_message_caselaw_citations_method_values",
         ),
         CheckConstraint(
