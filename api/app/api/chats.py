@@ -2922,6 +2922,7 @@ async def _non_streaming_response(
                     message_id=assistant_message_id,
                     assistant_text=outcome.text,
                     tool_sources=outcome.tool_sources,
+                    gateway=gateway,
                 )
             except Exception as caselaw_exc:  # never block the turn
                 log.warning("caselaw citation verification failed: %r", caselaw_exc)
@@ -3507,6 +3508,7 @@ async def _stream_response(
                         tool_sources=loop_outcome.tool_sources
                         if isinstance(loop_outcome, LoopFinal)
                         else [],
+                        gateway=gateway,
                     )
                 except Exception as caselaw_exc:  # never block the turn
                     log.warning("caselaw citation verification failed: %r", caselaw_exc)

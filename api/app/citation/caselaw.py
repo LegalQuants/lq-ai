@@ -1,8 +1,14 @@
-"""Caselaw quote verification (P1-A1).
+"""Caselaw quote verification (P1-A1, P1-B1b).
 
 Extracts blockquote passages from an assistant answer, locates each verbatim in
 a consulted CourtListener opinion's stored plaintext, runs the existing citation
 cascade (deterministic stages 1-2), and persists verified rows.
+
+P1-B1b adds a SUPPORTED judge pass: passages that did not match verbatim are
+judged against the whole opinion text (cost-gated). A judge-accepted passage
+persists a paraphrase_judge row (gate -> supported_only). Additive-only: no
+FAIL/unverified rows are ever written here.
+
 See docs/superpowers/specs/2026-06-24-p1a1-external-caselaw-quote-verification-design.md.
 """
 
@@ -12,13 +18,19 @@ import logging
 import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.chat.tool_loop import ToolSourceRecord
-from app.citation.verification import verify
+from app.citation.case_content_judge import (
+    CASE_CONTENT_JUDGE_BUDGET_USD,
+    estimate_case_content_cost_usd,
+    judge_case_content,
+)
+from app.citation.verification import _JudgeGatewayProtocol, verify
 from app.models.message_caselaw_citation import MessageCaselawCitation
 from app.models.research import ResearchOpinionMetadata
 from app.research.service import read_opinion
@@ -117,12 +129,21 @@ async def verify_and_persist_caselaw_citations(
     assistant_text: str,
     tool_sources: Sequence[ToolSourceRecord],
     load_opinion_text: _LoadOpinionText = _default_load_opinion_text,
+    gateway: _JudgeGatewayProtocol | None = None,
+    judge_model: str = "fast",
 ) -> int:
-    """Verify verbatim caselaw quotes in ``assistant_text`` and persist verified rows.
+    """Verify caselaw quotes in ``assistant_text`` and persist verified rows.
 
-    Deterministic stages 1-2 only (``gateway=None``). Returns the row count.
-    Never raises on a per-opinion failure (conservative posture): a load miss is
-    logged and skipped, and the turn proceeds with whatever verified.
+    Stage 1: verbatim locate + deterministic cascade (stages 1-2). Stage 2
+    (P1-B1b, SUPPORTED): passages that produced no verbatim row are judged
+    against the whole opinion text (cost-gated, additive-only).
+
+    ``gateway=None`` (default) runs the verbatim path only — behaviour is
+    byte-for-byte identical to the pre-P1-B1b implementation.
+
+    Returns the total row count. Never raises on a per-opinion failure
+    (conservative posture): a load miss is logged and skipped, and the turn
+    proceeds with whatever verified.
     """
     cluster_ids = {
         int(r.external_ref)
@@ -157,6 +178,10 @@ async def verify_and_persist_caselaw_citations(
             log.warning("caselaw verify: could not load opinion %s: %r", op.opinion_id, exc)
 
     rows: list[MessageCaselawCitation] = []
+
+    # --- Verbatim loop (stages 1-2) ----------------------------------------
+    # Track which passages were resolved verbatim so the judge pass can skip them.
+    verbatim_matched: set[str] = set()
     for passage in passages:
         for op, text in texts:
             loc = locate_passage(passage, text)
@@ -187,8 +212,66 @@ async def verify_and_persist_caselaw_citations(
                     partial=result.partial,
                 )
             )
+            verbatim_matched.add(passage)
             break  # one verified row per passage (first matching opinion wins)
 
+    # --- SUPPORTED judge pass (P1-B1b, additive-only) -----------------------
+    # Only runs when a gateway is supplied. Passages that got a verbatim row
+    # are skipped. Per-turn budget stops the whole pass when exceeded.
+    if gateway is not None:
+        spent: Decimal = Decimal("0")
+        budget_exhausted = False
+        for passage in passages:
+            if budget_exhausted:
+                break
+            if passage in verbatim_matched:
+                continue  # already have a verbatim row — skip
+            for op, text in texts:
+                est = await estimate_case_content_cost_usd(
+                    db, judge_model=judge_model, opinion_text=text
+                )
+                if spent + est > CASE_CONTENT_JUDGE_BUDGET_USD:
+                    log.info(
+                        "case-content judge: per-turn budget reached; stopping judge pass",
+                        extra={"event": "caselaw_judge_budget_reached"},
+                    )
+                    budget_exhausted = True
+                    break  # stop the whole judge pass for this turn
+                spent += est
+                try:
+                    result = await judge_case_content(
+                        passage=passage,
+                        opinion_text=text,
+                        gateway=gateway,
+                        judge_model=judge_model,
+                    )
+                except Exception as exc:
+                    log.warning(
+                        "case-content judge error on opinion %s: %r",
+                        op.opinion_id,
+                        exc,
+                    )
+                    continue  # per-opinion error — try next opinion
+                if not result.verified:
+                    continue  # this opinion's judge rejected — try next opinion
+                # Judge accepted — write one SUPPORTED row and move to next passage.
+                rows.append(
+                    MessageCaselawCitation(
+                        message_id=message_id,
+                        opinion_id=op.opinion_id,
+                        cluster_id=op.cluster_id,
+                        source_offset_start=0,
+                        source_offset_end=len(text),
+                        source_text=passage,
+                        verified=True,
+                        verification_method="paraphrase_judge",
+                        verification_confidence=result.confidence,
+                        partial=True,
+                    )
+                )
+                break  # one SUPPORTED row per passage; first accepting opinion wins
+
+    # --- Persist (single add_all / flush) -----------------------------------
     if rows:
         db.add_all(rows)
         await db.flush()
