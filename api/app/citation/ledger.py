@@ -53,10 +53,12 @@ async def assemble_ledger_entries(db: AsyncSession, *, message_id: uuid.UUID) ->
                 message_id=message_id,
                 source_kind="kb_document",
                 message_citation_id=c.id,
-                verification_status=c.verification_method or "verified",
-                confidence=float(c.verification_confidence)
-                if c.verification_confidence is not None
-                else None,
+                verification_status=c.verification_method if c.verified else "unverified",
+                confidence=(
+                    float(c.verification_confidence)
+                    if (c.verified and c.verification_confidence is not None)
+                    else None
+                ),
                 provider=None,
                 retrieved_at=None,
             )
@@ -81,8 +83,8 @@ async def assemble_ledger_entries(db: AsyncSession, *, message_id: uuid.UUID) ->
                 message_id=message_id,
                 source_kind="caselaw",
                 message_caselaw_citation_id=cc.id,
-                verification_status=cc.verification_method or "verified",
-                confidence=cc.verification_confidence,
+                verification_status=cc.verification_method if cc.verified else "unverified",
+                confidence=cc.verification_confidence if cc.verified else None,
                 provider="courtlistener",
                 retrieved_at=cc.created_at,
             )
