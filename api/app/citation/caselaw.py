@@ -36,30 +36,64 @@ from app.models.research import ResearchOpinionMetadata
 from app.research.service import read_opinion
 
 
-def extract_blockquote_passages(answer_text: str) -> list[str]:
-    """Return the text of each markdown blockquote in ``answer_text``.
+@dataclass(slots=True)
+class AttributedPassage:
+    """A blockquote passage paired with the case name of its nearest ``### `` heading.
 
-    The case-law-research skill renders each cited passage as a markdown
-    blockquote (``> ...``) under a "Relevant passage:" header. Consecutive
-    blockquote lines are one passage (wrapped quote); a non-blockquote line
-    ends the current passage.
+    ``case_name`` is the text of the most recent ``### `` heading above the
+    blockquote, taken up to the first comma (the case-law-research skill renders
+    headings as ``### [Case Name], [Court], [Year] ([Citation])``). ``None`` when
+    no ``### `` heading precedes the blockquote — the attribution false-positive
+    guard: an unattributed passage never produces a FAIL row.
     """
-    passages: list[str] = []
+
+    passage: str
+    case_name: str | None
+
+
+def attribute_passages(answer_text: str) -> list[AttributedPassage]:
+    """Return each markdown blockquote paired with its nearest ``### `` case heading.
+
+    Consecutive blockquote lines (``> ...``) join into one passage; a
+    non-blockquote line ends the current passage. Each closed passage is paired
+    with the case name parsed from the most recent ``### `` heading seen so far.
+    """
+    result: list[AttributedPassage] = []
     current: list[str] = []
+    current_case: str | None = None
+
+    def _flush() -> None:
+        nonlocal current
+        joined = " ".join(p for p in current if p).strip()
+        if joined:
+            result.append(AttributedPassage(passage=joined, case_name=current_case))
+        current = []
+
     for line in answer_text.splitlines():
         stripped = line.lstrip()
         if stripped.startswith(">"):
             current.append(stripped[1:].strip())
-        elif current:
-            joined = " ".join(p for p in current if p).strip()
-            if joined:
-                passages.append(joined)
-            current = []
+            continue
+        if current:
+            _flush()
+        # Only level-3 (``### ``) headings carry case attribution. ``##``/``#``
+        # (and ``####``) do not — guard with an exact "### " prefix that is not
+        # also "#### ".
+        if stripped.startswith("### ") and not stripped.startswith("#### "):
+            heading = stripped[4:].strip()
+            current_case = heading.split(",", 1)[0].strip() or None
     if current:
-        joined = " ".join(p for p in current if p).strip()
-        if joined:
-            passages.append(joined)
-    return passages
+        _flush()
+    return result
+
+
+def extract_blockquote_passages(answer_text: str) -> list[str]:
+    """Return the text of each markdown blockquote in ``answer_text`` (flat list).
+
+    Retained for existing callers/tests; equivalent to the passages produced by
+    :func:`attribute_passages`.
+    """
+    return [a.passage for a in attribute_passages(answer_text)]
 
 
 # Stable namespace so a given opinion_id maps to a deterministic synthetic id.
