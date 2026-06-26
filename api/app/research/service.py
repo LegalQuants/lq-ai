@@ -89,6 +89,14 @@ async def search_case_law(args: dict[str, Any], *, request_id: str | None = None
     return result["payload"]
 
 
+async def get_citing_opinions(opinion_id: int, *, request_id: str | None = None) -> dict[str, Any]:
+    provider = await _resolve_provider(request_id=request_id)
+    result = await get_gateway_client().call_tool(
+        provider, "get_citing_opinions", {"opinion_id": opinion_id}, request_id=request_id
+    )
+    return result["payload"]
+
+
 def _opinion_storage_path(cluster_id: int, opinion_id: int) -> str:
     return f"courtlistener/opinions/by-cluster/{cluster_id}/{opinion_id}"
 
