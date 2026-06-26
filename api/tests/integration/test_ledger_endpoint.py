@@ -8,6 +8,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+from app.citation.gate import compute_and_record_gate
 from app.citation.ledger import assemble_ledger_entries
 from app.db.session import get_db
 from app.main import app
@@ -130,3 +131,20 @@ async def test_ledger_non_uuid_400(client, seeded):
     user, _, _ = seeded
     r = await client.get("/api/v1/chats/not-a-uuid/ledger", headers=_auth(user))
     assert r.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_ledger_includes_gate(client, db_session, seeded):
+    user, chat, msg = seeded
+    await compute_and_record_gate(db_session, message_id=msg.id)
+    await db_session.flush()
+    r = await client.get(f"/api/v1/chats/{chat.id}/ledger", headers=_auth(user))
+    assert r.status_code == 200
+    body = r.json()
+    assert "gates" in body
+    assert len(body["gates"]) == 1
+    g = body["gates"][0]
+    assert g["message_id"] == str(msg.id)
+    # the seeded turn has one exact_match KB citation -> fiduciary_grade
+    assert g["gate_status"] == "fiduciary_grade"
+    assert g["pass_count"] == 1

@@ -47,6 +47,7 @@ from app.models.user import User, UserSession
 from app.models.user_export import UserExportJob
 from app.models.user_skill import UserSkill
 from app.models.work_product import WorkProductAttribution
+from app.models.work_product_fiduciary_gate import WorkProductFiduciaryGate
 
 __all__ = [
     "AuditLog",
@@ -95,4 +96,5 @@ __all__ = [
     "UserSession",
     "UserSkill",
     "WorkProductAttribution",
+    "WorkProductFiduciaryGate",
 ]
