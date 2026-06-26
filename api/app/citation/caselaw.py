@@ -15,6 +15,7 @@ See docs/superpowers/specs/2026-06-24-p1a1-external-caselaw-quote-verification-d
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
@@ -85,6 +86,35 @@ def attribute_passages(answer_text: str) -> list[AttributedPassage]:
     if current:
         _flush()
     return result
+
+
+def normalize_case_name(name: str) -> str:
+    """Normalize a case name for attribution matching.
+
+    Lowercases, strips a trailing ``(...)`` citation parenthetical, strips
+    trailing punctuation/whitespace, and collapses internal whitespace runs to
+    single spaces. Conservative: only a normalized-exact match attributes.
+    """
+    text = name.strip()
+    # Drop a trailing parenthetical citation, e.g. "(410 U.S. 113)".
+    text = re.sub(r"\s*\([^()]*\)\s*$", "", text)
+    text = text.lower()
+    text = re.sub(r"\s+", " ", text)
+    return text.strip().rstrip(",;: ")
+
+
+def match_case_name(parsed: str, clusters: Sequence[tuple[int, str]]) -> int | None:
+    """Return the cluster_id iff exactly one cluster's case_name matches ``parsed``.
+
+    Normalized-exact, single-match only (the false-positive guard). Zero matches,
+    two-or-more matches, or clusters with an empty case_name → ``None`` →
+    the passage stays on the B1b path (never produces a FAIL row).
+    """
+    target = normalize_case_name(parsed)
+    if not target:
+        return None
+    matches = [cid for cid, name in clusters if name and normalize_case_name(name) == target]
+    return matches[0] if len(matches) == 1 else None
 
 
 def extract_blockquote_passages(answer_text: str) -> list[str]:
