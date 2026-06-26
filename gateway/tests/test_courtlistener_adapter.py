@@ -36,7 +36,7 @@ async def test_lists_three_read_tools(monkeypatch) -> None:
     adapter = _adapter(monkeypatch)
     try:
         names = {t.name for t in await adapter.list_tools()}
-        assert names == {"verify_citations", "search_case_law", "get_cases"}
+        assert names == {"verify_citations", "search_case_law", "get_cases", "get_citing_opinions"}
         assert all(t.read_only for t in await adapter.list_tools())
     finally:
         await adapter.aclose()
@@ -295,3 +295,53 @@ async def test_courtlistener_through_router_writes_audit(monkeypatch) -> None:
     assert res.payload["count"] == 0
     assert writer.rows[-1].refused is False
     assert writer.rows[-1].bytes_in is not None
+
+
+@pytest.mark.unit
+async def test_get_citing_opinions_shapes_count_and_capped_list(monkeypatch) -> None:
+    adapter = _adapter(monkeypatch)
+    # 32 results upstream; upstream total count is 412 — capped to 30 in payload
+    results = [
+        {
+            "cluster_id": 1000 + i,
+            "caseName": f"Citing Case {i}",
+            "court": "ca9",
+            "dateFiled": f"2020-01-{(i % 28) + 1:02d}",
+            "citation": [],
+            "absolute_url": "/x",
+            "opinions": [{"id": 5000 + i}],
+        }
+        for i in range(32)
+    ]
+    with respx.mock:
+        route = respx.get(f"{BASE}/search/").mock(
+            return_value=httpx.Response(200, json={"count": 412, "results": results, "next": None})
+        )
+        try:
+            result = await adapter.invoke_tool(
+                "get_citing_opinions", {"opinion_id": 2812209}, request_id="r"
+            )
+        finally:
+            await adapter.aclose()
+
+    assert route.called
+    params = route.calls.last.request.url.params
+    assert params["q"] == "cites:(2812209)"
+    assert params["type"] == "o"
+    assert params["order_by"] == "dateFiled desc"
+    payload = result.payload
+    assert payload["cited_by_count"] == 412          # upstream total, NOT 30
+    assert len(payload["citing"]) == 30              # capped at _CITING_TOP_N
+    assert payload["citing"][0]["case_name"] == "Citing Case 0"
+    assert payload["citing"][0]["court"] == "ca9"
+    assert set(payload["citing"][0]) == {"cluster_id", "opinion_id", "case_name", "court", "date_filed"}
+
+
+@pytest.mark.unit
+async def test_get_citing_opinions_requires_integer_opinion_id(monkeypatch) -> None:
+    adapter = _adapter(monkeypatch)
+    try:
+        with pytest.raises(ToolProviderInvalidRequestError):
+            await adapter.invoke_tool("get_citing_opinions", {"opinion_id": "x"}, request_id="r")
+    finally:
+        await adapter.aclose()

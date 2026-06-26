@@ -31,6 +31,8 @@ from app.secrets import ProviderKeyResolver
 
 DEFAULT_TIMEOUT_SECONDS = 30.0
 
+_CITING_TOP_N = 30
+
 _OPINION_TEXT_FIELDS = (
     "html_with_citations",
     "html_columbia",
@@ -183,6 +185,18 @@ class CourtListenerToolAdapter(ToolProviderAdapter):
                 },
                 read_only=True,
             ),
+            ToolSpec(
+                name="get_citing_opinions",
+                description="List later opinions that CITE a given opinion id (the "
+                "'cited by' direction), via the CourtListener Search API. Returns the "
+                "total cited-by count + the most recent citing opinions (capped).",
+                parameters={
+                    "type": "object",
+                    "properties": {"opinion_id": {"type": "integer"}},
+                    "required": ["opinion_id"],
+                },
+                read_only=True,
+            ),
         ]
 
     async def invoke_tool(
@@ -194,6 +208,8 @@ class CourtListenerToolAdapter(ToolProviderAdapter):
             return await self._search_case_law(args)
         if tool == "get_cases":
             return await self._get_cases(args)
+        if tool == "get_citing_opinions":
+            return await self._get_citing_opinions(args)
         raise ToolProviderError(f"unknown tool {tool!r} for courtlistener provider")
 
     async def _verify_citations(self, args: dict[str, Any]) -> ToolResult:
@@ -286,6 +302,32 @@ class CourtListenerToolAdapter(ToolProviderAdapter):
             "opinions": opinions,
         }
         return self._result("get_cases", payload, sent={"cluster_id": cluster_id}, received=cluster)
+
+    async def _get_citing_opinions(self, args: dict[str, Any]) -> ToolResult:
+        opinion_id = args.get("opinion_id")
+        if not isinstance(opinion_id, int) or isinstance(opinion_id, bool):
+            raise ToolProviderInvalidRequestError(
+                "get_citing_opinions requires integer 'opinion_id'", upstream_status=400
+            )
+        params: dict[str, Any] = {
+            "q": f"cites:({opinion_id})",
+            "type": "o",
+            "order_by": "dateFiled desc",
+        }
+        resp = await self._request("GET", "/search/", params=params)
+        data = resp.json()
+        citing = [
+            {
+                "cluster_id": r.get("cluster_id"),
+                "opinion_id": (r.get("opinions") or [{}])[0].get("id"),
+                "case_name": r.get("caseName"),
+                "court": r.get("court"),
+                "date_filed": r.get("dateFiled"),
+            }
+            for r in (data.get("results") or [])[:_CITING_TOP_N]
+        ]
+        payload = {"cited_by_count": data.get("count"), "citing": citing}
+        return self._result("get_citing_opinions", payload, sent=params, received=data)
 
     def _result(self, tool: str, payload: Any, *, sent: Any, received: Any) -> ToolResult:
         """Build a ToolResult with byte counts; mark public data verbatim."""
