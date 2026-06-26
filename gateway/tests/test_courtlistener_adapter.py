@@ -330,11 +330,17 @@ async def test_get_citing_opinions_shapes_count_and_capped_list(monkeypatch) -> 
     assert params["type"] == "o"
     assert params["order_by"] == "dateFiled desc"
     payload = result.payload
-    assert payload["cited_by_count"] == 412          # upstream total, NOT 30
-    assert len(payload["citing"]) == 30              # capped at _CITING_TOP_N
+    assert payload["cited_by_count"] == 412  # upstream total, NOT 30
+    assert len(payload["citing"]) == 30  # capped at _CITING_TOP_N
     assert payload["citing"][0]["case_name"] == "Citing Case 0"
     assert payload["citing"][0]["court"] == "ca9"
-    assert set(payload["citing"][0]) == {"cluster_id", "opinion_id", "case_name", "court", "date_filed"}
+    assert set(payload["citing"][0]) == {
+        "cluster_id",
+        "opinion_id",
+        "case_name",
+        "court",
+        "date_filed",
+    }
 
 
 @pytest.mark.unit

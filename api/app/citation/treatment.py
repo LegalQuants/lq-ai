@@ -123,8 +123,13 @@ async def derive_treatment_for_message(
     )
     linked = 0
     for e in entries:
-        cluster_id = cc_id_to_cluster.get(e.message_caselaw_citation_id)
-        treatment_id = cluster_to_treatment.get(cluster_id) if cluster_id is not None else None
+        cc_id = e.message_caselaw_citation_id
+        if cc_id is None:
+            continue
+        entry_cluster_id = cc_id_to_cluster.get(cc_id)
+        if entry_cluster_id is None:
+            continue
+        treatment_id = cluster_to_treatment.get(entry_cluster_id)
         if treatment_id is not None:
             e.treatment_id = treatment_id
             linked += 1
