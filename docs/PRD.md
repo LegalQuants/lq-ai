@@ -4827,6 +4827,18 @@ So the single longest phase (image pull) has neither a stream nor a poll. The re
 
 ---
 
+#### DE-364 — Per-cluster SAVEPOINT isolation in treatment derivation (concurrency)
+
+**Priority:** P2 · **Effort:** S · **Status: OPEN (land before Phase 2 closes)**
+
+**Context:** Surfaced by the WS-G PR1 Opus whole-branch review. `derive_treatment_for_message` (`api/app/citation/treatment.py`) processes each cited cluster in a per-cluster `try/except` so that one case's failure does not sink the others (the conservative per-case non-fatal guarantee). That guarantee holds for the **common** failure — a `fetch_citing` network error happens before any DB mutation, so the session stays clean and other clusters proceed (this is what the tests exercise). It does **not** fully hold for a `db.flush()` failure: if two concurrent turns cite the **same not-yet-cached case**, both miss the cache, both attempt to INSERT a `citation_treatment` row, and the second hits the `uq_citation_treatment_cluster_id` unique constraint → `IntegrityError`. That poisons the `AsyncSession` (pending-rollback), so the *remaining* clusters on a **multi-cluster** turn then fail with `PendingRollbackError` and the whole turn's derivation is lost. The worker's outer `try/except` catches it and returns `{"ok": False}` — **no crash**, and the underived state is honestly re-derivable by [DE-363](#de-363)'s lazy fallback — but the per-cluster non-fatal invariant is narrower than the code claims for multi-cluster turns under concurrent same-case citation. Single-cluster turns (the overwhelming common case) degrade to exactly the intended "this one case failed, underived" outcome.
+
+**Specific scope:** Wrap each cluster's mutate+flush in a SAVEPOINT (`async with db.begin_nested():`) so an `IntegrityError` rolls back only that cluster and leaves the session usable for the rest, OR catch the unique-violation specifically and re-read + reuse the row the concurrent turn inserted (the more correct outcome — the case *is* now cached). Add a concurrency regression test that forces a mid-loop flush failure on one cluster of a multi-cluster turn and asserts the others still derive + link.
+
+**When to ship:** Within WS-G (Phase 2), before the milestone closes — alongside DE-363 or PR2. Filed (not fixed) in PR1 to keep the security-gated slice scoped; the degradation is non-crashing and DE-363-recoverable in the interim.
+
+---
+
 ## 10. Appendices
 
 ### Appendix A — Glossary
