@@ -99,7 +99,7 @@ Four sharpenings the table understated — each now reflected in the Phase 1 pla
 ## New ADRs this program needs
 
 - **[ADR 0018 — The Citation Ledger & fiduciary-grade output](../adr/0018-citation-ledger-and-fiduciary-grade-output.md)** (WS-A/B) — **accepted 2026-06-24**: the thin referencing data model (D1), external-source quote-verification via materialized citable sources (D2), the fiduciary-grade gate (D3), the one-click trace read model (D4), the no-raw-payload guarantee (D5), the reserved treatment slot (D6), and retention (D7). Phase 1 code PRs (P1-A1+) carry security review per CODEOWNERS.
-- **[ADR 0019](../adr/0019-transparent-validity-treatment-layer.md) — Transparent validity/treatment layer** (WS-G): the derive-don't-assert methodology, the citation-graph + LLM-judge pipeline, confidence calibration, the anti-overclaiming posture, and how derived vs. connector-editorial signals coexist in the ledger. **Proposed 2026-06-26; awaiting acceptance.**
+- **[ADR 0019](../adr/0019-transparent-validity-treatment-layer.md) — Transparent validity/treatment layer** (WS-G): the derive-don't-assert methodology, the citation-graph + LLM-judge pipeline, confidence calibration, the anti-overclaiming posture, and how derived vs. connector-editorial signals coexist in the ledger. **Accepted 2026-06-26.**
 - **ADR — MCP-server ingress boundary** (WS-F): the inbound counterpart to ADR 0014 — auth, scoping, exposure policy, rate-limiting, and unified audit/ledger.
 - *(Possible)* **ADR — Authoritative-source registry & tiering**, if WS-E's registry warrants structural status beyond config.
 

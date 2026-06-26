@@ -1,6 +1,6 @@
 # ADR 0019 — Transparent validity/treatment layer (WS-G)
 
-**Status:** Proposed (2026-06-26) — awaiting maintainer acceptance. Implementation PRs (WS-G PR1+) carry **security review** per CODEOWNERS (new gateway egress operation; citation/audit surface).
+**Status:** Accepted (2026-06-26) — maintainer-accepted. Implementation PRs (WS-G PR1+) carry **security review** per CODEOWNERS (new gateway egress operation; citation/audit surface).
 **Date:** 2026-06-26
 **Owner:** Fiduciary-grade agentic legal work milestone — Phase 2 (WS-G), feature branch `docs/adr-0019-validity-treatment-layer`
 **Supersedes / relates to:** [ADR 0014](0014-gateway-egress-boundary-for-tool-providers.md) (where egress lives — the new citing-graph operation lands here), [ADR 0015](0015-governed-tool-calling-model.md) (how a tool call is governed), [ADR 0016](0016-transparency-and-governance-invariants.md) (the binding invariants — P3 no-raw-payload, P6 one governance path), [ADR 0018](0018-citation-ledger-and-fiduciary-grade-output.md) (D6 reserves the `citation_ledger_entry.treatment_id` slot this ADR fills), and the [fiduciary-grade mini-PRD](../proposals/fiduciary-grade-agentic-legal-work.md) WS-G.
