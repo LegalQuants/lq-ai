@@ -45,6 +45,7 @@ from typing import Any, ClassVar
 from app.config import get_settings
 from app.db.session import dispose_engine, get_session_factory
 from app.pipeline.ingest import find_orphaned_files, ingest_file
+from app.workers.treatment_worker import treatment_derivation_job
 from app.workers.user_deletion import hard_delete_due_users_job
 from app.workers.user_export import export_gc_job, export_user_data_job
 
@@ -254,6 +255,7 @@ class WorkerSettings:
         ingest_file_job,
         embed_chunks_for_file_job,
         export_user_data_job,
+        treatment_derivation_job,
     ]
     on_startup = on_startup
     on_shutdown = on_shutdown

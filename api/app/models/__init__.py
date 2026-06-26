@@ -22,6 +22,7 @@ from app.models.autonomous import (
 from app.models.chat import Chat, Message
 from app.models.chat_pending_tool_call import ChatPendingToolCall
 from app.models.citation_ledger_entry import CitationLedgerEntry
+from app.models.citation_treatment import CitationTreatment
 from app.models.document import Document, DocumentChunk
 from app.models.enhance_prompt import EnhancePromptInteraction
 from app.models.file import File
@@ -59,6 +60,7 @@ __all__ = [
     "Chat",
     "ChatPendingToolCall",
     "CitationLedgerEntry",
+    "CitationTreatment",
     "Document",
     "DocumentChunk",
     "EnhancePromptInteraction",

@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.chat import Chat, Message, MessageCitation
 from app.models.citation_ledger_entry import CitationLedgerEntry
+from app.models.citation_treatment import CitationTreatment
 from app.models.message_caselaw_citation import MessageCaselawCitation
 from app.models.message_tool_source import MessageToolSource
 
@@ -232,6 +233,20 @@ async def resolve_ledger_entries(
             .all()
         }
 
+    treatment_ids = {e.treatment_id for e in entries if e.treatment_id is not None}
+    treatments: dict[uuid.UUID, CitationTreatment] = {}
+    if treatment_ids:
+        treatments = {
+            t.id: t
+            for t in (
+                await db.execute(
+                    select(CitationTreatment).where(CitationTreatment.id.in_(treatment_ids))
+                )
+            )
+            .scalars()
+            .all()
+        }
+
     out: list[dict[str, Any]] = []
     for e in entries:
         source = _resolve_source(e, docs, caselaw, tools)
@@ -248,6 +263,16 @@ async def resolve_ledger_entries(
                 "provider": e.provider,
                 "retrieved_at": e.retrieved_at.isoformat() if e.retrieved_at else None,
                 "treatment_id": str(e.treatment_id) if e.treatment_id else None,
+                "treatment": (
+                    {
+                        "cited_by_count": treatments[e.treatment_id].cited_by_count,
+                        "as_of": treatments[e.treatment_id].as_of.isoformat(),
+                        "derived_method": treatments[e.treatment_id].derived_method,
+                        "citing": treatments[e.treatment_id].citing_opinions,
+                    }
+                    if e.treatment_id is not None and e.treatment_id in treatments
+                    else None
+                ),
                 "created_at": e.created_at.isoformat(),
                 "source": source,
             }

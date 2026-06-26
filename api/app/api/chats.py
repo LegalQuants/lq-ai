@@ -128,6 +128,7 @@ from app.schemas.gateway import (
     InlineSkillRef,
 )
 from app.skills.registry import MutableSkillRegistry, SkillRegistry
+from app.workers.queue import enqueue_treatment_derivation_job
 
 router = APIRouter(prefix="/chats", tags=["chats"])
 log = logging.getLogger(__name__)
@@ -2951,6 +2952,10 @@ async def _non_streaming_response(
                 request=http_request,
                 attached_skill_provenance=attached_skill_provenance,
             )
+            try:
+                await enqueue_treatment_derivation_job(assistant_message_id)
+            except Exception as treatment_exc:  # never block the turn response
+                log.warning("treatment derivation enqueue failed: %r", treatment_exc)
             body = MessagePostResponse(
                 message=message_to_response(persisted),
                 citations=[],
@@ -3170,6 +3175,10 @@ async def _non_streaming_response(
         request=http_request,
         attached_skill_provenance=attached_skill_provenance,
     )
+    try:
+        await enqueue_treatment_derivation_job(assistant_message_id)
+    except Exception as treatment_exc:  # never block the turn response
+        log.warning("treatment derivation enqueue failed: %r", treatment_exc)
 
     body = MessagePostResponse(
         message=message_to_response(persisted),
@@ -3554,6 +3563,10 @@ async def _stream_response(
                         "error": str(audit_exc),
                     },
                 )
+            try:
+                await enqueue_treatment_derivation_job(assistant_message_id)
+            except Exception as treatment_exc:  # never block the turn response
+                log.warning("treatment derivation enqueue failed: %r", treatment_exc)
         except Exception as persist_exc:
             # Persisting the audit row must not break the stream; the
             # operator sees this in logs and the client gets the same

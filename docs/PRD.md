@@ -4815,6 +4815,30 @@ So the single longest phase (image pull) has neither a stream nor a poll. The re
 
 ---
 
+#### DE-363 — WS-G lazy-on-trace-open treatment fallback
+
+**Priority:** P2 · **Effort:** S · **Status: OPEN (committed to land within Phase 2 / WS-G)**
+
+**Context:** [ADR 0019](adr/0019-transparent-validity-treatment-layer.md) D2 specifies a **lazy-on-first-trace-open** fallback for deriving a cited case's treatment when the async derivation job has not yet populated it (worker backlog, a failed/dropped enqueue, or a row that expired its staleness TTL between turns). WS-G PR1 (the citation-graph signal) ships **async-only** to keep the ledger read path fast and egress-free; an entry whose treatment is not yet derived renders nothing / "pending." That is an honest interim state, not a silent gap — but the ADR's fallback is part of the intended design, and the maintainer approved deferring it (2026-06-26) **on the condition that it lands by the end of Phase 2.**
+
+**Specific scope:** When `GET /chats/{chat_id}/ledger` resolves a caselaw entry whose `treatment_id` is null (or whose `citation_treatment.as_of` is stale beyond the TTL), trigger a best-effort derivation — most likely by **enqueuing the existing `treatment_derivation_job`** for that turn (keeping egress off the synchronous read path) and returning `treatment: null` / "deriving" for that read, rather than blocking the response on a live CourtListener fetch. Decide in the implementing PR whether the fallback ever derives **synchronously** on read (latency + egress cost) or strictly re-enqueues; the re-enqueue path is the conservative default.
+
+**When to ship:** Within WS-G (Phase 2) — alongside or immediately after PR2, before the milestone closes. Not optional; tracked here so the PR1 async-only simplification cannot silently become permanent.
+
+---
+
+#### DE-364 — Per-cluster SAVEPOINT isolation in treatment derivation (concurrency)
+
+**Priority:** P2 · **Effort:** S · **Status: OPEN (land before Phase 2 closes)**
+
+**Context:** Surfaced by the WS-G PR1 Opus whole-branch review. `derive_treatment_for_message` (`api/app/citation/treatment.py`) processes each cited cluster in a per-cluster `try/except` so that one case's failure does not sink the others (the conservative per-case non-fatal guarantee). That guarantee holds for the **common** failure — a `fetch_citing` network error happens before any DB mutation, so the session stays clean and other clusters proceed (this is what the tests exercise). It does **not** fully hold for a `db.flush()` failure: if two concurrent turns cite the **same not-yet-cached case**, both miss the cache, both attempt to INSERT a `citation_treatment` row, and the second hits the `uq_citation_treatment_cluster_id` unique constraint → `IntegrityError`. That poisons the `AsyncSession` (pending-rollback), so the *remaining* clusters on a **multi-cluster** turn then fail with `PendingRollbackError` and the whole turn's derivation is lost. The worker's outer `try/except` catches it and returns `{"ok": False}` — **no crash**, and the underived state is honestly re-derivable by [DE-363](#de-363)'s lazy fallback — but the per-cluster non-fatal invariant is narrower than the code claims for multi-cluster turns under concurrent same-case citation. Single-cluster turns (the overwhelming common case) degrade to exactly the intended "this one case failed, underived" outcome.
+
+**Specific scope:** Wrap each cluster's mutate+flush in a SAVEPOINT (`async with db.begin_nested():`) so an `IntegrityError` rolls back only that cluster and leaves the session usable for the rest, OR catch the unique-violation specifically and re-read + reuse the row the concurrent turn inserted (the more correct outcome — the case *is* now cached). Add a concurrency regression test that forces a mid-loop flush failure on one cluster of a multi-cluster turn and asserts the others still derive + link.
+
+**When to ship:** Within WS-G (Phase 2), before the milestone closes — alongside DE-363 or PR2. Filed (not fixed) in PR1 to keep the security-gated slice scoped; the degradation is non-crashing and DE-363-recoverable in the interim.
+
+---
+
 ## 10. Appendices
 
 ### Appendix A — Glossary
