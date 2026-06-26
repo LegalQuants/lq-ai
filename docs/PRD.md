@@ -4791,6 +4791,18 @@ So the single longest phase (image pull) has neither a stream nor a poll. The re
 
 ---
 
+#### DE-361 — Route `llm_judge` (and future verification methods) into the fiduciary-grade gate's status sets
+
+**Priority:** P3 · **Effort:** S · **Status: OPEN**
+
+**Context:** Surfaced by the P1-B1 final whole-branch review (the fiduciary-grade gate). The gate (`api/app/citation/gate.py`) buckets each ledger entry's `verification_status` into PASS `{exact_match, tolerant_match}` / SUPPORTED `{paraphrase_judge, ensemble_strict, ensemble_majority}` / FAIL `{unverified, failed}`; an unrecognized status is logged and **excluded** from all counts (a deliberately conservative default — it can never be silently counted as PASS). The `message_citations.verification_method` CHECK (`chk_message_citations_method_values`) admits **`'llm_judge'`** as a legal value ("reserved for future LLM-based verification"), but it is in **none** of the gate's three sets. This is **latent and harmless today** — the citation cascade does not emit `llm_judge` (no producer in `app/`; only the model docstring + the CHECK reference it) — so no real citation is dropped. **But** when LLM-judge verification ships, a legitimately-verified citation carrying `llm_judge` would be silently excluded from the gate's counts, and a turn whose only support is `llm_judge` would read `fiduciary_grade` with `total_assertions=0` rather than reflecting the supported assertion.
+
+**Specific scope:** When LLM-judge verification lands (or sooner, defensively), decide `llm_judge`'s tier — almost certainly **SUPPORTED** (a judge verdict is "supported, not verbatim," analogous to `paraphrase_judge`) — and add it to the gate's `SUPPORTED_STATUSES`, with a test. More broadly, establish the **forward-consistency obligation**: any new `verification_method` the cascade can emit must be routed into a gate bucket in the same change, so the "unrecognized → excluded" path stays a true safety net rather than a silent gap. Consider a structural guard (e.g. a test asserting every legal `verification_method` CHECK value maps to exactly one gate set).
+
+**When to ship:** With (or just before) the first feature that emits `llm_judge`. Until then the exclusion is safe; this is a tracked forward-consistency obligation, not a live bug.
+
+---
+
 ## 10. Appendices
 
 ### Appendix A — Glossary
