@@ -8,7 +8,7 @@ describe('ledgerEntryState', () => {
 		expect(ledgerEntryState('tolerant_match')).toBe('verified-tolerant');
 	});
 	it('maps judge/ensemble methods to paraphrase (amber)', () => {
-		for (const s of ['paraphrase_judge', 'ensemble_strict', 'ensemble_majority']) {
+		for (const s of ['paraphrase_judge', 'llm_judge', 'ensemble_strict', 'ensemble_majority']) {
 			expect(ledgerEntryState(s)).toBe('verified-paraphrase');
 		}
 	});
@@ -31,6 +31,9 @@ describe('gateBadge', () => {
 	};
 	it('returns null for undefined', () => {
 		expect(gateBadge(undefined)).toBeNull();
+	});
+	it('returns null for an unrecognized gate_status', () => {
+		expect(gateBadge({ ...base, gate_status: 'bogus' as any })).toBeNull();
 	});
 	it('maps each verdict to a tone + label', () => {
 		expect(gateBadge({ ...base, gate_status: 'fiduciary_grade' })?.tone).toBe('sage');

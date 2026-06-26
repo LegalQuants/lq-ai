@@ -60,5 +60,7 @@ export function gateBadge(gate: LedgerGate | undefined): GateBadge | null {
 				label: 'Unverified claims flagged',
 				tip: `${gate.fail_count} cited assertion(s) could not be verified.`
 			};
+		default:
+			return null;
 	}
 }
