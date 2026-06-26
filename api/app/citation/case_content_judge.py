@@ -22,7 +22,7 @@ from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.citation.cost import estimate_judge_call_cost_usd
+from app.citation.cost import DEFAULT_PER_JUDGE_USD, estimate_judge_call_cost_usd
 from app.citation.judge_prompts import build_judge_prompt
 from app.citation.verification import (
     _MISS,
@@ -160,4 +160,4 @@ async def estimate_case_content_cost_usd(
     scale = Decimal(opinion_tokens) / Decimal(TYPICAL_PARAPHRASE_TOKENS)
     if scale < Decimal(1):
         scale = Decimal(1)
-    return per_call * scale
+    return max(per_call * scale, DEFAULT_PER_JUDGE_USD)

@@ -238,6 +238,9 @@ async def verify_and_persist_caselaw_citations(
                     budget_exhausted = True
                     break  # stop the whole judge pass for this turn
                 spent += est
+                # Defense-in-depth: judge_case_content is contractually non-raising
+                # (all errors resolve to _MISS), but the guard protects against a
+                # future refactor that inadvertently breaks that contract.
                 try:
                     result = await judge_case_content(
                         passage=passage,
