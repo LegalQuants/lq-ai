@@ -1,4 +1,4 @@
-"""Caselaw quote verification (P1-A1, P1-B1b).
+"""Caselaw quote verification (P1-A1, P1-B1b, P1-B1c).
 
 Extracts blockquote passages from an assistant answer, locates each verbatim in
 a consulted CourtListener opinion's stored plaintext, runs the existing citation
@@ -6,15 +6,25 @@ cascade (deterministic stages 1-2), and persists verified rows.
 
 P1-B1b adds a SUPPORTED judge pass: passages that did not match verbatim are
 judged against the whole opinion text (cost-gated). A judge-accepted passage
-persists a paraphrase_judge row (gate -> supported_only). Additive-only: no
-FAIL/unverified rows are ever written here.
+persists a paraphrase_judge row (gate -> supported_only).
+
+P1-B1c adds attribution-aware FAIL rows: passages confidently attributed to a
+single consulted case (via ``### `` heading match) are judged against that one
+opinion only. A real judge rejection writes an unverified FAIL row
+(verified=False, verification_method=NULL), which flows through the unchanged
+ledger/gate to a ``flagged`` turn status. Over-budget attributed passages also
+write an unverified FAIL row. Transient gateway errors on ALL opinions of an
+attributed passage → drop (no row). Unattributed passages keep B1b's
+all-opinions SUPPORTED-or-drop behavior (strict additive guarantee).
 
 See docs/superpowers/specs/2026-06-24-p1a1-external-caselaw-quote-verification-design.md.
 """
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
@@ -27,39 +37,103 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.chat.tool_loop import ToolSourceRecord
 from app.citation.case_content_judge import (
     CASE_CONTENT_JUDGE_BUDGET_USD,
+    _build_prompt as _build_case_content_prompt,
     estimate_case_content_cost_usd,
     judge_case_content,
 )
-from app.citation.verification import _JudgeGatewayProtocol, verify
+from app.citation.verification import _JudgeGatewayProtocol, _parse_judge_response, verify
 from app.models.message_caselaw_citation import MessageCaselawCitation
-from app.models.research import ResearchOpinionMetadata
+from app.models.research import ResearchClusterMetadata, ResearchOpinionMetadata
 from app.research.service import read_opinion
 
 
-def extract_blockquote_passages(answer_text: str) -> list[str]:
-    """Return the text of each markdown blockquote in ``answer_text``.
+@dataclass(slots=True)
+class AttributedPassage:
+    """A blockquote passage paired with the case name of its nearest ``### `` heading.
 
-    The case-law-research skill renders each cited passage as a markdown
-    blockquote (``> ...``) under a "Relevant passage:" header. Consecutive
-    blockquote lines are one passage (wrapped quote); a non-blockquote line
-    ends the current passage.
+    ``case_name`` is the text of the most recent ``### `` heading above the
+    blockquote, taken up to the first comma (the case-law-research skill renders
+    headings as ``### [Case Name], [Court], [Year] ([Citation])``). ``None`` when
+    no ``### `` heading precedes the blockquote — the attribution false-positive
+    guard: an unattributed passage never produces a FAIL row.
     """
-    passages: list[str] = []
+
+    passage: str
+    case_name: str | None
+
+
+def attribute_passages(answer_text: str) -> list[AttributedPassage]:
+    """Return each markdown blockquote paired with its nearest ``### `` case heading.
+
+    Consecutive blockquote lines (``> ...``) join into one passage; a
+    non-blockquote line ends the current passage. Each closed passage is paired
+    with the case name parsed from the most recent ``### `` heading seen so far.
+    """
+    result: list[AttributedPassage] = []
     current: list[str] = []
+    current_case: str | None = None
+
+    def _flush() -> None:
+        nonlocal current
+        joined = " ".join(p for p in current if p).strip()
+        if joined:
+            result.append(AttributedPassage(passage=joined, case_name=current_case))
+        current = []
+
     for line in answer_text.splitlines():
         stripped = line.lstrip()
         if stripped.startswith(">"):
             current.append(stripped[1:].strip())
-        elif current:
-            joined = " ".join(p for p in current if p).strip()
-            if joined:
-                passages.append(joined)
-            current = []
+            continue
+        if current:
+            _flush()
+        # Only level-3 (``### ``) headings carry case attribution. ``##``/``#``
+        # (and ``####``) do not — guard with an exact "### " prefix that is not
+        # also "#### ".
+        if stripped.startswith("### ") and not stripped.startswith("#### "):
+            heading = stripped[4:].strip()
+            current_case = heading.split(",", 1)[0].strip() or None
     if current:
-        joined = " ".join(p for p in current if p).strip()
-        if joined:
-            passages.append(joined)
-    return passages
+        _flush()
+    return result
+
+
+def normalize_case_name(name: str) -> str:
+    """Normalize a case name for attribution matching.
+
+    Lowercases, strips a trailing ``(...)`` citation parenthetical, strips
+    trailing punctuation/whitespace, and collapses internal whitespace runs to
+    single spaces. Conservative: only a normalized-exact match attributes.
+    """
+    text = name.strip()
+    # Drop a trailing parenthetical citation, e.g. "(410 U.S. 113)".
+    text = re.sub(r"\s*\([^()]*\)\s*$", "", text)
+    text = text.lower()
+    text = re.sub(r"\s+", " ", text)
+    return text.strip().rstrip(",;: ")
+
+
+def match_case_name(parsed: str, clusters: Sequence[tuple[int, str]]) -> int | None:
+    """Return the cluster_id iff exactly one cluster's case_name matches ``parsed``.
+
+    Normalized-exact, single-match only (the false-positive guard). Zero matches,
+    two-or-more matches, or clusters with an empty case_name → ``None`` →
+    the passage stays on the B1b path (never produces a FAIL row).
+    """
+    target = normalize_case_name(parsed)
+    if not target:
+        return None
+    matches = [cid for cid, name in clusters if name and normalize_case_name(name) == target]
+    return matches[0] if len(matches) == 1 else None
+
+
+def extract_blockquote_passages(answer_text: str) -> list[str]:
+    """Return the text of each markdown blockquote in ``answer_text`` (flat list).
+
+    Retained for existing callers/tests; equivalent to the passages produced by
+    :func:`attribute_passages`.
+    """
+    return [a.passage for a in attribute_passages(answer_text)]
 
 
 # Stable namespace so a given opinion_id maps to a deterministic synthetic id.
@@ -109,10 +183,130 @@ def locate_passage(passage: str, opinion_text: str) -> tuple[int, int] | None:
 
 
 # ---------------------------------------------------------------------------
-# Orchestrator
+# Private helpers (FAIL tier — P1-B1c)
 # ---------------------------------------------------------------------------
 
 log = logging.getLogger(__name__)
+
+
+def _fail_row(
+    message_id: uuid.UUID, opinion_id: int, cluster_id: int, passage: str
+) -> MessageCaselawCitation:
+    """Build an unverified caselaw FAIL row (gate -> flagged).
+
+    Offsets are a documented placeholder: a FAIL passage has no verified span in
+    the opinion, but the CHECK requires offset_end > offset_start >= 0. The ledger
+    and trace never read caselaw offsets (ledger.py:78-91).
+    """
+    return MessageCaselawCitation(
+        message_id=message_id,
+        opinion_id=opinion_id,
+        cluster_id=cluster_id,
+        source_offset_start=0,
+        source_offset_end=len(passage),
+        source_text=passage,
+        verified=False,
+        verification_method=None,
+        verification_confidence=None,
+        partial=False,
+    )
+
+
+def _judge_returned_explicit_no(response: Any) -> bool:
+    """True only if the judge returned a parseable ``{"verdict": "no"}``.
+
+    A reject must be an *explicit* "no". Non-substantive failures — truncated or
+    non-JSON output (the judge caps at 400 tokens), an unknown verdict, or a
+    "yes"/"partial" with an unrecognized confidence — all collapse to the same
+    _MISS in _parse_judge_response, but they are NOT rejections: treating them as
+    FAIL would flag good work product on judge-output noise (the exact
+    false-positive this tier exists to avoid). Those cases drop, like a transient
+    error.
+    """
+    try:
+        choices = response.choices
+        if not choices:
+            return False
+        content = choices[0].message.content
+        if not content:
+            return False
+        payload = json.loads(content)
+    except (AttributeError, json.JSONDecodeError, TypeError):
+        return False
+    return isinstance(payload, dict) and payload.get("verdict") == "no"
+
+
+async def _judge_attributed_passage(
+    db: AsyncSession,
+    *,
+    message_id: uuid.UUID,
+    passage: str,
+    cluster_id: int,
+    opinions: list[tuple[int, str]],
+    gateway: _JudgeGatewayProtocol,
+    judge_model: str,
+    spent: Decimal,
+) -> tuple[Decimal, MessageCaselawCitation | None]:
+    """Judge an attributed passage against its cluster's opinion(s) only.
+
+    Returns (updated_spent, row_or_None):
+      * accept            -> SUPPORTED row (paraphrase_judge)
+      * judge reject      -> FAIL row (verified=False, method NULL)
+      * over budget       -> unverified FAIL row (verified=False, method NULL)
+      * all transient err -> None (drop; no row)
+    """
+    saw_reject = False
+    first_opinion_id = opinions[0][0]
+    for opinion_id, text in opinions:
+        est = await estimate_case_content_cost_usd(db, judge_model=judge_model, opinion_text=text)
+        if spent + est > CASE_CONTENT_JUDGE_BUDGET_USD:
+            log.info(
+                "case-content judge: attributed passage over budget; flagging unverified",
+                extra={"event": "caselaw_fail_over_budget", "cluster_id": cluster_id},
+            )
+            return spent, _fail_row(message_id, opinion_id, cluster_id, passage)
+        spent += est
+        # Call the gateway directly (not via judge_case_content) so transient errors
+        # propagate as exceptions. judge_case_content swallows all errors and returns
+        # _MISS, making "real rejection" and "transient error" indistinguishable — but
+        # the attribution FAIL tier needs to distinguish them (transient → drop, not FAIL).
+        try:
+            request = _build_case_content_prompt(passage, text, judge_model=judge_model)
+            response = await gateway.chat_completion(request)
+            result = _parse_judge_response(response)
+            explicit_no = _judge_returned_explicit_no(response)
+        except Exception as exc:
+            log.warning("case-content judge error on opinion %s: %r", opinion_id, exc)
+            continue  # transient on this opinion -> try the next
+        if result.verified:
+            return spent, MessageCaselawCitation(
+                message_id=message_id,
+                opinion_id=opinion_id,
+                cluster_id=cluster_id,
+                source_offset_start=0,
+                source_offset_end=len(text),
+                source_text=passage,
+                verified=True,
+                verification_method="paraphrase_judge",
+                verification_confidence=result.confidence,
+                partial=True,
+            )
+        if explicit_no:
+            saw_reject = True  # an explicit "no" from the judge -> reject
+        # else: non-substantive output (unparseable/unknown verdict/missing
+        # confidence) -> drop this opinion, like a transient error.
+    if saw_reject:
+        log.info(
+            "case-content judge: attributed passage rejected; flagging FAIL",
+            extra={"event": "caselaw_fail_judge_rejected", "cluster_id": cluster_id},
+        )
+        return spent, _fail_row(message_id, first_opinion_id, cluster_id, passage)
+    return spent, None  # every opinion errored transiently -> drop
+
+
+# ---------------------------------------------------------------------------
+# Orchestrator
+# ---------------------------------------------------------------------------
 
 _LoadOpinionText = Callable[[AsyncSession, int], Awaitable[str]]
 
@@ -215,49 +409,85 @@ async def verify_and_persist_caselaw_citations(
             verbatim_matched.add(passage)
             break  # one verified row per passage (first matching opinion wins)
 
-    # --- SUPPORTED judge pass (P1-B1b, additive-only) -----------------------
-    # Only runs when a gateway is supplied. Passages that got a verbatim row
-    # are skipped. Per-turn budget stops the whole pass when exceeded.
+    # --- Attribution-aware judge pass (P1-B1c) --------------------------------
+    # Confidently-attributed passages are judged against their one opinion:
+    #   reject -> FAIL row; over-budget -> unverified FAIL row; transient error
+    #   -> drop. Unattributed passages keep B1b's all-opinions SUPPORTED-or-drop
+    #   behavior. FAIL is strictly additive: only attributed passages can FAIL.
     if gateway is not None:
+        # Case names for the consulted clusters (for H3 attribution).
+        cluster_metas = (
+            (
+                await db.execute(
+                    select(ResearchClusterMetadata).where(
+                        ResearchClusterMetadata.cluster_id.in_(cluster_ids)
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        clusters: list[tuple[int, str]] = [
+            (c.cluster_id, c.case_name) for c in cluster_metas if c.case_name
+        ]
+        # cluster_id -> [(opinion_id, text)] from the already-loaded opinion texts.
+        cluster_texts: dict[int, list[tuple[int, str]]] = {}
+        for op, text in texts:
+            cluster_texts.setdefault(op.cluster_id, []).append((op.opinion_id, text))
+
+        # Resolve attribution per still-unverified passage; judge attributed
+        # passages FIRST so the per-turn budget is spent on FAIL-bearing checks.
+        pending = [
+            a for a in attribute_passages(assistant_text) if a.passage not in verbatim_matched
+        ]
+
+        def _attributed_cluster(a: AttributedPassage) -> int | None:
+            if a.case_name is None:
+                return None
+            cid = match_case_name(a.case_name, clusters)
+            if cid is None or cid not in cluster_texts:
+                return None  # no confident match, or named-but-not-fetched
+            return cid
+
+        annotated = [(a, _attributed_cluster(a)) for a in pending]
+        annotated.sort(key=lambda t: t[1] is None)  # attributed (cid not None) first
+
         spent: Decimal = Decimal("0")
-        budget_exhausted = False
-        for passage in passages:
-            if budget_exhausted:
-                break
-            if passage in verbatim_matched:
-                continue  # already have a verbatim row — skip
+        for a, cid in annotated:
+            if cid is not None:
+                spent, row = await _judge_attributed_passage(
+                    db,
+                    message_id=message_id,
+                    passage=a.passage,
+                    cluster_id=cid,
+                    opinions=cluster_texts[cid],
+                    gateway=gateway,
+                    judge_model=judge_model,
+                    spent=spent,
+                )
+                if row is not None:
+                    rows.append(row)
+                continue
+            # --- Unattributed: B1b all-opinions SUPPORTED-or-drop ------------
             for op, text in texts:
                 est = await estimate_case_content_cost_usd(
                     db, judge_model=judge_model, opinion_text=text
                 )
                 if spent + est > CASE_CONTENT_JUDGE_BUDGET_USD:
-                    log.info(
-                        "case-content judge: per-turn budget reached; stopping judge pass",
-                        extra={"event": "caselaw_judge_budget_reached"},
-                    )
-                    budget_exhausted = True
-                    break  # stop the whole judge pass for this turn
+                    break  # budget reached -> drop remaining unattributed work
                 spent += est
-                # Defense-in-depth: judge_case_content is contractually non-raising
-                # (all errors resolve to _MISS), but the guard protects against a
-                # future refactor that inadvertently breaks that contract.
                 try:
                     result = await judge_case_content(
-                        passage=passage,
+                        passage=a.passage,
                         opinion_text=text,
                         gateway=gateway,
                         judge_model=judge_model,
                     )
                 except Exception as exc:
-                    log.warning(
-                        "case-content judge error on opinion %s: %r",
-                        op.opinion_id,
-                        exc,
-                    )
-                    continue  # per-opinion error — try next opinion
+                    log.warning("case-content judge error on opinion %s: %r", op.opinion_id, exc)
+                    continue
                 if not result.verified:
-                    continue  # this opinion's judge rejected — try next opinion
-                # Judge accepted — write one SUPPORTED row and move to next passage.
+                    continue
                 rows.append(
                     MessageCaselawCitation(
                         message_id=message_id,
@@ -265,14 +495,14 @@ async def verify_and_persist_caselaw_citations(
                         cluster_id=op.cluster_id,
                         source_offset_start=0,
                         source_offset_end=len(text),
-                        source_text=passage,
+                        source_text=a.passage,
                         verified=True,
                         verification_method="paraphrase_judge",
                         verification_confidence=result.confidence,
                         partial=True,
                     )
                 )
-                break  # one SUPPORTED row per passage; first accepting opinion wins
+                break
 
     # --- Persist (single add_all / flush) -----------------------------------
     if rows:
