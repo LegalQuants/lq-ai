@@ -27,3 +27,4 @@ export * as preferencesApi from './preferences';
 export * as usersApi from './users';
 export * as enhancePromptApi from './enhancePrompt';
 export * as autonomousApi from './autonomous';
+export * as ledgerApi from './ledger';

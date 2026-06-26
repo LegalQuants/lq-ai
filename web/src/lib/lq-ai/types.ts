@@ -1260,3 +1260,52 @@ export interface TabularPreviewCostResponse {
 	estimated_cost_usd: string;
 	per_tier_breakdown: Record<string, number>;
 }
+
+// ----- Citation Ledger (P1-A3 / P1-C1) -----
+
+export interface LedgerPassage {
+	text: string;
+	offset_start: number;
+	offset_end: number;
+	page?: number | null;
+}
+export interface LedgerSource {
+	kind: string; // kb_document | caselaw | mcp | ...
+	source_file_id?: string;
+	opinion_id?: number;
+	cluster_id?: number;
+	label?: string | null;
+	subtitle?: string | null;
+	url?: string | null;
+	external_ref?: string | null;
+	tool?: string | null;
+	passages?: LedgerPassage[];
+}
+export interface LedgerEntry {
+	id: string;
+	message_id: string;
+	source_kind: string;
+	verification_status: string;
+	confidence: number | null;
+	provider: string | null;
+	retrieved_at: string | null;
+	treatment_id: string | null;
+	created_at: string;
+	source: LedgerSource;
+}
+export type GateStatus = 'fiduciary_grade' | 'supported_only' | 'flagged';
+export interface LedgerGate {
+	message_id: string;
+	gate_status: GateStatus;
+	pass_count: number;
+	supported_count: number;
+	fail_count: number;
+	total_assertions: number;
+	confidence: number | null;
+	created_at: string;
+}
+export interface ChatLedger {
+	chat_id: string;
+	entries: LedgerEntry[];
+	gates: LedgerGate[];
+}
