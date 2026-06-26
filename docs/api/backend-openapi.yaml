@@ -1098,6 +1098,20 @@ paths:
                   entries:
                     type: array
                     items: {$ref: '#/components/schemas/LedgerEntry'}
+                  gates:
+                    type: array
+                    description: Per-turn fiduciary-grade verdicts (ADR 0018 D3).
+                    items:
+                      type: object
+                      properties:
+                        message_id: {type: string, format: uuid}
+                        gate_status: {type: string, enum: [fiduciary_grade, supported_only, flagged]}
+                        pass_count: {type: integer}
+                        supported_count: {type: integer}
+                        fail_count: {type: integer}
+                        total_assertions: {type: integer}
+                        confidence: {type: number, nullable: true}
+                        created_at: {type: string, format: date-time}
         '404':
           description: Chat (or filtered message) does not exist
           content:

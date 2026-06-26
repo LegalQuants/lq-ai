@@ -85,6 +85,7 @@ from app.chat.tool_schemas import ChatToolAllowlist, assemble_allowlist
 from app.citation import extract_citations, verify
 from app.citation.caselaw import verify_and_persist_caselaw_citations
 from app.citation.cost import estimate_judge_call_cost_usd
+from app.citation.gate import compute_and_record_gate, resolve_gates
 from app.citation.ledger import assemble_ledger_entries, resolve_ledger_entries
 from app.clients.gateway import EnsembleConfig, GatewayClient, get_gateway_client
 from app.config import get_settings
@@ -1815,7 +1816,8 @@ async def get_chat_ledger(
             raise NotFound(f"Message {mid} not found.", details={"message_id": str(mid)})
 
     entries = await resolve_ledger_entries(db, chat_id=cid, message_id=mid)
-    return {"chat_id": str(cid), "entries": entries}
+    gates = await resolve_gates(db, chat_id=cid, message_id=mid)
+    return {"chat_id": str(cid), "entries": entries, "gates": gates}
 
 
 # ---------------------------------------------------------------------------
@@ -2927,6 +2929,10 @@ async def _non_streaming_response(
                 await assemble_ledger_entries(db, message_id=assistant_message_id)
             except Exception as ledger_exc:  # never block the turn
                 log.warning("citation ledger assembly failed: %r", ledger_exc)
+            try:
+                await compute_and_record_gate(db, message_id=assistant_message_id)
+            except Exception as gate_exc:  # never break the turn (conservative posture)
+                log.warning("fiduciary gate computation failed: %r", gate_exc)
             await _audit_message_sent(
                 db,
                 user=user,
@@ -3141,6 +3147,10 @@ async def _non_streaming_response(
         await assemble_ledger_entries(db, message_id=assistant_message_id)
     except Exception as ledger_exc:  # never block the turn
         log.warning("citation ledger assembly failed: %r", ledger_exc)
+    try:
+        await compute_and_record_gate(db, message_id=assistant_message_id)
+    except Exception as gate_exc:  # never break the turn (conservative posture)
+        log.warning("fiduciary gate computation failed: %r", gate_exc)
 
     await _audit_message_sent(
         db,
@@ -3504,6 +3514,10 @@ async def _stream_response(
                     await assemble_ledger_entries(db, message_id=assistant_message_id)
                 except Exception as ledger_exc:  # never block the turn
                     log.warning("citation ledger assembly failed: %r", ledger_exc)
+                try:
+                    await compute_and_record_gate(db, message_id=assistant_message_id)
+                except Exception as gate_exc:  # never break the turn (conservative posture)
+                    log.warning("fiduciary gate computation failed: %r", gate_exc)
             # D3 audit row — best-effort, must not break the stream.
             try:
                 await _audit_message_sent(
