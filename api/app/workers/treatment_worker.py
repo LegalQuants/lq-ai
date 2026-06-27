@@ -1,4 +1,4 @@
-"""arq job — derive citation-graph treatment for an assistant turn (WS-G PR1).
+"""arq job — derive citation-graph treatment for an assistant turn (WS-G PR1/PR2).
 
 Runs OFF the turn's critical path: enqueued best-effort after each assistant
 turn finalizes (see ``app.api.chats``), consumed by the ingest worker.
@@ -15,6 +15,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.citation.treatment import _default_fetch_citing, _FetchCiting, derive_treatment_for_message
+from app.clients.gateway import GatewayClient, get_gateway_client
 from app.db.session import get_session_factory
 
 log = logging.getLogger(__name__)
@@ -25,17 +26,43 @@ async def run_treatment_derivation(
     *,
     message_id: uuid.UUID,
     fetch_citing: _FetchCiting = _default_fetch_citing,
+    gateway: GatewayClient | None = None,
 ) -> int:
     """Session-injected core (testable without arq/Redis).
+
+    Resolves a gateway + judge model for the PR2 judge pass; degrades to
+    graph-only (``gateway=None``) if the gateway or judge-model can't be
+    resolved (e.g. worker running without gateway config).
+
+    The ``gateway`` kwarg allows test injection; when omitted the
+    process-global :func:`get_gateway_client` is used.
 
     Calls ``derive_treatment_for_message`` with a UTC-aware *now*, then
     commits the session. Returns the number of ledger entries linked.
     """
+    # _gw is always a GatewayClient (ternary guarantees it); the separate
+    # derive_gateway variable starts as _gw and is cleared to None in the
+    # degrade path so mypy can track both states cleanly.
+    _gw: GatewayClient = gateway if gateway is not None else get_gateway_client()
+    judge_model = "fast"
+    derive_gateway: GatewayClient | None = _gw
+    try:
+        judge_model = await _gw.get_citation_engine_judge_model()
+    except Exception as exc:
+        log.warning(
+            "treatment judge-model resolve failed; degrading to graph-only: %r",
+            exc,
+            extra={"event": "treatment_judge_model_unavailable"},
+        )
+        derive_gateway = None
+
     linked = await derive_treatment_for_message(
         db,
         message_id=message_id,
         now=datetime.now(UTC),
         fetch_citing=fetch_citing,
+        gateway=derive_gateway,
+        judge_model=judge_model,
     )
     await db.commit()
     return linked
