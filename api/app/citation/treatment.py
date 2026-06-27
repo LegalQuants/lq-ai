@@ -21,6 +21,7 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.citation.treatment_judge import (
@@ -124,8 +125,33 @@ async def derive_treatment_for_message(
                     derived_method="citation_graph",
                     as_of=now,
                 )
-                db.add(row)
-                await db.flush()
+                try:
+                    async with db.begin_nested():  # SAVEPOINT around the conflict-prone insert
+                        db.add(row)
+                        await db.flush()
+                except IntegrityError:
+                    # A concurrent turn inserted this cluster between our existing-check
+                    # and our flush. Exiting the begin_nested() block on the exception
+                    # already rolled back TO the savepoint, so the session is usable.
+                    # SQLAlchemy automatically expels the rolled-back row from the
+                    # session identity map; do not call expunge(row) — it is already gone.
+                    # Re-read and REUSE the winner's row; link only, skip this turn's
+                    # judge pass (the winner owns the row). DE-364.
+                    winner = (
+                        await db.execute(
+                            select(CitationTreatment).where(
+                                CitationTreatment.cluster_id == cluster_id
+                            )
+                        )
+                    ).scalar_one_or_none()
+                    if winner is not None:
+                        cluster_to_treatment[cluster_id] = winner.id
+                    else:
+                        log.warning(
+                            "treatment insert conflict but no winner row for cluster %s",
+                            cluster_id,
+                        )
+                    continue  # next cluster; no judge pass for a reused/lost row
                 cluster_to_treatment[cluster_id] = row.id
                 treatment_row = row
             else:
