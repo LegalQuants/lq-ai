@@ -41,6 +41,10 @@ def test_parse_accepts_every_class(cls):
         json.dumps({"confidence": "high", "justification": "x"}),  # missing treatment
         json.dumps(["overruled"]),  # not a dict
         "",
+        json.dumps(
+            {"treatment": "followed", "confidence": "high", "justification": "   "}
+        ),  # whitespace-only
+        json.dumps({"treatment": "followed", "confidence": "high"}),  # missing justification
     ],
 )
 def test_parse_returns_none_on_garbage(bad):
@@ -71,6 +75,8 @@ async def test_judge_treatment_tags_purpose_and_parses():
         async def chat_completion(self, request, *, request_id=None):
             seen["purpose"] = request.lq_ai_purpose
             seen["anonymize"] = request.anonymize
+            seen["temperature"] = request.temperature
+            seen["max_tokens"] = request.max_tokens
             return _resp(
                 json.dumps(
                     {
@@ -84,3 +90,5 @@ async def test_judge_treatment_tags_purpose_and_parses():
     out = await judge_treatment(cited_case_name="X", snippet="y", gateway=GW(), judge_model="fast")
     assert out == TreatmentJudgment("questioned", 0.70, "doubted it")
     assert seen["purpose"] == "judge_treatment" and seen["anonymize"] is False
+    assert seen["temperature"] == 0.0
+    assert seen["max_tokens"] == 400
