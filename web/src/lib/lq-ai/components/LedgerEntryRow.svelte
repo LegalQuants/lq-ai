@@ -251,6 +251,10 @@
 	.lq-ledger-treatment-asof {
 		color: var(--lq-text-tertiary);
 	}
+	.lq-ledger-treatment-caret {
+		font-size: 10px;
+		margin-left: 2px;
+	}
 	.lq-ledger-treatment-list {
 		list-style: none;
 		margin: 0;
