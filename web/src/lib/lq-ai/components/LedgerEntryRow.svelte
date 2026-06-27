@@ -10,11 +10,13 @@
 	 */
 	import type { LedgerEntry } from '../types';
 	import { ledgerEntryState } from '../citations/ledger-state';
+	import { treatmentSummary, formatCitingRef } from '../citations/treatment-display';
 
 	export let entry: LedgerEntry;
 
 	$: state = ledgerEntryState(entry.verification_status);
 	$: src = entry.source;
+	let treatmentOpen = false;
 
 	function identity(): string {
 		if (src.kind === 'kb_document') return 'Document';
@@ -52,6 +54,42 @@
 		{/each}
 	{:else}
 		<span class="lq-ledger-consulted">consulted</span>
+	{/if}
+
+	{#if entry.treatment}
+		{@const t = treatmentSummary(entry.treatment)}
+		<div class="lq-ledger-treatment">
+			<button
+				type="button"
+				class="lq-ledger-treatment-line"
+				aria-expanded={treatmentOpen}
+				aria-label="Citation-graph treatment, derived — not an editorial good-law judgment"
+				title="Derived from the citation graph — not an editorial 'good law' judgment. Treatment classification arrives in a later release."
+				on:click={() => (treatmentOpen = !treatmentOpen)}
+			>
+				<span class="lq-ledger-treatment-icon" aria-hidden="true">⚖</span>
+				<span class="lq-ledger-treatment-label">{t.label}</span>
+				<span class="lq-ledger-treatment-asof">· derived {t.asOf}</span>
+				{#if t.preview.length > 0}
+					<span class="lq-ledger-treatment-caret" aria-hidden="true"
+						>{treatmentOpen ? '▾' : '▸'}</span
+					>
+				{/if}
+			</button>
+			{#if treatmentOpen && t.preview.length > 0}
+				<ul class="lq-ledger-treatment-list">
+					{#each t.preview as ref}
+						<li>{formatCitingRef(ref)}</li>
+					{/each}
+					{#if t.moreCount > 0}
+						<li class="lq-ledger-treatment-more">
+							+ {t.moreCount} more{#if t.capped}
+								· {t.shown} most recent of {t.total}{/if}
+						</li>
+					{/if}
+				</ul>
+			{/if}
+		</div>
 	{/if}
 </li>
 
@@ -181,5 +219,50 @@
 		color: var(--lq-text-tertiary);
 		font-style: italic;
 		padding-left: var(--lq-space-1);
+	}
+
+	.lq-ledger-treatment {
+		display: flex;
+		flex-direction: column;
+		gap: var(--lq-space-1);
+	}
+	.lq-ledger-treatment-line {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		align-self: flex-start;
+		padding: 0;
+		border: none;
+		background: transparent;
+		font: inherit;
+		font-size: 11px;
+		color: var(--lq-text-tertiary);
+		cursor: pointer;
+	}
+	.lq-ledger-treatment-line:hover {
+		color: var(--lq-text-secondary);
+	}
+	.lq-ledger-treatment-icon {
+		font-size: 12px;
+	}
+	.lq-ledger-treatment-label {
+		font-weight: 500;
+	}
+	.lq-ledger-treatment-asof {
+		color: var(--lq-text-tertiary);
+	}
+	.lq-ledger-treatment-list {
+		list-style: none;
+		margin: 0;
+		padding: 0 0 0 var(--lq-space-4);
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		font-size: 11px;
+		color: var(--lq-text-tertiary);
+	}
+	.lq-ledger-treatment-more {
+		color: var(--lq-text-tertiary);
+		font-style: italic;
 	}
 </style>
