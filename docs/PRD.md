@@ -4633,7 +4633,9 @@ No code change — the runtime already returns these with the correct typed `cod
 
 **Specific scope:** Add a per-provider external-tool cost model (e.g. a configured cost-per-call or cost-per-unit on the gateway `tool_providers` / `mcp.yaml` entry, or a rolling-average like the inference estimator) so `estimate_tool_cost` returns a real projection for `retrieve_caselaw` / `call_mcp_tool` and the R4 brake throttles expensive external tools. Record the realized cost on the `tool_call_log` row.
 
-**When to ship:** Before the autonomous layer (or chat) is pointed at a metered/paid third-party tool provider.
+**When to ship:** Before the autonomous layer (or chat) is pointed at a metered/paid third-party tool provider. **Landing point: WS-G PR2's per-case judge budget (the chat path's first real cost bound).** Its **trigger** is WS-E (content-source registry + free-source expansion), which introduces the first metered/paid sources and so satisfies this "when to ship" condition by construction.
+
+**Status (2026-06-26):** Partially addressed. WS-G PR2 (the treatment-classifying judge) shipped the **per-case judge budget** — a real, enforced USD cost bound on the treatment judge fan-out — as the milestone's first concrete external-work cost control (ADR 0019 D10). PR2 did **not** wire the autonomous-path `estimate_tool_cost`/R4 piece: the treatment judge runs in a background arq derivation job, not through the autonomous `guarded_tool_call` chokepoint, and `get_citing_opinions` is not a `ToolIntent` — so routing it through R4 would be incorrect, not merely deferred. Nothing metered ships before WS-E (CourtListener is free-tier/BYO-key today), so no spend escapes R4 in the interim. The remaining scope — a real per-provider `estimate_tool_cost` for `retrieve_caselaw` / `call_mcp_tool` + realized-cost recording on `tool_call_log` — lands in **WS-E**, on its first metered source.
 
 #### DE-345 — Extract a shared `_stream_loop_outcome` renderer for the chat tool-loop
 
