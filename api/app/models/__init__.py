@@ -23,6 +23,7 @@ from app.models.chat import Chat, Message
 from app.models.chat_pending_tool_call import ChatPendingToolCall
 from app.models.citation_ledger_entry import CitationLedgerEntry
 from app.models.citation_treatment import CitationTreatment
+from app.models.citation_treatment_signal import CitationTreatmentSignal
 from app.models.document import Document, DocumentChunk
 from app.models.enhance_prompt import EnhancePromptInteraction
 from app.models.file import File
@@ -61,6 +62,7 @@ __all__ = [
     "ChatPendingToolCall",
     "CitationLedgerEntry",
     "CitationTreatment",
+    "CitationTreatmentSignal",
     "Document",
     "DocumentChunk",
     "EnhancePromptInteraction",

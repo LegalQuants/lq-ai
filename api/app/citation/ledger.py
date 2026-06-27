@@ -15,9 +15,12 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.citation.treatment_judge import TreatmentJudgment
+from app.citation.treatment_rollup import roll_up
 from app.models.chat import Chat, Message, MessageCitation
 from app.models.citation_ledger_entry import CitationLedgerEntry
 from app.models.citation_treatment import CitationTreatment
+from app.models.citation_treatment_signal import CitationTreatmentSignal
 from app.models.message_caselaw_citation import MessageCaselawCitation
 from app.models.message_tool_source import MessageToolSource
 
@@ -175,6 +178,52 @@ def _resolve_source(
     return None
 
 
+def _build_treatment_dict(
+    treatment: CitationTreatment,
+    sigs: list[CitationTreatmentSignal],
+) -> dict[str, Any]:
+    """Build the resolved treatment object for one ledger entry.
+
+    Combines the four PR1 graph keys with the PR2 rollup columns and per-passage
+    signal list. ``sigs`` is pre-fetched (no N+1); empty list for graph-only rows.
+    ``roll_up([])`` returns per_class_counts={}, case_confidence=None.
+    """
+    rollup = roll_up(
+        [
+            TreatmentJudgment(
+                classification=s.classification,
+                confidence=s.confidence,
+                justification=s.justification,
+            )
+            for s in sigs
+        ]
+    )
+    return {
+        # PR1 graph keys (unchanged).
+        "cited_by_count": treatment.cited_by_count,
+        "as_of": treatment.as_of.isoformat(),
+        "derived_method": treatment.derived_method,
+        "citing": treatment.citing_opinions,
+        # PR2 rollup columns from CitationTreatment (None when graph-only).
+        "strongest_negative_class": treatment.strongest_negative_class,
+        "judged_count": treatment.judged_count,
+        "judge_as_of": treatment.judge_as_of.isoformat() if treatment.judge_as_of else None,
+        # Computed via roll_up (empty/None when no signals).
+        "per_class_counts": rollup.per_class_counts,
+        "case_confidence": rollup.case_confidence,
+        # Per-passage signals — no snippet (ADR 0016 P3 / ADR 0019 D7).
+        "signals": [
+            {
+                "citing_opinion_id": s.citing_opinion_id,
+                "classification": s.classification,
+                "confidence": s.confidence,
+                "justification": s.justification,
+            }
+            for s in sigs
+        ],
+    }
+
+
 async def resolve_ledger_entries(
     db: AsyncSession, *, chat_id: uuid.UUID, message_id: uuid.UUID | None = None
 ) -> list[dict[str, Any]]:
@@ -247,6 +296,22 @@ async def resolve_ledger_entries(
             .all()
         }
 
+    signals_by_treatment: dict[uuid.UUID, list[CitationTreatmentSignal]] = {}
+    if treatment_ids:
+        signal_rows = (
+            (
+                await db.execute(
+                    select(CitationTreatmentSignal).where(
+                        CitationTreatmentSignal.treatment_id.in_(treatment_ids)
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for s in signal_rows:
+            signals_by_treatment.setdefault(s.treatment_id, []).append(s)
+
     out: list[dict[str, Any]] = []
     for e in entries:
         source = _resolve_source(e, docs, caselaw, tools)
@@ -264,12 +329,10 @@ async def resolve_ledger_entries(
                 "retrieved_at": e.retrieved_at.isoformat() if e.retrieved_at else None,
                 "treatment_id": str(e.treatment_id) if e.treatment_id else None,
                 "treatment": (
-                    {
-                        "cited_by_count": treatments[e.treatment_id].cited_by_count,
-                        "as_of": treatments[e.treatment_id].as_of.isoformat(),
-                        "derived_method": treatments[e.treatment_id].derived_method,
-                        "citing": treatments[e.treatment_id].citing_opinions,
-                    }
+                    _build_treatment_dict(
+                        treatments[e.treatment_id],
+                        signals_by_treatment.get(e.treatment_id, []),
+                    )
                     if e.treatment_id is not None and e.treatment_id in treatments
                     else None
                 ),

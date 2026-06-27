@@ -4633,7 +4633,9 @@ No code change — the runtime already returns these with the correct typed `cod
 
 **Specific scope:** Add a per-provider external-tool cost model (e.g. a configured cost-per-call or cost-per-unit on the gateway `tool_providers` / `mcp.yaml` entry, or a rolling-average like the inference estimator) so `estimate_tool_cost` returns a real projection for `retrieve_caselaw` / `call_mcp_tool` and the R4 brake throttles expensive external tools. Record the realized cost on the `tool_call_log` row.
 
-**When to ship:** Before the autonomous layer (or chat) is pointed at a metered/paid third-party tool provider.
+**When to ship:** Before the autonomous layer (or chat) is pointed at a metered/paid third-party tool provider. **Landing point: WS-G PR2's per-case judge budget (the chat path's first real cost bound).** Its **trigger** is WS-E (content-source registry + free-source expansion), which introduces the first metered/paid sources and so satisfies this "when to ship" condition by construction.
+
+**Status (2026-06-26):** Partially addressed. WS-G PR2 (the treatment-classifying judge) shipped the **per-case judge budget** — a real, enforced USD cost bound on the treatment judge fan-out — as the milestone's first concrete external-work cost control (ADR 0019 D10). PR2 did **not** wire the autonomous-path `estimate_tool_cost`/R4 piece: the treatment judge runs in a background arq derivation job, not through the autonomous `guarded_tool_call` chokepoint, and `get_citing_opinions` is not a `ToolIntent` — so routing it through R4 would be incorrect, not merely deferred. Nothing metered ships before WS-E (CourtListener is free-tier/BYO-key today), so no spend escapes R4 in the interim. The remaining scope — a real per-provider `estimate_tool_cost` for `retrieve_caselaw` / `call_mcp_tool` + realized-cost recording on `tool_call_log` — lands in **WS-E**, on its first metered source.
 
 #### DE-345 — Extract a shared `_stream_loop_outcome` renderer for the chat tool-loop
 
@@ -4836,6 +4838,41 @@ So the single longest phase (image pull) has neither a stream nor a poll. The re
 **Specific scope:** Wrap each cluster's mutate+flush in a SAVEPOINT (`async with db.begin_nested():`) so an `IntegrityError` rolls back only that cluster and leaves the session usable for the rest, OR catch the unique-violation specifically and re-read + reuse the row the concurrent turn inserted (the more correct outcome — the case *is* now cached). Add a concurrency regression test that forces a mid-loop flush failure on one cluster of a multi-cluster turn and asserts the others still derive + link.
 
 **When to ship:** Within WS-G (Phase 2), before the milestone closes — alongside DE-363 or PR2. Filed (not fixed) in PR1 to keep the security-gated slice scoped; the degradation is non-crashing and DE-363-recoverable in the interim.
+
+#### DE-365 — Launch-documentation pass: fiduciary-grade positioning + transparent-by-evidence comparison
+
+**Priority:** P2 · **Effort:** L · **Status: OPEN (end of Phase 2 / pre-launch)**
+
+**Context:** LQ.AI is plausibly one of the first **fiduciary-evidence-level** legal-tech products — and uniquely, it is **open source, open-telemetry, and self-hosted**, with educational transparency visualizations. The incumbents (Thomson Reuters / Westlaw / CoCounsel) have announced a fiduciary-grade legal-research direction but, per their public statements, are **not launching until later summer 2026**. The end-of-phase documentation does not yet convey the magnitude of what the project gives away for free, nor position it honestly against that announced-but-unshipped competition. Surfaced by the maintainer (2026-06-26).
+
+**Specific scope:**
+1. **Refresh README + docs** and add **clear transparency visualizations** that show how each core principle (derive-don't-assert, the Citation Ledger, the fiduciary-grade gate, governed gateway egress, P3 no-raw-payload, OpenTelemetry tracing, the validity/treatment layer) delivers transparent, auditable results "at every turn."
+2. **Pull the public TR/Westlaw/CoCounsel fiduciary-grade press release/announcement**, enumerate every promised feature/capability, and build an **honest feature-comparison chart**. Each LQ.AI "✓" must **link to the artifact that proves it** — the ADR, the code path, the test, or the live trace — so the comparison is *evidence-backed, not asserted* (a clickable audit trail cannot be FUD-ed; the transparency IS the proof).
+3. Frame the inspiration honestly (their announced direction inspired this) while making the defensible, demonstrable claim: massively-funded teams have **not** shipped this level of transparency, and LQ.AI delivers it transparently, open-source, now.
+
+**Constraint:** the conservative-engineering posture (CLAUDE.md principle 4 — never overclaim) binds every comparison claim: honest and unflinching, never hype. Where a capability is partial or roadmapped, say so. The standard for an LQ.AI "✓" is "demonstrable by an in-house lawyer on real documents," tied to a linkable artifact.
+
+**When to ship:** End of Phase 2 / pre-launch, after the fiduciary-grade workstreams (WS-G/D/E) have landed the capabilities the chart will claim. Relates to the [PR6 transparency-posture narration obligation](#13-transparency-as-a-founding-principle) (narrate the *why*, not just the mechanics).
+
+#### DE-366 — Treatment worker short-circuits the judge pass when no gateway is reachable
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** Surfaced by the WS-G PR2 Opus whole-branch review. `run_treatment_derivation` (`api/app/workers/treatment_worker.py`) resolves a `GatewayClient` via `get_gateway_client()` (which always returns a client — defaults present, `__init__` never raises) and then `get_citation_engine_judge_model()` (which catches all failures and returns its fallback rather than raising). So when the treatment worker runs against an **unconfigured or unreachable** gateway, `derive_gateway` is never set to `None` from the worker, and the judge pass is attempted: up to `n_judged_cap` per-cluster `chat_completion` calls are made and each fails+is swallowed → graph-only result. The **result data is correct** (graph-only, identical to PR1), so this is a latency / log-noise regression only — where PR1 made zero gateway calls, PR2 makes (and swallows) up to N failed connection attempts per cited case before degrading.
+
+**Specific scope:** Have the worker detect an unreachable/unconfigured gateway once (e.g. a cheap reachability/config probe, or treat a `get_citation_engine_judge_model` that returned the *fallback due to failure* as "no judge available") and pass `gateway=None` so `derive_treatment_for_message` short-circuits to graph-only without per-passage attempts. Keep the safe-degrade data outcome identical; only avoid the wasted calls.
+
+**When to ship:** Opportunistic; before the treatment worker is run at scale against operators who have not configured a gateway judge model.
+
+#### DE-367 — Materialize the treatment per-class rollup to avoid stored-vs-recomputed divergence
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** Surfaced by the WS-G PR2 reviews. The `/ledger` read (`api/app/citation/ledger.py`) exposes the stored parent column `citation_treatment.judged_count` alongside `per_class_counts` / `case_confidence`, which are **recomputed at read time** via `roll_up` over the current `citation_treatment_signal` rows. Today they always agree (the derivation writes `judged_count` and the signals atomically, and every refresh clears the child rows — DE-366's sibling fix in PR2), so there is no divergence. But a **future partial re-judge** that appended or removed signals without rewriting `judged_count` would desync the stored count from the recomputed per-class totals.
+
+**Specific scope:** When the partial-re-judge / incremental-refresh feature is designed, either (a) always update `judged_count` atomically with any signal write, or (b) drop the stored `judged_count` column and compute it at read time from the signals (single source of truth). Until then the current implementation is internally consistent.
+
+**When to ship:** Alongside any future incremental/partial treatment re-judge work.
 
 ---
 

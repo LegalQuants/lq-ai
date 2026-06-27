@@ -27,8 +27,13 @@ class CitationTreatment(Base):
         UniqueConstraint("cluster_id", name="uq_citation_treatment_cluster_id"),
         CheckConstraint("cited_by_count >= 0", name="chk_citation_treatment_count_nonneg"),
         CheckConstraint(
-            "derived_method IN ('citation_graph')",
+            "derived_method IN ('citation_graph', 'citation_graph+judge')",
             name="chk_citation_treatment_method_values",
+        ),
+        CheckConstraint(
+            "strongest_negative_class IS NULL OR strongest_negative_class IN "
+            "('overruled','superseded','criticized','questioned','distinguished')",
+            name="chk_citation_treatment_strongest_negative",
         ),
     )
 
@@ -40,6 +45,9 @@ class CitationTreatment(Base):
     cited_by_count: Mapped[int] = mapped_column(Integer, nullable=False)
     citing_opinions: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
     derived_method: Mapped[str] = mapped_column(Text, nullable=False)
+    strongest_negative_class: Mapped[str | None] = mapped_column(Text, nullable=True)
+    judged_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    judge_as_of: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     as_of: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
