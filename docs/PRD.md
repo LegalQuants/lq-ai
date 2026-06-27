@@ -4854,6 +4854,26 @@ So the single longest phase (image pull) has neither a stream nor a poll. The re
 
 **When to ship:** End of Phase 2 / pre-launch, after the fiduciary-grade workstreams (WS-G/D/E) have landed the capabilities the chart will claim. Relates to the [PR6 transparency-posture narration obligation](#13-transparency-as-a-founding-principle) (narrate the *why*, not just the mechanics).
 
+#### DE-366 — Treatment worker short-circuits the judge pass when no gateway is reachable
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** Surfaced by the WS-G PR2 Opus whole-branch review. `run_treatment_derivation` (`api/app/workers/treatment_worker.py`) resolves a `GatewayClient` via `get_gateway_client()` (which always returns a client — defaults present, `__init__` never raises) and then `get_citation_engine_judge_model()` (which catches all failures and returns its fallback rather than raising). So when the treatment worker runs against an **unconfigured or unreachable** gateway, `derive_gateway` is never set to `None` from the worker, and the judge pass is attempted: up to `n_judged_cap` per-cluster `chat_completion` calls are made and each fails+is swallowed → graph-only result. The **result data is correct** (graph-only, identical to PR1), so this is a latency / log-noise regression only — where PR1 made zero gateway calls, PR2 makes (and swallows) up to N failed connection attempts per cited case before degrading.
+
+**Specific scope:** Have the worker detect an unreachable/unconfigured gateway once (e.g. a cheap reachability/config probe, or treat a `get_citation_engine_judge_model` that returned the *fallback due to failure* as "no judge available") and pass `gateway=None` so `derive_treatment_for_message` short-circuits to graph-only without per-passage attempts. Keep the safe-degrade data outcome identical; only avoid the wasted calls.
+
+**When to ship:** Opportunistic; before the treatment worker is run at scale against operators who have not configured a gateway judge model.
+
+#### DE-367 — Materialize the treatment per-class rollup to avoid stored-vs-recomputed divergence
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** Surfaced by the WS-G PR2 reviews. The `/ledger` read (`api/app/citation/ledger.py`) exposes the stored parent column `citation_treatment.judged_count` alongside `per_class_counts` / `case_confidence`, which are **recomputed at read time** via `roll_up` over the current `citation_treatment_signal` rows. Today they always agree (the derivation writes `judged_count` and the signals atomically, and every refresh clears the child rows — DE-366's sibling fix in PR2), so there is no divergence. But a **future partial re-judge** that appended or removed signals without rewriting `judged_count` would desync the stored count from the recomputed per-class totals.
+
+**Specific scope:** When the partial-re-judge / incremental-refresh feature is designed, either (a) always update `judged_count` atomically with any signal write, or (b) drop the stored `judged_count` column and compute it at read time from the signals (single source of truth). Until then the current implementation is internally consistent.
+
+**When to ship:** Alongside any future incremental/partial treatment re-judge work.
+
 ---
 
 ## 10. Appendices
