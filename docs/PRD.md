@@ -4839,6 +4839,21 @@ So the single longest phase (image pull) has neither a stream nor a poll. The re
 
 **When to ship:** Within WS-G (Phase 2), before the milestone closes — alongside DE-363 or PR2. Filed (not fixed) in PR1 to keep the security-gated slice scoped; the degradation is non-crashing and DE-363-recoverable in the interim.
 
+#### DE-365 — Launch-documentation pass: fiduciary-grade positioning + transparent-by-evidence comparison
+
+**Priority:** P2 · **Effort:** L · **Status: OPEN (end of Phase 2 / pre-launch)**
+
+**Context:** LQ.AI is plausibly one of the first **fiduciary-evidence-level** legal-tech products — and uniquely, it is **open source, open-telemetry, and self-hosted**, with educational transparency visualizations. The incumbents (Thomson Reuters / Westlaw / CoCounsel) have announced a fiduciary-grade legal-research direction but, per their public statements, are **not launching until later summer 2026**. The end-of-phase documentation does not yet convey the magnitude of what the project gives away for free, nor position it honestly against that announced-but-unshipped competition. Surfaced by the maintainer (2026-06-26).
+
+**Specific scope:**
+1. **Refresh README + docs** and add **clear transparency visualizations** that show how each core principle (derive-don't-assert, the Citation Ledger, the fiduciary-grade gate, governed gateway egress, P3 no-raw-payload, OpenTelemetry tracing, the validity/treatment layer) delivers transparent, auditable results "at every turn."
+2. **Pull the public TR/Westlaw/CoCounsel fiduciary-grade press release/announcement**, enumerate every promised feature/capability, and build an **honest feature-comparison chart**. Each LQ.AI "✓" must **link to the artifact that proves it** — the ADR, the code path, the test, or the live trace — so the comparison is *evidence-backed, not asserted* (a clickable audit trail cannot be FUD-ed; the transparency IS the proof).
+3. Frame the inspiration honestly (their announced direction inspired this) while making the defensible, demonstrable claim: massively-funded teams have **not** shipped this level of transparency, and LQ.AI delivers it transparently, open-source, now.
+
+**Constraint:** the conservative-engineering posture (CLAUDE.md principle 4 — never overclaim) binds every comparison claim: honest and unflinching, never hype. Where a capability is partial or roadmapped, say so. The standard for an LQ.AI "✓" is "demonstrable by an in-house lawyer on real documents," tied to a linkable artifact.
+
+**When to ship:** End of Phase 2 / pre-launch, after the fiduciary-grade workstreams (WS-G/D/E) have landed the capabilities the chart will claim. Relates to the [PR6 transparency-posture narration obligation](#13-transparency-as-a-founding-principle) (narrate the *why*, not just the mechanics).
+
 ---
 
 ## 10. Appendices
