@@ -137,6 +137,14 @@ async def derive_treatment_for_message(
                 existing.judge_as_of = None
                 existing.opinion_id = opinion_id
                 existing.as_of = now
+                # Clear child signals unconditionally on every stale refresh, regardless
+                # of whether a judge pass will follow. Prevents stale "overruled"/etc.
+                # signals from resurfacing on a graph-only row (FIX 1, WS-G PR2 review).
+                await db.execute(
+                    delete(CitationTreatmentSignal).where(
+                        CitationTreatmentSignal.treatment_id == existing.id
+                    )
+                )
                 await db.flush()
                 cluster_to_treatment[cluster_id] = existing.id
                 treatment_row = existing
@@ -227,12 +235,17 @@ async def _run_judge_pass(
     per_call = await estimate_treatment_cost_usd(db, judge_model=judge_model)
     spent = Decimal("0")
     judgments = []
+    seen: set[int] = set()
     # raw_citing is already recency-sorted by the upstream service; take the cap.
     for ref in raw_citing[:n_judged_cap]:
         snippet = ref.get("snippet")
         citing_opinion_id = ref.get("opinion_id")
         if not snippet or citing_opinion_id is None:
             continue
+        # Dedup: two refs sharing an opinion_id would violate the unique constraint.
+        if int(citing_opinion_id) in seen:
+            continue
+        seen.add(int(citing_opinion_id))
         if spent + per_call > judge_budget_usd:
             break  # budget exhausted — keep what was judged so far
         spent += per_call

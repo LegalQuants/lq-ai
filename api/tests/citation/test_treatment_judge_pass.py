@@ -20,6 +20,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.citation.ledger import resolve_ledger_entries
 from app.citation.treatment import derive_treatment_for_message
 from app.models.citation_treatment import CitationTreatment
 from app.models.citation_treatment_signal import CitationTreatmentSignal
@@ -214,6 +215,31 @@ async def test_re_derive_replaces_signals(db_session: AsyncSession, seeded: Any)
     assert len(sigs) == 2  # delete-and-rewrite, not 4
 
 
+async def _fetch_with_dup_opinion_id(opinion_id: int) -> dict[str, Any]:
+    """Two citing refs sharing the same opinion_id — dedup guard under test."""
+    return {
+        "cited_by_count": 2,
+        "citing": [
+            {
+                "cluster_id": 90,
+                "opinion_id": 900,
+                "case_name": "A v. B",
+                "court": "ca9",
+                "date_filed": "2021-01-01",
+                "snippet": "First occurrence with opinion 900.",
+            },
+            {
+                "cluster_id": 90,
+                "opinion_id": 900,  # duplicate
+                "case_name": "A v. B",
+                "court": "ca9",
+                "date_filed": "2021-01-01",
+                "snippet": "Second occurrence — same opinion_id.",
+            },
+        ],
+    }
+
+
 class _BadGW:
     """Stub gateway that always returns malformed JSON → parse_treatment_response returns None."""
 
@@ -271,3 +297,199 @@ async def test_failed_refresh_leaves_consistent_graph_only(
     # Prior signals must be gone (deleted at the start of _run_judge_pass).
     sigs = (await db_session.execute(select(CitationTreatmentSignal))).scalars().all()
     assert sigs == []
+
+
+# ---------------------------------------------------------------------------
+# FIX 1 regression: orphaned child signals on a no-judge-pass stale refresh
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_refresh_without_judge_pass_clears_prior_signals(
+    db_session: AsyncSession, seeded: Any
+) -> None:
+    """Stale refresh with gateway=None must delete prior signals (FIX 1).
+
+    Previously, the stale-refresh else-branch null-ed rollup columns but left
+    child CitationTreatmentSignal rows, producing a contradictory graph-only
+    parent with 'overruled' child signals visible on the read path.
+    """
+    message_id, chat_id, *_ = seeded
+    await _seed_cluster_metadata(db_session)
+
+    # First pass: working judge — writes 2 signals + full rollup.
+    await derive_treatment_for_message(
+        db_session,
+        message_id=message_id,
+        now=_NOW,
+        fetch_citing=_fetch_with_snippets,
+        gateway=_GW(),
+        judge_model="fast",
+        ttl_days=0,
+    )
+    t = (
+        await db_session.execute(
+            select(CitationTreatment).where(CitationTreatment.cluster_id == _CLUSTER_ID)
+        )
+    ).scalar_one()
+    assert t.derived_method == "citation_graph+judge"  # sanity: judge ran
+
+    # Second pass (stale, now+1d, ttl_days=0) with NO gateway — judge pass skipped.
+    await derive_treatment_for_message(
+        db_session,
+        message_id=message_id,
+        now=_NOW + timedelta(days=1),
+        fetch_citing=_fetch_with_snippets,
+        gateway=None,
+        ttl_days=0,
+    )
+
+    await db_session.refresh(t)
+    # Parent row must be honest graph-only.
+    assert t.derived_method == "citation_graph"
+    assert t.strongest_negative_class is None
+    assert t.judged_count is None
+    assert t.judge_as_of is None
+    assert t.cited_by_count == 3  # graph still set
+
+    # Child signals cleared even though no judge pass ran (FIX 1).
+    remaining_sigs = (
+        (
+            await db_session.execute(
+                select(CitationTreatmentSignal).where(CitationTreatmentSignal.treatment_id == t.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert remaining_sigs == []
+
+    # Read path must be consistent: no stale signals visible via resolve_ledger_entries.
+    ledger = await resolve_ledger_entries(db_session, chat_id=chat_id, message_id=message_id)
+    caselaw_entries = [e for e in ledger if e.get("source_kind") == "caselaw"]
+    assert len(caselaw_entries) == 1
+    treatment_dict = caselaw_entries[0]["treatment"]
+    assert treatment_dict["signals"] == []
+    assert treatment_dict["per_class_counts"] == {}
+    assert treatment_dict["case_confidence"] is None
+
+
+@pytest.mark.asyncio
+async def test_refresh_without_judge_pass_clears_prior_signals_missing_case_name(
+    db_session: AsyncSession, seeded: Any
+) -> None:
+    """Stale refresh with gateway but no case_name must also delete prior signals (FIX 1).
+
+    The judge pass is skipped when ResearchClusterMetadata is absent/case_name blank.
+    Signals written in the first pass must still be deleted.
+    """
+    message_id, chat_id, *_ = seeded
+    await _seed_cluster_metadata(db_session)
+
+    # First pass: working judge — writes signals.
+    await derive_treatment_for_message(
+        db_session,
+        message_id=message_id,
+        now=_NOW,
+        fetch_citing=_fetch_with_snippets,
+        gateway=_GW(),
+        judge_model="fast",
+        ttl_days=0,
+    )
+
+    # Remove ResearchClusterMetadata so the second pass cannot resolve case_name.
+    meta = (
+        await db_session.execute(
+            select(ResearchClusterMetadata).where(ResearchClusterMetadata.cluster_id == _CLUSTER_ID)
+        )
+    ).scalar_one()
+    await db_session.delete(meta)
+    await db_session.flush()
+
+    # Second pass (stale): gateway supplied but case_name unresolvable.
+    await derive_treatment_for_message(
+        db_session,
+        message_id=message_id,
+        now=_NOW + timedelta(days=1),
+        fetch_citing=_fetch_with_snippets,
+        gateway=_GW(),
+        ttl_days=0,
+    )
+
+    t = (
+        await db_session.execute(
+            select(CitationTreatment).where(CitationTreatment.cluster_id == _CLUSTER_ID)
+        )
+    ).scalar_one()
+    # Parent row must be graph-only.
+    assert t.derived_method == "citation_graph"
+    assert t.strongest_negative_class is None
+    assert t.judged_count is None
+    assert t.judge_as_of is None
+
+    # Child signals cleared despite gateway being present (FIX 1).
+    remaining_sigs = (
+        (
+            await db_session.execute(
+                select(CitationTreatmentSignal).where(CitationTreatmentSignal.treatment_id == t.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert remaining_sigs == []
+
+    # Read path consistent.
+    ledger = await resolve_ledger_entries(db_session, chat_id=chat_id, message_id=message_id)
+    caselaw_entries = [e for e in ledger if e.get("source_kind") == "caselaw"]
+    assert len(caselaw_entries) == 1
+    treatment_dict = caselaw_entries[0]["treatment"]
+    assert treatment_dict["signals"] == []
+    assert treatment_dict["per_class_counts"] == {}
+    assert treatment_dict["case_confidence"] is None
+
+
+# ---------------------------------------------------------------------------
+# FIX 2 regression: dedup citing_opinion_id in judge loop
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_dedup_citing_opinion_id_writes_single_signal(
+    db_session: AsyncSession, seeded: Any
+) -> None:
+    """Two citing refs sharing opinion_id=900 must produce only one signal row (FIX 2).
+
+    Without the dedup guard, the second insert would violate the
+    uq_treatment_signal_treatment_citing unique constraint, raising IntegrityError.
+    """
+    message_id, *_ = seeded
+    await _seed_cluster_metadata(db_session)
+
+    await derive_treatment_for_message(
+        db_session,
+        message_id=message_id,
+        now=_NOW,
+        fetch_citing=_fetch_with_dup_opinion_id,
+        gateway=_GW(),
+        judge_model="fast",
+    )
+
+    t = (
+        await db_session.execute(
+            select(CitationTreatment).where(CitationTreatment.cluster_id == _CLUSTER_ID)
+        )
+    ).scalar_one()
+
+    sigs = (
+        (
+            await db_session.execute(
+                select(CitationTreatmentSignal).where(CitationTreatmentSignal.treatment_id == t.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    # Only one signal for opinion_id=900, not two (dedup guard in effect).
+    assert len(sigs) == 1
+    assert sigs[0].citing_opinion_id == 900

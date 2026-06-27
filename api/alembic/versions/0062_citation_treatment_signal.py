@@ -40,7 +40,7 @@ def upgrade() -> None:
         sa.CheckConstraint(f"classification IN ({_CLASSES})",
                            name="chk_treatment_signal_classification"),
     )
-    op.create_index("ix_treatment_signal_treatment_id", "citation_treatment_signal", ["treatment_id"])
+    op.create_index("ix_citation_treatment_signal_treatment_id", "citation_treatment_signal", ["treatment_id"])
 
     op.add_column("citation_treatment", sa.Column("strongest_negative_class", sa.Text(), nullable=True))
     op.add_column("citation_treatment", sa.Column("judged_count", sa.Integer(), nullable=True))
@@ -67,5 +67,5 @@ def downgrade() -> None:
     op.drop_column("citation_treatment", "judge_as_of")
     op.drop_column("citation_treatment", "judged_count")
     op.drop_column("citation_treatment", "strongest_negative_class")
-    op.drop_index("ix_treatment_signal_treatment_id", table_name="citation_treatment_signal")
+    op.drop_index("ix_citation_treatment_signal_treatment_id", table_name="citation_treatment_signal")
     op.drop_table("citation_treatment_signal")
