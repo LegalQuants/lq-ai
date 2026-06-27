@@ -340,6 +340,7 @@ async def test_get_citing_opinions_shapes_count_and_capped_list(monkeypatch) -> 
         "case_name",
         "court",
         "date_filed",
+        "snippet",
     }
 
 
@@ -351,3 +352,38 @@ async def test_get_citing_opinions_requires_integer_opinion_id(monkeypatch) -> N
             await adapter.invoke_tool("get_citing_opinions", {"opinion_id": "x"}, request_id="r")
     finally:
         await adapter.aclose()
+
+
+@pytest.mark.unit
+async def test_get_citing_opinions_includes_snippet(monkeypatch) -> None:
+    adapter = _adapter(monkeypatch)
+    results = [
+        {
+            "cluster_id": 1000,
+            "caseName": "Citing Case",
+            "court": "ca9",
+            "dateFiled": "2021-05-01",
+            "opinions": [{"id": 5000, "snippet": "We decline to follow Smith v. Jones."}],
+        },
+        {  # no snippet anywhere → None, never raises
+            "cluster_id": 1001,
+            "caseName": "Quiet Case",
+            "court": "ca2",
+            "dateFiled": "2021-04-01",
+            "opinions": [{"id": 5001}],
+        },
+    ]
+    with respx.mock:
+        respx.get(f"{BASE}/search/").mock(
+            return_value=httpx.Response(200, json={"count": 2, "results": results, "next": None})
+        )
+        try:
+            result = await adapter.invoke_tool(
+                "get_citing_opinions", {"opinion_id": 42}, request_id="r"
+            )
+        finally:
+            await adapter.aclose()
+    citing = result.payload["citing"]
+    assert citing[0]["snippet"] == "We decline to follow Smith v. Jones."
+    assert citing[1]["snippet"] is None
+    assert "snippet" in set(citing[0])

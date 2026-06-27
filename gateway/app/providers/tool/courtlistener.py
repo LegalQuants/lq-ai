@@ -323,6 +323,9 @@ class CourtListenerToolAdapter(ToolProviderAdapter):
                 "case_name": r.get("caseName"),
                 "court": r.get("court"),
                 "date_filed": r.get("dateFiled"),
+                # WS-G PR2: the highlighted excerpt around the citing match.
+                # Transient treatment-judge input — NEVER persisted (P3).
+                "snippet": (r.get("opinions") or [{}])[0].get("snippet") or r.get("snippet"),
             }
             for r in (data.get("results") or [])[:_CITING_TOP_N]
         ]
