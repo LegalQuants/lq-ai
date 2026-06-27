@@ -11,7 +11,7 @@ Verifies that derive_treatment_for_message correctly:
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any
@@ -196,12 +196,14 @@ async def test_re_derive_replaces_signals(db_session: AsyncSession, seeded: Any)
     message_id, *_ = seeded
     await _seed_cluster_metadata(db_session)
 
-    # Derive twice with TTL=0 to force a refetch both times.
-    for _ in range(2):
+    # Use distinct timestamps so the second pass is genuinely stale and re-runs the judge.
+    now1 = _NOW
+    now2 = _NOW + timedelta(days=1)  # forces stale on the second pass (ttl_days=0)
+    for now in (now1, now2):
         await derive_treatment_for_message(
             db_session,
             message_id=message_id,
-            now=_NOW,
+            now=now,
             fetch_citing=_fetch_with_snippets,
             gateway=_GW(),
             judge_model="fast",
@@ -209,4 +211,63 @@ async def test_re_derive_replaces_signals(db_session: AsyncSession, seeded: Any)
         )
 
     sigs = (await db_session.execute(select(CitationTreatmentSignal))).scalars().all()
-    assert len(sigs) == 2  # not 4 — prior signals replaced
+    assert len(sigs) == 2  # delete-and-rewrite, not 4
+
+
+class _BadGW:
+    """Stub gateway that always returns malformed JSON → parse_treatment_response returns None."""
+
+    async def chat_completion(self, request: Any, *, request_id: Any = None) -> Any:
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="not json"))]
+        )
+
+
+@pytest.mark.asyncio
+async def test_failed_refresh_leaves_consistent_graph_only(
+    db_session: AsyncSession, seeded: Any
+) -> None:
+    """Regression: a refresh where the judge yields no judgments must leave a consistent
+    graph-only row — derived_method='citation_graph', rollup columns all None, no signals."""
+    message_id, *_ = seeded
+    await _seed_cluster_metadata(db_session)
+
+    # First pass: working judge — writes signals + full rollup.
+    await derive_treatment_for_message(
+        db_session,
+        message_id=message_id,
+        now=_NOW,
+        fetch_citing=_fetch_with_snippets,
+        gateway=_GW(),
+        judge_model="fast",
+        ttl_days=0,
+    )
+    t = (
+        await db_session.execute(
+            select(CitationTreatment).where(CitationTreatment.cluster_id == _CLUSTER_ID)
+        )
+    ).scalar_one()
+    assert t.derived_method == "citation_graph+judge"  # sanity
+
+    # Second pass (stale): bad gateway → parser returns None for every snippet.
+    await derive_treatment_for_message(
+        db_session,
+        message_id=message_id,
+        now=_NOW + timedelta(days=1),
+        fetch_citing=_fetch_with_snippets,
+        gateway=_BadGW(),
+        judge_model="fast",
+        ttl_days=0,
+    )
+
+    await db_session.refresh(t)
+    # Row must be honest graph-only — no stale judge fields.
+    assert t.derived_method == "citation_graph"
+    assert t.strongest_negative_class is None
+    assert t.judged_count is None
+    assert t.judge_as_of is None
+    # Graph signal must have survived (cited_by_count refreshed by fetch_citing).
+    assert t.cited_by_count == 3
+    # Prior signals must be gone (deleted at the start of _run_judge_pass).
+    sigs = (await db_session.execute(select(CitationTreatmentSignal))).scalars().all()
+    assert sigs == []

@@ -24,7 +24,6 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.citation.treatment_judge import (
-    _TREATMENT_PURPOSE,  # noqa: F401 — imported for callers / tests
     estimate_treatment_cost_usd,
     judge_treatment,
 )
@@ -133,6 +132,9 @@ async def derive_treatment_for_message(
                 existing.cited_by_count = int(payload.get("cited_by_count") or 0)
                 existing.citing_opinions = persisted_citing
                 existing.derived_method = "citation_graph"
+                existing.strongest_negative_class = None
+                existing.judged_count = None
+                existing.judge_as_of = None
                 existing.opinion_id = opinion_id
                 existing.as_of = now
                 await db.flush()
