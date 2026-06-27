@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.citation.treatment import TREATMENT_TTL_DAYS
 from app.citation.treatment_judge import TreatmentJudgment
 from app.citation.treatment_rollup import roll_up
 from app.models.chat import Chat, Message, MessageCitation
@@ -341,3 +343,37 @@ async def resolve_ledger_entries(
             }
         )
     return out
+
+
+async def message_ids_needing_treatment(
+    db: AsyncSession,
+    *,
+    chat_id: uuid.UUID,
+    message_id: uuid.UUID | None,
+    now: datetime,
+    ttl_days: int = TREATMENT_TTL_DAYS,
+) -> set[uuid.UUID]:
+    """Distinct message_ids of caselaw ledger entries whose treatment is missing or stale.
+
+    Pure DB (no egress). A caselaw entry needs (re)derivation when its
+    ``treatment_id`` is NULL, or when the linked ``citation_treatment`` row's
+    ``as_of`` is older than ``now - ttl_days``. Used by the GET /ledger handler
+    to best-effort re-enqueue derivation (DE-363); never mutates.
+    """
+    cutoff = now - timedelta(days=ttl_days)
+    stmt = (
+        select(CitationLedgerEntry.message_id)
+        .outerjoin(CitationTreatment, CitationLedgerEntry.treatment_id == CitationTreatment.id)
+        .where(
+            CitationLedgerEntry.chat_id == chat_id,
+            CitationLedgerEntry.source_kind == "caselaw",
+            or_(
+                CitationLedgerEntry.treatment_id.is_(None),
+                CitationTreatment.as_of < cutoff,
+            ),
+        )
+    )
+    if message_id is not None:
+        stmt = stmt.where(CitationLedgerEntry.message_id == message_id)
+    rows = (await db.execute(stmt)).scalars().all()
+    return set(rows)
