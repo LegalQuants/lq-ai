@@ -56,30 +56,47 @@
 		<span class="lq-ledger-consulted">consulted</span>
 	{/if}
 
-	{#if entry.treatment}
+	{#if entry.treatment && src.kind === 'caselaw'}
 		{@const t = treatmentSummary(entry.treatment)}
+		{@const interactive = t.preview.length > 0}
+		{@const notEditorial =
+			'Derived from the citation graph — not an editorial ‘good law’ judgment. Treatment classification arrives in a later release.'}
 		<div class="lq-ledger-treatment">
-			<button
-				type="button"
-				class="lq-ledger-treatment-line"
-				aria-expanded={treatmentOpen}
-				aria-label="Citation-graph treatment, derived — not an editorial good-law judgment"
-				title="Derived from the citation graph — not an editorial 'good law' judgment. Treatment classification arrives in a later release."
-				on:click={() => (treatmentOpen = !treatmentOpen)}
-			>
-				<span class="lq-ledger-treatment-icon" aria-hidden="true">⚖</span>
-				<span class="lq-ledger-treatment-label">{t.label}</span>
-				<span class="lq-ledger-treatment-asof">· derived {t.asOf}</span>
-				{#if t.preview.length > 0}
+			{#if interactive}
+				<button
+					type="button"
+					class="lq-ledger-treatment-line"
+					aria-expanded={treatmentOpen}
+					aria-label={`Citation-graph treatment — ${t.label}, derived ${t.asOf} — not an editorial good-law judgment`}
+					title={notEditorial}
+					on:click={() => (treatmentOpen = !treatmentOpen)}
+				>
+					<span class="lq-ledger-treatment-icon" aria-hidden="true">⚖</span>
+					<span class="lq-ledger-treatment-label">{t.label}</span>
+					<span class="lq-ledger-treatment-asof">· derived {t.asOf}</span>
 					<span class="lq-ledger-treatment-caret" aria-hidden="true"
 						>{treatmentOpen ? '▾' : '▸'}</span
 					>
-				{/if}
-			</button>
-			{#if treatmentOpen && t.preview.length > 0}
+				</button>
+			{:else}
+				<!-- No citing refs to disclose → a non-interactive line (no broken aria-expanded). -->
+				<div
+					class="lq-ledger-treatment-line lq-ledger-treatment-static"
+					title={notEditorial}
+					aria-label={`Citation-graph treatment — ${t.label}, derived ${t.asOf} — not an editorial good-law judgment`}
+				>
+					<span class="lq-ledger-treatment-icon" aria-hidden="true">⚖</span>
+					<span class="lq-ledger-treatment-label">{t.label}</span>
+					<span class="lq-ledger-treatment-asof">· derived {t.asOf}</span>
+				</div>
+			{/if}
+			{#if treatmentOpen && interactive}
 				<ul class="lq-ledger-treatment-list">
 					{#each t.preview as ref}
-						<li>{formatCitingRef(ref)}</li>
+						{@const refLabel = formatCitingRef(ref)}
+						{#if refLabel}
+							<li>{refLabel}</li>
+						{/if}
 					{/each}
 					{#if t.moreCount > 0}
 						<li class="lq-ledger-treatment-more">
@@ -241,6 +258,9 @@
 	}
 	.lq-ledger-treatment-line:hover {
 		color: var(--lq-text-secondary);
+	}
+	.lq-ledger-treatment-static {
+		cursor: default;
 	}
 	.lq-ledger-treatment-icon {
 		font-size: 12px;
