@@ -1281,6 +1281,19 @@ export interface LedgerSource {
 	tool?: string | null;
 	passages?: LedgerPassage[];
 }
+export interface LedgerCitingRef {
+	cluster_id?: number | null;
+	opinion_id?: number | null;
+	case_name?: string | null;
+	court?: string | null;
+	date_filed?: string | null;
+}
+export interface LedgerTreatment {
+	cited_by_count: number;
+	as_of: string;
+	derived_method: string;
+	citing: LedgerCitingRef[];
+}
 export interface LedgerEntry {
 	id: string;
 	message_id: string;
@@ -1290,6 +1303,7 @@ export interface LedgerEntry {
 	provider: string | null;
 	retrieved_at: string | null;
 	treatment_id: string | null;
+	treatment?: LedgerTreatment | null;
 	created_at: string;
 	source: LedgerSource;
 }
