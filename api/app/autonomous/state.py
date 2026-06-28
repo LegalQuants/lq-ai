@@ -96,3 +96,11 @@ class AutonomousSessionState(TypedDict, total=False):
     # surfaces it as ``artifact_count`` in the notify payload and as
     # ``artifacts_count`` on the terminal ``completed`` audit row.
     artifacts_count: int
+
+    # WS-D PR1: agentic-loop plan trace. Set only when the loop ran
+    # (``state["query"]`` was non-empty and a ``skill_ref`` or
+    # ``playbook_id`` was configured). Carries counts/intents/short
+    # rationale/halt only — never raw tool payloads (P3). Shape:
+    # ``{"steps": int, "halt_reason": str, "decisions": list[dict]}``.
+    # Absent on the query-less single-call path.
+    analysis_plan_trace: dict | None

@@ -622,6 +622,59 @@ async def running_session_at_delivery(db_session: AsyncSession) -> AutonomousSes
     return await _make_running_session(db_session, user=user, trigger_kind="watch", params={})
 
 
+# ---------------------------------------------------------------------------
+# WS-D PR1 — agentic-loop fixtures (test_agentic_loop.py)
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def seeded_matter_session(
+    db_session: AsyncSession,
+    _installed_skill_registry: None,
+) -> AutonomousSession:
+    """Running, opted-in, skill-ref session with a matter query.
+
+    Carries ``params["skill_ref"]`` + ``params["query"]`` so the analysis
+    node's loop gate engages.  Tests must also set ``state["query"]``
+    (which the real executor seeds from ``session.params["query"]`` at
+    executor.py:116 — the fixture mirrors production params truthfully).
+    Requests :func:`_installed_skill_registry` so ``alpha-test-skill``
+    resolves during synthesis prompt assembly.
+    """
+    user = await _make_optedin_user(db_session)
+    return await _make_running_session(
+        db_session,
+        user=user,
+        trigger_kind="manual",
+        params={
+            "skill_ref": _FIXTURE_SKILL_REF,
+            "query": "Is the assignment clause enforceable?",
+        },
+    )
+
+
+@pytest_asyncio.fixture
+async def seeded_skill_session_no_query(
+    db_session: AsyncSession,
+    _installed_skill_registry: None,
+) -> AutonomousSession:
+    """Running, opted-in, skill-ref session WITHOUT a matter query.
+
+    Triggers the query-less single-call path in ``make_analysis_node``
+    (invariant #1 test).  ``params`` carries only ``skill_ref`` — no
+    ``query`` — so ``(state.get('query') or '').strip()`` is empty and
+    the loop gate does not engage.  Requests :func:`_installed_skill_registry`
+    so the single-call ``assemble_analysis_messages`` can resolve the skill.
+    """
+    user = await _make_optedin_user(db_session)
+    return await _make_running_session(
+        db_session,
+        user=user,
+        trigger_kind="manual",
+        params={"skill_ref": _FIXTURE_SKILL_REF},
+    )
+
+
 @pytest.fixture
 def mock_gateway_structured_response() -> MagicMock:
     """Gateway double whose ``chat_completion`` returns a structured-output stub.

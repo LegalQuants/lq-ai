@@ -457,6 +457,11 @@ class Settings(BaseSettings):
     )
 
 
+# WS-D PR1: default maximum number of plan→act steps in the agentic analysis loop.
+# Session params["max_analysis_steps"] overrides this per-session.
+DEFAULT_MAX_ANALYSIS_STEPS: int = 6
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Return the cached Settings instance.

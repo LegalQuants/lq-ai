@@ -45,11 +45,18 @@ from app.autonomous.audit import autonomous_audit
 from app.autonomous.enums import ToolIntent
 from app.autonomous.guard import guarded_tool_call
 from app.autonomous.phases import run_phase_transition
-from app.autonomous.prompts import assemble_analysis_messages
+from app.autonomous.planner import (
+    PLANNER_ALLOWLIST,
+    build_planner_messages,
+    parse_planner_decision,
+    summarize_observation,
+)
+from app.autonomous.prompts import assemble_analysis_messages, assemble_synthesis_messages
 from app.autonomous.receipt import build_receipt_safe
 from app.autonomous.state import AutonomousSessionState
 from app.autonomous.structured_output import parse_structured_output
-from app.config import get_settings
+from app.config import DEFAULT_MAX_ANALYSIS_STEPS, get_settings
+from app.errors import AutonomousBrake
 from app.models.autonomous import AutonomousSession
 from app.schemas.autonomous import Phase
 
@@ -152,6 +159,108 @@ def make_intake_node(
     return intake_node
 
 
+async def _run_analysis_loop(
+    session: AutonomousSession,
+    *,
+    query: str,
+    params: dict[str, Any],
+    chunks: list[dict[str, Any]],
+    model: str,
+    db: AsyncSession,
+    gateway: Any,
+) -> dict[str, Any]:
+    """The governed plan→act→observe→replan loop for matter-scoped sessions (WS-D PR1).
+
+    Every step goes through :func:`~app.autonomous.guard.guarded_tool_call`
+    (R5→R6→R4); bounded by ``max_analysis_steps`` + R4's cost cap.
+
+    Brake invariant (addendum §A): :exc:`~app.errors.AutonomousBrake` from
+    the action dispatch propagates immediately (brake-commit contract); every
+    other exception from the action handler is caught as a non-fatal failed
+    observation so a bad model-supplied arg never crashes the loop.
+
+    P3 invariant: ``analysis_plan_trace`` carries counts/intents/short
+    rationales/halt-reason only — never raw tool payloads.
+    """
+    max_steps = int(params.get("max_analysis_steps") or DEFAULT_MAX_ANALYSIS_STEPS)
+    observations: list[str] = []
+    trace: list[dict[str, str]] = []
+    halt_reason = "step_cap"
+    steps = 0
+
+    while steps < max_steps:
+        plan_res = await guarded_tool_call(
+            session,
+            ToolIntent.plan,
+            {
+                "model": model,
+                "messages": build_planner_messages(
+                    goal=query,
+                    observations=observations,
+                    allowlist=PLANNER_ALLOWLIST,
+                ),
+                "anonymize": False,
+            },
+            db,
+            gateway,
+        )
+        decision = parse_planner_decision((plan_res.data or {}).get("content"))
+        if decision is None:
+            halt_reason = "planner_unparseable"
+            break
+        if decision.done:
+            halt_reason = "planner_done"
+            trace.append({"step": str(steps), "intent": "done", "rationale": decision.rationale})
+            break
+
+        assert decision.next_intent is not None  # parser guarantees: action ⇒ intent set
+        try:
+            act = await guarded_tool_call(session, decision.next_intent, decision.args, db, gateway)
+            observations.append(
+                summarize_observation(decision.next_intent, decision.rationale, act)
+            )
+        except AutonomousBrake:
+            raise  # brakes (SessionHalted/CostCapReached/ToolNotGranted) propagate
+        except Exception as exc:  # invariant #5: bad planner arg is a non-fatal failed observation
+            observations.append(f"{decision.next_intent.value} → failed ({type(exc).__name__})")
+        trace.append(
+            {
+                "step": str(steps),
+                "intent": decision.next_intent.value,
+                "rationale": decision.rationale,
+            }
+        )
+        steps += 1
+
+    synth = await guarded_tool_call(
+        session,
+        ToolIntent.run_skill,
+        {
+            "model": model,
+            "messages": await assemble_synthesis_messages(
+                session,
+                goal=query,
+                observations=observations,
+                chunks=chunks,
+                db=db,
+            ),
+            "anonymize": True,
+        },
+        db,
+        gateway,
+    )
+    return {
+        "current_phase": str(Phase.analysis),
+        "analysis_content": (synth.data or {}).get("content"),
+        "analysis_outcome": synth.outcome,
+        "analysis_plan_trace": {
+            "steps": steps,
+            "halt_reason": halt_reason,
+            "decisions": trace,
+        },
+    }
+
+
 def make_analysis_node(
     db: AsyncSession,
     gateway: Any = None,
@@ -224,12 +333,29 @@ def make_analysis_node(
                 "analysis_content": None,
             }
 
+        settings = get_settings()
+        model = params.get("model") or settings.autonomous_default_model
+        query = (state.get("query") or "").strip()
+
+        if query:
+            # Matter-scoped session: run the governed plan→act→observe→replan
+            # loop (WS-D PR1).  The loop gate only engages when the session
+            # carries a non-empty matter goal; query-less sessions (cron/watch/
+            # schedule) take the unchanged single-call path below.
+            return await _run_analysis_loop(
+                session,
+                query=query,
+                params=params,
+                chunks=state.get("retrieved_chunks") or [],
+                model=model,
+                db=db,
+                gateway=gateway,
+            )
+
+        # ---- unchanged single-call path (query-less sessions) ----
         chunks = state.get("retrieved_chunks") or []
         messages = await assemble_analysis_messages(session, chunks=chunks, db=db)
         intent = ToolIntent.run_playbook if playbook_id else ToolIntent.run_skill
-
-        settings = get_settings()
-        model = params.get("model") or settings.autonomous_default_model
 
         result = await guarded_tool_call(
             session,
