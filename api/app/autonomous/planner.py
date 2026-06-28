@@ -106,3 +106,37 @@ def parse_planner_decision(content: str | None) -> PlannerDecision | None:
         args=args,
         rationale=str(payload.get("rationale", "")),
     )
+
+
+_SNIPPET = 120
+
+
+def summarize_observation(intent: ToolIntent, rationale: str, result: object) -> str:
+    """One-line, P3-clean summary of a tool result for the planner's context.
+
+    Never includes full opinion/chunk payloads — only counts, ids, case names,
+    and short snippets. ``result`` is a guard.ToolResult (duck-typed to avoid a
+    circular import: read ``.outcome`` and ``.data``)."""
+    outcome = getattr(result, "outcome", "success")
+    data = getattr(result, "data", None) or {}
+    if outcome != "success":
+        return f"{intent.value} → failed ({outcome})"
+    if intent == ToolIntent.retrieve_caselaw:
+        items = data.get("results") or data.get("matches") or []
+        names = [
+            f"{(i.get('case_name') or '?')} ({i.get('court') or '?'} {i.get('date_filed') or '?'})"
+            for i in items[:5]
+            if isinstance(i, dict)
+        ]
+        more = "" if len(items) <= 5 else f" +{len(items) - 5} more"
+        return f"{intent.value} → {len(items)} result(s): [{'; '.join(names)}]{more}"
+    if intent == ToolIntent.retrieve_chunks:
+        chunks = data.get("chunks") or []
+        files = sorted({fn for c in chunks if isinstance(c, dict) and (fn := c.get("file_name"))})
+        return f"{intent.value} → {len(chunks)} chunk(s) from {files or '(no files)'}"
+    if intent == ToolIntent.call_mcp_tool:
+        payload = data if isinstance(data, dict) else {}
+        keys = sorted(payload.keys())[:8]
+        return f"{intent.value} → payload keys {keys}"
+    snippet = str(data)[:_SNIPPET]
+    return f"{intent.value} → {snippet}"
