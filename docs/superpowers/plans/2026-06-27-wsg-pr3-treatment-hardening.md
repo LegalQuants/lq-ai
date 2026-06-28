@@ -556,6 +556,194 @@ git commit -s -m "feat(api): lazy-on-trace-open treatment re-enqueue from GET /l
 
 ---
 
+### Task 5: DE-364b — SAVEPOINT-isolate the judge-pass signal writes (refresh-path concurrency)
+
+> Added after the Opus whole-branch review (finding I1), maintainer-approved fix-now. DE-364 isolated the parent-INSERT race; this isolates the **second** race the Opus review found and DE-363 amplifies: two concurrent re-derivations of the **same stale cluster** (different messages → different arq jobs; `_job_id` coalesces per-message, not per-cluster) both run `_run_judge_pass`, whose `DELETE` + per-signal `INSERT`s collide on `uq_treatment_signal_treatment_citing (treatment_id, citing_opinion_id)` at the final flush. That flush is **not** in a savepoint → poisons the session → the turn's link flush fails (`linked=0`). Non-gating + self-healing today, but PR3's lazy re-enqueue makes it more reachable, so we close it here.
+
+**Files:**
+- Modify: `api/app/citation/treatment.py` (`_run_judge_pass`)
+- Test: `api/tests/citation/test_treatment_concurrency.py` (extend)
+
+**Interfaces:**
+- Consumes: `IntegrityError` (already imported in Task 1).
+- Produces: `_run_judge_pass` separates the gateway-judging phase (slow, no DB writes) from a **tight** persist phase wrapped in `begin_nested()`; on a signal-write `IntegrityError` it rolls back the savepoint and skips (reusing the concurrent winner's signals), leaving the session usable. No signature change.
+
+- [ ] **Step 1: Write the failing test** (extend `api/tests/citation/test_treatment_concurrency.py`)
+
+```python
+import json
+from types import SimpleNamespace
+from datetime import timedelta
+
+from app.models.citation_treatment_signal import CitationTreatmentSignal
+from app.models.research import ResearchClusterMetadata
+
+
+async def test_concurrent_judge_write_conflict_isolates(db_session: AsyncSession):
+    """A concurrent re-derivation writes the same (treatment_id, citing_opinion_id)
+    signal before our judge-pass flush; the conflict is savepoint-isolated (skip,
+    reuse the winner's signals) and does NOT poison the rest of the turn."""
+    message_id = await _seed_two_cluster_turn(db_session)
+    # Pre-create + cache both clusters' treatment rows so the turn takes the REFRESH
+    # path (existing, stale → re-derive + judge). case_name enables the judge pass.
+    old = datetime(2026, 1, 1, tzinfo=UTC)  # stale (beyond 30d TTL vs _NOW)
+    rows = {}
+    for cluster_id, opinion_id in ((7001, 8001), (7002, 8002)):
+        db_session.add(ResearchClusterMetadata(
+            cluster_id=cluster_id, case_name="A v. B", court="ca9", date_filed="2020-01-01",
+            absolute_url="/x",
+        ))
+        t = CitationTreatment(cluster_id=cluster_id, opinion_id=opinion_id, cited_by_count=1,
+                              citing_opinions=[], derived_method="citation_graph", as_of=old)
+        db_session.add(t)
+        await db_session.flush()
+        rows[cluster_id] = t.id
+
+    async def fetch(opinion_id: int) -> dict:
+        return {"cited_by_count": 5, "citing": [
+            {"cluster_id": 1, "opinion_id": 9001, "case_name": "C", "court": "ca9",
+             "date_filed": "2021-01-01", "snippet": "criticized in part"},
+        ]}
+
+    class _GW:
+        """Judge returns 'criticized' for opinion 9001. While judging cluster 7001,
+        stage a CONCURRENT winner's signal row for (7001's treatment, 9001) so our
+        persist-phase INSERT collides."""
+        def __init__(self):
+            self.staged = False
+        async def chat_completion(self, request, *, request_id=None):
+            body = request.messages[1].content
+            if "A v. B" in body and not self.staged:
+                self.staged = True
+                db_session.add(CitationTreatmentSignal(
+                    treatment_id=rows[7001], citing_opinion_id=9001,
+                    classification="criticized", confidence=0.7, justification="winner",
+                ))
+                await db_session.flush()
+            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
+                content=json.dumps({"treatment": "criticized", "confidence": "high",
+                                    "justification": "x"})))])
+
+    linked = await derive_treatment_for_message(
+        db_session, message_id=message_id, now=_NOW, fetch_citing=fetch,
+        gateway=_GW(), judge_model="fast",
+    )
+
+    # The turn is not poisoned: both entries link; 7001 reuses the winner's signal.
+    assert linked == 2
+    sigs_7001 = (await db_session.execute(
+        select(CitationTreatmentSignal).where(CitationTreatmentSignal.treatment_id == rows[7001])
+    )).scalars().all()
+    assert len(sigs_7001) == 1  # the winner's row; ours was rolled back, not duplicated
+    assert sigs_7001[0].justification == "winner"
+```
+
+> The exact staging mechanics may need adjustment against the real `_run_judge_pass` structure once it is restructured in Step 3 (the stub stages the winner during the gateway call, which must occur BEFORE the persist flush). If the conflict cannot be staged deterministically, report BLOCKED with what you observed rather than weakening the assertion.
+
+- [ ] **Step 2: Run it — expect failure** (today the judge-write conflict poisons the session)
+
+Run: `cd api && DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:55432/lqai_test .venv/bin/python -m pytest tests/citation/test_treatment_concurrency.py -v`
+Expected: FAIL — `IntegrityError`/`PendingRollbackError`; `linked != 2`.
+
+- [ ] **Step 3: Restructure `_run_judge_pass` into judge-phase + savepoint-wrapped persist-phase.** Replace the body so that (a) the gateway judging runs first into an in-memory list with NO DB writes, then (b) the DELETE + signal INSERTs + parent rollup-column writes + flush run inside a single `begin_nested()`:
+
+```python
+async def _run_judge_pass(
+    db: AsyncSession,
+    *,
+    treatment_row: CitationTreatment,
+    cited_case_name: str,
+    raw_citing: list[dict[str, Any]],
+    now: datetime,
+    gateway: _JudgeGatewayProtocol,
+    judge_model: str,
+    judge_budget_usd: Decimal,
+    n_judged_cap: int,
+) -> None:
+    """Judge top-N citing snippets, then persist signals + rollup in a tight
+    SAVEPOINT. Non-fatal per passage. The gateway calls run OUTSIDE the savepoint
+    (judge phase); the savepoint covers only the DB writes so a concurrent
+    re-derivation of the same cluster cannot poison the session (DE-364b)."""
+    # --- Judge phase: gateway calls only, no DB writes ---
+    per_call = await estimate_treatment_cost_usd(db, judge_model=judge_model)
+    spent = Decimal("0")
+    seen: set[int] = set()
+    judged: list[tuple[int, Any]] = []  # (citing_opinion_id, TreatmentJudgment)
+    for ref in raw_citing[:n_judged_cap]:
+        snippet = ref.get("snippet")
+        citing_opinion_id = ref.get("opinion_id")
+        if not snippet or citing_opinion_id is None:
+            continue
+        if int(citing_opinion_id) in seen:
+            continue
+        seen.add(int(citing_opinion_id))
+        if spent + per_call > judge_budget_usd:
+            break
+        spent += per_call
+        try:
+            judgment = await judge_treatment(
+                cited_case_name=cited_case_name, snippet=snippet,
+                gateway=gateway, judge_model=judge_model,
+            )
+        except Exception as exc:  # defense in depth; judge_treatment already swallows
+            log.warning("treatment judge raised for opinion %s: %r", citing_opinion_id, exc)
+            continue
+        if judgment is None:
+            continue
+        judged.append((int(citing_opinion_id), judgment))
+
+    if not judged:
+        return  # nothing classified — prior signals already cleared by the caller's refresh branch
+
+    # --- Persist phase: tight SAVEPOINT around the DB writes only ---
+    try:
+        async with db.begin_nested():
+            await db.execute(
+                delete(CitationTreatmentSignal).where(
+                    CitationTreatmentSignal.treatment_id == treatment_row.id
+                )
+            )
+            for citing_opinion_id, judgment in judged:
+                db.add(CitationTreatmentSignal(
+                    treatment_id=treatment_row.id,
+                    citing_opinion_id=citing_opinion_id,
+                    classification=judgment.classification,
+                    confidence=judgment.confidence,
+                    justification=judgment.justification,
+                ))
+            rollup = roll_up([j for _, j in judged])
+            treatment_row.strongest_negative_class = rollup.strongest_negative_class
+            treatment_row.judged_count = rollup.judged_count
+            treatment_row.judge_as_of = now
+            treatment_row.derived_method = "citation_graph+judge"
+            await db.flush()
+    except IntegrityError:
+        # A concurrent re-derivation of this cluster wrote these signals first.
+        # The savepoint rolled back our writes (session usable); reuse the winner's
+        # signals + rollup rather than double-write (DE-364b).
+        log.warning(
+            "treatment judge signal-write conflict for treatment %s; reusing concurrent result",
+            treatment_row.id,
+        )
+```
+
+Note: the caller's refresh branch still clears prior signals before calling `_run_judge_pass` (PR2 FIX 1, unchanged); the in-savepoint `DELETE` makes the persist atomic and idempotent. The judge-phase no longer writes signals incrementally.
+
+- [ ] **Step 4: Run it — expect pass + all treatment regressions**
+
+Run: `cd api && DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:55432/lqai_test .venv/bin/python -m pytest tests/citation/test_treatment_concurrency.py tests/citation/test_treatment_derivation.py tests/citation/test_treatment_judge_pass.py -v`
+Expected: PASS (new conflict test + all PR2 judge-pass/budget/refresh/dedup regressions, which must still hold under the restructure).
+
+- [ ] **Step 5: Gates + commit**
+
+```bash
+cd api && .venv/bin/ruff check app tests && .venv/bin/ruff format --check app tests && .venv/bin/mypy app
+git add api/app/citation/treatment.py api/tests/citation/test_treatment_concurrency.py
+git commit -s -m "fix(citation): SAVEPOINT-isolate judge-pass signal writes against concurrent refresh (DE-364b)"
+```
+
+---
+
 ## Final gate (before requesting review — the twice-burned CI LESSON)
 
 - [ ] **api full gates at CI scope (repo root):**
