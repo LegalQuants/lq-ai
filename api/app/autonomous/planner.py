@@ -108,6 +108,31 @@ def parse_planner_decision(content: str | None) -> PlannerDecision | None:
     )
 
 
+def validate_action_args(intent: ToolIntent, args: dict[str, Any]) -> None:
+    """Reject planner-supplied args that would fault at the SQL/handler layer
+    BEFORE they reach the chokepoint. Raises ValueError on an un-runnable arg
+    so the loop records a clean failed observation instead of poisoning the
+    AsyncSession with a DBAPIError (WS-D PR1 C1; ADR 0015 closed-set boundary).
+    A clean (no-SQL) ValueError keeps the session usable so synthesis still runs.
+
+    Only validates ``retrieve_chunks`` — the only local/SQL intent in the
+    planner allowlist.  ``retrieve_caselaw``/``call_mcp_tool`` are external;
+    their handler/HTTP errors are already non-poisoning.
+    """
+    if intent == ToolIntent.retrieve_chunks:
+        top_k = args.get("top_k")
+        if top_k is not None and (
+            not isinstance(top_k, int) or isinstance(top_k, bool) or top_k < 1
+        ):
+            raise ValueError(f"retrieve_chunks top_k must be a positive int, got {top_k!r}")
+        emb = args.get("query_embedding")
+        if emb is not None and (
+            not isinstance(emb, list)
+            or not all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in emb)
+        ):
+            raise ValueError("retrieve_chunks query_embedding must be None or a list of numbers")
+
+
 _SNIPPET = 120
 
 

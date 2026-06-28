@@ -654,6 +654,53 @@ async def seeded_matter_session(
 
 
 @pytest_asyncio.fixture
+async def seeded_playbook_matter_session(
+    db_session: AsyncSession,
+) -> AutonomousSession:
+    """Running session with ``playbook_id`` + ``query`` for I1 synthesis-intent test.
+
+    Carries ``params["playbook_id"]`` + ``params["query"]`` so the analysis
+    node's loop gate engages AND the synthesis intent resolves to
+    ``ToolIntent.run_playbook`` (not ``run_skill``).  No skill registry is
+    required because the prompt assembler resolves the playbook from the DB.
+    """
+    user = await _make_optedin_user(db_session)
+    playbook = Playbook(
+        name="Agentic Loop Fixture Playbook",
+        contract_type="NDA",
+        description="Used by the I1 synthesis-intent test in test_agentic_loop.py.",
+    )
+    db_session.add(playbook)
+    await db_session.flush()
+    position = PlaybookPosition(
+        playbook_id=playbook.id,
+        issue="Confidentiality term",
+        description="Receiving Party obligation scope.",
+        standard_language=(
+            "The Receiving Party shall hold Confidential Information in confidence "
+            "and shall not disclose it to any third party."
+        ),
+        severity_if_missing="high",
+        detection_keywords=["confidential"],
+        detection_examples=[],
+        redline_strategy="Tighten to the standard language above.",
+        fallback_tiers=[],
+        position_order=0,
+    )
+    db_session.add(position)
+    await db_session.flush()
+    return await _make_running_session(
+        db_session,
+        user=user,
+        trigger_kind="manual",
+        params={
+            "playbook_id": str(playbook.id),
+            "query": "Is the indemnification clause market-standard?",
+        },
+    )
+
+
+@pytest_asyncio.fixture
 async def seeded_skill_session_no_query(
     db_session: AsyncSession,
     _installed_skill_registry: None,

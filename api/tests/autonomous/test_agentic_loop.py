@@ -321,3 +321,86 @@ async def test_action_error_is_nonfatal_observation(
     # The ``started`` audit row for the action was written before the error
     rows = await _audit_rows(db_session, str(seeded_matter_session.id))
     assert _tool_started_calls(rows, "retrieve_chunks") >= 1
+
+
+# ---------------------------------------------------------------------------
+# C1 — boundary-validate bad planner args before they reach the SQL layer
+# ---------------------------------------------------------------------------
+
+
+async def test_bad_top_k_is_nonfatal_validation_observation(
+    db_session: AsyncSession,
+    seeded_matter_session: AutonomousSession,
+) -> None:
+    """C1: planner emits retrieve_chunks with top_k=-1 → validate_action_args fires.
+
+    The validation raises ValueError BEFORE the SQL layer is touched, so the
+    AsyncSession is never poisoned by a DBAPIError.  The loop captures the error
+    as a non-fatal failed observation; synthesis runs and produces analysis_content;
+    halt_reason is 'planner_done'.
+    """
+    gw = _ScriptedGateway(
+        [
+            {
+                "next_intent": "retrieve_chunks",
+                "args": {"top_k": -1},
+                "rationale": "x",
+            },
+            {"done": True, "rationale": "enough evidence"},
+        ]
+    )
+    node = make_analysis_node(db_session, gw)
+    state: AutonomousSessionState = {
+        "session_id": str(seeded_matter_session.id),
+        "query": "Is the assignment clause enforceable?",
+        "retrieved_chunks": [],
+    }
+    # Must not raise — validation must degrade to a failed observation, not crash
+    result = await node(state)
+
+    assert result.get("analysis_content") is not None
+    trace = result.get("analysis_plan_trace")
+    assert trace is not None
+    assert trace["halt_reason"] == "planner_done"
+    assert trace["steps"] == 1  # the failed (validated) step is still counted
+
+    action_decisions = [d for d in trace["decisions"] if d.get("intent") == "retrieve_chunks"]
+    assert len(action_decisions) == 1
+
+
+# ---------------------------------------------------------------------------
+# I1 — playbook+query session synthesizes under run_playbook, not run_skill
+# ---------------------------------------------------------------------------
+
+
+async def test_playbook_session_synthesizes_under_run_playbook(
+    db_session: AsyncSession,
+    seeded_playbook_matter_session: AutonomousSession,
+) -> None:
+    """I1: a matter-scoped session with playbook_id synthesizes under run_playbook.
+
+    Previously _run_analysis_loop hardcoded ToolIntent.run_skill for the synthesis
+    call regardless of session target.  The fix computes the correct intent from
+    playbook_id / skill_ref and passes it through.  This test asserts the synthesis
+    call audits as run_playbook (not run_skill) when the session carries a playbook.
+    """
+    # Planner immediately signals done; synthesis is the only inference call.
+    gw = _ScriptedGateway([{"done": True, "rationale": "nothing to gather"}])
+    node = make_analysis_node(db_session, gw)
+    state: AutonomousSessionState = {
+        "session_id": str(seeded_playbook_matter_session.id),
+        "query": "Is the indemnification clause market-standard?",
+        "retrieved_chunks": [],
+    }
+    result = await node(state)
+
+    assert result.get("analysis_content") is not None
+
+    rows = await _audit_rows(db_session, str(seeded_playbook_matter_session.id))
+    # Synthesis must audit as run_playbook (I1 fix)
+    assert _tool_started_calls(rows, "run_playbook") >= 1, (
+        "synthesis for a playbook session must audit as run_playbook, not run_skill"
+    )
+    assert _tool_started_calls(rows, "run_skill") == 0, (
+        "run_skill must NOT appear in the audit log for a playbook session"
+    )

@@ -8,6 +8,7 @@ from app.autonomous.planner import (
     PlannerDecision,
     build_planner_messages,
     parse_planner_decision,
+    validate_action_args,
 )
 
 
@@ -77,3 +78,60 @@ def test_parse_done_decision():
 )
 def test_parse_returns_none_on_garbage_or_out_of_set(bad):
     assert parse_planner_decision(bad) is None
+
+
+# ---------------------------------------------------------------------------
+# validate_action_args unit tests (C1 — WS-D PR1)
+# ---------------------------------------------------------------------------
+
+
+def test_validate_action_args_valid_top_k_passes():
+    """A positive integer top_k is accepted."""
+    validate_action_args(ToolIntent.retrieve_chunks, {"top_k": 5, "query": "x", "kb_id": "k"})
+
+
+def test_validate_action_args_absent_top_k_passes():
+    """Omitted top_k (None default) is accepted — the handler supplies its own default."""
+    validate_action_args(ToolIntent.retrieve_chunks, {"query": "x", "kb_id": "k"})
+
+
+@pytest.mark.parametrize(
+    "bad_top_k",
+    [-1, 0, True, "5"],
+)
+def test_validate_action_args_bad_top_k_raises(bad_top_k):
+    """top_k=-1, 0, bool(True), or str('5') all raise ValueError."""
+    with pytest.raises(ValueError, match="top_k"):
+        validate_action_args(ToolIntent.retrieve_chunks, {"top_k": bad_top_k, "query": "x"})
+
+
+def test_validate_action_args_valid_embedding_passes():
+    """A list of floats is accepted."""
+    validate_action_args(
+        ToolIntent.retrieve_chunks,
+        {"query_embedding": [0.1, 0.2, 0.3], "query": "x", "kb_id": "k"},
+    )
+
+
+def test_validate_action_args_none_embedding_passes():
+    """Explicit None query_embedding is accepted (handler treats it as absent)."""
+    validate_action_args(
+        ToolIntent.retrieve_chunks,
+        {"query_embedding": None, "query": "x", "kb_id": "k"},
+    )
+
+
+@pytest.mark.parametrize(
+    "bad_emb",
+    ["x", [("a",)]],
+)
+def test_validate_action_args_bad_embedding_raises(bad_emb):
+    """A string or a list of tuples for query_embedding raises ValueError."""
+    with pytest.raises(ValueError, match="query_embedding"):
+        validate_action_args(ToolIntent.retrieve_chunks, {"query_embedding": bad_emb, "query": "x"})
+
+
+def test_validate_action_args_non_retrieve_chunks_is_noop():
+    """Non-retrieve_chunks intents pass unconditionally (no SQL reach)."""
+    validate_action_args(ToolIntent.retrieve_caselaw, {"top_k": -999, "query_embedding": "bad"})
+    validate_action_args(ToolIntent.call_mcp_tool, {"top_k": -1})

@@ -50,6 +50,7 @@ from app.autonomous.planner import (
     build_planner_messages,
     parse_planner_decision,
     summarize_observation,
+    validate_action_args,
 )
 from app.autonomous.prompts import assemble_analysis_messages, assemble_synthesis_messages
 from app.autonomous.receipt import build_receipt_safe
@@ -166,6 +167,7 @@ async def _run_analysis_loop(
     params: dict[str, Any],
     chunks: list[dict[str, Any]],
     model: str,
+    synthesis_intent: ToolIntent,
     db: AsyncSession,
     gateway: Any,
 ) -> dict[str, Any]:
@@ -213,15 +215,20 @@ async def _run_analysis_loop(
             trace.append({"step": str(steps), "intent": "done", "rationale": decision.rationale})
             break
 
-        assert decision.next_intent is not None  # parser guarantees: action ⇒ intent set
+        if decision.next_intent is None:  # parser guarantees this won't happen; -O-safe belt
+            halt_reason = "planner_unparseable"
+            break
         try:
+            validate_action_args(decision.next_intent, decision.args)
             act = await guarded_tool_call(session, decision.next_intent, decision.args, db, gateway)
             observations.append(
                 summarize_observation(decision.next_intent, decision.rationale, act)
             )
         except AutonomousBrake:
             raise  # brakes (SessionHalted/CostCapReached/ToolNotGranted) propagate
-        except Exception as exc:  # invariant #5: bad planner arg is a non-fatal failed observation
+        except (
+            Exception
+        ) as exc:  # invariant #5 / C1: bad arg → non-fatal failed observation, no DB poison
             observations.append(f"{decision.next_intent.value} → failed ({type(exc).__name__})")
         trace.append(
             {
@@ -234,7 +241,7 @@ async def _run_analysis_loop(
 
     synth = await guarded_tool_call(
         session,
-        ToolIntent.run_skill,
+        synthesis_intent,
         {
             "model": model,
             "messages": await assemble_synthesis_messages(
@@ -342,12 +349,16 @@ def make_analysis_node(
             # loop (WS-D PR1).  The loop gate only engages when the session
             # carries a non-empty matter goal; query-less sessions (cron/watch/
             # schedule) take the unchanged single-call path below.
+            # I1: choose the synthesis intent that matches the session target so
+            # the synthesis call audits honestly (run_playbook vs run_skill).
+            synthesis_intent = ToolIntent.run_playbook if playbook_id else ToolIntent.run_skill
             return await _run_analysis_loop(
                 session,
                 query=query,
                 params=params,
                 chunks=state.get("retrieved_chunks") or [],
                 model=model,
+                synthesis_intent=synthesis_intent,
                 db=db,
                 gateway=gateway,
             )
