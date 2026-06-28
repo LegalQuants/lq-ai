@@ -798,7 +798,17 @@ def make_delivery_node(
         # column is populated atomically with the terminal status update.
         # build_receipt reads audit rows that were flushed during the run
         # and are visible in the same session/transaction.
-        session.result = await build_receipt_safe(session, db)
+        receipt = await build_receipt_safe(session, db)
+        # D5 transparency: if the agentic-loop ran, merge its plan trace into
+        # the receipt under "plan_trace".  Strictly additive — only injected
+        # when the trace exists in state (query-less / non-matter sessions have
+        # no trace and their receipt shape is unchanged).  We must guard against
+        # build_receipt_safe returning None (DE-325 best-effort contract) —
+        # skip the merge in that case; the session still transitions to terminal.
+        plan_trace = state.get("analysis_plan_trace")
+        if isinstance(receipt, dict) and plan_trace is not None:
+            receipt["plan_trace"] = plan_trace
+        session.result = receipt
         await db.commit()
 
         return {"current_phase": str(Phase.delivery)}
