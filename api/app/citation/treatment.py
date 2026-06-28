@@ -25,6 +25,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.citation.treatment_judge import (
+    TreatmentJudgment,
     estimate_treatment_cost_usd,
     judge_treatment,
 )
@@ -253,12 +254,11 @@ async def _run_judge_pass(
 ) -> None:
     """Judge top-N citing snippets, then persist signals + rollup in a tight
     SAVEPOINT. Non-fatal per passage. The gateway calls run OUTSIDE the savepoint
-    (judge phase); the savepoint covers only the DB writes so a concurrent
-    re-derivation of the same cluster cannot poison the session (DE-364b).
-
-    Prior signals for this treatment row are always cleared by the caller's
-    refresh branch before this function is called (FIX 1, stale-refresh path).
-    New rows carry no prior signals.  Either way, no DELETE is needed here.
+    (judge phase); the savepoint covers an atomic DELETE+INSERT so the outcome is
+    last-writer-wins in the common concurrent case. The IntegrityError except is the
+    rare backstop when another transaction commits between our DELETE and flush;
+    it re-reads the winner's signals and restores the parent rollup to match, so the
+    parent is never committed in a graph-only state beside judge signals (DE-364b).
     """
     # --- Judge phase: gateway calls only, no DB writes ---
     per_call = await estimate_treatment_cost_usd(db, judge_model=judge_model)
@@ -293,16 +293,29 @@ async def _run_judge_pass(
         judged.append((int(citing_opinion_id), judgment))
 
     if not judged:
-        # Nothing classified — leave graph-only; signals already cleared by the caller.
-        return
+        return  # nothing classified — prior signals already cleared by the caller's refresh branch
 
-    # --- Persist phase: tight SAVEPOINT around the DB writes only ---
+    # Capture the PK before the savepoint.  After a savepoint rollback SQLAlchemy
+    # expires all ORM objects; accessing `treatment_row.id` inside the except block
+    # would trigger a synchronous lazy-load → MissingGreenlet in async context.
+    treatment_id = treatment_row.id
+
+    # --- Persist phase: tight SAVEPOINT around the DB writes only (gateway calls already done) ---
     try:
         async with db.begin_nested():
+            # DELETE-then-INSERT is atomic + idempotent here: in the common concurrent
+            # case it makes the outcome last-writer-wins (no conflict). The except below
+            # is the rare-window backstop (a row committed by another txn between our
+            # DELETE and our flush).
+            await db.execute(
+                delete(CitationTreatmentSignal).where(
+                    CitationTreatmentSignal.treatment_id == treatment_id
+                )
+            )
             for citing_opinion_id, judgment in judged:
                 db.add(
                     CitationTreatmentSignal(
-                        treatment_id=treatment_row.id,
+                        treatment_id=treatment_id,
                         citing_opinion_id=citing_opinion_id,
                         classification=judgment.classification,
                         confidence=judgment.confidence,
@@ -316,10 +329,40 @@ async def _run_judge_pass(
             treatment_row.derived_method = "citation_graph+judge"
             await db.flush()
     except IntegrityError:
-        # A concurrent re-derivation of this cluster wrote these signals first.
-        # The savepoint rolled back our writes (session usable); reuse the winner's
-        # signals rather than double-writing (DE-364b).
+        # A concurrent re-derivation of this cluster committed signals between our
+        # DELETE and our flush. The savepoint rolled back our writes (session usable).
+        # Re-read the winner's signals and restore the parent rollup to MATCH them, so
+        # we never commit a graph-only parent beside judge signals (the contradiction
+        # PR2 FIX 1 guards). DE-364b.
         log.warning(
-            "treatment judge signal-write conflict for treatment %s; reusing concurrent result",
-            treatment_row.id,
+            "treatment judge signal-write conflict for treatment %s; adopting concurrent result",
+            treatment_id,
         )
+        winner_sigs = (
+            (
+                await db.execute(
+                    select(CitationTreatmentSignal).where(
+                        CitationTreatmentSignal.treatment_id == treatment_id
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if winner_sigs:
+            rollup = roll_up(
+                [
+                    TreatmentJudgment(
+                        classification=s.classification,
+                        confidence=s.confidence,
+                        justification=s.justification,
+                    )
+                    for s in winner_sigs
+                ]
+            )
+            treatment_row.strongest_negative_class = rollup.strongest_negative_class
+            treatment_row.judged_count = rollup.judged_count
+            treatment_row.judge_as_of = now
+            treatment_row.derived_method = "citation_graph+judge"
+            await db.flush()
+        # else: the winner cleared signals → leaving graph-only is already consistent.
