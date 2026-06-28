@@ -21,9 +21,11 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.citation.treatment_judge import (
+    TreatmentJudgment,
     estimate_treatment_cost_usd,
     judge_treatment,
 )
@@ -124,8 +126,33 @@ async def derive_treatment_for_message(
                     derived_method="citation_graph",
                     as_of=now,
                 )
-                db.add(row)
-                await db.flush()
+                try:
+                    async with db.begin_nested():  # SAVEPOINT around the conflict-prone insert
+                        db.add(row)
+                        await db.flush()
+                except IntegrityError:
+                    # A concurrent turn inserted this cluster between our existing-check
+                    # and our flush. Exiting the begin_nested() block on the exception
+                    # already rolled back TO the savepoint, so the session is usable.
+                    # SQLAlchemy automatically expels the rolled-back row from the
+                    # session identity map; do not call expunge(row) — it is already gone.
+                    # Re-read and REUSE the winner's row; link only, skip this turn's
+                    # judge pass (the winner owns the row). DE-364.
+                    winner = (
+                        await db.execute(
+                            select(CitationTreatment).where(
+                                CitationTreatment.cluster_id == cluster_id
+                            )
+                        )
+                    ).scalar_one_or_none()
+                    if winner is not None:
+                        cluster_to_treatment[cluster_id] = winner.id
+                    else:
+                        log.warning(
+                            "treatment insert conflict but no winner row for cluster %s",
+                            cluster_id,
+                        )
+                    continue  # next cluster; no judge pass for a reused/lost row
                 cluster_to_treatment[cluster_id] = row.id
                 treatment_row = row
             else:
@@ -225,17 +252,19 @@ async def _run_judge_pass(
     judge_budget_usd: Decimal,
     n_judged_cap: int,
 ) -> None:
-    """Judge top-N citing snippets, write child signals + rollup. Non-fatal per passage."""
-    # Idempotent refresh: clear this row's prior signals before writing new ones.
-    await db.execute(
-        delete(CitationTreatmentSignal).where(
-            CitationTreatmentSignal.treatment_id == treatment_row.id
-        )
-    )
+    """Judge top-N citing snippets, then persist signals + rollup in a tight
+    SAVEPOINT. Non-fatal per passage. The gateway calls run OUTSIDE the savepoint
+    (judge phase); the savepoint covers an atomic DELETE+INSERT so the outcome is
+    last-writer-wins in the common concurrent case. The IntegrityError except is the
+    rare backstop when another transaction commits between our DELETE and flush;
+    it re-reads the winner's signals and restores the parent rollup to match, so the
+    parent is never committed in a graph-only state beside judge signals (DE-364b).
+    """
+    # --- Judge phase: gateway calls only, no DB writes ---
     per_call = await estimate_treatment_cost_usd(db, judge_model=judge_model)
     spent = Decimal("0")
-    judgments = []
     seen: set[int] = set()
+    judged: list[tuple[int, Any]] = []  # (citing_opinion_id, TreatmentJudgment)
     # raw_citing is already recency-sorted by the upstream service; take the cap.
     for ref in raw_citing[:n_judged_cap]:
         snippet = ref.get("snippet")
@@ -261,22 +290,79 @@ async def _run_judge_pass(
             continue
         if judgment is None:
             continue
-        db.add(
-            CitationTreatmentSignal(
-                treatment_id=treatment_row.id,
-                citing_opinion_id=int(citing_opinion_id),
-                classification=judgment.classification,
-                confidence=judgment.confidence,
-                justification=judgment.justification,
+        judged.append((int(citing_opinion_id), judgment))
+
+    if not judged:
+        return  # nothing classified — prior signals already cleared by the caller's refresh branch
+
+    # Capture the PK before the savepoint.  After a savepoint rollback SQLAlchemy
+    # expires all ORM objects; accessing `treatment_row.id` inside the except block
+    # would trigger a synchronous lazy-load → MissingGreenlet in async context.
+    treatment_id = treatment_row.id
+
+    # --- Persist phase: tight SAVEPOINT around the DB writes only (gateway calls already done) ---
+    try:
+        async with db.begin_nested():
+            # DELETE-then-INSERT is atomic + idempotent here: in the common concurrent
+            # case it makes the outcome last-writer-wins (no conflict). The except below
+            # is the rare-window backstop (a row committed by another txn between our
+            # DELETE and our flush).
+            await db.execute(
+                delete(CitationTreatmentSignal).where(
+                    CitationTreatmentSignal.treatment_id == treatment_id
+                )
             )
+            for citing_opinion_id, judgment in judged:
+                db.add(
+                    CitationTreatmentSignal(
+                        treatment_id=treatment_id,
+                        citing_opinion_id=citing_opinion_id,
+                        classification=judgment.classification,
+                        confidence=judgment.confidence,
+                        justification=judgment.justification,
+                    )
+                )
+            rollup = roll_up([j for _, j in judged])
+            treatment_row.strongest_negative_class = rollup.strongest_negative_class
+            treatment_row.judged_count = rollup.judged_count
+            treatment_row.judge_as_of = now
+            treatment_row.derived_method = "citation_graph+judge"
+            await db.flush()
+    except IntegrityError:
+        # A concurrent re-derivation of this cluster committed signals between our
+        # DELETE and our flush. The savepoint rolled back our writes (session usable).
+        # Re-read the winner's signals and restore the parent rollup to MATCH them, so
+        # we never commit a graph-only parent beside judge signals (the contradiction
+        # PR2 FIX 1 guards). DE-364b.
+        log.warning(
+            "treatment judge signal-write conflict for treatment %s; adopting concurrent result",
+            treatment_id,
         )
-        judgments.append(judgment)
-    if not judgments:
-        # Nothing classified — leave graph-only; signals already cleared above.
-        return
-    rollup = roll_up(judgments)
-    treatment_row.strongest_negative_class = rollup.strongest_negative_class
-    treatment_row.judged_count = rollup.judged_count
-    treatment_row.judge_as_of = now
-    treatment_row.derived_method = "citation_graph+judge"
-    await db.flush()
+        winner_sigs = (
+            (
+                await db.execute(
+                    select(CitationTreatmentSignal).where(
+                        CitationTreatmentSignal.treatment_id == treatment_id
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if winner_sigs:
+            rollup = roll_up(
+                [
+                    TreatmentJudgment(
+                        classification=s.classification,
+                        confidence=s.confidence,
+                        justification=s.justification,
+                    )
+                    for s in winner_sigs
+                ]
+            )
+            treatment_row.strongest_negative_class = rollup.strongest_negative_class
+            treatment_row.judged_count = rollup.judged_count
+            treatment_row.judge_as_of = now
+            treatment_row.derived_method = "citation_graph+judge"
+            await db.flush()
+        # else: the winner cleared signals → leaving graph-only is already consistent.

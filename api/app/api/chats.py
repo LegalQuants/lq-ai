@@ -86,7 +86,11 @@ from app.citation import extract_citations, verify
 from app.citation.caselaw import verify_and_persist_caselaw_citations
 from app.citation.cost import estimate_judge_call_cost_usd
 from app.citation.gate import compute_and_record_gate, resolve_gates
-from app.citation.ledger import assemble_ledger_entries, resolve_ledger_entries
+from app.citation.ledger import (
+    assemble_ledger_entries,
+    message_ids_needing_treatment,
+    resolve_ledger_entries,
+)
 from app.clients.gateway import EnsembleConfig, GatewayClient, get_gateway_client
 from app.config import get_settings
 from app.db.session import get_db
@@ -1818,6 +1822,21 @@ async def get_chat_ledger(
 
     entries = await resolve_ledger_entries(db, chat_id=cid, message_id=mid)
     gates = await resolve_gates(db, chat_id=cid, message_id=mid)
+
+    # DE-363: lazy-on-trace-open fallback — best-effort re-enqueue derivation for
+    # any caselaw turn whose treatment is missing/stale. Re-enqueue only (no
+    # synchronous egress); the enqueue is coalesced by _job_id, and never blocks
+    # the read. The response shape is unchanged — the derived signal appears on
+    # the next read.
+    try:
+        needing = await message_ids_needing_treatment(
+            db, chat_id=cid, message_id=mid, now=datetime.now(UTC)
+        )
+        for need_mid in needing:
+            await enqueue_treatment_derivation_job(need_mid)
+    except Exception as exc:  # never block the read on the fallback
+        log.warning("lazy treatment enqueue failed: %r", exc)
+
     return {"chat_id": str(cid), "entries": entries, "gates": gates}
 
 
