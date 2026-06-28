@@ -357,10 +357,16 @@ async def enqueue_treatment_derivation_job(message_id: uuid.UUID) -> bool:
     caller (turn-finalize path in ``app.api.chats``) never blocks on this;
     a missed derivation is silent — no retry sweep (treatment is
     re-derived on demand when the Ledger UI queries the signal).
+    Coalesced via arq ``_job_id`` so the finalize-path and the lazy
+    read-path (DE-363) enqueues for one turn de-duplicate.
     """
     try:
         pool = await _get_pool()
-        await pool.enqueue_job(TREATMENT_DERIVATION_JOB_NAME, str(message_id))
+        await pool.enqueue_job(
+            TREATMENT_DERIVATION_JOB_NAME,
+            str(message_id),
+            _job_id=f"treatment:{message_id}",
+        )
         log.info(
             "enqueue_treatment_derivation_job: enqueued",
             extra={
