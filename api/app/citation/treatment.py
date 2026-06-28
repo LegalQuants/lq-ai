@@ -251,17 +251,20 @@ async def _run_judge_pass(
     judge_budget_usd: Decimal,
     n_judged_cap: int,
 ) -> None:
-    """Judge top-N citing snippets, write child signals + rollup. Non-fatal per passage."""
-    # Idempotent refresh: clear this row's prior signals before writing new ones.
-    await db.execute(
-        delete(CitationTreatmentSignal).where(
-            CitationTreatmentSignal.treatment_id == treatment_row.id
-        )
-    )
+    """Judge top-N citing snippets, then persist signals + rollup in a tight
+    SAVEPOINT. Non-fatal per passage. The gateway calls run OUTSIDE the savepoint
+    (judge phase); the savepoint covers only the DB writes so a concurrent
+    re-derivation of the same cluster cannot poison the session (DE-364b).
+
+    Prior signals for this treatment row are always cleared by the caller's
+    refresh branch before this function is called (FIX 1, stale-refresh path).
+    New rows carry no prior signals.  Either way, no DELETE is needed here.
+    """
+    # --- Judge phase: gateway calls only, no DB writes ---
     per_call = await estimate_treatment_cost_usd(db, judge_model=judge_model)
     spent = Decimal("0")
-    judgments = []
     seen: set[int] = set()
+    judged: list[tuple[int, Any]] = []  # (citing_opinion_id, TreatmentJudgment)
     # raw_citing is already recency-sorted by the upstream service; take the cap.
     for ref in raw_citing[:n_judged_cap]:
         snippet = ref.get("snippet")
@@ -287,22 +290,36 @@ async def _run_judge_pass(
             continue
         if judgment is None:
             continue
-        db.add(
-            CitationTreatmentSignal(
-                treatment_id=treatment_row.id,
-                citing_opinion_id=int(citing_opinion_id),
-                classification=judgment.classification,
-                confidence=judgment.confidence,
-                justification=judgment.justification,
-            )
-        )
-        judgments.append(judgment)
-    if not judgments:
-        # Nothing classified — leave graph-only; signals already cleared above.
+        judged.append((int(citing_opinion_id), judgment))
+
+    if not judged:
+        # Nothing classified — leave graph-only; signals already cleared by the caller.
         return
-    rollup = roll_up(judgments)
-    treatment_row.strongest_negative_class = rollup.strongest_negative_class
-    treatment_row.judged_count = rollup.judged_count
-    treatment_row.judge_as_of = now
-    treatment_row.derived_method = "citation_graph+judge"
-    await db.flush()
+
+    # --- Persist phase: tight SAVEPOINT around the DB writes only ---
+    try:
+        async with db.begin_nested():
+            for citing_opinion_id, judgment in judged:
+                db.add(
+                    CitationTreatmentSignal(
+                        treatment_id=treatment_row.id,
+                        citing_opinion_id=citing_opinion_id,
+                        classification=judgment.classification,
+                        confidence=judgment.confidence,
+                        justification=judgment.justification,
+                    )
+                )
+            rollup = roll_up([j for _, j in judged])
+            treatment_row.strongest_negative_class = rollup.strongest_negative_class
+            treatment_row.judged_count = rollup.judged_count
+            treatment_row.judge_as_of = now
+            treatment_row.derived_method = "citation_graph+judge"
+            await db.flush()
+    except IntegrityError:
+        # A concurrent re-derivation of this cluster wrote these signals first.
+        # The savepoint rolled back our writes (session usable); reuse the winner's
+        # signals rather than double-writing (DE-364b).
+        log.warning(
+            "treatment judge signal-write conflict for treatment %s; reusing concurrent result",
+            treatment_row.id,
+        )

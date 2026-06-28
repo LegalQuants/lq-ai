@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import select
@@ -11,7 +13,9 @@ from app.citation.treatment import derive_treatment_for_message
 from app.models.chat import Chat, Message
 from app.models.citation_ledger_entry import CitationLedgerEntry
 from app.models.citation_treatment import CitationTreatment
+from app.models.citation_treatment_signal import CitationTreatmentSignal
 from app.models.message_caselaw_citation import MessageCaselawCitation
+from app.models.research import ResearchClusterMetadata
 from app.models.user import User
 
 pytestmark = pytest.mark.integration
@@ -122,3 +126,105 @@ async def test_concurrent_insert_conflict_isolates_and_reuses(db_session: AsyncS
     by_cluster = {cc_map[e.message_caselaw_citation_id]: rows[e.treatment_id] for e in entries}
     assert by_cluster[7001].cited_by_count == 99  # reused the winner, did not overwrite
     assert by_cluster[7002].cited_by_count == 5  # derived normally
+
+
+async def test_concurrent_judge_write_conflict_isolates(db_session: AsyncSession):
+    """A concurrent re-derivation writes the same (treatment_id, citing_opinion_id)
+    signal before our judge-pass flush; the conflict is savepoint-isolated (skip,
+    reuse the winner's signals) and does NOT poison the rest of the turn (DE-364b)."""
+    message_id = await _seed_two_cluster_turn(db_session)
+    # Pre-create stale treatment rows so the turn takes the REFRESH path.
+    # case_name in ResearchClusterMetadata enables the judge pass.
+    old = datetime(2026, 1, 1, tzinfo=UTC)
+    rows: dict[int, uuid.UUID] = {}
+    for cluster_id, opinion_id in ((7001, 8001), (7002, 8002)):
+        db_session.add(ResearchClusterMetadata(cluster_id=cluster_id, case_name="A v. B"))
+        t = CitationTreatment(
+            cluster_id=cluster_id,
+            opinion_id=opinion_id,
+            cited_by_count=1,
+            citing_opinions=[],
+            derived_method="citation_graph",
+            as_of=old,
+        )
+        db_session.add(t)
+        await db_session.flush()
+        rows[cluster_id] = t.id
+
+    async def fetch(opinion_id: int) -> dict:
+        return {
+            "cited_by_count": 5,
+            "citing": [
+                {
+                    "cluster_id": 1,
+                    "opinion_id": 9001,
+                    "case_name": "C",
+                    "court": "ca9",
+                    "date_filed": "2021-01-01",
+                    "snippet": "criticized in part",
+                },
+            ],
+        }
+
+    class _GW:
+        """Judge returns 'criticized' for opinion 9001.  While judging cluster 7001,
+        stage a CONCURRENT winner's signal row for (7001's treatment, 9001) so our
+        persist-phase INSERT collides with it."""
+
+        def __init__(self) -> None:
+            self.staged = False
+
+        async def chat_completion(self, request: object, *, request_id: object = None) -> object:
+            body = request.messages[1].content  # type: ignore[attr-defined]
+            if "A v. B" in body and not self.staged:
+                self.staged = True
+                db_session.add(
+                    CitationTreatmentSignal(
+                        treatment_id=rows[7001],
+                        citing_opinion_id=9001,
+                        classification="criticized",
+                        confidence=0.7,
+                        justification="winner",
+                    )
+                )
+                await db_session.flush()
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content=json.dumps(
+                                {
+                                    "treatment": "criticized",
+                                    "confidence": "high",
+                                    "justification": "x",
+                                }
+                            )
+                        )
+                    )
+                ]
+            )
+
+    linked = await derive_treatment_for_message(
+        db_session,
+        message_id=message_id,
+        now=_NOW,
+        fetch_citing=fetch,
+        gateway=_GW(),
+        judge_model="fast",
+    )
+
+    # The turn is not poisoned: both entries link; 7001 reuses the winner's signal.
+    assert linked == 2
+    sigs_7001 = (
+        (
+            await db_session.execute(
+                select(CitationTreatmentSignal).where(
+                    CitationTreatmentSignal.treatment_id == rows[7001]
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(sigs_7001) == 1  # the winner's row; ours was rolled back, not duplicated
+    assert sigs_7001[0].justification == "winner"
