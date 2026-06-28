@@ -1,0 +1,108 @@
+"""WS-D PR1 — the agentic planner: prompt, decision parser, observation summarizer.
+
+The planner is a gateway inference (ToolIntent.plan) that, given the matter
+goal + compact observations + the observe-intent allowlist, returns either the
+next governed action to take or a 'done' signal. It NEVER selects outside the
+closed allowlist (an out-of-set proposal parses to None → the loop stops
+conservatively). It does not execute anything — the loop dispatches its choice
+through guarded_tool_call (ADR 0020 D1).
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from dataclasses import dataclass, field
+from typing import Any
+
+from app.autonomous.enums import ToolIntent
+
+log = logging.getLogger(__name__)
+
+# The planner may choose ONLY observe intents (gather), or signal done.
+# run_skill/run_playbook are reserved for the final synthesis; emit/side-effect
+# intents are not planner-driven in PR1.
+PLANNER_ALLOWLIST: frozenset[ToolIntent] = frozenset(
+    {ToolIntent.retrieve_chunks, ToolIntent.retrieve_caselaw, ToolIntent.call_mcp_tool}
+)
+
+_SYSTEM_PROMPT = """\
+You are the research planner for a governed legal-matter agent. Given the
+MATTER GOAL and the OBSERVATIONS gathered so far, decide the SINGLE next
+research action, or that enough has been gathered.
+
+You may choose ONLY from this closed set of actions (you cannot invent tools):
+{allowlist}
+
+Respond with STRICTLY VALID JSON, one of:
+
+  {{"next_intent": "<one action above>",
+    "args": {{ ...arguments for that action... }},
+    "rationale": "<one sentence: why this next step>"}}
+
+or, when enough authority/context has been gathered:
+
+  {{"done": true, "rationale": "<one sentence: why you are finished>"}}
+
+Output ONLY the JSON object. No preamble, no markdown fencing."""
+
+
+@dataclass(slots=True)
+class PlannerDecision:
+    done: bool
+    next_intent: ToolIntent | None
+    args: dict[str, Any] = field(default_factory=dict)
+    rationale: str = ""
+
+
+def build_planner_messages(
+    *, goal: str, observations: list[str], allowlist: frozenset[ToolIntent]
+) -> list[dict[str, str]]:
+    allow = ", ".join(sorted(i.value for i in allowlist))
+    system = _SYSTEM_PROMPT.format(allowlist=allow)
+    obs = "\n".join(f"- {o}" for o in observations) if observations else "(none yet)"
+    user = f"MATTER GOAL:\n{goal}\n\nOBSERVATIONS SO FAR:\n{obs}\n\nDecide the next action as JSON."
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
+def parse_planner_decision(content: str | None) -> PlannerDecision | None:
+    if not content:
+        return None
+    text = content.strip()
+    if text.startswith("```"):  # tolerate an accidental fence
+        text = text.strip("`")
+        text = text[text.find("{") :] if "{" in text else text
+    try:
+        payload = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        log.info("planner produced non-JSON", extra={"event": "autonomous_planner_malformed"})
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("done") is True:
+        return PlannerDecision(
+            done=True, next_intent=None, rationale=str(payload.get("rationale", ""))
+        )
+    raw_intent = payload.get("next_intent")
+    if not isinstance(raw_intent, str):
+        return None
+    try:
+        intent = ToolIntent(raw_intent)
+    except ValueError:
+        return None
+    if intent not in PLANNER_ALLOWLIST:
+        log.info(
+            "planner chose out-of-allowlist intent %r",
+            raw_intent,
+            extra={"event": "autonomous_planner_out_of_set"},
+        )
+        return None
+    args = payload.get("args")
+    if not isinstance(args, dict):
+        args = {}
+    return PlannerDecision(
+        done=False,
+        next_intent=intent,
+        args=args,
+        rationale=str(payload.get("rationale", "")),
+    )
