@@ -7,7 +7,7 @@ rolling-average estimator; local-only intents have zero marginal cost.
 
 Cost model (per M4 implementation plan)
 ----------------------------------------
-* ``run_skill`` / ``run_playbook`` — inference-bearing; delegate to
+* ``run_skill`` / ``run_playbook`` / ``plan`` — inference-bearing; delegate to
   :func:`~app.citation.cost.estimate_judge_call_cost_usd` which uses a
   per-model rolling average over the last 100 judge calls.
 * ``retrieve_chunks`` / ``propose_memory`` / ``propose_precedent`` /
@@ -42,7 +42,7 @@ from app.autonomous.enums import ToolIntent
 from app.citation.cost import estimate_judge_call_cost_usd
 
 _INFERENCE_INTENTS: frozenset[ToolIntent] = frozenset(
-    {ToolIntent.run_skill, ToolIntent.run_playbook}
+    {ToolIntent.run_skill, ToolIntent.run_playbook, ToolIntent.plan}
 )
 
 
@@ -54,7 +54,7 @@ async def estimate_tool_cost(
     """Project the USD cost of a tool call for the R4 pre-flight check.
 
     Inference-bearing intents (:attr:`~ToolIntent.run_skill`,
-    :attr:`~ToolIntent.run_playbook`) reuse the M2-E2 rolling-average
+    :attr:`~ToolIntent.run_playbook`, :attr:`~ToolIntent.plan`) reuse the M2-E2 rolling-average
     estimator keyed by model name. The ``params`` dict is expected to carry
     ``"judge_model"`` (preferred) or ``"model"`` for these intents.
 

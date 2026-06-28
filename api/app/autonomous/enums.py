@@ -51,6 +51,9 @@ class ToolIntent(StrEnum):
     notify = "notify"
     retrieve_caselaw = "retrieve_caselaw"
     call_mcp_tool = "call_mcp_tool"
+    # WS-D PR1: the planner's next-step decision call (a gateway inference).
+    # Granted only in analysis; the agentic loop dispatches it each iteration.
+    plan = "plan"
 
 
 PHASE_GRANTS: dict[Phase, frozenset[ToolIntent]] = {
@@ -67,6 +70,8 @@ PHASE_GRANTS: dict[Phase, frozenset[ToolIntent]] = {
             # lookups; granted at analysis only (PR5a D-a4).
             ToolIntent.retrieve_caselaw,
             ToolIntent.call_mcp_tool,
+            # WS-D PR1: the agentic planner decision call.
+            ToolIntent.plan,
         }
     ),
     Phase.drafting: frozenset(
