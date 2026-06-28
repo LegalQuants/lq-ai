@@ -222,6 +222,8 @@ async def test_concurrent_judge_write_last_writer_wins(db_session: AsyncSession)
             select(CitationTreatment).where(CitationTreatment.id == rows[7001])
         )
     ).scalar_one()
+    # Refresh from DB to ensure parent-column assertions read persisted state, not in-memory.
+    await db_session.refresh(t_7001)
     sigs_7001 = (
         (
             await db_session.execute(
@@ -353,6 +355,8 @@ async def test_judge_write_conflict_skip_restores_parent(
             select(CitationTreatment).where(CitationTreatment.id == rows[7001])
         )
     ).scalar_one()
+    # Refresh from DB to ensure parent-column assertions read persisted state, not in-memory.
+    await db_session.refresh(t_7001)
     sigs_7001 = (
         (
             await db_session.execute(
