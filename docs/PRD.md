@@ -4874,6 +4874,16 @@ So the single longest phase (image pull) has neither a stream nor a poll. The re
 
 **When to ship:** Alongside any future incremental/partial treatment re-judge work.
 
+#### DE-368 — Test suite is serial-only against one shared Postgres; parallelization needs per-worker DBs
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** Surfaced during WS-D PR1 verification. The `api/` test suite shares a single Postgres test database with a single-process, shared-connection SAVEPOINT-rollback model (`api/tests/conftest.py`). CI runs the suite as one serial `pytest -q` (no `pytest-xdist` / `pytest-randomly` installed), so this is correct and green there (verified: a clean solo run is `2436 passed, 1 skipped`). The fragility appears only under **concurrent** access to that one DB: running a second `pytest` invocation locally against the dev test DB while the full suite runs produced 24 spurious failures, all in DB-state-sensitive tests — `tests/test_research_service.py` (read-through opinion-cache + exact gateway `call_count` assertions like "2nd call served from cache"). The failures were a false alarm from concurrent test processes sharing rows/connection state, **not** a code or test-isolation defect; the same tests pass in isolation and in a solo full run.
+
+**Specific scope:** If the suite is ever parallelized for speed (`pytest-xdist -n auto`), give each worker its own database/schema (e.g. `xdist`'s `worker_id` → per-worker DB name, or a template-DB clone per worker) and mark any remaining cross-worker-stateful tests (DB-cache + call-count assertions) `serial`. Until then: do not run parallel `pytest` against the shared dev test DB (`lqai_test` on `:55432`). Optionally add a one-line note to `api/tests/conftest.py` documenting the serial-only constraint.
+
+**When to ship:** Before/with any test-suite parallelization effort; no action needed for current serial CI.
+
 ---
 
 ## 10. Appendices

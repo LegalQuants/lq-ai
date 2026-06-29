@@ -546,7 +546,7 @@ async def _dispatch(
     if intent == ToolIntent.retrieve_chunks:
         return await _handle_retrieve_chunks(params, db=db)
 
-    if intent in (ToolIntent.run_skill, ToolIntent.run_playbook):
+    if intent in (ToolIntent.run_skill, ToolIntent.run_playbook, ToolIntent.plan):
         return await _handle_gateway_inference(
             intent, params, gateway=gateway, estimated_cost=estimated_cost
         )

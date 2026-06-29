@@ -367,8 +367,66 @@ def _format_chunks_as_user_content(chunks: list[dict[str, Any]]) -> str:
     return "\n\n".join(blocks)
 
 
+async def assemble_synthesis_messages(
+    session: AutonomousSession,
+    *,
+    goal: str,
+    observations: list[str],
+    chunks: list[dict[str, Any]],
+    db: AsyncSession,
+    registry: SkillRegistry | None = None,
+) -> list[dict[str, str]]:
+    """Build the final-synthesis messages for the agentic loop (WS-D PR1).
+
+    Reuses :func:`assemble_analysis_messages` (so the skill/playbook system
+    prompt and :data:`STRUCTURED_OUTPUT_INSTRUCTION` are identical — the
+    synthesis must still emit the fenced-JSON findings the drafting node
+    parses), then appends a user block carrying the matter GOAL and the
+    loop's compact OBSERVATIONS.
+
+    Args:
+        session: The autonomous session.  ``session.params`` must carry a
+            resolvable target (``skill_ref`` or ``playbook_id``) — same
+            constraint as :func:`assemble_analysis_messages`.
+        goal: The matter goal text set at session spawn (e.g., "Is the
+            indemnification clause market-standard?").
+        observations: Compact strings produced by the planner loop — one
+            per research step (e.g., "retrieve_caselaw → 2 results: …").
+            May be empty when no steps ran.
+        chunks: Retrieved-chunks list (forwarded verbatim to the base
+            assembler so the system+user pair is identical to what the
+            standalone analysis path would have produced).
+        db: Active async ORM session.
+        registry: Optional skill registry snapshot.  Forwarded to the
+            base assembler; see :func:`assemble_analysis_messages`.
+
+    Returns:
+        A ``[system, user, user]`` list where the first two elements are
+        the base analysis messages and the third carries the goal + obs.
+    """
+    messages = await assemble_analysis_messages(session, chunks=chunks, db=db, registry=registry)
+    obs_block = (
+        "\n".join(f"- {o}" for o in observations)
+        if observations
+        else "(no research steps were run)"
+    )
+    messages.append(
+        {
+            "role": "user",
+            "content": (
+                f"MATTER GOAL:\n{goal}\n\n"
+                f"RESEARCH OBSERVATIONS (gathered by the agent):\n{obs_block}\n\n"
+                "Synthesize your analysis of the MATTER GOAL using the observations and any "
+                "chunks above, then return the final JSON object as instructed."
+            ),
+        }
+    )
+    return messages
+
+
 __all__ = [
     "ARTIFACT_OUTPUT_INSTRUCTION",
     "STRUCTURED_OUTPUT_INSTRUCTION",
     "assemble_analysis_messages",
+    "assemble_synthesis_messages",
 ]

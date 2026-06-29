@@ -128,6 +128,8 @@ def test_phase_grants_exact_membership() -> None:
             # ONLY (gateway-brokered case-law + MCP lookups).
             ToolIntent.retrieve_caselaw,
             ToolIntent.call_mcp_tool,
+            # WS-D PR1: the agentic planner decision call; analysis-only.
+            ToolIntent.plan,
         }
     )
 
@@ -159,9 +161,10 @@ def test_phase_grants_covers_all_phases() -> None:
 
 @pytest.mark.unit
 def test_tool_intent_members() -> None:
-    """ToolIntent has exactly the ten members specified (M4-B2 adds
+    """ToolIntent has exactly the eleven members specified (M4-B2 adds
     propose_precedent; Donna #8 adds emit_artifact; PR5a adds the two
-    external-tool intents retrieve_caselaw + call_mcp_tool)."""
+    external-tool intents retrieve_caselaw + call_mcp_tool;
+    WS-D PR1 adds plan)."""
     expected = {
         "retrieve_chunks",
         "run_skill",
@@ -174,6 +177,8 @@ def test_tool_intent_members() -> None:
         # PR5a: gateway-brokered external-tool intents.
         "retrieve_caselaw",
         "call_mcp_tool",
+        # WS-D PR1: the agentic planner decision call.
+        "plan",
     }
     actual = {m.value for m in ToolIntent}
     assert actual == expected
@@ -351,22 +356,31 @@ async def test_executor_persists_failed_status_on_mid_graph_error(
 
         return _node
 
+    session_id = session.id  # save PK before executor's rollback detaches the object
+    # Commit the row into the outer test transaction so the executor's rollback()
+    # (C1b) only removes executor-owned changes (not the session row itself).
+    # Without this commit, rollback() would wipe the row and the re-fetch in the
+    # executor's crash handler would return None, skipping the status update.
+    await db_session.commit()
     executor_mod.make_intake_node = _exploding_intake  # type: ignore[assignment]
     try:
         gateway = _StubGateway()
         # Should NOT raise — exception is caught and persisted.
         await run_autonomous_session(
             db_session,
-            session_id=session.id,
+            session_id=session_id,
             gateway=gateway,  # type: ignore[arg-type]
         )
     finally:
         executor_mod.make_intake_node = original_make_intake  # type: ignore[assignment]
 
-    await db_session.refresh(session)
-    assert session.status == "failed"
-    assert session.error is not None
-    assert "RuntimeError" in session.error
+    # C1b: rollback() detaches the in-memory row; re-fetch by PK to see the
+    # committed failed status.
+    refreshed = await db_session.get(AutonomousSession, session_id)
+    assert refreshed is not None
+    assert refreshed.status == "failed"
+    assert refreshed.error is not None
+    assert "RuntimeError" in refreshed.error
 
 
 @pytest.mark.integration
@@ -418,6 +432,76 @@ async def test_executor_persists_failed_status_on_state_dict_error(
     assert session.error is not None
     assert "injected state-dict error" in session.error
     assert session.completed_at is not None, "completed_at must be set on the error state-dict path"
+
+
+@pytest.mark.integration
+async def test_executor_rollback_called_on_mid_graph_error(
+    db_session: AsyncSession,
+) -> None:
+    """C1b: the except Exception handler calls db.rollback() before persisting status='failed'.
+
+    Defends against a poisoned AsyncSession (e.g., a DBAPIError from a bad SQL arg
+    passed by the planner) whose uncleared error state would cause the subsequent
+    commit() to raise PendingRollbackError, stranding the session at 'running' (zombie).
+
+    Approach: inject a plain RuntimeError via make_intake_node patch and spy on
+    db.rollback.  We do NOT simulate a real DBAPIError/SQL-level poison here because
+    that would invalidate the per-test SAVEPOINT infrastructure; the spy directly
+    verifies the contract (rollback is called before commit in the crash handler).
+    The session ends at status='failed' and completed_at is populated, proving
+    the post-rollback re-fetch + commit succeeded.
+    """
+    user = await _make_user(db_session)
+    session = AutonomousSession(user_id=user.id, trigger_kind="manual")
+    db_session.add(session)
+    await db_session.flush()
+
+    import app.autonomous.executor as executor_mod
+
+    original_make_intake = executor_mod.make_intake_node
+
+    def _exploding_intake(db, gateway=None):  # type: ignore[no-untyped-def]
+        async def _node(state):  # type: ignore[no-untyped-def]
+            raise RuntimeError("injected failure for rollback test")
+
+        return _node
+
+    rollback_call_count = 0
+    _real_rollback = db_session.rollback
+
+    async def _spy_rollback() -> None:
+        nonlocal rollback_call_count
+        rollback_call_count += 1
+        await _real_rollback()
+
+    session_id = session.id  # save PK before executor's rollback detaches the object
+    # Commit the row into the outer test transaction so the executor's rollback()
+    # (C1b) only removes executor-owned changes (not the session row itself).
+    await db_session.commit()
+    executor_mod.make_intake_node = _exploding_intake  # type: ignore[assignment]
+    try:
+        gateway = _StubGateway()
+        with patch.object(db_session, "rollback", side_effect=_spy_rollback):
+            # Should NOT raise — crash is caught, rolled back, and persisted.
+            await run_autonomous_session(
+                db_session,
+                session_id=session_id,
+                gateway=gateway,  # type: ignore[arg-type]
+            )
+    finally:
+        executor_mod.make_intake_node = original_make_intake  # type: ignore[assignment]
+
+    assert rollback_call_count >= 1, (
+        "C1b: executor must call db.rollback() in the crash handler before committing "
+        f"status='failed'; rollback was called {rollback_call_count} time(s)"
+    )
+    # The rollback detaches the in-memory row; re-fetch by PK to see committed state.
+    refreshed = await db_session.get(AutonomousSession, session_id)
+    assert refreshed is not None
+    assert refreshed.status == "failed", (
+        f"Expected status='failed' after mid-graph crash, got '{refreshed.status}'"
+    )
+    assert refreshed.completed_at is not None, "completed_at must be set after rollback+commit"
 
 
 @pytest.mark.integration
