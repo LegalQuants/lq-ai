@@ -244,6 +244,11 @@ async def _run_analysis_loop(
         )
         steps += 1
 
+    # Build the evidence dicts ONCE: used both as the synthesis prompt input
+    # and as analysis_evidence in the returned state.  vars() CANNOT be used
+    # here because EvidenceItem is @dataclass(slots=True); dataclasses.asdict
+    # is the correct serialiser.
+    evidence_dicts = [dataclasses.asdict(e) for e in evidence]
     synth = await guarded_tool_call(
         session,
         synthesis_intent,
@@ -254,6 +259,7 @@ async def _run_analysis_loop(
                 goal=query,
                 observations=observations,
                 chunks=chunks,
+                evidence=evidence_dicts,
                 db=db,
             ),
             "anonymize": True,
@@ -270,9 +276,7 @@ async def _run_analysis_loop(
             "halt_reason": halt_reason,
             "decisions": trace,
         },
-        "analysis_evidence": [
-            dataclasses.asdict(e) for e in evidence
-        ],  # JSONable; consumed by delivery (P3: not in trace)
+        "analysis_evidence": evidence_dicts,  # JSONable; consumed by delivery (P3: not in trace)
     }
 
 

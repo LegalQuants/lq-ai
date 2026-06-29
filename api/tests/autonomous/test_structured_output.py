@@ -188,7 +188,13 @@ def test_parse_non_dict_items_in_dict_shaped_arrays_are_dropped(key: str) -> Non
     raw = json.dumps({key: ["a string", 42, None, True, [1, 2], survivor]})
     r = parse_structured_output(raw)
     assert r.is_structured is True
-    assert getattr(r, key) == [survivor], f"key={key} should keep only dict items"
+    if key == "findings":
+        # _normalize_findings adds citations: [] to every surviving finding dict (WS-D PR2).
+        assert getattr(r, key) == [{**survivor, "citations": []}], (
+            f"key={key} should keep only dict items (with citations normalized)"
+        )
+    else:
+        assert getattr(r, key) == [survivor], f"key={key} should keep only dict items"
 
 
 def test_parse_mixed_contamination_across_all_dict_shaped_arrays() -> None:
@@ -207,7 +213,9 @@ def test_parse_mixed_contamination_across_all_dict_shaped_arrays() -> None:
     )
     r = parse_structured_output(raw)
     assert r.is_structured is True
-    assert r.findings == [{"title": "ok"}]
+    assert r.findings == [
+        {"title": "ok", "citations": []}
+    ]  # _normalize_findings adds citations (WS-D PR2)
     assert r.suggested_memories == [{"category": "preference", "content": "C"}]
     assert r.suggested_precedents == [{"pattern_kind": "clause"}]
     assert r.artifacts == [{"name": "a.md", "content_md": "x"}]
@@ -231,3 +239,57 @@ def test_parse_non_array_value_does_not_raise_on_any_array_key() -> None:
         assert r.is_structured is True
         # Read the coerced field via getattr to compare uniformly:
         assert getattr(r, key) == [], f"key={key} should coerce to []"
+
+
+def test_parse_finding_citations() -> None:
+    """Citations array is parsed and sanitized when present in a finding."""
+    raw = (
+        '```json\n{"findings": [{"title": "T", "summary": "S", "severity": "info", '
+        '"source_chunk_ids": [], "citations": [{"quote": "Confidential clause.", "source": 1}]}], '
+        '"suggested_memories": [], "suggested_precedents": [], '
+        '"privilege_concerns": [], "scope_concerns": []}\n```'
+    )
+    parsed = parse_structured_output(raw)
+    assert parsed.is_structured
+    assert parsed.findings[0]["citations"] == [{"quote": "Confidential clause.", "source": 1}]
+
+
+def test_parse_finding_citations_absent_defaults_empty() -> None:
+    """When citations key is absent from a finding, it defaults to []."""
+    raw = (
+        '```json\n{"findings": [{"title": "T", "summary": "S", "severity": "info", '
+        '"source_chunk_ids": []}], "suggested_memories": [], "suggested_precedents": [], '
+        '"privilege_concerns": [], "scope_concerns": []}\n```'
+    )
+    parsed = parse_structured_output(raw)
+    assert parsed.findings[0].get("citations", []) == []
+
+
+def test_parse_finding_citations_malformed_entries_dropped() -> None:
+    """Malformed citation entries (non-dict, wrong types, bool source) are silently dropped."""
+    raw = json.dumps(
+        {
+            "findings": [
+                {
+                    "title": "T",
+                    "summary": "S",
+                    "severity": "info",
+                    "source_chunk_ids": [],
+                    "citations": [
+                        {"quote": "valid", "source": 2},  # good
+                        "not a dict",  # dropped
+                        {"quote": 99, "source": 1},  # non-str quote dropped
+                        {"quote": "text", "source": True},  # bool source dropped
+                        {"quote": "text", "source": "1"},  # str source dropped
+                        {"quote": "also valid", "source": 3},  # good
+                    ],
+                }
+            ]
+        }
+    )
+    parsed = parse_structured_output(raw)
+    assert parsed.is_structured
+    assert parsed.findings[0]["citations"] == [
+        {"quote": "valid", "source": 2},
+        {"quote": "also valid", "source": 3},
+    ]
