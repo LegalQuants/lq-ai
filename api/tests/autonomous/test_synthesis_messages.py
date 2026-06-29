@@ -107,3 +107,63 @@ async def test_synthesis_does_not_alter_system_prompt(
         db=db_session,
     )
     assert synthesis[0]["content"] == base[0]["content"]
+
+
+async def test_synthesis_includes_numbered_evidence_and_citation_instruction(
+    db_session: AsyncSession,
+    session_with_skill_ref: AutonomousSession,
+) -> None:
+    """When evidence items are provided, synthesis includes a numbered SOURCES
+    block and a citation instruction telling the model to use verbatim quotes."""
+    msgs = await assemble_synthesis_messages(
+        session_with_skill_ref,
+        goal="Is the clause enforceable?",
+        observations=["retrieve_caselaw → 1 result"],
+        chunks=[],
+        evidence=[
+            {
+                "n": 1,
+                "kind": "kb",
+                "ref": "c1",
+                "content": "Confidential clause.",
+                "display": "nda.pdf (chunk c1)",
+            },
+            {
+                "n": 2,
+                "kind": "caselaw",
+                "ref": "42",
+                "content": "It is held...",
+                "display": "Smith (ca9 2021; cl=42)",
+            },
+        ],
+        db=db_session,
+    )
+    blob = " ".join(m["content"] for m in msgs)
+    assert "[1]" in blob and "nda.pdf" in blob  # numbered source list
+    assert "[2]" in blob and "Smith" in blob
+    assert "quote" in blob and "source" in blob  # citation instruction present
+
+
+async def test_synthesis_empty_evidence_omits_citation_block(
+    db_session: AsyncSession,
+    session_with_skill_ref: AutonomousSession,
+) -> None:
+    """When evidence is empty (or not provided), the citation block is absent."""
+    msgs_none = await assemble_synthesis_messages(
+        session_with_skill_ref,
+        goal="Goal.",
+        observations=[],
+        chunks=[],
+        db=db_session,
+    )
+    msgs_empty = await assemble_synthesis_messages(
+        session_with_skill_ref,
+        goal="Goal.",
+        observations=[],
+        chunks=[],
+        evidence=[],
+        db=db_session,
+    )
+    for msgs in (msgs_none, msgs_empty):
+        blob = " ".join(m["content"] for m in msgs)
+        assert "NUMBERED SOURCES" not in blob

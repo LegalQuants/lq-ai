@@ -373,16 +373,19 @@ async def assemble_synthesis_messages(
     goal: str,
     observations: list[str],
     chunks: list[dict[str, Any]],
+    evidence: list[dict[str, Any]] | None = None,
     db: AsyncSession,
     registry: SkillRegistry | None = None,
 ) -> list[dict[str, str]]:
-    """Build the final-synthesis messages for the agentic loop (WS-D PR1).
+    """Build the final-synthesis messages for the agentic loop (WS-D PR1/PR2).
 
     Reuses :func:`assemble_analysis_messages` (so the skill/playbook system
     prompt and :data:`STRUCTURED_OUTPUT_INSTRUCTION` are identical — the
     synthesis must still emit the fenced-JSON findings the drafting node
-    parses), then appends a user block carrying the matter GOAL and the
-    loop's compact OBSERVATIONS.
+    parses), then appends a user block carrying the matter GOAL, the loop's
+    compact OBSERVATIONS, and (when evidence is non-empty) a numbered SOURCES
+    block with a citation instruction directing the model to support each
+    finding with verbatim quotes tagged ``{"quote": "...", "source": N}``.
 
     Args:
         session: The autonomous session.  ``session.params`` must carry a
@@ -396,13 +399,22 @@ async def assemble_synthesis_messages(
         chunks: Retrieved-chunks list (forwarded verbatim to the base
             assembler so the system+user pair is identical to what the
             standalone analysis path would have produced).
+        evidence: Evidence items accumulated by the agentic loop — each a
+            dict with keys ``n`` (int), ``kind`` (str), ``ref`` (str),
+            ``content`` (str), ``display`` (str).  When non-empty, a
+            numbered SOURCES block and citation instruction are appended to
+            the trailing user message.  When ``None`` or empty, the citation
+            block is omitted and behaviour is identical to PR1 (no change in
+            prompt cost for sessions with no evidence).
         db: Active async ORM session.
         registry: Optional skill registry snapshot.  Forwarded to the
             base assembler; see :func:`assemble_analysis_messages`.
 
     Returns:
         A ``[system, user, user]`` list where the first two elements are
-        the base analysis messages and the third carries the goal + obs.
+        the base analysis messages and the third carries the goal + obs
+        (and, when evidence is non-empty, the numbered sources + citation
+        instruction).
     """
     messages = await assemble_analysis_messages(session, chunks=chunks, db=db, registry=registry)
     obs_block = (
@@ -410,14 +422,31 @@ async def assemble_synthesis_messages(
         if observations
         else "(no research steps were run)"
     )
+    _evidence: list[dict[str, Any]] = evidence if evidence is not None else []
+    if _evidence:
+        sources = "\n".join(
+            f'[{e["n"]}] ({e["kind"]}) {e["display"]}\n    """{e["content"][:1500]}"""'
+            for e in _evidence
+        )
+        cite_block = (
+            "\n\nNUMBERED SOURCES (cite these by number):\n"
+            + sources
+            + "\n\nFor every finding, support it with VERBATIM quotes from the numbered sources. "
+            'In each finding\'s JSON, include a "citations" array of objects '
+            '{"quote": "<exact text copied from the source>", "source": <source number>}. '
+            "Copy quotes character-for-character; do not paraphrase inside a quote."
+        )
+    else:
+        cite_block = ""
     messages.append(
         {
             "role": "user",
             "content": (
                 f"MATTER GOAL:\n{goal}\n\n"
-                f"RESEARCH OBSERVATIONS (gathered by the agent):\n{obs_block}\n\n"
-                "Synthesize your analysis of the MATTER GOAL using the observations and any "
-                "chunks above, then return the final JSON object as instructed."
+                f"RESEARCH OBSERVATIONS (gathered by the agent):\n{obs_block}"
+                f"{cite_block}\n\n"
+                "Synthesize your analysis of the MATTER GOAL using the observations, the numbered "
+                "sources, and any chunks above, then return the final JSON object as instructed."
             ),
         }
     )

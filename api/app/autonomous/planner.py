@@ -108,6 +108,60 @@ def parse_planner_decision(content: str | None) -> PlannerDecision | None:
     )
 
 
+@dataclass(slots=True)
+class EvidenceItem:
+    """A numbered piece of gathered authority the synthesis may quote-and-cite.
+
+    ``content`` is the authoritative text used at delivery to verify a quoted
+    span (chunk text for kb, opinion text for caselaw). Loop-local + synthesis
+    context only — NEVER written to analysis_plan_trace/audit (P3)."""
+
+    n: int
+    kind: str  # "kb" | "caselaw"
+    ref: str  # chunk_id (kb) | cluster_id (caselaw), as str
+    content: str
+    display: str
+
+
+def collect_evidence(intent: ToolIntent, result: object, start_n: int) -> list[EvidenceItem]:
+    outcome = getattr(result, "outcome", "success")
+    data = getattr(result, "data", None) or {}
+    if outcome != "success":
+        return []
+    items: list[EvidenceItem] = []
+    n = start_n
+    if intent == ToolIntent.retrieve_chunks:
+        for c in data.get("chunks") or []:
+            if not isinstance(c, dict) or not c.get("chunk_id"):
+                continue
+            items.append(
+                EvidenceItem(
+                    n=n,
+                    kind="kb",
+                    ref=str(c["chunk_id"]),
+                    content=str(c.get("content") or ""),
+                    display=f"{c.get('file_name') or '?'} (chunk {c['chunk_id']})",
+                )
+            )
+            n += 1
+    elif intent == ToolIntent.retrieve_caselaw:
+        rows = data.get("results") or data.get("matches") or []
+        for r in rows:
+            if not isinstance(r, dict) or not r.get("cluster_id"):
+                continue
+            items.append(
+                EvidenceItem(
+                    n=n,
+                    kind="caselaw",
+                    ref=str(r["cluster_id"]),
+                    content=str(r.get("opinion_text") or r.get("text") or ""),
+                    display=f"{r.get('case_name') or '?'} ({r.get('court') or '?'} {r.get('date_filed') or '?'})",
+                )
+            )
+            n += 1
+    return items
+
+
 def validate_action_args(intent: ToolIntent, args: dict[str, Any]) -> None:
     """Reject planner-supplied args that would fault at the SQL/handler layer
     BEFORE they reach the chokepoint. Raises ValueError on an un-runnable arg
@@ -149,7 +203,7 @@ def summarize_observation(intent: ToolIntent, rationale: str, result: object) ->
     if intent == ToolIntent.retrieve_caselaw:
         items = data.get("results") or data.get("matches") or []
         names = [
-            f"{(i.get('case_name') or '?')} ({i.get('court') or '?'} {i.get('date_filed') or '?'})"
+            f"{(i.get('case_name') or '?')} ({i.get('court') or '?'} {i.get('date_filed') or '?'}; cl={i.get('cluster_id') or '?'})"
             for i in items[:5]
             if isinstance(i, dict)
         ]

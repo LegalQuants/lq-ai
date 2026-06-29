@@ -34,6 +34,7 @@ LangGraph node functions remain pure-ish over the state dict and
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
@@ -47,7 +48,9 @@ from app.autonomous.guard import guarded_tool_call
 from app.autonomous.phases import run_phase_transition
 from app.autonomous.planner import (
     PLANNER_ALLOWLIST,
+    EvidenceItem,
     build_planner_messages,
+    collect_evidence,
     parse_planner_decision,
     summarize_observation,
     validate_action_args,
@@ -187,6 +190,7 @@ async def _run_analysis_loop(
     max_steps = int(params.get("max_analysis_steps") or DEFAULT_MAX_ANALYSIS_STEPS)
     observations: list[str] = []
     trace: list[dict[str, str]] = []
+    evidence: list[EvidenceItem] = []
     halt_reason = "step_cap"
     steps = 0
 
@@ -224,6 +228,7 @@ async def _run_analysis_loop(
             observations.append(
                 summarize_observation(decision.next_intent, decision.rationale, act)
             )
+            evidence.extend(collect_evidence(decision.next_intent, act, start_n=len(evidence) + 1))
         except AutonomousBrake:
             raise  # brakes (SessionHalted/CostCapReached/ToolNotGranted) propagate
         except (
@@ -239,6 +244,11 @@ async def _run_analysis_loop(
         )
         steps += 1
 
+    # Build the evidence dicts ONCE: used both as the synthesis prompt input
+    # and as analysis_evidence in the returned state.  vars() CANNOT be used
+    # here because EvidenceItem is @dataclass(slots=True); dataclasses.asdict
+    # is the correct serialiser.
+    evidence_dicts = [dataclasses.asdict(e) for e in evidence]
     synth = await guarded_tool_call(
         session,
         synthesis_intent,
@@ -249,6 +259,7 @@ async def _run_analysis_loop(
                 goal=query,
                 observations=observations,
                 chunks=chunks,
+                evidence=evidence_dicts,
                 db=db,
             ),
             "anonymize": True,
@@ -265,6 +276,7 @@ async def _run_analysis_loop(
             "halt_reason": halt_reason,
             "decisions": trace,
         },
+        "analysis_evidence": evidence_dicts,  # JSONable; consumed by delivery (P3: not in trace)
     }
 
 
@@ -819,6 +831,42 @@ def make_delivery_node(
         plan_trace = state.get("analysis_plan_trace")
         if isinstance(receipt, dict) and plan_trace is not None:
             receipt["plan_trace"] = plan_trace
+        # WS-D PR2: fiduciary ledger + gate for matter sessions (best-effort).
+        # Re-parse analysis_content to recover findings WITH their citations
+        # (single source of truth — drafting node strips citations from the
+        # state "findings" list; re-parsing from the raw content is the correct
+        # approach). Isolated in a SAVEPOINT so a flush error inside the bridge
+        # rolls back ONLY the manufactured chat/citation rows and leaves the
+        # outer transaction (session status + audit rows) usable for the
+        # terminal commit — the PR1-C1 lesson.
+        parsed = parse_structured_output(state.get("analysis_content"))
+        findings = parsed.findings if parsed.is_structured else []
+        evidence = state.get("analysis_evidence") or []
+        work_product = state.get("analysis_content") or ""
+        if findings and evidence and work_product:
+            try:
+                from app.autonomous.ledger_bridge import build_session_ledger
+
+                async with db.begin_nested():  # SAVEPOINT — isolates best-effort enrichment
+                    verdict = await build_session_ledger(
+                        db,
+                        session=session,
+                        work_product_text=work_product,
+                        findings=findings,
+                        evidence=evidence,
+                        gateway=gateway,
+                    )
+                if verdict is not None and isinstance(receipt, dict):
+                    receipt["fiduciary_gate"] = verdict
+            except Exception:
+                logger.warning(
+                    "autonomous ledger bridge failed",
+                    extra={
+                        "event": "autonomous_ledger_bridge_failed",
+                        "session_id": session_id,
+                    },
+                    exc_info=True,
+                )
         session.result = receipt
         await db.commit()
 

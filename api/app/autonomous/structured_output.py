@@ -83,7 +83,7 @@ def _as_dict_list(value: Any) -> list[dict[str, Any]]:
     """Coerce a JSON value to a list of dicts — tolerant, item-level.
 
     Non-list values yield []; non-dict items inside a list are silently
-    dropped. The dict-shaped arrays (``findings``, ``suggested_memories``,
+    dropped. The dict-shaped arrays (``suggested_memories``,
     ``suggested_precedents``, ``artifacts``) are consumed downstream with
     ``.get()`` calls, so a string or number smuggled into an otherwise
     valid array would raise ``AttributeError`` in the drafting node and
@@ -92,10 +92,52 @@ def _as_dict_list(value: Any) -> list[dict[str, Any]]:
     pre-existing dict-shaped loops too, not just ``artifacts``: a uniform
     posture beats per-loop drift (the failure mode is not "wrong decision"
     but "different decisions in different files").
+
+    Note: ``findings`` use :func:`_normalize_findings` instead, which
+    additionally sanitizes the ``citations`` key on each finding (WS-D PR2).
     """
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, dict)]
+
+
+def _normalize_findings(value: Any) -> list[dict[str, Any]]:
+    """Coerce the ``findings`` array and sanitize per-finding ``citations``.
+
+    Like :func:`_as_dict_list`, but additionally processes each finding to
+    produce a sanitized ``citations`` list (WS-D PR2):
+
+    * Non-dict items in the top-level list are dropped (same as _as_dict_list).
+    * Each finding gets a ``citations`` key set to a sanitized list of dicts
+      ``{"quote": str, "source": int}`` built from the raw ``citations``
+      value.  Any entry that is not a dict, has a non-str ``quote``, has a
+      non-int ``source``, or has a bool ``source`` (booleans are ints in
+      Python / JSON but semantically wrong here) is silently dropped.
+    * Absent ``citations`` key → empty list (``[]``).
+
+    This function never raises — it is part of the tolerant-parse contract.
+    """
+    if not isinstance(value, list):
+        return []
+    result: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        finding: dict[str, Any] = dict(item)
+        raw_citations = finding.get("citations")
+        citations: list[dict[str, Any]] = []
+        if isinstance(raw_citations, list):
+            for c in raw_citations:
+                if (
+                    isinstance(c, dict)
+                    and isinstance(c.get("quote"), str)
+                    and isinstance(c.get("source"), int)
+                    and not isinstance(c.get("source"), bool)
+                ):
+                    citations.append({"quote": c["quote"], "source": c["source"]})
+        finding["citations"] = citations
+        result.append(finding)
+    return result
 
 
 def parse_structured_output(content: str | None) -> StructuredResult:
@@ -141,7 +183,7 @@ def parse_structured_output(content: str | None) -> StructuredResult:
 
     return StructuredResult(
         is_structured=True,
-        findings=_as_dict_list(parsed.get("findings")),
+        findings=_normalize_findings(parsed.get("findings")),
         suggested_memories=_as_dict_list(parsed.get("suggested_memories")),
         suggested_precedents=_as_dict_list(parsed.get("suggested_precedents")),
         privilege_concerns=_as_list(parsed.get("privilege_concerns")),

@@ -652,6 +652,7 @@ async def search_chats(
         .where(
             Chat.owner_id == user.id,
             Chat.archived_at.is_(None),
+            Chat.autonomous_session_id.is_(None),
             sa_text("chats.title_tsv @@ websearch_to_tsquery('english', :q)"),
         )
         .params(q=q)
@@ -679,6 +680,7 @@ async def search_chats(
         .where(
             Chat.owner_id == user.id,
             Chat.archived_at.is_(None),
+            Chat.autonomous_session_id.is_(None),
             sa_text("messages.content_tsv @@ websearch_to_tsquery('english', :q)"),
         )
         .params(q=q)
@@ -740,7 +742,10 @@ async def list_chats(
         Query(ge=1, le=LIST_LIMIT_MAX, description="Page size; capped at 100."),
     ] = LIST_LIMIT_DEFAULT,
 ) -> ChatListResponse:
-    stmt = select(Chat).where(Chat.owner_id == user.id)
+    stmt = select(Chat).where(
+        Chat.owner_id == user.id,
+        Chat.autonomous_session_id.is_(None),
+    )
     if archived is True:
         stmt = stmt.where(Chat.archived_at.is_not(None))
     else:

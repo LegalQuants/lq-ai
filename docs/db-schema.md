@@ -322,6 +322,12 @@ CREATE TABLE chats (
     -- When non-empty, these skill slugs are unioned into every turn's effective
     -- skills until cleared. Set via MessageCreate.set_sticky.
     sticky_skills TEXT[] NOT NULL DEFAULT '{}',
+    -- Session-owned chat marker (WS-D PR2, migration 0063). Non-null when this
+    -- chat was manufactured by an autonomous session to route its work product
+    -- through the citation ledger + fiduciary gate. Excluded from list_chats and
+    -- search_chats so it is invisible in the user's chat list. Direct GET by id
+    -- still works. ON DELETE SET NULL so archiving the session doesn't cascade.
+    autonomous_session_id UUID REFERENCES autonomous_sessions(id) ON DELETE SET NULL,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
