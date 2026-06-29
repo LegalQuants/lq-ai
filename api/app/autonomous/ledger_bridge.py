@@ -15,15 +15,20 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.citation.caselaw import _CaselawCandidate, locate_passage, opinion_target
 from app.citation.extraction import CitationCandidate, locate_in_chunk
 from app.citation.verification import verify
 from app.models.chat import MessageCitation
 from app.models.document import Document, DocumentChunk
+from app.models.message_caselaw_citation import MessageCaselawCitation
+from app.models.research import ResearchOpinionMetadata
+from app.research.service import read_opinion as _default_read_opinion
 
 log = logging.getLogger(__name__)
 
@@ -64,6 +69,12 @@ async def build_kb_citations(
     added = 0
 
     for quote, chunk_id_str in citations:
+        if not quote.strip():
+            log.debug(
+                "kb citation build: empty quote, skipping",
+                extra={"event": "autonomous_kb_citation_skip"},
+            )
+            continue
         try:
             chunk_uuid = uuid.UUID(str(chunk_id_str))
         except ValueError:
@@ -150,6 +161,136 @@ async def build_kb_citations(
             log.warning(
                 "kb citation build: unexpected error, skipping citation",
                 extra={"event": "autonomous_kb_citation_skip", "chunk_id": chunk_id_str},
+                exc_info=True,
+            )
+
+    await db.flush()
+    return added
+
+
+# ---------------------------------------------------------------------------
+# Caselaw structured-citation builder
+# ---------------------------------------------------------------------------
+
+_LoadOpinion = Callable[..., Awaitable[dict[str, Any]]]
+
+
+async def build_caselaw_citations(
+    db: AsyncSession,
+    *,
+    message_id: uuid.UUID,
+    citations: list[tuple[str, str]],  # (quote, cluster_id)
+    gateway: Any,
+    judge_model: str = "fast",
+    load_opinion_text: _LoadOpinion = _default_read_opinion,
+) -> int:
+    """Resolve, verify, and persist caselaw structured citations into the ledger.
+
+    For each ``(quote, cluster_id)`` pair:
+
+    1. Guard: skip empty / whitespace-only quotes (prevents the poisoned-flush
+       class: ``locate_passage`` returns ``None`` for empty needles, but the
+       guard fires before any DB lookup for clarity and defense-in-depth).
+    2. Resolve ``ResearchOpinionMetadata`` by ``cluster_id``.  Unknown → skip.
+    3. Load opinion text via ``load_opinion_text(db, opinion_id=...)``.
+    4. Locate ``quote`` in opinion text via :func:`locate_passage`.  Miss → skip.
+    5. Build an :class:`_OpinionVerificationTarget` and a
+       :class:`_CaselawCandidate`.
+    6. Run the verifier cascade via :func:`verify`.  Miss → skip (honest-
+       degradation invariant — no fabrication).
+    7. ``db.add`` a verified ``MessageCaselawCitation`` row; accumulate count.
+
+    ``db.flush()`` is called once at the end so callers can roll back the
+    entire block as a unit.
+
+    Returns the number of rows added (0 when every citation was unverifiable,
+    the cluster was unknown, or the passage was not found in the opinion text).
+    Never fabricates rows.
+    """
+    added = 0
+
+    for quote, cluster_id_str in citations:
+        if not quote.strip():
+            log.debug(
+                "caselaw citation build: empty quote, skipping",
+                extra={"event": "autonomous_caselaw_citation_skip"},
+            )
+            continue
+
+        try:
+            meta = (
+                (
+                    await db.execute(
+                        select(ResearchOpinionMetadata).where(
+                            ResearchOpinionMetadata.cluster_id == int(cluster_id_str)
+                        )
+                    )
+                )
+                .scalars()
+                .first()
+            )
+            if meta is None:
+                log.debug(
+                    "caselaw citation build: no metadata for cluster, skipping",
+                    extra={
+                        "event": "autonomous_caselaw_citation_skip",
+                        "cluster_id": cluster_id_str,
+                    },
+                )
+                continue
+
+            opinion = await load_opinion_text(db, opinion_id=meta.opinion_id)
+            text = str((opinion or {}).get("text") or "")
+
+            span = locate_passage(quote, text)
+            if span is None:
+                log.debug(
+                    "caselaw citation build: locate miss, skipping",
+                    extra={
+                        "event": "autonomous_caselaw_citation_skip",
+                        "cluster_id": cluster_id_str,
+                    },
+                )
+                continue
+
+            start, end = span
+            target = opinion_target(meta.opinion_id, text)
+            candidate = _CaselawCandidate(
+                source_offset_start=start,
+                source_offset_end=end,
+                source_text=quote,
+                source_document_id=target.id,
+            )
+
+            result = await verify(candidate, target, gateway=gateway, judge_model=judge_model)
+            if not result.verified:
+                continue
+
+            db.add(
+                MessageCaselawCitation(
+                    message_id=message_id,
+                    opinion_id=meta.opinion_id,
+                    cluster_id=meta.cluster_id,
+                    source_offset_start=start,
+                    source_offset_end=end,
+                    source_text=quote,
+                    verified=True,
+                    verification_method=result.method,
+                    verification_confidence=result.confidence,
+                    partial=result.partial,
+                )
+            )
+            added += 1
+
+        except Exception:
+            # One bad citation must not sink the rest (per honest-degradation
+            # invariant). Log and continue so remaining citations still get a chance.
+            log.warning(
+                "caselaw citation build: unexpected error, skipping citation",
+                extra={
+                    "event": "autonomous_caselaw_citation_skip",
+                    "cluster_id": cluster_id_str,
+                },
                 exc_info=True,
             )
 

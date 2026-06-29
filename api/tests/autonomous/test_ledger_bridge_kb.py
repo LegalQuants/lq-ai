@@ -111,3 +111,50 @@ async def test_build_kb_citations_drops_unverifiable(
     )
 
     assert n == 0  # honest: unverifiable quote dropped, no row
+
+
+async def test_build_kb_citations_empty_quote_skipped(
+    db_session: AsyncSession,
+    kb_with_one_indexed_file: object,
+) -> None:
+    """Empty-string quote is dropped before any DB lookup — no row, no poisoned flush.
+
+    Python's str.find("") returns 0, so without the guard an empty quote would
+    produce a (start=0, end=0) span → a MessageCitation with
+    source_offset_start == source_offset_end — violating the DB CHECK constraint
+    at flush time and poisoning the entire batch.  The ``if not quote.strip()``
+    guard at the top of the loop body must fire first.
+    """
+    from tests.autonomous.conftest import KbOneFile
+
+    kb: KbOneFile = kb_with_one_indexed_file  # type: ignore[assignment]
+    user = User(
+        email="kb-bridge-empty@x.com",
+        hashed_password=hash_password("p"),
+        role="member",
+        is_admin=False,
+        mfa_enabled=False,
+        must_change_password=False,
+    )
+    db_session.add(user)
+    await db_session.flush()
+    msg = await _msg(db_session, user.id)
+
+    n = await build_kb_citations(
+        db_session,
+        message_id=msg.id,
+        citations=[("", str(kb.chunk_id))],
+        gateway=None,
+    )
+
+    assert n == 0
+    rows = (
+        (
+            await db_session.execute(
+                select(MessageCitation).where(MessageCitation.message_id == msg.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 0
