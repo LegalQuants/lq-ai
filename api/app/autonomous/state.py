@@ -104,3 +104,9 @@ class AutonomousSessionState(TypedDict, total=False):
     # ``{"steps": int, "halt_reason": str, "decisions": list[dict]}``.
     # Absent on the query-less single-call path.
     analysis_plan_trace: dict | None
+
+    # WS-D PR2: loop-gathered evidence for the synthesis + delivery ledger
+    # bridge; NOT surfaced in the receipt/trace (P3). Each entry is a
+    # JSONable dict of EvidenceItem fields (n, kind, ref, content, display).
+    # Absent on the query-less single-call path (only the agentic loop sets it).
+    analysis_evidence: list[dict]

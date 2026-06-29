@@ -34,6 +34,7 @@ LangGraph node functions remain pure-ish over the state dict and
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
@@ -47,7 +48,9 @@ from app.autonomous.guard import guarded_tool_call
 from app.autonomous.phases import run_phase_transition
 from app.autonomous.planner import (
     PLANNER_ALLOWLIST,
+    EvidenceItem,
     build_planner_messages,
+    collect_evidence,
     parse_planner_decision,
     summarize_observation,
     validate_action_args,
@@ -187,6 +190,7 @@ async def _run_analysis_loop(
     max_steps = int(params.get("max_analysis_steps") or DEFAULT_MAX_ANALYSIS_STEPS)
     observations: list[str] = []
     trace: list[dict[str, str]] = []
+    evidence: list[EvidenceItem] = []
     halt_reason = "step_cap"
     steps = 0
 
@@ -224,6 +228,7 @@ async def _run_analysis_loop(
             observations.append(
                 summarize_observation(decision.next_intent, decision.rationale, act)
             )
+            evidence.extend(collect_evidence(decision.next_intent, act, start_n=len(evidence) + 1))
         except AutonomousBrake:
             raise  # brakes (SessionHalted/CostCapReached/ToolNotGranted) propagate
         except (
@@ -265,6 +270,9 @@ async def _run_analysis_loop(
             "halt_reason": halt_reason,
             "decisions": trace,
         },
+        "analysis_evidence": [
+            dataclasses.asdict(e) for e in evidence
+        ],  # JSONable; consumed by delivery (P3: not in trace)
     }
 
 
