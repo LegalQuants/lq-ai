@@ -87,6 +87,12 @@ class Chat(Base):
         ForeignKey("projects.id", ondelete="SET NULL", name="fk_chats_project_id"),
         nullable=True,
     )
+    autonomous_session_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("autonomous_sessions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=False,  # partial index created in migration 0063
+    )
     title: Mapped[str] = mapped_column(
         Text,
         nullable=False,
