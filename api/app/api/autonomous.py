@@ -40,7 +40,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
@@ -53,6 +53,8 @@ from app.audit import audit_action
 from app.autonomous.audit import autonomous_audit
 from app.autonomous.cron import next_run_after, validate_cron_expr
 from app.autonomous.receipt import build_receipt
+from app.citation.gate import resolve_gates
+from app.citation.ledger import resolve_ledger_entries
 from app.config import get_settings
 from app.db.session import get_db
 from app.models.autonomous import (
@@ -66,6 +68,7 @@ from app.models.autonomous import (
     PrecedentEntry,
     ProjectContextProposal,
 )
+from app.models.chat import Chat
 from app.models.document import Document
 from app.models.knowledge import KnowledgeBase
 from app.models.project import Project
@@ -651,6 +654,44 @@ async def list_session_artifacts(
         limit=limit,
         offset=offset,
     )
+
+
+@router.get(
+    "/sessions/{session_id}/ledger",
+    summary="Citation ledger + fiduciary gate for an autonomous session (WS-D PR2 C5)",
+    responses={
+        404: {"description": "Session not found or has no ledger"},
+        401: {"description": "Not authenticated"},
+    },
+)
+async def get_session_ledger(
+    session_id: uuid.UUID,
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, Any]:
+    """GET /api/v1/autonomous/sessions/{session_id}/ledger
+
+    Returns the citation ledger (entries + fiduciary gate) for the hidden
+    chat manufactured by ``build_session_ledger`` (WS-D PR2 Task 7).
+    Reuses ``resolve_ledger_entries`` and ``resolve_gates`` — the same
+    functions the chat ``GET /{chat_id}/ledger`` endpoint calls — so the
+    response schema is identical and the PR2-UI can reuse the chat ledger
+    component.
+
+    Owner-gated via ``_load_owned_session``; another user's ``session_id``
+    or a missing session returns 404 (not 403) to avoid existence
+    disclosure.  Returns 404 if the session exists but ``build_session_ledger``
+    has not been called yet (no hidden chat manufactured).
+    """
+    await _load_owned_session(db, session_id=session_id, user_id=user.id)
+    chat = (
+        await db.execute(select(Chat).where(Chat.autonomous_session_id == session_id))
+    ).scalar_one_or_none()
+    if chat is None:
+        raise HTTPException(status_code=404, detail="session has no ledger")
+    entries = await resolve_ledger_entries(db, chat_id=chat.id)
+    gates = await resolve_gates(db, chat_id=chat.id)
+    return {"entries": entries, "gate": gates[0] if gates else None}
 
 
 # ---------------------------------------------------------------------------
