@@ -23,8 +23,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.citation.caselaw import _CaselawCandidate, locate_passage, opinion_target
 from app.citation.extraction import CitationCandidate, locate_in_chunk
+from app.citation.gate import compute_and_record_gate
+from app.citation.ledger import assemble_ledger_entries
 from app.citation.verification import verify
-from app.models.chat import MessageCitation
+from app.models.autonomous import AutonomousSession
+from app.models.chat import Chat, Message, MessageCitation
 from app.models.document import Document, DocumentChunk
 from app.models.message_caselaw_citation import MessageCaselawCitation
 from app.models.research import ResearchOpinionMetadata
@@ -296,3 +299,98 @@ async def build_caselaw_citations(
 
     await db.flush()
     return added
+
+
+# ---------------------------------------------------------------------------
+# Session-level bridge (WS-D PR2 Task 7)
+# ---------------------------------------------------------------------------
+
+
+async def build_session_ledger(
+    db: AsyncSession,
+    *,
+    session: AutonomousSession,
+    work_product_text: str,
+    findings: list[dict[str, Any]],
+    evidence: list[dict[str, Any]],
+    gateway: Any,
+    judge_model: str = "fast",
+) -> dict[str, Any] | None:
+    """Manufacture a hidden chat+message, build citation rows, and compute the gate.
+
+    Splits each finding's ``citations`` (``{quote, source}``) by the evidence
+    registry entry's ``kind`` (``"kb"`` vs ``"caselaw"``) into ``(quote, ref)``
+    tuples, then delegates to :func:`build_kb_citations` and
+    :func:`build_caselaw_citations` (Tasks 5/6).  Runs
+    :func:`~app.citation.ledger.assemble_ledger_entries` and
+    :func:`~app.citation.gate.compute_and_record_gate` on the manufactured
+    message.
+
+    Returns a ``dict`` with ``gate_status``, ``pass_count``, ``supported_count``,
+    ``fail_count``, ``total_assertions``, and ``confidence`` when at least one
+    citation is ledgerable, or ``None`` when there are no citable citations
+    (so no hidden chat is manufactured and the caller's transaction is
+    untouched).
+
+    This function only flushes; it never commits.  The caller is responsible
+    for wrapping it in a SAVEPOINT (``async with db.begin_nested()``) so a
+    flush error cannot poison the outer transaction.
+    """
+    # Build index: evidence n → evidence entry (n is always an int per EvidenceItem).
+    by_n: dict[int, dict[str, Any]] = {
+        int(e["n"]): e for e in evidence if isinstance(e.get("n"), int)
+    }
+
+    # Split citations by kind using the evidence registry.
+    kb: list[tuple[str, str]] = []
+    cl: list[tuple[str, str]] = []
+    for f in findings:
+        for c in f.get("citations") or []:
+            ev = by_n.get(c.get("source"))
+            if ev is None or not isinstance(c.get("quote"), str):
+                continue
+            if ev["kind"] == "kb":
+                kb.append((c["quote"], ev["ref"]))
+            elif ev["kind"] == "caselaw":
+                cl.append((c["quote"], ev["ref"]))
+
+    # Nothing citable → no manufactured chat, no gate, no transaction writes.
+    if not kb and not cl:
+        return None
+
+    # Manufacture the hidden chat + assistant message.
+    chat = Chat(
+        owner_id=session.user_id,
+        project_id=session.project_id,
+        title=f"Matter session {session.id}",
+        autonomous_session_id=session.id,
+    )
+    db.add(chat)
+    await db.flush()
+
+    message = Message(chat_id=chat.id, role="assistant", content=work_product_text)
+    db.add(message)
+    await db.flush()
+
+    # Build citation rows (Tasks 5/6).  Each builder flushes once internally.
+    await build_kb_citations(
+        db, message_id=message.id, citations=kb, gateway=gateway, judge_model=judge_model
+    )
+    await build_caselaw_citations(
+        db, message_id=message.id, citations=cl, gateway=gateway, judge_model=judge_model
+    )
+
+    # Assemble the ledger index + compute the gate verdict.
+    await assemble_ledger_entries(db, message_id=message.id)
+    gate = await compute_and_record_gate(db, message_id=message.id)
+    if gate is None:
+        return None
+
+    return {
+        "gate_status": gate.gate_status,
+        "pass_count": gate.pass_count,
+        "supported_count": gate.supported_count,
+        "fail_count": gate.fail_count,
+        "total_assertions": gate.total_assertions,
+        "confidence": float(gate.confidence) if gate.confidence is not None else None,
+    }

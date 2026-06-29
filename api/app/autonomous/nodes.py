@@ -831,6 +831,42 @@ def make_delivery_node(
         plan_trace = state.get("analysis_plan_trace")
         if isinstance(receipt, dict) and plan_trace is not None:
             receipt["plan_trace"] = plan_trace
+        # WS-D PR2: fiduciary ledger + gate for matter sessions (best-effort).
+        # Re-parse analysis_content to recover findings WITH their citations
+        # (single source of truth — drafting node strips citations from the
+        # state "findings" list; re-parsing from the raw content is the correct
+        # approach). Isolated in a SAVEPOINT so a flush error inside the bridge
+        # rolls back ONLY the manufactured chat/citation rows and leaves the
+        # outer transaction (session status + audit rows) usable for the
+        # terminal commit — the PR1-C1 lesson.
+        parsed = parse_structured_output(state.get("analysis_content"))
+        findings = parsed.findings if parsed.is_structured else []
+        evidence = state.get("analysis_evidence") or []
+        work_product = state.get("analysis_content") or ""
+        if findings and evidence and work_product:
+            try:
+                from app.autonomous.ledger_bridge import build_session_ledger
+
+                async with db.begin_nested():  # SAVEPOINT — isolates best-effort enrichment
+                    verdict = await build_session_ledger(
+                        db,
+                        session=session,
+                        work_product_text=work_product,
+                        findings=findings,
+                        evidence=evidence,
+                        gateway=gateway,
+                    )
+                if verdict is not None and isinstance(receipt, dict):
+                    receipt["fiduciary_gate"] = verdict
+            except Exception:
+                logger.warning(
+                    "autonomous ledger bridge failed",
+                    extra={
+                        "event": "autonomous_ledger_bridge_failed",
+                        "session_id": session_id,
+                    },
+                    exc_info=True,
+                )
         session.result = receipt
         await db.commit()
 
