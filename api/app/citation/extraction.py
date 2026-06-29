@@ -125,7 +125,7 @@ _CITATION_RE = re.compile(
 _ALIGNMENT_THRESHOLD = 85.0
 
 
-def _locate_in_chunk(quote: str, chunk_content: str) -> tuple[int, int] | None:
+def locate_in_chunk(quote: str, chunk_content: str) -> tuple[int, int] | None:
     """Find ``quote`` inside ``chunk_content`` — exact, then fuzzy.
 
     Returns the (start, end) offsets *into the chunk's content string*
@@ -190,7 +190,7 @@ def extract_citations(
             continue
 
         chunk = retrieved_chunks[index_1based - 1]
-        located = _locate_in_chunk(quote, chunk.content)
+        located = locate_in_chunk(quote, chunk.content)
         if located is not None:
             in_chunk_start, in_chunk_end = located
             offset_start = chunk.char_offset_start + in_chunk_start
@@ -214,7 +214,7 @@ def extract_citations(
                 # in the retrieved-chunk window.
                 continue
 
-            doc_located = _locate_in_chunk(quote, doc_content)
+            doc_located = locate_in_chunk(quote, doc_content)
             if doc_located is None:
                 # Quote is not in the document at all. Drop.
                 continue
