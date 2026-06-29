@@ -671,12 +671,14 @@ async def get_session_ledger(
 ) -> dict[str, Any]:
     """GET /api/v1/autonomous/sessions/{session_id}/ledger
 
-    Returns the citation ledger (entries + fiduciary gate) for the hidden
-    chat manufactured by ``build_session_ledger`` (WS-D PR2 Task 7).
+    Returns ``{chat_id, entries, gates}`` — the identical shape produced by
+    the chat ``GET /{chat_id}/ledger`` endpoint — so the PR2-UI can reuse
+    the chat ledger component directly without adaptation.  For a session
+    ledger ``gates`` always has exactly one element (the single fiduciary-
+    grade gate manufactured by ``build_session_ledger``).
+
     Reuses ``resolve_ledger_entries`` and ``resolve_gates`` — the same
-    functions the chat ``GET /{chat_id}/ledger`` endpoint calls — so the
-    response schema is identical and the PR2-UI can reuse the chat ledger
-    component.
+    functions the chat ledger endpoint calls.
 
     Owner-gated via ``_load_owned_session``; another user's ``session_id``
     or a missing session returns 404 (not 403) to avoid existence
@@ -691,7 +693,7 @@ async def get_session_ledger(
         raise HTTPException(status_code=404, detail="session has no ledger")
     entries = await resolve_ledger_entries(db, chat_id=chat.id)
     gates = await resolve_gates(db, chat_id=chat.id)
-    return {"entries": entries, "gate": gates[0] if gates else None}
+    return {"chat_id": str(chat.id), "entries": entries, "gates": gates}
 
 
 # ---------------------------------------------------------------------------

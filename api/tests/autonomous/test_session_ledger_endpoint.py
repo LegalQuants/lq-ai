@@ -2,8 +2,10 @@
 
 Covers:
 - Happy path: a session with a manufactured ledger (via build_session_ledger)
-  returns 200 with entries + gate.
+  returns 200 with entries + gates (identical shape to chat ledger endpoint).
 - 404 when the session has no manufactured chat (no ledger built yet).
+- 404 (not 403) when a different authenticated user requests another user's
+  session ledger (ownership enforcement, no existence leak).
 """
 
 from __future__ import annotations
@@ -53,6 +55,21 @@ async def client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
 async def owner_user(db_session: AsyncSession) -> User:
     user = User(
         email=f"sl-ep-{uuid.uuid4().hex[:8]}@example.com",
+        hashed_password=hash_password("pw"),
+        role="member",
+        is_admin=False,
+        mfa_enabled=False,
+        must_change_password=False,
+    )
+    db_session.add(user)
+    await db_session.flush()
+    return user
+
+
+@pytest_asyncio.fixture
+async def other_user(db_session: AsyncSession) -> User:
+    user = User(
+        email=f"sl-ep-other-{uuid.uuid4().hex[:8]}@example.com",
         hashed_password=hash_password("pw"),
         role="member",
         is_admin=False,
@@ -121,7 +138,8 @@ async def test_session_ledger_endpoint_returns_entries(
     )
     assert resp.status_code == 200
     body = resp.json()
-    assert body["gate"]["gate_status"] in {"fiduciary_grade", "supported_only", "flagged"}
+    assert "chat_id" in body
+    assert body["gates"][0]["gate_status"] in {"fiduciary_grade", "supported_only", "flagged"}
     assert len(body["entries"]) >= 1
 
 
@@ -136,6 +154,30 @@ async def test_session_ledger_endpoint_404_without_ledger(
     await db_session.commit()
     resp = await client.get(
         f"/api/v1/autonomous/sessions/{sess.id}/ledger",
+        headers={"Authorization": _bearer_for(owner_user)},
+    )
+    assert resp.status_code == 404
+
+
+async def test_session_ledger_endpoint_cross_user_returns_404(
+    db_session: AsyncSession,
+    client: AsyncClient,
+    owner_user: User,
+    other_user: User,
+) -> None:
+    """404 (not 403) when user A requests user B's session ledger.
+
+    Ownership is enforced by ``_load_owned_session``; returning 404 rather
+    than 403 avoids leaking the existence of another user's session.
+    """
+    # Create a session owned by other_user (user B).
+    sess_b = AutonomousSession(user_id=other_user.id, trigger_kind="manual", params={})
+    db_session.add(sess_b)
+    await db_session.commit()
+
+    # Request as owner_user (user A) — must get 404, not 403.
+    resp = await client.get(
+        f"/api/v1/autonomous/sessions/{sess_b.id}/ledger",
         headers={"Authorization": _bearer_for(owner_user)},
     )
     assert resp.status_code == 404
