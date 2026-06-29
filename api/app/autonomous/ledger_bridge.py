@@ -384,7 +384,9 @@ async def build_session_ledger(
     await assemble_ledger_entries(db, message_id=message.id)
     gate = await compute_and_record_gate(db, message_id=message.id)
     if gate is None:
-        return None
+        raise RuntimeError(
+            "compute_and_record_gate returned None for a freshly-manufactured message"
+        )
 
     return {
         "gate_status": gate.gate_status,

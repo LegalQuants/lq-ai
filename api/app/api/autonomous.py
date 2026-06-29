@@ -687,8 +687,17 @@ async def get_session_ledger(
     """
     await _load_owned_session(db, session_id=session_id, user_id=user.id)
     chat = (
-        await db.execute(select(Chat).where(Chat.autonomous_session_id == session_id))
-    ).scalar_one_or_none()
+        (
+            await db.execute(
+                select(Chat)
+                .where(Chat.autonomous_session_id == session_id)
+                .order_by(Chat.created_at)
+                .limit(1)
+            )
+        )
+        .scalars()
+        .first()
+    )
     if chat is None:
         raise HTTPException(status_code=404, detail="session has no ledger")
     entries = await resolve_ledger_entries(db, chat_id=chat.id)
