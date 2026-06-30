@@ -6,6 +6,10 @@ Covers:
 - ToolResult.data["authority"]["source"] == params["source"] (the registry name).
 - EvidenceItem collected from a retrieve_authority result carries .source AND
   .content_kind (loop-local; P3 unaffected — not persisted).
+- CRITICAL (Task 4 fix): when the cache write raises a real DB-level error
+  mid-transaction, the outer begin_nested savepoint rolls back cleanly and the
+  AsyncSession remains usable for subsequent DB ops in the same turn (the
+  WS-D PR1-C1 poisoned-session class, one level out).
 
 Reuses the _GovInfoGateway scripted double + _make_user/_make_session helpers
 from test_retrieve_authority.py (PR1a).
@@ -22,6 +26,7 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
 import pytest
+import sqlalchemy as sa
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -177,3 +182,92 @@ def test_collect_evidence_authority_carries_source_and_content_kind() -> None:
     # PR1b additions — source + content_kind must be threaded onto EvidenceItem
     assert item.source == "govinfo"
     assert item.content_kind == "statute"
+
+
+# ---------------------------------------------------------------------------
+# Test 3: DB-level error in cache write must NOT poison the session (Task 4 fix)
+# ---------------------------------------------------------------------------
+
+
+async def test_cache_write_db_error_does_not_poison_session(
+    db_session: AsyncSession,
+    fake_storage: dict[str, bytes],
+) -> None:
+    """A real DB-level error inside the cache write leaves the session usable.
+
+    This is the proving test for the Task 4 Critical fix: the guard wraps
+    store_authority_text in ``async with db.begin_nested():`` so that any
+    PostgreSQL-level error (e.g. a division-by-zero that aborts the Postgres
+    backend transaction) is contained in the savepoint and rolled back cleanly,
+    without leaving the AsyncSession in InFailedSQLTransaction state.
+
+    Approach:
+    - Monkeypatch ``app.citation.authority.store_authority_text`` with a stub
+      that executes a genuine Postgres error (SELECT 1/0) via the real
+      AsyncSession, faithfully exercising the begin_nested rollback path.
+    - Assert guarded_tool_call STILL returns a ToolResult with
+      data["authority"] (the fetch itself was not aborted).
+    - Assert a follow-up DB op (SELECT 1) SUCCEEDS on the same session —
+      session NOT poisoned.
+    - Assert NO AuthorityTextCache row was committed for the test ref
+      (the savepoint rolled back the cache write).
+    """
+    from app.autonomous import guard as guard_mod
+
+    _TEST_EXTERNAL_REF = "USCODE-2023-title15-poison-test"
+
+    async def _failing_store(
+        db: AsyncSession,
+        *,
+        source_type: str,
+        external_ref: str,
+        text: str,
+    ) -> None:
+        # Execute a real Postgres-level error inside the (soon-to-be) savepoint.
+        # asyncpg raises asyncpg.exceptions.DivisionByZeroError which propagates
+        # as sqlalchemy.exc.DBAPIError, aborting the server-side transaction.
+        # The begin_nested wrapper in guard.py must catch this via its savepoint.
+        await db.execute(sa.text("SELECT 1/0"))
+
+    user = await _make_user(db_session)
+    sess = await _make_session(db_session, user=user, current_phase="analysis")
+    gateway = _GovInfoGateway()
+
+    with (
+        patch(
+            "app.tools.governance.resolve_provider_tier",
+            new=AsyncMock(return_value=2),
+        ),
+        patch(
+            "app.citation.authority.store_authority_text",
+            new=_failing_store,
+        ),
+    ):
+        result = await guard_mod.guarded_tool_call(
+            sess,
+            ToolIntent.retrieve_authority,
+            {
+                "source": "govinfo",
+                "op": "get_authority",
+                "args": {"package_id": _TEST_EXTERNAL_REF},
+            },
+            db_session,
+            gateway,
+        )
+
+    # ── 1. fetch result was NOT aborted ─────────────────────────────────────
+    assert result.data is not None, "guarded_tool_call must return a ToolResult on cache failure"
+    assert "authority" in result.data, "data['authority'] must be present despite cache error"
+
+    # ── 2. session is NOT poisoned: a follow-up DB op must succeed ──────────
+    follow_up = await db_session.execute(sa.text("SELECT 1"))
+    val = follow_up.scalar_one()
+    assert val == 1, "db_session must be usable after a cache write DB error"
+
+    # ── 3. no AuthorityTextCache row was committed for this ref ─────────────
+    cached = (
+        await db_session.execute(
+            select(AuthorityTextCache).where(AuthorityTextCache.external_ref == _TEST_EXTERNAL_REF)
+        )
+    ).scalar_one_or_none()
+    assert cached is None, "cache row must NOT be committed when the cache write fails"

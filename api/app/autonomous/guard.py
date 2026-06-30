@@ -856,15 +856,30 @@ async def _handle_retrieve_authority(
     # ── PR1b: non-fatal cache write ──────────────────────────────────────────
     # Best-effort: any failure (including ValueError for a bad external_ref)
     # must not abort the fetch or poison the AsyncSession (WS-D PR1 C1 lesson).
+    #
+    # store_authority_text contains bare SELECT + flush ops outside its own
+    # inner savepoint (only the INSERT path is wrapped).  A PostgreSQL-level
+    # error on any of those bare ops aborts the transaction server-side; the
+    # outer except catches the exception but leaves the AsyncSession in
+    # InFailedSQLTransaction state — every subsequent DB op in the same turn
+    # would fail (the WS-D PR1-C1 poisoned-session class, one level out).
+    #
+    # Fix: wrap the entire call in a savepoint so ALL of store_authority_text's
+    # DB ops — including the bare SELECT/flush on the update path and the
+    # post-IntegrityError bare SELECT/flush — are contained in a nested
+    # transaction that rolls back cleanly on any exception, leaving the session
+    # usable.  store_authority_text's own inner begin_nested still works inside
+    # the outer savepoint (SQLAlchemy + asyncpg fully support nesting).
     try:
         from app.citation.authority import store_authority_text
 
-        await store_authority_text(
-            db,
-            source_type=params["source"],
-            external_ref=authority.external_ref,
-            text=authority.citable_text,
-        )
+        async with db.begin_nested():
+            await store_authority_text(
+                db,
+                source_type=params["source"],
+                external_ref=authority.external_ref,
+                text=authority.citable_text,
+            )
     except Exception:
         log.warning(
             "autonomous.retrieve_authority: cache write failed; "
