@@ -23,6 +23,7 @@ from app.models.chat import Chat, Message, MessageCitation
 from app.models.citation_ledger_entry import CitationLedgerEntry
 from app.models.citation_treatment import CitationTreatment
 from app.models.citation_treatment_signal import CitationTreatmentSignal
+from app.models.message_authority_citation import MessageAuthorityCitation
 from app.models.message_caselaw_citation import MessageCaselawCitation
 from app.models.message_tool_source import MessageToolSource
 
@@ -96,6 +97,32 @@ async def assemble_ledger_entries(db: AsyncSession, *, message_id: uuid.UUID) ->
             )
         )
 
+    authority_citations = (
+        (
+            await db.execute(
+                select(MessageAuthorityCitation).where(
+                    MessageAuthorityCitation.message_id == message_id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for ac in authority_citations:
+        entries.append(
+            CitationLedgerEntry(
+                project_id=project_id,
+                chat_id=chat_id,
+                message_id=message_id,
+                source_kind=ac.content_kind,
+                message_authority_citation_id=ac.id,
+                verification_status=ac.verification_method if ac.verified else "unverified",
+                confidence=ac.verification_confidence if ac.verified else None,
+                provider=ac.source_type,
+                retrieved_at=ac.created_at,
+            )
+        )
+
     tool_sources = (
         (
             await db.execute(
@@ -131,6 +158,7 @@ def _resolve_source(
     docs: dict[uuid.UUID, MessageCitation],
     caselaw: dict[uuid.UUID, MessageCaselawCitation],
     tools: dict[uuid.UUID, MessageToolSource],
+    authority: dict[uuid.UUID, MessageAuthorityCitation],
 ) -> dict[str, Any] | None:
     """Resolve an entry's single referenced row to a source block, or None if absent."""
     if entry.message_citation_id is not None:
@@ -176,6 +204,24 @@ def _resolve_source(
             "url": ts.url,
             "external_ref": ts.external_ref,
             "tool": ts.tool,
+        }
+    if entry.message_authority_citation_id is not None:
+        ac = authority.get(entry.message_authority_citation_id)
+        if ac is None:
+            return None
+        return {
+            "kind": ac.content_kind,
+            "external_ref": ac.external_ref,
+            "provider": ac.source_type,
+            "passages": [
+                {
+                    "text": ac.source_text,
+                    "offset_start": ac.source_offset_start,
+                    "offset_end": ac.source_offset_end,
+                    "verified": ac.verified,
+                    "method": ac.verification_method,
+                }
+            ],
         }
     return None
 
@@ -248,6 +294,11 @@ async def resolve_ledger_entries(
         e.message_caselaw_citation_id for e in entries if e.message_caselaw_citation_id is not None
     }
     tool_ids = {e.message_tool_source_id for e in entries if e.message_tool_source_id is not None}
+    authority_ids = {
+        e.message_authority_citation_id
+        for e in entries
+        if e.message_authority_citation_id is not None
+    }
 
     docs: dict[uuid.UUID, MessageCitation] = {}
     if doc_ids:
@@ -278,6 +329,20 @@ async def resolve_ledger_entries(
             for r in (
                 await db.execute(
                     select(MessageToolSource).where(MessageToolSource.id.in_(tool_ids))
+                )
+            )
+            .scalars()
+            .all()
+        }
+    auth_by_id: dict[uuid.UUID, MessageAuthorityCitation] = {}
+    if authority_ids:
+        auth_by_id = {
+            r.id: r
+            for r in (
+                await db.execute(
+                    select(MessageAuthorityCitation).where(
+                        MessageAuthorityCitation.id.in_(authority_ids)
+                    )
                 )
             )
             .scalars()
@@ -316,7 +381,7 @@ async def resolve_ledger_entries(
 
     out: list[dict[str, Any]] = []
     for e in entries:
-        source = _resolve_source(e, docs, caselaw, tools)
+        source = _resolve_source(e, docs, caselaw, tools, auth_by_id)
         if source is None:
             log.warning("ledger entry %s references a missing source row; skipping", e.id)
             continue
