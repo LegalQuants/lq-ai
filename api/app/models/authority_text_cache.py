@@ -15,7 +15,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Index, Integer, Text, UniqueConstraint
+from sqlalchemy import DateTime, Index, Integer, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -41,5 +41,9 @@ class AuthorityTextCache(Base):
     external_ref: Mapped[str] = mapped_column(Text, nullable=False)
     storage_path: Mapped[str] = mapped_column(Text, nullable=False)
     char_length: Mapped[int] = mapped_column(Integer, nullable=False)
-    retrieved_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
-    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+    retrieved_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
