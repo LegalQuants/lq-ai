@@ -133,12 +133,26 @@ async def resolve_available_sources(gateway: Any) -> list[AvailableSource]:
         if ptype and ptype not in provider_by_type:
             provider_by_type[ptype] = p
 
+    # Local import: registry is imported by guard/cost, so we defer the
+    # governance import here to avoid any circular-import risk (same pattern
+    # used in cost.py and guard.py).
+    from app.tools.governance import resolve_provider_tier
+
     result: list[AvailableSource] = []
     for _key, spec in SOURCE_REGISTRY.items():
         provider = provider_by_type.get(spec.type)
         if provider is not None:
-            egress_raw = provider.get("egress_tier")
-            egress_tier: int | None = int(egress_raw) if egress_raw is not None else None
+            # Resolve egress_tier from the governance tier cache (admin config),
+            # NOT from the list_tool_providers payload — the real GatewayClient
+            # projects list_tool_providers down to {name, type} only, so
+            # provider.get("egress_tier") is always None in production.
+            provider_name: str = provider.get("name") or ""
+            egress_tier: int | None = None
+            if provider_name:
+                try:
+                    egress_tier = await resolve_provider_tier(provider_name)
+                except Exception:
+                    egress_tier = None
             result.append(
                 AvailableSource(
                     name=provider.get("name"),
@@ -152,6 +166,7 @@ async def resolve_available_sources(gateway: Any) -> list[AvailableSource]:
             )
         else:
             # Registered type with no configured provider — report unavailable.
+            # egress_tier is None: there is no provider to resolve a tier from.
             result.append(
                 AvailableSource(
                     name=None,

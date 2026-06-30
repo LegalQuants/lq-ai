@@ -2,8 +2,26 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.research.adapters import FetchedAuthority, GovInfoAdapter
+from app.research.adapters import FetchedAuthority, GovInfoAdapter, _content_kind_from_id
 from app.research.registry import SOURCE_REGISTRY, resolve_available_sources
+from app.tools.governance import _reset_provider_tier_cache_for_tests
+
+# ---------------------------------------------------------------------------
+# Cache isolation — reset the process-level governance tier cache around every
+# test so egress_tier lookups don't bleed across tests.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _reset_tier_cache() -> None:
+    _reset_provider_tier_cache_for_tests()
+    yield  # type: ignore[misc]
+    _reset_provider_tier_cache_for_tests()
+
+
+# ---------------------------------------------------------------------------
+# Registry structure
+# ---------------------------------------------------------------------------
 
 
 def test_registry_has_courtlistener_and_govinfo():
@@ -11,8 +29,27 @@ def test_registry_has_courtlistener_and_govinfo():
     assert "search_authority" in SOURCE_REGISTRY["govinfo"].ops
 
 
+# ---------------------------------------------------------------------------
+# resolve_available_sources — join logic
+# ---------------------------------------------------------------------------
+
+
 @pytest.mark.asyncio
-async def test_resolve_intersects_enabled_and_registered():
+async def test_resolve_intersects_enabled_and_registered(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Patch governance get_gateway_client so the tier-cache load returns an
+    # empty tool_providers list (all providers default to _MAX_TIER).  This
+    # keeps the test isolated from the real gateway and avoids a noisy HTTP
+    # call being swallowed by _load_provider_tier_cache's exception handler.
+    async def _fake_get_admin_config(*, request_id: str | None = None) -> dict:
+        return {"tool_providers": []}
+
+    class _FakeGW:
+        get_admin_config = staticmethod(_fake_get_admin_config)
+
+    monkeypatch.setattr("app.tools.governance.get_gateway_client", lambda: _FakeGW())
+
     gw = AsyncMock()
     gw.list_tool_providers.return_value = [
         {"name": "govinfo-prod", "type": "govinfo"},
@@ -24,6 +61,49 @@ async def test_resolve_intersects_enabled_and_registered():
     assert "not_in_registry" not in by_type
     # a registry type with no configured provider is reported unavailable
     assert by_type["courtlistener"].enabled is False
+    # disabled source has no provider → egress_tier must be None
+    assert by_type["courtlistener"].egress_tier is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_egress_tier_from_governance_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """egress_tier is resolved from the admin-config governance cache, not from
+    the list_tool_providers payload (which only carries {name, type} in prod).
+    Asserts that a CONFIGURED tier actually surfaces on the enabled source."""
+
+    async def _fake_get_admin_config(*, request_id: str | None = None) -> dict:
+        return {
+            "tool_providers": [
+                {"name": "govinfo-prod", "type": "govinfo", "egress_tier": 4},
+            ]
+        }
+
+    class _FakeGW:
+        get_admin_config = staticmethod(_fake_get_admin_config)
+
+    monkeypatch.setattr("app.tools.governance.get_gateway_client", lambda: _FakeGW())
+
+    gw = AsyncMock()
+    # list_tool_providers returns {name, type} ONLY — matching the real
+    # GatewayClient projection.  No egress_tier here (that would be the bug).
+    gw.list_tool_providers.return_value = [
+        {"name": "govinfo-prod", "type": "govinfo"},
+    ]
+    out = await resolve_available_sources(gw)
+    by_type = {s.type: s for s in out}
+
+    assert by_type["govinfo"].enabled is True
+    assert by_type["govinfo"].egress_tier == 4, (
+        "egress_tier must be resolved from the governance admin-config cache, "
+        "not from the list_tool_providers payload"
+    )
+
+
+# ---------------------------------------------------------------------------
+# GovInfoAdapter
+# ---------------------------------------------------------------------------
 
 
 def test_govinfo_adapter_from_response_get():
@@ -41,3 +121,27 @@ def test_govinfo_adapter_from_response_get():
     assert fa.external_ref == "USCODE-2022-title15"
     assert "restraint of trade" in fa.citable_text
     assert fa.content_kind in {"statute", "regulation"}
+
+
+# ---------------------------------------------------------------------------
+# _content_kind_from_id — honest catch-all
+# ---------------------------------------------------------------------------
+
+
+def test_content_kind_from_id_uscode_returns_statute():
+    assert _content_kind_from_id("USCODE-2022-title15") == "statute"
+
+
+def test_content_kind_from_id_cfr_returns_regulation():
+    assert _content_kind_from_id("CFR-2023-title12-vol1") == "regulation"
+
+
+def test_content_kind_from_id_unknown_returns_unknown():
+    """A non-USCODE/CFR package_id must return 'unknown', not 'statute'.
+
+    Returning 'statute' for an unrecognised id would be a confident mislabel
+    (anti-overclaiming posture, PRD §1.3 transparency principle).
+    """
+    assert _content_kind_from_id("BILLS-2022-s1234") == "unknown"
+    assert _content_kind_from_id("CREC-2023-pt1") == "unknown"
+    assert _content_kind_from_id("") == "unknown"

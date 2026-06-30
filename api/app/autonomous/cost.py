@@ -87,6 +87,10 @@ async def estimate_tool_cost(
     # DE-344: per-provider cost model for gateway-brokered external intents.
     # All imports are LOCAL to avoid circular imports:
     #   governance.py → guard.py → cost.py
+    # NOTE: each external-intent branch below is best-effort (D-a3 non-fatal
+    # posture).  Under a *persistent* gateway-config-fetch failure both
+    # estimate AND realized cost go to 0, so the R4 cost brake fails open on
+    # that path — this is the accepted trade-off per ADR D-a3 (ADR 0016).
     if intent == ToolIntent.retrieve_caselaw:
         try:
             from app.research import service as research_service

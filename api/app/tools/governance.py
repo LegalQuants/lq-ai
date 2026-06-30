@@ -130,7 +130,11 @@ async def _load_provider_tier_cache(*, request_id: str | None = None) -> None:
                     with contextlib.suppress(TypeError, ValueError, ArithmeticError):
                         _provider_cost_cache[str(name)] = Decimal(str(cost_raw))
                 type_str = entry.get("type")
-                if type_str:
+                # First-wins: if two providers share the same type, keep the
+                # first one (matches the first-wins logic in resolve_available_sources
+                # and _resolve_external_call; last-wins would let estimate project
+                # against one provider and charge another — DE-368 / WS-E PR1a review).
+                if type_str and str(type_str) not in _provider_type_to_name:
                     _provider_type_to_name[str(type_str)] = str(name)
     except Exception:
         log.warning(

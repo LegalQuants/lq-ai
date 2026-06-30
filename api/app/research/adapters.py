@@ -55,9 +55,11 @@ def _content_kind_from_id(identifier: str) -> str:
         return "statute"
     if "CFR" in upper:
         return "regulation"
-    # Fallback — unknown collection; callers should prefer the
-    # collection field when available (search_authority path).
-    return "statute"
+    # Honest fallback — collection not recognised; callers should prefer the
+    # collection field when available (search_authority path).  We do NOT
+    # claim "statute" for an unknown package — that would be a confident
+    # mislabel (anti-overclaiming, per PRD §1.3 transparency posture).
+    return "unknown"
 
 
 def _content_kind_from_collection(collection: str, fallback_id: str = "") -> str:
