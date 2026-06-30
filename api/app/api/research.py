@@ -1,15 +1,18 @@
-"""/api/v1/research — case-law research surface (WS3b)."""
+"""/api/v1/research — case-law research surface (WS3b) + content sources (WS-E)."""
 
 from __future__ import annotations
 
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import ActiveUser
+from app.clients.gateway import GatewayClient, get_gateway_client
 from app.db.session import get_db
 from app.research import service
+from app.research.registry import resolve_available_sources
 from app.schemas.research import (
     ClusterView,
     FindInCaseRequest,
@@ -24,6 +27,34 @@ from app.schemas.research import (
 )
 
 router = APIRouter(prefix="/research", tags=["research"])
+
+
+# ---------------------------------------------------------------------------
+# Response models for GET /sources (P3 / ADR 0016 — safe fields only)
+# ---------------------------------------------------------------------------
+
+
+class AvailableSourceResponse(BaseModel):
+    """Serialization of one registry entry.
+
+    Exposes only the safe fields defined by P3 (ADR 0016):
+    name, type, jurisdiction, coverage, content_kinds, enabled, egress_tier.
+    Auth keys and cost fields are NEVER included.
+    """
+
+    name: str | None
+    type: str
+    jurisdiction: str
+    coverage: str
+    content_kinds: tuple[str, ...]
+    enabled: bool
+    egress_tier: int | None
+
+
+class SourcesResponse(BaseModel):
+    """Envelope for GET /api/v1/research/sources."""
+
+    sources: list[AvailableSourceResponse]
 
 
 @router.get("/capabilities", response_model=ResearchCapabilities)
@@ -75,3 +106,36 @@ async def find_in_case(
     )
     matches = [FindMatch(**m) for m in raw_matches]
     return FindInCaseResponse(opinion_id=payload.opinion_id, matches=matches)
+
+
+# ---------------------------------------------------------------------------
+# WS-E PR1a — content-authority source registry
+# ---------------------------------------------------------------------------
+
+
+@router.get("/sources", response_model=SourcesResponse)
+async def list_sources(
+    user: ActiveUser,
+    gateway: Annotated[GatewayClient, Depends(get_gateway_client)],
+) -> SourcesResponse:
+    """List available content-authority sources from the registry.
+
+    Returns one entry per registered source type, indicating whether it is
+    enabled (configured in the gateway) and its safe metadata fields.
+    Auth keys and cost fields are never included (P3 / ADR 0016).
+    """
+    available = await resolve_available_sources(gateway)
+    return SourcesResponse(
+        sources=[
+            AvailableSourceResponse(
+                name=src.name,
+                type=src.type,
+                jurisdiction=src.jurisdiction,
+                coverage=src.coverage,
+                content_kinds=src.content_kinds,
+                enabled=src.enabled,
+                egress_tier=src.egress_tier,
+            )
+            for src in available
+        ]
+    )
