@@ -16,11 +16,16 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, NamedTuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.citation.authority import (
+    _AuthorityCandidate,
+    authority_target,
+    load_authority_text as _default_load_authority_text,
+)
 from app.citation.caselaw import _CaselawCandidate, locate_passage, opinion_target
 from app.citation.extraction import CitationCandidate, locate_in_chunk
 from app.citation.gate import compute_and_record_gate
@@ -29,6 +34,7 @@ from app.citation.verification import verify
 from app.models.autonomous import AutonomousSession
 from app.models.chat import Chat, Message, MessageCitation
 from app.models.document import Document, DocumentChunk
+from app.models.message_authority_citation import MessageAuthorityCitation
 from app.models.message_caselaw_citation import MessageCaselawCitation
 from app.models.research import ResearchOpinionMetadata
 from app.research.service import read_opinion as _default_read_opinion
@@ -177,6 +183,27 @@ async def build_kb_citations(
 
 _LoadOpinion = Callable[..., Awaitable[dict[str, Any]]]
 
+# ---------------------------------------------------------------------------
+# Authority structured-citation builder (WS-E PR1b)
+# ---------------------------------------------------------------------------
+
+_LoadAuthorityText = Callable[..., Awaitable[str | None]]
+
+
+class _AuthorityItem(NamedTuple):
+    """One authority citation extracted from the findings/evidence pair.
+
+    ``carried_text`` is the evidence body carried inline in the evidence dict
+    (``ev["content"]``); it serves as a non-fatal fallback when the durable
+    cache miss is a cache miss.
+    """
+
+    quote: str
+    source: str
+    external_ref: str
+    content_kind: str
+    carried_text: str
+
 
 async def build_caselaw_citations(
     db: AsyncSession,
@@ -301,6 +328,137 @@ async def build_caselaw_citations(
     return added
 
 
+async def build_authority_citations(
+    db: AsyncSession,
+    *,
+    message_id: uuid.UUID,
+    items: list[_AuthorityItem],
+    load_authority_text: _LoadAuthorityText = _default_load_authority_text,
+    gateway: Any,
+    judge_model: str = "fast",
+) -> int:
+    """Resolve, verify, and persist authority structured citations into the ledger.
+
+    For each ``_AuthorityItem(quote, source, external_ref, content_kind, carried_text)``:
+
+    1. Guard: skip empty / whitespace-only quotes.
+    2. Load body from the durable cache via ``load_authority_text``; if absent
+       (cache miss or stale), fall back to ``item.carried_text``.  If still
+       falsy → skip (non-fatal; no body means no target to verify against).
+    3. Build an :class:`_AuthorityVerificationTarget` via
+       :func:`authority_target`.
+    4. Locate ``quote`` in the body via :func:`locate_passage`.
+       **Miss → FAIL row** (``verified=False, method=None``) — unlike caselaw's
+       ledger bridge, a no-locate authority quote MUST surface to the gate so
+       fabricated statute/regulation quotes are never silently passed.  Mirrors
+       :func:`app.citation.caselaw._fail_row`'s offset convention
+       (``start=0, end=len(quote)``).
+    5. On locate hit: build an :class:`_AuthorityCandidate` and run the
+       verifier cascade via :func:`verify`.  Write a ``MessageAuthorityCitation``
+       row carrying ``result.verified``; the gate buckets it PASS or FAIL.
+
+    ``db.add_all(rows)`` + ``db.flush()`` once at the end.  Never commits.
+
+    Returns the number of rows added (verified + FAIL).  Best-effort: a
+    per-item exception is logged and skipped so one bad citation does not abort
+    the whole pass or poison the ``AsyncSession``.
+    """
+    rows: list[MessageAuthorityCitation] = []
+
+    for item in items:
+        if not item.quote.strip():
+            log.debug(
+                "authority citation build: empty quote, skipping",
+                extra={"event": "autonomous_authority_citation_skip"},
+            )
+            continue
+
+        try:
+            body = await load_authority_text(
+                db, source_type=item.source, external_ref=item.external_ref
+            )
+            if body is None:
+                body = item.carried_text
+            if not body:
+                log.debug(
+                    "authority citation build: no body available, skipping",
+                    extra={
+                        "event": "autonomous_authority_citation_skip",
+                        "external_ref": item.external_ref,
+                    },
+                )
+                continue
+
+            target = authority_target(item.source, item.external_ref, body)
+            off = locate_passage(item.quote, target.normalized_content)
+
+            if off is None:
+                # FAIL row: fabricated authority quote must surface to the gate.
+                # Offsets are a documented placeholder (mirrors caselaw._fail_row):
+                # start=0, end=len(quote) satisfies CHECK(end > start >= 0).
+                log.debug(
+                    "authority citation build: locate miss — FAIL row added",
+                    extra={
+                        "event": "autonomous_authority_citation_fail",
+                        "external_ref": item.external_ref,
+                    },
+                )
+                rows.append(
+                    MessageAuthorityCitation(
+                        message_id=message_id,
+                        source_type=item.source,
+                        external_ref=item.external_ref,
+                        content_kind=item.content_kind,
+                        source_offset_start=0,
+                        source_offset_end=len(item.quote),
+                        source_text=item.quote,
+                        verified=False,
+                        verification_method=None,
+                        verification_confidence=None,
+                        partial=False,
+                    )
+                )
+                continue
+
+            start, end = off
+            cand = _AuthorityCandidate(
+                source_offset_start=start,
+                source_offset_end=end,
+                source_text=item.quote,
+                source_document_id=target.id,
+            )
+            result = await verify(cand, target, gateway=gateway, judge_model=judge_model)
+            rows.append(
+                MessageAuthorityCitation(
+                    message_id=message_id,
+                    source_type=item.source,
+                    external_ref=item.external_ref,
+                    content_kind=item.content_kind,
+                    source_offset_start=start,
+                    source_offset_end=end,
+                    source_text=item.quote,
+                    verified=result.verified,
+                    verification_method=result.method,
+                    verification_confidence=result.confidence,
+                    partial=result.partial,
+                )
+            )
+
+        except Exception:
+            log.warning(
+                "authority citation build: unexpected error, skipping citation",
+                extra={
+                    "event": "autonomous_authority_citation_skip",
+                    "external_ref": item.external_ref,
+                },
+                exc_info=True,
+            )
+
+    db.add_all(rows)
+    await db.flush()
+    return len(rows)
+
+
 # ---------------------------------------------------------------------------
 # Session-level bridge (WS-D PR2 Task 7)
 # ---------------------------------------------------------------------------
@@ -344,6 +502,7 @@ async def build_session_ledger(
     # Split citations by kind using the evidence registry.
     kb: list[tuple[str, str]] = []
     cl: list[tuple[str, str]] = []
+    authority_items: list[_AuthorityItem] = []
     for f in findings:
         for c in f.get("citations") or []:
             ev = by_n.get(c.get("source"))
@@ -353,9 +512,19 @@ async def build_session_ledger(
                 kb.append((c["quote"], ev["ref"]))
             elif ev["kind"] == "caselaw":
                 cl.append((c["quote"], ev["ref"]))
+            elif ev["kind"] == "authority":
+                authority_items.append(
+                    _AuthorityItem(
+                        quote=c["quote"],
+                        source=ev["source"],
+                        external_ref=ev["ref"],
+                        content_kind=ev.get("content_kind") or "statute",
+                        carried_text=ev.get("content") or "",
+                    )
+                )
 
     # Nothing citable → no manufactured chat, no gate, no transaction writes.
-    if not kb and not cl:
+    if not kb and not cl and not authority_items:
         return None
 
     # Manufacture the hidden chat + assistant message.
@@ -372,12 +541,19 @@ async def build_session_ledger(
     db.add(message)
     await db.flush()
 
-    # Build citation rows (Tasks 5/6).  Each builder flushes once internally.
+    # Build citation rows (Tasks 5/6/WS-E).  Each builder flushes once internally.
     await build_kb_citations(
         db, message_id=message.id, citations=kb, gateway=gateway, judge_model=judge_model
     )
     await build_caselaw_citations(
         db, message_id=message.id, citations=cl, gateway=gateway, judge_model=judge_model
+    )
+    await build_authority_citations(
+        db,
+        message_id=message.id,
+        items=authority_items,
+        gateway=gateway,
+        judge_model=judge_model,
     )
 
     # Assemble the ledger index + compute the gate verdict.
