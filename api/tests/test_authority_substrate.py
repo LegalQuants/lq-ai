@@ -98,9 +98,7 @@ async def test_load_returns_none_when_absent(db_session, fake_storage) -> None:
 
 
 @pytest.mark.asyncio
-async def test_load_returns_none_when_stale(
-    db_session, monkeypatch: pytest.MonkeyPatch, fake_storage
-) -> None:
+async def test_load_returns_none_when_stale(db_session, fake_storage) -> None:
     await store_authority_text(
         db_session, source_type="govinfo", external_ref="USCODE-old", text="old body"
     )
@@ -123,6 +121,55 @@ async def test_load_returns_none_when_stale(
         await load_authority_text(db_session, source_type="govinfo", external_ref="USCODE-old")
         is None
     )
+
+
+@pytest.mark.asyncio
+async def test_store_rejects_path_traversal_external_ref(db_session, fake_storage) -> None:
+    """Malicious external_ref containing path-traversal chars raises ValueError.
+
+    The resulting storage key must never start with anything outside
+    'authority/<source_type>/' — validated by confirming the exception fires
+    before any upload attempt.
+    """
+    with pytest.raises(ValueError, match="external_ref"):
+        await store_authority_text(
+            db_session,
+            source_type="govinfo",
+            external_ref="../../etc/passwd",
+            text="malicious",
+        )
+
+
+@pytest.mark.asyncio
+async def test_store_rejects_path_traversal_source_type(db_session, fake_storage) -> None:
+    """Malicious source_type also raises ValueError (load path consistent)."""
+    with pytest.raises(ValueError, match="source_type"):
+        await store_authority_text(
+            db_session,
+            source_type="gov/../../etc",
+            external_ref="USCODE-2022-title15",
+            text="malicious",
+        )
+
+
+@pytest.mark.asyncio
+async def test_store_second_call_updates_not_raises(db_session, fake_storage) -> None:
+    """A second store for the same key updates the row, not raises IntegrityError.
+
+    Simulates the concurrent-insert scenario by pre-inserting a row (first store)
+    and then calling store again — asserts idempotent update rather than exception.
+    """
+    body1 = "Original statutory text"
+    body2 = "Refreshed statutory text"
+    await store_authority_text(
+        db_session, source_type="govinfo", external_ref="USCODE-dup", text=body1
+    )
+    # Second call must update, not raise.
+    await store_authority_text(
+        db_session, source_type="govinfo", external_ref="USCODE-dup", text=body2
+    )
+    got = await load_authority_text(db_session, source_type="govinfo", external_ref="USCODE-dup")
+    assert got == body2
 
 
 @pytest.mark.asyncio

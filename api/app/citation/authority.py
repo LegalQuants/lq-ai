@@ -21,11 +21,13 @@ Object storage follows the same pattern as
 
 from __future__ import annotations
 
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.authority_text_cache import AuthorityTextCache
@@ -34,6 +36,25 @@ from app.storage import stream_download, upload_bytes
 # Stable namespace for authority verify targets.
 # MUST be distinct from caselaw's _OPINION_NS ("6f9619ff-8b86-d011-b42d-00cf4fc964ff").
 _AUTHORITY_NS = uuid.UUID("fa7a7a7a-4e8b-4b5c-9d0e-1f2a3b4c5d6e")
+
+# Allowlist for object-storage key components.  GovInfo ids are alnum + hyphen
+# (e.g. "USCODE-2022-title15", "CFR-2023-title40"); permit dots and underscores
+# for other sources that may use them.
+_SAFE_KEY_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _validate_storage_key_component(param_name: str, value: str) -> None:
+    """Raise ValueError if ``value`` contains chars that could cause path traversal.
+
+    Accepts only ``[A-Za-z0-9._-]+``.  Caller supplies ``param_name`` for the
+    error message so callers can tell source_type from external_ref apart.
+    """
+    if not _SAFE_KEY_RE.fullmatch(value):
+        raise ValueError(
+            f"Invalid {param_name} {value!r}: must match [A-Za-z0-9._-]+ "
+            "(disallowed character or path-traversal sequence detected)"
+        )
+
 
 # TTL for cached authority source text: 30 days.
 AUTHORITY_TEXT_TTL = timedelta(days=30)
@@ -107,6 +128,9 @@ async def store_authority_text(
     can return it verbatim for use with ``authority_target``; the verifier
     normalizes the content internally when needed.
     """
+    _validate_storage_key_component("source_type", source_type)
+    _validate_storage_key_component("external_ref", external_ref)
+
     storage_path = f"authority/{source_type}/{external_ref}"
     await upload_bytes(
         storage_path=storage_path,
@@ -126,17 +150,38 @@ async def store_authority_text(
         existing.storage_path = storage_path
         existing.char_length = len(text)
         existing.retrieved_at = now
+        await db.flush()
     else:
-        db.add(
-            AuthorityTextCache(
-                source_type=source_type,
-                external_ref=external_ref,
-                storage_path=storage_path,
-                char_length=len(text),
-                retrieved_at=now,
-            )
+        new_row = AuthorityTextCache(
+            source_type=source_type,
+            external_ref=external_ref,
+            storage_path=storage_path,
+            char_length=len(text),
+            retrieved_at=now,
         )
-    await db.flush()
+        try:
+            async with db.begin_nested():  # SAVEPOINT around the conflict-prone insert
+                db.add(new_row)
+                await db.flush()
+        except IntegrityError:
+            # A concurrent call inserted the same (source_type, external_ref) between
+            # our SELECT and our INSERT.  Exiting begin_nested() on the exception has
+            # already rolled back to the SAVEPOINT — the session is still usable and
+            # new_row has been expelled from the identity map.  Re-read the winning row
+            # and update it in place so our fresh text/char_length/retrieved_at wins.
+            winner = (
+                await db.execute(
+                    select(AuthorityTextCache).where(
+                        AuthorityTextCache.source_type == source_type,
+                        AuthorityTextCache.external_ref == external_ref,
+                    )
+                )
+            ).scalar_one_or_none()
+            if winner is not None:
+                winner.storage_path = storage_path
+                winner.char_length = len(text)
+                winner.retrieved_at = now
+                await db.flush()
 
 
 async def load_authority_text(
@@ -154,6 +199,9 @@ async def load_authority_text(
     Reads the body from object storage via the same ``stream_download``
     helper that :mod:`app.research.service` uses for opinion bodies.
     """
+    _validate_storage_key_component("source_type", source_type)
+    _validate_storage_key_component("external_ref", external_ref)
+
     row = (
         await db.execute(
             select(AuthorityTextCache).where(
