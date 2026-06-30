@@ -28,7 +28,8 @@ class CitationLedgerEntry(Base):
         CheckConstraint(
             "(message_citation_id IS NOT NULL)::int "
             "+ (message_caselaw_citation_id IS NOT NULL)::int "
-            "+ (message_tool_source_id IS NOT NULL)::int = 1",
+            "+ (message_tool_source_id IS NOT NULL)::int "
+            "+ (message_authority_citation_id IS NOT NULL)::int = 1",
             name="chk_citation_ledger_entry_exactly_one_source",
         ),
         CheckConstraint(
@@ -81,6 +82,15 @@ class CitationLedgerEntry(Base):
             "message_tool_sources.id",
             ondelete="CASCADE",
             name="fk_citation_ledger_entry_tool_source",
+        ),
+        nullable=True,
+    )
+    message_authority_citation_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "message_authority_citations.id",
+            ondelete="CASCADE",
+            name="fk_citation_ledger_entry_authority_citation",
         ),
         nullable=True,
     )
