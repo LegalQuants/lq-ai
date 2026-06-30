@@ -130,6 +130,20 @@ async def test_search_authority_empty_query_raises(monkeypatch) -> None:
         )
 
 
+@pytest.mark.asyncio
+async def test_search_authority_absent_collection_raises(monkeypatch) -> None:
+    """Absent 'collection' key (not just a wrong value) → ToolProviderInvalidRequestError."""
+    from app.providers.tool.base import ToolProviderInvalidRequestError
+
+    adapter = _adapter(monkeypatch)
+    with pytest.raises(ToolProviderInvalidRequestError):
+        await adapter.invoke_tool(
+            "search_authority",
+            {"query": "something"},  # 'collection' key entirely absent
+            request_id="r6",
+        )
+
+
 # ---------------------------------------------------------------------------
 # Task 2 — get_authority normalization
 # ---------------------------------------------------------------------------
@@ -154,7 +168,8 @@ async def test_get_authority_returns_text(monkeypatch) -> None:
             {"package_id": "USCODE-2022-title15"},
             request_id="r1",
         )
-    assert "text" in out.payload
+    assert out.payload["text"] is not None
+    assert "USCODE-2022-title15" in out.payload["text"]
     assert out.payload["package_id"] == "USCODE-2022-title15"
 
 
@@ -170,6 +185,29 @@ async def test_get_authority_empty_id_raises(monkeypatch) -> None:
             {"package_id": ""},
             request_id="r4",
         )
+
+
+@pytest.mark.asyncio
+async def test_get_authority_no_txt_link_returns_none_text(monkeypatch) -> None:
+    """get_authority gracefully returns text=None when download.txtLink is absent."""
+    adapter = _adapter(monkeypatch)
+    summary_json = {
+        "packageId": "USCODE-2022-title15",
+        "title": "Title 15",
+        "download": {},  # no txtLink key
+    }
+    with respx.mock:
+        respx.route(method__in=["GET"], host="api.govinfo.gov").mock(
+            return_value=httpx.Response(200, json=summary_json)
+        )
+        out = await adapter.invoke_tool(
+            "get_authority",
+            {"package_id": "USCODE-2022-title15"},
+            request_id="r5",
+        )
+    assert out.payload["text"] is None
+    assert out.payload["package_id"] == "USCODE-2022-title15"
+    assert out.payload["title"] == "Title 15"
 
 
 # ---------------------------------------------------------------------------

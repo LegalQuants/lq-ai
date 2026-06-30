@@ -40,8 +40,9 @@ class GovInfoToolAdapter(ToolProviderAdapter):
     """Tool adapter for the GovInfo REST API (api.govinfo.gov).
 
     Auth: ``X-Api-Key`` header (api.data.gov key style — NOT ``Authorization:
-    Token``). Skeleton only; invoke_tool raises ToolProviderError for any tool
-    until Task 2 lands the operational tool implementations.
+    Token``). Supports two read-only operations: ``search_authority`` for
+    full-text search across USCODE and CFR collections, and ``get_authority``
+    for fetching a package's full statutory/regulatory text and metadata.
     """
 
     def __init__(
@@ -264,10 +265,12 @@ class GovInfoToolAdapter(ToolProviderAdapter):
         download: dict[str, Any] = summary.get("download") or {}
         txt_link: str | None = download.get("txtLink") or None
         text: str | None = None
+        text_bytes_in: int = 0
         if txt_link:
             path = urlparse(txt_link).path
             text_resp = await self._request("GET", path)
             text = text_resp.text
+            text_bytes_in = len(text_resp.content)
 
         url = txt_link or f"{self._base_url}/packages/{package_id}/summary"
         payload: dict[str, Any] = {
@@ -278,17 +281,34 @@ class GovInfoToolAdapter(ToolProviderAdapter):
             "text": text,
         }
         return self._result(
-            "get_authority", payload, sent={"package_id": package_id}, received=summary
+            "get_authority",
+            payload,
+            sent={"package_id": package_id},
+            received=summary,
+            extra_bytes_in=text_bytes_in,
         )
 
-    def _result(self, tool: str, payload: Any, *, sent: Any, received: Any) -> ToolResult:
-        """Build a ToolResult with byte counts; mark public statutory text verbatim."""
+    def _result(
+        self,
+        tool: str,
+        payload: Any,
+        *,
+        sent: Any,
+        received: Any,
+        extra_bytes_in: int = 0,
+    ) -> ToolResult:
+        """Build a ToolResult with byte counts; mark public statutory text verbatim.
+
+        ``extra_bytes_in`` allows callers to add bytes from secondary fetches
+        (e.g. the txtLink text body in ``_get_authority``) that are not
+        captured in the ``received`` JSON.
+        """
         return ToolResult(
             provider=self.name,
             tool=tool,
             payload=payload,
             bytes_out=len(json.dumps(sent).encode("utf-8")),
-            bytes_in=len(json.dumps(received).encode("utf-8")),
+            bytes_in=len(json.dumps(received).encode("utf-8")) + extra_bytes_in,
             skip_anonymization=True,
         )
 
