@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.autonomous.enums import ToolIntent
+from app.research.registry import AvailableSource
 
 log = logging.getLogger(__name__)
 
@@ -23,7 +24,13 @@ log = logging.getLogger(__name__)
 # run_skill/run_playbook are reserved for the final synthesis; emit/side-effect
 # intents are not planner-driven in PR1.
 PLANNER_ALLOWLIST: frozenset[ToolIntent] = frozenset(
-    {ToolIntent.retrieve_chunks, ToolIntent.retrieve_caselaw, ToolIntent.call_mcp_tool}
+    {
+        ToolIntent.retrieve_chunks,
+        ToolIntent.retrieve_caselaw,
+        ToolIntent.call_mcp_tool,
+        # WS-E PR1a: GovInfo authority retrieval (statute/regulation lookup).
+        ToolIntent.retrieve_authority,
+    }
 )
 
 _SYSTEM_PROMPT = """\
@@ -56,10 +63,33 @@ class PlannerDecision:
 
 
 def build_planner_messages(
-    *, goal: str, observations: list[str], allowlist: frozenset[ToolIntent]
+    *,
+    goal: str,
+    observations: list[str],
+    allowlist: frozenset[ToolIntent],
+    available_sources: list[AvailableSource] | None = None,
 ) -> list[dict[str, str]]:
     allow = ", ".join(sorted(i.value for i in allowlist))
     system = _SYSTEM_PROMPT.format(allowlist=allow)
+
+    # P3 minimal source-awareness (ADR 0016 / ADR 0021 D5): expose only
+    # name/type/jurisdiction/coverage to the planner — NEVER auth keys, egress
+    # tiers, or cost fields.  Only enabled sources are listed so the planner
+    # can choose a source that is actually available.  Richer source↔query
+    # matching (e.g. jurisdiction-aware routing) is PR2.
+    if available_sources:
+        enabled = [s for s in available_sources if s.enabled]
+        if enabled:
+            lines = [
+                f"  - {s.name or s.type} (type={s.type}, jurisdiction={s.jurisdiction},"
+                f" coverage={s.coverage})"
+                for s in enabled
+            ]
+            system += (
+                "\n\nAVAILABLE AUTHORITY SOURCES (use with retrieve_authority):\n"
+                + "\n".join(lines)
+            )
+
     obs = "\n".join(f"- {o}" for o in observations) if observations else "(none yet)"
     user = f"MATTER GOAL:\n{goal}\n\nOBSERVATIONS SO FAR:\n{obs}\n\nDecide the next action as JSON."
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
@@ -117,7 +147,7 @@ class EvidenceItem:
     context only — NEVER written to analysis_plan_trace/audit (P3)."""
 
     n: int
-    kind: str  # "kb" | "caselaw"
+    kind: str  # "kb" | "caselaw" | "authority"
     ref: str  # chunk_id (kb) | cluster_id (caselaw), as str
     content: str
     display: str
@@ -159,6 +189,22 @@ def collect_evidence(intent: ToolIntent, result: object, start_n: int) -> list[E
                 )
             )
             n += 1
+    elif intent == ToolIntent.retrieve_authority:
+        # WS-E PR1a: authority payload is a single dict under data["authority"].
+        # Ref = external_ref (e.g. "USCODE-2023-title42"); content = citable text.
+        authority = data.get("authority")
+        if isinstance(authority, dict) and authority.get("external_ref"):
+            items.append(
+                EvidenceItem(
+                    n=n,
+                    kind="authority",
+                    ref=str(authority["external_ref"]),
+                    content=str(authority.get("text") or ""),
+                    display=(
+                        f"{authority.get('label') or '?'} ({authority.get('content_kind') or '?'})"
+                    ),
+                )
+            )
     return items
 
 
@@ -185,6 +231,23 @@ def validate_action_args(intent: ToolIntent, args: dict[str, Any]) -> None:
             or not all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in emb)
         ):
             raise ValueError("retrieve_chunks query_embedding must be None or a list of numbers")
+    elif intent == ToolIntent.retrieve_authority:
+        # WS-E PR1a structural guard (WS-D non-fatal-observation boundary).
+        # Type-check only — do NOT hit the DB or gateway here.  The handler
+        # validates source-enabled and op-in-registry (those require I/O);
+        # this is the cheap pre-dispatch shape check that keeps the loop
+        # session usable on a bad model-supplied arg.
+        source = args.get("source")
+        if not isinstance(source, str):
+            raise ValueError(f"retrieve_authority source must be a str, got {source!r}")
+        op = args.get("op")
+        if not isinstance(op, str):
+            raise ValueError(f"retrieve_authority op must be a str, got {op!r}")
+        authority_args = args.get("args")
+        if authority_args is not None and not isinstance(authority_args, dict):
+            raise ValueError(
+                f"retrieve_authority args must be a dict or absent, got {authority_args!r}"
+            )
 
 
 _SNIPPET = 120
@@ -217,5 +280,13 @@ def summarize_observation(intent: ToolIntent, rationale: str, result: object) ->
         payload = data if isinstance(data, dict) else {}
         keys = sorted(payload.keys())[:8]
         return f"{intent.value} → payload keys {keys}"
+    if intent == ToolIntent.retrieve_authority:
+        authority = data.get("authority") if isinstance(data, dict) else None
+        if isinstance(authority, dict):
+            label = authority.get("label") or authority.get("external_ref") or "?"
+            ext_ref = authority.get("external_ref") or "?"
+            text_preview = str(authority.get("text") or "")[:_SNIPPET]
+            return f"{intent.value} → {label} ({ext_ref}): {text_preview}"
+        return f"{intent.value} → (no authority payload)"
     snippet = str(data)[:_SNIPPET]
     return f"{intent.value} → {snippet}"

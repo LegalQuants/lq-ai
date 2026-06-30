@@ -215,6 +215,21 @@ providers:
 #     rate_limit:
 #       requests_per_minute: 60    # per-provider, enforced at the adapter
 #     anonymize_outbound: true     # default; transform lands in WS3/WS4
+#
+#   - name: govinfo-prod
+#     type: govinfo                # shipped in WS-E PR1a; uncomment + set GOVINFO_API_KEY to enable
+#     base_url: https://api.govinfo.gov
+#     api_key_env: GOVINFO_API_KEY          # api.data.gov key — free tier sufficient for legal research
+#     egress_tier: 4               # public statutory/regulatory data (ADR 0014 D4)
+#     allowlist:
+#       hosts: [api.govinfo.gov]   # exact outbound host allowlist (SSRF)
+#     rate_limit:
+#       requests_per_minute: 60    # api.data.gov default is 1200/min; 60 is conservative
+#     anonymize_outbound: false    # statutory text is public; skip_anonymization=True on results
+#     # GovInfo data is free (no per-call cost). Fields below are optional DE-344 extensions
+#     # for future cost-tracking dashboards; omit or set to 0 for free sources:
+#     # cost_per_call: 0.0
+#     # cost_per_unit: 0.0
 
 # ============================================================
 # MODEL ALIASES — friendly names → specific provider/model

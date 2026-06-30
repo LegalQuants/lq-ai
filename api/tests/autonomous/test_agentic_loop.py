@@ -49,10 +49,20 @@ class _ScriptedGateway:
     Planner calls have 'research planner' in ``messages[0].content`` (the
     system prompt built by ``build_planner_messages``).  Synthesis / single
     inference calls don't, and receive the fixed structured-JSON stub.
+
+    ``list_tool_providers`` returns an empty list so ``resolve_available_sources``
+    (called once per loop in ``_run_analysis_loop``) sees no configured
+    providers and lists no sources in the planner prompt.  This is correct
+    for unit tests that do not exercise ``retrieve_authority`` — sources only
+    appear in the prompt when a matching provider is gateway-configured.
     """
 
     def __init__(self, planner_script: list[Any]) -> None:
         self.planner_script = list(planner_script)
+
+    async def list_tool_providers(self) -> list[dict[str, Any]]:
+        """No providers configured in the agentic-loop unit tests."""
+        return []
 
     async def chat_completion(self, request: Any, *, request_id: object = None) -> SimpleNamespace:
         system = request.messages[0].content
@@ -403,4 +413,48 @@ async def test_playbook_session_synthesizes_under_run_playbook(
     )
     assert _tool_started_calls(rows, "run_skill") == 0, (
         "run_skill must NOT appear in the audit log for a playbook session"
+    )
+
+
+# ---------------------------------------------------------------------------
+# WS-E PR1a — gateway failure on resolve_available_sources is non-fatal
+# ---------------------------------------------------------------------------
+
+
+class _FailingSourcesGateway(_ScriptedGateway):
+    """Gateway stub whose list_tool_providers raises to simulate a gateway hiccup."""
+
+    async def list_tool_providers(self) -> list[Any]:
+        raise RuntimeError("gateway unreachable")
+
+
+async def test_gateway_failure_on_authority_sources_does_not_abort_session(
+    db_session: AsyncSession,
+    seeded_matter_session: AutonomousSession,
+) -> None:
+    """CRITICAL (WS-E PR1a): gateway hiccup on resolve_available_sources must NOT abort
+    the matter session — the loop degrades to an empty source list and continues.
+
+    Pins the fix to the unguarded ``available_sources = await resolve_available_sources(gateway)``
+    call in ``_run_analysis_loop``.  Before the fix, a gateway error here would propagate
+    uncaught and abort the whole session.  After the fix it logs a warning and continues.
+    """
+    # Planner immediately signals done so only the source-resolve + synthesis calls fire.
+    gw = _FailingSourcesGateway([{"done": True, "rationale": "nothing to gather"}])
+    node = make_analysis_node(db_session, gw)
+    state: AutonomousSessionState = {
+        "session_id": str(seeded_matter_session.id),
+        "query": "Is the assignment clause enforceable?",
+        "retrieved_chunks": [],
+    }
+
+    # Must NOT raise — gateway failure on source resolution must degrade gracefully.
+    result = await node(state)
+
+    # Session still produced synthesis output (degraded, not aborted).
+    assert result.get("analysis_content") is not None, (
+        "matter session must complete with synthesis content even when authority source resolution fails"
+    )
+    assert result.get("analysis_outcome") == "success", (
+        "analysis_outcome must be 'success' (synthesis ran) despite source-resolution failure"
     )

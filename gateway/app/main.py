@@ -77,6 +77,7 @@ from app.providers import (
 from app.providers.tool.base import ToolProviderAdapter
 from app.providers.tool.courtlistener import CourtListenerToolAdapter
 from app.providers.tool.echo import EchoToolAdapter
+from app.providers.tool.govinfo import GovInfoToolAdapter
 from app.router import Router
 from app.routing_log import NullRoutingLogWriter, RoutingLogWriter, SQLRoutingLogWriter
 from app.tool_egress_log import NullToolEgressLogWriter, SQLToolEgressLogWriter
@@ -197,6 +198,10 @@ def build_tool_adapter(provider: ToolProviderConfig) -> ToolProviderAdapter | No
         mcp_adapter = MCPToolProviderAdapter.from_config(provider)
         mcp_adapter.validate_base_url()
         return mcp_adapter
+    if provider.type == "govinfo":
+        govinfo_adapter = GovInfoToolAdapter.from_config(provider)
+        govinfo_adapter.validate_base_url()
+        return govinfo_adapter
     return None
 
 

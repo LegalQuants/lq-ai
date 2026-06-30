@@ -201,6 +201,8 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/research/clusters/{cluster_id}",
         "/api/v1/research/opinions/{opinion_id}",
         "/api/v1/research/find-in-case",
+        # WS-E PR1a — content-authority source registry
+        "/api/v1/research/sources",
         # WS2/PR4b — MCP registry admin surface
         "/api/v1/admin/mcp",
         "/api/v1/admin/mcp/{server}/refresh",
@@ -332,7 +334,9 @@ async def test_openapi_paths_match_sketch() -> None:
     # /api/v1/chats/{chat_id}/ledger
     # WS-D PR2 C5 adds one new path (135 -> 136):
     # /api/v1/autonomous/sessions/{session_id}/ledger
-    assert len(actual) == 136
+    # WS-E PR1a adds one new path (136 -> 137):
+    # /api/v1/research/sources
+    assert len(actual) == 137
 
 
 @pytest.mark.unit

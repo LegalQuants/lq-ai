@@ -15,11 +15,12 @@ Cost model (per M4 implementation plan)
   with no provider inference; marginal cost is zero for R4 pre-flight
   purposes (``emit_artifact`` writes storage + DB rows but burns no
   provider tokens, exactly like ``emit_finding``).
-* ``retrieve_caselaw`` / ``call_mcp_tool`` — gateway-brokered external
-  lookups (PR5a, granted at analysis phase per D-a4); they burn no
-  provider-inference tokens so marginal cost is zero (D-a3). A real
-  per-provider tool-cost model that accounts for CourtListener API fees
-  and MCP provider charges is deferred to DE-344.
+* ``retrieve_caselaw`` / ``call_mcp_tool`` / ``retrieve_authority`` —
+  gateway-brokered external lookups (PR5a / WS-E PR1a, granted at analysis
+  phase per D-a4); they burn no provider-inference tokens so marginal cost is
+  zero (D-a3). A real per-provider tool-cost model that accounts for
+  CourtListener API fees, MCP provider charges, and GovInfo API fees is
+  deferred to DE-344 / Task 7.
 
 Usage::
 
@@ -60,11 +61,12 @@ async def estimate_tool_cost(
 
     All other intents (``retrieve_chunks``, ``propose_memory``,
     ``propose_precedent``, ``emit_finding``, ``emit_artifact``,
-    ``notify``, ``retrieve_caselaw``, ``call_mcp_tool``) are
-    local-only or gateway-brokered operations with no provider
-    inference; this function returns :data:`decimal.Decimal` ``"0"``
-    for them without querying the DB. A per-provider cost model for
-    ``retrieve_caselaw`` and ``call_mcp_tool`` is deferred to DE-344.
+    ``notify``, ``retrieve_caselaw``, ``call_mcp_tool``,
+    ``retrieve_authority``) are local-only or gateway-brokered operations
+    with no provider inference; this function returns
+    :data:`decimal.Decimal` ``"0"`` for them without querying the DB.
+    A per-provider cost model for ``retrieve_caselaw``, ``call_mcp_tool``,
+    and ``retrieve_authority`` is deferred to DE-344 / Task 7.
 
     Args:
         intent: The :class:`~app.autonomous.enums.ToolIntent` being considered.
@@ -81,4 +83,49 @@ async def estimate_tool_cost(
     if intent in _INFERENCE_INTENTS:
         model = params.get("judge_model") or params["model"]
         return await estimate_judge_call_cost_usd(db, judge_model=model)
+
+    # DE-344: per-provider cost model for gateway-brokered external intents.
+    # All imports are LOCAL to avoid circular imports:
+    #   governance.py → guard.py → cost.py
+    # NOTE: each external-intent branch below is best-effort (D-a3 non-fatal
+    # posture).  Under a *persistent* gateway-config-fetch failure both
+    # estimate AND realized cost go to 0, so the R4 cost brake fails open on
+    # that path — this is the accepted trade-off per ADR D-a3 (ADR 0016).
+    if intent == ToolIntent.retrieve_caselaw:
+        try:
+            from app.research import service as research_service
+            from app.tools.governance import resolve_provider_cost
+
+            provider = await research_service._resolve_provider()
+            return await resolve_provider_cost(provider)
+        except Exception:
+            pass
+        return Decimal("0")
+
+    if intent == ToolIntent.retrieve_authority:
+        try:
+            from app.tools.governance import (
+                resolve_provider_cost,
+                resolve_provider_name_by_type,
+            )
+
+            source_type = str(params.get("source") or "")
+            provider_name = await resolve_provider_name_by_type(source_type)
+            if provider_name:
+                return await resolve_provider_cost(provider_name)
+        except Exception:
+            pass
+        return Decimal("0")
+
+    if intent == ToolIntent.call_mcp_tool:
+        try:
+            from app.tools.governance import resolve_provider_cost
+
+            provider = str(params.get("provider") or "")
+            if provider:
+                return await resolve_provider_cost(provider)
+        except Exception:
+            pass
+        return Decimal("0")
+
     return Decimal("0")

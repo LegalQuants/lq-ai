@@ -4637,6 +4637,8 @@ No code change — the runtime already returns these with the correct typed `cod
 
 **Status (2026-06-26):** Partially addressed. WS-G PR2 (the treatment-classifying judge) shipped the **per-case judge budget** — a real, enforced USD cost bound on the treatment judge fan-out — as the milestone's first concrete external-work cost control (ADR 0019 D10). PR2 did **not** wire the autonomous-path `estimate_tool_cost`/R4 piece: the treatment judge runs in a background arq derivation job, not through the autonomous `guarded_tool_call` chokepoint, and `get_citing_opinions` is not a `ToolIntent` — so routing it through R4 would be incorrect, not merely deferred. Nothing metered ships before WS-E (CourtListener is free-tier/BYO-key today), so no spend escapes R4 in the interim. The remaining scope — a real per-provider `estimate_tool_cost` for `retrieve_caselaw` / `call_mcp_tool` + realized-cost recording on `tool_call_log` — lands in **WS-E**, on its first metered source.
 
+**Status (2026-06-30): SHIPPED — WS-E PR1a.** A per-provider cost model now backs all three external intents (`retrieve_caselaw`, `retrieve_authority`, `call_mcp_tool`). The gateway `tool_providers` config carries an optional `cost_per_call` / `cost_per_unit` (riding `ToolProviderConfig`'s `extra="allow"` `model_extra` — no config-schema field, no migration); `app/tools/governance.py` caches it per-provider alongside the egress tier in the same admin-config pass (`resolve_provider_cost`); `estimate_tool_cost` returns the configured rate for the projecting R4 pre-flight; and all three governed handlers record the realized rate on `ToolResult.cost_usd` → `tool_call_log.cost_usd` and accumulate it onto `session.cost_total_usd` (so R4's cumulative brake throttles external spend symmetrically across the three intents). A free/unconfigured source omits the field → `Decimal("0")` → R4 no-op (correct). **Honest caveat — remaining follow-up:** the realized cost is the *configured* per-call rate, not a cost parsed from a provider's response envelope; a source that reports a *variable* per-call cost in its payload (none of GovInfo/CourtListener/MCP do today) would need response-level cost parsing — file as a DE if/when such a source is added. The cost brake is also best-effort (fails open on a systemic gateway-config-fetch failure, per ADR D-a3 / ADR 0016 non-fatal posture).
+
 #### DE-345 — Extract a shared `_stream_loop_outcome` renderer for the chat tool-loop
 
 **Priority:** P3 · **Effort:** S
@@ -4883,6 +4885,22 @@ So the single longest phase (image pull) has neither a stream nor a poll. The re
 **Specific scope:** If the suite is ever parallelized for speed (`pytest-xdist -n auto`), give each worker its own database/schema (e.g. `xdist`'s `worker_id` → per-worker DB name, or a template-DB clone per worker) and mark any remaining cross-worker-stateful tests (DB-cache + call-count assertions) `serial`. Until then: do not run parallel `pytest` against the shared dev test DB (`lqai_test` on `:55432`). Optionally add a one-line note to `api/tests/conftest.py` documenting the serial-only constraint.
 
 **When to ship:** Before/with any test-suite parallelization effort; no action needed for current serial CI.
+
+#### DE-369 — Durable content provenance for fetched authority (statutes/regs) in the autonomous loop — **PR1b mandate, not optional**
+
+**Priority:** P1 · **Effort:** M · **Status: REQUIRED in WS-E PR1b (not deferrable past it)**
+
+**Context:** Surfaced during WS-E PR1a Task 5 (`retrieve_authority`). The PR1a plan/handoff said fetched GovInfo authority would be captured as a `MessageToolSource` provenance row. That is architecturally impossible in the autonomous executor: `message_tool_sources.message_id` is `NOT NULL FK → messages.id` and the autonomous loop has no `message_id` (it produces findings/artifacts, not chat messages mid-loop). `MessageToolSource` is a chat-path mechanism (DE-350); the sibling autonomous handlers `_handle_retrieve_caselaw` / `_handle_call_mcp_tool` likewise write none. So PR1a captures provenance **only** at two levels: the `tool_call_log` row (the durable external-call **audit** — provider/tool/intent/tier/outcome) and `ToolResult.data["authority"]` (consumed by the loop, **not durably persisted**). The fetched authority's **content** (the statutory/regulatory text, label, url, citation) is therefore not durably stored by PR1a. Maintainer decision (2026-06-29): accept the PR1a adaptation, but the durable content provenance is **not** dropped — it is sequenced to PR1b, where it is the coherent unit it belongs to.
+
+**Why PR1b is the right home (not a skip):** ADR 0021 D3 (refined 2026-06-29 = mirror-the-caselaw-path) already designs this as one mechanism (mech-B): an in-memory verify target + ONE `message_authority_citations` table + a 4th `citation_ledger_entry` FK slot + a `(source_type, external_ref) → text` TTL cache + `build_authority_citations` + a `build_session_ledger` authority split. Durable text storage is **coupled to** char-fidelity verification of the fetched quote — storing the text without the verifier half is a half-built table that would need rework — and it needs migration `0064`, which PR1a was explicitly scoped to exclude. Building it whole in PR1b is the correct sequencing, not the lazier one.
+
+**Acceptance criteria (PR1b must deliver all):**
+1. Fetched-authority **text** is durably persisted (the `(source_type, external_ref) → text` TTL cache + the citable target the verifier reads), not only returned in `ToolResult.data`.
+2. A `message_authority_citations` table (migration `0064`) backs verified authority quotes, mirroring `message_caselaw_citations`; rows are char-fidelity-verified against the stored authority text via the existing cascade.
+3. The `citation_ledger_entry` 4th FK slot references authority citations, so a delivered matter session's ledger (`build_session_ledger`) includes authority-backed findings and the fiduciary gate counts them.
+4. P3 preserved (joins the no-raw-payload tripwire; text read at trace time, not stored in audit rows).
+
+**When to ship:** WS-E PR1b — the immediately-next slice after PR1a. This DE exists so the deferral is a tracked, permanent backlog obligation rather than a handoff note; PR1b is not "done" until all four criteria above hold.
 
 ---
 

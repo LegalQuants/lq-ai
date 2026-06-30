@@ -147,9 +147,10 @@ class ProviderConfig(BaseModel):
 # --- Tool / data-source providers (ADR 0014) ---------------------------------
 
 
-ToolProviderType = Literal["echo", "courtlistener", "mcp"]
+ToolProviderType = Literal["echo", "courtlistener", "mcp", "govinfo"]
 """Tool-provider family. ``echo`` is the test/proof type (PR1); ``courtlistener``
-and ``mcp`` land in later PRs."""
+and ``mcp`` land in later PRs; ``govinfo`` is the GovInfo statutory-text adapter
+(WS-E PR1a)."""
 
 
 class EgressAllowlistConfig(BaseModel):

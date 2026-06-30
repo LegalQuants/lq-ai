@@ -119,7 +119,7 @@ _ARTIFACT_MAX_CHARS: int = 1_000_000
 # pre-check + span annotation). Every OTHER intent is a local write or a local
 # retrieval and stays on ``autonomous_audit`` only — no ``tool_call_log`` noise.
 _EXTERNAL_TOOL_INTENTS: frozenset[ToolIntent] = frozenset(
-    {ToolIntent.retrieve_caselaw, ToolIntent.call_mcp_tool}
+    {ToolIntent.retrieve_caselaw, ToolIntent.call_mcp_tool, ToolIntent.retrieve_authority}
 )
 
 
@@ -305,18 +305,33 @@ async def guarded_tool_call(
         return result
 
 
-async def _resolve_external_call(intent: ToolIntent, params: dict[str, Any]) -> tuple[str, str]:
+async def _resolve_external_call(
+    intent: ToolIntent,
+    params: dict[str, Any],
+    gateway: Any,
+) -> tuple[str, str]:
     """Resolve the ``(provider, tool)`` marker for a governed external call.
 
     For ``retrieve_caselaw`` the provider is the configured CourtListener
     provider name (resolved via the research service's provider-resolution
     helper — PR3b retired the hardcoded name) and the ``tool`` is the research
     op (e.g. ``"search_case_law"``).  For ``call_mcp_tool`` the provider/tool
-    come straight from the params the model supplied.
+    come straight from the params the model supplied.  For
+    ``retrieve_authority`` the provider is resolved via the live content-source
+    registry (``resolve_available_sources``) filtered to enabled sources only
+    (ADR 0021 D5 / WS-E PR1a); a disabled or unknown source raises
+    :exc:`ValueError` BEFORE ``governed_tool_invocation`` writes any audit row
+    (validation-before-side-effect invariant).
 
     These markers are the ``provider``/``tool`` columns on the ``tool_call_log``
     row and the key into ``resolve_provider_tier`` — counts/types only, never
     raw args.
+
+    Args:
+        intent: The external :class:`~app.autonomous.enums.ToolIntent`.
+        params: The call params dict.
+        gateway: The Inference Gateway client; required for
+            ``retrieve_authority`` to call ``resolve_available_sources``.
     """
     if intent == ToolIntent.retrieve_caselaw:
         from app.research import service as research_service
@@ -326,6 +341,21 @@ async def _resolve_external_call(intent: ToolIntent, params: dict[str, Any]) -> 
         return provider, op
     if intent == ToolIntent.call_mcp_tool:
         return str(params["provider"]), str(params["tool"])
+    if intent == ToolIntent.retrieve_authority:
+        # WS-E PR1a: resolve the GovInfo provider name via the live registry.
+        # Validation-before-side-effect: raise ValueError for unknown/disabled
+        # source BEFORE governed_tool_invocation writes any tool_call_log row,
+        # so a bad model-supplied source never poisons the session state.
+        from app.research.registry import resolve_available_sources
+
+        source_type = str(params.get("source") or "")
+        sources = await resolve_available_sources(gateway)
+        matching = [s for s in sources if s.type == source_type and s.enabled]
+        if not matching:
+            raise ValueError(
+                f"retrieve_authority: source {source_type!r} not available or disabled"
+            )
+        return str(matching[0].name), str(params.get("op") or "")
     raise ValueError(f"_resolve_external_call: not an external intent {intent!r}")
 
 
@@ -356,7 +386,7 @@ async def _governed_external_dispatch(
     # top-level import here would be circular.
     from app.tools.governance import governed_tool_invocation, resolve_provider_tier
 
-    provider, tool = await _resolve_external_call(intent, params)
+    provider, tool = await _resolve_external_call(intent, params, gateway)
     provider_tier = await resolve_provider_tier(provider)
 
     async def _dispatch_closure() -> ToolResult:
@@ -557,6 +587,9 @@ async def _dispatch(
     if intent == ToolIntent.call_mcp_tool:
         return await _handle_call_mcp_tool(params, db=db)
 
+    if intent == ToolIntent.retrieve_authority:
+        return await _handle_retrieve_authority(params, db=db, gateway=gateway)
+
     # Should be unreachable: PHASE_GRANTS + R6 prevent unknown intents.
     raise ValueError(f"_dispatch: unhandled intent {intent!r}")
 
@@ -578,10 +611,10 @@ async def _handle_retrieve_caselaw(
     - ``read_opinion``     → ``{opinion_id}``
     - ``find_in_case``     → ``{opinion_id, query[, max_matches]}``
 
-    Zero cost in v1 (D-a3: no provider-inference tokens; a per-provider
-    external-tool cost model is DE-344).  The provider/tool/tier audit was
-    already written by ``governed_tool_invocation``; this handler only does
-    the call.
+    Realized cost is resolved via the per-provider cost model (DE-344);
+    falls back to ``Decimal("0")`` if resolution fails (non-fatal).
+    The provider/tool/tier audit was already written by
+    ``governed_tool_invocation``; this handler only does the call.
 
     Raises:
         ValueError: if ``op`` is missing or not a recognised research op.
@@ -612,7 +645,19 @@ async def _handle_retrieve_caselaw(
     else:
         raise ValueError(f"_handle_retrieve_caselaw: unknown research op {op!r}")
 
-    return ToolResult(cost_usd=Decimal("0"), data=data)
+    # ── DE-344: realized cost from per-provider cost model ──────────────────
+    # Local import avoids circular: governance.py → guard.py → cost.py.
+    # Non-fatal: any failure defaults to Decimal("0").
+    realized_cost: Decimal = Decimal("0")
+    try:
+        from app.tools.governance import resolve_provider_cost
+
+        provider = await research_service._resolve_provider()
+        realized_cost = await resolve_provider_cost(provider)
+    except Exception:
+        pass
+
+    return ToolResult(cost_usd=realized_cost, data=data)
 
 
 async def _handle_call_mcp_tool(
@@ -678,7 +723,149 @@ async def _handle_call_mcp_tool(
     from app.clients.gateway import get_gateway_client
 
     result = await get_gateway_client().call_tool(provider, tool, args, max_allowed_tier=None)
-    return ToolResult(cost_usd=Decimal("0"), data=result.get("payload"))
+
+    # ── DE-344: realized cost from per-provider cost model ──────────────────
+    # Local import avoids circular: governance.py → guard.py → cost.py.
+    # Non-fatal: any failure defaults to Decimal("0").
+    realized_cost: Decimal = Decimal("0")
+    try:
+        from app.tools.governance import resolve_provider_cost
+
+        realized_cost = await resolve_provider_cost(provider)
+    except Exception:
+        pass
+
+    return ToolResult(cost_usd=realized_cost, data=result.get("payload"))
+
+
+async def _handle_retrieve_authority(
+    params: dict[str, Any],
+    *,
+    db: AsyncSession,
+    gateway: Any,
+) -> ToolResult:
+    """Handle ``retrieve_authority`` — GovInfo authority retrieval via gateway.
+
+    Fetches a US federal statute or regulation through the Inference Gateway
+    (ADR 0014: the backend never calls GovInfo directly; every op goes through
+    the gateway egress).  The response is normalised by
+    :class:`~app.research.adapters.GovInfoAdapter` into a
+    :class:`~app.research.adapters.FetchedAuthority` and returned as
+    ``ToolResult.data["authority"]`` (text, external_ref, label, url,
+    content_kind).
+
+    Validation order (before any gateway call or DB write):
+
+    1. Resolve available sources via the live registry
+       (:func:`~app.research.registry.resolve_available_sources`); raise
+       :exc:`ValueError` if the requested source is absent or disabled
+       (ADR 0021 D5 — honest unavailability; belt-and-suspenders after
+       ``_resolve_external_call`` already checked).
+    2. Check the requested op is in the source's registered ops; raise
+       :exc:`ValueError` if not.
+
+    Provenance note (PR1a adaptation)
+    ----------------------------------
+    The brief specifies writing a ``MessageToolSource`` provenance row here.
+    This is architecturally impossible in the autonomous context:
+    ``message_tool_sources.message_id`` is ``NOT NULL FK → messages.id``, and
+    no ``message_id`` exists in the autonomous executor.  The
+    ``retrieve_caselaw`` handler (the closest prior analog) also does NOT write
+    a ``MessageToolSource`` row.  Provenance is captured instead in:
+
+    - ``ToolResult.data["authority"]`` (text, external_ref, label, url,
+      content_kind) — returned to the caller for further use.
+    - The ``tool_call_log`` row written by ``governed_tool_invocation``
+      (provider, tool, intent, tier, outcome) — durable external-call audit.
+
+    Character-fidelity verification and ledger-backing are PR1b (out of scope
+    here).  No migration is added in PR1a.
+
+    Zero cost in v1 (D-a3: no provider-inference tokens; per-provider
+    external-tool cost model deferred to DE-344 / Task 7).
+
+    Args:
+        params: Must contain ``"source"`` (str, SOURCE_REGISTRY type key),
+            ``"op"`` (str, one of the source's registered ops), and optionally
+            ``"args"`` (dict — defaults to ``{}`` if absent or None).
+        db: An open :class:`~sqlalchemy.ext.asyncio.AsyncSession`.  Not used
+            for writes in PR1a (no provenance row); reserved for PR1b.
+        gateway: The Inference Gateway client.  Used for
+            ``resolve_available_sources`` (provider discovery) and
+            ``call_tool`` (the actual egress call).
+
+    Returns:
+        :class:`ToolResult` with ``cost_usd=Decimal("0")`` and
+        ``data={"authority": {text, external_ref, label, url, content_kind}}``.
+
+    Raises:
+        ValueError: If the source is unknown/disabled, or the op is not
+            registered for that source.  These are clean model-arg errors —
+            the WS-D agentic loop treats them as non-fatal failed observations.
+    """
+    from app.research.registry import SOURCE_REGISTRY, resolve_available_sources
+
+    source_type = str(params.get("source") or "")
+    op = str(params.get("op") or "")
+    args: dict[str, Any] = params.get("args") or {}
+
+    # ── Validate: source enabled (belt-and-suspenders; _resolve_external_call
+    # already checked, but validate again before the gateway call so a race
+    # or param-mutation between the two can never bypass source validation).
+    sources = await resolve_available_sources(gateway)
+    enabled_map = {s.type: s for s in sources if s.enabled}
+    source = enabled_map.get(source_type)
+    if source is None:
+        raise ValueError(
+            f"_handle_retrieve_authority: source {source_type!r} not available or disabled"
+        )
+
+    # ── Validate: op ∈ source's registered ops ──────────────────────────────
+    spec = SOURCE_REGISTRY.get(source_type)
+    if spec is None or op not in spec.ops:
+        raise ValueError(
+            f"_handle_retrieve_authority: op {op!r} not in registered ops for "
+            f"source {source_type!r}"
+        )
+
+    # ── One egress (ADR 0014): call through gateway only ────────────────────
+    provider_name = str(source.name)
+    result: dict[str, Any] = await gateway.call_tool(provider_name, op, args)
+    # GatewayClient.call_tool returns the envelope {provider, tool, payload, tier};
+    # the actual GovInfo fields live under result["payload"].  Match the
+    # sibling convention in _handle_call_mcp_tool and research/service.py.
+    payload: dict[str, Any] = result.get("payload") or {}
+
+    # ── Normalise via adapter ────────────────────────────────────────────────
+    if spec.adapter is None:
+        raise ValueError(
+            f"_handle_retrieve_authority: source {source_type!r} has no response adapter"
+        )
+    authority = spec.adapter.from_response(op, payload)
+
+    # ── DE-344: realized cost from per-provider cost model ──────────────────
+    # Local import avoids circular: governance.py → guard.py → cost.py.
+    # Non-fatal: any failure defaults to Decimal("0").
+    realized_cost: Decimal = Decimal("0")
+    try:
+        from app.tools.governance import resolve_provider_cost
+
+        realized_cost = await resolve_provider_cost(provider_name)
+    except Exception:
+        pass
+
+    return ToolResult(
+        cost_usd=realized_cost,
+        data={
+            "authority": {
+                "text": authority.citable_text,
+                "external_ref": authority.external_ref,
+                "label": authority.label,
+                "url": authority.url,
+                "content_kind": authority.content_kind,
+            }
+        },
+    )
 
 
 def _sanitize_artifact_name(raw: Any) -> str:

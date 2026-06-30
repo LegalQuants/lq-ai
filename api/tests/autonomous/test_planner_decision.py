@@ -13,9 +13,15 @@ from app.autonomous.planner import (
 
 
 def test_allowlist_is_observe_intents_only():
+    # WS-E PR1a added retrieve_authority to the closed allowlist.
     assert (
         frozenset(
-            {ToolIntent.retrieve_chunks, ToolIntent.retrieve_caselaw, ToolIntent.call_mcp_tool}
+            {
+                ToolIntent.retrieve_chunks,
+                ToolIntent.retrieve_caselaw,
+                ToolIntent.call_mcp_tool,
+                ToolIntent.retrieve_authority,
+            }
         )
         == PLANNER_ALLOWLIST
     )

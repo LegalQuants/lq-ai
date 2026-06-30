@@ -319,6 +319,8 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("GET", "/api/v1/research/clusters/{cluster_id}"),
     ("GET", "/api/v1/research/opinions/{opinion_id}"),
     ("POST", "/api/v1/research/find-in-case"),
+    # WS-E PR1a — content-authority source registry
+    ("GET", "/api/v1/research/sources"),
     # WS2/PR4b — MCP registry admin surface
     ("GET", "/api/v1/admin/mcp"),
     ("POST", "/api/v1/admin/mcp/{server}/refresh"),
