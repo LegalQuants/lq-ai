@@ -62,6 +62,7 @@ from app.autonomous.structured_output import parse_structured_output
 from app.config import DEFAULT_MAX_ANALYSIS_STEPS, get_settings
 from app.errors import AutonomousBrake
 from app.models.autonomous import AutonomousSession
+from app.research.registry import resolve_available_sources
 from app.schemas.autonomous import Phase
 
 logger = logging.getLogger(__name__)
@@ -194,6 +195,12 @@ async def _run_analysis_loop(
     halt_reason = "step_cap"
     steps = 0
 
+    # WS-E PR1a: resolve authority sources once before the loop (P3 minimal —
+    # name/type/jurisdiction/coverage only; never auth/cost).  Passed into
+    # build_planner_messages so the planner can choose an available source for
+    # retrieve_authority.  Richer source↔query matching is PR2.
+    available_sources = await resolve_available_sources(gateway)
+
     while steps < max_steps:
         plan_res = await guarded_tool_call(
             session,
@@ -204,6 +211,7 @@ async def _run_analysis_loop(
                     goal=query,
                     observations=observations,
                     allowlist=PLANNER_ALLOWLIST,
+                    available_sources=available_sources,
                 ),
                 "anonymize": False,
             },

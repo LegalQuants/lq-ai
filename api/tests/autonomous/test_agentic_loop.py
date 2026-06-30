@@ -49,10 +49,20 @@ class _ScriptedGateway:
     Planner calls have 'research planner' in ``messages[0].content`` (the
     system prompt built by ``build_planner_messages``).  Synthesis / single
     inference calls don't, and receive the fixed structured-JSON stub.
+
+    ``list_tool_providers`` returns an empty list so ``resolve_available_sources``
+    (called once per loop in ``_run_analysis_loop``) sees no configured
+    providers and lists no sources in the planner prompt.  This is correct
+    for unit tests that do not exercise ``retrieve_authority`` — sources only
+    appear in the prompt when a matching provider is gateway-configured.
     """
 
     def __init__(self, planner_script: list[Any]) -> None:
         self.planner_script = list(planner_script)
+
+    async def list_tool_providers(self) -> list[dict[str, Any]]:
+        """No providers configured in the agentic-loop unit tests."""
+        return []
 
     async def chat_completion(self, request: Any, *, request_id: object = None) -> SimpleNamespace:
         system = request.messages[0].content
