@@ -82,7 +82,17 @@ class _GovInfoGateway:
         self.list_tool_providers: AsyncMock = AsyncMock(
             return_value=[{"name": provider_name, "type": "govinfo", "egress_tier": 2}]
         )
-        self.call_tool: AsyncMock = AsyncMock(return_value=_GET_AUTHORITY_PAYLOAD)
+        # Return the REAL GatewayClient.call_tool envelope shape so the double
+        # matches the contract and the handler's unwrap (result.get("payload"))
+        # is exercised by the happy-path test.
+        self.call_tool: AsyncMock = AsyncMock(
+            return_value={
+                "provider": provider_name,
+                "tool": "get_authority",
+                "payload": _GET_AUTHORITY_PAYLOAD,
+                "tier": 4,
+            }
+        )
 
 
 async def _make_user(db: AsyncSession) -> User:
@@ -268,6 +278,67 @@ async def test_retrieve_authority_unknown_source_type_raises_ValueError(
     await db_session.refresh(sess)
     assert sess.halt_state == "running"
     assert len(await _tool_call_rows(db_session, sess.id)) == 0
+
+
+# ---------------------------------------------------------------------------
+# (d) Valid source + unsupported op → ValueError, tool_call_log outcome=error
+# ---------------------------------------------------------------------------
+
+
+async def test_retrieve_authority_unsupported_op_writes_error_row(
+    db_session: AsyncSession,
+) -> None:
+    """Valid enabled source + unsupported op writes a tool_call_log row with outcome=error.
+
+    _resolve_external_call does NOT validate op, so a valid-source + bad-op
+    call succeeds there and enters governed_tool_invocation, which writes a
+    tool_call_log row with outcome="pending".  _handle_retrieve_authority then
+    raises ValueError on ``op not in spec.ops``; governed_tool_invocation
+    catches it, marks the row outcome="error", flushes a clean UPDATE, and
+    re-raises.
+
+    Asserts:
+    - A clean ValueError is raised (not poisoned).
+    - sess.halt_state == "running" (session not poisoned).
+    - Exactly ONE tool_call_log row with outcome="error".
+
+    Distinct from the bad-SOURCE test (b), which writes ZERO rows because
+    ValueError fires inside _resolve_external_call, BEFORE
+    governed_tool_invocation is entered.
+    """
+    from app.autonomous import guard as guard_mod
+
+    user = await _make_user(db_session)
+    sess = await _make_session(db_session, user=user, current_phase="analysis")
+    gateway = _GovInfoGateway()
+
+    with (
+        patch(
+            "app.tools.governance.resolve_provider_tier",
+            new=AsyncMock(return_value=2),
+        ),
+        pytest.raises(ValueError),
+    ):
+        await guard_mod.guarded_tool_call(
+            sess,
+            ToolIntent.retrieve_authority,
+            {
+                "source": "govinfo",
+                "op": "unsupported_op_xyz",
+                "args": {},
+            },
+            db_session,
+            gateway,
+        )
+
+    # Session is accessible and not poisoned
+    await db_session.refresh(sess)
+    assert sess.halt_state == "running"
+
+    # Exactly ONE tool_call_log row with outcome="error"
+    rows = await _tool_call_rows(db_session, sess.id)
+    assert len(rows) == 1
+    assert rows[0].outcome == "error"
 
 
 # ---------------------------------------------------------------------------

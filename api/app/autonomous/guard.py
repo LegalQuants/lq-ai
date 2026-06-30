@@ -806,7 +806,11 @@ async def _handle_retrieve_authority(
 
     # ── One egress (ADR 0014): call through gateway only ────────────────────
     provider_name = str(source.name)
-    payload: dict[str, Any] = await gateway.call_tool(provider_name, op, args)
+    result: dict[str, Any] = await gateway.call_tool(provider_name, op, args)
+    # GatewayClient.call_tool returns the envelope {provider, tool, payload, tier};
+    # the actual GovInfo fields live under result["payload"].  Match the
+    # sibling convention in _handle_call_mcp_tool and research/service.py.
+    payload: dict[str, Any] = result.get("payload") or {}
 
     # ── Normalise via adapter ────────────────────────────────────────────────
     if spec.adapter is None:
