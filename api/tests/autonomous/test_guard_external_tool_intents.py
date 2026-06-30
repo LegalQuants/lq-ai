@@ -45,6 +45,26 @@ pytestmark = pytest.mark.integration
 
 
 # ---------------------------------------------------------------------------
+# Cache isolation
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _reset_cost_cache() -> None:
+    """Reset the process-level provider tier+cost cache before/after each test.
+
+    Prevents stale cache state from a preceding test (e.g. one that
+    monkeypatches ``get_gateway_client`` with a cost-bearing config) from
+    leaking into the next test and producing unexpected non-zero costs.
+    """
+    from app.tools.governance import _reset_provider_tier_cache_for_tests
+
+    _reset_provider_tier_cache_for_tests()
+    yield  # type: ignore[misc]
+    _reset_provider_tier_cache_for_tests()
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -464,6 +484,98 @@ async def test_external_intent_records_single_estimate(db_session: AsyncSession)
     mock_estimate.assert_awaited_once()
     rows = await _tool_call_rows(db_session, sess.id)
     assert len(rows) == 1
-    # The handler returns Decimal("0") (D-a3); the executed row records the
-    # ToolResult cost, which is the handler's 0 — NOT a divergent re-estimate.
+    # No cost configured in governance cache (no monkeypatch for get_admin_config
+    # here) → handler's realized cost falls back to Decimal("0"); the executed row
+    # records the ToolResult cost, NOT the divergent R4 mock estimate.
     assert rows[0].cost_usd == Decimal("0")
+
+
+# ---------------------------------------------------------------------------
+# DE-344: retrieve_caselaw realized cost flows to tool_call_log + session
+# ---------------------------------------------------------------------------
+
+
+async def test_retrieve_caselaw_realized_cost_on_tool_call_log_and_session(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """retrieve_caselaw with a configured cost_per_call: realized cost lands on
+    tool_call_log.cost_usd AND grows session.cost_total_usd (DE-344 cumulative-brake gap).
+
+    Before this fix, _handle_retrieve_caselaw returned Decimal("0") regardless
+    of provider config, so repeated caselaw calls never grew session.cost_total_usd
+    and the R4 cumulative brake could not throttle caselaw spend.
+
+    Asserts:
+    - ToolResult.cost_usd == configured_cost (Decimal)
+    - tool_call_log.cost_usd == configured_cost (executed row's realized cost)
+    - session.cost_total_usd == configured_cost (cumulative brake feed)
+    """
+    from app.autonomous import guard as guard_mod
+
+    _CONFIGURED_COST = Decimal("0.01")
+    _CL_PROVIDER = "courtlistener-prod"
+
+    # Provide the governance cache with a cost_per_call for courtlistener-prod.
+    # resolve_provider_cost uses get_gateway_client().get_admin_config() from
+    # app.tools.governance — that is the global gateway client, NOT the gateway
+    # arg passed to guarded_tool_call. Monkeypatch that seam only.
+    _COST_PROVIDERS = [
+        {
+            "name": _CL_PROVIDER,
+            "type": "courtlistener",
+            "egress_tier": 4,
+            "cost_per_call": float(_CONFIGURED_COST),
+        }
+    ]
+
+    async def _fake_admin_config(*, request_id: str | None = None) -> dict:
+        return {"tool_providers": _COST_PROVIDERS}
+
+    class _AdminGW:
+        get_admin_config = staticmethod(_fake_admin_config)
+
+    monkeypatch.setattr("app.tools.governance.get_gateway_client", lambda: _AdminGW())
+
+    user = await _make_user(db_session)
+    sess = await _make_session(db_session, user=user, current_phase="analysis")
+
+    with (
+        patch(
+            "app.research.service._resolve_provider",
+            new=AsyncMock(return_value=_CL_PROVIDER),
+        ),
+        patch(
+            "app.research.service.search_case_law",
+            new=AsyncMock(return_value={"results": [{"cluster_id": 99}]}),
+        ),
+        patch(
+            "app.tools.governance.resolve_provider_tier",
+            new=AsyncMock(return_value=4),
+        ),
+    ):
+        result = await guard_mod.guarded_tool_call(
+            sess,
+            ToolIntent.retrieve_caselaw,
+            {"op": "search_case_law", "args": {"q": "trade secret misappropriation"}},
+            db_session,
+            _StubGateway(),
+        )
+
+    # ── ToolResult carries the configured realized cost ───────────────────────
+    assert result.cost_usd == _CONFIGURED_COST
+
+    # ── tool_call_log.cost_usd == realized cost (overwritten from estimated) ──
+    rows = await _tool_call_rows(db_session, sess.id)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.provider == _CL_PROVIDER
+    assert row.intent == "retrieve_caselaw"
+    assert row.outcome == "executed"
+    assert row.cost_usd == _CONFIGURED_COST
+
+    # ── session.cost_total_usd grew by the configured cost ───────────────────
+    # This is the key fix: repeated caselaw calls must grow session.cost_total_usd
+    # so R4 can throttle cumulative caselaw spend symmetrically with the other
+    # two external intents (retrieve_authority, call_mcp_tool).
+    assert sess.cost_total_usd == _CONFIGURED_COST

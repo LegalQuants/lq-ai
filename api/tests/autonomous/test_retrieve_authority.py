@@ -52,6 +52,26 @@ from app.security import hash_password
 pytestmark = pytest.mark.integration
 
 # ---------------------------------------------------------------------------
+# Cache isolation
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _reset_cost_cache() -> None:
+    """Reset the process-level provider tier+cost cache before/after each test.
+
+    Prevents stale cache state from a preceding test (e.g. one that
+    monkeypatches ``get_gateway_client`` with a cost-bearing config) from
+    leaking into the next test and producing unexpected non-zero costs.
+    """
+    from app.tools.governance import _reset_provider_tier_cache_for_tests
+
+    _reset_provider_tier_cache_for_tests()
+    yield  # type: ignore[misc]
+    _reset_provider_tier_cache_for_tests()
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -377,3 +397,81 @@ async def test_retrieve_authority_refused_outside_analysis(
 
     # R6 fires before dispatch → no tool_call_log row
     assert await _tool_call_rows(db_session, sess.id) == []
+
+
+# ---------------------------------------------------------------------------
+# (e) DE-344: realized cost flows to tool_call_log + session.cost_total_usd
+# ---------------------------------------------------------------------------
+
+
+async def test_retrieve_authority_realized_cost_on_tool_call_log_and_session(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """retrieve_authority with a configured cost_per_call: realized cost lands on
+    tool_call_log.cost_usd AND grows session.cost_total_usd (DE-344 cumulative-brake gap).
+
+    Asserts:
+    - ToolResult.cost_usd == configured_cost (Decimal)
+    - tool_call_log.cost_usd == configured_cost (executed row's realized cost)
+    - session.cost_total_usd == configured_cost (cumulative brake feed)
+    """
+    from app.autonomous import guard as guard_mod
+
+    _CONFIGURED_COST = Decimal("0.05")
+
+    # Provide the governance cache with a cost_per_call for govinfo-prod.
+    # resolve_provider_cost uses get_gateway_client().get_admin_config() from
+    # app.tools.governance — this is the global gateway client, NOT the
+    # gateway arg passed to guarded_tool_call. Monkeypatch that seam only.
+    _COST_PROVIDERS = [
+        {
+            "name": _GOVINFO_PROVIDER_NAME,
+            "type": "govinfo",
+            "egress_tier": 2,
+            "cost_per_call": float(_CONFIGURED_COST),
+        }
+    ]
+
+    async def _fake_admin_config(*, request_id: str | None = None) -> dict:
+        return {"tool_providers": _COST_PROVIDERS}
+
+    class _AdminGW:
+        get_admin_config = staticmethod(_fake_admin_config)
+
+    monkeypatch.setattr("app.tools.governance.get_gateway_client", lambda: _AdminGW())
+
+    user = await _make_user(db_session)
+    sess = await _make_session(db_session, user=user, current_phase="analysis")
+    # _GovInfoGateway provides list_tool_providers (source registry) + call_tool
+    # (actual egress); cost resolution uses the monkeypatched global client above.
+    gateway = _GovInfoGateway()
+
+    with patch(
+        "app.tools.governance.resolve_provider_tier",
+        new=AsyncMock(return_value=2),
+    ):
+        result = await guard_mod.guarded_tool_call(
+            sess,
+            ToolIntent.retrieve_authority,
+            {
+                "source": "govinfo",
+                "op": "get_authority",
+                "args": {"package_id": "USCODE-2023-title15"},
+            },
+            db_session,
+            gateway,
+        )
+
+    # ── ToolResult carries the configured realized cost ───────────────────────
+    assert result.cost_usd == _CONFIGURED_COST
+
+    # ── tool_call_log.cost_usd == realized cost (not the estimate) ───────────
+    rows = await _tool_call_rows(db_session, sess.id)
+    assert len(rows) == 1
+    assert rows[0].cost_usd == _CONFIGURED_COST
+
+    # ── session.cost_total_usd grew by the configured cost ───────────────────
+    # This is the cumulative-brake feed: repeated retrieve_authority calls
+    # must grow session.cost_total_usd so R4 can throttle further spend.
+    assert sess.cost_total_usd == _CONFIGURED_COST

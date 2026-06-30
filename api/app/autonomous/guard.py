@@ -611,10 +611,10 @@ async def _handle_retrieve_caselaw(
     - ``read_opinion``     → ``{opinion_id}``
     - ``find_in_case``     → ``{opinion_id, query[, max_matches]}``
 
-    Zero cost in v1 (D-a3: no provider-inference tokens; a per-provider
-    external-tool cost model is DE-344).  The provider/tool/tier audit was
-    already written by ``governed_tool_invocation``; this handler only does
-    the call.
+    Realized cost is resolved via the per-provider cost model (DE-344);
+    falls back to ``Decimal("0")`` if resolution fails (non-fatal).
+    The provider/tool/tier audit was already written by
+    ``governed_tool_invocation``; this handler only does the call.
 
     Raises:
         ValueError: if ``op`` is missing or not a recognised research op.
@@ -645,7 +645,19 @@ async def _handle_retrieve_caselaw(
     else:
         raise ValueError(f"_handle_retrieve_caselaw: unknown research op {op!r}")
 
-    return ToolResult(cost_usd=Decimal("0"), data=data)
+    # ── DE-344: realized cost from per-provider cost model ──────────────────
+    # Local import avoids circular: governance.py → guard.py → cost.py.
+    # Non-fatal: any failure defaults to Decimal("0").
+    realized_cost: Decimal = Decimal("0")
+    try:
+        from app.tools.governance import resolve_provider_cost
+
+        provider = await research_service._resolve_provider()
+        realized_cost = await resolve_provider_cost(provider)
+    except Exception:
+        pass
+
+    return ToolResult(cost_usd=realized_cost, data=data)
 
 
 async def _handle_call_mcp_tool(
