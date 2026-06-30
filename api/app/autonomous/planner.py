@@ -147,7 +147,7 @@ class EvidenceItem:
     context only — NEVER written to analysis_plan_trace/audit (P3)."""
 
     n: int
-    kind: str  # "kb" | "caselaw"
+    kind: str  # "kb" | "caselaw" | "authority"
     ref: str  # chunk_id (kb) | cluster_id (caselaw), as str
     content: str
     display: str
@@ -280,5 +280,13 @@ def summarize_observation(intent: ToolIntent, rationale: str, result: object) ->
         payload = data if isinstance(data, dict) else {}
         keys = sorted(payload.keys())[:8]
         return f"{intent.value} → payload keys {keys}"
+    if intent == ToolIntent.retrieve_authority:
+        authority = data.get("authority") if isinstance(data, dict) else None
+        if isinstance(authority, dict):
+            label = authority.get("label") or authority.get("external_ref") or "?"
+            ext_ref = authority.get("external_ref") or "?"
+            text_preview = str(authority.get("text") or "")[:_SNIPPET]
+            return f"{intent.value} → {label} ({ext_ref}): {text_preview}"
+        return f"{intent.value} → (no authority payload)"
     snippet = str(data)[:_SNIPPET]
     return f"{intent.value} → {snippet}"

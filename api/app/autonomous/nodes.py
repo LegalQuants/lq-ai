@@ -199,7 +199,15 @@ async def _run_analysis_loop(
     # name/type/jurisdiction/coverage only; never auth/cost).  Passed into
     # build_planner_messages so the planner can choose an available source for
     # retrieve_authority.  Richer source↔query matching is PR2.
-    available_sources = await resolve_available_sources(gateway)
+    try:
+        available_sources = await resolve_available_sources(gateway)
+    except Exception:
+        logger.warning(
+            "autonomous.analysis_loop: failed to resolve authority sources; continuing with empty list",
+            extra={"event": "autonomous_authority_source_resolve_failed"},
+            exc_info=True,
+        )
+        available_sources = []
 
     while steps < max_steps:
         plan_res = await guarded_tool_call(

@@ -20,6 +20,7 @@ from app.autonomous.planner import (
     PLANNER_ALLOWLIST,
     build_planner_messages,
     collect_evidence,
+    summarize_observation,
     validate_action_args,
 )
 from app.research.registry import AvailableSource
@@ -195,3 +196,65 @@ def test_build_planner_messages_backward_compat_no_sources() -> None:
     assert len(msgs) == 2
     assert msgs[0]["role"] == "system"
     assert msgs[1]["role"] == "user"
+
+
+# ---------------------------------------------------------------------------
+# summarize_observation — retrieve_authority branch (WS-E PR1a, Finding 3)
+#
+# The planner context must receive a useful one-line summary (not a generic
+# str(data) truncation) that includes the external_ref and/or label so the
+# model can reason about what was retrieved.  P3: no secrets in the summary.
+# ---------------------------------------------------------------------------
+
+
+def test_summarize_observation_authority_includes_external_ref() -> None:
+    """retrieve_authority observation summary must include the external_ref (non-vacuous)."""
+    result = ToolResult(
+        data={
+            "authority": {
+                "label": "42 U.S.C. § 1983",
+                "external_ref": "USCODE-2023-title42",
+                "text": "Every person who, under color of any statute...",
+                "content_kind": "statute",
+            }
+        },
+        outcome="success",
+    )
+    summary = summarize_observation(ToolIntent.retrieve_authority, "check statute", result)
+    assert "USCODE-2023-title42" in summary, (
+        "authority observation summary must include external_ref"
+    )
+    assert "retrieve_authority" in summary
+
+
+def test_summarize_observation_authority_includes_label() -> None:
+    """retrieve_authority observation summary includes the label when present."""
+    result = ToolResult(
+        data={
+            "authority": {
+                "label": "42 U.S.C. § 1983",
+                "external_ref": "USCODE-2023-title42",
+                "text": "Every person who, under color of any statute...",
+                "content_kind": "statute",
+            }
+        },
+        outcome="success",
+    )
+    summary = summarize_observation(ToolIntent.retrieve_authority, "check statute", result)
+    assert "42 U.S.C. § 1983" in summary
+
+
+def test_summarize_observation_authority_failure_is_terse() -> None:
+    """retrieve_authority failure produces the standard terse failure summary."""
+    result = ToolResult(data={}, outcome="gateway_error")
+    summary = summarize_observation(ToolIntent.retrieve_authority, "check statute", result)
+    assert "failed" in summary
+    assert "retrieve_authority" in summary
+
+
+def test_summarize_observation_authority_no_payload() -> None:
+    """retrieve_authority with success but missing authority dict does not crash."""
+    result = ToolResult(data={}, outcome="success")
+    summary = summarize_observation(ToolIntent.retrieve_authority, "check statute", result)
+    assert "retrieve_authority" in summary
+    assert "no authority payload" in summary
