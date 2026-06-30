@@ -151,6 +151,10 @@ class EvidenceItem:
     ref: str  # chunk_id (kb) | cluster_id (caselaw), as str
     content: str
     display: str
+    source: str | None = None  # PR1b: registry source name (authority); loop-local, not persisted
+    content_kind: str | None = (
+        None  # PR1b: "statute" | "regulation" etc.; loop-local, not persisted
+    )
 
 
 def collect_evidence(intent: ToolIntent, result: object, start_n: int) -> list[EvidenceItem]:
@@ -192,6 +196,7 @@ def collect_evidence(intent: ToolIntent, result: object, start_n: int) -> list[E
     elif intent == ToolIntent.retrieve_authority:
         # WS-E PR1a: authority payload is a single dict under data["authority"].
         # Ref = external_ref (e.g. "USCODE-2023-title42"); content = citable text.
+        # PR1b: source + content_kind are threaded onto EvidenceItem (loop-local, not persisted).
         authority = data.get("authority")
         if isinstance(authority, dict) and authority.get("external_ref"):
             items.append(
@@ -203,6 +208,8 @@ def collect_evidence(intent: ToolIntent, result: object, start_n: int) -> list[E
                     display=(
                         f"{authority.get('label') or '?'} ({authority.get('content_kind') or '?'})"
                     ),
+                    source=authority.get("source"),
+                    content_kind=authority.get("content_kind"),
                 )
             )
     return items
