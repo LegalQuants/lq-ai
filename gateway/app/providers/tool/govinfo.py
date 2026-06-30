@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -30,6 +31,9 @@ from app.providers.tool.egress import EgressRefused, validate_egress_target
 from app.secrets import ProviderKeyResolver
 
 DEFAULT_TIMEOUT_SECONDS = 30.0
+
+# PR1a supports USCODE and CFR; additional collections land in later PRs (DE-344 scope).
+_SUPPORTED_COLLECTIONS: frozenset[str] = frozenset({"USCODE", "CFR"})
 
 
 class GovInfoToolAdapter(ToolProviderAdapter):
@@ -122,13 +126,160 @@ class GovInfoToolAdapter(ToolProviderAdapter):
         return resp
 
     async def list_tools(self, *, user_token: str | None = None) -> list[ToolSpec]:
-        # Task 2 lands search_authority + get_authority; skeleton returns empty.
-        return []
+        return [
+            ToolSpec(
+                name="search_authority",
+                description=(
+                    "Full-text search of US statutory (USCODE) and regulatory (CFR) text "
+                    "via GovInfo. Returns a list of matching package identifiers with "
+                    "title, collection, and date metadata."
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "collection": {
+                            "type": "string",
+                            "enum": sorted(_SUPPORTED_COLLECTIONS),
+                            "description": "The GovInfo collection to search (USCODE or CFR).",
+                        },
+                        "query": {
+                            "type": "string",
+                            "description": "Search query string.",
+                        },
+                        "page_size": {
+                            "type": "integer",
+                            "description": "Maximum results to return (default 10).",
+                        },
+                    },
+                    "required": ["collection", "query"],
+                },
+                read_only=True,
+            ),
+            ToolSpec(
+                name="get_authority",
+                description=(
+                    "Fetch the full text and metadata of a GovInfo package (e.g. a "
+                    "USCODE title or CFR part) by its packageId."
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "package_id": {
+                            "type": "string",
+                            "description": "GovInfo packageId (e.g. USCODE-2023-title15).",
+                        },
+                    },
+                    "required": ["package_id"],
+                },
+                read_only=True,
+            ),
+        ]
 
     async def invoke_tool(
         self, tool: str, args: dict[str, Any], *, request_id: str, user_token: str | None = None
     ) -> ToolResult:
+        if tool == "search_authority":
+            return await self._search_authority(args)
+        if tool == "get_authority":
+            return await self._get_authority(args)
         raise ToolProviderError(f"unknown tool {tool!r} for govinfo provider")
+
+    async def _search_authority(self, args: dict[str, Any]) -> ToolResult:
+        """POST /search — normalize GovInfo results to snake_case output.
+
+        Validates that ``collection`` is one of the PR1a-supported codes
+        (USCODE, CFR) and that ``query`` is non-empty. Raises
+        :class:`~app.providers.tool.base.ToolProviderInvalidRequestError`
+        on bad input so the router can log a clean refusal.
+        """
+        collection = args.get("collection")
+        query = args.get("query")
+        raw_page_size = args.get("page_size", 10)
+        page_size: int = (
+            raw_page_size
+            if isinstance(raw_page_size, int)
+            and not isinstance(raw_page_size, bool)
+            and raw_page_size >= 1
+            else 10
+        )
+
+        if collection not in _SUPPORTED_COLLECTIONS:
+            raise ToolProviderInvalidRequestError(
+                f"search_authority: 'collection' must be one of "
+                f"{sorted(_SUPPORTED_COLLECTIONS)}; got {collection!r}",
+                upstream_status=400,
+            )
+        if not isinstance(query, str) or not query.strip():
+            raise ToolProviderInvalidRequestError(
+                "search_authority: 'query' must be a non-empty string",
+                upstream_status=400,
+            )
+
+        body: dict[str, Any] = {
+            "query": query,
+            "pageSize": page_size,
+            "offsetMark": "*",
+            "collections": [collection],
+        }
+        resp = await self._request("POST", "/search", json_body=body)
+        data: dict[str, Any] = resp.json()
+
+        results = [
+            {
+                "package_id": r.get("packageId"),
+                "title": r.get("title"),
+                "collection": r.get("collectionCode"),
+                "date": r.get("dateIssued"),
+            }
+            for r in data.get("results", [])
+        ]
+        payload: dict[str, Any] = {
+            "results": results,
+            "count": data.get("count", len(results)),
+        }
+        return self._result("search_authority", payload, sent=body, received=data)
+
+    async def _get_authority(self, args: dict[str, Any]) -> ToolResult:
+        """GET /packages/{packageId}/summary then follow txtLink for text content.
+
+        Accepts ``package_id`` (primary) or ``granule_id`` (alias). Fetches
+        the GovInfo package summary for metadata and the ``download.txtLink``
+        URL for the full statutory/regulatory text. Both requests go through
+        :meth:`_request` so SSRF validation is applied to each outbound call.
+        """
+        package_id = args.get("package_id") or args.get("granule_id")
+        if not isinstance(package_id, str) or not package_id.strip():
+            raise ToolProviderInvalidRequestError(
+                "get_authority: 'package_id' (or 'granule_id') must be a non-empty string",
+                upstream_status=400,
+            )
+
+        # 1. Fetch package summary → metadata + download links
+        resp = await self._request("GET", f"/packages/{package_id}/summary")
+        summary: dict[str, Any] = resp.json()
+
+        # 2. Follow txtLink (HTML format) for the statutory/regulatory text.
+        #    txtLink is absolute (e.g. https://api.govinfo.gov/packages/{id}/htm);
+        #    extract the path so _request handles SSRF validation.
+        download: dict[str, Any] = summary.get("download") or {}
+        txt_link: str | None = download.get("txtLink") or None
+        text: str | None = None
+        if txt_link:
+            path = urlparse(txt_link).path
+            text_resp = await self._request("GET", path)
+            text = text_resp.text
+
+        url = txt_link or f"{self._base_url}/packages/{package_id}/summary"
+        payload: dict[str, Any] = {
+            "package_id": summary.get("packageId", package_id),
+            "title": summary.get("title"),
+            "citation": summary.get("suDocClassNumber") or None,
+            "url": url,
+            "text": text,
+        }
+        return self._result(
+            "get_authority", payload, sent={"package_id": package_id}, received=summary
+        )
 
     def _result(self, tool: str, payload: Any, *, sent: Any, received: Any) -> ToolResult:
         """Build a ToolResult with byte counts; mark public statutory text verbatim."""
