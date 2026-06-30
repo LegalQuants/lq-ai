@@ -711,7 +711,19 @@ async def _handle_call_mcp_tool(
     from app.clients.gateway import get_gateway_client
 
     result = await get_gateway_client().call_tool(provider, tool, args, max_allowed_tier=None)
-    return ToolResult(cost_usd=Decimal("0"), data=result.get("payload"))
+
+    # ── DE-344: realized cost from per-provider cost model ──────────────────
+    # Local import avoids circular: governance.py → guard.py → cost.py.
+    # Non-fatal: any failure defaults to Decimal("0").
+    realized_cost: Decimal = Decimal("0")
+    try:
+        from app.tools.governance import resolve_provider_cost
+
+        realized_cost = await resolve_provider_cost(provider)
+    except Exception:
+        pass
+
+    return ToolResult(cost_usd=realized_cost, data=result.get("payload"))
 
 
 async def _handle_retrieve_authority(
@@ -819,8 +831,19 @@ async def _handle_retrieve_authority(
         )
     authority = spec.adapter.from_response(op, payload)
 
+    # ── DE-344: realized cost from per-provider cost model ──────────────────
+    # Local import avoids circular: governance.py → guard.py → cost.py.
+    # Non-fatal: any failure defaults to Decimal("0").
+    realized_cost: Decimal = Decimal("0")
+    try:
+        from app.tools.governance import resolve_provider_cost
+
+        realized_cost = await resolve_provider_cost(provider_name)
+    except Exception:
+        pass
+
     return ToolResult(
-        cost_usd=Decimal("0"),
+        cost_usd=realized_cost,
         data={
             "authority": {
                 "text": authority.citable_text,

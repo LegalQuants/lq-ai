@@ -83,4 +83,45 @@ async def estimate_tool_cost(
     if intent in _INFERENCE_INTENTS:
         model = params.get("judge_model") or params["model"]
         return await estimate_judge_call_cost_usd(db, judge_model=model)
+
+    # DE-344: per-provider cost model for gateway-brokered external intents.
+    # All imports are LOCAL to avoid circular imports:
+    #   governance.py → guard.py → cost.py
+    if intent == ToolIntent.retrieve_caselaw:
+        try:
+            from app.research import service as research_service
+            from app.tools.governance import resolve_provider_cost
+
+            provider = await research_service._resolve_provider()
+            return await resolve_provider_cost(provider)
+        except Exception:
+            pass
+        return Decimal("0")
+
+    if intent == ToolIntent.retrieve_authority:
+        try:
+            from app.tools.governance import (
+                resolve_provider_cost,
+                resolve_provider_name_by_type,
+            )
+
+            source_type = str(params.get("source") or "")
+            provider_name = await resolve_provider_name_by_type(source_type)
+            if provider_name:
+                return await resolve_provider_cost(provider_name)
+        except Exception:
+            pass
+        return Decimal("0")
+
+    if intent == ToolIntent.call_mcp_tool:
+        try:
+            from app.tools.governance import resolve_provider_cost
+
+            provider = str(params.get("provider") or "")
+            if provider:
+                return await resolve_provider_cost(provider)
+        except Exception:
+            pass
+        return Decimal("0")
+
     return Decimal("0")

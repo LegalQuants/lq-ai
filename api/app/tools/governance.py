@@ -63,6 +63,14 @@ _MAX_TIER: int = 5
 _provider_tier_cache: dict[str, int] = {}
 _provider_tier_cache_loaded: bool = False
 
+# DE-344: per-provider external-tool cost caches, populated alongside the
+# tier cache in a single _load_provider_tier_cache pass.
+# provider name → cost_per_call (Decimal); absent ⟹ Decimal("0").
+_provider_cost_cache: dict[str, Decimal] = {}
+# provider type string → provider name; used by retrieve_authority to map
+# the source type (e.g. "govinfo") to the logical provider name.
+_provider_type_to_name: dict[str, str] = {}
+
 
 async def resolve_provider_tier(
     provider: str,
@@ -115,6 +123,15 @@ async def _load_provider_tier_cache(*, request_id: str | None = None) -> None:
             if name and tier_raw is not None:
                 with contextlib.suppress(TypeError, ValueError):
                     _provider_tier_cache[str(name)] = int(tier_raw)
+            # DE-344: cache cost_per_call and type→name for external-tool cost model.
+            if name:
+                cost_raw = entry.get("cost_per_call")
+                if cost_raw is not None:
+                    with contextlib.suppress(TypeError, ValueError, ArithmeticError):
+                        _provider_cost_cache[str(name)] = Decimal(str(cost_raw))
+                type_str = entry.get("type")
+                if type_str:
+                    _provider_type_to_name[str(type_str)] = str(name)
     except Exception:
         log.warning(
             "resolve_provider_tier: gateway config fetch failed; "
@@ -127,10 +144,72 @@ async def _load_provider_tier_cache(*, request_id: str | None = None) -> None:
 
 
 def _reset_provider_tier_cache_for_tests() -> None:
-    """Drop the tier cache.  Tests use this to force a fresh fetch."""
+    """Drop the tier and cost caches.  Tests use this to force a fresh fetch."""
     global _provider_tier_cache_loaded
     _provider_tier_cache.clear()
+    _provider_cost_cache.clear()
+    _provider_type_to_name.clear()
     _provider_tier_cache_loaded = False
+
+
+async def resolve_provider_cost(
+    provider: str,
+    *,
+    request_id: str | None = None,
+) -> Decimal:
+    """Return the configured cost_per_call for *provider* as a :class:`~decimal.Decimal`.
+
+    Reads ``GET /admin/v1/config`` once per process (same cache and load
+    flag as :func:`resolve_provider_tier`).  Returns :data:`decimal.Decimal`
+    ``"0"`` when the provider is absent or no ``cost_per_call`` is set —
+    never raises (D-a3: external-tool cost is non-fatal).
+
+    Args:
+        provider: The logical provider name (e.g. ``"courtlistener-prod"``).
+        request_id: Optional cross-service trace correlation header value.
+
+    Returns:
+        The provider's ``cost_per_call`` as a ``Decimal``, or
+        ``Decimal("0")`` when absent/unknown.
+    """
+    global _provider_tier_cache_loaded
+
+    if not _provider_tier_cache_loaded:
+        await _load_provider_tier_cache(request_id=request_id)
+
+    return _provider_cost_cache.get(provider, Decimal("0"))
+
+
+async def resolve_provider_name_by_type(
+    type_str: str,
+    *,
+    request_id: str | None = None,
+) -> str | None:
+    """Return the provider name for a given source *type_str*.
+
+    Maps the source type string from the content-source registry (e.g.
+    ``"govinfo"``) to the logical provider name used in ``gateway.yaml``
+    (e.g. ``"govinfo-prod"``), so :func:`resolve_provider_cost` can be
+    called with the correct key for ``retrieve_authority`` tool calls.
+
+    Shares the same cache and load flag as :func:`resolve_provider_tier`.
+    Returns ``None`` when the type is absent or the cache load failed —
+    never raises.
+
+    Args:
+        type_str: The source type string (e.g. ``"govinfo"``,
+            ``"courtlistener"``).
+        request_id: Optional cross-service trace correlation header value.
+
+    Returns:
+        The provider name string, or ``None`` when not found.
+    """
+    global _provider_tier_cache_loaded
+
+    if not _provider_tier_cache_loaded:
+        await _load_provider_tier_cache(request_id=request_id)
+
+    return _provider_type_to_name.get(type_str)
 
 
 async def governed_tool_invocation(
