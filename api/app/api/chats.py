@@ -83,6 +83,7 @@ from app.chat.tool_loop import (
 )
 from app.chat.tool_schemas import ChatToolAllowlist, assemble_allowlist
 from app.citation import extract_citations, verify
+from app.citation.authority import verify_and_persist_authority_citations
 from app.citation.caselaw import verify_and_persist_caselaw_citations
 from app.citation.cost import estimate_judge_call_cost_usd
 from app.citation.gate import compute_and_record_gate, resolve_gates
@@ -2958,6 +2959,21 @@ async def _non_streaming_response(
             except Exception as caselaw_exc:  # never block the turn
                 log.warning("caselaw citation verification failed: %r", caselaw_exc)
             try:
+                await verify_and_persist_authority_citations(
+                    db,
+                    message_id=assistant_message_id,
+                    assistant_text=outcome.text,
+                    tool_sources=outcome.tool_sources,
+                    gateway=gateway,
+                    judge_model=_caselaw_judge_model,
+                )
+            except Exception:
+                log.warning(
+                    "chat finalize: authority citation verify failed — non-fatal",
+                    extra={"event": "chat_authority_verify_finalize_failed"},
+                    exc_info=True,
+                )
+            try:
                 await assemble_ledger_entries(db, message_id=assistant_message_id)
             except Exception as ledger_exc:  # never block the turn
                 log.warning("citation ledger assembly failed: %r", ledger_exc)
@@ -3555,6 +3571,23 @@ async def _stream_response(
                     )
                 except Exception as caselaw_exc:  # never block the turn
                     log.warning("caselaw citation verification failed: %r", caselaw_exc)
+                try:
+                    await verify_and_persist_authority_citations(
+                        db,
+                        message_id=assistant_message_id,
+                        assistant_text="".join(accumulated),
+                        tool_sources=loop_outcome.tool_sources
+                        if isinstance(loop_outcome, LoopFinal)
+                        else [],
+                        gateway=gateway,
+                        judge_model=_caselaw_judge_model,
+                    )
+                except Exception:
+                    log.warning(
+                        "chat finalize (stream): authority citation verify failed — non-fatal",
+                        extra={"event": "chat_authority_verify_finalize_failed"},
+                        exc_info=True,
+                    )
                 try:
                     await assemble_ledger_entries(db, message_id=assistant_message_id)
                 except Exception as ledger_exc:  # never block the turn
