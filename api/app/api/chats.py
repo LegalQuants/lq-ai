@@ -83,6 +83,7 @@ from app.chat.tool_loop import (
 )
 from app.chat.tool_schemas import ChatToolAllowlist, assemble_allowlist
 from app.citation import extract_citations, verify
+from app.citation.authority import verify_and_persist_authority_citations
 from app.citation.caselaw import verify_and_persist_caselaw_citations
 from app.citation.cost import estimate_judge_call_cost_usd
 from app.citation.gate import compute_and_record_gate, resolve_gates
@@ -1615,7 +1616,7 @@ async def send_message(
     # deployment or in environments without research/MCP), return an empty
     # allowlist so the existing single-shot path runs unchanged.
     try:
-        allowlist = await assemble_allowlist(db, request_id=request_id)
+        allowlist = await assemble_allowlist(db, gateway=gateway, request_id=request_id)
     except Exception:
         log.warning(
             "chat send_message: assemble_allowlist failed — falling back to empty allowlist",
@@ -2010,7 +2011,9 @@ async def resume_tool_call(
             # Re-assemble the allowlist to resolve the spec (tool may have been
             # removed since the gate; treat that as denial-style).
             try:
-                current_allowlist = await assemble_allowlist(db, request_id=request_id)
+                current_allowlist = await assemble_allowlist(
+                    db, gateway=gateway, request_id=request_id
+                )
             except Exception:
                 current_allowlist = ChatToolAllowlist(specs={})
 
@@ -2116,7 +2119,7 @@ async def resume_tool_call(
 
         # Re-assemble allowlist for the resumed loop.
         try:
-            resume_allowlist = await assemble_allowlist(db, request_id=request_id)
+            resume_allowlist = await assemble_allowlist(db, gateway=gateway, request_id=request_id)
         except Exception:
             resume_allowlist = ChatToolAllowlist(specs={})
 
@@ -2956,6 +2959,21 @@ async def _non_streaming_response(
             except Exception as caselaw_exc:  # never block the turn
                 log.warning("caselaw citation verification failed: %r", caselaw_exc)
             try:
+                await verify_and_persist_authority_citations(
+                    db,
+                    message_id=assistant_message_id,
+                    assistant_text=outcome.text,
+                    tool_sources=outcome.tool_sources,
+                    gateway=gateway,
+                    judge_model=_caselaw_judge_model,
+                )
+            except Exception:
+                log.warning(
+                    "chat finalize: authority citation verify failed — non-fatal",
+                    extra={"event": "chat_authority_verify_finalize_failed"},
+                    exc_info=True,
+                )
+            try:
                 await assemble_ledger_entries(db, message_id=assistant_message_id)
             except Exception as ledger_exc:  # never block the turn
                 log.warning("citation ledger assembly failed: %r", ledger_exc)
@@ -3553,6 +3571,23 @@ async def _stream_response(
                     )
                 except Exception as caselaw_exc:  # never block the turn
                     log.warning("caselaw citation verification failed: %r", caselaw_exc)
+                try:
+                    await verify_and_persist_authority_citations(
+                        db,
+                        message_id=assistant_message_id,
+                        assistant_text="".join(accumulated),
+                        tool_sources=loop_outcome.tool_sources
+                        if isinstance(loop_outcome, LoopFinal)
+                        else [],
+                        gateway=gateway,
+                        judge_model=_caselaw_judge_model,
+                    )
+                except Exception:
+                    log.warning(
+                        "chat finalize (stream): authority citation verify failed — non-fatal",
+                        extra={"event": "chat_authority_verify_finalize_failed"},
+                        exc_info=True,
+                    )
                 try:
                     await assemble_ledger_entries(db, message_id=assistant_message_id)
                 except Exception as ledger_exc:  # never block the turn

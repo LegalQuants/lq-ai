@@ -54,6 +54,7 @@ from app.mcp.oauth import get_valid_token
 from app.mcp.service import list_servers
 from app.models.user import User
 from app.research import service as research_service
+from app.research.adapters import GovInfoAdapter
 from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
 from app.tools.governance import governed_tool_invocation, resolve_provider_tier
 
@@ -283,11 +284,27 @@ def extract_mcp_tool_source(spec: ToolSpec, data: Any) -> ToolSourceRecord | Non
 def collect_tool_sources(spec: ToolSpec, data: Any) -> list[ToolSourceRecord]:
     """Route a tool result to its provenance records by ``spec.kind`` (DE-350).
 
-    MCP → one ``mcp`` record; research → the existing case-law extraction.
+    MCP → one ``mcp`` record; authority (DE-369, ADR 0021 D3) → one record for
+    both search and get calls; research → the existing case-law extraction.
     """
     if spec.kind == "mcp":
         rec = extract_mcp_tool_source(spec, data)
         return [rec] if rec is not None else []
+    if spec.kind == "authority":
+        auth = (data or {}).get("authority") if isinstance(data, dict) else None
+        if not auth or not auth.get("external_ref"):
+            return []
+        return [
+            ToolSourceRecord(
+                source_kind=auth.get("content_kind") or "unknown",
+                label=auth.get("label") or auth.get("external_ref"),
+                subtitle=auth.get("subtitle"),
+                url=auth.get("url") or None,
+                external_ref=auth.get("external_ref"),
+                provider=spec.provider,
+                tool=spec.tool,
+            )
+        ]
     return extract_tool_sources(spec.tool, data)
 
 
@@ -350,6 +367,70 @@ async def _dispatch_research(
             phase="chat",
         )
     return ToolResult(cost_usd=Decimal("0"), data=data, outcome="success")
+
+
+# ---------------------------------------------------------------------------
+# Authority dispatch (WS-E PR1c)
+# ---------------------------------------------------------------------------
+
+
+async def _dispatch_authority(
+    db: AsyncSession,
+    spec: ToolSpec,
+    args: dict[str, Any],
+    gateway: Any,
+    request_id: str | None,
+) -> ToolResult:
+    """Dispatch an authority op (search_authority/get_authority) via the gateway.
+
+    On get_authority, persist the fetched body to the durable authority cache
+    so the finalize verify hook can char-verify quotes against it.  The cache
+    write is savepoint-isolated + non-fatal (never poison the session — mirrors
+    app/autonomous/guard.py).  Only get_authority yields a quotable body.
+    """
+    result = await gateway.call_tool(spec.provider, spec.tool, args)
+    payload = result.get("payload") if isinstance(result, dict) else None
+    authority = GovInfoAdapter().from_response(spec.tool, payload or {})
+
+    if spec.tool == "get_authority" and authority.citable_text:
+        # Function-local import breaks the tool_loop <-> citation.authority
+        # module cycle (mirrors guard.py:874).
+        from app.citation.authority import store_authority_text
+
+        try:
+            async with db.begin_nested():
+                await store_authority_text(
+                    db,
+                    source_type=spec.provider,
+                    external_ref=authority.external_ref,
+                    text=authority.citable_text,
+                )
+        except Exception:
+            log.warning(
+                "chat authority dispatch: cache write failed — non-fatal",
+                extra={
+                    "event": "chat_authority_cache_write_failed",
+                    "external_ref": authority.external_ref,
+                },
+                exc_info=True,
+            )
+
+    return ToolResult(
+        cost_usd=Decimal("0"),
+        data={
+            "authority": {
+                "source": spec.provider,
+                "op": spec.tool,
+                "content_kind": authority.content_kind,
+                "external_ref": authority.external_ref,
+                "label": authority.label,
+                "subtitle": authority.subtitle,
+                "url": authority.url,
+                "citable_text": authority.citable_text,
+            }
+        },
+        outcome="success",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -459,7 +540,12 @@ async def execute_tool(
         :class:`~app.errors.MCPAuthorizationRequired`: When the MCP server
             requires OAuth and no valid token is stored.
     """
-    intent = ToolIntent.retrieve_caselaw if spec.kind == "research" else ToolIntent.call_mcp_tool
+    if spec.kind == "research":
+        intent = ToolIntent.retrieve_caselaw
+    elif spec.kind == "authority":
+        intent = ToolIntent.retrieve_authority
+    else:
+        intent = ToolIntent.call_mcp_tool
 
     estimated_cost = await estimate_tool_cost(intent, args, db)
     provider_tier = await resolve_provider_tier(spec.provider, request_id=request_id)
@@ -467,6 +553,8 @@ async def execute_tool(
     async def _dispatch() -> ToolResult:
         if spec.kind == "research":
             return await _dispatch_research(db, spec, args, cluster_cache, request_id)
+        elif spec.kind == "authority":
+            return await _dispatch_authority(db, spec, args, gateway, request_id)
         else:
             return await _dispatch_mcp(db, user, gateway, spec, args, server_auth_map, request_id)
 
