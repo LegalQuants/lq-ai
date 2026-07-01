@@ -27,6 +27,7 @@ import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
@@ -318,6 +319,7 @@ async def verify_and_persist_authority_citations(
         return 0
 
     rows: list[MessageAuthorityCitation] = []
+    verbatim_matched: set[str] = set()
     for passage in passages:
         for source_type, external_ref, content_kind, target in targets:
             try:
@@ -334,7 +336,12 @@ async def verify_and_persist_authority_citations(
                 source_document_id=target.id,
             )
             try:
-                result = await verify(cand, target, gateway=gateway, judge_model=judge_model)
+                # gateway=None: verbatim-only here. locate_passage is a
+                # byte-exact substring finder — verify()'s judge stage is
+                # structurally unreachable in this loop (a miss `continue`s
+                # before a candidate exists), so passing gateway through
+                # would be dishonest. Mirrors caselaw.py's verbatim pass.
+                result = await verify(cand, target, gateway=None, judge_model=judge_model)
             except Exception:
                 log.warning(
                     "authority verify: verify() failed, skipping passage",
@@ -360,7 +367,67 @@ async def verify_and_persist_authority_citations(
                     partial=result.partial,
                 )
             )
+            verbatim_matched.add(passage)
             break  # first matching authority wins
+
+    # --- Pass B: whole-body paraphrase judge (SUPPORTED tier) --------------
+    # Passages that missed verbatim matching in every fetched body are
+    # judged against each body in full, budget-bounded. Mirrors caselaw.py's
+    # "Unattributed: B1b all-opinions SUPPORTED-or-drop" loop.
+    if gateway is not None:
+        from app.citation.authority_content_judge import (
+            AUTHORITY_CONTENT_JUDGE_BUDGET_USD,
+            estimate_authority_content_cost_usd,
+            judge_authority_content,
+        )
+
+        spent: Decimal = Decimal("0")
+        for passage in passages:
+            if passage in verbatim_matched:
+                continue
+            for source_type, external_ref, content_kind, target in targets:
+                body = target.normalized_content
+                est = await estimate_authority_content_cost_usd(
+                    db, judge_model=judge_model, authority_text=body
+                )
+                if spent + est > AUTHORITY_CONTENT_JUDGE_BUDGET_USD:
+                    break  # budget reached -> drop remaining judge work
+                spent += est
+                try:
+                    result = await judge_authority_content(
+                        passage=passage,
+                        authority_text=body,
+                        gateway=gateway,
+                        judge_model=judge_model,
+                    )
+                except Exception:
+                    log.warning(
+                        "authority content judge error, skipping",
+                        extra={
+                            "event": "chat_authority_judge_error",
+                            "external_ref": external_ref,
+                        },
+                        exc_info=True,
+                    )
+                    continue
+                if not result.verified:
+                    continue
+                rows.append(
+                    MessageAuthorityCitation(
+                        message_id=message_id,
+                        source_type=source_type,
+                        external_ref=external_ref,
+                        content_kind=content_kind,
+                        source_offset_start=0,
+                        source_offset_end=len(body),
+                        source_text=passage,
+                        verified=True,
+                        verification_method="paraphrase_judge",
+                        verification_confidence=result.confidence,
+                        partial=True,
+                    )
+                )
+                break  # first supporting body wins for this passage
 
     if rows:
         db.add_all(rows)

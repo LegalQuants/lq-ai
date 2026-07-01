@@ -251,9 +251,18 @@ async def test_paraphrase_supported_via_stub_gateway(
     seeded_message: uuid.UUID,
     seeded_authority_cache: None,
 ) -> None:
+    """Pass B: a passage that does NOT appear verbatim in the fetched body
+    (so Pass A drops it) is judged against the whole body by the stub
+    gateway's judge, which accepts -> a paraphrase_judge SUPPORTED row.
+
+    This is the load-bearing correctness check: it asserts the judge was
+    actually invoked (gateway.call_count >= 1), not merely that some row
+    landed via whichever tier happened to catch it.
+    """
     message_id = seeded_message
-    # A near-verbatim quote that misses exact/tolerant but a stub judge accepts.
-    text = "> the fair use of a copyrighted work is not an infringement"
+    # Paraphrased, not a substring of _BODY -> Pass A's locate_passage misses.
+    text = "> unauthorized reproduction of protected works is permitted under the fair use doctrine"
+    assert text.strip("> ") not in _BODY
 
     gateway = _StubJudgeGateway(verdict="yes", confidence="high")
     n = await verify_and_persist_authority_citations(
@@ -265,6 +274,7 @@ async def test_paraphrase_supported_via_stub_gateway(
         judge_model="fast",
     )
     assert n == 1
+    assert gateway.call_count >= 1
     rows = (
         (
             await db_session.execute(
@@ -277,7 +287,61 @@ async def test_paraphrase_supported_via_stub_gateway(
         .all()
     )
     assert len(rows) == 1
-    # Either exact/tolerant catches it (PASS) or the judge does (SUPPORTED);
-    # both are a persisted verified row.
-    assert rows[0].verification_method in {"exact_match", "tolerant_match", "paraphrase_judge"}
+    assert rows[0].verification_method == "paraphrase_judge"
     assert rows[0].verified is True
+    assert rows[0].partial is True
+
+
+@pytest.mark.asyncio
+async def test_paraphrase_budget_cap(
+    db_session: AsyncSession,
+    seeded_message: uuid.UUID,
+    seeded_authority_cache: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When the pre-flight cost estimate exceeds the Pass-B budget, no judge
+    calls are made and no SUPPORTED rows are persisted."""
+    from decimal import Decimal
+
+    async def _huge_estimate(db: object, *, judge_model: str, authority_text: str) -> Decimal:
+        return Decimal("999")
+
+    monkeypatch.setattr(
+        "app.citation.authority_content_judge.estimate_authority_content_cost_usd",
+        _huge_estimate,
+    )
+
+    message_id = seeded_message
+    text = "> unauthorized reproduction of protected works is permitted under the fair use doctrine"
+    gateway = _StubJudgeGateway(verdict="yes", confidence="high")
+    n = await verify_and_persist_authority_citations(
+        db_session,
+        message_id=message_id,
+        assistant_text=text,
+        tool_sources=[_rec()],
+        gateway=gateway,
+        judge_model="fast",
+    )
+    assert n == 0
+    assert gateway.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_gateway_none_skips_pass_b(
+    db_session: AsyncSession,
+    seeded_message: uuid.UUID,
+    seeded_authority_cache: None,
+) -> None:
+    """gateway=None: only Pass A (verbatim) can run; a paraphrased quote
+    that misses verbatim matching is dropped deterministically, no judge
+    call is possible."""
+    message_id = seeded_message
+    text = "> unauthorized reproduction of protected works is permitted under the fair use doctrine"
+    n = await verify_and_persist_authority_citations(
+        db_session,
+        message_id=message_id,
+        assistant_text=text,
+        tool_sources=[_rec()],
+        gateway=None,
+    )
+    assert n == 0
