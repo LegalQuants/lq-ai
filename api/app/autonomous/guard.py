@@ -843,6 +843,51 @@ async def _handle_retrieve_authority(
         )
     authority = spec.adapter.from_response(op, payload)
 
+    # ── PR1b: build authority dict with source threaded in ───────────────────
+    authority_data: dict[str, Any] = {
+        "text": authority.citable_text,
+        "external_ref": authority.external_ref,
+        "label": authority.label,
+        "url": authority.url,
+        "content_kind": authority.content_kind,
+        "source": params["source"],  # registry source name, for delivery verification
+    }
+
+    # ── PR1b: non-fatal cache write ──────────────────────────────────────────
+    # Best-effort: any failure (including ValueError for a bad external_ref)
+    # must not abort the fetch or poison the AsyncSession (WS-D PR1 C1 lesson).
+    #
+    # store_authority_text contains bare SELECT + flush ops outside its own
+    # inner savepoint (only the INSERT path is wrapped).  A PostgreSQL-level
+    # error on any of those bare ops aborts the transaction server-side; the
+    # outer except catches the exception but leaves the AsyncSession in
+    # InFailedSQLTransaction state — every subsequent DB op in the same turn
+    # would fail (the WS-D PR1-C1 poisoned-session class, one level out).
+    #
+    # Fix: wrap the entire call in a savepoint so ALL of store_authority_text's
+    # DB ops — including the bare SELECT/flush on the update path and the
+    # post-IntegrityError bare SELECT/flush — are contained in a nested
+    # transaction that rolls back cleanly on any exception, leaving the session
+    # usable.  store_authority_text's own inner begin_nested still works inside
+    # the outer savepoint (SQLAlchemy + asyncpg fully support nesting).
+    try:
+        from app.citation.authority import store_authority_text
+
+        async with db.begin_nested():
+            await store_authority_text(
+                db,
+                source_type=params["source"],
+                external_ref=authority.external_ref,
+                text=authority.citable_text,
+            )
+    except Exception:
+        log.warning(
+            "autonomous.retrieve_authority: cache write failed; "
+            "verification will fall back to carried evidence text",
+            extra={"event": "authority_cache_write_failed"},
+            exc_info=True,
+        )
+
     # ── DE-344: realized cost from per-provider cost model ──────────────────
     # Local import avoids circular: governance.py → guard.py → cost.py.
     # Non-fatal: any failure defaults to Decimal("0").
@@ -856,15 +901,7 @@ async def _handle_retrieve_authority(
 
     return ToolResult(
         cost_usd=realized_cost,
-        data={
-            "authority": {
-                "text": authority.citable_text,
-                "external_ref": authority.external_ref,
-                "label": authority.label,
-                "url": authority.url,
-                "content_kind": authority.content_kind,
-            }
-        },
+        data={"authority": authority_data},
     )
 
 

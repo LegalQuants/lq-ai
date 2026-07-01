@@ -301,6 +301,7 @@ async def test_resolve_skips_dangling_reference(db_session, seeded_message):
         message_citation_id = uuid.uuid4()
         message_caselaw_citation_id = None
         message_tool_source_id = None
+        message_authority_citation_id = None
         id = uuid.uuid4()
 
-    assert _resolve_source(_E(), {}, {}, {}) is None
+    assert _resolve_source(_E(), {}, {}, {}, {}) is None

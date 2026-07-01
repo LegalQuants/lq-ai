@@ -11,6 +11,7 @@ declarative base, so Alembic's autogenerate (when used) sees them.
 from __future__ import annotations
 
 from app.models.audit import AuditLog
+from app.models.authority_text_cache import AuthorityTextCache
 from app.models.autonomous import (
     AutonomousMemory,
     AutonomousNotification,
@@ -31,6 +32,7 @@ from app.models.inference import InferenceRoutingLog
 from app.models.knowledge import KnowledgeBase, KnowledgeBaseFile
 from app.models.mcp import MCPToolCache
 from app.models.mcp_oauth import MCPOAuthState, MCPOAuthToken
+from app.models.message_authority_citation import MessageAuthorityCitation
 from app.models.message_caselaw_citation import MessageCaselawCitation
 from app.models.message_tool_source import MessageToolSource
 from app.models.organization_profile import OrganizationProfile
@@ -53,6 +55,7 @@ from app.models.work_product_fiduciary_gate import WorkProductFiduciaryGate
 
 __all__ = [
     "AuditLog",
+    "AuthorityTextCache",
     "AutonomousMemory",
     "AutonomousNotification",
     "AutonomousSchedule",
@@ -74,6 +77,7 @@ __all__ = [
     "MCPOAuthToken",
     "MCPToolCache",
     "Message",
+    "MessageAuthorityCitation",
     "MessageCaselawCitation",
     "MessageToolSource",
     "OrganizationProfile",
