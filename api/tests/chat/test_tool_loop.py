@@ -868,3 +868,153 @@ async def test_loop_threads_chat_id_into_tool_call_audit(db: AsyncSession, user:
     )
     assert len(rows) == 1
     assert rows[0].chat_id == chat_id
+
+
+# ---------------------------------------------------------------------------
+# Authority dispatch (WS-E PR1c Task 2)
+# ---------------------------------------------------------------------------
+
+from collections.abc import AsyncIterator as _AsyncIterator  # noqa: E402
+
+from app.chat.tool_loop import ToolResult, _dispatch_authority  # noqa: E402
+
+
+def _authority_spec(op: str) -> ToolSpec:
+    return ToolSpec(
+        function_name=op,
+        kind="authority",
+        provider="govinfo",
+        tool=op,
+        read_only=True,
+        destructive=False,
+        requires_confirmation=False,
+        parameters={},
+        description="",
+    )
+
+
+class _FakeGateway:
+    def __init__(self, payload):
+        self._payload = payload
+        self.calls = []
+
+    async def call_tool(self, provider, op, args):
+        self.calls.append((provider, op, args))
+        return {"payload": self._payload}
+
+
+@pytest.fixture
+def fake_authority_storage(monkeypatch: pytest.MonkeyPatch) -> dict[str, bytes]:
+    """In-memory object-storage double for app.citation.authority (mirrors
+    tests/test_authority_substrate.py's fake_storage — patched at the
+    app.citation.authority import point since store_authority_text calls
+    upload_bytes()/stream_download() directly.)
+    """
+    store: dict[str, bytes] = {}
+
+    async def _upload(*, storage_path: str, body: bytes, content_type: str) -> None:
+        store[storage_path] = body
+
+    class _Reader:
+        def __init__(self, data: bytes) -> None:
+            self._data = data
+
+        async def __aenter__(self) -> _AsyncIterator[bytes]:
+            data = self._data
+
+            async def _gen() -> _AsyncIterator[bytes]:
+                yield data
+
+            return _gen()
+
+        async def __aexit__(self, *a: object) -> bool:
+            return False
+
+    def _download(*, storage_path: str) -> _Reader:
+        return _Reader(store[storage_path])
+
+    monkeypatch.setattr("app.citation.authority.upload_bytes", _upload)
+    monkeypatch.setattr("app.citation.authority.stream_download", _download)
+    return store
+
+
+@pytest.mark.asyncio
+async def test_dispatch_get_authority_writes_cache_and_returns_data(
+    db, fake_authority_storage: dict[str, bytes]
+):
+    payload = {
+        "package_id": "USCODE-2022-title17",
+        "citation": "17 U.S.C. 107",
+        "title": "Limitations on exclusive rights: Fair use",
+        "url": "https://govinfo.example/uscode17",
+        "text": "Notwithstanding the provisions of sections 106 and 106A ...",
+    }
+    gw = _FakeGateway(payload)
+    result = await _dispatch_authority(
+        db,
+        spec=_authority_spec("get_authority"),
+        args={"package_id": "USCODE-2022-title17"},
+        gateway=gw,
+        request_id="r1",
+    )
+    assert isinstance(result, ToolResult)
+    auth = result.data["authority"]
+    assert auth["source"] == "govinfo"
+    assert auth["external_ref"] == "USCODE-2022-title17"
+    assert auth["content_kind"] == "statute"
+    assert "Notwithstanding" in auth["citable_text"]
+    # Body was written to the durable cache under source_type="govinfo".
+    from app.citation.authority import load_authority_text
+
+    body = await load_authority_text(db, source_type="govinfo", external_ref="USCODE-2022-title17")
+    assert body is not None and "Notwithstanding" in body
+
+
+@pytest.mark.asyncio
+async def test_dispatch_search_authority_does_not_write_cache(db):
+    payload = {
+        "results": [
+            {"package_id": "USCODE-2022-title17", "title": "Fair use", "dateIssued": "2022-01-01"}
+        ],
+        "collection": "USCODE",
+    }
+    gw = _FakeGateway(payload)
+    result = await _dispatch_authority(
+        db,
+        spec=_authority_spec("search_authority"),
+        args={"query": "fair use"},
+        gateway=gw,
+        request_id="r1",
+    )
+    auth = result.data["authority"]
+    assert auth["op"] == "search_authority"
+    from app.citation.authority import load_authority_text
+
+    # search results carry the package_id but no body was stored.
+    body = await load_authority_text(db, source_type="govinfo", external_ref=auth["external_ref"])
+    assert body is None
+
+
+@pytest.mark.asyncio
+async def test_dispatch_authority_cache_failure_is_non_fatal(db, monkeypatch):
+    async def _boom(db, *, source_type, external_ref, text):
+        raise RuntimeError("storage down")
+
+    monkeypatch.setattr("app.citation.authority.store_authority_text", _boom)
+    payload = {
+        "package_id": "USCODE-2022-title17",
+        "citation": "17 U.S.C. 107",
+        "title": "Fair use",
+        "url": "u",
+        "text": "body text",
+    }
+    result = await _dispatch_authority(
+        db,
+        spec=_authority_spec("get_authority"),
+        args={"package_id": "USCODE-2022-title17"},
+        gateway=_FakeGateway(payload),
+        request_id="r1",
+    )
+    # Dispatch still succeeds; the session is usable afterwards.
+    assert result.data["authority"]["citable_text"] == "body text"
+    await db.execute(__import__("sqlalchemy").text("SELECT 1"))
