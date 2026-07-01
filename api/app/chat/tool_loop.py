@@ -296,7 +296,7 @@ def collect_tool_sources(spec: ToolSpec, data: Any) -> list[ToolSourceRecord]:
             return []
         return [
             ToolSourceRecord(
-                source_kind=auth.get("content_kind") or "authority",
+                source_kind=auth.get("content_kind") or "unknown",
                 label=auth.get("label") or auth.get("external_ref"),
                 subtitle=auth.get("subtitle"),
                 url=auth.get("url") or None,
