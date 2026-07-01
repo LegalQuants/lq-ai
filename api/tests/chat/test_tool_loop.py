@@ -22,6 +22,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.chat.tool_loop import collect_tool_sources
 from app.chat.tool_schemas import ChatToolAllowlist, ToolSpec
 from app.errors import ToolTierRefused
 from app.models.tool_call_log import ToolCallLog
@@ -1018,3 +1019,49 @@ async def test_dispatch_authority_cache_failure_is_non_fatal(db, monkeypatch):
     # Dispatch still succeeds; the session is usable afterwards.
     assert result.data["authority"]["citable_text"] == "body text"
     await db.execute(__import__("sqlalchemy").text("SELECT 1"))
+
+
+# ---------------------------------------------------------------------------
+# Authority provenance (WS-E PR1c Task 3)
+# ---------------------------------------------------------------------------
+
+
+def test_collect_tool_sources_authority_branch():
+    spec = _authority_spec("get_authority")
+    data = {
+        "authority": {
+            "source": "govinfo",
+            "op": "get_authority",
+            "content_kind": "statute",
+            "external_ref": "USCODE-2022-title17",
+            "label": "17 U.S.C. 107",
+            "subtitle": "Fair use",
+            "url": "https://govinfo.example/uscode17",
+            "citable_text": "Notwithstanding ...",
+        }
+    }
+    records = collect_tool_sources(spec, data)
+    assert len(records) == 1
+    rec = records[0]
+    assert rec.source_kind == "statute"
+    assert rec.external_ref == "USCODE-2022-title17"
+    assert rec.provider == "govinfo"
+    assert rec.tool == "get_authority"
+
+
+def test_collect_tool_sources_authority_search_also_emits():
+    spec = _authority_spec("search_authority")
+    data = {
+        "authority": {
+            "source": "govinfo",
+            "op": "search_authority",
+            "content_kind": "regulation",
+            "external_ref": "CFR-2023-title40",
+            "label": "40 CFR",
+            "subtitle": "2023",
+            "url": "",
+            "citable_text": "Title 40",
+        }
+    }
+    records = collect_tool_sources(spec, data)
+    assert len(records) == 1 and records[0].source_kind == "regulation"

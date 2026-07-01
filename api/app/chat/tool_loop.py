@@ -284,11 +284,27 @@ def extract_mcp_tool_source(spec: ToolSpec, data: Any) -> ToolSourceRecord | Non
 def collect_tool_sources(spec: ToolSpec, data: Any) -> list[ToolSourceRecord]:
     """Route a tool result to its provenance records by ``spec.kind`` (DE-350).
 
-    MCP → one ``mcp`` record; research → the existing case-law extraction.
+    MCP → one ``mcp`` record; authority (DE-369, ADR 0021 D3) → one record for
+    both search and get calls; research → the existing case-law extraction.
     """
     if spec.kind == "mcp":
         rec = extract_mcp_tool_source(spec, data)
         return [rec] if rec is not None else []
+    if spec.kind == "authority":
+        auth = (data or {}).get("authority") if isinstance(data, dict) else None
+        if not auth or not auth.get("external_ref"):
+            return []
+        return [
+            ToolSourceRecord(
+                source_kind=auth.get("content_kind") or "authority",
+                label=auth.get("label") or auth.get("external_ref"),
+                subtitle=auth.get("subtitle"),
+                url=auth.get("url") or None,
+                external_ref=auth.get("external_ref"),
+                provider=spec.provider,
+                tool=spec.tool,
+            )
+        ]
     return extract_tool_sources(spec.tool, data)
 
 
