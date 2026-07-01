@@ -516,7 +516,7 @@ async def build_session_ledger(
                 authority_items.append(
                     _AuthorityItem(
                         quote=c["quote"],
-                        source=ev["source"],
+                        source=ev.get("source") or "govinfo",
                         external_ref=ev["ref"],
                         content_kind=ev.get("content_kind") or "statute",
                         carried_text=ev.get("content") or "",
