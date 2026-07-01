@@ -21,17 +21,28 @@ Object storage follows the same pattern as
 
 from __future__ import annotations
 
+import logging
 import re
 import uuid
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.authority_text_cache import AuthorityTextCache
+from app.models.message_authority_citation import MessageAuthorityCitation
 from app.storage import stream_download, upload_bytes
+
+if TYPE_CHECKING:
+    from app.chat.tool_loop import ToolSourceRecord
+
+log = logging.getLogger(__name__)
+
+_LoadAuthorityText = Callable[..., Awaitable[str | None]]
 
 # Stable namespace for authority verify targets.
 # MUST be distinct from caselaw's _OPINION_NS ("6f9619ff-8b86-d011-b42d-00cf4fc964ff").
@@ -227,3 +238,131 @@ async def load_authority_text(
         async for chunk in stream:
             chunks.append(chunk)
     return b"".join(chunks).decode("utf-8")
+
+
+async def verify_and_persist_authority_citations(
+    db: AsyncSession,
+    *,
+    message_id: uuid.UUID,
+    assistant_text: str,
+    tool_sources: Sequence[ToolSourceRecord],
+    load_authority_text: _LoadAuthorityText = load_authority_text,
+    gateway: Any = None,
+    judge_model: str = "fast",
+) -> int:
+    """Char-verify verbatim/paraphrase quotes of fetched authority in a chat
+    turn's answer, persisting MessageAuthorityCitation rows.
+
+    Level-2 depth (WS-E PR1c): verbatim + paraphrase, PASS/SUPPORTED,
+    drop-on-miss.  Unlike the autonomous ledger_bridge.build_authority_citations,
+    chat blockquotes are unattributed, so a quote that matches NO fetched body
+    is dropped (no row) rather than FAILed — avoiding false-positives on
+    uploaded-document or caselaw blockquotes.  Attributed-authority FAIL is
+    DE-370.  Best-effort: per-ref/per-passage exceptions are logged and skipped.
+    """
+    # Only get_authority-sourced refs carry a cached body; filter to authority
+    # content kinds with an external_ref.
+    refs = [
+        r for r in tool_sources if r.source_kind in {"statute", "regulation"} and r.external_ref
+    ]
+    if not refs:
+        return 0
+
+    # Function-local imports break the authority <-> caselaw <-> tool_loop cycle.
+    from app.citation.caselaw import extract_blockquote_passages, locate_passage
+    from app.citation.verification import verify
+
+    passages = extract_blockquote_passages(assistant_text)
+    if not passages:
+        return 0
+
+    # Load each distinct authority body once. Carry external_ref alongside
+    # source_type/content_kind so a persisted row records the exact package
+    # its quote matched (rather than re-deriving it from tool_sources later).
+    targets: list[
+        tuple[str, str, str, Any]
+    ] = []  # (source_type, external_ref, content_kind, target)
+    seen: set[tuple[str, str]] = set()
+    for r in refs:
+        assert r.external_ref is not None  # guaranteed by the `refs` filter above
+        key = (r.provider, r.external_ref)
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            body = await load_authority_text(
+                db, source_type=r.provider, external_ref=r.external_ref
+            )
+        except Exception:
+            log.warning(
+                "authority verify: body load failed, skipping ref",
+                extra={
+                    "event": "chat_authority_verify_load_failed",
+                    "external_ref": r.external_ref,
+                },
+                exc_info=True,
+            )
+            continue
+        if not body:
+            continue
+        targets.append(
+            (
+                r.provider,
+                r.external_ref,
+                r.source_kind,
+                authority_target(r.provider, r.external_ref, body),
+            )
+        )
+
+    if not targets:
+        return 0
+
+    rows: list[MessageAuthorityCitation] = []
+    for passage in passages:
+        for source_type, external_ref, content_kind, target in targets:
+            try:
+                off = locate_passage(passage, target.normalized_content)
+            except Exception:
+                continue
+            if off is None:
+                continue
+            start, end = off
+            cand = _AuthorityCandidate(
+                source_offset_start=start,
+                source_offset_end=end,
+                source_text=passage,
+                source_document_id=target.id,
+            )
+            try:
+                result = await verify(cand, target, gateway=gateway, judge_model=judge_model)
+            except Exception:
+                log.warning(
+                    "authority verify: verify() failed, skipping passage",
+                    extra={"event": "chat_authority_verify_failed"},
+                    exc_info=True,
+                )
+                continue
+            if not result.verified:
+                # drop-on-miss: not verified against this body — try the next.
+                continue
+            rows.append(
+                MessageAuthorityCitation(
+                    message_id=message_id,
+                    source_type=source_type,
+                    external_ref=external_ref,
+                    content_kind=content_kind,
+                    source_offset_start=start,
+                    source_offset_end=end,
+                    source_text=passage,
+                    verified=True,
+                    verification_method=result.method,
+                    verification_confidence=result.confidence,
+                    partial=result.partial,
+                )
+            )
+            break  # first matching authority wins
+
+    if rows:
+        db.add_all(rows)
+        await db.flush()
+    return len(rows)
