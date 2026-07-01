@@ -1615,7 +1615,7 @@ async def send_message(
     # deployment or in environments without research/MCP), return an empty
     # allowlist so the existing single-shot path runs unchanged.
     try:
-        allowlist = await assemble_allowlist(db, request_id=request_id)
+        allowlist = await assemble_allowlist(db, gateway=gateway, request_id=request_id)
     except Exception:
         log.warning(
             "chat send_message: assemble_allowlist failed — falling back to empty allowlist",
@@ -2010,7 +2010,9 @@ async def resume_tool_call(
             # Re-assemble the allowlist to resolve the spec (tool may have been
             # removed since the gate; treat that as denial-style).
             try:
-                current_allowlist = await assemble_allowlist(db, request_id=request_id)
+                current_allowlist = await assemble_allowlist(
+                    db, gateway=gateway, request_id=request_id
+                )
             except Exception:
                 current_allowlist = ChatToolAllowlist(specs={})
 
@@ -2116,7 +2118,7 @@ async def resume_tool_call(
 
         # Re-assemble allowlist for the resumed loop.
         try:
-            resume_allowlist = await assemble_allowlist(db, request_id=request_id)
+            resume_allowlist = await assemble_allowlist(db, gateway=gateway, request_id=request_id)
         except Exception:
             resume_allowlist = ChatToolAllowlist(specs={})
 
