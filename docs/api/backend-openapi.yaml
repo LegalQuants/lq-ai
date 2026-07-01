@@ -745,6 +745,70 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
 
+  /api/v1/projects/{project_id}/knowledge-bases:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      tags: [projects]
+      summary: Attach a knowledge base to a matter
+      description: |
+        Wave D.1 T3. Body: ``{knowledge_base_id}``. The caller must own
+        both the project and the KB (cross-user → 404 on either side).
+        Idempotent — re-attaching an already-attached KB returns 200
+        with the current project state (unlike the skill/file attach
+        endpoints above, this does NOT return 409 on repeat attach).
+        Audit action: ``project.knowledge_base_attached``.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [knowledge_base_id]
+              properties:
+                knowledge_base_id: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Project state after attach (idempotent — same body on repeat calls)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Project'}
+        '404':
+          description: Project or knowledge base not found
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/v1/projects/{project_id}/knowledge-bases/{kb_id}:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: kb_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    delete:
+      tags: [projects]
+      summary: Detach a knowledge base from a matter
+      description: |
+        Wave D.1 T3. Idempotent — detaching a KB that is not attached
+        still returns 204. The KB row itself is untouched (use
+        ``DELETE /api/v1/knowledge-bases/{id}`` for the KB). Audit
+        action: ``project.knowledge_base_detached`` (only written when
+        a join row is actually removed).
+      responses:
+        '204': {description: Detached (or was already not attached)}
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
   # ----------- PROJECTS SANDBOX (Wave D.2 Task 2.2) -----------
   /api/v1/projects/sandbox/ensure:
     post:
@@ -4124,6 +4188,62 @@ paths:
         '404':
           description: Session not found
 
+  /api/v1/autonomous/sessions/{session_id}/ledger:
+    get:
+      tags: [autonomous]
+      summary: Citation ledger + fiduciary gate for an autonomous session (WS-D PR2 C5)
+      description: |
+        Returns ``{chat_id, entries, gates}`` — the identical shape
+        produced by ``GET /api/v1/chats/{chat_id}/ledger`` — so the
+        PR2 UI can reuse the chat ledger component directly without
+        adaptation. For a session ledger, ``gates`` always has exactly
+        one element (the single fiduciary-grade gate manufactured by
+        ``build_session_ledger``). Reuses ``resolve_ledger_entries`` and
+        ``resolve_gates`` — the same functions the chat ledger endpoint
+        calls.
+
+        Owner-gated: another user's ``session_id`` or a missing session
+        returns 404 (not 403) to avoid existence disclosure. Also
+        returns 404 if the session exists but ``build_session_ledger``
+        has not yet manufactured the hidden backing chat.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Ledger entries resolved to source + passage(s) + status + provenance, plus the session's single fiduciary-grade gate
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  chat_id: {type: string, format: uuid}
+                  entries:
+                    type: array
+                    items: {$ref: '#/components/schemas/LedgerEntry'}
+                  gates:
+                    type: array
+                    description: Exactly one element for a session ledger — the gate manufactured by build_session_ledger (ADR 0018 D3).
+                    items:
+                      type: object
+                      properties:
+                        message_id: {type: string, format: uuid}
+                        gate_status: {type: string, enum: [fiduciary_grade, supported_only, flagged]}
+                        pass_count: {type: integer}
+                        supported_count: {type: integer}
+                        fail_count: {type: integer}
+                        total_assertions: {type: integer}
+                        confidence: {type: number, nullable: true}
+                        created_at: {type: string, format: date-time}
+        '401':
+          description: Not authenticated
+        '404':
+          description: Session not found, or session has no ledger yet
+
   /api/v1/autonomous/sessions/{session_id}/halt:
     post:
       tags: [autonomous]
@@ -5170,6 +5290,31 @@ paths:
               schema: {$ref: '#/components/schemas/Error'}
         '404':
           description: Opinion not yet fetched; call GET /clusters/{id} first
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/v1/research/sources:
+    get:
+      tags: [research]
+      summary: List available content-authority sources from the registry
+      description: |
+        WS-E PR1a (ADR 0016 / P3). Returns one entry per registered
+        content-authority source type, indicating whether it is enabled
+        (configured in the gateway) and its safe metadata fields. Auth
+        keys and cost fields are never included. Requires an
+        authenticated user (bearer token).
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Available content-authority sources
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourcesResponse'
+        '401':
+          description: Not authenticated
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
@@ -7064,6 +7209,14 @@ components:
           type: array
           items: {type: string, format: uuid}
           description: "Files attached to this project, ordered by attachment time"
+        attached_knowledge_base_ids:
+          type: array
+          items: {type: string, format: uuid}
+          description: |
+            Knowledge bases attached to this project (matter), ordered by
+            attachment time (Wave D.1 T3). Mutated by
+            ``POST /api/v1/projects/{project_id}/knowledge-bases`` and
+            ``DELETE /api/v1/projects/{project_id}/knowledge-bases/{kb_id}``.
         is_sandbox:
           type: boolean
           default: false
@@ -8472,6 +8625,34 @@ components:
         source:
           type: object
           description: Resolved source block; shape varies by kind. Quote kinds carry passages[].
+
+    SourcesResponse:
+      type: object
+      description: Envelope for GET /api/v1/research/sources (WS-E PR1a).
+      required: [sources]
+      properties:
+        sources:
+          type: array
+          items: {$ref: '#/components/schemas/AvailableSourceResponse'}
+
+    AvailableSourceResponse:
+      type: object
+      description: |
+        One content-authority source registry entry. Exposes only the
+        safe fields defined by P3 (ADR 0016): name, type, jurisdiction,
+        coverage, content_kinds, enabled, egress_tier. Auth keys and
+        cost fields are NEVER included.
+      required: [type, jurisdiction, coverage, content_kinds, enabled]
+      properties:
+        name: {type: string, nullable: true}
+        type: {type: string}
+        jurisdiction: {type: string}
+        coverage: {type: string}
+        content_kinds:
+          type: array
+          items: {type: string}
+        enabled: {type: boolean}
+        egress_tier: {type: integer, nullable: true}
 
 security:
   - bearerAuth: []
