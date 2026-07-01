@@ -147,10 +147,10 @@ class ProviderConfig(BaseModel):
 # --- Tool / data-source providers (ADR 0014) ---------------------------------
 
 
-ToolProviderType = Literal["echo", "courtlistener", "mcp", "govinfo"]
+ToolProviderType = Literal["echo", "courtlistener", "mcp", "govinfo", "edgar"]
 """Tool-provider family. ``echo`` is the test/proof type (PR1); ``courtlistener``
 and ``mcp`` land in later PRs; ``govinfo`` is the GovInfo statutory-text adapter
-(WS-E PR1a)."""
+(WS-E PR1a); ``edgar`` is the SEC EDGAR filings adapter (WS-E PR2a)."""
 
 
 class EgressAllowlistConfig(BaseModel):
@@ -199,6 +199,10 @@ class ToolProviderConfig(BaseModel):
     """Default True per ADR 0014 D5. NOTE: PR1 parses but does not yet apply
     the transform (no matter context exists); enforcement lands in WS3/WS4."""
     enabled: bool = True
+    user_agent: str | None = None
+    """Descriptive ``User-Agent`` header value, required for ``type: edgar``
+    (SEC's fair-access policy substitutes for an API key). Unused by other
+    provider types."""
 
     @model_validator(mode="after")
     def _exactly_one_key_source(self) -> ToolProviderConfig:
