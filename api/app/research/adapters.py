@@ -136,3 +136,68 @@ class GovInfoAdapter:
             external_ref=package_id,
             content_kind=content_kind,
         )
+
+
+class EdgarAdapter:
+    """Normalises SEC EDGAR gateway payloads into ``FetchedAuthority`` objects.
+
+    Handles the two EDGAR tool operations exposed by the gateway:
+
+    ``get_authority``
+        Payload: ``{external_ref, title, url, text, content_kind?}``
+        Returns a fully-hydrated ``FetchedAuthority`` with the filing body —
+        this is the quotable, citable text.
+
+    ``search_authority``
+        Payload: ``{results: [{external_ref, form_type, company, filed_date,
+        title}], count}``
+        Returns a ``FetchedAuthority`` from the *first* result.  EDGAR search
+        results carry no full-text body (same contract as GovInfo search) —
+        ``citable_text`` is the title/label only and is NOT quotable as
+        filing text.
+
+    ``content_kind`` is always ``"sec_filing"``: EDGAR filings are not
+    statutes, regulations, or caselaw, and the form type (10-K, 8-K, S-1,
+    etc.) is carried in ``subtitle`` rather than folded into content_kind.
+    """
+
+    def from_response(self, op: str, payload: dict[str, Any]) -> FetchedAuthority:
+        if op == "get_authority":
+            return self._from_get_authority(payload)
+        if op == "search_authority":
+            return self._from_search_authority(payload)
+        raise ValueError(f"EdgarAdapter: unsupported op {op!r}")
+
+    def _from_get_authority(self, payload: dict[str, Any]) -> FetchedAuthority:
+        title: str = payload.get("title") or ""
+        url: str = payload.get("url") or ""
+        text: str = payload.get("text") or ""
+        external_ref: str = payload.get("external_ref") or ""
+        content_kind: str = payload.get("content_kind") or "sec_filing"
+        return FetchedAuthority(
+            citable_text=text,
+            label=title,
+            subtitle="",
+            url=url,
+            external_ref=external_ref,
+            content_kind=content_kind,
+        )
+
+    def _from_search_authority(self, payload: dict[str, Any]) -> FetchedAuthority:
+        results: list[dict[str, Any]] = payload.get("results") or []
+        if not results:
+            raise ValueError("EdgarAdapter: search_authority payload has no results")
+        first = results[0]
+        title: str = first.get("title") or ""
+        form_type: str = first.get("form_type") or ""
+        filed_date: str = first.get("filed_date") or ""
+        external_ref: str = first.get("external_ref") or ""
+        subtitle = f"{form_type} · {filed_date}".strip(" ·")
+        return FetchedAuthority(
+            citable_text=title,  # search has no quotable body; only get_authority does
+            label=title,
+            subtitle=subtitle,
+            url="",
+            external_ref=external_ref,
+            content_kind="sec_filing",
+        )

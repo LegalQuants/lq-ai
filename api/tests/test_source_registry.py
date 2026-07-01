@@ -2,7 +2,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.research.adapters import FetchedAuthority, GovInfoAdapter, _content_kind_from_id
+from app.research.adapters import (
+    EdgarAdapter,
+    FetchedAuthority,
+    GovInfoAdapter,
+    _content_kind_from_id,
+)
 from app.research.registry import SOURCE_REGISTRY, resolve_available_sources
 from app.tools.governance import _reset_provider_tier_cache_for_tests
 
@@ -27,6 +32,14 @@ def _reset_tier_cache() -> None:
 def test_registry_has_courtlistener_and_govinfo():
     assert "courtlistener" in SOURCE_REGISTRY and "govinfo" in SOURCE_REGISTRY
     assert "search_authority" in SOURCE_REGISTRY["govinfo"].ops
+
+
+def test_edgar_registered_with_sec_filing_kind():
+    spec = SOURCE_REGISTRY["edgar"]
+    assert spec.type == "edgar"
+    assert spec.content_kinds == ("sec_filing",)
+    assert spec.ops == ("search_authority", "get_authority")
+    assert spec.adapter is not None
 
 
 # ---------------------------------------------------------------------------
@@ -145,3 +158,43 @@ def test_content_kind_from_id_unknown_returns_unknown():
     assert _content_kind_from_id("BILLS-2022-s1234") == "unknown"
     assert _content_kind_from_id("CREC-2023-pt1") == "unknown"
     assert _content_kind_from_id("") == "unknown"
+
+
+# ---------------------------------------------------------------------------
+# EdgarAdapter
+# ---------------------------------------------------------------------------
+
+
+def test_edgar_get_authority_maps_to_fetched_authority():
+    payload = {
+        "external_ref": "1005010_000119312509237465_dex992.htm",
+        "title": "dex992.htm",
+        "url": "https://www.sec.gov/Archives/edgar/data/1005010/000119312509237465/dex992.htm",
+        "text": "Revenue recognition policy ...",
+        "content_kind": "sec_filing",
+    }
+    fa = EdgarAdapter().from_response("get_authority", payload)
+    assert isinstance(fa, FetchedAuthority)
+    assert fa.content_kind == "sec_filing"
+    assert fa.external_ref == "1005010_000119312509237465_dex992.htm"
+    assert fa.citable_text == "Revenue recognition policy ..."
+    assert fa.url.endswith("dex992.htm")
+
+
+def test_edgar_search_authority_is_title_only_body():
+    payload = {
+        "results": [
+            {
+                "external_ref": "1005010_000119312509237465_dex992.htm",
+                "form_type": "10-K",
+                "company": "ARTHROCARE CORP",
+                "filed_date": "2009-11-18",
+                "title": "ARTHROCARE CORP — 10-K (2009-11-18)",
+            }
+        ],
+        "count": 1,
+    }
+    fa = EdgarAdapter().from_response("search_authority", payload)
+    assert fa.content_kind == "sec_filing"
+    # search bodies are NOT quotable full text — citable_text is the title/label only
+    assert "ARTHROCARE" in fa.citable_text
