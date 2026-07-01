@@ -54,7 +54,7 @@ from app.mcp.oauth import get_valid_token
 from app.mcp.service import list_servers
 from app.models.user import User
 from app.research import service as research_service
-from app.research.adapters import GovInfoAdapter
+from app.research.registry import SOURCE_REGISTRY, resolve_available_sources
 from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
 from app.tools.governance import governed_tool_invocation, resolve_provider_tier
 
@@ -301,7 +301,14 @@ def collect_tool_sources(spec: ToolSpec, data: Any) -> list[ToolSourceRecord]:
                 subtitle=auth.get("subtitle"),
                 url=auth.get("url") or None,
                 external_ref=auth.get("external_ref"),
-                provider=spec.provider,
+                # Registry-driven (WS-E PR2a Task 3): a single ToolSpec now
+                # covers every enabled authority source, so `spec.provider`
+                # no longer identifies which source answered this call.
+                # `_dispatch_authority` always threads the resolved source
+                # type into data["authority"]["source"]; prefer that, and
+                # fall back to spec.provider only for pre-generalization
+                # callers that construct a single-source ToolSpec directly.
+                provider=auth.get("source") or spec.provider,
                 tool=spec.tool,
             )
         ]
@@ -370,8 +377,33 @@ async def _dispatch_research(
 
 
 # ---------------------------------------------------------------------------
-# Authority dispatch (WS-E PR1c)
+# Authority dispatch (WS-E PR1c; registry-driven WS-E PR2a Task 3)
 # ---------------------------------------------------------------------------
+
+
+async def _resolve_authority_provider_name(
+    gateway: Any, source_type: str, *, request_id: str | None = None
+) -> str:
+    """Best-effort resolve the gateway provider name for an authority ``source_type``.
+
+    Joins ``SOURCE_REGISTRY`` against the live gateway config via
+    :func:`~app.research.registry.resolve_available_sources` — the same
+    mapping :func:`app.autonomous.guard._resolve_external_call` uses for its
+    ``retrieve_authority`` branch.
+
+    Falls back to ``source_type`` itself when the gateway double doesn't
+    implement ``list_tool_providers`` (unit-test doubles that only stub
+    ``call_tool``) or no enabled match is found. This preserves the
+    pre-generalization behavior — the registry type WAS the hardcoded
+    provider name (``"govinfo"``) — for the common case where they coincide,
+    and never raises (a resolution miss must not break the chat turn).
+    """
+    try:
+        sources = await resolve_available_sources(gateway)
+    except Exception:
+        return source_type
+    match = next((s for s in sources if s.type == source_type and s.enabled and s.name), None)
+    return str(match.name) if match is not None else source_type
 
 
 async def _dispatch_authority(
@@ -383,14 +415,84 @@ async def _dispatch_authority(
 ) -> ToolResult:
     """Dispatch an authority op (search_authority/get_authority) via the gateway.
 
+    Registry-driven (WS-E PR2a Task 3): the adapter is resolved from
+    ``SOURCE_REGISTRY`` keyed on the call's ``source`` argument — NOT a
+    hardcoded ``GovInfoAdapter()``. ``source`` defaults to ``spec.provider``
+    when absent from ``args`` (pre-generalization callers that build a
+    single-source ``ToolSpec`` directly; keeps the pre-existing GovInfo unit
+    and integration tests green unmodified).
+
     On get_authority, persist the fetched body to the durable authority cache
     so the finalize verify hook can char-verify quotes against it.  The cache
     write is savepoint-isolated + non-fatal (never poison the session — mirrors
     app/autonomous/guard.py).  Only get_authority yields a quotable body.
+
+    Empty-results resilience (WS-E PR2a Task 3 review): ``search_authority``
+    with zero hits raises ``ValueError`` inside the adapter (pre-existing
+    behavior shared with the autonomous path, which is guarded by a
+    catch-all in ``nodes.py``). The chat path has no such catch-all around
+    tool dispatch — ``execute_tool``/``governed_tool_invocation`` only catch
+    ``MCPAuthorizationRequired``/``ToolTierRefused``, so an uncaught
+    ``ValueError`` here would propagate out of ``run_chat_tool_loop`` and
+    break the whole chat turn. Degrade to a normal empty-results observation
+    instead of raising.
     """
-    result = await gateway.call_tool(spec.provider, spec.tool, args)
+    source_type = str(args.get("source") or spec.provider or "")
+    spec_entry = SOURCE_REGISTRY.get(source_type)
+    if spec_entry is None or spec_entry.adapter is None:
+        log.warning(
+            "chat authority dispatch: unknown or unsupported source %r",
+            source_type,
+            extra={"event": "chat_authority_unknown_source", "source": source_type},
+        )
+        return ToolResult(
+            cost_usd=Decimal("0"),
+            data={
+                "authority": {
+                    "source": source_type,
+                    "op": spec.tool,
+                    "error": "source not available",
+                }
+            },
+            outcome="success",
+        )
+    adapter = spec_entry.adapter
+
+    provider_name = await _resolve_authority_provider_name(
+        gateway, source_type, request_id=request_id
+    )
+    call_args = {k: v for k, v in args.items() if k != "source"}
+    result = await gateway.call_tool(provider_name, spec.tool, call_args)
     payload = result.get("payload") if isinstance(result, dict) else None
-    authority = GovInfoAdapter().from_response(spec.tool, payload or {})
+
+    try:
+        authority = adapter.from_response(spec.tool, payload or {})
+    except ValueError:
+        # search_authority with zero results (or any other adapter-detected
+        # empty/malformed response) — non-fatal: feed the model a normal
+        # no-results observation instead of propagating out of the loop.
+        log.info(
+            "chat authority dispatch: no-results for %r/%r — returning empty observation",
+            source_type,
+            spec.tool,
+            extra={
+                "event": "chat_authority_no_results",
+                "source": source_type,
+                "op": spec.tool,
+            },
+        )
+        return ToolResult(
+            cost_usd=Decimal("0"),
+            data={
+                "authority": {
+                    "source": source_type,
+                    "op": spec.tool,
+                    "results": [],
+                    "count": 0,
+                }
+            },
+            outcome="success",
+        )
 
     if spec.tool == "get_authority" and authority.citable_text:
         # Function-local import breaks the tool_loop <-> citation.authority
@@ -401,7 +503,7 @@ async def _dispatch_authority(
             async with db.begin_nested():
                 await store_authority_text(
                     db,
-                    source_type=spec.provider,
+                    source_type=source_type,
                     external_ref=authority.external_ref,
                     text=authority.citable_text,
                 )
@@ -419,7 +521,7 @@ async def _dispatch_authority(
         cost_usd=Decimal("0"),
         data={
             "authority": {
-                "source": spec.provider,
+                "source": source_type,
                 "op": spec.tool,
                 "content_kind": authority.content_kind,
                 "external_ref": authority.external_ref,
@@ -548,7 +650,22 @@ async def execute_tool(
         intent = ToolIntent.call_mcp_tool
 
     estimated_cost = await estimate_tool_cost(intent, args, db)
-    provider_tier = await resolve_provider_tier(spec.provider, request_id=request_id)
+
+    # Authority tools (WS-E PR2a Task 3) are registry-driven: one shared
+    # ToolSpec covers every enabled source, so `spec.provider` carries no
+    # single source for it (see assemble_allowlist). Resolve the real
+    # provider name per-call from the model-supplied `source` argument —
+    # this is the value used for the tier check AND the tool_call_log audit
+    # row. Non-authority kinds are unaffected (spec.provider as before).
+    if spec.kind == "authority":
+        source_type = str(args.get("source") or spec.provider or "")
+        provider = await _resolve_authority_provider_name(
+            gateway, source_type, request_id=request_id
+        )
+    else:
+        provider = spec.provider
+
+    provider_tier = await resolve_provider_tier(provider, request_id=request_id)
 
     async def _dispatch() -> ToolResult:
         if spec.kind == "research":
@@ -561,7 +678,7 @@ async def execute_tool(
     return await governed_tool_invocation(
         db,
         origin="chat",
-        provider=spec.provider,
+        provider=provider,
         tool=spec.tool,
         intent=intent,
         provider_tier=provider_tier,

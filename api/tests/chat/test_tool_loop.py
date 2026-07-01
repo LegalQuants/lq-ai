@@ -1065,3 +1065,129 @@ def test_collect_tool_sources_authority_search_also_emits():
     }
     records = collect_tool_sources(spec, data)
     assert len(records) == 1 and records[0].source_kind == "regulation"
+
+
+# ---------------------------------------------------------------------------
+# Registry-driven authority dispatch (WS-E PR2a Task 3)
+# ---------------------------------------------------------------------------
+
+
+def _shared_authority_spec(op: str) -> ToolSpec:
+    """A ToolSpec as produced by the registry-driven assemble_allowlist:
+
+    ``provider`` is a best-effort default (NOT used for dispatch — the real
+    source comes from the call's ``source`` argument), mirroring
+    tool_schemas.assemble_allowlist's shared search_authority/get_authority
+    spec that covers every enabled source.
+    """
+    return ToolSpec(
+        function_name=op,
+        kind="authority",
+        provider="govinfo",
+        tool=op,
+        read_only=True,
+        destructive=False,
+        requires_confirmation=False,
+        parameters={},
+        description="",
+    )
+
+
+@pytest.mark.asyncio
+async def test_dispatch_authority_uses_registry_adapter_for_edgar(
+    db, fake_authority_storage: dict[str, bytes]
+):
+    """Task 2 review requirement 1: a get_authority call with source='edgar'
+    must resolve SOURCE_REGISTRY['edgar'].adapter (EdgarAdapter) — NOT a
+    hardcoded GovInfoAdapter(). content_kind must stay 'sec_filing', not be
+    degraded to GovInfoAdapter's 'unknown' fallback (which would happen if
+    the EDGAR payload were fed through GovInfoAdapter's package_id parsing).
+    """
+    payload = {
+        "external_ref": "1005010_00011_dex.htm",
+        "title": "dex.htm",
+        "url": "https://www.sec.gov/x",
+        "text": "Body text",
+        "content_kind": "sec_filing",
+    }
+    gw = _FakeGateway(payload)
+    result = await _dispatch_authority(
+        db,
+        spec=_shared_authority_spec("get_authority"),
+        args={"source": "edgar", "external_ref": "1005010_00011_dex.htm"},
+        gateway=gw,
+        request_id="r1",
+    )
+    assert isinstance(result, ToolResult)
+    auth = result.data["authority"]
+    assert auth["source"] == "edgar"
+    assert auth["content_kind"] == "sec_filing"
+    assert auth["external_ref"] == "1005010_00011_dex.htm"
+    # The gateway call itself was routed under the edgar source, not govinfo
+    # (spec.provider="govinfo" is the shared-spec default and must be ignored
+    # whenever the call supplies its own `source`).
+    assert gw.calls == [("edgar", "get_authority", {"external_ref": "1005010_00011_dex.htm"})]
+
+
+@pytest.mark.asyncio
+async def test_dispatch_search_authority_empty_results_does_not_raise(db):
+    """Task 2 review requirement 2 (empty-search resilience): EdgarAdapter
+    (like GovInfoAdapter) raises ValueError on a zero-result search_authority
+    payload. execute_tool only catches MCPAuthorizationRequired/
+    ToolTierRefused, and governed_tool_invocation re-raises everything else —
+    so an uncaught ValueError here would break the whole chat turn (unlike
+    the autonomous path, which nodes.py wraps in a catch-all). The chat
+    dispatch must degrade to a normal no-results observation instead.
+    """
+    payload = {"results": [], "count": 0}
+    gw = _FakeGateway(payload)
+    result = await _dispatch_authority(
+        db,
+        spec=_shared_authority_spec("search_authority"),
+        args={"source": "edgar", "query": "no such filing exists anywhere"},
+        gateway=gw,
+        request_id="r1",
+    )
+    assert isinstance(result, ToolResult)
+    assert result.outcome == "success"
+    auth = result.data["authority"]
+    assert auth["source"] == "edgar"
+    assert auth["results"] == []
+
+
+@pytest.mark.asyncio
+async def test_dispatch_search_authority_empty_results_does_not_raise_govinfo(db):
+    """Same empty-results resilience for the pre-existing GovInfo path (the
+    bug pre-dates EDGAR; EDGAR just made it reachable more often given
+    full-text search commonly returns zero hits)."""
+    payload = {"results": [], "count": 0}
+    gw = _FakeGateway(payload)
+    result = await _dispatch_authority(
+        db,
+        spec=_authority_spec("search_authority"),
+        args={"query": "a query with no matches"},
+        gateway=gw,
+        request_id="r1",
+    )
+    assert result.outcome == "success"
+    assert result.data["authority"]["results"] == []
+
+
+@pytest.mark.asyncio
+async def test_dispatch_authority_unknown_source_does_not_raise(db):
+    """A source not in SOURCE_REGISTRY (or without a registered adapter,
+    e.g. courtlistener) must degrade to a failed-but-non-raising observation
+    rather than crash the dispatch — defensive belt-and-suspenders mirroring
+    app.autonomous.guard._handle_retrieve_authority's source validation."""
+    gw = _FakeGateway({})
+    spec = _shared_authority_spec("get_authority")
+    result = await _dispatch_authority(
+        db,
+        spec=spec,
+        args={"source": "not_a_real_source", "external_ref": "x"},
+        gateway=gw,
+        request_id="r1",
+    )
+    assert result.outcome == "success"
+    assert result.data["authority"]["error"] == "source not available"
+    assert gw.calls == []  # never reached the gateway for an unknown source
