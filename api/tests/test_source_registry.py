@@ -4,6 +4,7 @@ import pytest
 
 from app.research.adapters import (
     EdgarAdapter,
+    EurLexAdapter,
     FetchedAuthority,
     GovInfoAdapter,
     _content_kind_from_id,
@@ -198,3 +199,41 @@ def test_edgar_search_authority_is_title_only_body():
     assert fa.content_kind == "sec_filing"
     # search bodies are NOT quotable full text — citable_text is the title/label only
     assert "ARTHROCARE" in fa.citable_text
+
+
+# ---------------------------------------------------------------------------
+# EurLexAdapter
+# ---------------------------------------------------------------------------
+
+
+def test_eurlex_get_authority_maps_to_fetched_authority():
+    payload = {
+        "external_ref": "32016R0679",
+        "title": "32016R0679",
+        "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32016R0679",
+        "text": "Article 6 lawfulness of processing ...",
+        "content_kind": "eu_regulation",
+    }
+    fa = EurLexAdapter().from_response("get_authority", payload)
+    assert fa.content_kind == "eu_regulation"
+    assert fa.external_ref == "32016R0679"
+    assert fa.citable_text.startswith("Article 6")
+    assert "CELEX:32016R0679" in fa.url
+
+
+def test_eurlex_unsupported_op_raises() -> None:
+    with pytest.raises(ValueError):
+        EurLexAdapter().from_response("search_authority", {})
+
+
+# ---------------------------------------------------------------------------
+# eurlex registry entry
+# ---------------------------------------------------------------------------
+
+
+def test_eurlex_registered_get_only():
+    spec = SOURCE_REGISTRY["eurlex"]
+    assert spec.type == "eurlex"
+    assert spec.ops == ("get_authority",)
+    assert "eu_regulation" in spec.content_kinds
+    assert spec.adapter is not None
