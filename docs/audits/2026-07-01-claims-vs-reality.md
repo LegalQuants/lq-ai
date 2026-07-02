@@ -267,3 +267,43 @@ above) were found in this pass.
 $ python3 docs/audits/check_doc_links.py docs/audits/2026-07-01-claims-vs-reality.md
 OK: 0 dangling link(s)
 ```
+
+---
+
+## Task 3 execution notes (README.md)
+
+Applied against `README.md` only, per Direction-A resolutions rows 4, 12, 13, 16, 17, 19, 21, 24, 25
+and the six Direction-B rows (five in narrative + status; the egress-cost-model row folded into
+the "Project status" prose per its `add-to = README status` scope, not given a standalone
+narrative paragraph). Verbatim roadmap-table row from the brief inserted unchanged.
+
+**Link-check (Step 3):**
+
+```
+$ python3 docs/audits/check_doc_links.py README.md
+OK: 0 dangling link(s)
+```
+
+Confirms both new links resolve and both pre-existing dangling links (rows 24/25) are fixed:
+`docs/playbook-authoring-guide.md` → `docs/playbooks.md` (exists, is the playbook reference);
+`docs/deployment-cookbook.md` → `deploy/` (Helm/Caddy-Tailscale/observability recipes) +
+`docs/INSTALL-MAC.md`, since no single "deployment cookbook" doc exists.
+
+**Vendor-neutral grep (Step 4):**
+
+```
+$ grep -niE "thomson|westlaw|cocounsel|reuters" README.md
+(no output, exit 1)
+```
+
+**No-overclaim read-through (Step 4):** re-read all six new/amended paragraphs in "What it does"
+plus the "Project status" prose and roadmap-table row. Each of the five fiduciary-grade narrative
+paragraphs (Citation Ledger, Fiduciary-grade gate, Governed agentic matter sessions, Free
+authority sources, Validity/treatment layer) carries its honest caveat verbatim from the
+Direction-B table (id/offset-only ledger + ADR 0016 P3; DE-370/DE-371 open; no matter-intake UI;
+EUR-Lex get-by-CELEX-only + DE-374/DE-375; "derived, not editorial" + bounded judge budget). The
+governed-egress-cost-model caveat (configured rate, fails open on gateway-config failure) is
+folded into the "Project status" prose rather than given its own paragraph, matching its
+`add-to = README status` scope. The new roadmap-table row is the brief's verbatim text. No named
+competitor introduced. Every "✓ Shipped" carries either an inline caveat or points to
+HONEST-STATE for the caveat detail. Self-review: clean.
