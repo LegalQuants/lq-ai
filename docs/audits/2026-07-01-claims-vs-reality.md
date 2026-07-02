@@ -449,7 +449,7 @@ correctly. Outcome: **PASS.**
 **3. Cross-document consistency — nothing shipped-in-README is unbuilt-in-HONEST-STATE.**
 
 ```
-$ grep -niE "shipped|✓" README.md   # (28 hits, spot-checked above)
+$ grep -niE "shipped|✓" README.md   # (26 hits, spot-checked above)
 $ grep -n "## 6" docs/HONEST-STATE.md
 245:## 6. Capabilities not yet started in source
 ```
