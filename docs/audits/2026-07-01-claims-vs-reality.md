@@ -403,20 +403,20 @@ Fixed: `docs/ROADMAP.md` line 268 (§9.27) Notes column changed from "Depends on
 (M5)." to "Builds on the already-shipped MCP-client subsystem (HONEST-STATE §5.5)." — mirroring
 §11.1's wording exactly.
 
-**Sweep for other surviving instances:** `grep -n "MCP" docs/ROADMAP.md` (8 hits) reviewed line
+**Sweep for other surviving instances:** `grep -n "MCP" docs/ROADMAP.md` (11 hits, on lines: 56, 268, 306, 310, 311, 312, 313, 314, 315, 338, 342) reviewed line
 by line. No other line frames the *MCP-client subsystem* as future/M5 work:
 
-- Line 56 (§ intro) and line 306 (§10 status) already state the subsystem "has shipped."
-- Lines 310–315 (§11.1–11.3, already fixed in Task 5) correctly build on the shipped
-  subsystem while describing individual *connectors* (email/calendar/task/CRM/doc-store) as
-  legitimately still open M5+ work — that is accurate, not stale, since the connectors
-  themselves are genuinely unbuilt.
+- Line 56 (§1 intro) and line 306 (§10 status) already state the subsystem "has shipped."
+- Line 268 (§9.27) now carries the corrected "Builds on the already-shipped MCP-client subsystem (HONEST-STATE §5.5)" phrasing, fixed in Task 6.
+- Lines 310–312 (§11.1–§11.3, already fixed in Task 5) correctly build on the shipped
+  subsystem with the same "Builds on the already-shipped MCP-client subsystem (HONEST-STATE §5.5)" phrasing while describing individual *connectors* as legitimately still open M5+ work — that is accurate, not stale, since the connectors themselves are genuinely unbuilt.
+- Lines 313–315 (§11.4–§11.6 — task/CRM/document-store connectors) do not mention MCP-subsystem status; they are simply silent on it.
 - Line 338 (§12.1, DE-040) says "MCP path (M5+) is the integration story" — this describes the
   *community connector-building trajectory* as M5+, not the client subsystem itself; accurate.
 - Line 342 (§12.5, DE-289) references an "MCP catalog" as a design-reference item, not an
   unbuilt-subsystem claim.
 
-No other edit was needed; only §9.27 carried the stale framing.
+No other edit was needed; the Task 6 fix covered §9.27 and brought all MCP-subsystem framing into consistency.
 
 ---
 
