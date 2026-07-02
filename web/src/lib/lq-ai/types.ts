@@ -370,6 +370,12 @@ export interface MessageCreate {
 	 * `false` clears the set; omitted leaves it unchanged. Off by default.
 	 */
 	set_sticky?: boolean | null;
+	/**
+	 * IDs of files attached to this turn for document context (separate
+	 * channel from skill_inputs — see api/app/schemas/chats.py
+	 * MessageCreateRequest.file_ids). Echoed back as applied_file_ids.
+	 */
+	file_ids?: string[];
 }
 
 export interface MessagePostResponse {

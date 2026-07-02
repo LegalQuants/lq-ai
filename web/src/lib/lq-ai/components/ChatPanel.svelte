@@ -40,6 +40,30 @@
 			slashIndex
 		};
 	}
+
+	/**
+	 * Pure helpers for attached-file status polling / send-payload wiring
+	 * (bugfix: chat-attach-file-context). Exposed here for the same reason
+	 * as detectSlashAt above — vitest exercises them without mounting the
+	 * component, since @testing-library/svelte is unavailable for this file
+	 * (see ChatPanel-slash-detect.test.ts header). FileMeta is imported
+	 * once, in the instance <script> below — svelte-check treats a .svelte
+	 * file's module + instance scripts as one type-checking unit, so
+	 * importing the same named type in both blocks is flagged as a
+	 * duplicate identifier even though they're separate JS scopes at
+	 * runtime.
+	 */
+	import type { FileMeta } from '$lib/lq-ai/types';
+
+	export function hasPendingFileStatus(files: FileMeta[]): boolean {
+		return files.some(
+			(f) => f.ingestion_status === 'pending' || f.ingestion_status === 'processing'
+		);
+	}
+
+	export function fileIdsForSend(files: FileMeta[]): string[] | undefined {
+		return files.length > 0 ? files.map((f) => f.id) : undefined;
+	}
 </script>
 
 <script lang="ts">
@@ -61,7 +85,7 @@
 	 * surfaced per-message.
 	 */
 	import { get } from 'svelte/store';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
 
 	import {
@@ -84,7 +108,10 @@
 	} from '$lib/lq-ai/stores';
 	import { consumeMessageStream } from '$lib/lq-ai/sse/parser';
 	import { buildAuthorizeUrl, type PendingGate } from '$lib/lq-ai/chat/toolGate';
-	import type { Chat, FileMeta, Message, Project, Skill } from '$lib/lq-ai/types';
+	// FileMeta is imported in the module <script> above; svelte-check
+	// treats module + instance scripts as one type-checking unit, so
+	// re-importing it here is flagged as a duplicate identifier.
+	import type { Chat, Message, Project, Skill } from '$lib/lq-ai/types';
 
 	import ChatSidebar from '$lib/lq-ai/components/ChatSidebar.svelte';
 	import AttachedFilesPanel from '$lib/lq-ai/components/AttachedFilesPanel.svelte';
@@ -435,6 +462,44 @@
 	}
 
 	// ---- file panel handlers ----
+
+	// Ingestion runs async in the ingest-worker after the upload response
+	// returns, so chatFiles' ingestion_status is frozen at upload-time
+	// ("pending"/"processing") until something re-fetches it. Poll while any
+	// attached file is non-terminal; stop once all are ready/failed.
+	// hasPendingFileStatus is the pure predicate, exported from the module
+	// block above so it's unit-testable without mounting this component.
+	const FILE_STATUS_POLL_INTERVAL_MS = 3000;
+	let fileStatusPollHandle: ReturnType<typeof setInterval> | null = null;
+
+	function stopFileStatusPoll(): void {
+		if (fileStatusPollHandle !== null) {
+			clearInterval(fileStatusPollHandle);
+			fileStatusPollHandle = null;
+		}
+	}
+
+	function ensureFileStatusPoll(): void {
+		if (fileStatusPollHandle !== null || !hasPendingFileStatus(chatFiles)) return;
+		fileStatusPollHandle = setInterval(async () => {
+			const pending = chatFiles.filter(
+				(f) => f.ingestion_status === 'pending' || f.ingestion_status === 'processing'
+			);
+			if (pending.length === 0) {
+				stopFileStatusPoll();
+				return;
+			}
+			try {
+				const refreshed = await Promise.all(pending.map((f) => filesApi.getFile(f.id)));
+				const byId = new Map(refreshed.map((f) => [f.id, f]));
+				chatFiles = chatFiles.map((f) => byId.get(f.id) ?? f);
+			} catch (e) {
+				console.error('lq-ai: file status poll failed', e);
+			}
+			if (!hasPendingFileStatus(chatFiles)) stopFileStatusPoll();
+		}, FILE_STATUS_POLL_INTERVAL_MS);
+	}
+
 	async function uploadAttached(file: File) {
 		uploading = true;
 		try {
@@ -442,6 +507,7 @@
 				project_id: $activeChatStore?.project_id ?? undefined
 			});
 			chatFiles = [...chatFiles, uploaded];
+			ensureFileStatusPoll();
 		} catch (e) {
 			console.error('lq-ai: upload failed', e);
 		} finally {
@@ -638,6 +704,7 @@
 						Object.keys(skillInputs).length > 0
 							? (skillInputs as Record<string, Record<string, unknown>>)
 							: undefined,
+					file_ids: fileIdsForSend(chatFiles),
 					// Issue #207 finding 4 — only send set_sticky on a real toggle
 					// change; otherwise leave the chat's sticky set unchanged.
 					set_sticky: stickyDirty ? stickyEnabled : undefined,
@@ -862,6 +929,10 @@
 				composerText = stash;
 			}
 		}
+	});
+
+	onDestroy(() => {
+		stopFileStatusPoll();
 	});
 
 	$: groups = $chatsByProject;
