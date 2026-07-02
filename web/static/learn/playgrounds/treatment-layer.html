@@ -85,6 +85,7 @@
   .badge.method-graph { background: rgba(107,114,128,0.14); color: var(--neutral); border-color: rgba(107,114,128,0.35); }
   .badge.method-judge { background: rgba(245,181,68,0.14); color: var(--fid); border-color: rgba(245,181,68,0.35); }
   .badge.neg-none { background: rgba(52,211,153,0.14); color: var(--ok); border-color: rgba(52,211,153,0.35); }
+  .badge.neg-unassessed { background: rgba(107,114,128,0.14); color: var(--neutral); border-color: rgba(107,114,128,0.35); }
   .badge.neg-distinguished { background: rgba(245,181,68,0.14); color: var(--fid); border-color: rgba(245,181,68,0.35); }
   .badge.neg-criticized { background: rgba(248,113,113,0.14); color: var(--fail); border-color: rgba(248,113,113,0.35); }
   .badge.cls-followed { background: rgba(52,211,153,0.14); color: var(--ok); border-color: rgba(52,211,153,0.35); }
@@ -465,6 +466,17 @@ function negBadgeClass(strongest) {
   return "neg-none";
 }
 
+// The judge pass hasn't run for a graph-only case (derived_method ===
+// "citation_graph", judged_count === null) — that's a different state from a
+// judged case that found no negative signal, and must read differently
+// ("not yet assessed" vs. "no negative treatment found").
+function negBadgeInfo(c) {
+  const judged = c.derived_method === "citation_graph+judge";
+  if (!judged) return { cls: "neg-unassessed", label: "not yet assessed" };
+  if (!c.rollup.strongest) return { cls: "neg-none", label: "no negative signal" };
+  return { cls: negBadgeClass(c.rollup.strongest), label: c.rollup.strongest };
+}
+
 function renderCaseList() {
   const wrap = document.getElementById("case-list");
   wrap.innerHTML = "";
@@ -472,15 +484,14 @@ function renderCaseList() {
     const row = document.createElement("div");
     row.className = "case-row" + (c.key === state.selectedKey ? " selected" : "");
     const methodCls = c.derived_method === "citation_graph+judge" ? "method-judge" : "method-graph";
-    const negCls = negBadgeClass(c.rollup.strongest);
-    const negLabel = c.rollup.strongest ? c.rollup.strongest : "no negative signal";
+    const negInfo = negBadgeInfo(c);
     row.innerHTML = `
       <span class="case-title">${escapeHtml(c.caseName)}</span>
       <span class="case-cite">${escapeHtml(c.citation)}</span>
       <span class="case-ids">cluster_id: ${c.cluster_id} · cited_by_count: ${c.cited_by_count}</span>
       <div class="case-badges">
         <span class="badge ${methodCls}">${escapeHtml(c.derived_method)}</span>
-        <span class="badge ${negCls}">${escapeHtml(negLabel)}</span>
+        <span class="badge ${negInfo.cls}">${escapeHtml(negInfo.label)}</span>
       </div>
     `;
     row.addEventListener("click", () => { state.selectedKey = c.key; state.expandedSignal = null; renderAll(); });
@@ -498,6 +509,11 @@ function renderTaxo() {
 }
 
 function rollupSentence(c) {
+  const judged = c.derived_method === "citation_graph+judge";
+  if (!judged) {
+    const n = c.graphOnlyRefs.length;
+    return `Not yet assessed — the judge pass has not run for this case as of ${c.as_of}. The citation graph found ${n} citing opinion${n === 1 ? "" : "s"}, but none has been classified yet.`;
+  }
   if (!c.rollup.strongest) {
     return `No negative treatment found as of ${c.as_of}.`;
   }
@@ -518,6 +534,7 @@ function renderPanel() {
   const c = CASES.find(x => x.key === state.selectedKey);
   const wrap = document.getElementById("panel");
   const judged = c.derived_method === "citation_graph+judge";
+  const negInfo = negBadgeInfo(c);
 
   let html = `
     <div class="case-header">
@@ -533,7 +550,7 @@ function renderPanel() {
 
     <div class="rollup-card">
       <div class="rollup-verdict">
-        <span class="badge ${negBadgeClass(c.rollup.strongest)}">${c.rollup.strongest ? c.rollup.strongest : "no negative signal"}</span>
+        <span class="badge ${negInfo.cls}">${escapeHtml(negInfo.label)}</span>
         Case-level treatment rollup
       </div>
       <div class="rollup-detail">${rollupSentence(c)}</div>

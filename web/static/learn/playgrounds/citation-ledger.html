@@ -82,8 +82,8 @@
     padding: 2px 6px; border-radius: 3px; white-space: nowrap; font-family: ui-monospace, Menlo, monospace;
     border: 1px solid transparent;
   }
-  .st-exact, .st-tolerant { background: rgba(52,211,153,0.14); color: var(--ok); border-color: rgba(52,211,153,0.35); }
-  .st-paraphrase, .st-ensemble { background: rgba(245,181,68,0.14); color: var(--fid); border-color: rgba(245,181,68,0.35); }
+  .st-exact_match, .st-tolerant_match { background: rgba(52,211,153,0.14); color: var(--ok); border-color: rgba(52,211,153,0.35); }
+  .st-paraphrase_judge, .st-ensemble_strict, .st-ensemble_majority { background: rgba(245,181,68,0.14); color: var(--fid); border-color: rgba(245,181,68,0.35); }
   .st-unverified, .st-failed { background: rgba(248,113,113,0.14); color: var(--fail); border-color: rgba(248,113,113,0.35); }
   .st-provenance { background: rgba(107,114,128,0.14); color: var(--neutral); border-color: rgba(107,114,128,0.35); }
 
@@ -202,8 +202,8 @@
       </div>
 
       <h2>Verification status</h2>
-      <div class="legend-row"><span class="status-badge st-exact">exact / tolerant</span><span class="desc">verbatim quote match against the source (byte-for-byte or normalized).</span></div>
-      <div class="legend-row"><span class="status-badge st-paraphrase">paraphrase / ensemble</span><span class="desc">supported by the source, not a verbatim quote — labeled distinctly (ADR 0018 D3).</span></div>
+      <div class="legend-row"><span class="status-badge st-exact_match">exact_match / tolerant_match</span><span class="desc">verbatim quote match against the source (byte-for-byte or normalized).</span></div>
+      <div class="legend-row"><span class="status-badge st-paraphrase_judge">paraphrase_judge / ensemble_*</span><span class="desc">supported by the source, not a verbatim quote — labeled distinctly (ADR 0018 D3).</span></div>
       <div class="legend-row"><span class="status-badge st-unverified">unverified / failed</span><span class="desc">the cascade could not confirm the citation — flagged, never silently emitted.</span></div>
       <div class="legend-row"><span class="status-badge st-provenance">provenance</span><span class="desc">a source the tool call returned this turn — not an assertion, no quote to trace.</span></div>
     </aside>
@@ -271,19 +271,19 @@ const SOURCE_DOCS = {
 const ENTRIES = [
   {
     id: "3f9a2e10-8b41-4c77-9a02-1d7e5f6b8c31", source_kind: "kb_document",
-    verification_status: "exact", confidence: 1.0, provider: null, retrieved_at: null,
+    verification_status: "exact_match", confidence: 1.0, provider: null, retrieved_at: null,
     claim: "The License grants a non-exclusive right to use the Software for internal business purposes only.",
     doc: "kb1", quote: "a non-exclusive, non-transferable right to use the Software solely for Customer's internal business purposes"
   },
   {
     id: "7c1d4e88-2a6f-4b09-9d3e-8f5c1a2b9e44", source_kind: "caselaw",
-    verification_status: "tolerant", confidence: 0.91, provider: "courtlistener", retrieved_at: "2026-06-30T14:02:11Z",
+    verification_status: "tolerant_match", confidence: 0.91, provider: "courtlistener", retrieved_at: "2026-06-30T14:02:11Z",
     claim: "Work-product protection lets an attorney prepare a case with a degree of privacy, free from unnecessary intrusion by opposing counsel.",
     doc: "case1", quote: "it is essential that a lawyer work with a certain degree of privacy, free from unnecessary intrusion by opposing parties and their counsel"
   },
   {
     id: "a15b6f22-4c8d-4e11-9f2a-3b7d8c5e1a90", source_kind: "statute",
-    verification_status: "paraphrase", confidence: 0.70, provider: "govinfo", retrieved_at: "2026-06-30T14:02:37Z",
+    verification_status: "paraphrase_judge", confidence: 0.70, provider: "govinfo", retrieved_at: "2026-06-30T14:02:37Z",
     claim: "Under 42 U.S.C. § 1983, a person acting under color of state law who deprives another of a federally protected right may be held liable in a civil action.",
     doc: "stat1", quote: "subjects, or causes to be subjected, any citizen of the United States or other person within the jurisdiction thereof to the deprivation of any rights, privileges, or immunities secured by the Constitution and laws"
   },
@@ -295,7 +295,7 @@ const ENTRIES = [
   },
   {
     id: "5b8e1a44-9c2d-4f76-a103-7e6b2c9d4f85", source_kind: "eu_regulation",
-    verification_status: "ensemble", confidence: 0.82, provider: "eurlex", retrieved_at: "2026-06-30T14:03:29Z",
+    verification_status: "ensemble_majority", confidence: 0.82, provider: "eurlex", retrieved_at: "2026-06-30T14:03:29Z",
     claim: "Article 17 GDPR grants a data subject the right to obtain erasure of personal data without undue delay in specified circumstances.",
     doc: "eu1", quote: "the right to obtain from the controller the erasure of personal data concerning him or her without undue delay"
   },
@@ -314,7 +314,8 @@ const ENTRIES = [
 ];
 
 const STATUS_LABEL = {
-  exact: "exact", tolerant: "tolerant", paraphrase: "paraphrase", ensemble: "ensemble",
+  exact_match: "exact_match", tolerant_match: "tolerant_match",
+  paraphrase_judge: "paraphrase_judge", ensemble_strict: "ensemble_strict", ensemble_majority: "ensemble_majority",
   unverified: "unverified", failed: "failed", provenance: "provenance"
 };
 
