@@ -4948,6 +4948,12 @@ The deferred `search_authority` op for EUR-Lex: PR2b ships get-by-CELEX only, so
 
 PR2b validates `external_ref` against `^[A-Za-z0-9._-]+$` (the `authority_text_cache` key charset) and rejects treaty/corrigendum CELEX ids containing `/` or `()` (e.g. `12016E/TXT`, `32016R0679R(01)`) with a 400 before egress. DE-375 adds a reversible `external_ref` encoding (or an alternate cache-key scheme) so those id shapes can be fetched and cached safely.
 
+#### DE-376 — EUR-Lex human-readable subtitle + partial-payload adapter test
+
+**Priority:** P3 · **Effort:** S · **Status (2026-07-01): filed (WS-E PR2b whole-branch review).**
+
+Two cosmetic follow-ups surfaced by the PR2b Opus whole-branch review, deliberately deferred as non-blocking. (1) `EurLexAdapter.from_response` (`api/app/research/adapters.py`) maps the machine `content_kind` (e.g. `eu_regulation`) into `FetchedAuthority.subtitle`, which is documented as a human heading — EDGAR's subtitle is a human-readable `form_type · filed_date`. A better EUR-Lex subtitle (the document's official title, available once DE-374 search lands, or a friendly kind label) would improve the citation UX; never load-bearing for verification. (2) The adapter's absent-`content_kind`/`url`/`title` payload fallback path (`payload.get(...) or "eu_legislation"`) has no direct unit test — the happy-path mapping test covers the main case. Add a one-line partial-payload test alongside the subtitle fix.
+
 ---
 
 ## 10. Appendices

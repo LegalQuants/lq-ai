@@ -167,7 +167,11 @@ def build_authority_tool_schemas(enabled_sources: list[str]) -> list[dict[str, A
         return []
     schemas: list[dict[str, Any]] = []
     for op, template in AUTHORITY_TOOL_SCHEMAS.items():
-        op_sources = [s for s in enabled_sources if op in SOURCE_REGISTRY[s].ops]
+        op_sources = [
+            s
+            for s in enabled_sources
+            if (spec := SOURCE_REGISTRY.get(s)) is not None and op in spec.ops
+        ]
         if not op_sources:
             continue
         source_enum = {"type": "string", "enum": op_sources}

@@ -221,10 +221,7 @@ class EurLexToolAdapter(ToolProviderAdapter):
         current = url
         for _ in range(MAX_REDIRECTS):
             current = _force_https(current)
-            try:
-                validate_egress_target(current, allowlist=self._allowlist)
-            except EgressRefused:
-                raise
+            validate_egress_target(current, allowlist=self._allowlist)
             try:
                 resp = await self._client.get(current, headers=headers)
             except EgressRefused:
