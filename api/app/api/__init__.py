@@ -25,6 +25,7 @@ from fastapi import APIRouter, Depends
 from app.api import (
     admin,
     admin_intake_bridges,
+    admin_mcp,
     auth,
     autonomous,
     bootstrap,
@@ -38,10 +39,12 @@ from app.api import (
     integrations_teams,
     internal,
     knowledge_bases,
+    mcp_oauth,
     models,
     organization_profile,
     playbooks as playbooks_api,
     projects,
+    research,
     saved_prompts,
     skills,
     tabular,
@@ -128,5 +131,20 @@ api_router.include_router(tabular.router, dependencies=_active)
 # lives in the same module but on a separate ``public_router`` mounted
 # above without the ``_active`` gate.
 api_router.include_router(word_addin.admin_router, dependencies=_active)
+# WS3b — case-law research surface (verify-citations, search, clusters,
+# opinions, find-in-case). All five endpoints require an authenticated,
+# password-changed user; auth enforced via the _active dependency group.
+api_router.include_router(research.router, dependencies=_active)
+# WS2/PR4b — MCP registry admin surface (list, refresh, enable/disable).
+# Admin-gated at handler level via the AdminUser dependency; mounted
+# under _active so the bearer-token + must-change-password gates fire first.
+api_router.include_router(admin_mcp.router, dependencies=_active)
+# PR4c — per-user MCP OAuth surface (authorize, callback, status, disconnect).
+# Registered WITHOUT _active because the callback endpoint must remain public
+# (the browser redirect from the AS cannot carry a bearer token). Each
+# authenticated handler (authorize, status, disconnect) takes ActiveUser
+# explicitly. The callback endpoint takes no user dependency — the user is
+# recovered from the single-use mcp_oauth_state row inside exchange_code.
+api_router.include_router(mcp_oauth.router)
 
 __all__ = ["api_router"]

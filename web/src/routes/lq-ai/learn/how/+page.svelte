@@ -816,6 +816,68 @@
 					</span>
 				</div>
 			</section>
+
+			<p class="lq-transition lq-text-body">
+				The newest capability lets the assistant look up case law and reach operator-approved
+				connectors — without ever loosening the security boundary. This last playground walks that
+				governed path and lets you switch each guardrail off to see how the boundary reacts.
+			</p>
+
+			<!-- 17: governed-tool-flow -->
+			<section class="lq-how-section" data-testid="lq-ai-learn-how-section-governed-tool-flow">
+				<h2 class="lq-section-h">17. Case-law &amp; connectors: the governed tool boundary</h2>
+				<p class="lq-text-body">
+					When the assistant looks up case law (CourtListener) or calls an operator-approved connector
+					(an MCP server), the request leaves your environment only through the Inference Gateway — the
+					single audited egress. The operator chooses which connectors exist; every call is tier-gated
+					and audited (counts and types only, never the raw arguments or results); per-user connector
+					tokens travel in a header and are never logged; and a destructive tool pauses for your explicit
+					approval. Step through the flow, then flip any guardrail off to see the boundary refuse, prompt,
+					or pause. <strong>Available today:</strong> the governed backend tool-loop, egress boundary,
+					per-user OAuth, audit, the confirmation-gate protocol, the in-chat confirmation and connect
+					prompts that render this gate inside the chat, rich case-law provenance — source-kinded
+					citations with provenance pills for the external sources a tool call pulled in — and the
+					procedural case-law research skill.
+				</p>
+				<div class="lq-playground-wrap">
+					<iframe
+						src="/learn/playgrounds/governed-tool-flow.html"
+						title="Governed Tool Boundary"
+						loading="lazy"
+						data-testid="learn-playground-governed-tool-flow"
+						style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+					></iframe>
+				</div>
+				<div class="lq-playground-foot">
+					<a
+						href="/learn/playgrounds/governed-tool-flow.html"
+						class="lq-link lq-fullscreen-link"
+						target="_blank"
+						rel="noopener noreferrer">Open full-screen ↗</a
+					>
+					<span class="lq-source-ref">
+						Source:
+						<a
+							href="https://github.com/LegalQuants/lq-ai/blob/main/docs/adr/0014-gateway-egress-boundary-for-tool-providers.md"
+							class="lq-link"
+							target="_blank"
+							rel="noopener noreferrer">ADR 0014</a
+						>;
+						<a
+							href="https://github.com/LegalQuants/lq-ai/blob/main/docs/adr/0015-governed-tool-calling-model.md"
+							class="lq-link"
+							target="_blank"
+							rel="noopener noreferrer">ADR 0015</a
+						>;
+						<a
+							href="https://github.com/LegalQuants/lq-ai/blob/main/api/app/chat/tool_loop.py"
+							class="lq-link"
+							target="_blank"
+							rel="noopener noreferrer">api/app/chat/tool_loop.py</a
+						>
+					</span>
+				</div>
+			</section>
 	</div>
 
 	<footer class="lq-how-footer">

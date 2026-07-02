@@ -145,6 +145,32 @@ class Settings(BaseSettings):
         description="Shared secret for backend ↔ gateway. Required in prod.",
     )
 
+    # ----- Chat history (multi-turn memory) -----
+    # The chat send path (api/app/api/chats.py) replays prior turns of the
+    # conversation to the model so chat is genuinely multi-turn — previously
+    # only the current turn was sent. History is trimmed most-recent-first to
+    # fit BOTH a token budget and a hard message-count cap; oldest turns drop
+    # first when either is exceeded. Token counts use a cheap ~4-chars/token
+    # heuristic (no tokenizer dependency — CLAUDE.md SBOM posture). Operators
+    # on long-context models can raise the budget; set it to 0 to disable
+    # history replay entirely (revert to single-turn requests).
+    lq_ai_chat_history_token_budget: int = Field(
+        default=6_000,
+        ge=0,
+        description=(
+            "Approximate token budget (~4 chars/token) for prior chat turns "
+            "replayed to the model. 0 disables multi-turn history."
+        ),
+    )
+    lq_ai_chat_history_max_messages: int = Field(
+        default=20,
+        ge=0,
+        description=(
+            "Hard cap on the number of prior chat messages replayed to the "
+            "model, independent of the token budget. 0 disables history."
+        ),
+    )
+
     # ----- JWT (per ADR 0002 — backend owns auth) -----
     jwt_secret: str = Field(
         default="dev-jwt-secret-change-me",
@@ -343,6 +369,28 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ----- Chat tool-loop (PR5b / L4) -----
+    # Hard cap on tool-call rounds per chat turn. Once calls_used reaches this
+    # limit the loop issues one final gateway round WITHOUT tools (tool_choice
+    # "none") so the model can synthesise what it has gathered, then returns
+    # LoopFinal. Operator-overridable; 8 is the conservative M1 default that
+    # keeps turn latency bounded while allowing multi-hop research workflows.
+    # Referenced in docs/PRD.md §L4 (chat tool-loop).
+    chat_tool_call_cap: int = Field(
+        default=8,
+        ge=1,
+        description=(
+            "Maximum number of tool calls the chat tool-loop will execute in a "
+            "single turn before issuing a final no-tools round (PRD §L4). "
+            "Default: 8. Operator-overridable via LQ_AI_CHAT_TOOL_CALL_CAP."
+        ),
+        # Settings has no env_prefix, so the field name alone would bind to the
+        # bare CHAT_TOOL_CALL_CAP. Accept the documented LQ_AI_-prefixed name
+        # (matching the autonomous settings convention) while keeping the bare
+        # name working for any existing deployment that set it.
+        validation_alias=AliasChoices("LQ_AI_CHAT_TOOL_CALL_CAP", "CHAT_TOOL_CALL_CAP"),
+    )
+
     # ----- Operational -----
     log_level: LogLevel = Field(default="info", description="Log level for the api/ service.")
     lq_ai_dev_mode: bool = Field(
@@ -409,6 +457,11 @@ class Settings(BaseSettings):
     )
 
 
+# WS-D PR1: default maximum number of plan→act steps in the agentic analysis loop.
+# Session params["max_analysis_steps"] overrides this per-session.
+DEFAULT_MAX_ANALYSIS_STEPS: int = 6
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Return the cached Settings instance.
@@ -417,3 +470,36 @@ def get_settings() -> Settings:
     monkeypatching environment variables.
     """
     return Settings()
+
+
+def is_allowed_return_url(url: str, settings: Settings) -> bool:
+    """Return True iff *url*'s origin is in the operator's CORS allowlist.
+
+    Parses ``settings.lq_ai_cors_origins`` the same way ``app/main.py`` does —
+    comma-split, strip, drop empties.  Builds the origin
+    (``{scheme}://{netloc}``) from *url* and checks membership.
+
+    Security invariants:
+    * Only ``http`` and ``https`` schemes are accepted; ``javascript:``,
+      ``data:``, etc. always return False.
+    * An empty allowlist returns False (fail closed — no redirect allowed when
+      the operator has not configured any origins).
+    * The check is exact origin membership, not substring/prefix matching.
+
+    Callers (the ``/authorize`` handler) validate BEFORE storing ``return_url``
+    on the state row; the callback reads from the row, never from the query
+    string — so this validator is the only enforcement point needed.
+    """
+    from urllib.parse import urlparse  # stdlib — no new dependency
+
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    if not parsed.netloc:
+        return False
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    allowed = [o.strip() for o in (settings.lq_ai_cors_origins or "").split(",") if o.strip()]
+    if not allowed:
+        return False
+    # Case-sensitive exact membership — intentional, matches CORS-allowlist semantics.
+    return origin in allowed

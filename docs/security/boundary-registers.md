@@ -222,6 +222,54 @@ It is named here so a reader doesn't conflate the two boundaries: a deployment c
 
 ---
 
+## Gateway boundary — tool / data-source egress (ADR 0014)
+
+This boundary is **orthogonal to R1–R6** (which restrain the model) and to the Inference Choice Spectrum (which restrains where inference data flows). It restrains *outbound calls the gateway makes on behalf of a skill or user to third-party data sources* — case-law APIs, MCP servers, and similar.
+
+**What it guards.** Any HTTP egress the gateway brokers to a tool provider: case-law retrieval (CourtListener, etc.), MCP server calls, future data-source adapters. These calls carry query terms derived from the user's matter; each is an egress vector that must be allowlisted, tier-tagged, rate-limited, and audited independently of the inference path.
+
+**Controls.**
+
+- **HTTPS-only.** Non-TLS outbound requests are refused at the adapter layer; no plaintext egress.
+- **DNS private/loopback/link-local block.** SSRF guard: the adapter resolves the configured `base_url` and rejects results that resolve to RFC-1918, loopback, or link-local addresses before any connection is attempted.
+- **Per-provider host allowlist.** Each `tool_providers:` entry declares `allowlist.hosts`; the adapter checks the resolved host against the exact allowlist before dispatch. A call whose resolved host is not in the allowlist is refused with a structured error.
+- **No caller `Host` override.** The gateway sets the `Host` header from the configured `base_url`; callers cannot substitute a different host through request parameters.
+- **Outbound header validation (denylist: rejects caller-supplied `Host` override and smuggled gateway-auth headers; full enforcement wired in WS3 when real adapters egress).**
+- **Egress-tier ceiling.** Each provider carries `egress_tier`. If the provider's egress_tier exceeds the matter's or skill's allowed ceiling, the request is refused with a tier-mismatch error — the same enforcement pattern as the inference-tier floor (R2, above).
+- **Per-provider rate limit.** Each entry declares `rate_limit.requests_per_minute`; the adapter enforces it. Requests over the limit return a structured rate-limit error rather than being forwarded.
+- **Gateway is the sole egress + the only MCP-protocol speaker.** MCP servers are operator-allowlisted in `mcp.yaml` and synthesized into `type: mcp` tool providers behind this same boundary; the gateway holds the MCP session, so the backend never speaks MCP or reaches a third party directly (ADR 0014; WS2).
+- **Per-user OAuth, out-of-band, header-only.** For `auth: oauth` connectors the api drives the authorization-code + PKCE flow and stores Fernet-encrypted tokens; the gateway takes a per-call token via the `X-LQ-AI-User-Token` request header (never a query/body param, so it never lands in access logs) and stays user-unaware. Tokens are never written to `tool_egress_log` (WS2 / PR4c).
+- **Closed allowlist, governed per call.** The chat tool-loop offers the model only a closed, per-turn allowlist of operator-enabled tools (the model cannot reach beyond it); every call is tier-checked, cost-accounted, and audited through the shared `governed_tool_invocation` substrate before dispatch (ADR 0015; WS4).
+- **Confirmation gate for destructive tools.** A tool annotated `destructive`/`requires_confirmation` (un-annotated MCP tools default to requires-confirmation, safe-by-default) is held by a persist-and-resume confirmation gate until a human approves; the autonomous layer is never auto-granted destructive tools (ADR 0015 D4; WS4).
+
+**Audit surface.** Two layers, both counts/types only. The gateway writes `tool_egress_log` (the egress-boundary audit): provider name, egress tier, timestamp, status. The api writes `tool_call_log` (the governance audit): origin, provider, tool, tier, confirmation state, outcome, cost, and an `args_digest`. Raw request arguments and tool results are **never** written to either row or to any log line — only the digest and outcome labels (the same two-layer split as `inference_routing_log` vs. the api audit).
+
+**Current implementation state.** SHIPPED — `tool_providers:` schema + config loading + SSRF/allowlist guard + per-provider rate limit + egress-tier refusal + `tool_egress_log` (ADR 0014, PR1); the CourtListener research provider (WS3); the MCP server adapter + per-user OAuth passthrough, Fernet-at-rest, header-only token (WS2); the governed chat tool-loop + `tool_call_log` + persist-and-resume confirmation gate (WS4); the in-chat confirmation/connect prompts that render the gate inside the chat (WS5 / 6b); rich case-law provenance — `message_tool_sources`, `source_kind='caselaw'`, inline Sources-consulted sidecar (6c); and the procedural case-law research skill with `tool_usage` surfacing on the skill-detail page (6d). The full governed-tool-boundary is complete and running.
+
+**Reference.** ADR 0014 (`docs/adr/0014-gateway-egress-boundary-for-tool-providers.md`) — the egress boundary; ADR 0015 (`docs/adr/0015-governed-tool-calling-model.md`) — the governed tool-calling model.
+
+**Verification path.**
+
+```bash
+# Egress-boundary schema + SSRF/allowlist/tier guards (gateway):
+grep -n "tool_providers\|egress_tier" gateway/app/config.py
+ls gateway/app/providers/tool/                       # adapters incl. courtlistener + mcp + oauth_passthrough
+grep -n "def route_tool_call" gateway/app/router.py  # tier/rate/allowlist enforcement
+less gateway/app/tool_egress_log.py                  # gateway egress audit (counts/types only)
+# Per-user OAuth (header-only, Fernet at rest):
+less api/app/mcp/oauth.py
+# Governed tool-loop + governance substrate + confirmation gate (api):
+less api/app/chat/tool_loop.py                        # closed allowlist + confirmation gate
+less api/app/tools/governance.py                      # tier -> tool_call_log(args_digest) -> dispatch
+less api/app/models/tool_call_log.py                  # governance audit row (no raw payloads)
+# Example config + regression tests (gateway):
+grep -A 20 "TOOL / DATA-SOURCE PROVIDERS" gateway.yaml.example
+cat mcp.yaml.example
+cd gateway && pytest tests/test_example_config_tool_providers.py tests/test_tool_egress_integration.py -v
+```
+
+---
+
 ## Cross-references
 
 - [PRD §1.8 Security Posture](../PRD.md#18-security-posture) — names this catalog as the framework for restraint work.

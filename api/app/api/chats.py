@@ -57,7 +57,7 @@ import logging
 import re
 import uuid
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Any
 
@@ -67,26 +67,47 @@ from fastapi.responses import JSONResponse, StreamingResponse
 # `trace` is for add_event() on the active span; spans use app.observability_helpers.
 from opentelemetry import trace
 from pydantic import BaseModel, ValidationError as PydanticValidationError
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import ActiveUser
 from app.api.skills import _resolve_skill_for_user
 from app.audit import audit_action
+from app.autonomous.guard import _args_digest
+from app.chat.tool_loop import (
+    LoopConfirmation,
+    LoopFinal,
+    LoopMcpAuth,
+    ToolSourceRecord,
+    run_chat_tool_loop,
+)
+from app.chat.tool_schemas import ChatToolAllowlist, assemble_allowlist
 from app.citation import extract_citations, verify
+from app.citation.authority import verify_and_persist_authority_citations
+from app.citation.caselaw import verify_and_persist_caselaw_citations
 from app.citation.cost import estimate_judge_call_cost_usd
+from app.citation.gate import compute_and_record_gate, resolve_gates
+from app.citation.ledger import (
+    assemble_ledger_entries,
+    message_ids_needing_treatment,
+    resolve_ledger_entries,
+)
 from app.clients.gateway import EnsembleConfig, GatewayClient, get_gateway_client
+from app.config import get_settings
 from app.db.session import get_db
-from app.errors import LQAIError, NotFound, ValidationError
+from app.errors import Conflict, InternalError, LQAIError, NotFound, ValidationError
 from app.knowledge.embed import DEFAULT_EMBEDDING_MODEL, request_embedding_vector
 from app.knowledge.retrieval import HybridSearchResult, hybrid_search
 from app.models.chat import Chat, Message, MessageCitation
+from app.models.chat_pending_tool_call import ChatPendingToolCall
 from app.models.document import Document
 from app.models.file import File
 from app.models.inference import InferenceRoutingLog
 from app.models.knowledge import KnowledgeBase
+from app.models.message_tool_source import MessageToolSource
 from app.models.project import Project
 from app.models.project_knowledge_base import ProjectKnowledgeBase
+from app.models.tool_call_log import ToolCallLog
 from app.models.user import User
 from app.observability_helpers import get_tracer, record_attributes
 from app.schemas.chats import (
@@ -112,9 +133,125 @@ from app.schemas.gateway import (
     InlineSkillRef,
 )
 from app.skills.registry import MutableSkillRegistry, SkillRegistry
+from app.workers.queue import enqueue_treatment_derivation_job
 
 router = APIRouter(prefix="/chats", tags=["chats"])
 log = logging.getLogger(__name__)
+
+# PR5b Task 6 — TTL for pending confirmation rows.
+CONFIRM_TTL: timedelta = timedelta(minutes=15)
+
+
+def _safe_args_summary(args: dict[str, Any]) -> dict[str, Any]:
+    """Shallow, size-bounded view of tool-call args for SSE gate frames.
+
+    Returns a dict with the same keys but values truncated/redacted:
+    - str / int / float / bool / None scalars are kept (strings capped at
+      80 chars).
+    - Nested containers (dict, list) are replaced with their type name so
+      large payloads never flow to the client.
+    Never includes raw sensitive data — the primary purpose is to let the
+    UI render a human-readable "what is about to happen" summary without
+    exposing the full argument payload.
+    """
+    _MAX_STR = 80
+    out: dict[str, Any] = {}
+    for k, v in args.items():
+        if isinstance(v, str):
+            out[k] = v[:_MAX_STR] + "…" if len(v) > _MAX_STR else v
+        elif isinstance(v, (int, float, bool)) or v is None:
+            out[k] = v
+        elif isinstance(v, dict):
+            out[k] = f"<dict({len(v)} keys)>"
+        elif isinstance(v, list):
+            out[k] = f"<list({len(v)} items)>"
+        else:
+            out[k] = f"<{type(v).__name__}>"
+    return out
+
+
+def _estimate_tokens(text: str) -> int:
+    """Rough token count for history budgeting — ~4 chars per token.
+
+    Deliberately dependency-free (no tiktoken / model tokenizer) per the
+    SBOM posture in CLAUDE.md. Slightly over-estimates for code/markup,
+    which is the safe direction for a budget cap. Never returns 0.
+    """
+    return max(1, (len(text) + 3) // 4)
+
+
+def _select_history_within_budget(
+    history: list[tuple[str, str]],
+    *,
+    token_budget: int,
+    max_messages: int,
+) -> list[tuple[str, str]]:
+    """Trim ``history`` to the most recent turns that fit the budget.
+
+    ``history`` is ``(role, content)`` in chronological order (oldest
+    first). Returns the most-recent turns that fit within BOTH
+    ``token_budget`` and ``max_messages``, back in chronological order.
+    Oldest turns drop first. The single most-recent turn is always kept
+    even if it alone exceeds the token budget — dropping it would discard
+    the context immediately preceding the live turn, which is the most
+    valuable. ``token_budget`` or ``max_messages`` of 0 disables history.
+    """
+    if token_budget <= 0 or max_messages <= 0:
+        return []
+    selected_rev: list[tuple[str, str]] = []
+    used = 0
+    for role, content in reversed(history):
+        if len(selected_rev) >= max_messages:
+            break
+        cost = _estimate_tokens(content)
+        if selected_rev and used + cost > token_budget:
+            break
+        used += cost
+        selected_rev.append((role, content))
+    selected_rev.reverse()
+    return selected_rev
+
+
+async def _load_history_messages(
+    db: AsyncSession,
+    *,
+    chat_id: uuid.UUID,
+    exclude_message_id: uuid.UUID,
+    token_budget: int,
+    max_messages: int,
+) -> list[ChatCompletionMessage]:
+    """Load prior conversation turns for ``chat_id`` as gateway messages.
+
+    Returns the most-recent ``user``/``assistant`` turns (chronological)
+    that fit the budget, EXCLUDING ``exclude_message_id`` — the just-
+    persisted current user turn, which the caller appends separately as
+    the live turn. Errored assistant rows (``error_code`` set) and rows
+    with empty content are skipped. History messages carry no
+    ``lq_ai_skip_anonymization`` flag, so the gateway pseudonymizes them
+    with the same per-request map as the current turn (consistent entity
+    mapping across the conversation).
+    """
+    if token_budget <= 0 or max_messages <= 0:
+        return []
+    stmt = (
+        select(Message.role, Message.content)
+        .where(
+            Message.chat_id == chat_id,
+            Message.id != exclude_message_id,
+            Message.role.in_(("user", "assistant")),
+            Message.error_code.is_(None),
+        )
+        .order_by(Message.created_at.asc(), Message.id.asc())
+    )
+    rows = (await db.execute(stmt)).all()
+    history: list[tuple[str, str]] = [(row[0], row[1]) for row in rows if row[1]]
+    selected = _select_history_within_budget(
+        history, token_budget=token_budget, max_messages=max_messages
+    )
+    return [
+        ChatCompletionMessage.model_validate({"role": role, "content": content})
+        for role, content in selected
+    ]
 
 
 # Wave D.2 Task 2.7 — send-time slash fallback. If the user's content
@@ -384,6 +521,7 @@ async def _serialize_chat(
         created_at=chat.created_at,
         updated_at=chat.updated_at,
         message_count=message_count,
+        sticky_skills=list(chat.sticky_skills or []),
     )
 
 
@@ -515,6 +653,7 @@ async def search_chats(
         .where(
             Chat.owner_id == user.id,
             Chat.archived_at.is_(None),
+            Chat.autonomous_session_id.is_(None),
             sa_text("chats.title_tsv @@ websearch_to_tsquery('english', :q)"),
         )
         .params(q=q)
@@ -542,6 +681,7 @@ async def search_chats(
         .where(
             Chat.owner_id == user.id,
             Chat.archived_at.is_(None),
+            Chat.autonomous_session_id.is_(None),
             sa_text("messages.content_tsv @@ websearch_to_tsquery('english', :q)"),
         )
         .params(q=q)
@@ -603,7 +743,10 @@ async def list_chats(
         Query(ge=1, le=LIST_LIMIT_MAX, description="Page size; capped at 100."),
     ] = LIST_LIMIT_DEFAULT,
 ) -> ChatListResponse:
-    stmt = select(Chat).where(Chat.owner_id == user.id)
+    stmt = select(Chat).where(
+        Chat.owner_id == user.id,
+        Chat.autonomous_session_id.is_(None),
+    )
     if archived is True:
         stmt = stmt.where(Chat.archived_at.is_not(None))
     else:
@@ -1185,6 +1328,25 @@ async def send_message(
                 {"name": resolved_slug, "source": "slash", "kind": "slug"}
             )
 
+    # Sticky skills (issue #207 finding 4) — opt-in, per-chat. ``chat.sticky_skills``
+    # is the persisted set (empty = toggle OFF, fail-restrictive). While active it
+    # is unioned into this turn's skills so a follow-up turn keeps applying them
+    # without the client re-sending; per-turn explicit skills are kept too (union).
+    # ``set_sticky`` is the toggle: True snapshots the current set, False clears it,
+    # None leaves it unchanged.
+    if payload.set_sticky is False:
+        # Toggle off: clear the set; this turn applies only explicitly-chosen skills.
+        chat.sticky_skills = []
+    else:
+        for slug in chat.sticky_skills or []:
+            if slug not in effective_skills:
+                effective_skills.append(slug)
+            if slug not in {e["name"] for e in attached_skill_provenance}:
+                attached_skill_provenance.append({"name": slug, "source": "sticky", "kind": "slug"})
+        if payload.set_sticky is True:
+            # Snapshot everything applied this turn as the chat's sticky set.
+            chat.sticky_skills = list(effective_skills)
+
     # Persist the user message FIRST. This is unconditionally written,
     # even if the gateway call ultimately fails — the user did say
     # something and the audit trail must reflect that.
@@ -1365,13 +1527,33 @@ async def send_message(
         )
         await db.commit()
 
+    # Multi-turn memory — replay prior conversation turns so chat is
+    # genuinely conversational. Previously this path sent only the current
+    # turn (single-turn requests). History is trimmed most-recent-first to
+    # the configured token budget + message cap (oldest dropped); set
+    # ``LQ_AI_CHAT_HISTORY_TOKEN_BUDGET=0`` to revert to single-turn.
+    # Inserted AFTER the current-turn system context blocks (RAG / attached
+    # files) and BEFORE the live user turn, so the provider sees
+    # ``[system context] + [prior turns] + [current user turn]``. History
+    # turns carry no ``lq_ai_skip_anonymization`` flag, so the gateway
+    # pseudonymizes them with the same per-request map as the current turn
+    # (entities stay consistent across the conversation).
+    settings = get_settings()
+    history_messages = await _load_history_messages(
+        db,
+        chat_id=cid,
+        exclude_message_id=user_message.id,
+        token_budget=settings.lq_ai_chat_history_token_budget,
+        max_messages=settings.lq_ai_chat_history_max_messages,
+    )
+    gw_messages.extend(history_messages)
+
     gw_messages.append(ChatCompletionMessage(role="user", content=effective_content))
 
-    # Build the gateway request. C3 still sends a single-turn request
-    # (the user's content as one ``user`` message); a future task may
-    # widen this to include prior history. The gateway does the skill
-    # prompt assembly per ADR 0007. T7b prepends a system context
-    # block when KB retrieval returned chunks (see above).
+    # Build the gateway request. The gateway does the skill prompt
+    # assembly per ADR 0007. T7b prepends a system context block when KB
+    # retrieval returned chunks (see above); the replayed history sits
+    # between that context and the live user turn.
     #
     # Wave D.2 Task 3.0 — ``lq_ai_inline_skills`` carries inline-body
     # attachments. The gateway assembles them alongside ``lq_ai_skills``
@@ -1428,6 +1610,20 @@ async def send_message(
         },
     )
 
+    # PR5b Task 6 — assemble the per-turn tool allowlist.  Empty when no
+    # research / MCP is configured; non-empty drives the agentic loop.
+    # Fail safe: if the gateway config endpoint is unreachable (e.g. during
+    # deployment or in environments without research/MCP), return an empty
+    # allowlist so the existing single-shot path runs unchanged.
+    try:
+        allowlist = await assemble_allowlist(db, gateway=gateway, request_id=request_id)
+    except Exception:
+        log.warning(
+            "chat send_message: assemble_allowlist failed — falling back to empty allowlist",
+            exc_info=True,
+        )
+        allowlist = ChatToolAllowlist(specs={})
+
     if payload.stream:
         return await _stream_response(
             db=db,
@@ -1442,6 +1638,7 @@ async def send_message(
             http_request=request,
             attached_skill_provenance=attached_skill_provenance,
             project_ensemble_verification=project_ensemble_verification,
+            allowlist=allowlist,
         )
     return await _non_streaming_response(
         db=db,
@@ -1458,6 +1655,7 @@ async def send_message(
         slash_unresolved=slash_unresolved,
         attached_skill_provenance=attached_skill_provenance,
         project_ensemble_verification=project_ensemble_verification,
+        allowlist=allowlist,
     )
 
 
@@ -1538,6 +1736,591 @@ async def get_citations(
         }
         for c in rows
     ]
+
+
+@router.get(
+    "/{chat_id}/messages/{message_id}/sources",
+    summary="Get external-source provenance (case law consulted) for a message (PR6c)",
+)
+async def get_message_sources(
+    chat_id: str,
+    message_id: str,
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> list[dict[str, Any]]:
+    """Return the external sources (case-law clusters) a message's turn consulted.
+
+    Retrieval-provenance from ``message_tool_sources`` — "sources consulted,"
+    distinct from the verified quote rows of ``message_citations``. Returns ``[]``
+    for a turn that consulted nothing; 404 when the message doesn't exist in the
+    chat. Chat ownership enforced as in :func:`get_citations`.
+    """
+    cid = _validate_chat_id(chat_id)
+    try:
+        mid = uuid.UUID(message_id)
+    except ValueError as exc:
+        raise ValidationError(
+            "message_id must be a UUID", details={"message_id": message_id}
+        ) from exc
+
+    await _load_visible_chat(db, cid, user.id, include_archived=True)
+
+    msg_stmt = select(Message.id).where(Message.id == mid, Message.chat_id == cid)
+    if (await db.execute(msg_stmt)).scalar_one_or_none() is None:
+        raise NotFound(f"Message {mid} not found.", details={"message_id": str(mid)})
+
+    src_stmt = (
+        select(MessageToolSource)
+        .where(MessageToolSource.message_id == mid)
+        .order_by(MessageToolSource.created_at, MessageToolSource.id)
+    )
+    rows = (await db.execute(src_stmt)).scalars().all()
+    return [
+        {
+            "id": str(s.id),
+            "message_id": str(s.message_id),
+            "source_kind": s.source_kind,
+            "label": s.label,
+            "subtitle": s.subtitle,
+            "url": s.url,
+            "external_ref": s.external_ref,
+            "provider": s.provider,
+            "tool": s.tool,
+            "created_at": s.created_at.isoformat(),
+        }
+        for s in rows
+    ]
+
+
+@router.get(
+    "/{chat_id}/ledger",
+    summary="Citation Ledger for a chat (one-click trace) — P1-A3",
+)
+async def get_chat_ledger(
+    chat_id: str,
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    message_id: str | None = None,
+) -> dict[str, Any]:
+    """Return the Citation Ledger for a chat, each entry resolved to its source
+    identity + passage(s) read + verification status + provenance (ADR 0018 D4).
+
+    Chat-scoped; ``?message_id=`` narrows to a single assistant turn. Ownership is
+    enforced as in :func:`get_citations` (cross-user → 404). The ledger row holds
+    no content — passages are resolved from the content layer at read time (P3).
+    """
+    cid = _validate_chat_id(chat_id)
+    mid: uuid.UUID | None = None
+    if message_id is not None:
+        try:
+            mid = uuid.UUID(message_id)
+        except ValueError as exc:
+            raise ValidationError(
+                "message_id must be a UUID", details={"message_id": message_id}
+            ) from exc
+
+    await _load_visible_chat(db, cid, user.id, include_archived=True)
+
+    if mid is not None:
+        msg_stmt = select(Message.id).where(Message.id == mid, Message.chat_id == cid)
+        if (await db.execute(msg_stmt)).scalar_one_or_none() is None:
+            raise NotFound(f"Message {mid} not found.", details={"message_id": str(mid)})
+
+    entries = await resolve_ledger_entries(db, chat_id=cid, message_id=mid)
+    gates = await resolve_gates(db, chat_id=cid, message_id=mid)
+
+    # DE-363: lazy-on-trace-open fallback — best-effort re-enqueue derivation for
+    # any caselaw turn whose treatment is missing/stale. Re-enqueue only (no
+    # synchronous egress); the enqueue is coalesced by _job_id, and never blocks
+    # the read. The response shape is unchanged — the derived signal appears on
+    # the next read.
+    try:
+        needing = await message_ids_needing_treatment(
+            db, chat_id=cid, message_id=mid, now=datetime.now(UTC)
+        )
+        for need_mid in needing:
+            await enqueue_treatment_derivation_job(need_mid)
+    except Exception as exc:  # never block the read on the fallback
+        log.warning("lazy treatment enqueue failed: %r", exc)
+
+    return {"chat_id": str(cid), "entries": entries, "gates": gates}
+
+
+# ---------------------------------------------------------------------------
+# PR5b Task 7 — resume pending tool-call gate
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/{chat_id}/tool-calls/{pending_call_id}",
+    response_model=None,
+    summary="Approve or deny a pending destructive chat tool-call; resumes the turn",
+)
+async def resume_tool_call(
+    chat_id: str,
+    pending_call_id: str,
+    request: Request,
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    gateway: Annotated[GatewayClient, Depends(get_gateway_client)],
+) -> StreamingResponse:
+    """POST /{chat_id}/tool-calls/{pending_call_id} — approve or deny a pending tool call.
+
+    Loads the pending row (owner-scoped, single-use), resolves the decision,
+    executes the tool or feeds a denial message, then resumes run_chat_tool_loop
+    and streams the outcome as SSE frames.
+    """
+    from app.chat.tool_loop import _tool_error_message, execute_tool, tool_result_message
+    from app.mcp.service import list_servers
+    from app.schemas.chats import ToolCallDecisionRequest
+
+    cid = _validate_chat_id(chat_id)
+
+    # Validate pending_call_id as UUID — 404 on malformed (id-probing-safe).
+    try:
+        pid = uuid.UUID(pending_call_id)
+    except ValueError as exc:
+        raise NotFound(
+            "pending tool-call not found",
+            details={"pending_call_id": pending_call_id},
+        ) from exc
+
+    # Owner-scoped chat load — 404 on cross-user.
+    await _load_visible_chat(db, cid, user.id, include_archived=False)
+
+    # Parse decision body.
+    try:
+        raw_body = await request.json()
+    except Exception as exc:
+        raise ValidationError("Request body is not valid JSON") from exc
+
+    from pydantic import ValidationError as PydanticValidationError
+
+    try:
+        body = ToolCallDecisionRequest.model_validate(raw_body)
+    except PydanticValidationError as exc:
+        raise ValidationError(
+            "Request body failed schema validation",
+            details={
+                "errors": exc.errors(include_context=False, include_url=False, include_input=False)
+            },
+        ) from exc
+
+    # Atomically claim the pending row — single-use gate, concurrency-safe.
+    #
+    # Under PostgreSQL READ COMMITTED, an uncommitted UPDATE is invisible to
+    # a concurrent transaction, so two simultaneous approve POSTs would BOTH
+    # read status="pending" if we used SELECT-then-flush.  Instead, we use a
+    # conditional UPDATE with WHERE status='pending' AND expires_at >= now and
+    # commit the status flip BEFORE doing any tool work.  Only ONE concurrent
+    # caller can win the DB-side atomic claim; the other gets claimed_id=None.
+    now = datetime.now(UTC)
+    claim = await db.execute(
+        update(ChatPendingToolCall)
+        .where(
+            ChatPendingToolCall.id == pid,
+            ChatPendingToolCall.chat_id == cid,
+            ChatPendingToolCall.user_id == user.id,
+            ChatPendingToolCall.status == "pending",
+            ChatPendingToolCall.expires_at >= now,
+        )
+        .values(status="resolved", updated_at=now)
+        .returning(ChatPendingToolCall.id)
+    )
+    claimed_id = claim.scalar_one_or_none()
+    # Durably commit the claim BEFORE any tool execution / gateway call.
+    await db.commit()
+
+    if claimed_id is None:
+        # Did not win the claim — disambiguate 404 vs 409.
+        # Owner-scoped follow-up SELECT: if the row exists it was either
+        # already-resolved or expired (409); if it does not exist at all
+        # (unknown id or non-owner) → 404 (id-probing-safe).
+        check = (
+            await db.execute(
+                select(ChatPendingToolCall).where(
+                    ChatPendingToolCall.id == pid,
+                    ChatPendingToolCall.chat_id == cid,
+                    ChatPendingToolCall.user_id == user.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if check is None:
+            raise NotFound(
+                "pending tool-call not found", details={"pending_call_id": pending_call_id}
+            )
+        # Row exists but was non-pending or expired → conflict.
+        raise Conflict("tool-call already resolved or expired")
+
+    # We won the claim — re-load the full row (now status="resolved") to get
+    # resume_state, tool_call_args, function_name, provider, tool, etc.
+    pending = (
+        await db.execute(select(ChatPendingToolCall).where(ChatPendingToolCall.id == claimed_id))
+    ).scalar_one()
+
+    # Extract resume state.
+    resume_state: dict = pending.resume_state
+    messages: list[dict] = list(resume_state.get("messages", []))
+    calls_used: int = int(resume_state.get("calls_used", 0))
+    model: str = str(resume_state.get("model", "smart"))
+
+    request_id = (
+        request.headers.get("x-request-id")
+        or request.headers.get("x-correlation-id")
+        or f"req_{uuid.uuid4().hex}"
+    )
+
+    assistant_message_id = pending.assistant_message_id
+
+    async def _generate() -> AsyncIterator[bytes]:
+        # Opening frame — same shape as the initial send path.
+        opening: dict[str, Any] = {
+            "type": "start",
+            "lq_ai_message_id": str(assistant_message_id),
+            "chat_id": str(cid),
+        }
+        yield f"data: {_json.dumps(opening, separators=(',', ':'))}\n\n".encode()
+
+        # One shared tool_call_id is used for BOTH the reconstructed assistant
+        # turn and the trailing tool result/denial message.  Real providers
+        # (Anthropic, OpenAI) reject an orphaned role="tool" message that is
+        # not a response to a preceding assistant tool_calls turn — the
+        # resume_state.messages saved at gate-time contain only the user turn
+        # and the pre-gate conversation; they do NOT contain the assistant turn
+        # that proposed the gated call.  We reconstruct it here so the
+        # conversation is valid before handing it to run_chat_tool_loop.
+        tool_call_id = str(uuid.uuid4())
+        assistant_turn: dict[str, Any] = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": tool_call_id,
+                    "type": "function",
+                    "function": {
+                        "name": pending.function_name,
+                        "arguments": _json.dumps(dict(pending.tool_call_args)),
+                    },
+                }
+            ],
+        }
+        messages.append(assistant_turn)
+
+        # ── Approve path ─────────────────────────────────────────────────────
+        if body.decision == "approve":
+            # Re-assemble the allowlist to resolve the spec (tool may have been
+            # removed since the gate; treat that as denial-style).
+            try:
+                current_allowlist = await assemble_allowlist(
+                    db, gateway=gateway, request_id=request_id
+                )
+            except Exception:
+                current_allowlist = ChatToolAllowlist(specs={})
+
+            spec = current_allowlist.resolve(pending.function_name)
+
+            if spec is None:
+                # Tool was removed/disabled since the gate — feed an error message.
+                log.warning(
+                    "resume_tool_call: approved but spec %r no longer in allowlist — feeding error",
+                    pending.function_name,
+                    extra={
+                        "event": "resume_tool_call_spec_gone",
+                        "function_name": pending.function_name,
+                    },
+                )
+                messages.append(_tool_error_message(tool_call_id, "tool no longer available"))
+            else:
+                # Build server_auth_map (needed by execute_tool → _dispatch_mcp).
+                try:
+                    raw_servers = await list_servers(request_id=request_id)
+                    server_auth_map: dict[str, str] = {
+                        s["name"]: s.get("auth", "none") for s in raw_servers
+                    }
+                except Exception:
+                    server_auth_map = {}
+
+                # Execute the pending tool call.
+                #
+                # Two-row audit model:
+                # - Gate row (pending.tool_call_log_id): the confirmation-request
+                #   lifecycle record (pending_confirmation → approved | denied).
+                #   Its outcome stays as-is; we only flip confirmation_state.
+                # - Execute_tool row (written inside governed_tool_invocation):
+                #   the actual approved execution, stamped confirmation_state=
+                #   "approved" / outcome="executed".  This is the authoritative
+                #   record that the tool ran with user approval.
+                try:
+                    result = await execute_tool(
+                        db,
+                        user=user,
+                        gateway=gateway,
+                        spec=spec,
+                        args=dict(pending.tool_call_args),
+                        cluster_cache={},
+                        server_auth_map=server_auth_map,
+                        assistant_message_id=assistant_message_id,
+                        chat_id=cid,
+                        request_id=request_id,
+                        confirmation_state="approved",
+                    )
+                    # Update the gate row's confirmation_state to "approved"
+                    # (the confirmation-REQUEST lifecycle: pending_confirmation →
+                    # approved).  We do NOT set outcome="executed" here — that
+                    # would misrepresent the gate row as the execution record.
+                    # The execution record is the separate row written above by
+                    # governed_tool_invocation with confirmation_state="approved"
+                    # and outcome="executed".
+                    if pending.tool_call_log_id is not None:
+                        gate_tcl = await db.get(ToolCallLog, pending.tool_call_log_id)
+                        if gate_tcl is not None:
+                            gate_tcl.confirmation_state = "approved"
+                            await db.flush()
+
+                    # Build the tool result message with a synthetic tc_id.
+                    tr_msg = tool_result_message(tool_call_id, result)
+                    messages.append(tr_msg)
+
+                except Exception as exec_exc:
+                    log.warning(
+                        "resume_tool_call: approved execute_tool failed — feeding error",
+                        extra={"event": "resume_tool_call_execute_failed", "error": repr(exec_exc)},
+                    )
+                    messages.append(_tool_error_message(tool_call_id, "tool execution failed"))
+
+        # ── Deny path ────────────────────────────────────────────────────────
+        else:
+            # Feed a denial tool message so the model can finalize.
+            messages.append(_tool_error_message(tool_call_id, "user denied this tool call"))
+
+            # Update the gate ToolCallLog to denied.
+            if pending.tool_call_log_id is not None:
+                gate_tcl = await db.get(ToolCallLog, pending.tool_call_log_id)
+                if gate_tcl is not None:
+                    gate_tcl.confirmation_state = "denied"
+                    gate_tcl.outcome = "denied"
+                    await db.flush()
+
+        await db.commit()
+
+        # Rebuild the base_request from resume_state messages + model.
+        msg_objects = [
+            ChatCompletionMessage(**m) if not isinstance(m, ChatCompletionMessage) else m
+            for m in messages
+        ]
+        base_request = ChatCompletionRequest(
+            model=model,
+            messages=msg_objects,
+            stream=False,
+            chat_id=str(cid),
+            lq_ai_chat_id=str(cid),
+            lq_ai_message_id=str(assistant_message_id),
+        )
+
+        # Re-assemble allowlist for the resumed loop.
+        try:
+            resume_allowlist = await assemble_allowlist(db, gateway=gateway, request_id=request_id)
+        except Exception:
+            resume_allowlist = ChatToolAllowlist(specs={})
+
+        # Run the tool loop with remaining budget.
+        loop_outcome: LoopFinal | LoopConfirmation | LoopMcpAuth | None = None
+        error_code: str | None = None
+        error_envelope: dict[str, Any] | None = None
+        try:
+            loop_outcome = await run_chat_tool_loop(
+                db,
+                user=user,
+                gateway=gateway,
+                base_request=base_request,
+                allowlist=resume_allowlist,
+                assistant_message_id=assistant_message_id,
+                chat_id=cid,
+                calls_used=calls_used,
+                cluster_cache={},
+                request_id=request_id,
+            )
+        except LQAIError as exc:
+            error_code = exc.effective_code
+            error_envelope = exc.to_envelope()
+            log.warning(
+                "resume_tool_call: tool-loop failed",
+                extra={"event": "resume_tool_call_loop_failed", "error_code": error_code},
+            )
+
+        # Render the outcome — mirrors _stream_response's outcome rendering.
+        accumulated: list[str] = []
+        last_tier: int | None = None
+        last_provider: str | None = None
+        last_model: str | None = None
+        last_applied_skills: list[str] | None = None
+        prompt_tokens: int | None = None
+        completion_tokens: int | None = None
+
+        if loop_outcome is not None and isinstance(loop_outcome, LoopFinal):
+            last_tier = loop_outcome.tier
+            last_provider = loop_outcome.provider
+            last_model = loop_outcome.model
+            last_applied_skills = list(loop_outcome.applied_skills or [])
+            prompt_tokens = loop_outcome.usage_prompt or None
+            completion_tokens = loop_outcome.usage_completion or None
+            accumulated = [loop_outcome.text]
+            delta_frame: dict[str, Any] = {
+                "type": "delta",
+                "delta": loop_outcome.text,
+                "lq_ai_message_id": str(assistant_message_id),
+            }
+            if last_tier is not None:
+                delta_frame["routed_inference_tier"] = last_tier
+            if last_applied_skills:
+                delta_frame["applied_skills"] = list(last_applied_skills)
+            yield f"data: {_json.dumps(delta_frame, separators=(',', ':'))}\n\n".encode()
+
+        elif loop_outcome is not None and isinstance(loop_outcome, LoopConfirmation):
+            # Another confirmation gate arose — persist and emit.
+            spec2 = loop_outcome.spec
+            tier_val2 = loop_outcome.tier if loop_outcome.tier is not None else 0
+            try:
+                pending_row2 = ChatPendingToolCall(
+                    chat_id=cid,
+                    user_id=user.id,
+                    assistant_message_id=assistant_message_id,
+                    function_name=spec2.function_name,
+                    kind=spec2.kind,
+                    provider=spec2.provider,
+                    tool=spec2.tool,
+                    destructive=spec2.destructive,
+                    tier=tier_val2,
+                    tool_call_args=loop_outcome.args,
+                    resume_state={
+                        "messages": loop_outcome.messages,
+                        "calls_used": loop_outcome.calls_used,
+                        "model": model,
+                    },
+                    status="pending",
+                    expires_at=datetime.now(UTC) + CONFIRM_TTL,
+                )
+                db.add(pending_row2)
+                await db.flush()
+
+                tcl_row2 = ToolCallLog(
+                    origin="chat",
+                    provider=spec2.provider,
+                    tool=spec2.tool,
+                    tier=tier_val2,
+                    intent=None,
+                    confirmation_state="pending_confirmation",
+                    outcome="pending",
+                    cost_usd=None,
+                    args_digest=_args_digest(loop_outcome.args),
+                    user_id=user.id,
+                    chat_id=cid,
+                    message_id=assistant_message_id,
+                )
+                db.add(tcl_row2)
+                await db.flush()
+                pending_row2.tool_call_log_id = tcl_row2.id
+                await db.commit()
+
+                gate_frame2: dict[str, Any] = {
+                    "type": "tool_confirmation_required",
+                    "lq_ai_message_id": str(assistant_message_id),
+                    "pending_call_id": str(pending_row2.id),
+                    "provider": spec2.provider,
+                    "tool": spec2.tool,
+                    "function_name": spec2.function_name,
+                    "args_summary": _safe_args_summary(loop_outcome.args),
+                    "tier": tier_val2,
+                    "destructive": spec2.destructive,
+                }
+                yield (f"data: {_json.dumps(gate_frame2, separators=(',', ':'))}\n\n".encode())
+            except Exception as gate_exc2:
+                log.error(
+                    "resume_tool_call: failed to persist second confirmation gate",
+                    extra={"error": repr(gate_exc2)},
+                )
+                _err2 = InternalError("Failed to record tool confirmation; please retry.")
+                yield (
+                    f"data: {_json.dumps(_err2.to_envelope(), separators=(',', ':'))}\n\n"
+                ).encode()
+            yield b"data: [DONE]\n\n"
+            return
+
+        elif loop_outcome is not None and isinstance(loop_outcome, LoopMcpAuth):
+            mcp_frame2: dict[str, Any] = {
+                "type": "mcp_authorization_required",
+                "lq_ai_message_id": str(assistant_message_id),
+                "server": loop_outcome.server,
+                "authorize_url": f"/api/v1/mcp/oauth/{loop_outcome.server}/authorize",
+            }
+            yield (f"data: {_json.dumps(mcp_frame2, separators=(',', ':'))}\n\n".encode())
+            yield b"data: [DONE]\n\n"
+            return
+
+        # Persist the assistant message (LoopFinal or error path).
+        try:
+            await _load_visible_chat(db, cid, user.id, include_archived=False)
+        except NotFound:
+            # Chat was deleted; nothing to persist.
+            yield b"data: [DONE]\n\n"
+            return
+
+        try:
+            await _persist_assistant_message(
+                db,
+                message_id=assistant_message_id,
+                chat_id=cid,
+                content="".join(accumulated),
+                requested_model=model,
+                routed_provider=last_provider,
+                routed_model=last_model,
+                routed_inference_tier=last_tier,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                cost_estimate_usd=None,
+                applied_skills=last_applied_skills or [],
+                error_code=error_code,
+            )
+        except Exception as persist_exc:
+            log.error(
+                "resume_tool_call: failed to persist assistant row",
+                extra={"error": repr(persist_exc)},
+            )
+
+        # Final frames.
+        if error_envelope is not None:
+            yield (f"data: {_json.dumps(error_envelope, separators=(',', ':'))}\n\n".encode())
+        else:
+            complete: dict[str, Any] = {
+                "type": "complete",
+                "lq_ai_message_id": str(assistant_message_id),
+                "message": {
+                    "id": str(assistant_message_id),
+                    "chat_id": str(cid),
+                    "role": "assistant",
+                    "content": "".join(accumulated),
+                    "model": last_model,
+                    "provider": last_provider,
+                    "routed_inference_tier": last_tier,
+                    "tokens_in": prompt_tokens,
+                    "tokens_out": completion_tokens,
+                    "created_at": datetime.now(tz=UTC).isoformat(),
+                },
+                "applied_skills": last_applied_skills or [],
+                "applied_file_ids": [],
+                "citations": [],
+                "routed_inference_tier": last_tier,
+                "routed_provider": last_provider,
+            }
+            yield f"data: {_json.dumps(complete, separators=(',', ':'))}\n\n".encode()
+
+        yield b"data: [DONE]\n\n"
+
+    return StreamingResponse(
+        _generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1915,6 +2698,38 @@ async def _persist_message_citations(
     )
 
 
+async def _persist_message_tool_sources(
+    db: AsyncSession,
+    *,
+    message_id: uuid.UUID,
+    records: list[ToolSourceRecord],
+) -> None:
+    """Persist retrieval-provenance rows for the external sources a turn consulted.
+
+    Runs after :func:`_persist_assistant_message` (so ``message_id`` is a real FK
+    target). No-op when ``records`` is empty. Retrieval-provenance only — these
+    rows are NOT verified (contrast ``message_citations``).
+    """
+    if not records:
+        return
+    db.add_all(
+        [
+            MessageToolSource(
+                message_id=message_id,
+                source_kind=r.source_kind,
+                label=r.label,
+                subtitle=r.subtitle,
+                url=r.url,
+                external_ref=r.external_ref,
+                provider=r.provider,
+                tool=r.tool,
+            )
+            for r in records
+        ]
+    )
+    await db.flush()
+
+
 async def _persist_assistant_message(
     db: AsyncSession,
     *,
@@ -2054,14 +2869,272 @@ async def _non_streaming_response(
     slash_unresolved: bool = False,
     attached_skill_provenance: list[dict[str, str | None]] | None = None,
     project_ensemble_verification: bool = False,
+    allowlist: ChatToolAllowlist | None = None,
 ) -> JSONResponse:
     """Run the non-streaming path: forward, persist, return JSON.
 
     Wave D.2 Task 2.7 — ``attached_skill_names`` and ``slash_unresolved``
     are propagated from :func:`send_message`'s slash-fallback path.
     Defaults preserve the pre-Task-2.7 wire contract for any caller
-    that doesn't pass them in."""
+    that doesn't pass them in.
 
+    PR5b Task 6 — when ``allowlist`` is non-empty, drives the agentic
+    tool-loop (``run_chat_tool_loop``) instead of the single-shot gateway
+    call.  Empty allowlist → existing single-shot path, byte-for-byte
+    unchanged.
+    """
+
+    # ── PR5b Task 6: tool-loop branch ──────────────────────────────────────
+    if allowlist is not None and allowlist.specs:
+        # Non-empty allowlist → run the agentic loop.
+        try:
+            outcome = await run_chat_tool_loop(
+                db,
+                user=user,
+                gateway=gateway,
+                base_request=request,
+                allowlist=allowlist,
+                assistant_message_id=assistant_message_id,
+                chat_id=chat.id,
+                cluster_cache={},
+                request_id=request_id,
+            )
+        except LQAIError as exc:
+            log.warning(
+                "chat send_message tool-loop failed (non-streaming)",
+                extra={
+                    "event": "chat_send_message_loop_failed",
+                    "user_id": str(user.id),
+                    "chat_id": str(chat.id),
+                    "assistant_message_id": str(assistant_message_id),
+                    "request_id": request_id,
+                    "error_code": getattr(exc, "effective_code", "internal_error"),
+                },
+            )
+            raise
+
+        if isinstance(outcome, LoopFinal):
+            # Normal completion — persist exactly like the single-shot path.
+            applied_skills = list(outcome.applied_skills or [])
+            persisted = await _persist_assistant_message(
+                db,
+                message_id=assistant_message_id,
+                chat_id=chat.id,
+                content=outcome.text,
+                requested_model=request.model,
+                routed_provider=outcome.provider,
+                routed_model=outcome.model,
+                routed_inference_tier=outcome.tier,
+                prompt_tokens=outcome.usage_prompt or None,
+                completion_tokens=outcome.usage_completion or None,
+                cost_estimate_usd=None,
+                applied_skills=applied_skills,
+                error_code=None,
+            )
+            await _persist_message_citations(
+                db,
+                message_id=assistant_message_id,
+                assistant_text=outcome.text,
+                retrieved_chunks=retrieved_chunks or [],
+                gateway=gateway,
+                applied_skills=applied_skills,
+                project_ensemble_verification=project_ensemble_verification,
+                skill_registry=_skill_registry_from_request(http_request),
+            )
+            await _persist_message_tool_sources(
+                db, message_id=assistant_message_id, records=outcome.tool_sources
+            )
+            _caselaw_judge_model = "fast"
+            if gateway is not None:
+                _caselaw_judge_model = await gateway.get_citation_engine_judge_model()
+            try:
+                await verify_and_persist_caselaw_citations(
+                    db,
+                    message_id=assistant_message_id,
+                    assistant_text=outcome.text,
+                    tool_sources=outcome.tool_sources,
+                    gateway=gateway,
+                    judge_model=_caselaw_judge_model,
+                )
+            except Exception as caselaw_exc:  # never block the turn
+                log.warning("caselaw citation verification failed: %r", caselaw_exc)
+            try:
+                await verify_and_persist_authority_citations(
+                    db,
+                    message_id=assistant_message_id,
+                    assistant_text=outcome.text,
+                    tool_sources=outcome.tool_sources,
+                    gateway=gateway,
+                    judge_model=_caselaw_judge_model,
+                )
+            except Exception:
+                log.warning(
+                    "chat finalize: authority citation verify failed — non-fatal",
+                    extra={"event": "chat_authority_verify_finalize_failed"},
+                    exc_info=True,
+                )
+            try:
+                await assemble_ledger_entries(db, message_id=assistant_message_id)
+            except Exception as ledger_exc:  # never block the turn
+                log.warning("citation ledger assembly failed: %r", ledger_exc)
+            try:
+                await compute_and_record_gate(db, message_id=assistant_message_id)
+            except Exception as gate_exc:  # never break the turn (conservative posture)
+                log.warning("fiduciary gate computation failed: %r", gate_exc)
+            await _audit_message_sent(
+                db,
+                user=user,
+                chat=chat,
+                assistant_message_id=assistant_message_id,
+                user_message_id=user_message_id,
+                routed_inference_tier=outcome.tier,
+                routed_provider=outcome.provider,
+                applied_skills=applied_skills,
+                error_code=None,
+                request=http_request,
+                attached_skill_provenance=attached_skill_provenance,
+            )
+            try:
+                await enqueue_treatment_derivation_job(assistant_message_id)
+            except Exception as treatment_exc:  # never block the turn response
+                log.warning("treatment derivation enqueue failed: %r", treatment_exc)
+            body = MessagePostResponse(
+                message=message_to_response(persisted),
+                citations=[],
+                routed_inference_tier=outcome.tier,
+                routed_provider=outcome.provider,
+                cost_estimate=None,
+                applied_skills=applied_skills,
+                applied_file_ids=list(request.lq_ai_file_ids),
+                attached_skill_names=list(attached_skill_names or []),
+                slash_unresolved=slash_unresolved,
+            )
+            loop_headers: dict[str, str] = {}
+            if outcome.tier is not None:
+                loop_headers["X-LQ-AI-Routed-Inference-Tier"] = str(outcome.tier)
+            if outcome.provider is not None:
+                loop_headers["X-LQ-AI-Routed-Provider"] = outcome.provider
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content=body.model_dump(mode="json"),
+                headers=loop_headers,
+            )
+
+        if isinstance(outcome, LoopConfirmation):
+            # Confirmation gate — persist pending rows and return gate payload.
+            spec = outcome.spec
+            tier_val = outcome.tier if outcome.tier is not None else 0
+            pending_row = ChatPendingToolCall(
+                chat_id=chat.id,
+                user_id=user.id,
+                assistant_message_id=assistant_message_id,
+                function_name=spec.function_name,
+                kind=spec.kind,
+                provider=spec.provider,
+                tool=spec.tool,
+                destructive=spec.destructive,
+                tier=tier_val,
+                tool_call_args=outcome.args,
+                resume_state={
+                    "messages": outcome.messages,
+                    "calls_used": outcome.calls_used,
+                    "model": request.model,
+                },
+                status="pending",
+                expires_at=datetime.now(UTC) + CONFIRM_TTL,
+            )
+            db.add(pending_row)
+            await db.flush()
+
+            tcl_row = ToolCallLog(
+                origin="chat",
+                provider=spec.provider,
+                tool=spec.tool,
+                tier=tier_val,
+                intent=None,
+                confirmation_state="pending_confirmation",
+                outcome="pending",
+                cost_usd=None,
+                args_digest=_args_digest(outcome.args),
+                user_id=user.id,
+                chat_id=chat.id,
+                message_id=assistant_message_id,
+            )
+            db.add(tcl_row)
+            await db.flush()
+
+            # Link the pending row to its tool-call-log row.
+            pending_row.tool_call_log_id = tcl_row.id
+            await db.commit()
+
+            gate_payload: dict[str, Any] = {
+                "type": "tool_confirmation_required",
+                "lq_ai_message_id": str(assistant_message_id),
+                "pending_call_id": str(pending_row.id),
+                "provider": spec.provider,
+                "tool": spec.tool,
+                "function_name": spec.function_name,
+                "args_summary": _safe_args_summary(outcome.args),
+                "tier": tier_val,
+                "destructive": spec.destructive,
+            }
+            # Construct a minimal placeholder message for MessagePostResponse.
+            # The resume path (Task 7) persists the real assistant row.
+            # MessageResponse.content is a required str; use "" since the
+            # gate response carries the payload in pending_tool_call.
+            from app.schemas.chats import MessageResponse
+
+            placeholder_msg = MessageResponse(
+                id=assistant_message_id,
+                chat_id=chat.id,
+                role="assistant",
+                content="",
+                created_at=datetime.now(UTC),
+            )
+            body_conf = MessagePostResponse(
+                message=placeholder_msg,
+                citations=[],
+                applied_file_ids=list(request.lq_ai_file_ids),
+                attached_skill_names=list(attached_skill_names or []),
+                slash_unresolved=slash_unresolved,
+                pending_tool_call=gate_payload,
+            )
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content=body_conf.model_dump(mode="json"),
+            )
+
+        if isinstance(outcome, LoopMcpAuth):
+            # OAuth gate — no persistence, return authorize URL.
+            mcp_payload: dict[str, Any] = {
+                "type": "mcp_authorization_required",
+                "lq_ai_message_id": str(assistant_message_id),
+                "server": outcome.server,
+                "authorize_url": f"/api/v1/mcp/oauth/{outcome.server}/authorize",
+            }
+            from app.schemas.chats import MessageResponse
+
+            placeholder_mcp = MessageResponse(
+                id=assistant_message_id,
+                chat_id=chat.id,
+                role="assistant",
+                content="",
+                created_at=datetime.now(UTC),
+            )
+            body_mcp = MessagePostResponse(
+                message=placeholder_mcp,
+                citations=[],
+                applied_file_ids=list(request.lq_ai_file_ids),
+                attached_skill_names=list(attached_skill_names or []),
+                slash_unresolved=slash_unresolved,
+                mcp_authorization_required=mcp_payload,
+            )
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content=body_mcp.model_dump(mode="json"),
+            )
+
+    # ── Existing single-shot path (empty allowlist) ─────────────────────────
     try:
         response = await gateway.chat_completion(request, request_id=request_id)
     except LQAIError as exc:
@@ -2121,6 +3194,15 @@ async def _non_streaming_response(
         project_ensemble_verification=project_ensemble_verification,
         skill_registry=_skill_registry_from_request(http_request),
     )
+    await _persist_message_tool_sources(db, message_id=assistant_message_id, records=[])
+    try:
+        await assemble_ledger_entries(db, message_id=assistant_message_id)
+    except Exception as ledger_exc:  # never block the turn
+        log.warning("citation ledger assembly failed: %r", ledger_exc)
+    try:
+        await compute_and_record_gate(db, message_id=assistant_message_id)
+    except Exception as gate_exc:  # never break the turn (conservative posture)
+        log.warning("fiduciary gate computation failed: %r", gate_exc)
 
     await _audit_message_sent(
         db,
@@ -2135,6 +3217,10 @@ async def _non_streaming_response(
         request=http_request,
         attached_skill_provenance=attached_skill_provenance,
     )
+    try:
+        await enqueue_treatment_derivation_job(assistant_message_id)
+    except Exception as treatment_exc:  # never block the turn response
+        log.warning("treatment derivation enqueue failed: %r", treatment_exc)
 
     body = MessagePostResponse(
         message=message_to_response(persisted),
@@ -2175,8 +3261,14 @@ async def _stream_response(
     http_request: Request | None = None,
     attached_skill_provenance: list[dict[str, str | None]] | None = None,
     project_ensemble_verification: bool = False,
+    allowlist: ChatToolAllowlist | None = None,
 ) -> StreamingResponse:
-    """Run the streaming path: forward, stream SSE, persist at end."""
+    """Run the streaming path: forward, stream SSE, persist at end.
+
+    PR5b Task 6 — when ``allowlist`` is non-empty, drives the agentic
+    tool-loop instead of the single-shot ``chat_completion_stream`` call.
+    Empty allowlist → existing single-shot path, byte-for-byte unchanged.
+    """
 
     async def _generate() -> AsyncIterator[bytes]:
         accumulated: list[str] = []
@@ -2186,6 +3278,7 @@ async def _stream_response(
         last_applied_skills: list[str] | None = None
         prompt_tokens: int | None = None
         completion_tokens: int | None = None
+        loop_outcome: LoopFinal | LoopConfirmation | LoopMcpAuth | None = None
         error_code: str | None = None
         error_envelope: dict[str, Any] | None = None
 
@@ -2198,55 +3291,210 @@ async def _stream_response(
         }
         yield f"data: {_json.dumps(opening, separators=(',', ':'))}\n\n".encode()
 
-        try:
-            async for chunk in gateway.chat_completion_stream(request, request_id=request_id):
-                last_tier = chunk.routed_inference_tier or last_tier
-                last_provider = chunk.routed_provider or last_provider
-                last_model = chunk.model
-                if chunk.lq_ai_applied_skills is not None:
-                    last_applied_skills = list(chunk.lq_ai_applied_skills)
-                if chunk.usage is not None:
-                    if chunk.usage.prompt_tokens:
-                        prompt_tokens = chunk.usage.prompt_tokens
-                    if chunk.usage.completion_tokens:
-                        completion_tokens = chunk.usage.completion_tokens
+        # ── PR5b Task 6: tool-loop branch ─────────────────────────────────────
+        if allowlist is not None and allowlist.specs:
+            # Non-empty allowlist → agentic loop (non-streaming internally).
+            try:
+                loop_outcome = await run_chat_tool_loop(
+                    db,
+                    user=user,
+                    gateway=gateway,
+                    base_request=request,
+                    allowlist=allowlist,
+                    assistant_message_id=assistant_message_id,
+                    chat_id=chat.id,
+                    cluster_cache={},
+                    request_id=request_id,
+                )
+            except LQAIError as exc:
+                error_code = exc.effective_code
+                error_envelope = exc.to_envelope()
+                log.warning(
+                    "chat send_message tool-loop failed (streaming)",
+                    extra={
+                        "event": "chat_send_message_loop_failed_stream",
+                        "user_id": str(user.id),
+                        "chat_id": str(chat.id),
+                        "assistant_message_id": str(assistant_message_id),
+                        "request_id": request_id,
+                        "error_code": error_code,
+                    },
+                )
 
-                for choice in chunk.choices:
-                    delta = choice.delta.content or ""
-                    if not delta:
-                        continue
-                    accumulated.append(delta)
-                    frame: dict[str, Any] = {
-                        "type": "delta",
-                        "delta": delta,
+            if loop_outcome is not None and isinstance(loop_outcome, LoopFinal):
+                # Emit final text as a single delta frame, then persist.
+                last_tier = loop_outcome.tier
+                last_provider = loop_outcome.provider
+                last_model = loop_outcome.model
+                last_applied_skills = list(loop_outcome.applied_skills or [])
+                prompt_tokens = loop_outcome.usage_prompt or None
+                completion_tokens = loop_outcome.usage_completion or None
+                accumulated = [loop_outcome.text]
+                delta_frame: dict[str, Any] = {
+                    "type": "delta",
+                    "delta": loop_outcome.text,
+                    "lq_ai_message_id": str(assistant_message_id),
+                }
+                if last_tier is not None:
+                    delta_frame["routed_inference_tier"] = last_tier
+                if last_applied_skills:
+                    delta_frame["applied_skills"] = list(last_applied_skills)
+                yield f"data: {_json.dumps(delta_frame, separators=(',', ':'))}\n\n".encode()
+                # Fall through to the persistence + complete-frame tail below.
+
+            elif loop_outcome is not None and isinstance(loop_outcome, LoopConfirmation):
+                # Confirmation gate — persist pending rows, emit terminal event.
+                spec = loop_outcome.spec
+                tier_val = loop_outcome.tier if loop_outcome.tier is not None else 0
+                try:
+                    pending_row = ChatPendingToolCall(
+                        chat_id=chat.id,
+                        user_id=user.id,
+                        assistant_message_id=assistant_message_id,
+                        function_name=spec.function_name,
+                        kind=spec.kind,
+                        provider=spec.provider,
+                        tool=spec.tool,
+                        destructive=spec.destructive,
+                        tier=tier_val,
+                        tool_call_args=loop_outcome.args,
+                        resume_state={
+                            "messages": loop_outcome.messages,
+                            "calls_used": loop_outcome.calls_used,
+                            "model": request.model,
+                        },
+                        status="pending",
+                        expires_at=datetime.now(UTC) + CONFIRM_TTL,
+                    )
+                    db.add(pending_row)
+                    await db.flush()
+
+                    tcl_row = ToolCallLog(
+                        origin="chat",
+                        provider=spec.provider,
+                        tool=spec.tool,
+                        tier=tier_val,
+                        intent=None,
+                        confirmation_state="pending_confirmation",
+                        outcome="pending",
+                        cost_usd=None,
+                        args_digest=_args_digest(loop_outcome.args),
+                        user_id=user.id,
+                        chat_id=chat.id,
+                        message_id=assistant_message_id,
+                    )
+                    db.add(tcl_row)
+                    await db.flush()
+
+                    # Link the pending row to its tool-call-log row.
+                    pending_row.tool_call_log_id = tcl_row.id
+                    await db.commit()
+
+                    gate_frame: dict[str, Any] = {
+                        "type": "tool_confirmation_required",
                         "lq_ai_message_id": str(assistant_message_id),
+                        "pending_call_id": str(pending_row.id),
+                        "provider": spec.provider,
+                        "tool": spec.tool,
+                        "function_name": spec.function_name,
+                        "args_summary": _safe_args_summary(loop_outcome.args),
+                        "tier": tier_val,
+                        "destructive": spec.destructive,
                     }
-                    # Per ADR 0007 / C3 brief: surface the LQ.AI extension
-                    # fields on each chunk so header-blind clients can
-                    # observe routing without a separate request.
-                    if last_tier is not None:
-                        frame["routed_inference_tier"] = last_tier
-                    if last_applied_skills is not None:
-                        frame["applied_skills"] = list(last_applied_skills)
-                    yield f"data: {_json.dumps(frame, separators=(',', ':'))}\n\n".encode()
-        except LQAIError as exc:
-            # Stream ended in failure. We persist a partial assistant
-            # row with whatever content the client already saw, and
-            # ``error_code`` populated. This is the audit-friendly
-            # decision documented inline in the C3 brief.
-            error_code = exc.effective_code
-            error_envelope = exc.to_envelope()
-            log.warning(
-                "chat send_message failed mid-stream",
-                extra={
-                    "event": "chat_send_message_failed_mid_stream",
-                    "user_id": str(user.id),
-                    "chat_id": str(chat.id),
-                    "assistant_message_id": str(assistant_message_id),
-                    "request_id": request_id,
-                    "error_code": error_code,
-                },
-            )
+                    yield (f"data: {_json.dumps(gate_frame, separators=(',', ':'))}\n\n".encode())
+                except Exception as gate_persist_exc:
+                    log.error(
+                        "chat send_message: failed to persist confirmation gate rows",
+                        extra={
+                            "event": "chat_gate_persist_failed",
+                            "user_id": str(user.id),
+                            "chat_id": str(chat.id),
+                            "assistant_message_id": str(assistant_message_id),
+                            "error": repr(gate_persist_exc),
+                        },
+                    )
+                    # Persist failure — no gate frame was emitted, no tool was
+                    # executed.  Emit a generic error frame so the client is not
+                    # left with a silent dead-end.  Never leak exception internals
+                    # or tool args into the message.
+                    _gate_persist_err = InternalError(
+                        "Failed to record tool confirmation; please retry.",
+                        details={"event": "chat_gate_persist_failed"},
+                    )
+                    _gate_persist_envelope = _gate_persist_err.to_envelope()
+                    yield (
+                        f"data: {_json.dumps(_gate_persist_envelope, separators=(',', ':'))}\n\n"
+                    ).encode()
+                # Do NOT persist a final assistant Message — Task 7 (resume) does.
+                yield b"data: [DONE]\n\n"
+                return
+
+            elif loop_outcome is not None and isinstance(loop_outcome, LoopMcpAuth):
+                # OAuth gate — no persistence, emit terminal event.
+                mcp_frame: dict[str, Any] = {
+                    "type": "mcp_authorization_required",
+                    "lq_ai_message_id": str(assistant_message_id),
+                    "server": loop_outcome.server,
+                    "authorize_url": (f"/api/v1/mcp/oauth/{loop_outcome.server}/authorize"),
+                }
+                yield (f"data: {_json.dumps(mcp_frame, separators=(',', ':'))}\n\n".encode())
+                yield b"data: [DONE]\n\n"
+                return
+
+            # If loop_outcome is None (error path), fall through to the
+            # persistence + error-frame tail with accumulated=[], error_code set.
+
+        else:
+            # ── Existing single-shot path (empty allowlist) ───────────────────
+            try:
+                async for chunk in gateway.chat_completion_stream(request, request_id=request_id):
+                    last_tier = chunk.routed_inference_tier or last_tier
+                    last_provider = chunk.routed_provider or last_provider
+                    last_model = chunk.model
+                    if chunk.lq_ai_applied_skills is not None:
+                        last_applied_skills = list(chunk.lq_ai_applied_skills)
+                    if chunk.usage is not None:
+                        if chunk.usage.prompt_tokens:
+                            prompt_tokens = chunk.usage.prompt_tokens
+                        if chunk.usage.completion_tokens:
+                            completion_tokens = chunk.usage.completion_tokens
+
+                    for choice in chunk.choices:
+                        delta = choice.delta.content or ""
+                        if not delta:
+                            continue
+                        accumulated.append(delta)
+                        frame: dict[str, Any] = {
+                            "type": "delta",
+                            "delta": delta,
+                            "lq_ai_message_id": str(assistant_message_id),
+                        }
+                        # Per ADR 0007 / C3 brief: surface the LQ.AI extension
+                        # fields on each chunk so header-blind clients can
+                        # observe routing without a separate request.
+                        if last_tier is not None:
+                            frame["routed_inference_tier"] = last_tier
+                        if last_applied_skills is not None:
+                            frame["applied_skills"] = list(last_applied_skills)
+                        yield f"data: {_json.dumps(frame, separators=(',', ':'))}\n\n".encode()
+            except LQAIError as exc:
+                # Stream ended in failure. We persist a partial assistant
+                # row with whatever content the client already saw, and
+                # ``error_code`` populated. This is the audit-friendly
+                # decision documented inline in the C3 brief.
+                error_code = exc.effective_code
+                error_envelope = exc.to_envelope()
+                log.warning(
+                    "chat send_message failed mid-stream",
+                    extra={
+                        "event": "chat_send_message_failed_mid_stream",
+                        "user_id": str(user.id),
+                        "chat_id": str(chat.id),
+                        "assistant_message_id": str(assistant_message_id),
+                        "request_id": request_id,
+                        "error_code": error_code,
+                    },
+                )
 
         # Persist the assistant row exactly once. Even if everything
         # failed, we record what we got so operators see the full
@@ -2289,6 +3537,13 @@ async def _stream_response(
                         project_ensemble_verification=project_ensemble_verification,
                         skill_registry=_skill_registry_from_request(http_request),
                     )
+                    await _persist_message_tool_sources(
+                        db,
+                        message_id=assistant_message_id,
+                        records=loop_outcome.tool_sources
+                        if isinstance(loop_outcome, LoopFinal)
+                        else [],
+                    )
                 except Exception as cite_exc:
                     log.warning(
                         "chat send_message: citation persistence failed",
@@ -2300,6 +3555,47 @@ async def _stream_response(
                             "error": str(cite_exc),
                         },
                     )
+                _caselaw_judge_model = "fast"
+                if gateway is not None:
+                    _caselaw_judge_model = await gateway.get_citation_engine_judge_model()
+                try:
+                    await verify_and_persist_caselaw_citations(
+                        db,
+                        message_id=assistant_message_id,
+                        assistant_text="".join(accumulated),
+                        tool_sources=loop_outcome.tool_sources
+                        if isinstance(loop_outcome, LoopFinal)
+                        else [],
+                        gateway=gateway,
+                        judge_model=_caselaw_judge_model,
+                    )
+                except Exception as caselaw_exc:  # never block the turn
+                    log.warning("caselaw citation verification failed: %r", caselaw_exc)
+                try:
+                    await verify_and_persist_authority_citations(
+                        db,
+                        message_id=assistant_message_id,
+                        assistant_text="".join(accumulated),
+                        tool_sources=loop_outcome.tool_sources
+                        if isinstance(loop_outcome, LoopFinal)
+                        else [],
+                        gateway=gateway,
+                        judge_model=_caselaw_judge_model,
+                    )
+                except Exception:
+                    log.warning(
+                        "chat finalize (stream): authority citation verify failed — non-fatal",
+                        extra={"event": "chat_authority_verify_finalize_failed"},
+                        exc_info=True,
+                    )
+                try:
+                    await assemble_ledger_entries(db, message_id=assistant_message_id)
+                except Exception as ledger_exc:  # never block the turn
+                    log.warning("citation ledger assembly failed: %r", ledger_exc)
+                try:
+                    await compute_and_record_gate(db, message_id=assistant_message_id)
+                except Exception as gate_exc:  # never break the turn (conservative posture)
+                    log.warning("fiduciary gate computation failed: %r", gate_exc)
             # D3 audit row — best-effort, must not break the stream.
             try:
                 await _audit_message_sent(
@@ -2326,6 +3622,10 @@ async def _stream_response(
                         "error": str(audit_exc),
                     },
                 )
+            try:
+                await enqueue_treatment_derivation_job(assistant_message_id)
+            except Exception as treatment_exc:  # never block the turn response
+                log.warning("treatment derivation enqueue failed: %r", treatment_exc)
         except Exception as persist_exc:
             # Persisting the audit row must not break the stream; the
             # operator sees this in logs and the client gets the same
@@ -2505,9 +3805,11 @@ __all__ = [
     "create_chat",
     "delete_chat",
     "get_chat",
+    "get_chat_ledger",
     "get_citations",
     "list_chats",
     "list_messages",
+    "resume_tool_call",
     "router",
     "run_inference_override",
     "send_message",

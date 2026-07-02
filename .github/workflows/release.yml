@@ -29,12 +29,30 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # api + gateway release images bake repo-root assets (skills corpus,
+          # gateway.yaml.example) so they build from the repo root with a
+          # dedicated *.release Dockerfile. web is self-contained → own subdir
+          # context + default Dockerfile.
           - service: api
-            context: ./api
+            context: .
+            file: api/Dockerfile.release
           - service: gateway
-            context: ./gateway
+            context: .
+            file: gateway/Dockerfile.release
+          # web bakes PUBLIC_LQ_AI_API_BASE_URL=/lq/api/v1 so the LQ.AI client
+          # addresses its own /lq-prefixed origin behind the proxy (never
+          # colliding with OpenWebUI's same-origin /api). Other services pass no
+          # build-arg (build_args defaults empty below).
           - service: web
             context: ./web
+            file: web/Dockerfile
+            build_args: |
+              PUBLIC_LQ_AI_API_BASE_URL=/lq/api/v1
+          # proxy bakes the Caddyfile (no repo on the user's Mac) → own subdir
+          # context + default Dockerfile. caddy:2-alpine is multi-arch upstream.
+          - service: proxy
+            context: ./proxy
+            file: proxy/Dockerfile
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,6 +65,10 @@ jobs:
           else
             echo "tag=dryrun-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Set up QEMU
+        # Enables cross-platform (linux/arm64) builds on the amd64 runner.
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -64,6 +86,12 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          # Only the web matrix entry sets build_args; for api/gateway/proxy this
+          # resolves to empty (no stray build-arg). docker/build-push-action
+          # accepts a multi-line build-args input (KEY=VALUE per line).
+          build-args: ${{ matrix.build_args }}
+          platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name == 'push' || !inputs.dry_run }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/lq-ai-${{ matrix.service }}:${{ steps.tag.outputs.tag }}
@@ -87,7 +115,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [api, gateway, web]
+        service: [api, gateway, web, proxy]
     permissions:
       contents: read
       packages: read
@@ -146,7 +174,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [api, gateway, web]
+        service: [api, gateway, web, proxy]
     permissions:
       contents: read
       packages: write

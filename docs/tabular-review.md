@@ -2,7 +2,7 @@
 
 Tabular Review runs the same per-position extraction over **many documents at once** and lays the answers out in a grid: one row per document, one column per question. It is the "compare these N agreements on these M points" surface — the multi-document complement to the single-document Playbook engine ([docs/playbooks.md](playbooks.md)).
 
-This document is the implementation companion to [PRD §3.14](PRD.md#314-tabular--multi-document-review-m3). It describes what shipped in M3-C2 (the grid + LangGraph workflow), M3-C1 (the `output_format: table` skill mode), and M3-C4a (XLSX/CSV export) — and is scrupulous about what did **not** ship: per-cell citations are surfaced as *display-only* references rather than resolvable Citation-Engine rows (DE-309), per-cell cost/tier telemetry is not yet captured (DE-310), and bulk row/column operations are deferred (DE-304).
+This document is the implementation companion to [PRD §3.14](PRD.md#314-tabular--multi-document-review-m3). It describes what shipped in M3-C2 (the grid + LangGraph workflow), M3-C1 (the `output_format: table` skill mode), and M3-C4a (XLSX/CSV export), plus the post-v0.4.0 additions: navigable per-cell citations (read-side source resolution, #125) and per-column ensemble verification honored at execution (#127). It is scrupulous about what still has **not** shipped: per-cell citations are resolved read-side but are **not** yet executor-minted Citation-Engine rows (DE-309; the enrichment fields are also untyped in the generated client, DE-330), per-cell cost/tier telemetry is not yet captured (DE-310), and bulk row/column operations are deferred (DE-304).
 
 ---
 
@@ -43,6 +43,16 @@ The wire shape `ColumnSpec` is defined twice on purpose — `app.skills.schema.C
 
 ---
 
+## Per-column ensemble verification (post-v0.4.0, #127)
+
+A column's `ensemble_verification` flag is **honored at execution**. The executor resolves the gateway's Stage-4 ensemble config once for the whole run (`gateway.get_citation_engine_ensemble_config()`); for each column it computes an effective flag with the precedence **column `ensemble_verification` > skill snapshot > deployment default** (`ensemble_config.default_enabled`). A column can only actually run an ensemble when the gateway has one configured, so the effective flag is false whenever no ensemble exists regardless of the column setting. The same resolution runs identically at preview and at execute.
+
+When a column resolves to ensemble-on and a cell has grounding chunks, `extract_cell` runs **one** Stage-4 ensemble verify pass (`_verify_cell_ensemble`, `api/app/tabular/nodes.py`) over the concatenation of that cell's cited chunks: the extracted `value` is the claim, the cited chunk text is the source. Stages 1–2 usually miss (a short value rarely equals the long concatenation) so Stage 4 fires — but a near-verbatim single-chunk value can legitimately hit `exact_match`/`tolerant_match` instead, which is a *stronger* verification, not an error. The pass is defensively wrapped: a verification failure (or any exception) degrades to `verification_method = None` and **never** fails the cell or alters its `value`/`confidence`/`citations`.
+
+The resulting `verification_method` — `ensemble_strict`, `ensemble_majority`, or `None` — persists on each cell and is **mirrored onto each synthesized `Citation`** by the read-side validator. Cost preview reflects the premium: `ensemble_cells_count` (= `n_docs × count-of-ensemble-columns`) and `ensemble_premium_usd` are added to the preview response, and the premium is included in `estimated_cost_usd` (`api/app/tabular/cost.py`). There is **no** mid-run / per-cell cost ceiling on the tabular ensemble path the way the chat path has one — that is deferred as **[DE-331](PRD.md#9-deferred-enhancements-and-identified-future-work)**; the pre-flight preview + the operator's `confirmed_cost_usd` ceiling are the only economic guard.
+
+---
+
 ## Persisted row shape
 
 The `tabular_executions` table (migration 0036) carries a 5-state status (`pending` / `running` / `completed` / `failed` / `cancelled`) with a soft-delete column, plus `document_ids`, `columns`, `skill_name`, `results` (JSONB), `cost_estimate_usd`, `cost_actual_usd`, `error_text`, a `parent_execution_id` self-reference (non-null on bulk-op sibling rows), and the usual timestamps. (The per-document display names returned by the API as `document_names` are **not** a stored column — they are assembled onto the response from the documents' parent filenames; see [docs/db-schema.md](db-schema.md).)
@@ -63,6 +73,16 @@ The `results` JSONB (validated by `app.schemas.tabular.TabularResults`) is:
           "confidence": "high",          // high | medium | low | failed
           "tier_used": null,             // see telemetry limitation below
           "cost_usd": "0",               // see telemetry limitation below
+          "verification_method": "ensemble_strict", // ensemble column: set by the Stage-4 pass
+          "error": null
+        },
+        "Governing Law": {
+          "value": "Delaware",
+          "cited_chunk_ids": ["<chunk-uuid>"],
+          "confidence": "high",
+          "tier_used": null,
+          "cost_usd": "0",
+          "verification_method": null,   // non-ensemble column: no Stage-4 pass ran
           "error": null
         }
         // … one entry per column
@@ -82,9 +102,11 @@ The `results` schema is version-stamped (`schema_version`) so the result-view re
 
 Each non-failed cell records the chunks the model cited as `cited_chunk_ids`. This is the cell's **grounding** — the FTS-retrieved chunks whose content the model said supported its answer.
 
-**Important honesty point.** The web surface and the read-side schema model a structured `Citation` (`{citation_id, document_id, chunk_id, confidence}`) under `CellResult.citations`, but the executor only persists `cited_chunk_ids: list[str]`. A read-side `model_validator` on `TabularRow` (`app/schemas/tabular.py`) bridges the two: for each persisted `cited_chunk_id` it synthesizes a `Citation` using the row's `document_id`, the cell's `confidence`, and a **deterministic, display-only** `citation_id = uuid5(NS, chunk_id)`.
+**The synthetic-citation bridge.** The web surface and the read-side schema model a structured `Citation` (`{citation_id, document_id, chunk_id, confidence, …}`) under `CellResult.citations`, but the executor only persists `cited_chunk_ids: list[str]`. A read-side `model_validator` on `TabularRow` (`app/schemas/tabular.py`) bridges the two: for each persisted `cited_chunk_id` it synthesizes a `Citation` using the row's `document_id`, the cell's `confidence`, the cell's `verification_method` (mirrored down), and a **deterministic** `citation_id = uuid5(NS, chunk_id)`.
 
-That synthetic `citation_id` is **not** a real Citation-Engine row. The tabular citation drawer is display-only — it shows the `chunk_id`, `document_id`, and `confidence`; it never resolves the `citation_id` against the M2 Citation Engine and offers no "jump to the exact source span" affordance. This is the same posture as the Playbook executor ([docs/playbooks.md](playbooks.md)): both surfaces ground answers in chunk references + verbatim matched text, but neither runs the M2 Citation Engine verification cascade. Real Citation-Engine-backed provenance for tabular cells — resolvable `citation_id`, character-precise source spans — is deferred to **[DE-309](PRD.md#9-deferred-enhancements-and-identified-future-work)**.
+**Navigable source resolution (post-v0.4.0, #125).** `GET /api/v1/tabular/executions/{id}` now *enriches* each synthesized citation read-side with its source location: `source_file_id` (`documents.file_id`), `source_page` (`document_chunks.page_start`), and `source_text` (the chunk content). The handler (`api/app/api/tabular.py`) resolves these with **two batched IN-queries** across all cited chunks for the whole grid — one over `document_chunks`, one mapping documents to their files — rather than per-cell lookups. Existing executions are enriched on read too (the resolution is read-side, so no re-run or migration is needed). With these fields the drawer can offer a "jump to the source span" affordance.
+
+That synthetic `citation_id` is still **not** a real Citation-Engine row: the executor does not mint Citation-Engine rows, so the read-side resolution stops at chunk-grained source location rather than character-precise, cascade-verified provenance. This remains the same posture as the Playbook executor ([docs/playbooks.md](playbooks.md)) — chunk references + verbatim matched text, no M2 Citation Engine cascade in the executor. Executor-minted Citation-Engine provenance (resolvable `citation_id`, character-precise spans) stays deferred to **[DE-309](PRD.md#9-deferred-enhancements-and-identified-future-work)**, and the enrichment fields are not yet modeled in the generated API client (**[DE-330](PRD.md#9-deferred-enhancements-and-identified-future-work)**).
 
 > **Why the bridge exists.** Before the M3-E1 fix (PR #80), the persisted key (`cited_chunk_ids`) did not map to the schema field (`citations`), so `CellResult.citations` deserialized empty on every cell and the citation drawer showed nothing — even though the grounding chunks were recorded all along. The `model_validator` is the contained read-side fix; a future executor that emits real `Citation` objects passes through untouched.
 
@@ -96,13 +118,13 @@ The grid renders at `/lq-ai/tabular/[id]` (`web/src/routes/lq-ai/tabular/[id]/+p
 
 - **`TabularGrid.svelte`** — the N × M grid; the leftmost sticky column is the document name.
 - **`TabularCell.svelte`** — one cell; shows the extracted value, a confidence affordance, and the failed-cell state. Cells with `confidence='failed'` render distinctly (and export as `"(failed)"`) so operators spot gaps without cross-referencing the source run.
-- **`TabularCitationModal.svelte`** — the per-cell citation drawer. Clicking a cell opens it with the cell's citations (display-only: `citation_id`, `confidence`, `document_id`, `chunk_id`). Empty cells show "No citations were attached to this cell"; failed cells explain the cell errored before producing a citation.
+- **`TabularCitationModal.svelte`** — the per-cell citation drawer. Clicking a cell opens it with the cell's citations (`citation_id`, `confidence`, `document_id`, `chunk_id`, and the read-side-resolved `source_file_id`/`source_page`/`source_text` from #125). Empty cells show "No citations were attached to this cell"; failed cells explain the cell errored before producing a citation.
 
 ---
 
 ## Cost preview
 
-`POST /api/v1/tabular/preview-cost` is a synchronous estimate — no execution row is created. The UI calls it before showing the confirmation modal so the operator sees the cell count + estimated cost + per-tier breakdown (Decision C-5). The estimator uses a rolling average over recent `purpose='tabular_extraction'` routing-log rows; cold-start deployments see a conservative default per-cell cost until enough calibration data accumulates. The operator confirms a cost ceiling (`confirmed_cost_usd`) that is echoed onto the execution row as an audit trail.
+`POST /api/v1/tabular/preview-cost` is a synchronous estimate — no execution row is created. The UI calls it before showing the confirmation modal so the operator sees the cell count + estimated cost + per-tier breakdown (Decision C-5). The estimator uses a rolling average over recent `purpose='tabular_extraction'` routing-log rows; cold-start deployments see a conservative default per-cell cost until enough calibration data accumulates. When any column resolves to ensemble-on, the preview also reports `ensemble_cells_count` and `ensemble_premium_usd` — the added cost of the per-cell Stage-4 passes — and folds the premium into `estimated_cost_usd` (per-column ensemble section above). The operator confirms a cost ceiling (`confirmed_cost_usd`) that is echoed onto the execution row as an audit trail.
 
 The confirmation modal is mandatory above a ~$1.00 threshold (Decision C-5).
 
@@ -115,7 +137,7 @@ The confirmation modal is mandatory above a ~$1.00 threshold (Decision C-5).
 - **XLSX** — each grid cell with at least one citation carries an openpyxl `Comment` listing the citation ids + confidences (up to 5 per comment; the cell retains the full count). Operators hover any cell in Excel / Numbers / Google Sheets to see the sources.
 - **CSV** — a trailing `citation_links` column per row carries a semicolon-separated list of `"<column_name>:<citation_id>"` pairs across the row's cells; empty when no cell in the row had citations.
 
-Because export reads the grid through the same `TabularResults.model_validate` path as the API, it picks up the citation bridge described above — the `citation_links` column and XLSX comments carry the same display-only synthetic citation ids.
+Because export reads the grid through the same `TabularResults.model_validate` path as the API, it picks up the citation bridge described above — the `citation_links` column and XLSX comments carry the same synthetic citation ids. (The read-side `source_file_id`/`source_page`/`source_text` enrichment is applied by the `GET /tabular/executions/{id}` handler, not by `model_validate`, so the export surfaces the citation ids rather than the resolved source spans.)
 
 ---
 
@@ -127,7 +149,7 @@ Cells persist `tier_used: null` and `cost_usd: "0"`, and the execution's `cost_a
 
 ## Known limitations
 
-- **Citations are display-only, not Citation-Engine-resolved.** See [Citations](#citations-how-the-cell-grounding-is-surfaced). Real provenance is [DE-309](PRD.md#9-deferred-enhancements-and-identified-future-work).
+- **Citations are read-side-resolved, not executor-minted Citation-Engine rows.** Cell citations now carry navigable `source_file_id`/`source_page`/`source_text` (#125), but the executor still does not mint real Citation-Engine rows; full cascade-verified provenance is [DE-309](PRD.md#9-deferred-enhancements-and-identified-future-work) and the enrichment fields are untyped in the generated client ([DE-330](PRD.md#9-deferred-enhancements-and-identified-future-work)). See [Citations](#citations-how-the-cell-grounding-is-surfaced).
 - **Per-cell `tier_used` + `cost_usd` are not captured** (always null / 0). [DE-310](PRD.md#9-deferred-enhancements-and-identified-future-work).
 - **Bulk operations are deferred.** The M3-C4 spec bundled export (shipped as M3-C4a) with bulk operations — "redline column N in all rows" and "summarize column N into a memo." Only export shipped; the bulk operations are **[DE-304](PRD.md#9-deferred-enhancements-and-identified-future-work)** (they surface an architectural choice about where the output lands that the substrate doesn't anticipate).
 - **Lexical FTS retrieval, not vector.** A column query whose vocabulary diverges from the contract's wording may retrieve weaker chunks; low-confidence cells should be treated with corresponding skepticism.
@@ -146,5 +168,5 @@ Cells persist `tier_used: null` and `cost_usd: "0"`, and the execution's `cost_a
 - Web UI: [`web/src/lib/lq-ai/components/TabularGrid.svelte`](../web/src/lib/lq-ai/components/TabularGrid.svelte), `TabularCell.svelte`, `TabularCitationModal.svelte`, [`web/src/routes/lq-ai/tabular/[id]/+page.svelte`](../web/src/routes/lq-ai/tabular/[id]/+page.svelte)
 - Table-mode skill: [`skills/contract-snapshot/SKILL.md`](../skills/contract-snapshot/SKILL.md), [`docs/skill-authoring-guide.md`](skill-authoring-guide.md)
 - Capability spec: [PRD §3.14](PRD.md#314-tabular--multi-document-review-m3)
-- Related deferred work: [DE-304](PRD.md#9-deferred-enhancements-and-identified-future-work) (bulk ops), [DE-309](PRD.md#9-deferred-enhancements-and-identified-future-work) (real citation provenance), [DE-310](PRD.md#9-deferred-enhancements-and-identified-future-work) (per-cell tier/cost telemetry)
+- Related deferred work: [DE-304](PRD.md#9-deferred-enhancements-and-identified-future-work) (bulk ops), [DE-309](PRD.md#9-deferred-enhancements-and-identified-future-work) (executor-minted citation provenance), [DE-310](PRD.md#9-deferred-enhancements-and-identified-future-work) (per-cell tier/cost telemetry), [DE-330](PRD.md#9-deferred-enhancements-and-identified-future-work) (typed cell/citation OpenAPI schema), [DE-331](PRD.md#9-deferred-enhancements-and-identified-future-work) (mid-run ensemble cost ceiling)
 - Companion surface: [docs/playbooks.md](playbooks.md) (single-document Playbook engine)

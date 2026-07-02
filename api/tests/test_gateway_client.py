@@ -953,6 +953,129 @@ async def test_ensemble_config_failed_fetch_is_cached(client: GatewayClient) -> 
     assert route.call_count == 1
 
 
+# ---------------------------------------------------------------------------
+# list_tool_providers (research capabilities signal, WS3b-follow)
+#
+# Reads GET /admin/v1/config (gateway-key gated, sanitized — env-var names
+# only, never secret values) and extracts the configured tool providers as
+# [{name, type}].  Extra fields (base_url, api_key_env, …) are stripped so
+# callers don't accidentally widen the surface.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_list_tool_providers_happy_path(client: GatewayClient) -> None:
+    """Two valid provider entries → [{name, type}] with extras stripped."""
+
+    config_payload = {
+        "tool_providers": [
+            {
+                "name": "courtlistener-prod",
+                "type": "courtlistener",
+                "base_url": "https://www.courtlistener.com/api/rest/v4",
+                "api_key_env": "COURTLISTENER_API_TOKEN",
+            },
+            {
+                "name": "echo",
+                "type": "echo",
+                "base_url": "http://localhost:9999",
+            },
+        ]
+    }
+    respx.get(f"{GATEWAY_BASE}/admin/v1/config").mock(
+        return_value=httpx.Response(200, json=config_payload)
+    )
+
+    result = await client.list_tool_providers()
+
+    assert result == [
+        {"name": "courtlistener-prod", "type": "courtlistener"},
+        {"name": "echo", "type": "echo"},
+    ]
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_list_tool_providers_sends_gateway_key_header(client: GatewayClient) -> None:
+    """The gateway-key default header is stamped on the admin config request."""
+
+    route = respx.get(f"{GATEWAY_BASE}/admin/v1/config").mock(
+        return_value=httpx.Response(200, json={"tool_providers": []})
+    )
+
+    await client.list_tool_providers()
+
+    assert route.calls.last.request.headers.get(GATEWAY_KEY_HEADER) == GATEWAY_KEY
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_list_tool_providers_empty_list_when_key_absent(client: GatewayClient) -> None:
+    """Config without a ``tool_providers`` key → empty list, no error."""
+
+    respx.get(f"{GATEWAY_BASE}/admin/v1/config").mock(
+        return_value=httpx.Response(200, json={"aliases": []})
+    )
+
+    result = await client.list_tool_providers()
+
+    assert result == []
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_list_tool_providers_empty_list_when_key_present_but_empty(
+    client: GatewayClient,
+) -> None:
+    """Explicit empty ``tool_providers`` list → empty result."""
+
+    respx.get(f"{GATEWAY_BASE}/admin/v1/config").mock(
+        return_value=httpx.Response(200, json={"tool_providers": []})
+    )
+
+    result = await client.list_tool_providers()
+
+    assert result == []
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_list_tool_providers_filters_malformed_entries(client: GatewayClient) -> None:
+    """Non-dict entries and dicts missing required keys are silently dropped;
+    valid entries are preserved."""
+
+    config_payload = {
+        "tool_providers": [
+            "not-a-dict",  # filtered: not a dict
+            {"name": "no-type"},  # filtered: missing "type"
+            {"type": "no-name"},  # filtered: missing "name"
+            {"name": "valid", "type": "echo"},  # kept
+        ]
+    }
+    respx.get(f"{GATEWAY_BASE}/admin/v1/config").mock(
+        return_value=httpx.Response(200, json=config_payload)
+    )
+
+    result = await client.list_tool_providers()
+
+    assert result == [{"name": "valid", "type": "echo"}]
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_list_tool_providers_forwards_request_id(client: GatewayClient) -> None:
+    """request_id kwarg is forwarded as X-Request-Id."""
+
+    route = respx.get(f"{GATEWAY_BASE}/admin/v1/config").mock(
+        return_value=httpx.Response(200, json={"tool_providers": []})
+    )
+
+    await client.list_tool_providers(request_id="req-abc")
+
+    assert route.calls.last.request.headers.get("X-Request-Id") == "req-abc"
+
+
 # Suppress the "task pending" warning that respx can emit on cancellation.
 @pytest.fixture(autouse=True)
 def _suppress_pending_task_warnings() -> None:

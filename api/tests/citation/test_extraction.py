@@ -246,3 +246,17 @@ def test_extract_smart_quote_alignment_pairs() -> None:
     candidates = extract_citations(response, [chunk])
     assert len(candidates) == 1
     assert candidates[0].source_text == "The agreement shall terminate."
+
+
+@pytest.mark.unit
+def test_locate_in_chunk_public_exact_and_miss() -> None:
+    """Test the public locate_in_chunk function directly."""
+
+    from app.citation.extraction import locate_in_chunk
+
+    content = "The Receiving Party shall hold Confidential Information in confidence."
+    span = locate_in_chunk("hold Confidential Information", content)
+    assert span is not None
+    start, end = span
+    assert content[start:end] == "hold Confidential Information"
+    assert locate_in_chunk("text that is absent", content) is None

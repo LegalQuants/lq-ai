@@ -34,6 +34,7 @@ LangGraph node functions remain pure-ish over the state dict and
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
@@ -45,12 +46,23 @@ from app.autonomous.audit import autonomous_audit
 from app.autonomous.enums import ToolIntent
 from app.autonomous.guard import guarded_tool_call
 from app.autonomous.phases import run_phase_transition
-from app.autonomous.prompts import assemble_analysis_messages
+from app.autonomous.planner import (
+    PLANNER_ALLOWLIST,
+    EvidenceItem,
+    build_planner_messages,
+    collect_evidence,
+    parse_planner_decision,
+    summarize_observation,
+    validate_action_args,
+)
+from app.autonomous.prompts import assemble_analysis_messages, assemble_synthesis_messages
 from app.autonomous.receipt import build_receipt_safe
 from app.autonomous.state import AutonomousSessionState
 from app.autonomous.structured_output import parse_structured_output
-from app.config import get_settings
+from app.config import DEFAULT_MAX_ANALYSIS_STEPS, get_settings
+from app.errors import AutonomousBrake
 from app.models.autonomous import AutonomousSession
+from app.research.registry import resolve_available_sources
 from app.schemas.autonomous import Phase
 
 logger = logging.getLogger(__name__)
@@ -152,6 +164,138 @@ def make_intake_node(
     return intake_node
 
 
+async def _run_analysis_loop(
+    session: AutonomousSession,
+    *,
+    query: str,
+    params: dict[str, Any],
+    chunks: list[dict[str, Any]],
+    model: str,
+    synthesis_intent: ToolIntent,
+    db: AsyncSession,
+    gateway: Any,
+) -> dict[str, Any]:
+    """The governed plan→act→observe→replan loop for matter-scoped sessions (WS-D PR1).
+
+    Every step goes through :func:`~app.autonomous.guard.guarded_tool_call`
+    (R5→R6→R4); bounded by ``max_analysis_steps`` + R4's cost cap.
+
+    Brake invariant (addendum §A): :exc:`~app.errors.AutonomousBrake` from
+    the action dispatch propagates immediately (brake-commit contract); every
+    other exception from the action handler is caught as a non-fatal failed
+    observation so a bad model-supplied arg never crashes the loop.
+
+    P3 invariant: ``analysis_plan_trace`` carries counts/intents/short
+    rationales/halt-reason only — never raw tool payloads.
+    """
+    max_steps = int(params.get("max_analysis_steps") or DEFAULT_MAX_ANALYSIS_STEPS)
+    observations: list[str] = []
+    trace: list[dict[str, str]] = []
+    evidence: list[EvidenceItem] = []
+    halt_reason = "step_cap"
+    steps = 0
+
+    # WS-E PR1a: resolve authority sources once before the loop (P3 minimal —
+    # name/type/jurisdiction/coverage only; never auth/cost).  Passed into
+    # build_planner_messages so the planner can choose an available source for
+    # retrieve_authority.  Richer source↔query matching is PR2.
+    try:
+        available_sources = await resolve_available_sources(gateway)
+    except Exception:
+        logger.warning(
+            "autonomous.analysis_loop: failed to resolve authority sources; continuing with empty list",
+            extra={"event": "autonomous_authority_source_resolve_failed"},
+            exc_info=True,
+        )
+        available_sources = []
+
+    while steps < max_steps:
+        plan_res = await guarded_tool_call(
+            session,
+            ToolIntent.plan,
+            {
+                "model": model,
+                "messages": build_planner_messages(
+                    goal=query,
+                    observations=observations,
+                    allowlist=PLANNER_ALLOWLIST,
+                    available_sources=available_sources,
+                ),
+                "anonymize": False,
+            },
+            db,
+            gateway,
+        )
+        decision = parse_planner_decision((plan_res.data or {}).get("content"))
+        if decision is None:
+            halt_reason = "planner_unparseable"
+            break
+        if decision.done:
+            halt_reason = "planner_done"
+            trace.append({"step": str(steps), "intent": "done", "rationale": decision.rationale})
+            break
+
+        if decision.next_intent is None:  # parser guarantees this won't happen; -O-safe belt
+            halt_reason = "planner_unparseable"
+            break
+        try:
+            validate_action_args(decision.next_intent, decision.args)
+            act = await guarded_tool_call(session, decision.next_intent, decision.args, db, gateway)
+            observations.append(
+                summarize_observation(decision.next_intent, decision.rationale, act)
+            )
+            evidence.extend(collect_evidence(decision.next_intent, act, start_n=len(evidence) + 1))
+        except AutonomousBrake:
+            raise  # brakes (SessionHalted/CostCapReached/ToolNotGranted) propagate
+        except (
+            Exception
+        ) as exc:  # invariant #5 / C1: bad arg → non-fatal failed observation, no DB poison
+            observations.append(f"{decision.next_intent.value} → failed ({type(exc).__name__})")
+        trace.append(
+            {
+                "step": str(steps),
+                "intent": decision.next_intent.value,
+                "rationale": decision.rationale,
+            }
+        )
+        steps += 1
+
+    # Build the evidence dicts ONCE: used both as the synthesis prompt input
+    # and as analysis_evidence in the returned state.  vars() CANNOT be used
+    # here because EvidenceItem is @dataclass(slots=True); dataclasses.asdict
+    # is the correct serialiser.
+    evidence_dicts = [dataclasses.asdict(e) for e in evidence]
+    synth = await guarded_tool_call(
+        session,
+        synthesis_intent,
+        {
+            "model": model,
+            "messages": await assemble_synthesis_messages(
+                session,
+                goal=query,
+                observations=observations,
+                chunks=chunks,
+                evidence=evidence_dicts,
+                db=db,
+            ),
+            "anonymize": True,
+        },
+        db,
+        gateway,
+    )
+    return {
+        "current_phase": str(Phase.analysis),
+        "analysis_content": (synth.data or {}).get("content"),
+        "analysis_outcome": synth.outcome,
+        "analysis_plan_trace": {
+            "steps": steps,
+            "halt_reason": halt_reason,
+            "decisions": trace,
+        },
+        "analysis_evidence": evidence_dicts,  # JSONable; consumed by delivery (P3: not in trace)
+    }
+
+
 def make_analysis_node(
     db: AsyncSession,
     gateway: Any = None,
@@ -224,12 +368,33 @@ def make_analysis_node(
                 "analysis_content": None,
             }
 
+        settings = get_settings()
+        model = params.get("model") or settings.autonomous_default_model
+        query = (state.get("query") or "").strip()
+
+        if query:
+            # Matter-scoped session: run the governed plan→act→observe→replan
+            # loop (WS-D PR1).  The loop gate only engages when the session
+            # carries a non-empty matter goal; query-less sessions (cron/watch/
+            # schedule) take the unchanged single-call path below.
+            # I1: choose the synthesis intent that matches the session target so
+            # the synthesis call audits honestly (run_playbook vs run_skill).
+            synthesis_intent = ToolIntent.run_playbook if playbook_id else ToolIntent.run_skill
+            return await _run_analysis_loop(
+                session,
+                query=query,
+                params=params,
+                chunks=state.get("retrieved_chunks") or [],
+                model=model,
+                synthesis_intent=synthesis_intent,
+                db=db,
+                gateway=gateway,
+            )
+
+        # ---- unchanged single-call path (query-less sessions) ----
         chunks = state.get("retrieved_chunks") or []
         messages = await assemble_analysis_messages(session, chunks=chunks, db=db)
         intent = ToolIntent.run_playbook if playbook_id else ToolIntent.run_skill
-
-        settings = get_settings()
-        model = params.get("model") or settings.autonomous_default_model
 
         result = await guarded_tool_call(
             session,
@@ -283,11 +448,19 @@ def make_drafting_node(
        suggested precedent via
        :attr:`~app.autonomous.enums.ToolIntent.propose_precedent`. The
        parser's ``privilege_concerns`` / ``scope_concerns`` are forwarded
-       in the returned state for the ethics-review node.
+       in the returned state for the ethics-review node. When the session
+       opted in to artifacts (``params["emit_artifacts"]`` truthy — Donna
+       ask #8), each parsed artifact is additionally dispatched via
+       :attr:`~app.autonomous.enums.ToolIntent.emit_artifact`; skip /
+       storage-error outcomes surface as honest explanatory findings.
 
-    Every return path emits both ``findings`` (the list of dispatched
-    finding dicts) and ``findings_count`` (its length) — ``findings_count``
-    counts findings ONLY, never memories or precedents.
+    Every return path emits ``findings`` (the list of dispatched finding
+    dicts), ``findings_count`` (its length), and ``artifacts_count`` (the
+    number of artifacts PERSISTED through the chokepoint; 0 on cases 1-3
+    and when the opt-in flag is off) — ``findings_count`` counts findings
+    ONLY, never memories, precedents, or artifacts (though the
+    artifact-explanatory info/warn findings DO count: they go through
+    ``emit_finding`` like any other finding).
 
     Brakes propagate to the executor's terminal handler per the
     brake-commit contract.
@@ -330,6 +503,7 @@ def make_drafting_node(
                 "current_phase": str(Phase.drafting),
                 "findings": [finding],
                 "findings_count": 1,
+                "artifacts_count": 0,
             }
 
         # Case 2 — schedule first tick: emit ONE baseline finding.
@@ -353,6 +527,7 @@ def make_drafting_node(
                 "current_phase": str(Phase.drafting),
                 "findings": [finding],
                 "findings_count": 1,
+                "artifacts_count": 0,
             }
 
         parsed = parse_structured_output(state.get("analysis_content"))
@@ -375,6 +550,7 @@ def make_drafting_node(
                 "current_phase": str(Phase.drafting),
                 "findings": [finding],
                 "findings_count": 1,
+                "artifacts_count": 0,
             }
 
         # Case 4 — structured: dispatch each item as its own guarded call.
@@ -417,12 +593,99 @@ def make_drafting_node(
                 gateway,
             )
 
-        # ``findings_count`` counts findings ONLY — memories and precedents
-        # are deliberately excluded (they are proposals, not findings).
+        # Donna ask #8 — document-grade artifacts, OPT-IN ONLY. When the
+        # session flag is off, ``parsed.artifacts`` is ignored entirely
+        # (defense-in-depth: the model was never instructed to emit the
+        # ``artifacts`` key, so an unasked-for emission must never persist —
+        # and no finding is emitted about it either).
+        artifacts_count = 0
+        if (session.params or {}).get("emit_artifacts") and parsed.artifacts:
+            for artifact in parsed.artifacts:
+                result = await guarded_tool_call(
+                    session,
+                    ToolIntent.emit_artifact,
+                    {
+                        "artifact": {
+                            "name": artifact.get("name"),
+                            # Key mapping: ARTIFACT_OUTPUT_INSTRUCTION tells
+                            # the model to emit ``content_md``; the chokepoint
+                            # handler takes ``content``. Tolerate both so a
+                            # model that emits ``content`` anyway still lands.
+                            "content": artifact.get("content_md") or artifact.get("content") or "",
+                            "mime": "text/markdown",
+                        }
+                    },
+                    db,
+                    gateway,
+                )
+                data = result.data or {}
+                if data.get("artifact_id"):
+                    # Persisted — only real persists count toward the tally.
+                    artifacts_count += 1
+                    continue
+                if data.get("skipped") == "no_target_kb":
+                    # The session has no target KB, so EVERY remaining
+                    # artifact would skip for the same reason — emit ONE
+                    # ``info`` finding total (not one per artifact) and stop
+                    # attempting further artifacts.
+                    artifact_name = str(artifact.get("name") or "(unnamed)")[:255]
+                    finding = {
+                        "title": "Artifact not persisted — no target knowledge base",
+                        "summary": (
+                            f"The run produced the artifact "
+                            f"{artifact_name!r} but has no "
+                            "target knowledge base to save it into. Configure a "
+                            "target KB on the schedule or watch to persist "
+                            "artifacts."
+                        ),
+                        "severity": "info",
+                    }
+                    await guarded_tool_call(
+                        session,
+                        ToolIntent.emit_finding,
+                        {"finding": finding},
+                        db,
+                        gateway,
+                    )
+                    findings.append(finding)
+                    break
+                if data.get("skipped") == "empty_content":
+                    # Nothing to persist and nothing to explain — counted
+                    # nowhere; the remaining artifacts may still be fine.
+                    continue
+                if result.outcome == "storage_error":
+                    # Storage failures are per-artifact (and possibly
+                    # transient) — emit ONE ``warn`` finding for THIS
+                    # artifact and continue with the remaining ones.
+                    error_text = str(data.get("error") or "")[:500]
+                    artifact_name = str(artifact.get("name") or "(unnamed)")[:255]
+                    finding = {
+                        "title": "Artifact persistence failed at storage",
+                        "summary": (
+                            f"The artifact {artifact_name!r} "
+                            f"could not be uploaded to object storage: {error_text}"
+                        ),
+                        "severity": "warn",
+                    }
+                    await guarded_tool_call(
+                        session,
+                        ToolIntent.emit_finding,
+                        {"finding": finding},
+                        db,
+                        gateway,
+                    )
+                    findings.append(finding)
+                    continue
+
+        # ``findings_count`` counts findings ONLY — memories, precedents,
+        # and artifacts are deliberately excluded (the artifact-explanatory
+        # info/warn findings above DO count: they were dispatched through
+        # emit_finding and appended to ``findings`` like any other finding).
         return {
             "current_phase": str(Phase.drafting),
             "findings": findings,
             "findings_count": len(findings),
+            "artifacts_count": artifacts_count,
             "privilege_concerns": parsed.privilege_concerns,
             "scope_concerns": parsed.scope_concerns,
         }
@@ -507,10 +770,12 @@ def make_delivery_node(
     The delivery node transitions the session to :attr:`Phase.delivery`,
     calls :func:`~app.autonomous.guard.guarded_tool_call` with
     :attr:`~app.autonomous.enums.ToolIntent.notify` to write the
-    in-app notification row, writes the terminal
+    in-app notification row (payload always carries ``finding_count`` AND
+    ``artifact_count`` — Donna ask #8; the body mentions documents only
+    when ``artifact_count > 0``), writes the terminal
     ``autonomous_session.completed`` audit row (so the receipt's
-    ``terminal_reason`` populates), then marks the session as completed
-    and commits.
+    ``terminal_reason`` populates; it carries ``artifacts_count`` next to
+    ``findings_count``), then marks the session as completed and commits.
 
     Brakes propagate to the executor's terminal handler per the
     brake-commit contract.
@@ -534,13 +799,22 @@ def make_delivery_node(
         # Notify the user via the chokepoint — this is the canonical tool
         # call in the delivery phase; it must not bypass the gate.
         findings_count = state.get("findings_count", len(state.get("findings") or []))
+        artifact_count = state.get("artifacts_count", 0)
+        # Counts only, no content — one sentence; the document clause is
+        # appended only when artifacts persisted. The payload ALWAYS carries
+        # artifact_count (0 is honest, and lets a client distinguish
+        # "feature present, zero artifacts" from a pre-artifacts payload).
+        body = f"Session completed with {findings_count} finding(s)"
+        if artifact_count > 0:
+            body += f" and {artifact_count} document(s) saved to the knowledge base"
+        body += "."
         await guarded_tool_call(
             session,
             ToolIntent.notify,
             {
                 "title": "Autonomous session complete",
-                "body": f"Session completed with {findings_count} finding(s).",
-                "payload": {"finding_count": findings_count},
+                "body": body,
+                "payload": {"finding_count": findings_count, "artifact_count": artifact_count},
             },
             db,
             gateway,
@@ -555,6 +829,7 @@ def make_delivery_node(
             "completed",
             cost_total_usd=str(session.cost_total_usd or "0"),
             findings_count=findings_count,
+            artifacts_count=artifact_count,
         )
         session.status = "completed"
         session.completed_at = datetime.now(UTC)
@@ -562,7 +837,53 @@ def make_delivery_node(
         # column is populated atomically with the terminal status update.
         # build_receipt reads audit rows that were flushed during the run
         # and are visible in the same session/transaction.
-        session.result = await build_receipt_safe(session, db)
+        receipt = await build_receipt_safe(session, db)
+        # D5 transparency: if the agentic-loop ran, merge its plan trace into
+        # the receipt under "plan_trace".  Strictly additive — only injected
+        # when the trace exists in state (query-less / non-matter sessions have
+        # no trace and their receipt shape is unchanged).  We must guard against
+        # build_receipt_safe returning None (DE-325 best-effort contract) —
+        # skip the merge in that case; the session still transitions to terminal.
+        plan_trace = state.get("analysis_plan_trace")
+        if isinstance(receipt, dict) and plan_trace is not None:
+            receipt["plan_trace"] = plan_trace
+        # WS-D PR2: fiduciary ledger + gate for matter sessions (best-effort).
+        # Re-parse analysis_content to recover findings WITH their citations
+        # (single source of truth — drafting node strips citations from the
+        # state "findings" list; re-parsing from the raw content is the correct
+        # approach). Isolated in a SAVEPOINT so a flush error inside the bridge
+        # rolls back ONLY the manufactured chat/citation rows and leaves the
+        # outer transaction (session status + audit rows) usable for the
+        # terminal commit — the PR1-C1 lesson.
+        parsed = parse_structured_output(state.get("analysis_content"))
+        findings = parsed.findings if parsed.is_structured else []
+        evidence = state.get("analysis_evidence") or []
+        work_product = state.get("analysis_content") or ""
+        if findings and evidence and work_product:
+            try:
+                from app.autonomous.ledger_bridge import build_session_ledger
+
+                async with db.begin_nested():  # SAVEPOINT — isolates best-effort enrichment
+                    verdict = await build_session_ledger(
+                        db,
+                        session=session,
+                        work_product_text=work_product,
+                        findings=findings,
+                        evidence=evidence,
+                        gateway=gateway,
+                    )
+                if verdict is not None and isinstance(receipt, dict):
+                    receipt["fiduciary_gate"] = verdict
+            except Exception:
+                logger.warning(
+                    "autonomous ledger bridge failed",
+                    extra={
+                        "event": "autonomous_ledger_bridge_failed",
+                        "session_id": session_id,
+                    },
+                    exc_info=True,
+                )
+        session.result = receipt
         await db.commit()
 
         return {"current_phase": str(Phase.delivery)}

@@ -387,6 +387,47 @@ async def test_list_memory_isolation(
 
 
 @pytest.mark.integration
+async def test_list_memory_filter_by_source_session_id(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    user_a: User,
+) -> None:
+    """?source_session_id= narrows to the memories a specific run proposed.
+
+    Omitting the filter returns all of the user's non-deleted memories
+    (back-compat); supplying it returns only the matching run's memories.
+    """
+    sess_a = await _make_session(db_session, user=user_a)
+    sess_b = await _make_session(db_session, user=user_a)
+
+    mem_a1 = await _make_memory(db_session, user=user_a)
+    mem_a1.source_session_id = sess_a.id
+    mem_a2 = await _make_memory(db_session, user=user_a)
+    mem_a2.source_session_id = sess_a.id
+    mem_b = await _make_memory(db_session, user=user_a)
+    mem_b.source_session_id = sess_b.id
+    await db_session.flush()
+
+    # Filtered to run A
+    resp = await client.get(
+        "/api/v1/autonomous/memory",
+        headers=_bearer(user_a),
+        params={"source_session_id": str(sess_a.id)},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    ids = {e["id"] for e in body["entries"]}
+    assert ids == {str(mem_a1.id), str(mem_a2.id)}
+    assert str(mem_b.id) not in ids
+    assert body["total_count"] == 2
+
+    # Omitted → all three (back-compat).
+    resp = await client.get("/api/v1/autonomous/memory", headers=_bearer(user_a))
+    body = resp.json()
+    assert body["total_count"] == 3
+
+
+@pytest.mark.integration
 async def test_list_memory_unauth_returns_401(client: AsyncClient) -> None:
     """No Authorization header returns 401."""
     resp = await client.get("/api/v1/autonomous/memory")

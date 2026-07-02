@@ -47,7 +47,17 @@ class ToolIntent(StrEnum):
     propose_memory = "propose_memory"
     propose_precedent = "propose_precedent"
     emit_finding = "emit_finding"
+    emit_artifact = "emit_artifact"
     notify = "notify"
+    retrieve_caselaw = "retrieve_caselaw"
+    call_mcp_tool = "call_mcp_tool"
+    # WS-D PR1: the planner's next-step decision call (a gateway inference).
+    # Granted only in analysis; the agentic loop dispatches it each iteration.
+    plan = "plan"
+    # WS-E PR1a: gateway-brokered US federal statute/regulation retrieval via
+    # GovInfo through the registry + GovInfoAdapter egress path.  Granted only
+    # in analysis (authority lookup is an analysis-phase activity).
+    retrieve_authority = "retrieve_authority"
 
 
 PHASE_GRANTS: dict[Phase, frozenset[ToolIntent]] = {
@@ -60,6 +70,15 @@ PHASE_GRANTS: dict[Phase, frozenset[ToolIntent]] = {
             # propose_precedent at analysis: document/clause patterns are
             # observed while reading docs (M4-B2, Decision B2-b).
             ToolIntent.propose_precedent,
+            # retrieve_caselaw + call_mcp_tool: gateway-brokered external
+            # lookups; granted at analysis only (PR5a D-a4).
+            ToolIntent.retrieve_caselaw,
+            ToolIntent.call_mcp_tool,
+            # WS-E PR1a: govinfo authority retrieval; analysis only (same
+            # rationale as retrieve_caselaw — external lookup during analysis).
+            ToolIntent.retrieve_authority,
+            # WS-D PR1: the agentic planner decision call.
+            ToolIntent.plan,
         }
     ),
     Phase.drafting: frozenset(
@@ -70,6 +89,9 @@ PHASE_GRANTS: dict[Phase, frozenset[ToolIntent]] = {
             # propose_precedent at drafting: recurring patterns recognized
             # during synthesis (M4-B2, Decision B2-b).
             ToolIntent.propose_precedent,
+            # emit_artifact at drafting ONLY: the memo is synthesized work
+            # product, written exactly once where synthesis happens (Donna #8).
+            ToolIntent.emit_artifact,
         }
     ),
     Phase.ethics_review: frozenset({ToolIntent.emit_finding}),

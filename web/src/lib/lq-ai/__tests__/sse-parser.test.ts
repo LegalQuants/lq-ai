@@ -149,4 +149,64 @@ describe('consumeMessageStream', () => {
 		await consumeMessageStream(body, { onDelta });
 		expect(onDelta).toHaveBeenCalledTimes(1);
 	});
+
+	it('dispatches onToolConfirmation and terminates the stream', async () => {
+		const frame = {
+			type: 'tool_confirmation_required',
+			lq_ai_message_id: 'm1',
+			pending_call_id: 'p1',
+			provider: 'files',
+			tool: 'delete_doc',
+			function_name: 'mcp__files__delete_doc',
+			args_summary: '{path:/x}',
+			tier: 2,
+			destructive: true
+		};
+		const body = streamFromLines([
+			'data: ' + JSON.stringify(frame),
+			'',
+			'data: {"type":"delta","delta":"X","lq_ai_message_id":"m1"}',
+			'',
+			'data: [DONE]',
+			''
+		]);
+		const calls: string[] = [];
+		await consumeMessageStream(body, {
+			onToolConfirmation: () => calls.push('confirm'),
+			onDelta: () => calls.push('delta')
+		});
+		expect(calls).toEqual(['confirm']); // terminal: the trailing delta is never dispatched
+	});
+
+	it('dispatches onMcpAuthorization and terminates the stream', async () => {
+		const frame = {
+			type: 'mcp_authorization_required',
+			lq_ai_message_id: 'm1',
+			server: 'files',
+			authorize_url: '/api/v1/mcp/oauth/files/authorize'
+		};
+		const body = streamFromLines([
+			'data: ' + JSON.stringify(frame),
+			'',
+			'data: {"type":"delta","delta":"X","lq_ai_message_id":"m1"}',
+			'',
+			'data: [DONE]',
+			''
+		]);
+		const calls: string[] = [];
+		await consumeMessageStream(body, {
+			onMcpAuthorization: () => calls.push('auth'),
+			onDelta: () => calls.push('delta')
+		});
+		expect(calls).toEqual(['auth']);
+	});
+
+	it('normalizeFrame accepts the two new types', () => {
+		expect(normalizeFrame({ type: 'tool_confirmation_required', pending_call_id: 'p1' })?.type).toBe(
+			'tool_confirmation_required'
+		);
+		expect(normalizeFrame({ type: 'mcp_authorization_required', server: 's' })?.type).toBe(
+			'mcp_authorization_required'
+		);
+	});
 });

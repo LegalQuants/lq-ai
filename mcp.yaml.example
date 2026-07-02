@@ -1,0 +1,23 @@
+# mcp.yaml — operator-allowlisted MCP servers (WS2 spec D2). Loaded by the
+# gateway (MCP_CONFIG_PATH; defaults to ./mcp.yaml). Each entry becomes a
+# type: mcp tool-provider behind the same egress boundary as gateway.yaml
+# tool_providers. The gateway is the sole egress + MCP-protocol speaker.
+mcp_servers:
+  - name: example-mcp
+    server_url: https://mcp.example.com/sse
+    auth: none              # none | bearer | oauth
+    egress_tier: 2
+    allowlist:
+      hosts: [mcp.example.com]
+    # auth: bearer -> also set api_key_env: EXAMPLE_MCP_TOKEN
+    #
+    # auth: oauth  -> per-user token supplied by the api at call time (PR4c).
+    #   oauth_client_id: lqai-acme   # required: pre-registered public OAuth client_id
+    #                                #   for this MCP server's authorization server.
+    #                                #   The api reads this to initiate the out-of-band
+    #                                #   authorization-code flow on behalf of the user.
+    #   NOTE: the OAuth authorization-server host may differ from the MCP server
+    #   host (it is discovered at runtime from the AS metadata endpoint). Add it
+    #   to this server's allowlist.hosts so the gateway OAuth passthrough can
+    #   reach it. Example: if mcp.acme.example uses auth.acme.example as its AS,
+    #   set allowlist: {hosts: [mcp.acme.example, auth.acme.example]}.

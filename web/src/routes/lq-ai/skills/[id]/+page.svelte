@@ -4,6 +4,7 @@
 	import { onMount } from 'svelte';
 	import { skillsApi } from '$lib/lq-ai/api';
 	import type { Skill } from '$lib/lq-ai/types';
+	import { toolUsageNote } from '$lib/lq-ai/skills/toolUsageNote';
 	import SkillDetailTabs from '$lib/lq-ai/components/SkillDetailTabs.svelte';
 	import SkillSourceView from '$lib/lq-ai/components/SkillSourceView.svelte';
 	import SkillTryItTab from '$lib/lq-ai/components/SkillTryItTab.svelte';
@@ -23,6 +24,8 @@
 			? ($page.url.searchParams.get('tab') as Tab)
 			: 'use'
 	) as Tab;
+	// C5 (PR6d) — derive tool-usage note reactively; never blocks UI.
+	$: usageNote = toolUsageNote(skill?.tool_usage, skill?.unavailable_tool_usage);
 
 	onMount(async () => {
 		if (!skillName) return;
@@ -72,6 +75,14 @@
 				<article class="lq-text-body" style="white-space: pre-wrap;">
 					{skill.description ?? '(no description)'}
 				</article>
+				{#if usageNote.uses.length > 0}
+					<div class="lq-tool-usage" data-testid="skill-tool-usage">
+						<span class="lq-tool-usage-label">Uses:</span> {usageNote.uses.join(', ')}
+						{#if usageNote.warning}
+							<p class="lq-tool-usage-warning" data-testid="skill-tool-usage-warning">⚠ {usageNote.warning}</p>
+						{/if}
+					</div>
+				{/if}
 			{:else if activeTab === 'source'}
 				<SkillSourceView
 					slug={skill.name}
@@ -120,5 +131,24 @@
 	}
 	.lq-btn-ghost:hover {
 		background: var(--lq-accent-soft, #e8f4ec);
+	}
+	/* C5 (PR6d) — tool-usage metadata row */
+	.lq-tool-usage {
+		margin-top: var(--lq-space-3, 12px);
+		font-size: 13px;
+		color: var(--lq-text-secondary, #6b7280);
+	}
+	.lq-tool-usage-label {
+		font-weight: 500;
+		color: var(--lq-text-primary, #111827);
+	}
+	.lq-tool-usage-warning {
+		margin-top: var(--lq-space-2, 8px);
+		padding: 6px 10px;
+		border-radius: var(--lq-radius, 6px);
+		background: var(--lq-warning-soft, #fffbeb);
+		border: 1px solid var(--lq-warning-border, #fcd34d);
+		color: var(--lq-warning-text, #92400e);
+		font-size: 13px;
 	}
 </style>

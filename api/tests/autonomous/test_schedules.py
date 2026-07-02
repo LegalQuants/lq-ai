@@ -96,6 +96,7 @@ async def _make_schedule(
     playbook_id: uuid.UUID | None = None,
     skill_ref: str | None = None,
     name: str | None = None,
+    emit_artifacts: bool = False,
 ) -> AutonomousSchedule:
     sched = AutonomousSchedule(
         user_id=user.id,
@@ -107,6 +108,7 @@ async def _make_schedule(
         playbook_id=playbook_id,
         skill_ref=skill_ref,
         name=name,
+        emit_artifacts=emit_artifacts,
     )
     db.add(sched)
     await db.flush()
@@ -311,6 +313,9 @@ async def test_dispatcher_due_schedule_spawns_one_session(
     # kb_id and playbook_id were None — excluded from params (non-null subset).
     assert "kb_id" not in sess.params
     assert "playbook_id" not in sess.params
+    # emit_artifacts defaults False — excluded too (non-null subset; the
+    # key is present iff the schedule opted in — Donna ask #8).
+    assert "emit_artifacts" not in sess.params
 
     enqueue.assert_awaited_once_with(sess.id)
 
@@ -318,6 +323,36 @@ async def test_dispatcher_due_schedule_spawns_one_session(
     assert sched.last_run_at == now
     assert sched.next_run_at is not None
     assert sched.next_run_at > now
+
+
+@pytest.mark.integration
+async def test_dispatcher_copies_emit_artifacts_flag_into_params(
+    db_session: AsyncSession,
+    user_a: User,
+) -> None:
+    """A schedule with emit_artifacts=True spawns a session whose params
+    carry emit_artifacts=True (Donna ask #8 opt-in plumbing)."""
+    from app.workers.autonomous_worker import _run_schedule_sweep
+
+    now = datetime(2026, 5, 25, 10, 0, 0, tzinfo=UTC)
+    sched = await _make_schedule(
+        db_session,
+        user=user_a,
+        next_run_at=now - timedelta(minutes=1),
+        skill_ref="nda-review",
+        emit_artifacts=True,
+    )
+
+    enqueue = AsyncMock(return_value=True)
+    result = await _run_schedule_sweep(db_session, now=now, enqueue=enqueue)
+    assert result == {"spawned": 1}
+
+    sess = (
+        await db_session.execute(
+            select(AutonomousSession).where(AutonomousSession.trigger_ref == sched.id)
+        )
+    ).scalar_one()
+    assert sess.params["emit_artifacts"] is True
 
 
 @pytest.mark.integration
@@ -560,6 +595,36 @@ async def test_create_schedule_computes_next_run_and_audits(
 
 
 @pytest.mark.integration
+async def test_create_schedule_emit_artifacts_round_trip(
+    client: AsyncClient,
+    user_a: User,
+) -> None:
+    """Create with emit_artifacts=true → the read echoes true (Donna #8)."""
+    resp = await client.post(
+        "/api/v1/autonomous/schedules",
+        headers=_bearer(user_a),
+        json={"cron_expr": "*/5 * * * *", "emit_artifacts": True},
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["emit_artifacts"] is True
+
+
+@pytest.mark.integration
+async def test_create_schedule_emit_artifacts_defaults_false(
+    client: AsyncClient,
+    user_a: User,
+) -> None:
+    """Omitting emit_artifacts at create → false (opt-in, default off)."""
+    resp = await client.post(
+        "/api/v1/autonomous/schedules",
+        headers=_bearer(user_a),
+        json={"cron_expr": "*/5 * * * *"},
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["emit_artifacts"] is False
+
+
+@pytest.mark.integration
 async def test_create_schedule_invalid_cron_returns_422(
     client: AsyncClient,
     user_a: User,
@@ -761,6 +826,32 @@ async def test_patch_schedule_toggles_enabled(
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["enabled"] is False
+
+
+@pytest.mark.integration
+async def test_patch_schedule_toggles_emit_artifacts_both_ways(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    user_a: User,
+) -> None:
+    """PATCH flips emit_artifacts false→true and true→false (Donna #8)."""
+    sched = await _make_schedule(db_session, user=user_a, emit_artifacts=False)
+
+    resp = await client.patch(
+        f"/api/v1/autonomous/schedules/{sched.id}",
+        headers=_bearer(user_a),
+        json={"emit_artifacts": True},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["emit_artifacts"] is True
+
+    resp = await client.patch(
+        f"/api/v1/autonomous/schedules/{sched.id}",
+        headers=_bearer(user_a),
+        json={"emit_artifacts": False},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["emit_artifacts"] is False
 
 
 @pytest.mark.integration

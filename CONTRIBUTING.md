@@ -71,6 +71,8 @@ npm run typecheck
 
 ## What to work on
 
+> **Working with an AI coding agent (Claude Code, Cursor, …)?** Start it on the [cold-start guide for coding agents](docs/contribute/coding-agent-onboarding.md) — read-order, the build loop, dev-environment hard rules, and how to take a roadmap item to a merged PR.
+
 The project's [Deferred Enhancements list (PRD §9)](docs/PRD.md#9-deferred-enhancements-and-identified-future-work) catalogs ~50+ bounded enhancements where the architectural slot exists and the implementation is well-defined. Items tagged **P1** are particularly welcome for v1.5+. A few that are well-shaped for first-time contributors:
 
 - **DE-013 Saved Prompts Library** (S effort) — per-user saved prompts in a sidebar; CRUD plus promote-to-skill.

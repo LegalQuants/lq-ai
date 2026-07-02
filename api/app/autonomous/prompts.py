@@ -27,6 +27,13 @@ The structured-output instruction tail :data:`STRUCTURED_OUTPUT_INSTRUCTION`
 is always appended to the system prompt and tells the model exactly which
 JSON keys the drafting node parses (``findings``, ``suggested_memories``,
 ``suggested_precedents``, ``privilege_concerns``, ``scope_concerns``).
+
+When the session opted in to document-grade artifacts
+(``session.params["emit_artifacts"]`` is truthy — Donna ask #8), the
+additional :data:`ARTIFACT_OUTPUT_INSTRUCTION` tail is appended AFTER it,
+documenting the optional ``artifacts`` key. Sessions that did not opt in
+never see the artifact instruction, so existing automations see zero
+behavior/cost change.
 """
 
 from __future__ import annotations
@@ -88,6 +95,42 @@ response is logged as a finding only if the JSON cannot be parsed.
 
 
 # ---------------------------------------------------------------------------
+# Artifact instruction tail (opt-in — Donna ask #8)
+# ---------------------------------------------------------------------------
+#
+# Appended AFTER ``STRUCTURED_OUTPUT_INSTRUCTION`` ONLY when the session
+# opted in (``session.params["emit_artifacts"]`` is truthy).  It documents
+# one ADDITIONAL optional top-level key (``artifacts``) in the same JSON
+# object.  The contract spans three modules, all updated in this commit:
+#
+# - the parser (structured_output.py) fills ``StructuredResult.artifacts``
+#   via ``_as_dict_list`` regardless of the flag (flag-agnostic by design);
+# - the drafting node (nodes.py case 4) dispatches each parsed artifact
+#   through the ``emit_artifact`` chokepoint ONLY when the session flag is
+#   set (defense-in-depth: an un-asked-for ``artifacts`` key is ignored);
+# - the chokepoint handler (guard.py::_handle_emit_artifact) takes the
+#   inner ``content`` key — the drafting node maps ``content_md`` (the
+#   name instructed here) onto it.
+#
+# Changes here REQUIRE matching updates in those three places and a
+# regression test.
+
+ARTIFACT_OUTPUT_INSTRUCTION = """\
+The JSON object may also carry one ADDITIONAL optional top-level key:
+
+  "artifacts": [
+    {"name": "<filename, e.g. review-memo.md>",
+     "content_md": "<the full document in markdown>"}
+  ]
+
+When the work product warrants a standalone document (a review memo, a \
+summary, a report), emit it here as complete, self-contained markdown.  \
+The array may be empty.  Emit at most a few artifacts — the executor \
+persists each one into the run's knowledge base.
+"""
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -104,7 +147,10 @@ async def assemble_analysis_messages(
     Resolves the session's target (``skill_ref`` or ``playbook_id`` from
     ``session.params``) into a system prompt, formats the retrieved chunks
     as a user message, and appends :data:`STRUCTURED_OUTPUT_INSTRUCTION`
-    to the system prompt.
+    to the system prompt.  When the session opted in to artifacts
+    (``session.params["emit_artifacts"]`` is truthy),
+    :data:`ARTIFACT_OUTPUT_INSTRUCTION` is appended after it; otherwise
+    the model is never told about the ``artifacts`` key.
 
     Args:
         session: The autonomous session.  ``session.params`` must carry
@@ -152,6 +198,11 @@ async def assemble_analysis_messages(
 
     user_chunks = _format_chunks_as_user_content(chunks)
     full_system = system + "\n\n" + STRUCTURED_OUTPUT_INSTRUCTION
+    # Opt-in only (Donna ask #8): the artifact instruction is appended iff
+    # the spawn path copied ``emit_artifacts`` into the session params —
+    # non-opted-in sessions never pay the extra output tokens.
+    if (session.params or {}).get("emit_artifacts"):
+        full_system = full_system + "\n" + ARTIFACT_OUTPUT_INSTRUCTION
     return [
         {"role": "system", "content": full_system},
         {"role": "user", "content": user_chunks},
@@ -190,10 +241,14 @@ async def _load_skill_system_prompt(
 def _registry_from_app_state() -> SkillRegistry | None:
     """Return the current ``SkillRegistry`` snapshot from ``app.state``, or None.
 
-    The production lifespan handler installs a :class:`MutableSkillRegistry`
-    at ``app.state.skill_registry`` (see ``app/main.py:88``); tests that
-    want this default path install the same holder.  Callers that pass
-    an explicit ``registry=`` bypass this helper entirely.
+    Both production startup paths install a :class:`MutableSkillRegistry`
+    at ``app.state.skill_registry`` via
+    :func:`app.skills.bootstrap.install_skill_registry` — the FastAPI
+    lifespan (``app/main.py``) and the arq worker's startup hook
+    (``app/workers/arq_setup.on_startup``), because this module runs in
+    whichever process executes the session.  Tests that want this
+    default path install the same holder.  Callers that pass an
+    explicit ``registry=`` bypass this helper entirely.
 
     The import of :mod:`app.main` is deferred to function-call time to
     avoid circular imports — ``main.py`` already imports from
@@ -312,7 +367,95 @@ def _format_chunks_as_user_content(chunks: list[dict[str, Any]]) -> str:
     return "\n\n".join(blocks)
 
 
+async def assemble_synthesis_messages(
+    session: AutonomousSession,
+    *,
+    goal: str,
+    observations: list[str],
+    chunks: list[dict[str, Any]],
+    evidence: list[dict[str, Any]] | None = None,
+    db: AsyncSession,
+    registry: SkillRegistry | None = None,
+) -> list[dict[str, str]]:
+    """Build the final-synthesis messages for the agentic loop (WS-D PR1/PR2).
+
+    Reuses :func:`assemble_analysis_messages` (so the skill/playbook system
+    prompt and :data:`STRUCTURED_OUTPUT_INSTRUCTION` are identical — the
+    synthesis must still emit the fenced-JSON findings the drafting node
+    parses), then appends a user block carrying the matter GOAL, the loop's
+    compact OBSERVATIONS, and (when evidence is non-empty) a numbered SOURCES
+    block with a citation instruction directing the model to support each
+    finding with verbatim quotes tagged ``{"quote": "...", "source": N}``.
+
+    Args:
+        session: The autonomous session.  ``session.params`` must carry a
+            resolvable target (``skill_ref`` or ``playbook_id``) — same
+            constraint as :func:`assemble_analysis_messages`.
+        goal: The matter goal text set at session spawn (e.g., "Is the
+            indemnification clause market-standard?").
+        observations: Compact strings produced by the planner loop — one
+            per research step (e.g., "retrieve_caselaw → 2 results: …").
+            May be empty when no steps ran.
+        chunks: Retrieved-chunks list (forwarded verbatim to the base
+            assembler so the system+user pair is identical to what the
+            standalone analysis path would have produced).
+        evidence: Evidence items accumulated by the agentic loop — each a
+            dict with keys ``n`` (int), ``kind`` (str), ``ref`` (str),
+            ``content`` (str), ``display`` (str).  When non-empty, a
+            numbered SOURCES block and citation instruction are appended to
+            the trailing user message.  When ``None`` or empty, the citation
+            block is omitted and behaviour is identical to PR1 (no change in
+            prompt cost for sessions with no evidence).
+        db: Active async ORM session.
+        registry: Optional skill registry snapshot.  Forwarded to the
+            base assembler; see :func:`assemble_analysis_messages`.
+
+    Returns:
+        A ``[system, user, user]`` list where the first two elements are
+        the base analysis messages and the third carries the goal + obs
+        (and, when evidence is non-empty, the numbered sources + citation
+        instruction).
+    """
+    messages = await assemble_analysis_messages(session, chunks=chunks, db=db, registry=registry)
+    obs_block = (
+        "\n".join(f"- {o}" for o in observations)
+        if observations
+        else "(no research steps were run)"
+    )
+    _evidence: list[dict[str, Any]] = evidence if evidence is not None else []
+    if _evidence:
+        sources = "\n".join(
+            f'[{e["n"]}] ({e["kind"]}) {e["display"]}\n    """{e["content"][:1500]}"""'
+            for e in _evidence
+        )
+        cite_block = (
+            "\n\nNUMBERED SOURCES (cite these by number):\n"
+            + sources
+            + "\n\nFor every finding, support it with VERBATIM quotes from the numbered sources. "
+            'In each finding\'s JSON, include a "citations" array of objects '
+            '{"quote": "<exact text copied from the source>", "source": <source number>}. '
+            "Copy quotes character-for-character; do not paraphrase inside a quote."
+        )
+    else:
+        cite_block = ""
+    messages.append(
+        {
+            "role": "user",
+            "content": (
+                f"MATTER GOAL:\n{goal}\n\n"
+                f"RESEARCH OBSERVATIONS (gathered by the agent):\n{obs_block}"
+                f"{cite_block}\n\n"
+                "Synthesize your analysis of the MATTER GOAL using the observations, the numbered "
+                "sources, and any chunks above, then return the final JSON object as instructed."
+            ),
+        }
+    )
+    return messages
+
+
 __all__ = [
+    "ARTIFACT_OUTPUT_INSTRUCTION",
     "STRUCTURED_OUTPUT_INSTRUCTION",
     "assemble_analysis_messages",
+    "assemble_synthesis_messages",
 ]

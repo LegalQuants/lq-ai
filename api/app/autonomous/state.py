@@ -87,3 +87,26 @@ class AutonomousSessionState(TypedDict, total=False):
     findings_count: int
     privilege_concerns: list[str]
     scope_concerns: list[str]
+
+    # Donna ask #8: number of document-grade artifacts the drafting node
+    # PERSISTED through the ``emit_artifact`` chokepoint (skips and storage
+    # errors are excluded). Always present on the drafting node's return —
+    # 0 when the session did not opt in (``params["emit_artifacts"]``
+    # absent) or on the non-structured drafting paths. The delivery node
+    # surfaces it as ``artifact_count`` in the notify payload and as
+    # ``artifacts_count`` on the terminal ``completed`` audit row.
+    artifacts_count: int
+
+    # WS-D PR1: agentic-loop plan trace. Set only when the loop ran
+    # (``state["query"]`` was non-empty and a ``skill_ref`` or
+    # ``playbook_id`` was configured). Carries counts/intents/short
+    # rationale/halt only — never raw tool payloads (P3). Shape:
+    # ``{"steps": int, "halt_reason": str, "decisions": list[dict]}``.
+    # Absent on the query-less single-call path.
+    analysis_plan_trace: dict | None
+
+    # WS-D PR2: loop-gathered evidence for the synthesis + delivery ledger
+    # bridge; NOT surfaced in the receipt/trace (P3). Each entry is a
+    # JSONable dict of EvidenceItem fields (n, kind, ref, content, display).
+    # Absent on the query-less single-call path (only the agentic loop sets it).
+    analysis_evidence: list[dict]

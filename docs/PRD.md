@@ -334,7 +334,7 @@ This section specifies each major capability. Every capability section follows t
 - `POST /api/v1/chats` — create chat.
 - `GET /api/v1/chats` — list user's chats.
 - `GET /api/v1/chats/{id}` — get chat with messages.
-- `POST /api/v1/chats/{id}/messages` — post message, stream response.
+- `POST /api/v1/chats/{id}/messages` — post message, stream response. Accepts a per-message `file_ids` list that attaches files for that turn only (passed to the gateway as `lq_ai_file_ids`, injected as document-context per Decision M2-1) and echoes the applied set back as `applied_file_ids`; this is a **separate channel from** `skill_inputs` (post-v0.4.0, #116/#117).
 - `PATCH /api/v1/chats/{id}` — update chat (rename, archive, pin, share).
 - `DELETE /api/v1/chats/{id}` — delete chat.
 - `GET /api/v1/chats/search?q=...` — search chats.
@@ -411,6 +411,8 @@ This section specifies each major capability. Every capability section follows t
 **API surface.**
 - `GET /api/v1/users/me/preferences` — returns all five preference fields for the calling user.
 - `PATCH /api/v1/users/me/preferences` — partial update; only supplied fields move. Writes a `user.preferences_updated` audit row (action on `audit_log`) when at least one field changes, with `details.changes` listing before/after for every changed field. A single PATCH call that changes multiple fields produces exactly one audit row.
+- `PATCH /api/v1/users/me` — self-service profile edit, scoped to **`display_name` only** (post-v0.4.0, #118). Self-service email editing is deliberately held back ([§9 DE-329](#9-deferred-enhancements-and-identified-future-work)).
+- `GET /api/v1/users/me` also surfaces `deletion_scheduled_at` (post-v0.4.0, #120) so a user with a pending account deletion can see it; `POST /api/v1/users/me/delete/cancel` clears it, round-tripping the field back to null.
 
 **Data model.** All five fields are columns on the `users` table — not a separate `user_preferences` table. This keeps the preferences queryable alongside auth fields (e.g., `WHERE role = 'member' AND workspace_layout = 'three_pane'`) without a join, and makes migration straightforward (add column + CHECK constraint per migration 0015 and 0019).
 
@@ -677,7 +679,7 @@ The API endpoint `GET /api/v1/skills/{id}/inputs` returns the skill's input sche
 
 ### 3.6 Research
 
-**M1+M2 status:** Not yet started in code. No web-search backend or legal-source connector exists in the codebase. `grep -r "research" api/app/api/` returns no research-specific handler; `api/alembic/versions/` has no `research_queries` migration. The Citation Engine pipeline dependency (§3.3) was met when M2 shipped — Research is now unblocked for contribution. The capability is fully spec'd here and in [PRD §9](PRD.md#9-deferred-enhancements-and-identified-future-work); a contributor picking it up should open a discussion before starting because the integration surface (citation-aware retrieval + ephemeral-document handling) is substantial. See [HONEST-STATE.md §6](HONEST-STATE.md#6-capabilities-not-yet-started-in-source).
+**PR6 status: PARTIAL — case-law retrieval shipped; full research surface still deferred.** The governed tool-loop + CourtListener research provider (search_case_law, get_cluster, read_opinion, find_in_case, verify_citations — WS3/PR1) and the procedural case-law research skill (`skills/case-law-research/`) landed in PR6. Rich case-law provenance (`message_tool_sources`, inline Sources-consulted sidecar, PR6c) surfaces which cases a tool call pulled in. **The broader research surface — web search, GovInfo, Congress.gov, Federal Register, EUR-Lex, SEC EDGAR, the `POST /api/v1/research` endpoint, and the `ResearchQuery` data model — is not yet started.** A contributor picking it up should open a discussion first; the integration surface (citation-aware retrieval + ephemeral-document handling) is substantial. See [HONEST-STATE.md §6](HONEST-STATE.md#6-capabilities-not-yet-started-in-source) and [§9 DE entries](#9-deferred-enhancements-and-identified-future-work) for the deferred scope.
 
 **Description.** Real-time legal information retrieval from authoritative sources, with the same Citation Engine fidelity as document-based citations. Web sources are fetched, parsed, and treated as ephemeral documents in the citation pipeline.
 
@@ -873,7 +875,13 @@ The scope-as-shipped is narrower than the original "ensemble runs on the whole a
 
 ### 3.10 Autonomous Layer (M4)
 
-**M4 status: SHIPPED.** The opt-in background executor runs real in-loop work end-to-end. The five-phase LangGraph state machine (intake → analysis → drafting → ethics_review → delivery) lives in `api/app/autonomous/executor.py` (`run_autonomous_session`) + `nodes.py`; every external action routes through the single `guarded_tool_call` chokepoint (`api/app/autonomous/guard.py`) enforcing R5 (external halt + idle watchdog → `SessionHalted`), R6 (`PHASE_GRANTS` phase-gated tool grants → `ToolNotGranted`), and R4 (per-session **and** per-trigger cost cap → `CostCapReached`). The four primitives ship: watches (`api/app/autonomous/watch_trigger.py`, table `autonomous_watches` — migration `0039`), schedules (`api/app/autonomous/cron.py`, table `autonomous_schedules`), per-user memory (`autonomous_memory`), and the precedent board (`precedent_entries` — migration `0039`; `project_context_proposals` — migration `0041`). Honest per-session receipts carry `terminal_reason` (completed / cost_cap_reached / external_halt) via `api/app/autonomous/receipt.py` (`build_receipt` / `build_receipt_safe`). The layer is per-user opt-in, off by default (`User.autonomous_enabled` — migration `0044`), with a full web dashboard at `web/src/routes/lq-ai/autonomous/`. Migration head at M4 close is `0045`. See [HONEST-STATE.md §5](HONEST-STATE.md#5-m4--autonomous-layer-shipped). The **Contract Repository auto-relationship graph** (§3.16) and the MCP-client subsystem (§8.5) remain deferred.
+**M4 status: SHIPPED.** The opt-in background executor runs real in-loop work end-to-end. The five-phase LangGraph state machine (intake → analysis → drafting → ethics_review → delivery) lives in `api/app/autonomous/executor.py` (`run_autonomous_session`) + `nodes.py`; every external action routes through the single `guarded_tool_call` chokepoint (`api/app/autonomous/guard.py`) enforcing R5 (external halt + idle watchdog → `SessionHalted`), R6 (`PHASE_GRANTS` phase-gated tool grants → `ToolNotGranted`), and R4 (per-session **and** per-trigger cost cap → `CostCapReached`). The four primitives ship: watches (`api/app/autonomous/watch_trigger.py`, table `autonomous_watches` — migration `0039`), schedules (`api/app/autonomous/cron.py`, table `autonomous_schedules`), per-user memory (`autonomous_memory`), and the precedent board (`precedent_entries` — migration `0039`; `project_context_proposals` — migration `0041`). Honest per-session receipts carry `terminal_reason` (completed / cost_cap_reached / external_halt) via `api/app/autonomous/receipt.py` (`build_receipt` / `build_receipt_safe`). The layer is per-user opt-in, off by default (`User.autonomous_enabled` — migration `0044`), with a full web dashboard at `web/src/routes/lq-ai/autonomous/`. Migration head at M4 close is `0045`. See [HONEST-STATE.md §5](HONEST-STATE.md#5-m4--autonomous-layer-shipped). As of M4 close the **Contract Repository auto-relationship graph** (§3.16) and the MCP-client subsystem (§8.5) remained deferred; the **MCP-client subsystem subsequently shipped** in the legal-research + connectors milestone (#158–#193 — see [DE-200](#de-200--mcp-client-subsystem-in-the-lq-ai-backend) and [HONEST-STATE.md §5.5](HONEST-STATE.md)), while the contract relationship graph remains deferred.
+
+**Post-v0.4.0 additions (#133/#135/#138/#139; migration head now `0047`).**
+- **Findings persistence (#135).** The `emit_finding` chokepoint now writes durable rows to `autonomous_findings` (migration `0046`), read back via `GET /autonomous/sessions/{id}/findings`. `GET /autonomous/memory` accepts a `?source_session_id=` filter to narrow to the memories a given session proposed (precedents are excluded — they are recurrence-aggregated, not session-scoped).
+- **Document-grade artifacts (#138).** An opt-in `emit_artifacts` flag (default **off**) on schedules, watches, and run-now requests lets the drafting phase dispatch an `emit_artifact` chokepoint intent that direct-writes a **real** Knowledge Base document (MinIO upload-first; a File reaches `ready` with a Document and chunks; the KB attach is direct, bypassing the watch-fire path so a run cannot loop on its own output, and mode-3 since-retrieval excludes artifact files so they do not echo back). Artifacts are referenced in `autonomous_artifacts` (migration `0047`; **session CASCADE / file SET NULL** — the document deliberately outlives the session), listed via `GET /autonomous/sessions/{id}/artifacts` (owner-gated, stable `created_at, id` order), and counted in the completion notification payload (`artifact_count`). Markdown/plain only — no PDF/DOCX (md/txt ingest is [§9 DE-332](#9-deferred-enhancements-and-identified-future-work); storage-failure finding dedupe is [§9 DE-333](#9-deferred-enhancements-and-identified-future-work)).
+- **Matter binding (#133).** Schedules and watches accept a `project_id` (set at create and reassignable via PATCH, including clear-to-null). Project ownership is validated at all five assignment sites (create-schedule, create-watch, run-now, and the two PATCH handlers) — this closed a pre-existing IDOR where `project_id` was assigned without an ownership check.
+- **Worker-side skill registry (#139).** The arq-worker now installs the skill registry at startup from the same `app/skills/bootstrap.py::install_skill_registry` the api uses (see §3.4 / HONEST-STATE §9).
 
 **Description.** Long-running per-user agents that observe activity, learn patterns, take proactive actions, and create skills autonomously. **Off by default, opt-in per user.** The autonomous executor runs in `api/app/autonomous/` on the existing **arq-worker** as a LangGraph state machine mirroring the Playbook executor (`api/app/playbooks/`), calling the gateway for inference exactly as playbooks do; it is **not** an OpenWebUI Pipeline (an earlier framing — superseded by [ADR 0013](adr/0013-autonomous-layer-design-influences.md), which pins the substrate). The web layer renders the dashboard and the per-session receipts; it does not run the agent loop. The detailed M4 design is pinned in **[ADR 0013 — Autonomous Layer design influences](adr/0013-autonomous-layer-design-influences.md)** (the DE-289 Phase 1 study).
 
@@ -1043,7 +1051,9 @@ Persistent matter memory is the single most-cited capability across in-house use
 
 ### 3.14 Tabular / Multi-Document Review (M3)
 
-**M3 status: SHIPPED (v0.3.0).** The `output_format: table` skill mode (M3-C1), the three-node LangGraph Tabular Review workflow (M3-C2), and XLSX/CSV export (M3-C4a) all shipped. Endpoints: `POST /api/v1/tabular/preview-cost`, `POST /api/v1/tabular/execute`, `GET /api/v1/tabular/executions/{id}`, `GET /api/v1/tabular/executions/{id}/export`. Implementation companion: [docs/tabular-review.md](tabular-review.md). **Honesty caveats:** per-cell citations are surfaced as *display-only* chunk references (a synthetic `citation_id`), not Citation-Engine-resolved provenance (see [§9 DE-309](#9-deferred-enhancements-and-identified-future-work)); per-cell `tier_used` + `cost_usd` are not yet captured ([§9 DE-310](#9-deferred-enhancements-and-identified-future-work)); bulk row/column operations are deferred ([§9 DE-304](#9-deferred-enhancements-and-identified-future-work)).
+**M3 status: SHIPPED (v0.3.0).** The `output_format: table` skill mode (M3-C1), the three-node LangGraph Tabular Review workflow (M3-C2), and XLSX/CSV export (M3-C4a) all shipped. Endpoints: `POST /api/v1/tabular/preview-cost`, `POST /api/v1/tabular/execute`, `GET /api/v1/tabular/executions/{id}`, `GET /api/v1/tabular/executions/{id}/export`. Implementation companion: [docs/tabular-review.md](tabular-review.md). **Honesty caveats:** per-cell citations are now *navigable* — `GET /api/v1/tabular/executions/{id}` resolves each cell's grounding chunk read-side to its `source_file_id`, `source_page`, and `source_text` (two batched IN-queries; existing executions are enriched too) over the synthetic `citation_id` bridge, so the UI can jump to source. This read-side resolution is **not** Citation-Engine-minted provenance: the executor still does not mint real Citation rows, so [§9 DE-309](#9-deferred-enhancements-and-identified-future-work) stays open; the enrichment fields are also untyped in the generated API client ([§9 DE-330](#9-deferred-enhancements-and-identified-future-work)). Per-cell `tier_used` + `cost_usd` are not yet captured ([§9 DE-310](#9-deferred-enhancements-and-identified-future-work)); bulk row/column operations are deferred ([§9 DE-304](#9-deferred-enhancements-and-identified-future-work)).
+
+**Per-column ensemble verification (post-v0.4.0, #127).** A column's `ensemble_verification` flag is now honored at execution. When a column resolves to ensemble-on and the gateway has an ensemble configured, each of that column's cells runs one Stage-4 ensemble verify pass (§3.8) over the concatenation of its cited chunks; the resulting `verification_method` (`ensemble_strict`, `ensemble_majority`, or `None`) persists on the cell and is mirrored onto each citation. A near-verbatim single-chunk value can legitimately resolve to `exact_match`/`tolerant_match` instead — a stronger verification, not an error — and a verification failure never fails the cell. Cost preview gains `ensemble_cells_count` and `ensemble_premium_usd` (the premium is included in `estimated_cost_usd`). The effective flag follows the precedence column > skill snapshot > deployment default, resolved identically at preview and execute. There is no mid-run per-cell cost ceiling on the tabular ensemble path ([§9 DE-331](#9-deferred-enhancements-and-identified-future-work)).
 
 **Description.** A view that takes (a) a set of documents (a Knowledge Base, a Project's files, a free selection) and (b) a set of questions or clauses to extract, and produces a row-per-document, column-per-question grid. Each cell is a citation-grounded answer that opens the side-panel viewer (§3.3) on click. The "compare clauses across N contracts in a grid" pattern (Legora Tabular Review, Harvey Vault, Ivo Repository columns) is a different UI shape than chat. In-house teams use it for due diligence, audits, portfolio-wide policy checks, and "what is market across the deals we have signed."
 
@@ -1063,7 +1073,7 @@ Persistent matter memory is the single most-cited capability across in-house use
 **Architectural fit.** This is mostly a new Skill output type plus a UI surface. The Citation Engine (§3.3), Document Pipeline, Knowledge Service (§3.5), and LangGraph runtime all already exist for it. Update §3.4 (Skill format) to document the `output_format: table` mode.
 
 **Open questions.**
-- Should ensemble verification (§3.8) be on by default for tabular cells, given the volume? Recommended: yes for high-stakes columns, configurable per-column.
+- ~~Should ensemble verification (§3.8) be on by default for tabular cells, given the volume? Recommended: yes for high-stakes columns, configurable per-column.~~ **Resolved by shipped code (post-v0.4.0, #127):** ensemble verification is configurable per-column and honored at execution, with the column flag overriding the deployment default — see the per-column ensemble passage above.
 
 **Dependencies.** Citation Engine (§3.3), Skill Service (§3.4), Files / Knowledge Bases (§3.5), Inference Gateway (§4), LangGraph runtime.
 
@@ -1134,6 +1144,7 @@ The Inference Gateway is a separate container, importable as a standalone servic
 - OpenTelemetry instrumentation.
 - **Tier derivation** (new in v0.2): every request is annotated with its derived Inference Tier (1–5 per §1.5.2 and §3.13) based on the routed provider/model and the gateway's configuration. The tier is included in the response metadata for the application to display.
 - **Anonymization middleware** (new in v0.2; M2): an optional pre/post middleware stage that pseudonymizes sensitive entities before the model call and rehydrates them after. See §4.7 for detail.
+- **Runtime provider-key administration** (post-v0.4.0; #128): an admin-only `/admin/v1/provider-keys` surface (fronted by the backend's `is_admin` proxy at `/api/v1/admin/provider-keys`) that lists provider-key status masked (last-4, configured flag, source `env`|`runtime` — never the key), sets a key (Fernet-encrypted into `gateway.yaml` and hot-applied to the live adapter with no restart), rotates it (PATCH), and revokes it (DELETE, after which routing to that provider returns 503). Requires `LQ_AI_GATEWAY_MASTER_KEY` (returns 400 `failed_precondition` otherwise); keys supplied via environment variables continue to work and report source `env`. See §4.5 and `gateway/app/provider_keys.py`.
 
 **Out of scope.**
 - Prompt caching (defer to v2).
@@ -1369,6 +1380,10 @@ Plus admin endpoints under `/admin/v1`:
 - `GET /v1/inference/current-tier?provider={provider}&model={model}` — return the derived tier and a human-readable explanation; used by the application to surface the tier badge (per §3.13).
 - `GET /admin/v1/anonymization-config` — return current anonymization configuration. New in v0.2 (per §4.7).
 - `PATCH /admin/v1/anonymization-config` — admin-only update.
+- `GET /admin/v1/provider-keys` — list provider-key status, masked (last-4, configured flag, source `env`|`runtime`; never the key). Post-v0.4.0 (#128, per §4.2).
+- `POST /admin/v1/provider-keys` — set/replace a runtime key (Fernet-encrypted into `gateway.yaml`, hot-applied with no restart). Requires `LQ_AI_GATEWAY_MASTER_KEY`.
+- `PATCH /admin/v1/provider-keys/{provider}` — rotate a runtime key.
+- `DELETE /admin/v1/provider-keys/{provider}` — revoke a runtime key (subsequent routing to that provider returns 503).
 
 ### 4.6 Implementation Plan
 
@@ -1873,12 +1888,12 @@ Milestone-based delivery. Each milestone is a public release.
 
 ### M5–M7 — Forward-Looking Workflow Intelligence (community-driven; not committed) {#section-8.5}
 
-> **Status: forward-looking.** This section names the project's longer-term ambition. It is not a v1–v4 commitment. The maintainer team's bandwidth is the M1–M4 critical path; M5+ is the right scope for a maturing community to contribute to, with the maintainer team coordinating direction. The architectural slots needed to support M5+ (the MCP-client subsystem; the autonomous-layer extensibility) are committed in M1–M4 so that this work is community-extensible rather than requiring core refactoring.
+> **Status: forward-looking.** This section names the project's longer-term ambition. It is not a v1–v4 commitment. The maintainer team's bandwidth is the M1–M4 critical path; M5+ is the right scope for a maturing community to contribute to, with the maintainer team coordinating direction. The architectural slots needed to support M5+ are committed so that this work is community-extensible rather than requiring core refactoring — and one of them, **the MCP-client subsystem, has now shipped** as a gateway-brokered connector mechanism (legal-research + MCP milestone #158–#193; [DE-200](#de-200--mcp-client-subsystem-in-the-lq-ai-backend), [HONEST-STATE.md §5.5](HONEST-STATE.md)). The remaining M5+ items below build on it.
 
 The M5+ direction extends LQ.AI from a tool the user reaches for into a workflow-aware context layer. The core capability sketch: signal aggregation across email, calendar, task systems, and document stores; a Workspace Concierge that produces a ranked Today view with rationales; agent dispatch with human-in-the-loop guardrails; voice and ambient modes. Privacy and security implications are dominant — most of M5+ benefits from Tier 1 / Tier 2 inference and the Anonymization Layer; granular consent per signal source and per scope is a hard requirement. The full sketch is captured in §9 (Workflow Intelligence subsection).
 
 **M5 — Workflow Intelligence Foundation (~10 weeks after M4).**
-- MCP-client subsystem operationalized; Signal Aggregation Service skeleton.
+- MCP-client subsystem operationalized — **done** (shipped #158–#193; build the read-only connectors below on top of it); Signal Aggregation Service skeleton.
 - Read-only connectors via MCP for: Gmail / Outlook / IMAP email; Google Calendar / Outlook Calendar; one task system (Linear or Asana, community-driven choice).
 - Today view (basic): chronologically-ordered list of pending items from connected sources; no prioritization yet.
 - Email Triage Skill: reads incoming, classifies (legal-relevant / not), proposes folder routing or task creation. No auto-actions; user approves.
@@ -3026,6 +3041,8 @@ This subsection captures the bounded items that operationalize the M5+ Forward-L
 Privacy and security implications dominate this entire subsection. Most items benefit from Tier 1 / Tier 2 inference (§1.5.2) and from the Anonymization Layer (§4.7); granular consent per signal source and per scope is a hard requirement, not an optional refinement. The §I.6 framing in the source recommendations (preserved here in spirit): "the privacy implications of workflow-aware context are the dominant constraint on the entire capability set; they cannot be appended as an afterthought; they have to be designed in from the start."
 
 #### DE-200 — MCP-client subsystem in the LQ.AI backend
+
+**✅ Delivered** in the legal-research + connectors (MCP) milestone (#158–#193; migration head `0055`), re-seated on the gateway egress boundary (ADR 0014/0015) rather than as a backend-direct client: a gateway MCP tool-provider adapter (streamable_http, per-call OAuth), an api MCP registry + discovery-cache + `/api/v1/admin/mcp` surface, per-user OAuth with Fernet-encrypted tokens, and MCP tools callable from the governed chat tool-loop under a human confirmation gate. The as-shipped registration surface is the admin API + DB (not an `mcp.yaml`); all egress is gateway-brokered and audited. See [HONEST-STATE.md §5.5](HONEST-STATE.md). The original P1/M scoping below is retained as the design record.
 
 **Priority:** P1 · **Effort:** M
 
@@ -4212,7 +4229,7 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 **Priority:** P2 (provenance depth) · **Effort:** M (~half-day + possible migration)
 
-**Context:** M3-E1 fixed F6 (tabular citations were stored as `cited_chunk_ids` but never surfaced through the API) with a read-side bridge that synthesizes a **display-only** `citation_id = uuid5(NS, chunk_id)`. That `citation_id` is not a real Citation-Engine row — the tabular citation drawer is display-only and never resolves it, so the synthetic id is safe for v0.3.0. The deferred enhancement is to have the tabular executor mint **real** Citation-Engine-backed citations during extraction (resolvable `citation_id`, full positional/offset provenance), so the tabular drawer can offer the same "jump to source span" affordance as the chat citation drawer.
+**Context:** M3-E1 fixed F6 (tabular citations were stored as `cited_chunk_ids` but never surfaced through the API) with a read-side bridge that synthesizes a `citation_id = uuid5(NS, chunk_id)`. Post-v0.4.0 (#125) the read-side now also *resolves* each cell citation to its `source_file_id`/`source_page`/`source_text` (two batched IN-queries; existing executions enriched too), so the drawer can already jump to source. That `citation_id` is still not a real Citation-Engine row — the synthetic id remains a bridge. The deferred enhancement (DE-309 scope, unchanged) is to have the tabular executor mint **real** Citation-Engine-backed citations during extraction (resolvable `citation_id`, full positional/offset provenance), retiring the synthetic-id bridge.
 
 **Specific scope:**
 - Tabular executor (`api/app/tabular/nodes.py`) creates Citation-Engine rows (or the equivalent `MessageCitation`-shaped records) per grounded cell during extraction.
@@ -4480,6 +4497,468 @@ Two bulk operations as originally written in the M3-C4 spec:
 **Specific scope:** Add an in-loop ensemble cost ceiling to the tabular extraction node — e.g. track cumulative judge spend against `confirmed_cost_usd` (or a dedicated cap) and degrade ensemble cells to no-verify (or single-judge) once the ceiling is hit, mirroring the chat path's `max_cost_per_message_usd` fallback. Receipt the degradation so the result view can show "ensemble verification halted at cost ceiling" rather than silently dropping verification.
 
 **When to ship:** When operators run large ensemble-heavy tabular grids in production and the up-front estimate proves insufficient as the sole guardrail.
+
+---
+
+#### DE-332 — Text/markdown ingest-parser support
+
+**Status: Shipped (post-v0.5.0).** `parse_text` (`api/app/pipeline/parsers.py`) accepts `text/plain` / `text/markdown`, stores the verbatim decoded bytes as canonical text so exact-match citations resolve against the source, and fails a non-UTF-8 upload as `decode_error` rather than guessing an encoding. Markdown is stored verbatim, never rendered. Tests: `api/tests/test_pipeline_parsers_text.py` (unit, no PyMuPDF) + `api/tests/test_pipeline_ingest.py` (ingest happy-path + decode_error). DOCX remains roadmap.
+
+**Priority:** P3 · **Effort:** M · **Good first issue** (community-suitable)
+
+**Context:** The ingest pipeline rejects every non-PDF upload at parse time — `api/app/pipeline/ingest.py` gates on `is_pdf_mime` (`api/app/pipeline/parsers.py`) and marks anything else failed. This surfaced during the autonomous document-grade-artifacts work (Donna ask #8): a run's markdown memo could not ride the normal ingest path, so the `emit_artifact` chokepoint handler writes the `File` + `Document` + chunks **directly** (markdown is already text — no parser needed). That direct-write path is correct and stays, but the underlying gap is general: a user cannot upload `.md` / `.txt` files to a knowledge base at all, even though the chunker (`chunk_document`) operates on plain text and handles them trivially once a `ParsedDocument` exists.
+
+**Specific scope:** Add a plain-text parser branch to the ingest pipeline — accept `text/markdown` and `text/plain` mimes in (or alongside) `is_pdf_mime`'s gate, build a synthetic single-page `ParsedDocument` from the decoded bytes (the same shape `_handle_emit_artifact` constructs), and run the existing chunk/embed path unchanged. Set `parser` to an honest value (e.g. `"plain-text"`), `page_count=1`, `was_ocrd=False`. Update the upload endpoint's accepted-mime documentation in `docs/api/backend-openapi.yaml`, add ingest tests for both mimes (happy path + a non-UTF-8 byte-stream failure case), and update the file-upload docs that currently state PDF-only.
+
+**When to ship:** Post-v0.4.0; well-scoped for community pickup (the artifact handler already demonstrates the exact `ParsedDocument` construction needed).
+
+---
+
+#### DE-333 — Dedupe correlated artifact storage-failure warn findings
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** When an opted-in autonomous run emits N artifacts and object storage (MinIO) is down, the drafting node's dispatch loop produces one `storage_error` result — and therefore one `warn` finding — per artifact: N near-identical "artifact could not be stored" findings for a single underlying outage. A natural bound already exists (the artifact list comes from a single analysis response, so N is limited by the response token budget), and each finding is individually honest, so this is noise rather than harm — which is why it was deferred rather than absorbed into the Donna-#8 work.
+
+**Specific scope:** In the drafting node's artifact dispatch loop (`api/app/autonomous/nodes.py`), collapse consecutive/correlated `storage_error` outcomes into one `warn` finding that names the count and the artifact names (e.g. "3 artifacts could not be stored — object storage unavailable"), instead of one finding per failure. Keep the per-artifact audit `tool_call` rows untouched (the receipt should still show every attempted dispatch); only the user-facing finding is deduplicated. Add a test with ≥2 failing artifacts asserting exactly one warn finding.
+
+**When to ship:** If/when a real storage outage during an artifact-emitting run produces enough duplicate findings to bother a user; pure polish until then.
+
+---
+
+#### DE-334 — Pin the macOS launcher's image tag to the release version (no floating `latest`)
+
+**Priority:** P2 · **Effort:** S
+
+**Context:** The macOS launcher (`desktop/`) ships with `LQ_AI_IMAGE_TAG` defaulting to `latest` (`desktop/src/main/index.ts`), so an installed `.dmg` pulls whatever `ghcr.io/legalquants/lq-ai-*:latest` points at *at launch time*. A subsequent image release silently changes what an already-installed app runs, and there is no immutable app↔image pinning — a `.dmg` is not reproducibly tied to the image set it was built against. Acceptable for the first launcher releases because the maintainer controls both the `v*` (image) and `desktop-v*` (app) tags and the docs prescribe publishing images first; deferred rather than absorbed so the first launcher ships on the simplest path.
+
+**Specific scope:** Have `desktop-release.yml` stamp `LQ_AI_IMAGE_TAG` to the matching `vX.Y.Z` at build time (e.g. inject it into the bundled config / a baked default) so each `.dmg` pins the exact image set it was released with. Keep `latest` as the dev/default fallback. Document the resulting app↔image version correspondence in `docs/BUILD-AND-RELEASE.md`.
+
+**When to ship:** Before the launcher has a broad enough install base that a `:latest` image change could surprise existing users; until then the manual tag discipline in BUILD-AND-RELEASE.md covers it.
+
+---
+
+#### DE-335 — Harden the OpenWebUI first-run bootstrap in the launcher (WEBUI_AUTH / WAL-mode webui.db)
+
+**Priority:** P2 · **Effort:** S
+
+**Context:** The `web` shell (OpenWebUI fork) keeps its OWN sqlite (`/app/backend/data/webui.db`) and honors `WEBUI_AUTH=false` auto-admin (`admin@localhost`) only on a *truly empty* db. If any non-default OpenWebUI user row exists, `POST /api/v1/auths/signin` returns 400 ("can't turn off authentication … existing users") and the SPA root guard parks at `/auth` with no self-recovery. OpenWebUI runs sqlite in **WAL mode**, so deleting only `webui.db` (leaving `webui.db-wal`/`webui.db-shm`) does NOT clear the user. Surfaced during the v0.4.2 Protocol-1 browser verification. The launcher's Reset does `docker compose down -v` (removes the whole volume incl. WAL/SHM), so a normal first install / Reset is clean — but an *interrupted* first-onboarding, or any path that probes `/auths/signin` before first paint, can wedge the shell with no in-app recovery.
+
+**Specific scope:** Make the first-run robust to a pre-existing OpenWebUI user — e.g. checkpoint/disable WAL for `webui.db`, or have the web entrypoint reset the OpenWebUI auth row to the default when `WEBUI_AUTH=false`, or give the launcher an in-app "repair" that wipes `webui.db*` (the full glob, not just `webui.db`) + restarts web. Until then, the manual remediation is `rm webui.db webui.db-wal webui.db-shm` + restart web (now documented in `desktop/VERIFICATION.md`).
+
+**When to ship:** Before a broad launcher install base; the `down -v` Reset covers the common case meanwhile.
+
+---
+
+#### DE-336 — Document the `503` responses on the `/api/v1/research/*` OpenAPI entries
+
+**Priority:** P3 · **Effort:** XS
+
+**Context:** Every `/api/v1/research/*` path in `docs/api/backend-openapi.yaml` documents `401` but omits the `503` cases, even though the surface fails with `503` in two distinct, client-meaningful ways: `gateway_unreachable` (transient outage) and `research_not_configured` (no CourtListener tool-provider wired — added in the WS3b-follow capabilities work). The new `/api/v1/research/capabilities` endpoint exists *specifically* to let a UI distinguish "research off" from "research broken," so the missing `503` documentation is most conspicuous there. Surfaced during the WS3b-follow code-quality review (2026-06-17). Deferred rather than absorbed because it's a uniform doc gap across all sibling research endpoints, best fixed in one pass; the typed `code` field already disambiguates the two cases at runtime.
+
+**Specific scope:** Add `503` responses (referencing the shared `Error` schema) to the research entries in `backend-openapi.yaml`, mirroring the existing inference-endpoint pattern (`503`/`504` → `#/components/schemas/Error`). The set of codes differs per endpoint — only the endpoints that actually call the gateway can `503`, and only those that resolve the provider can emit `research_not_configured`:
+
+| Endpoint | Calls gateway? | `503` codes to document |
+|---|---|---|
+| `GET /capabilities` | yes (reads `/admin/v1/config`) | `gateway_unreachable` |
+| `POST /verify-citations` | yes | `gateway_unreachable`, `research_not_configured` |
+| `POST /search` | yes | `gateway_unreachable`, `research_not_configured` |
+| `GET /clusters/{cluster_id}` | yes (on cache miss) | `gateway_unreachable`, `research_not_configured` |
+| `GET /opinions/{opinion_id}` | no (cache read; `404` if absent) | — none |
+| `POST /find-in-case` | no (cache read) | — none |
+
+No code change — the runtime already returns these with the correct typed `code`; this is documentation/contract honesty so consumers (e.g. Donna) can derive both failure modes (`research_not_configured` = feature off vs `gateway_unreachable` = transient outage) from `gen:api`. Do NOT add `503` to the two cache-read endpoints — they never reach the gateway, so it would be inaccurate. `test_openapi.py` pins the path *set* and count, not per-path response codes, so these additions are not test-enforced — review by hand.
+
+**When to ship:** Whenever the research surface's OpenAPI is next revised, or alongside the PR6 transparency work that touches these endpoints.
+
+---
+
+#### DE-337 — Generate `backend-openapi.yaml` from `app.openapi()` so the published contract can't drift from the typed models
+
+**Priority:** P2 · **Effort:** M
+
+**Context:** `docs/api/backend-openapi.yaml` is **hand-maintained**, while the FastAPI app derives its live schema from the typed Pydantic models. The two drift: #163 (`38dbbb0`) typed `VerifyCitationsResponse`/`OpinionTextField` in code but left the yaml's `verify-citations` and `text_field_used` entries loose, so the typed shapes never reached a consumer's `gen:api` (which reads the yaml, not the live app) until a follow-up doc fix. This is the second drift incident (cf. the pre-existing note that the yaml doesn't even `yaml.safe_load` cleanly and `test_openapi.py` is the authoritative conformance check). The hand-maintained file also carries rich prose `description:` blocks that a naive `app.openapi()` dump would lose.
+
+**Specific scope:** Make the typed models the single source of truth. Options to weigh in design: (a) a `make openapi` target that dumps `app.openapi()` to the yaml + a CI check that fails on drift (mirrors the `EXPECTED_PATHS`/`test_openapi.py` machinery), keeping descriptions in the models via `Field(description=...)`/route docstrings; or (b) keep the hand-maintained file but add a CI conformance test that asserts each documented response schema matches the live `response_model` (catches drift without regenerating). Either ends the manual-sync burden. Coordinate with the consumer (Donna) since their `gen:api` pins this file.
+
+**When to ship:** Before the research/MCP OpenAPI surface grows much further (PR4b/PR4c add `/admin/mcp` + `/mcp/oauth/*`); doing it then avoids re-hand-maintaining the new entries.
+
+---
+
+#### DE-338 — Bound MCP session teardown against a hung server
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** `MCPToolProviderAdapter`'s default session factory (`gateway/app/providers/tool/mcp.py`, PR4a) opens the streamable_http session inside an `AsyncExitStack` and bounds `session.initialize()` with `anyio.fail_after(10)`. But teardown (`AsyncExitStack.__aexit__`) runs inline with **no timeout** — a hung/half-dead MCP server could block the closing task during stream shutdown. The web stub this was ported from (`web/backend/open_webui/utils/mcp/client.py`) carried an explicit ~5s disconnect timeout for exactly this reason (its `disconnect()` comments document the cancel-scope discipline). The port deliberately kept enter+exit lexically scoped (which avoids the stub's cross-task-exit hazard — see the PR4a Task 3 review), so the hang risk is lower, but an unbounded teardown is still a latent availability foot-gun. Surfaced during the PR4a code review (2026-06-17).
+
+**Specific scope:** Bound the session teardown with a timeout that does NOT violate the MCP SDK's same-task cancel-scope requirement (the stub's comments enumerate what NOT to use — no `asyncio.shield`/`wait_for`, no new `anyio.CancelScope`/`fail_after` around the inner `TaskGroup` exit). Likely a connect-level timeout on the transport, or a watchdog that abandons the connection rather than wrapping `aclose()`. Add a test with a fake session whose teardown hangs.
+
+**When to ship:** Before MCP is used against untrusted/flaky servers at scale; the `initialize` bound covers the common connect-failure case meanwhile.
+
+#### DE-341 — Retire the OpenWebUI `web/backend/open_webui/utils/mcp/client.py` stub once the chat path is gateway-brokered
+
+**Priority:** P3 · **Effort:** M
+
+**Context:** PR4c's plan listed deleting the ported OpenWebUI MCP client stub (`web/backend/open_webui/utils/mcp/client.py`) on the assumption it was unwired. Verified against `main` during PR4c: it is still actively imported in two web-backend call sites — `web/backend/open_webui/routers/configs.py:403` (`MCPClient()` in a tool-server connect/verify endpoint) and `web/backend/open_webui/utils/middleware.py:2671` (`MCPClient()` in the chat middleware — the OLD backend-direct MCP path that PR4a–c replace at the gateway boundary). Deleting the stub in PR4c would break the web backend; properly removing it requires migrating those call sites — chiefly the chat middleware's tool-call connection — onto the gateway-brokered path, which is PR5's scope (the governed chat tool-loop). Surfaced 2026-06-18; PR4c was kept backend-only and the deletion deferred (operator-confirmed).
+
+**Specific scope:** When PR5 rewires the chat tool-loop to call MCP tools through the gateway (`POST /v1/tools/{provider}/{tool}` + the per-user `X-LQ-AI-User-Token` from the PR4c OAuth store), migrate `configs.py`'s tool-server verify path and `middleware.py`'s `mcp_clients` connection off `MCPClient`, then delete `web/backend/open_webui/utils/mcp/client.py` and grep-confirm no remaining importers. (DE-338's teardown-timeout discussion references the same stub — close both together.)
+
+**When to ship:** PR5 (WS4 governed chat tool-loop), alongside the chat-path migration to the gateway.
+
+**Resolved in PR6e (2026-06-20):** deleted `web/backend/open_webui/utils/mcp/client.py` and excised its importers — `configs.py`'s tool-server verify path now rejects MCP with a clear "configured by the operator via the gateway, not added here" error; the dead `middleware.py` chat-loop MCP branch (LQ.AI chat runs through the `api/` service + gateway, not `web/backend`) and the `main.py` teardown-disconnect were removed; the web UI no longer offers MCP as an add-tool-server type. `grep -rn "MCPClient\|utils.mcp.client\|mcp_clients" web/backend/` is clean. The OpenAPI tool-server paths are untouched, and LQ.AI's gateway-brokered MCP path (ADR 0014 / PR4–5) is the sole MCP egress — so this also closes the non-gateway-egress gap (the same stub DE-338 referenced).
+
+#### DE-342 — Map the gateway `egress_refused` code to a clearer "connector misconfigured" error (not generic 500)
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** With the PR4c OAuth gateway passthrough (D-c6), the operator must allowlist each MCP server's OAuth authorization-server host in `mcp.yaml` (the AS host is discovered at runtime and may differ from the MCP server host). When they forget, the gateway correctly refuses egress and returns `403 {error:{code:"egress_refused"}}` — but the api's `_GATEWAY_CODE_MAP` (`api/app/errors.py`) has no entry for `egress_refused`, so it falls back to `InternalError` (500). The user/operator sees a generic internal error rather than "this connector's authorization-server host isn't allowlisted." Mis-allowlisting the AS host is the *expected first-run failure* for D-c6, so the opaque mapping has real operator-experience cost. Surfaced in the PR4c whole-branch review (2026-06-18).
+
+**Specific scope:** Add `"egress_refused"` to `_GATEWAY_CODE_MAP` mapping to a clearer typed error (e.g. `ProviderUnavailable`/`502`, or a new `MCPOAuthConnectorMisconfigured`) whose message points at the `mcp.yaml` allowlist. Behaviour is safe today (the request fails closed) — this is purely diagnostics quality.
+
+#### DE-343 — Persist or re-discover the RFC 8707 `resource` for OAuth token refresh
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** PR4c's `app/mcp/oauth.py` `get_valid_token` refresh path omits the RFC 8707 `resource` parameter from the refresh-token form, because `mcp_oauth_tokens` has no `resource` column to recover it from (it is captured in `mcp_oauth_state` at authorize-time but that row is single-use and deleted at callback). An authorization server that *requires* `resource` on every token request (including refresh) would reject the refresh; the api then deletes the token row and the user is silently re-prompted to authorize. Most AS accept refresh without `resource`, so v1 works for them. Surfaced in the PR4c whole-branch review (2026-06-18).
+
+**Specific scope:** Either add a nullable `resource` column to `mcp_oauth_tokens` (set it at exchange time, send it on refresh) or re-run discovery at refresh time to recover the canonical resource URI. Add a test with an AS that requires `resource` on refresh.
+
+**When to ship:** When an MCP OAuth server that enforces RFC 8707 on refresh is encountered, or proactively before GA.
+
+#### DE-344 — Per-provider external-tool cost model for `retrieve_caselaw` / `call_mcp_tool`
+
+**Priority:** P3 · **Effort:** M
+
+**Context:** PR5a wired the two external-tool intents (`retrieve_caselaw`, `call_mcp_tool`) into the autonomous governance path, but their cost estimator (`api/app/autonomous/cost.py`) returns `Decimal("0")` in v1 — they burn no provider-inference tokens (CourtListener is free-tier; MCP tool cost is provider-specific and unknown), so the R4 economic brake does not throttle them. The per-turn tool-call cap (PR5b, chat) and the autonomous session cost cap (inference) bound spend meanwhile, but a tool that proxies a metered/paid third-party API (a future MCP server, or CourtListener rate-tier overages) would not register cost against R4. Surfaced in the PR5a plan (2026-06-19).
+
+**Specific scope:** Add a per-provider external-tool cost model (e.g. a configured cost-per-call or cost-per-unit on the gateway `tool_providers` / `mcp.yaml` entry, or a rolling-average like the inference estimator) so `estimate_tool_cost` returns a real projection for `retrieve_caselaw` / `call_mcp_tool` and the R4 brake throttles expensive external tools. Record the realized cost on the `tool_call_log` row.
+
+**When to ship:** Before the autonomous layer (or chat) is pointed at a metered/paid third-party tool provider. **Landing point: WS-G PR2's per-case judge budget (the chat path's first real cost bound).** Its **trigger** is WS-E (content-source registry + free-source expansion), which introduces the first metered/paid sources and so satisfies this "when to ship" condition by construction.
+
+**Status (2026-06-26):** Partially addressed. WS-G PR2 (the treatment-classifying judge) shipped the **per-case judge budget** — a real, enforced USD cost bound on the treatment judge fan-out — as the milestone's first concrete external-work cost control (ADR 0019 D10). PR2 did **not** wire the autonomous-path `estimate_tool_cost`/R4 piece: the treatment judge runs in a background arq derivation job, not through the autonomous `guarded_tool_call` chokepoint, and `get_citing_opinions` is not a `ToolIntent` — so routing it through R4 would be incorrect, not merely deferred. Nothing metered ships before WS-E (CourtListener is free-tier/BYO-key today), so no spend escapes R4 in the interim. The remaining scope — a real per-provider `estimate_tool_cost` for `retrieve_caselaw` / `call_mcp_tool` + realized-cost recording on `tool_call_log` — lands in **WS-E**, on its first metered source.
+
+**Status (2026-06-30): SHIPPED — WS-E PR1a.** A per-provider cost model now backs all three external intents (`retrieve_caselaw`, `retrieve_authority`, `call_mcp_tool`). The gateway `tool_providers` config carries an optional `cost_per_call` / `cost_per_unit` (riding `ToolProviderConfig`'s `extra="allow"` `model_extra` — no config-schema field, no migration); `app/tools/governance.py` caches it per-provider alongside the egress tier in the same admin-config pass (`resolve_provider_cost`); `estimate_tool_cost` returns the configured rate for the projecting R4 pre-flight; and all three governed handlers record the realized rate on `ToolResult.cost_usd` → `tool_call_log.cost_usd` and accumulate it onto `session.cost_total_usd` (so R4's cumulative brake throttles external spend symmetrically across the three intents). A free/unconfigured source omits the field → `Decimal("0")` → R4 no-op (correct). **Honest caveat — remaining follow-up:** the realized cost is the *configured* per-call rate, not a cost parsed from a provider's response envelope; a source that reports a *variable* per-call cost in its payload (none of GovInfo/CourtListener/MCP do today) would need response-level cost parsing — file as a DE if/when such a source is added. The cost brake is also best-effort (fails open on a systemic gateway-config-fetch failure, per ADR D-a3 / ADR 0016 non-fatal posture).
+
+#### DE-345 — Extract a shared `_stream_loop_outcome` renderer for the chat tool-loop
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** PR5b renders a tool-loop `LoopOutcome` (`LoopFinal` / `LoopConfirmation` / `LoopMcpAuth`) to SSE frames + DB persistence in two places — the initial-send streaming generator (`_stream_response`) and the resume route (`resume_tool_call`) in `api/app/api/chats.py`. The plan preferred a single shared `_stream_loop_outcome` generator, but the implementer kept the resume route's rendering inline to avoid restructuring the keystone send path mid-feature (the two have different live state: send has the live `chat`/`request`; resume reconstructs from `resume_state`). The duplication is bounded but real — a future change to the `tool_confirmation_required`/`complete` frame shapes or the gate-persistence rows must be made in both places. Surfaced in the PR5b Task 7 review (2026-06-19).
+
+**Specific scope:** Extract the outcome→frames+persistence logic into one reusable async generator both call sites drive, once both paths are stable and the no-regression risk to the send path is understood.
+
+#### DE-346 — Unify the `find_in_case` tool-result shape across chat-loop and autonomous dispatch
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** The chat tool-loop's research dispatch (`api/app/chat/tool_loop.py`) feeds the raw `find_in_case` service output (a list of match dicts) into the conversation, while the autonomous guard's dispatch wraps it as `{"matches": [...]}`. The same logical tool returns a different JSON shape to the model depending on origin (chat vs autonomous), which can confuse a skill author who relies on a stable contract. Surfaced in the PR5b Task 5 review (2026-06-19).
+
+**Specific scope:** Pick one canonical tool-result envelope for `find_in_case` (and audit the other research ops for the same divergence) and apply it in both dispatch paths.
+
+#### DE-347 — Chat tool-path OpenTelemetry span (`chat.tool_call`)
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** PR5b's chat tool-loop calls `governed_tool_invocation` with `span=None` — the helper is span-agnostic (it annotates a caller-supplied span per ADR 0015 D5 / D-a1) but the chat loop does not yet open a `chat.tool_call` domain span the way the autonomous path opens `autonomous.tool_call`. This is the chat-side slice of the standing tool-path-OTel deferred work (the inference path has `inference.dispatch`; the tool/research path has only the `tool_egress_log`/`tool_call_log` audit). Surfaced in the PR5b Task 5 review (2026-06-19).
+
+**Specific scope:** Open a `chat.tool_call` span (attributes = tool/provider/tier/outcome/cost, counts/types only) in the chat tool-loop and thread it into `governed_tool_invocation(span=...)`, mirroring `inference.dispatch` and the autonomous span. Fold into the broader tool-path-OTel follow-on.
+
+#### DE-348 — Resolve an expired confirmation-gate `tool_call_log` row to an `expired` state
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** When a chat destructive-tool confirmation expires (the `chat_pending_tool_call` row passes its TTL and a resume POST returns 409), the corresponding `tool_call_log` gate row (written at gate time with `confirmation_state="pending_confirmation"`, `outcome="pending"`) is left unchanged — it reads as perpetually pending in the audit trail even though it was never acted on. Surfaced in the PR5b Task 7 review (2026-06-19).
+
+**Specific scope:** On expiry (or via a background sweep of expired `chat_pending_tool_call` rows), flip the linked gate `tool_call_log` row to a terminal `confirmation_state="expired"` (and an `outcome` that reflects no execution) so the audit trail is honest. Pairs naturally with a TTL pruner for `chat_pending_tool_call` (the model already carries `expires_at` + an index).
+
+#### DE-349 — Merge consecutive `tool_result` messages into one Anthropic user message
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** The gateway's `_to_anthropic_request` (`gateway/app/providers/anthropic.py`) translates each incoming `role="tool"` message into its own Anthropic `user` message carrying one `tool_result` block. The PR5b chat tool-loop, when the model proposes **multiple** read-only tools in a single round, appends the assistant `tool_calls` turn followed by several `role="tool"` result messages — which become consecutive same-role `user` messages on the Anthropic hop. The Anthropic Messages API expects roles to alternate, so a multi-tool round could be rejected. PR5b's confirmation-resume path is unaffected (it reconstructs a single-call assistant turn + one tool result), and single-tool rounds are fine; this only bites multi-read-only-tool rounds against Anthropic. Surfaced in the PR5b final whole-branch review (2026-06-19).
+
+**Specific scope:** In `_to_anthropic_request`, coalesce a run of consecutive `role="tool"` messages into a single Anthropic `user` message containing multiple `tool_result` content blocks. Add a gateway adapter test feeding `assistant(tool_calls=[A,B]) → tool(A) → tool(B)` and asserting one merged user message with two `tool_result` blocks.
+
+#### DE-350 — Generic-MCP-result provenance (`source_kind='mcp'` on `message_tool_sources`)
+
+**Priority:** P3 · **Effort:** M · **Status: SHIPPED** (2026-06-24)
+
+**Context:** PR6c shipped retrieval-provenance for **case-law** tool results only (`source_kind='caselaw'`, from `search_case_law`/`get_cluster`). Extend `message_tool_sources` capture to generic MCP connector results (`source_kind='mcp'`) so a tool call to any operator-wired MCP server surfaces in the "Sources consulted" panel with a per-server label/url convention. Needs a label/url extraction strategy per MCP result shape (no structured cluster metadata to lean on). Shipped: one `message_tool_sources` row per MCP call (`source_kind='mcp'`, provider=server, tool=tool) with a defensive best-effort label/url; per-result-item parsing and per-server label/url conventions remain deferred. Design: `docs/superpowers/specs/2026-06-24-de-350-mcp-provenance-design.md`.
+
+#### DE-351 — First-run document ingestion times out on the docling model download, and the file is left stuck in `processing`
+
+**Priority:** P2 · **Effort:** M
+
+**Context:** Found during the v0.5.0 release-readiness fresh-clone verification. On a fresh deployment the **first** PDF upload fails: docling downloads ~696 MB of HuggingFace layout/OCR models on first use, which exceeds the single ingestion-job budget (`LQ_AI_DOCLING_TIMEOUT_SECONDS=300`), so the job dies with `TimeoutError` (`api/app/workers/document_pipeline.py`). A subsequent upload (models now cached) ingests in <6 s, so the pipeline itself is sound. Two defects: (1) the first-run experience is broken with no operator guidance; (2) the timeout handler leaves the `File` in `processing` (it does not flip to `failed`, and `ingestion_error` stays empty), so a UI polling for `ready` spins forever. **Fix options:** pre-warm/bake the docling models into the `ingest-worker` image (or a first-boot warmup step); and/or raise the first-run timeout; and — independently, as a correctness fix — have the timeout path mark the file `failed` with a `model_download_timeout` reason so the UI can surface it. The model-prewarm and the mark-failed-on-timeout are separable; the latter is the smaller correctness win.
+
+#### DE-352 — Pre-upload format guard for unsupported document types (TXT/DOCX accepted then failed late)
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** Found during the v0.5.0 release-readiness verification. Ingestion is PDF-only today (DOCX/RTF/TXT are M2), but the upload endpoint accepts a TXT/DOCX file (HTTP 2xx) and only marks it `failed` with `unsupported_type` after the worker picks it up — so a user learns the format is unsupported only after upload + a poll cycle. Add a pre-upload MIME/extension guard that rejects unsupported types synchronously with a clear error (or a documented "PDF only for now" note on the upload surface) until the M2 format expansion lands.
+
+#### DE-353 — `web` (OpenWebUI) container blocked first-boot on an unnecessary HuggingFace model fetch — **RESOLVED**
+
+**Priority:** P2 · **Effort:** S · **Status: RESOLVED** in the v0.5.0 launcher-readiness pass.
+
+**Context:** Found during the v0.5.0 release-readiness verification (isolated boot of the published images + the macOS launcher first-run). At import, `web/backend/open_webui/main.py` calls `get_ef(RAG_EMBEDDING_ENGINE, …)` **before** uvicorn binds `:8080`; with the default empty engine it builds a local SentenceTransformer → `snapshot_download` → the "Fetching 30 files" HuggingFace download. Under HF rate-limiting this stalled near 0% for many minutes, so the `web` healthcheck failed → `web` went `unhealthy` after its 20s start_period → the dependent user-facing `proxy` never started, and the macOS launcher (which fails the moment any service is `unhealthy`) reported "Stack failed to start." LQ.AI does its **own** embeddings/citations (api/gateway via OpenAI `text-embedding-3-*`) and does not use OpenWebUI's local RAG, so the fetch was pure waste. **Fix:** set `RAG_EMBEDDING_ENGINE=openai` (a non-empty sentinel) on the `web` service in `docker-compose.yml` and `docker-compose.release.yml` — `get_ef()` then returns `None` and the local-model construction/download is skipped. Empirically verified on `lq-ai-web:v0.5.0`: `/health` → 200 in **~11s** (vs never/183s+ baseline), no "Fetching" line, UI shell intact. Compose-only — no image re-cut required.
+
+#### DE-354 — macOS launcher regenerated secrets on a retried first-run without `down -v` → stale-volume auth crash-loop — **RESOLVED**
+
+**Priority:** P1 · **Effort:** S · **Status: RESOLVED** in the v0.5.0 launcher-readiness pass.
+
+**Context:** Found during the v0.5.0 launcher first-run test. `wizard:complete` (`desktop/src/main/index.ts`) calls `generateSecrets()` every run and only `saveConfig()`s on success, and `down -v` was wired only to the Reset button. So a first start that failed for any reason (e.g. [DE-353](#de-353--web-openwebui-container-blocked-first-boot-on-an-unnecessary-huggingface-model-fetch--resolved)) left an orphaned postgres volume initialized with the first attempt's password; the next start generated fresh secrets, but POSTGRES only honors the password on first init of an empty volume, so the api hit `password authentication failed` and crash-looped — unrecoverable without a manual Reset. **Fix:** `wizard:complete` now calls `resetStack()` (`down -v`) before `startStack()`, guaranteeing fresh secrets always meet a fresh postgres init (safe because the wizard only runs on first-run, when there is no real data yet). With DE-353 fixed, the first start succeeds outright; DE-354 makes any future failed attempt cleanly recoverable.
+
+---
+
+#### DE-355 — Document ingestion requires an OpenAI key specifically (the `embedding` alias is OpenAI-only)
+
+**Priority:** P2 · **Effort:** M · **Status: OPEN**
+
+**Context:** Surfaced during the v0.5.0 launcher provider-key work. The default `smart` chat alias works with *either* an Anthropic or an OpenAI key (Anthropic primary, OpenAI fallback), so first-use chat is provider-agnostic. But the `embedding` alias in `gateway.yaml.example` points only at OpenAI `text-embedding-3-small` (1536-dim, matching the `document_chunks.embedding` column). So a user who supplies **only an Anthropic key** — via the first-run wizard field or the in-app Provider keys page — gets working chat but **silently broken document ingestion / knowledge-base search** (embedding calls fail with no resolvable OpenAI key). **Proposed fix(es):** (a) detect the missing-embedding-provider case and surface a clear, actionable message at upload time ("document search needs an OpenAI key — add one under Provider keys") rather than a late failure; and/or (b) offer a non-OpenAI embedding path (a local/Ollama embedding model, or an Anthropic-compatible embedding) so an Anthropic-only operator can run ingestion. Until then, the install docs should note that **document upload + search specifically need an OpenAI key**, even though chat does not.
+
+---
+
+#### DE-356 — First-run launcher shows no progress during the image-pull + model-download phases
+
+**Priority:** P2 · **Effort:** M · **Status: OPEN**
+
+**Context:** Surfaced during the v0.5.2 fresh-install verification. A first run downloads ~17 GB of images (`api` ~9.5 GB, `web` ~6 GB, `gateway` ~1.6 GB, `proxy`) and then document-processing models — 10–30 min depending on bandwidth — but the wizard sits on a static "Starting LQ.AI…" with **no progress** for the whole time, reading as a hang. Root cause: `startStack` (`desktop/src/main/orchestrator.ts`) runs `docker compose up -d` via `runDocker`, which **buffers output and awaits completion**, and `wizard:complete` (`desktop/src/main/index.ts`) only begins the health-polling that emits the `X/9 services ready` snapshots **after** `up` returns:
+
+```
+await startStack(b, …)   // blocks for the entire pull; output buffered, nothing emitted
+await waitHealthy(b)      // the X/9 snapshots only start here, after up completes
+```
+
+So the single longest phase (image pull) has neither a stream nor a poll. The renderer already has the channels to fix this (`onState` / `onLog`; `streamDocker` is used for web log tailing).
+
+**Option ladder (defer to a launcher cycle — touching this means re-cutting the `.dmg`):**
+
+1. **Cheap / high-impact (S):** start the snapshot polling **concurrently** with `up` (don't await `up` first), and add an **elapsed timer + one-time reassurance** ("Downloading the engine — a one-time ~17 GB download; this can take 10–30 min"). No output parsing; a reorder + copy. Removes the "is it frozen?" feeling.
+2. **Target (M):** stream `docker compose up`/`pull` stdout to the wizard via the existing `streamDocker`, surfacing real Docker progress, optionally parsed into a **per-image checklist** (proxy ✓, gateway ✓, web ⏳, api ⏳).
+3. **Full (L):** a multi-phase progress UI — **Downloading engine** (parsed % bar) → **Starting services (X/9)** → **Loading document models** (tail the `ingest-worker` logs for the docling/OCR model fetch, the *second* invisible wait) → **Ready**.
+
+**Recommendation:** ship (1) as the floor and (2) as the target together; (3) is the polished follow-up. Verified live 2026-06-21 on the `desktop-v0.5.2` fresh install (wizard frozen on "Starting LQ.AI…" through the multi-GB pull).
+
+---
+
+#### DE-357 — Default chat tool-call cap (8) is low for multi-call-per-case research skills
+
+**Priority:** P3 · **Effort:** S–M · **Status: OPEN** · **Tracking:** [#212](https://github.com/LegalQuants/lq-ai/issues/212)
+
+**Context:** Split from [#207](https://github.com/LegalQuants/lq-ai/issues/207) finding 1. `settings.chat_tool_call_cap` defaults to **8**. Skills that issue several tool calls *per item* — `case-law-research` runs `search_case_law` → `get_cluster` → `read_opinion`/`find_in_case` for each case — exhaust the cap after only a handful of cases and drop into the final no-tools synthesis round earlier than the user expects. This is a tuning/UX gap, not a correctness bug: the empty-answer-at-cap case is already fixed (#208), and the operator override now works via `LQ_AI_CHAT_TOOL_CALL_CAP` / `CHAT_TOOL_CALL_CAP` after #210. **Options:** (1) raise the global default (e.g. 8 → 16/24) — simplest, but raises worst-case per-turn tool spend/latency for every skill; (2) per-skill cap override declared in the skill's frontmatter, applied as `max(default, skill_cap)` under a hard ceiling — targeted but more surface; (3) document per-deployment tuning of the env var prominently. Likely a sensible default bump + documented override now, with per-skill caps as a later enhancement.
+
+---
+
+#### DE-358 — Tool-use hardening backlog (harvested from parallel PRs #185/#186)
+
+**Priority:** P3 · **Effort:** S each · **Status: OPEN**
+
+**Context:** Contributor PRs [#185](https://github.com/LegalQuants/lq-ai/pull/185) (PR5b-i) and [#186](https://github.com/LegalQuants/lq-ai/pull/186) (PR5b-ii) rebuilt the PR5b governed chat tool-loop in parallel and were closed as duplicative of merged `main` (governed tool-calling per ADR 0015; the gateway Anthropic `tool_use` bridge; `api/app/chat/tool_loop.py`; the `chat_pending_tool_call` store + migration `0054`; the `POST /chats/{chat_id}/tool-calls/{pending_call_id}` confirmation endpoint). A line-by-line review of both branches against `main` surfaced the following genuinely-additive items. Each is to be **re-built against current `main`**, not cherry-picked from the now-stale branches.
+
+1. **Gateway Anthropic streaming `tool_use` accumulation.** `main`'s streaming adapter (`_anthropic_stream_iter` in `gateway/app/providers/anthropic.py`) emits no `tool_calls` delta for an Anthropic `tool_use` content block. This is **latent, not an active bug**: the chat tool-loop drives non-streaming gateway calls (`api/app/chat/tool_loop.py` `run_chat_tool_loop`, `stream=False`), so the gap is not reached today. **Verify reachability before fixing** — a future streaming-with-tools consumer would otherwise silently drop tool calls. Port an equivalent `input_json_delta` → `tool_calls` accumulator (emit at `content_block_stop`), plus a streaming-tool test (`main` has none).
+2. **OpenAPI documentation of `tools`/`tool_choice`.** `docs/api/gateway-openapi.yaml` `ChatCompletionRequest` forwards both fields but documents neither (a "documentation is part of the change" gap).
+3. **`tools` count cap.** No cap today on the gateway or api boundary; the PRs proposed 64. Cheap defense-in-depth on the prompt-multiplication surface — add as a `Field(max_length=...)` / `maxItems:` bound on `main`'s existing fields (not the full typed-model rewrite the PRs carried).
+4. **Granular `tool_choice` unit tests.** `main`'s adapter handles `auto`/`required`/`none`/forced-function/no-params modes but the tests exercise only `auto` + round-trip. Add per-mode coverage (note `main` emits `{"type":"auto"}` where the PR omitted the field — adapt assertions to `main`'s behavior).
+5. **Encryption-at-rest for the pending-tool-call resume payload.** `main` stores `resume_state`/`tool_call_args` on `chat_pending_tool_call` as plaintext JSONB (intentional — same sensitivity class as `messages.content`). The PR encrypted the bundled payload with Fernet (`MCPTokenEncryptor`). Optional defense-in-depth hardening to weigh against the schema/operability cost (the api process would need `LQ_AI_MCP_MASTER_KEY`).
+6. **Api-side per-chat tier ceiling.** `main`'s chat loop passes `max_allowed_tier=None` to `execute_mcp_tool` (relies on the gateway's per-provider `egress_tier` + SSRF allowlist — always enforced). Deriving an *additional* api-side ceiling from the chat/skill tier is defense-in-depth, not a bypass fix. Already flagged in-code; captured here so it has a tracking home.
+
+---
+
+#### DE-359 — Savepoint-isolate the chat-finalize persistence flushes
+
+**Priority:** P3 · **Effort:** S · **Status: OPEN**
+
+**Context:** Surfaced by the P1-A1 final whole-branch review (caselaw quote-verification). The chat-finalize path persists several artifacts in sequence — `_persist_message_citations`, `_persist_message_tool_sources`, and (P1-A1) the caselaw-citation orchestrator — before `_audit_message_sent` issues the turn's `db.commit()` (`api/app/api/chats.py`). Each persistence helper's `db.flush()` is wrapped in a `try/except … log` so a failure doesn't abort the turn, **but** a swallowed `DBAPIError` leaves the async session needing a rollback; the *next* unguarded statement (the audit `commit`) would then raise and break the turn. This is currently **unreachable in practice** — every row these helpers write satisfies its table CHECK constraints by construction, so the only path to a flush error is raw connection loss (which breaks the turn regardless) — and it is a **pre-existing** risk class (the `_persist_message_tool_sources` flush predates P1-A1; P1-A1 did not regress it). **Hardening:** wrap each finalize-time flush in a savepoint (`async with db.begin_nested():`) so a flush failure cannot poison the outer transaction before the audit commit. Defense-in-depth, not a correctness fix.
+
+---
+
+#### DE-360 — Gateway-native quality-escalation routing (cheap→capable), reasoning logged to the ledger
+
+**Priority:** P3 · **Effort:** L · **Status: OPEN**
+
+> Relocated from a standalone `docs/` draft and **renumbered from DE-345 → DE-360** to resolve a number collision (DE-345 is the `_stream_loop_outcome` renderer extraction, above). Surfaced while assessing Tucuxi-Inc's FLO project for reuse (2026-06-25).
+
+**Context:** A recurring cost pattern in the autonomous layer and the planned transparent validity/treatment layer (see the *Fiduciary-grade agentic legal work* proposal, WS-G) is running an LLM-judge over *many* small inputs — e.g. classifying the treatment of a case from each of its citing passages, or grading intermediate agent steps. Doing that fan-out on a frontier model is expensive; doing it on a small/cheap model risks quality. The standard mitigation is **escalation routing**: run the cheap model by default, judge the output, and escalate to a more capable model only when the judge's confidence is low. Tucuxi-Inc's MIT-licensed FLO project ("Focused Learning Optimizer") implements exactly this as its "small-model co-pilot" mode (cheap model + quality score → `escalation_needed` / `recommended_large_model`), and claims 70–80% cost savings; its eval rigor is light (≈20 cases, no independent audit) and, critically, its quality scores are **opaque** — the opposite of LQ.AI's posture. The useful, importable thing is the *pattern* (and possibly specific MIT code), not the service: a gateway-native escalation router whose judge **reasoning is exposed and logged**, not a black-box score.
+
+**Specific scope:**
+
+- A **gateway-native** escalation primitive — the Inference Gateway is the sole provider-key holder, so the cheap call, the quality judge, and any escalated call **must all route through the gateway**; no second key-holder, no direct provider calls from a sidecar. (This is the hard constraint that rules out adopting FLO as a standalone service.)
+- A configurable routing policy on the relevant call site: `default_model`, `escalation_model`, and an `escalation_threshold` on the judge's confidence. Below threshold → re-run on `escalation_model`; record both attempts.
+- The quality judge must be **transparent, not opaque**: it emits a confidence *and* a short rationale, and both the cheap-model output, the judge's rationale, and the escalation decision land in the **citation ledger / audit layer** (per ADR 0018 WS-A and ADR 0016 P3 — counts/types-and-pointers, no raw payloads) so a user can see *why* a step was escalated. A bare numeric score is explicitly out of scope — it reproduces the "trust us" opacity LQ.AI exists to replace.
+- Cost accounting: the escalation router's spend (cheap + judge + any escalated call) must register against the R4 economic brake and the autonomous session cost cap, and the realized cost recorded on the relevant `tool_call_log` / inference row (relates to [DE-344](#de-344)'s cost-model work).
+- First proving ground: the WS-G validity judge's citing-passage fan-out, where the cost lever is largest. Style/voice and learner-understanding monitoring (FLO modes 1/2/4) are **not** in scope.
+
+**Non-goals / boundaries:** Do **not** adopt FLO as a runtime dependency or co-deployed service (a second provider-key holder violates the gateway boundary; its opaque scoring violates the transparency mandate; its eval rigor is below the "works on a real lawyer's real documents" bar). Any code reuse is a *lift* of MIT-licensed logic into a gateway-native, transparency-preserving feature, reviewed as new gateway code under the `gateway/**` security-review path. FLO's factual-consistency test corpus may separately be useful as **eval scaffolding** for benchmarking the citation engine / WS-G judge — track that as its own small follow-up if pursued.
+
+**When to ship:** When the WS-G validity layer (or another high-fan-out LLM-judge workload) makes frontier-model judge cost a felt constraint. Until then, the existing per-turn tool-call cap and autonomous session cost cap bound spend, so this stays deferred.
+
+---
+
+#### DE-361 — Route `llm_judge` (and future verification methods) into the fiduciary-grade gate's status sets
+
+**Priority:** P3 · **Effort:** S · **Status: OPEN**
+
+**Context:** Surfaced by the P1-B1 final whole-branch review (the fiduciary-grade gate). The gate (`api/app/citation/gate.py`) buckets each ledger entry's `verification_status` into PASS `{exact_match, tolerant_match}` / SUPPORTED `{paraphrase_judge, ensemble_strict, ensemble_majority}` / FAIL `{unverified, failed}`; an unrecognized status is logged and **excluded** from all counts (a deliberately conservative default — it can never be silently counted as PASS). The `message_citations.verification_method` CHECK (`chk_message_citations_method_values`) admits **`'llm_judge'`** as a legal value ("reserved for future LLM-based verification"), but it is in **none** of the gate's three sets. This is **latent and harmless today** — the citation cascade does not emit `llm_judge` (no producer in `app/`; only the model docstring + the CHECK reference it) — so no real citation is dropped. **But** when LLM-judge verification ships, a legitimately-verified citation carrying `llm_judge` would be silently excluded from the gate's counts, and a turn whose only support is `llm_judge` would read `fiduciary_grade` with `total_assertions=0` rather than reflecting the supported assertion.
+
+**Specific scope:** When LLM-judge verification lands (or sooner, defensively), decide `llm_judge`'s tier — almost certainly **SUPPORTED** (a judge verdict is "supported, not verbatim," analogous to `paraphrase_judge`) — and add it to the gate's `SUPPORTED_STATUSES`, with a test. More broadly, establish the **forward-consistency obligation**: any new `verification_method` the cascade can emit must be routed into a gate bucket in the same change, so the "unrecognized → excluded" path stays a true safety net rather than a silent gap. Consider a structural guard (e.g. a test asserting every legal `verification_method` CHECK value maps to exactly one gate set).
+
+**When to ship:** With (or just before) the first feature that emits `llm_judge`. Until then the exclusion is safe; this is a tracked forward-consistency obligation, not a live bug.
+
+---
+
+#### DE-362 — Caselaw FAIL severity split in the Citation Ledger trace UI
+
+**Priority:** P3 · **Effort:** S · **Status: OPEN**
+
+**Context:** Surfaced by P1-B1c (the caselaw FAIL tier). P1-B1c writes a `message_caselaw_citations` FAIL row (`verified=False`, `verification_method=NULL`) in two distinct situations: (a) the whole-opinion judge **explicitly rejected** an attributed quote (the quote is likely fabricated or materially misquoted), and (b) the quote was **confidently attributed but could not be judged** because the per-turn cost budget was exhausted ("claims case X, not checked"). Both collapse to the same ledger `verification_status="unverified"` → gate `flagged`, and the C1 trace panel renders them identically. The distinction lives only in structured log events (`caselaw_fail_judge_rejected` vs `caselaw_fail_over_budget`). For a fiduciary tool the severity gap matters: "we checked and the cited case does not support this" is materially different from "we could not afford to check."
+
+**Specific scope:** Carry the FAIL reason from `_judge_attributed_passage` (`api/app/citation/caselaw.py`) through to the ledger/trace so the C1 panel can distinguish "judge-rejected" from "unverified — not checked." Likely needs a discriminating field on `message_caselaw_citations` (a nullable `fail_reason` enum) and a small ledger/UI change; weigh against simply surfacing the existing log distinction. Pairs with DE-279 (format-independent case-citation attribution), which would also let the same surface explain *why* a quote could not be attributed.
+
+**When to ship:** When the C1 trace UI is next iterated, or sooner if operators report confusion between the two FAIL kinds. Until then both honestly read "unverified" / flagged — conservative and correct, just coarse.
+
+---
+
+#### DE-363 — WS-G lazy-on-trace-open treatment fallback
+
+**Priority:** P2 · **Effort:** S · **Status: SHIPPED (WS-G PR3, 2026-06-27)** — the GET /ledger handler now best-effort re-enqueues `treatment_derivation_job` (coalesced by arq `_job_id`) for any caselaw turn whose treatment is null or stale, via the pure `message_ids_needing_treatment` helper; re-enqueue only (no synchronous egress), read shape unchanged.
+
+**Context:** [ADR 0019](adr/0019-transparent-validity-treatment-layer.md) D2 specifies a **lazy-on-first-trace-open** fallback for deriving a cited case's treatment when the async derivation job has not yet populated it (worker backlog, a failed/dropped enqueue, or a row that expired its staleness TTL between turns). WS-G PR1 (the citation-graph signal) ships **async-only** to keep the ledger read path fast and egress-free; an entry whose treatment is not yet derived renders nothing / "pending." That is an honest interim state, not a silent gap — but the ADR's fallback is part of the intended design, and the maintainer approved deferring it (2026-06-26) **on the condition that it lands by the end of Phase 2.**
+
+**Specific scope:** When `GET /chats/{chat_id}/ledger` resolves a caselaw entry whose `treatment_id` is null (or whose `citation_treatment.as_of` is stale beyond the TTL), trigger a best-effort derivation — most likely by **enqueuing the existing `treatment_derivation_job`** for that turn (keeping egress off the synchronous read path) and returning `treatment: null` / "deriving" for that read, rather than blocking the response on a live CourtListener fetch. Decide in the implementing PR whether the fallback ever derives **synchronously** on read (latency + egress cost) or strictly re-enqueues; the re-enqueue path is the conservative default.
+
+**When to ship:** Within WS-G (Phase 2) — alongside or immediately after PR2, before the milestone closes. Not optional; tracked here so the PR1 async-only simplification cannot silently become permanent.
+
+---
+
+#### DE-364 — Per-cluster SAVEPOINT isolation in treatment derivation (concurrency)
+
+**Priority:** P2 · **Effort:** S · **Status: SHIPPED (WS-G PR3, 2026-06-27)** — the parent-INSERT path is wrapped in a `begin_nested()` SAVEPOINT; on a `uq_citation_treatment_cluster_id` conflict it re-reads + reuses the concurrent winner's row (skipping this turn's judge pass). The Opus whole-branch review surfaced a sibling race on the **refresh** path (concurrent re-derivations colliding on the signal unique constraint at the judge-pass flush); that was closed in the same PR (DE-364b): `_run_judge_pass` was split into a gateway-judge phase + a tight SAVEPOINT persist phase (atomic DELETE+INSERT, last-writer-wins) with an `IntegrityError` backstop that restores the parent rollup to match the winner's signals. No separate DE was filed.
+
+**Context:** Surfaced by the WS-G PR1 Opus whole-branch review. `derive_treatment_for_message` (`api/app/citation/treatment.py`) processes each cited cluster in a per-cluster `try/except` so that one case's failure does not sink the others (the conservative per-case non-fatal guarantee). That guarantee holds for the **common** failure — a `fetch_citing` network error happens before any DB mutation, so the session stays clean and other clusters proceed (this is what the tests exercise). It does **not** fully hold for a `db.flush()` failure: if two concurrent turns cite the **same not-yet-cached case**, both miss the cache, both attempt to INSERT a `citation_treatment` row, and the second hits the `uq_citation_treatment_cluster_id` unique constraint → `IntegrityError`. That poisons the `AsyncSession` (pending-rollback), so the *remaining* clusters on a **multi-cluster** turn then fail with `PendingRollbackError` and the whole turn's derivation is lost. The worker's outer `try/except` catches it and returns `{"ok": False}` — **no crash**, and the underived state is honestly re-derivable by [DE-363](#de-363)'s lazy fallback — but the per-cluster non-fatal invariant is narrower than the code claims for multi-cluster turns under concurrent same-case citation. Single-cluster turns (the overwhelming common case) degrade to exactly the intended "this one case failed, underived" outcome.
+
+**Specific scope:** Wrap each cluster's mutate+flush in a SAVEPOINT (`async with db.begin_nested():`) so an `IntegrityError` rolls back only that cluster and leaves the session usable for the rest, OR catch the unique-violation specifically and re-read + reuse the row the concurrent turn inserted (the more correct outcome — the case *is* now cached). Add a concurrency regression test that forces a mid-loop flush failure on one cluster of a multi-cluster turn and asserts the others still derive + link.
+
+**When to ship:** Within WS-G (Phase 2), before the milestone closes — alongside DE-363 or PR2. Filed (not fixed) in PR1 to keep the security-gated slice scoped; the degradation is non-crashing and DE-363-recoverable in the interim.
+
+#### DE-365 — Launch-documentation pass: fiduciary-grade positioning + transparent-by-evidence comparison
+
+**Priority:** P2 · **Effort:** L · **Status: OPEN (end of Phase 2 / pre-launch)**
+
+**Context:** LQ.AI is plausibly one of the first **fiduciary-evidence-level** legal-tech products — and uniquely, it is **open source, open-telemetry, and self-hosted**, with educational transparency visualizations. The incumbents (Thomson Reuters / Westlaw / CoCounsel) have announced a fiduciary-grade legal-research direction but, per their public statements, are **not launching until later summer 2026**. The end-of-phase documentation does not yet convey the magnitude of what the project gives away for free, nor position it honestly against that announced-but-unshipped competition. Surfaced by the maintainer (2026-06-26).
+
+**Specific scope:**
+1. **Refresh README + docs** and add **clear transparency visualizations** that show how each core principle (derive-don't-assert, the Citation Ledger, the fiduciary-grade gate, governed gateway egress, P3 no-raw-payload, OpenTelemetry tracing, the validity/treatment layer) delivers transparent, auditable results "at every turn."
+2. **Pull the public TR/Westlaw/CoCounsel fiduciary-grade press release/announcement**, enumerate every promised feature/capability, and build an **honest feature-comparison chart**. Each LQ.AI "✓" must **link to the artifact that proves it** — the ADR, the code path, the test, or the live trace — so the comparison is *evidence-backed, not asserted* (a clickable audit trail cannot be FUD-ed; the transparency IS the proof).
+3. Frame the inspiration honestly (their announced direction inspired this) while making the defensible, demonstrable claim: massively-funded teams have **not** shipped this level of transparency, and LQ.AI delivers it transparently, open-source, now.
+
+**Constraint:** the conservative-engineering posture (CLAUDE.md principle 4 — never overclaim) binds every comparison claim: honest and unflinching, never hype. Where a capability is partial or roadmapped, say so. The standard for an LQ.AI "✓" is "demonstrable by an in-house lawyer on real documents," tied to a linkable artifact.
+
+**When to ship:** End of Phase 2 / pre-launch, after the fiduciary-grade workstreams (WS-G/D/E) have landed the capabilities the chart will claim. Relates to the [PR6 transparency-posture narration obligation](#13-transparency-as-a-founding-principle) (narrate the *why*, not just the mechanics).
+
+#### DE-366 — Treatment worker short-circuits the judge pass when no gateway is reachable
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** Surfaced by the WS-G PR2 Opus whole-branch review. `run_treatment_derivation` (`api/app/workers/treatment_worker.py`) resolves a `GatewayClient` via `get_gateway_client()` (which always returns a client — defaults present, `__init__` never raises) and then `get_citation_engine_judge_model()` (which catches all failures and returns its fallback rather than raising). So when the treatment worker runs against an **unconfigured or unreachable** gateway, `derive_gateway` is never set to `None` from the worker, and the judge pass is attempted: up to `n_judged_cap` per-cluster `chat_completion` calls are made and each fails+is swallowed → graph-only result. The **result data is correct** (graph-only, identical to PR1), so this is a latency / log-noise regression only — where PR1 made zero gateway calls, PR2 makes (and swallows) up to N failed connection attempts per cited case before degrading.
+
+**Specific scope:** Have the worker detect an unreachable/unconfigured gateway once (e.g. a cheap reachability/config probe, or treat a `get_citation_engine_judge_model` that returned the *fallback due to failure* as "no judge available") and pass `gateway=None` so `derive_treatment_for_message` short-circuits to graph-only without per-passage attempts. Keep the safe-degrade data outcome identical; only avoid the wasted calls.
+
+**When to ship:** Opportunistic; before the treatment worker is run at scale against operators who have not configured a gateway judge model.
+
+#### DE-367 — Materialize the treatment per-class rollup to avoid stored-vs-recomputed divergence
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** Surfaced by the WS-G PR2 reviews. The `/ledger` read (`api/app/citation/ledger.py`) exposes the stored parent column `citation_treatment.judged_count` alongside `per_class_counts` / `case_confidence`, which are **recomputed at read time** via `roll_up` over the current `citation_treatment_signal` rows. Today they always agree (the derivation writes `judged_count` and the signals atomically, and every refresh clears the child rows — DE-366's sibling fix in PR2), so there is no divergence. But a **future partial re-judge** that appended or removed signals without rewriting `judged_count` would desync the stored count from the recomputed per-class totals.
+
+**Specific scope:** When the partial-re-judge / incremental-refresh feature is designed, either (a) always update `judged_count` atomically with any signal write, or (b) drop the stored `judged_count` column and compute it at read time from the signals (single source of truth). Until then the current implementation is internally consistent.
+
+**When to ship:** Alongside any future incremental/partial treatment re-judge work.
+
+#### DE-368 — Test suite is serial-only against one shared Postgres; parallelization needs per-worker DBs
+
+**Priority:** P3 · **Effort:** S
+
+**Context:** Surfaced during WS-D PR1 verification. The `api/` test suite shares a single Postgres test database with a single-process, shared-connection SAVEPOINT-rollback model (`api/tests/conftest.py`). CI runs the suite as one serial `pytest -q` (no `pytest-xdist` / `pytest-randomly` installed), so this is correct and green there (verified: a clean solo run is `2436 passed, 1 skipped`). The fragility appears only under **concurrent** access to that one DB: running a second `pytest` invocation locally against the dev test DB while the full suite runs produced 24 spurious failures, all in DB-state-sensitive tests — `tests/test_research_service.py` (read-through opinion-cache + exact gateway `call_count` assertions like "2nd call served from cache"). The failures were a false alarm from concurrent test processes sharing rows/connection state, **not** a code or test-isolation defect; the same tests pass in isolation and in a solo full run.
+
+**Specific scope:** If the suite is ever parallelized for speed (`pytest-xdist -n auto`), give each worker its own database/schema (e.g. `xdist`'s `worker_id` → per-worker DB name, or a template-DB clone per worker) and mark any remaining cross-worker-stateful tests (DB-cache + call-count assertions) `serial`. Until then: do not run parallel `pytest` against the shared dev test DB (`lqai_test` on `:55432`). Optionally add a one-line note to `api/tests/conftest.py` documenting the serial-only constraint.
+
+**When to ship:** Before/with any test-suite parallelization effort; no action needed for current serial CI.
+
+#### DE-369 — Durable content provenance for fetched authority (statutes/regs) in the autonomous loop — **PR1b mandate, not optional**
+
+**Priority:** P1 · **Effort:** M · **Status (2026-07-01): SHIPPED — autonomous path (WS-E PR1b) + chat path (WS-E PR1c).** The chat consumer (WS-E PR1c) exposes `get_authority`/`search_authority` as governed chat tools, writes the fetched body to the same `authority_text_cache`, emits `MessageToolSource` provenance (chat has a `message_id`), and char-verifies quotes at finalize via `verify_and_persist_authority_citations` — a two-pass hook (Pass A verbatim → PASS; Pass B a budgeted whole-body paraphrase judge, `authority_content_judge.py`, → SUPPORTED) reusing the PR1b substrate; `gate.py`/`ledger.py` unchanged. Chat blockquotes are unattributed, so a quote matching no fetched body is **dropped** (not FAILed) to avoid false-positives on uploaded-doc/caselaw quotes — the attributed-FAIL tier is **DE-370**. All four acceptance criteria below are met for the autonomous matter loop: (1) fetched-authority text is durably persisted in an object-storage body + `authority_text_cache` metadata row (30-day TTL, path-traversal-hardened key, concurrent-safe upsert), written at fetch and read by the delivery verifier; (2) `message_authority_citations` (migration `0064`) backs verified quotes, char-verified via the reused `verify()` cascade + an in-memory `authority_target`; (3) the 4th `citation_ledger_entry` FK slot routes authority citations into `build_session_ledger` → the fiduciary gate counts them (verbatim → PASS, fabricated/no-locate → FAIL → `flagged`); (4) P3 preserved (`authority_text_cache` is a content store outside `_AUDIT_MODELS`; rows carry only the cited passage + offsets; body read at trace time). `gate.py` unchanged. **The CHAT path is completed by WS-E PR1c** (expose `get_authority`/`search_authority` in the chat tool-loop + a chat-finalize `verify_and_persist_authority_citations` hook reusing this same substrate).
+
+**Update (2026-07-01): SHIPPED — WS-E PR2a (SEC EDGAR).** SEC EDGAR full-text search ships as a second free authority source alongside GovInfo, in **both** the chat and autonomous paths: a gateway `EdgarToolAdapter` (`base_url: https://efts.sec.gov`, `www.sec.gov` for document fetch, `user_agent`-only auth — no API key) and a backend `EdgarAdapter` registered in `SOURCE_REGISTRY["edgar"]` reuse the PR1a/PR1b/PR1c substrate unchanged (`authority_text_cache`, `message_authority_citations`, the 4th ledger FK, `verify_and_persist_authority_citations`). The chat authority tools (`get_authority`/`search_authority`) are generalized from a GovInfo-only pair into registry-driven tools taking a `source` argument, so adding EDGAR required no new chat tool surface. EDGAR filings introduce a new verifiable content kind, `sec_filing`, added to `_VERIFIABLE_CONTENT_KINDS` with autonomous content_kind carried through end-to-end (closing the absent-content_kind mislabel gap tracked in DE-371).
+
+**Update (2026-07-01): SHIPPED — WS-E PR2b (EUR-Lex).** EUR-Lex (EU legislation + CJEU case law via the Publications Office Cellar) ships as the **third** free authority source, **get_authority-by-CELEX only** (no full-text search — that is DE-374), English-language, safe-CELEX only (treaty/corrigendum CELEX with `/`/`()` rejected pre-egress — DE-375); a gateway `EurLexToolAdapter` (User-Agent auth, no key; follows the Cellar 303 with an http→https upgrade + per-hop SSRF re-validation) + backend `EurLexAdapter` in `SOURCE_REGISTRY["eurlex"]` reuse the PR1a/PR1b/PR1c/PR2a substrate unchanged; the five `eu_*` content kinds (eu_regulation/eu_directive/eu_decision/eu_caselaw/eu_legislation) are added to `_VERIFIABLE_CONTENT_KINDS`; the chat authority tools become per-op so a get-only source is exposed honestly (only `get_authority`). This **completes WS-E PR2's "≥2 new free sources"** goal (GovInfo + SEC EDGAR + EUR-Lex = three free authority sources). `gate.py`/`ledger.py`/`alembic` unchanged; no migration.
+
+**Context:** Surfaced during WS-E PR1a Task 5 (`retrieve_authority`). The PR1a plan/handoff said fetched GovInfo authority would be captured as a `MessageToolSource` provenance row. That is architecturally impossible in the autonomous executor: `message_tool_sources.message_id` is `NOT NULL FK → messages.id` and the autonomous loop has no `message_id` (it produces findings/artifacts, not chat messages mid-loop). `MessageToolSource` is a chat-path mechanism (DE-350); the sibling autonomous handlers `_handle_retrieve_caselaw` / `_handle_call_mcp_tool` likewise write none. So PR1a captures provenance **only** at two levels: the `tool_call_log` row (the durable external-call **audit** — provider/tool/intent/tier/outcome) and `ToolResult.data["authority"]` (consumed by the loop, **not durably persisted**). The fetched authority's **content** (the statutory/regulatory text, label, url, citation) is therefore not durably stored by PR1a. Maintainer decision (2026-06-29): accept the PR1a adaptation, but the durable content provenance is **not** dropped — it is sequenced to PR1b, where it is the coherent unit it belongs to.
+
+**Why PR1b is the right home (not a skip):** ADR 0021 D3 (refined 2026-06-29 = mirror-the-caselaw-path) already designs this as one mechanism (mech-B): an in-memory verify target + ONE `message_authority_citations` table + a 4th `citation_ledger_entry` FK slot + a `(source_type, external_ref) → text` TTL cache + `build_authority_citations` + a `build_session_ledger` authority split. Durable text storage is **coupled to** char-fidelity verification of the fetched quote — storing the text without the verifier half is a half-built table that would need rework — and it needs migration `0064`, which PR1a was explicitly scoped to exclude. Building it whole in PR1b is the correct sequencing, not the lazier one.
+
+**Acceptance criteria (PR1b must deliver all):**
+1. Fetched-authority **text** is durably persisted (the `(source_type, external_ref) → text` TTL cache + the citable target the verifier reads), not only returned in `ToolResult.data`.
+2. A `message_authority_citations` table (migration `0064`) backs verified authority quotes, mirroring `message_caselaw_citations`; rows are char-fidelity-verified against the stored authority text via the existing cascade.
+3. The `citation_ledger_entry` 4th FK slot references authority citations, so a delivered matter session's ledger (`build_session_ledger`) includes authority-backed findings and the fiduciary gate counts them.
+4. P3 preserved (joins the no-raw-payload tripwire; text read at trace time, not stored in audit rows).
+
+**When to ship:** WS-E PR1b — the immediately-next slice after PR1a. This DE exists so the deferral is a tracked, permanent backlog obligation rather than a handoff note; PR1b is not "done" until all four criteria above hold.
+
+---
+
+#### DE-370 — Attributed-authority FAIL tier (chat)
+
+**Priority:** P2 · **Effort:** M · **Status (2026-07-01): filed (WS-E PR1c).**
+
+WS-E PR1c verifies chat quotes of fetched authority verbatim (PASS) and via a whole-body paraphrase judge (SUPPORTED), but **drops** a quote that matches no fetched body rather than FAILing it — because chat blockquotes are unattributed (a blockquote may quote an uploaded document or caselaw, not the fetched statute), so a FAIL would be a false-positive. DE-370 adds an attribution parser (blockquote → nearby statute/reg citation → matched `get_authority` ref) so a quote attributed to authority *X* that is not in *X*'s fetched text FAILs and flags the fiduciary gate. This is the B1c-analog for authority (mirrors the caselaw B1b→B1c staging: SUPPORTED-without-FAIL first, attributed-FAIL as a dedicated follow-up). Needs a reliable statute/reg citation-attribution parser (formats vary — "17 U.S.C. § 107", "17 USC 107", "40 CFR 1500.1"), so it is its own slice, not folded into PR1c.
+
+---
+
+#### DE-371 — Autonomous-path authority SUPPORTED tier (or drop the dead judge argument)
+
+**Priority:** P3 · **Effort:** S–M · **Status (2026-07-01): partially addressed (WS-E PR2a):** `sec_filing` is now a verifiable content kind and the autonomous absent-content_kind fallback no longer mislabels as `statute`; the autonomous SUPPORTED-tier (whole-body paraphrase judge parity) + the dead `gateway=` argument cleanup remain open.
+
+PR1b's `ledger_bridge.build_authority_citations` (autonomous path) uses a single `locate_passage`→`verify(…, gateway=gateway)` loop. Because `locate_passage` is a byte-exact substring finder, a located span always exact/tolerant-matches and an unlocatable paraphrase never produces a candidate — so `verify()`'s Stage-3 paraphrase judge is **structurally unreachable** there, and the `gateway=` argument is effectively dead for the SUPPORTED tier (the autonomous path delivers only PASS + no-locate-FAIL). WS-E PR1c fixed this for the **chat** path by adding a separate budgeted whole-body judge pass (`authority_content_judge.py`). DE-371 brings the autonomous path to parity — either (a) add the same whole-body paraphrase pass to `build_authority_citations`, or (b) if the SUPPORTED tier is not wanted for autonomous, drop the misleading `gateway=` argument from its `verify()` call and document verbatim-only. Honesty-motivated: today the autonomous code reads as if it does paraphrase judging when it cannot.
+
+---
+
+#### DE-372 — HTTP-level finalize integration fixture (caselaw + authority)
+
+**Priority:** P3 · **Effort:** M · **Status (2026-07-01): filed (surfaced by WS-E PR1c Task-5 review).**
+
+The citation-verify finalize wiring in `api/app/api/chats.py` (the `verify_and_persist_caselaw_citations` / `verify_and_persist_authority_citations` calls inserted into `_non_streaming_response` / `_stream_response` before `assemble_ledger_entries`) is not exercised by any executed test: the caselaw and authority integration tests drive `run_chat_tool_loop` and then call the verify/ledger/gate functions directly, and the one HTTP-level chat test mocks `run_chat_tool_loop` wholesale — so the actual insertion points are verified only by inspection + ruff/mypy. This is a symmetric, pre-existing gap (authority is at parity with caselaw, not below it). DE-372 adds a true HTTP-level finalize fixture that drives a chat turn through the endpoint and asserts the citation rows / ledger / gate the finalize wiring produces, covering both the caselaw and authority insertion sites, so a future edit to the finalize sequence can't silently break the wiring.
+
+#### DE-373 — Code-generated backend OpenAPI export + CI drift-guard
+
+**Priority:** P2 · **Effort:** M · **Status (2026-07-01): SHIPPED (generate-alongside).** `scripts/gen_openapi.py` (`make openapi`) dumps the live app's `app.openapi()` to a deterministic, canonically-sorted `docs/api/backend-openapi.generated.yaml`; the drift-guard `api/tests/test_openapi_export.py` regenerates in-memory and fails CI if the committed file diverges (fix = `make openapi`). The generator and the guard share `app.openapi_export.build_openapi_yaml()`, so they cannot disagree. The hand-authored `backend-openapi.yaml` sketch is retained as the human-facing reference; the replace-the-sketch variant remains a future ADR-lite decision.
+
+`docs/api/backend-openapi.yaml` is a hand-authored sketch, and no test checks it against the live FastAPI app (`api/tests/test_openapi.py` asserts the *app's* path set against a pinned `EXPECTED_PATHS`, never the committed sketch). So the sketch drifts silently: at pin `3659360` it was missing four shipped routes (`/research/sources`, `/autonomous/sessions/{session_id}/ledger`, and the two `/projects/{project_id}/knowledge-bases` routes), invisible to the downstream Donna BFF whose typegen vendors that static file. This DE makes the export faithful and drift-proof: (1) a generator (`scripts/gen-openapi.py` / `make openapi`) that dumps `app.openapi()` to a deterministic, canonically-sorted `docs/api/backend-openapi.generated.yaml`; (2) a CI drift-guard test that regenerates in-memory and fails when the committed file diverges (fix = re-run the generator) — this test alone would have caught all four missing routes at the PR that introduced them. Recommended posture: **generate alongside** the curated sketch (zero risk to existing consumers; Donna points typegen at the generated file), with the option to later **replace** the sketch outright and make code the single canonical API contract — the replace variant flips the project's sketch-is-canonical posture and warrants a short ADR. The immediate four-route drift was hand-patched in the same PR that files this DE.
+
+#### DE-374 — EUR-Lex full-text search via Cellar SPARQL
+
+**Priority:** P2 · **Effort:** M · **Status (2026-07-01): filed (WS-E PR2b).**
+
+The deferred `search_authority` op for EUR-Lex: PR2b ships get-by-CELEX only, so a user must already know the CELEX id. DE-374 adds a structured metadata/full-text search surface over the Cellar SPARQL endpoint (or the EUR-Lex search API), returning candidate CELEX ids + titles that feed `get_authority`; it makes EUR-Lex's `ops` include `search_authority` and the per-op chat schema would then surface it automatically.
+
+#### DE-375 — EUR-Lex treaty/corrigendum CELEX support
+
+**Priority:** P3 · **Effort:** S–M · **Status (2026-07-01): filed (WS-E PR2b).**
+
+PR2b validates `external_ref` against `^[A-Za-z0-9._-]+$` (the `authority_text_cache` key charset) and rejects treaty/corrigendum CELEX ids containing `/` or `()` (e.g. `12016E/TXT`, `32016R0679R(01)`) with a 400 before egress. DE-375 adds a reversible `external_ref` encoding (or an alternate cache-key scheme) so those id shapes can be fetched and cached safely.
+
+#### DE-376 — EUR-Lex human-readable subtitle + partial-payload adapter test
+
+**Priority:** P3 · **Effort:** S · **Status (2026-07-01): filed (WS-E PR2b whole-branch review).**
+
+Two cosmetic follow-ups surfaced by the PR2b Opus whole-branch review, deliberately deferred as non-blocking. (1) `EurLexAdapter.from_response` (`api/app/research/adapters.py`) maps the machine `content_kind` (e.g. `eu_regulation`) into `FetchedAuthority.subtitle`, which is documented as a human heading — EDGAR's subtitle is a human-readable `form_type · filed_date`. A better EUR-Lex subtitle (the document's official title, available once DE-374 search lands, or a friendly kind label) would improve the citation UX; never load-bearing for verification. (2) The adapter's absent-`content_kind`/`url`/`title` payload fallback path (`payload.get(...) or "eu_legislation"`) has no direct unit test — the happy-path mapping test covers the main case. Add a one-line partial-payload test alongside the subtitle fix.
+
+#### DE-377 — Genericize the one named third-party product reference in README
+
+**Priority:** P3 · **Effort:** S · **Status (2026-07-02): filed (DE-365 sub-project 1 whole-branch review).**
+
+The README Slack/Teams intake-bridge paragraph disclaims a scope ("Light intake, deliberately not full triage/SLA/approvals — that is *Streamline AI's* category"). This is a scope-*narrowing* disclaimer, not a competitor-comparison overclaim, so it was left untouched by the DE-365 sub-project 1 honesty audit. But it is the one place the public docs name a specific third-party product, and the milestone's vendor-neutral posture (LQ.AI vs. the generic proprietary category, no named products — the constraint that also binds the DE-365 sub-project 3 comparison) would eventually genericize it (e.g. "dedicated legal-intake/triage platforms"). Small, cosmetic; fold into a later vendor-neutrality sweep or the sub-project 3 comparison work.
 
 ---
 

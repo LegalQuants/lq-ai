@@ -226,6 +226,160 @@ async def test_ingest_happy_path_marks_ready_with_chunks(
 
 
 @pytest.mark.integration
+async def test_ingest_markdown_happy_path_stores_verbatim(
+    db_session: AsyncSession,
+    db_user: User,
+    fake_s3: FakeS3Client,
+    patched_storage: FakeS3Client,
+) -> None:
+    """A Markdown upload ingests to ``ready`` with verbatim canonical text.
+
+    Plain text needs no PyMuPDF/Docling, so this path is deterministic and
+    offline. The key assertion is that ``normalized_content`` (what the
+    Citation Engine re-reads) equals the uploaded text byte-for-byte — so
+    exact-match citations resolve against the source the user uploaded.
+    """
+
+    source = (
+        "# Master Services Agreement\n\n"
+        "1. **Term.** Three (3) years from the Effective Date.\n\n"
+        "2. **Fees.** Customer shall pay within thirty (30) days of invoice.\n\n"
+        "Cláusula 3 — Límite de responsabilidad — 第4条.\n"
+    ) * 20
+    body = source.encode("utf-8")
+    storage_key = f"{uuid.uuid4()}"
+    _put_in_fake_s3(fake_s3, storage_key, body)
+
+    file_row = await _create_file_row(
+        db_session,
+        db_user,
+        storage_path=storage_key,
+        pdf_bytes=body,
+        mime="text/markdown",
+        filename="msa.md",
+    )
+
+    result = await ingest_file(db_session, file_row.id)
+
+    assert result.status == "ready"
+    assert result.error is None
+    assert result.chunk_count > 0
+
+    await db_session.refresh(file_row)
+    assert file_row.ingestion_status == "ready"
+    assert file_row.ingestion_error is None
+
+    doc = (
+        await db_session.execute(select(Document).where(Document.file_id == file_row.id))
+    ).scalar_one()
+    assert doc.parser == "plain-text"
+    assert doc.page_count == 1
+    assert doc.was_ocrd is False
+    # Verbatim: the re-read source equals the uploaded text exactly.
+    assert doc.normalized_content == source
+
+    chunks = (
+        (
+            await db_session.execute(
+                select(DocumentChunk)
+                .where(DocumentChunk.document_id == doc.id)
+                .order_by(DocumentChunk.chunk_index)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(chunks) > 0
+    for chunk in chunks:
+        slice_ = doc.normalized_content[chunk.char_offset_start : chunk.char_offset_end]
+        assert slice_ == chunk.content, (
+            f"chunk {chunk.chunk_index} fidelity broken: "
+            f"len(slice)={len(slice_)}, len(content)={len(chunk.content)}"
+        )
+        assert chunk.page_start == 1 and chunk.page_end == 1
+
+
+@pytest.mark.integration
+async def test_ingest_non_utf8_text_fails_decode_error(
+    db_session: AsyncSession,
+    db_user: User,
+    fake_s3: FakeS3Client,
+    patched_storage: FakeS3Client,
+) -> None:
+    """A supported text MIME whose bytes are not UTF-8 fails as ``decode_error``.
+
+    Distinct from ``unsupported_type`` (the type IS supported) — and we fail
+    loud rather than guess an encoding, since a silent mis-decode would
+    corrupt the text a citation later verifies against.
+    """
+
+    body = b"valid ascii then non-utf8: \xff\xfe and a lone \x80 byte"
+    storage_key = f"{uuid.uuid4()}"
+    _put_in_fake_s3(fake_s3, storage_key, body)
+
+    file_row = await _create_file_row(
+        db_session,
+        db_user,
+        storage_path=storage_key,
+        pdf_bytes=body,
+        mime="text/plain",
+        filename="latin1-notes.txt",
+    )
+
+    result = await ingest_file(db_session, file_row.id)
+
+    assert result.status == "failed"
+    assert result.error == "decode_error"
+
+    await db_session.refresh(file_row)
+    assert file_row.ingestion_status == "failed"
+    assert file_row.ingestion_error == "decode_error"
+
+    # No Document persisted for a failed decode.
+    doc = (
+        await db_session.execute(select(Document).where(Document.file_id == file_row.id))
+    ).scalar_one_or_none()
+    assert doc is None
+
+
+@pytest.mark.integration
+async def test_ingest_markdown_as_octet_stream_routes_by_extension(
+    db_session: AsyncSession,
+    db_user: User,
+    fake_s3: FakeS3Client,
+    patched_storage: FakeS3Client,
+) -> None:
+    """Many browsers send `.md` as application/octet-stream (or empty). The gate
+    must fall back to the filename extension, or the headline use case (upload a
+    Markdown file) silently fails as unsupported_type before the parser runs."""
+
+    source = "# Notes\n\nThe party shall deliver within 30 days.\n" * 10
+    body = source.encode("utf-8")
+    storage_key = f"{uuid.uuid4()}"
+    _put_in_fake_s3(fake_s3, storage_key, body)
+
+    file_row = await _create_file_row(
+        db_session,
+        db_user,
+        storage_path=storage_key,
+        pdf_bytes=body,
+        mime="application/octet-stream",  # the browser did not recognize .md
+        filename="notes.md",
+    )
+
+    result = await ingest_file(db_session, file_row.id)
+
+    assert result.status == "ready", f"expected ready, got {result.status}/{result.error}"
+    assert result.chunk_count > 0
+
+    doc = (
+        await db_session.execute(select(Document).where(Document.file_id == file_row.id))
+    ).scalar_one()
+    assert doc.parser == "plain-text"
+    assert doc.normalized_content == source
+
+
+@pytest.mark.integration
 async def test_ingest_multipage_records_per_chunk_pages(
     db_session: AsyncSession,
     db_user: User,
@@ -339,7 +493,9 @@ async def test_ingest_unsupported_mime_marks_failed(
     fake_s3: FakeS3Client,
     patched_storage: FakeS3Client,
 ) -> None:
-    """A non-PDF MIME flips the row to failed with unsupported_type."""
+    """A MIME that is neither PDF nor text/Markdown flips the row to failed
+    with unsupported_type. (text/plain is now supported — see DE-332 — so this
+    uses an image, which is still unsupported.)"""
 
     storage_key = f"{uuid.uuid4()}"
     _put_in_fake_s3(fake_s3, storage_key, b"hello world")
@@ -349,8 +505,8 @@ async def test_ingest_unsupported_mime_marks_failed(
         db_user,
         storage_path=storage_key,
         pdf_bytes=b"hello world",
-        mime="text/plain",
-        filename="x.txt",
+        mime="image/png",
+        filename="x.png",
     )
 
     result = await ingest_file(db_session, file_row.id)
@@ -393,6 +549,53 @@ async def test_ingest_corrupt_pdf_marks_failed(
 
     await db_session.refresh(file_row)
     assert file_row.ingestion_status == "failed"
+
+
+@pytest.mark.integration
+async def test_ingest_parse_timeout_marks_failed(
+    db_session: AsyncSession,
+    db_user: User,
+    fake_s3: FakeS3Client,
+    patched_storage: FakeS3Client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A parse that exceeds the docling soft timeout flips the row to
+    ``failed`` with ``ingestion_timeout`` — never left stuck in
+    ``processing`` (DE-351 regression)."""
+
+    import time
+
+    from app.config import get_settings
+
+    settings = get_settings()
+    # Tiny soft timeout so the test is fast; the fake parser blocks past it.
+    monkeypatch.setattr(settings, "lq_ai_docling_timeout_seconds", 1)
+
+    def _slow_parse(*args: object, **kwargs: object) -> object:
+        # Blocks the worker thread well past the 1s soft timeout, standing
+        # in for a slow first-run docling model download.
+        time.sleep(3)
+        return None
+
+    monkeypatch.setattr("app.pipeline.ingest.parse_pdf", _slow_parse)
+
+    storage_key = f"{uuid.uuid4()}"
+    _put_in_fake_s3(fake_s3, storage_key, b"%PDF-1.4 fake")
+
+    file_row = await _create_file_row(
+        db_session,
+        db_user,
+        storage_path=storage_key,
+        pdf_bytes=b"%PDF-1.4 fake",
+    )
+
+    result = await ingest_file(db_session, file_row.id)
+    assert result.status == "failed"
+    assert result.error == "ingestion_timeout"
+
+    await db_session.refresh(file_row)
+    assert file_row.ingestion_status == "failed"
+    assert file_row.ingestion_error == "ingestion_timeout"
 
 
 @pytest.mark.integration

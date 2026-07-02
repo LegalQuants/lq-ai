@@ -261,7 +261,8 @@ stamps a canonical `autonomous_session.<event>` action and gates the `details`
 dict to counts, type labels, IDs, costs, and enums — **never raw entity values**.
 
 The `details` dict carries only structured scalars (e.g., `to_phase`, `reason`,
-`tool`, `outcome`, `cost_total_usd`, `findings_count`, `projected_usd`).
+`tool`, `outcome`, `cost_total_usd`, `findings_count`, `artifacts_count`,
+`projected_usd`).
 
 | Audit action | Emitted by | When |
 |---|---|---|
@@ -269,7 +270,7 @@ The `details` dict carries only structured scalars (e.g., `to_phase`, `reason`,
 | `autonomous_session.tool_call` | `api/app/autonomous/guard.py` | At the tool chokepoint — `outcome` ∈ `started`, the executed tool's outcome, or `tool_not_granted` |
 | `autonomous_session.halted` | `api/app/autonomous/guard.py` (external halt), `api/app/workers/autonomous_worker.py` (idle timeout) | On a halt (`details.reason` = `external_halt` or `idle_timeout`) |
 | `autonomous_session.cost_cap_reached` | `api/app/autonomous/guard.py` | When projected cost would exceed the session cap (`details.projected_usd`) |
-| `autonomous_session.completed` | `api/app/autonomous/nodes.py` | On normal session completion (`details.cost_total_usd`, `findings_count`) |
+| `autonomous_session.completed` | `api/app/autonomous/nodes.py` | On normal session completion (`details.cost_total_usd`, `findings_count`, `artifacts_count`) |
 | `autonomous_session.halt_requested` | `api/app/api/autonomous.py` | On `POST /sessions/{id}/halt` — the API-layer request that precedes the executor's `halted` event |
 
 **Known gap — `autonomous_session.started` is defined but never emitted.** The

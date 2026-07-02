@@ -114,6 +114,10 @@ api-format:
 api-format-check:
 	cd api && .venv/bin/ruff format --check .
 
+.PHONY: openapi
+openapi: ## Regenerate docs/api/backend-openapi.generated.yaml from the live app (DE-373)
+	api/.venv/bin/python scripts/gen_openapi.py
+
 # ---------- gateway/ ----------
 
 .PHONY: install-gateway

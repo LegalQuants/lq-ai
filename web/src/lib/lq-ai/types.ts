@@ -168,6 +168,12 @@ export interface Chat {
 	message_count?: number;
 	created_at: string;
 	updated_at: string;
+	/**
+	 * Issue #207 finding 4 — the chat's active "sticky skills" set. Empty (or
+	 * absent) means the sticky toggle is off; a new chat never inherits it.
+	 * When non-empty, these skills are auto-applied to every turn until cleared.
+	 */
+	sticky_skills?: string[];
 }
 
 export interface ChatCreate {
@@ -260,6 +266,20 @@ export interface Citation {
 	created_at?: string;
 }
 
+/** External-source provenance row returned by GET /api/v1/chats/{chat_id}/messages/{message_id}/sources (PR6c). */
+export interface ToolSource {
+	id: string;
+	message_id: string;
+	source_kind: string;
+	label: string;
+	subtitle?: string | null;
+	url?: string | null;
+	external_ref?: string | null;
+	provider: string;
+	tool: string;
+	created_at?: string;
+}
+
 export type MessageRole = 'user' | 'assistant' | 'system' | 'tool';
 
 /**
@@ -344,6 +364,12 @@ export interface MessageCreate {
 		source?: string;
 		inputs?: Record<string, unknown>;
 	}>;
+	/**
+	 * Issue #207 finding 4 — opt-in "sticky skills" toggle. `true` makes this
+	 * turn's applied skills sticky for the chat (auto-applied to later turns);
+	 * `false` clears the set; omitted leaves it unchanged. Off by default.
+	 */
+	set_sticky?: boolean | null;
 }
 
 export interface MessagePostResponse {
@@ -390,11 +416,32 @@ export interface MessageErrorFrame {
 	};
 }
 
+export interface ToolConfirmationRequiredFrame {
+	type: 'tool_confirmation_required';
+	lq_ai_message_id: string;
+	pending_call_id: string;
+	provider: string;
+	tool: string;
+	function_name: string;
+	args_summary: string;
+	tier: number | null;
+	destructive: boolean;
+}
+
+export interface McpAuthorizationRequiredFrame {
+	type: 'mcp_authorization_required';
+	lq_ai_message_id: string;
+	server: string;
+	authorize_url: string;
+}
+
 export type MessageStreamEvent =
 	| MessageStartFrame
 	| MessageDeltaFrame
 	| MessageCompleteFrame
-	| MessageErrorFrame;
+	| MessageErrorFrame
+	| ToolConfirmationRequiredFrame
+	| McpAuthorizationRequiredFrame;
 
 // ----- Skills -----
 
@@ -429,6 +476,11 @@ export interface SkillSummary {
 	 * spawned the row. Null for from-scratch creates.
 	 */
 	forked_from?: string | null;
+	/**
+	 * C5 (PR6d) — tool integrations declared in the skill's frontmatter.
+	 * Null/absent = skill makes no tool declarations.
+	 */
+	tool_usage?: string[] | null;
 }
 
 export interface SkillReferenceFile {
@@ -458,6 +510,12 @@ export interface Skill extends SkillSummary {
 	 * iteration; for now the LQ.AI shell parses YAML.
 	 */
 	inputs?: SkillInputDef[];
+	/**
+	 * C5 (PR6d) — tools declared in tool_usage that are not configured in
+	 * this deployment. Empty array = all declared tools available; null/absent
+	 * = availability undeterminable (e.g. gateway did not report).
+	 */
+	unavailable_tool_usage?: string[] | null;
 }
 
 /** Response shape for GET /api/v1/skills/{name}/inputs. Resolves user > team > built-in. */
@@ -1028,12 +1086,7 @@ export interface EasyPlaybookGeneration {
  * execution surface does NOT have — tabular runs can be hours long, so
  * cancellation matters.
  */
-export type TabularExecutionStatus =
-	| 'pending'
-	| 'running'
-	| 'completed'
-	| 'failed'
-	| 'cancelled';
+export type TabularExecutionStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 
 /**
  * Per-cell confidence from the Citation Engine cascade. `failed` is
@@ -1206,4 +1259,67 @@ export interface TabularPreviewCostResponse {
 	estimated_tokens: number;
 	estimated_cost_usd: string;
 	per_tier_breakdown: Record<string, number>;
+}
+
+// ----- Citation Ledger (P1-A3 / P1-C1) -----
+
+export interface LedgerPassage {
+	text: string;
+	offset_start: number;
+	offset_end: number;
+	page?: number | null;
+}
+export interface LedgerSource {
+	kind: string; // kb_document | caselaw | mcp | ...
+	source_file_id?: string;
+	opinion_id?: number;
+	cluster_id?: number;
+	label?: string | null;
+	subtitle?: string | null;
+	url?: string | null;
+	external_ref?: string | null;
+	tool?: string | null;
+	passages?: LedgerPassage[];
+}
+export interface LedgerCitingRef {
+	cluster_id?: number | null;
+	opinion_id?: number | null;
+	case_name?: string | null;
+	court?: string | null;
+	date_filed?: string | null;
+}
+export interface LedgerTreatment {
+	cited_by_count: number;
+	as_of: string;
+	derived_method: string;
+	citing: LedgerCitingRef[];
+}
+export interface LedgerEntry {
+	id: string;
+	message_id: string;
+	source_kind: string;
+	verification_status: string;
+	confidence: number | null;
+	provider: string | null;
+	retrieved_at: string | null;
+	treatment_id: string | null;
+	treatment?: LedgerTreatment | null;
+	created_at: string;
+	source: LedgerSource;
+}
+export type GateStatus = 'fiduciary_grade' | 'supported_only' | 'flagged';
+export interface LedgerGate {
+	message_id: string;
+	gate_status: GateStatus;
+	pass_count: number;
+	supported_count: number;
+	fail_count: number;
+	total_assertions: number;
+	confidence: number | null;
+	created_at: string;
+}
+export interface ChatLedger {
+	chat_id: string;
+	entries: LedgerEntry[];
+	gates: LedgerGate[];
 }

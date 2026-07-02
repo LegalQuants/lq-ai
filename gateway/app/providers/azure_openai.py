@@ -102,6 +102,7 @@ class AzureOpenAIAdapter(OpenAIAdapter):
         api_version: str,
         timeout_s: float = DEFAULT_TIMEOUT_SECONDS,
         client: httpx.AsyncClient | None = None,
+        use_max_completion_tokens: bool = False,
     ) -> None:
         super().__init__(
             name=name,
@@ -109,6 +110,7 @@ class AzureOpenAIAdapter(OpenAIAdapter):
             api_key=api_key,
             timeout_s=timeout_s,
             client=client,
+            use_max_completion_tokens=use_max_completion_tokens,
         )
         self._api_version = api_version
 
@@ -183,6 +185,7 @@ class AzureOpenAIAdapter(OpenAIAdapter):
             api_version=api_version_raw,
             timeout_s=timeout_s,
             client=client,
+            use_max_completion_tokens=provider.use_max_completion_tokens,
         )
 
     # --- ProviderAdapter contract --------------------------------------------
@@ -202,7 +205,12 @@ class AzureOpenAIAdapter(OpenAIAdapter):
         reused verbatim from the OpenAI helpers.
         """
 
-        body = _to_openai_request(request, model=model, stream=stream)
+        body = _to_openai_request(
+            request,
+            model=model,
+            stream=stream,
+            use_max_completion_tokens=self._use_max_completion_tokens,
+        )
         path = self._chat_completions_path(deployment_id=model)
 
         if stream:

@@ -4,7 +4,7 @@
 	 * Wave A defines the contract; Wave D wires it into the message renderer.
 	 * See spec §5.2.
 	 */
-	export type ProvenanceKind = 'skill' | 'tier' | 'provider' | 'kb' | 'audit' | 'enhanced';
+	export type ProvenanceKind = 'skill' | 'tier' | 'provider' | 'kb' | 'audit' | 'enhanced' | 'caselaw';
 
 	const KIND_ICON: Record<ProvenanceKind, string> = {
 		skill: '🛠️',
@@ -12,7 +12,8 @@
 		provider: '🧠',
 		kb: '📎',
 		audit: '📜',
-		enhanced: '✨'
+		enhanced: '✨',
+		caselaw: '⚖'
 	};
 
 	/**
@@ -30,7 +31,9 @@
 		audit:
 			'Audit log — this action was recorded for compliance and review. Click to view the entry.',
 		enhanced:
-			'Enhanced Prompt — the AI rewrote your short prompt into a structured legal prompt before answering. Click to compare.'
+			'Enhanced Prompt — the AI rewrote your short prompt into a structured legal prompt before answering. Click to compare.',
+		caselaw:
+			'Case law — this answer drew on external legal sources (e.g. CourtListener). Click to view sources consulted.'
 	};
 
 	export function iconFor(kind: ProvenanceKind): string {
@@ -45,6 +48,7 @@
 
 	export function toneFor(kind: ProvenanceKind, tierMismatch: boolean): ProvenanceTone {
 		if (kind === 'tier') return tierMismatch ? 'amber' : 'slate';
+		if (kind === 'caselaw') return 'slate';
 		return 'sage';
 	}
 </script>

@@ -6,6 +6,10 @@ Sessions (M4-A4-i):
 * ``POST /sessions/{session_id}/halt`` — idempotent halt request.
 * ``GET  /sessions``                  — paginated list, newest first.
 * ``GET  /sessions/{session_id}``     — detail + live receipt.
+* ``GET  /sessions/{session_id}/findings`` — the run's findings, stable
+  ``created_at, id`` order.
+* ``GET  /sessions/{session_id}/artifacts`` — the run's document-grade
+  artifact references, same stable order (Donna ask #8).
 
 Memory curation (M4-B1):
 * ``GET  /memory``                           — list non-deleted entries.
@@ -36,7 +40,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
@@ -49,9 +53,13 @@ from app.audit import audit_action
 from app.autonomous.audit import autonomous_audit
 from app.autonomous.cron import next_run_after, validate_cron_expr
 from app.autonomous.receipt import build_receipt
+from app.citation.gate import resolve_gates
+from app.citation.ledger import resolve_ledger_entries
 from app.config import get_settings
 from app.db.session import get_db
 from app.models.autonomous import (
+    AutonomousArtifact,
+    AutonomousFinding,
     AutonomousMemory,
     AutonomousNotification,
     AutonomousSchedule,
@@ -60,9 +68,15 @@ from app.models.autonomous import (
     PrecedentEntry,
     ProjectContextProposal,
 )
+from app.models.chat import Chat
+from app.models.document import Document
 from app.models.knowledge import KnowledgeBase
 from app.models.project import Project
 from app.schemas.autonomous import (
+    AutonomousArtifactListResponse,
+    AutonomousArtifactRead,
+    AutonomousFindingListResponse,
+    AutonomousFindingRead,
     AutonomousManualRunRequest,
     AutonomousMemoryListResponse,
     AutonomousMemoryRead,
@@ -491,6 +505,206 @@ async def get_session(
     )
 
 
+@router.get(
+    "/sessions/{session_id}/findings",
+    response_model=AutonomousFindingListResponse,
+    summary="List a session's persisted findings (work-product, stable order)",
+    responses={
+        404: {"description": "Session not found"},
+        401: {"description": "Not authenticated"},
+    },
+)
+async def list_session_findings(
+    session_id: uuid.UUID,
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    limit: int = _LIMIT_DEFAULT,
+    offset: int = 0,
+) -> AutonomousFindingListResponse:
+    """GET /api/v1/autonomous/sessions/{session_id}/findings
+
+    Returns the run's persisted findings (the ``emit_finding`` chokepoint
+    work-product) ordered by ``created_at ASC, id ASC``. Rows a run emits
+    in its single executor commit typically share one ``created_at``
+    (server-side ``now()`` is transaction-stable in Postgres), so ``id``
+    is the deterministic tiebreaker that keeps LIMIT/OFFSET pagination
+    stable — a repeatable order, NOT a guaranteed emission sequence (ids
+    are random UUIDs). This still differs intentionally from the
+    newest-first autonomous lists: these are one run's output, not a feed.
+
+    Owner-gated by loading the owned session first (the findings table has
+    no ``user_id`` — authz is via the parent session). Another user's
+    ``session_id`` — or a missing one — returns 404 (not 403) to avoid
+    existence disclosure. ``limit`` is clamped to [1, 200]; ``offset`` to
+    [0, ∞).
+    """
+    await _load_owned_session(db, session_id=session_id, user_id=user.id)
+
+    limit = max(1, min(limit, _LIMIT_MAX))
+    offset = max(0, offset)
+
+    base_where = [AutonomousFinding.session_id == session_id]
+
+    count_stmt = select(func.count()).select_from(AutonomousFinding).where(*base_where)
+    total_count: int = (await db.execute(count_stmt)).scalar_one()
+
+    rows_stmt = (
+        select(AutonomousFinding)
+        .where(*base_where)
+        .order_by(AutonomousFinding.created_at.asc(), AutonomousFinding.id.asc())
+        .limit(limit)
+        .offset(offset)
+    )
+    rows = (await db.execute(rows_stmt)).scalars().all()
+
+    return AutonomousFindingListResponse(
+        findings=[AutonomousFindingRead.model_validate(r) for r in rows],
+        total_count=total_count,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get(
+    "/sessions/{session_id}/artifacts",
+    response_model=AutonomousArtifactListResponse,
+    summary="List a session's persisted document-grade artifacts (work-product, stable order)",
+    responses={
+        404: {"description": "Session not found"},
+        401: {"description": "Not authenticated"},
+    },
+)
+async def list_session_artifacts(
+    session_id: uuid.UUID,
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    limit: int = _LIMIT_DEFAULT,
+    offset: int = 0,
+) -> AutonomousArtifactListResponse:
+    """GET /api/v1/autonomous/sessions/{session_id}/artifacts
+
+    Returns the run's persisted artifact references (the ``emit_artifact``
+    chokepoint work-product, Donna ask #8) ordered by ``created_at ASC,
+    id ASC``. Rows a run emits in its single executor commit typically
+    share one ``created_at`` (transaction-stable ``now()``), so ``id`` is
+    the deterministic tiebreaker that keeps LIMIT/OFFSET pagination
+    stable — a repeatable order, NOT a guaranteed emission sequence (ids
+    are random UUIDs). This differs intentionally from the newest-first
+    autonomous lists: these are one run's output, not a feed (mirrors the
+    findings read above).
+
+    Owner-gated by loading the owned session first (the artifacts table
+    has no ``user_id`` — authz is via the parent session). Another user's
+    ``session_id`` — or a missing one — returns 404 (not 403) to avoid
+    existence disclosure. ``limit`` is clamped to [1, 200]; ``offset`` to
+    [0, ∞).
+
+    ``document_id`` is NOT a column on ``autonomous_artifacts`` — it is
+    enriched here with one batched query over the page's non-null
+    ``file_id`` values against the unique ``documents.file_id`` (1:1), so
+    the UI can deep-link the KB document.
+
+    Deletion semantics: a hard file-delete SET-NULLs ``file_id`` (the
+    name/size metadata survives here; ``file_id`` and ``document_id``
+    return as null). Deleting the *session* CASCADE-deletes these
+    reference rows but never touches the KB document — the document
+    outlives the session (it is the user's deliverable).
+    """
+    await _load_owned_session(db, session_id=session_id, user_id=user.id)
+
+    limit = max(1, min(limit, _LIMIT_MAX))
+    offset = max(0, offset)
+
+    base_where = [AutonomousArtifact.session_id == session_id]
+
+    count_stmt = select(func.count()).select_from(AutonomousArtifact).where(*base_where)
+    total_count: int = (await db.execute(count_stmt)).scalar_one()
+
+    rows_stmt = (
+        select(AutonomousArtifact)
+        .where(*base_where)
+        .order_by(AutonomousArtifact.created_at.asc(), AutonomousArtifact.id.asc())
+        .limit(limit)
+        .offset(offset)
+    )
+    rows = (await db.execute(rows_stmt)).scalars().all()
+
+    # document_id enrichment — one batched lookup over this page's non-null
+    # file_ids via the unique documents.file_id (1:1). A NULL file_id (the
+    # file was hard-deleted; FK is ON DELETE SET NULL) or a missing
+    # documents row maps to document_id=None.
+    file_ids = {r.file_id for r in rows if r.file_id is not None}
+    doc_id_by_file_id: dict[uuid.UUID, uuid.UUID] = {}
+    if file_ids:
+        doc_rows = await db.execute(
+            select(Document.id, Document.file_id).where(Document.file_id.in_(file_ids))
+        )
+        doc_id_by_file_id = {f_id: d_id for d_id, f_id in doc_rows.all()}
+
+    artifacts: list[AutonomousArtifactRead] = []
+    for row in rows:
+        item = AutonomousArtifactRead.model_validate(row)
+        if row.file_id is not None:
+            item.document_id = doc_id_by_file_id.get(row.file_id)
+        artifacts.append(item)
+
+    return AutonomousArtifactListResponse(
+        artifacts=artifacts,
+        total_count=total_count,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get(
+    "/sessions/{session_id}/ledger",
+    summary="Citation ledger + fiduciary gate for an autonomous session (WS-D PR2 C5)",
+    responses={
+        404: {"description": "Session not found or has no ledger"},
+        401: {"description": "Not authenticated"},
+    },
+)
+async def get_session_ledger(
+    session_id: uuid.UUID,
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, Any]:
+    """GET /api/v1/autonomous/sessions/{session_id}/ledger
+
+    Returns ``{chat_id, entries, gates}`` — the identical shape produced by
+    the chat ``GET /{chat_id}/ledger`` endpoint — so the PR2-UI can reuse
+    the chat ledger component directly without adaptation.  For a session
+    ledger ``gates`` always has exactly one element (the single fiduciary-
+    grade gate manufactured by ``build_session_ledger``).
+
+    Reuses ``resolve_ledger_entries`` and ``resolve_gates`` — the same
+    functions the chat ledger endpoint calls.
+
+    Owner-gated via ``_load_owned_session``; another user's ``session_id``
+    or a missing session returns 404 (not 403) to avoid existence
+    disclosure.  Returns 404 if the session exists but ``build_session_ledger``
+    has not been called yet (no hidden chat manufactured).
+    """
+    await _load_owned_session(db, session_id=session_id, user_id=user.id)
+    chat = (
+        (
+            await db.execute(
+                select(Chat)
+                .where(Chat.autonomous_session_id == session_id)
+                .order_by(Chat.created_at)
+                .limit(1)
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if chat is None:
+        raise HTTPException(status_code=404, detail="session has no ledger")
+    entries = await resolve_ledger_entries(db, chat_id=chat.id)
+    gates = await resolve_gates(db, chat_id=chat.id)
+    return {"chat_id": str(chat.id), "entries": entries, "gates": gates}
+
+
 # ---------------------------------------------------------------------------
 # Memory curation endpoints (M4-B1)
 # ---------------------------------------------------------------------------
@@ -508,6 +722,7 @@ async def list_memory(
     user: ActiveUser,
     db: Annotated[AsyncSession, Depends(get_db)],
     state: Annotated[MemoryState | None, Query()] = None,
+    source_session_id: Annotated[uuid.UUID | None, Query()] = None,
     limit: int = _LIMIT_DEFAULT,
     offset: int = 0,
 ) -> AutonomousMemoryListResponse:
@@ -515,7 +730,9 @@ async def list_memory(
 
     Returns the caller's non-deleted memory entries ordered by
     ``created_at DESC``.  Pass ``?state=proposed|kept|dismissed`` to
-    filter; omitting ``state`` returns all non-deleted entries.
+    filter by review state; omitting ``state`` returns all non-deleted
+    entries.  Pass ``?source_session_id=`` to narrow to the memories a
+    specific run proposed (the run's "memories this run proposed" view).
     ``limit`` is clamped to [1, 200]; ``offset`` to [0, ∞).
     """
     limit = max(1, min(limit, _LIMIT_MAX))
@@ -527,6 +744,8 @@ async def list_memory(
     ]
     if state is not None:
         base_where.append(AutonomousMemory.state == str(state))
+    if source_session_id is not None:
+        base_where.append(AutonomousMemory.source_session_id == source_session_id)
 
     count_stmt = select(func.count()).select_from(AutonomousMemory).where(*base_where)
     total_count: int = (await db.execute(count_stmt)).scalar_one()
@@ -1077,6 +1296,7 @@ async def create_schedule(
         skill_ref=body.skill_ref,
         target_kb_id=body.target_kb_id,
         enabled=body.enabled,
+        emit_artifacts=body.emit_artifacts,
         max_cost_usd=body.max_cost_usd,
         next_run_at=next_run_after(body.cron_expr, now),
     )
@@ -1108,10 +1328,13 @@ async def _spawn_manual_session(
 
     Mirrors the session construction in
     :func:`app.workers.autonomous_worker._run_schedule_sweep`: builds
-    ``params`` carrying only the non-null target keys, sets a non-null
-    ``max_cost_usd`` (per-run cap or the config default so R4 always
-    arms), flushes to obtain the id, then best-effort enqueues. The
-    five-phase executor + R4/R5/R6 brakes + receipt are unchanged.
+    ``params`` carrying only the non-null target keys (plus
+    ``emit_artifacts`` — set to ``True`` only when the request body opted
+    in; Donna ask #8 — a manual run has no schedule/watch row, so the
+    body carries the flag), sets a non-null ``max_cost_usd`` (per-run cap
+    or the config default so R4 always arms), flushes to obtain the id,
+    then best-effort enqueues. The five-phase executor + R4/R5/R6 brakes
+    + receipt are unchanged.
     """
     enqueue_fn = enqueue if enqueue is not None else enqueue_autonomous_session_job
     settings = get_settings()
@@ -1128,6 +1351,10 @@ async def _spawn_manual_session(
         params["playbook_id"] = str(body.playbook_id)
     if body.skill_ref is not None:
         params["skill_ref"] = body.skill_ref
+    if body.emit_artifacts:
+        # Opt-in (Donna ask #8) — non-null-subset convention: the key is
+        # present iff the caller opted in.
+        params["emit_artifacts"] = True
 
     session = AutonomousSession(
         user_id=user_id,
@@ -1286,6 +1513,10 @@ async def update_schedule(
         schedule.name = fields["name"]
     if "enabled" in fields:
         schedule.enabled = fields["enabled"]
+    if fields.get("emit_artifacts") is not None:
+        # bool | None on the Update schema; the column is NOT NULL, so an
+        # explicit null is a no-op rather than a constraint violation.
+        schedule.emit_artifacts = fields["emit_artifacts"]
     if "playbook_id" in fields:
         schedule.playbook_id = fields["playbook_id"]
     if "skill_ref" in fields:
@@ -1422,6 +1653,7 @@ async def create_watch(
         playbook_id=body.playbook_id,
         skill_ref=body.skill_ref,
         enabled=body.enabled,
+        emit_artifacts=body.emit_artifacts,
         max_cost_usd=body.max_cost_usd,
     )
     db.add(watch)
@@ -1529,6 +1761,10 @@ async def update_watch(
 
     if "enabled" in fields:
         watch.enabled = fields["enabled"]
+    if fields.get("emit_artifacts") is not None:
+        # bool | None on the Update schema; the column is NOT NULL, so an
+        # explicit null is a no-op rather than a constraint violation.
+        watch.emit_artifacts = fields["emit_artifacts"]
     if "playbook_id" in fields:
         watch.playbook_id = fields["playbook_id"]
     if "skill_ref" in fields:

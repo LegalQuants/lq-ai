@@ -16,13 +16,14 @@ This module is the entry point invoked by the ``arq`` worker. Given a
 
 Failure paths:
 
-* **Unsupported file type** (non-PDF MIME): row goes to
-  ``ingestion_status='failed'`` with
-  ``ingestion_error='unsupported_type'``. C4 leaves project_id and
-  other metadata intact.
-* **Parser failure** (corrupt PDF, encrypted, image-only PDF that
-  PyMuPDF can't handle): same — ``failed`` + descriptive
-  ``ingestion_error``.
+* **Unsupported file type** (neither PDF nor text/Markdown — by MIME
+  or filename extension): row goes to ``ingestion_status='failed'``
+  with ``ingestion_error='unsupported_type'``. C4 leaves project_id
+  and other metadata intact.
+* **Parser failure**: ``failed`` + descriptive ``ingestion_error`` —
+  ``parse_failed`` (corrupt PDF), ``unsupported_content`` (encrypted /
+  image-only PDF), or ``decode_error`` (a text/Markdown upload that is
+  not valid UTF-8, or contains a NUL byte).
 * **Storage failure** (MinIO unreachable): the worker raises and
   ``arq`` retries per its visibility-timeout policy. The row stays
   at ``processing`` until a successful run flips it.
@@ -52,10 +53,14 @@ from app.pipeline.chunker import (
 )
 from app.pipeline.parsers import (
     ParsedDocument,
+    ParserDecodeError,
     ParserError,
     ParserUnsupported,
     is_pdf_mime,
+    is_text_filename,
+    is_text_mime,
     parse_pdf,
+    parse_text,
 )
 from app.storage import stream_download
 
@@ -151,8 +156,19 @@ async def ingest_file(
             error="soft_deleted",
         )
 
-    # ---- Reject unsupported types early.
-    if not is_pdf_mime(row.mime_type):
+    # ---- Resolve the parser route. PDF and plain-text/Markdown ride
+    # different branches. The browser-supplied MIME is unreliable for
+    # .md/.txt (often application/octet-stream or empty), so fall back to the
+    # filename extension when the MIME isn't already a text type. parse_text
+    # still validates the bytes (UTF-8, no NUL), so a binary file with a text
+    # name fails cleanly as decode_error rather than being trusted.
+    route_pdf = is_pdf_mime(row.mime_type)
+    route_text = is_text_mime(row.mime_type) or (not route_pdf and is_text_filename(row.filename))
+
+    # ---- Reject unsupported types early. Log the MIME only — never the
+    # filename (P3: counts/types/outcomes in logs, never user content; a
+    # legal filename can itself be sensitive).
+    if not (route_pdf or route_text):
         await _mark_failed(db, row, error="unsupported_type", reason=f"mime={row.mime_type!r}")
         return IngestResult(
             file_id=file_id,
@@ -172,7 +188,7 @@ async def ingest_file(
 
     # ---- Pull bytes from MinIO.
     try:
-        pdf_bytes = await _read_all_bytes(row.storage_path)
+        raw_bytes = await _read_all_bytes(row.storage_path)
     except Exception as exc:
         # Storage failures: log and re-raise so arq retries. Don't flip
         # status to failed — operator-side fixes (MinIO restart) should
@@ -187,12 +203,61 @@ async def ingest_file(
         )
         raise
 
-    # ---- Run parsers in a thread (sync libraries).
+    # ---- Run parsers in a thread (sync libraries), bounded by an in-job
+    # soft timeout. A slow first-run docling model download (~hundreds of MB
+    # on first use) can otherwise blow past arq's hard ``job_timeout``, which
+    # kills the worker mid-parse and leaves the row stuck in ``processing``
+    # with an empty ``ingestion_error`` — a UI polling for ``ready`` then
+    # spins forever (DE-351). The arq job_timeout is set strictly higher
+    # (see ``WorkerSettings`` in ``app.workers.document_pipeline``) so this
+    # soft path wins the race and can persist a terminal ``failed`` row.
+    # The orphaned worker thread finishes its download in the background, so
+    # a retry once the models are cached succeeds.
     try:
-        parsed = await asyncio.to_thread(
-            parse_pdf,
-            pdf_bytes,
-            run_docling=settings.lq_ai_docling_enabled,
+        if route_text:
+            # Plain text / Markdown needs no parsing library and no network:
+            # the decoded bytes are the canonical stream. Pure and fast, so
+            # it skips the Docling thread/timeout machinery entirely.
+            parsed = parse_text(raw_bytes)
+        else:
+            parsed = await asyncio.wait_for(
+                asyncio.to_thread(
+                    parse_pdf,
+                    raw_bytes,
+                    run_docling=settings.lq_ai_docling_enabled,
+                ),
+                timeout=settings.lq_ai_docling_timeout_seconds,
+            )
+    except TimeoutError:
+        await _mark_failed(
+            db,
+            row,
+            error="ingestion_timeout",
+            reason=(
+                f"parse exceeded {settings.lq_ai_docling_timeout_seconds}s "
+                "(a first-run docling model download can exceed the budget; "
+                "retry once models are cached — DE-351)"
+            ),
+        )
+        return IngestResult(
+            file_id=file_id,
+            status="failed",
+            document_id=None,
+            chunk_count=0,
+            parser=None,
+            error="ingestion_timeout",
+        )
+    except ParserDecodeError as exc:
+        # A supported text type whose bytes are not valid UTF-8. Honest,
+        # distinct from ``unsupported_type`` (the type IS supported).
+        await _mark_failed(db, row, error="decode_error", reason=str(exc))
+        return IngestResult(
+            file_id=file_id,
+            status="failed",
+            document_id=None,
+            chunk_count=0,
+            parser=None,
+            error="decode_error",
         )
     except ParserUnsupported as exc:
         await _mark_failed(db, row, error="unsupported_content", reason=str(exc))

@@ -1,0 +1,78 @@
+# =============================================================================
+# Repo-root .dockerignore — applies ONLY to builds that use the repo root as the
+# build context. Today that is the *release* image path:
+#   .github/workflows/release.yml -> api/Dockerfile.release, gateway/Dockerfile.release
+# (both `context: .`). The release images bake the repo-root `skills/` corpus and
+# `gateway.yaml.example`, which the dev stack bind-mounts instead.
+#
+# The dev builds (docker-compose.yml: build.context ./api, ./gateway, ./web) use
+# subdir contexts and their OWN api/.dockerignore, gateway/.dockerignore,
+# web/.dockerignore — this file does NOT affect them.
+#
+# Patterns are matched against paths relative to the build context root (repo
+# root). Root-anchored patterns (leading `/`) match only at the top level so we
+# don't strip load-bearing `.md` files (SKILL.md, api/README.md, gateway/README.md)
+# from inside skills/, api/, gateway/.
+# =============================================================================
+
+# ----- VCS + CI (never belong in an image) -----
+/.git
+/.github
+
+# ----- Subsystems not part of the api/gateway release images -----
+# web is built from its own ./web context (not repo-root) — don't ship its
+# sources into the api/gateway images.
+/web
+/desktop
+/word-addin
+/slack-bridge
+/teams-bridge
+/deploy
+/docs
+/tests
+/scripts
+
+# ----- Compose + release artifacts -----
+/docker-compose*.yml
+**/*.spdx.json
+
+# ----- Root-level docs (keep SKILL.md etc. inside skills/) -----
+/*.md
+
+# ----- macOS Finder duplicate files -----
+# On iCloud-synced filesystems, Finder occasionally creates phantom duplicates
+# named "foo 2.py", "foo 3.py", etc. These break Alembic ("Multiple head
+# revisions") and Python imports when they sneak into the build context.
+**/* [0-9].*
+**/* [0-9][0-9].*
+
+# Finder filesystem metadata.
+**/.DS_Store
+**/._*
+
+# ----- Python build / test caches (never belong in the image) -----
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
+**/.coverage
+**/htmlcov/
+
+# ----- Local virtualenvs -----
+**/.venv/
+**/venv/
+**/env/
+
+# ----- Node modules (web is excluded above; this covers any stray copies) -----
+**/node_modules/
+
+# ----- Editor / OS detritus -----
+**/*.swp
+**/*.swo
+**/.idea/
+**/.vscode/
+
+# ----- Misc -----
+*.log

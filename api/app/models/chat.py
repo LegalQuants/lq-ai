@@ -87,12 +87,29 @@ class Chat(Base):
         ForeignKey("projects.id", ondelete="SET NULL", name="fk_chats_project_id"),
         nullable=True,
     )
+    autonomous_session_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "autonomous_sessions.id", ondelete="SET NULL", name="fk_chats_autonomous_session_id"
+        ),
+        nullable=True,
+        index=False,  # partial index created in migration 0063
+    )
     title: Mapped[str] = mapped_column(
         Text,
         nullable=False,
         server_default=text("'New chat'"),
     )
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Opt-in "sticky skills" set (issue #207 finding 4). Empty = toggle OFF
+    # (fail-restrictive; a new chat never inherits stickiness). When non-empty,
+    # the chat send path unions these skill slugs into each turn's effective
+    # skills so follow-up turns keep applying them without the client re-sending.
+    sticky_skills: Mapped[list[str]] = mapped_column(
+        ARRAY(Text),
+        nullable=False,
+        server_default=text("'{}'::text[]"),
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

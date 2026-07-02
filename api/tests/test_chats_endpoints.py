@@ -893,3 +893,47 @@ async def test_chat_cascade_delete_removes_messages(
         text("SELECT count(*) FROM messages WHERE chat_id = :cid"), {"cid": chat_id}
     )
     assert rows.scalar_one() == 0
+
+
+# ---------------------------------------------------------------------------
+# Hidden session-owned chats (WS-D PR2)
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def owner_user(db_session: AsyncSession) -> User:
+    user = User(
+        email=f"owner-chats-{uuid.uuid4().hex[:8]}@example.com",
+        display_name="Owner Chats User",
+        hashed_password=hash_password("correct-horse-battery-staple"),
+        is_admin=False,
+        mfa_enabled=False,
+        must_change_password=False,
+    )
+    db_session.add(user)
+    await db_session.flush()
+    return user
+
+
+@pytest.mark.integration
+async def test_session_owned_chat_excluded_from_list(
+    db_session: AsyncSession, client: AsyncClient, owner_user: User
+) -> None:
+    from app.models.autonomous import AutonomousSession
+    from app.models.chat import Chat
+
+    sess = AutonomousSession(user_id=owner_user.id, trigger_kind="manual", params={})
+    db_session.add(sess)
+    await db_session.flush()
+    visible = Chat(owner_id=owner_user.id, title="Visible")
+    hidden = Chat(owner_id=owner_user.id, title="Session", autonomous_session_id=sess.id)
+    db_session.add_all([visible, hidden])
+    await db_session.commit()
+
+    resp = await client.get(
+        "/api/v1/chats", headers={"Authorization": f"Bearer {_bearer_for(owner_user)}"}
+    )
+    assert resp.status_code == 200
+    titles = {c["title"] for c in resp.json()["items"]}
+    assert "Visible" in titles
+    assert "Session" not in titles  # session-owned chat is hidden from the list

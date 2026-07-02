@@ -126,13 +126,43 @@ async def noop_job(ctx: dict[str, Any]) -> str:
 
 
 async def on_startup(ctx: dict[str, Any]) -> None:
-    """Worker startup hook — log boot.
+    """Worker startup hook — install the skill registry, then log boot.
 
-    No sweep-of-orphaned-rows logic yet; the only registered job
-    (``noop_job``) is stateless. Phase 5 will add the easy-playbook
-    generation-row sweep here, mirroring the pattern in
-    :mod:`app.workers.document_pipeline.on_startup`.
+    The autonomous executor resolves ``skill_ref`` session targets via
+    ``app.state.skill_registry`` (see
+    :func:`app.autonomous.prompts._registry_from_app_state`) in whichever
+    process runs the job. ``autonomous_session_job`` runs HERE, so this
+    worker must install the registry exactly like the FastAPI lifespan
+    does — historically only the api did, and every worker-side
+    ``skill_ref`` session (scheduled, watch, Run-now) died at analysis
+    with "skill registry not initialised".
+
+    Fail-loudly posture (deliberate): if the skills directory is
+    missing/unreadable or ``load_registry`` raises, the exception
+    propagates and the worker process exits at startup. An operator sees
+    a crash-looping container immediately instead of discovering the
+    first scheduled 9 AM tick failed hours later.
     """
+
+    # Deferred imports: app.main builds the full FastAPI app (router
+    # tree, middleware). Importing it at module top would make every
+    # `arq ...WorkerSettings` CLI discovery and unit-test import pay
+    # that cost, and mirrors the deferred-import precedent in
+    # app.autonomous.prompts._registry_from_app_state.
+    from app.main import app
+    from app.skills.bootstrap import install_skill_registry
+
+    # No try/except: propagation is the contract (see docstring).
+    holder = install_skill_registry(app, get_settings())
+    skill_count = len(holder.current().names())
+    log.info(
+        "arq-worker startup: skill registry installed (%d skills)",
+        skill_count,
+        extra={
+            "event": "arq_worker_skill_registry_installed",
+            "skill_count": skill_count,
+        },
+    )
 
     log.info(
         "arq-worker startup: playbook queue=%s ready",

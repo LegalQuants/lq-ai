@@ -7,7 +7,13 @@ info:
     
     This is a **sketch** — it covers the endpoints, request/response shapes, and
     schemas needed to anchor implementation. Expect refinement during M1 build.
-    
+
+    NOTE (DE-373): for a faithful, always-current contract generated from the
+    live app (recommended for client typegen), use the companion
+    `backend-openapi.generated.yaml`, produced by `make openapi` and kept in
+    sync by a CI drift-guard. This hand-authored sketch is the human-facing
+    reference; the generated file is the machine-faithful one.
+
     The Inference Gateway has a separate OpenAPI specification at
     `gateway-openapi.yaml` (consumes OpenAI-compatible inference requests from
     this backend; not directly accessible to end-users).
@@ -745,6 +751,70 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
 
+  /api/v1/projects/{project_id}/knowledge-bases:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      tags: [projects]
+      summary: Attach a knowledge base to a matter
+      description: |
+        Wave D.1 T3. Body: ``{knowledge_base_id}``. The caller must own
+        both the project and the KB (cross-user → 404 on either side).
+        Idempotent — re-attaching an already-attached KB returns 200
+        with the current project state (unlike the skill/file attach
+        endpoints above, this does NOT return 409 on repeat attach).
+        Audit action: ``project.knowledge_base_attached``.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [knowledge_base_id]
+              properties:
+                knowledge_base_id: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Project state after attach (idempotent — same body on repeat calls)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Project'}
+        '404':
+          description: Project or knowledge base not found
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/v1/projects/{project_id}/knowledge-bases/{kb_id}:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: kb_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    delete:
+      tags: [projects]
+      summary: Detach a knowledge base from a matter
+      description: |
+        Wave D.1 T3. Idempotent — detaching a KB that is not attached
+        still returns 204. The KB row itself is untouched (use
+        ``DELETE /api/v1/knowledge-bases/{id}`` for the KB). Audit
+        action: ``project.knowledge_base_detached`` (only written when
+        a join row is actually removed).
+      responses:
+        '204': {description: Detached (or was already not attached)}
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
   # ----------- PROJECTS SANDBOX (Wave D.2 Task 2.2) -----------
   /api/v1/projects/sandbox/ensure:
     post:
@@ -1037,6 +1107,86 @@ paths:
               schema:
                 type: array
                 items: {$ref: '#/components/schemas/Citation'}
+
+  /api/v1/chats/{chat_id}/messages/{message_id}/sources:
+    parameters:
+      - name: chat_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: message_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      tags: [messages]
+      summary: Get external-source provenance (case law consulted) for a message (PR6c)
+      responses:
+        '200':
+          description: External sources consulted during the message turn
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: {type: string, format: uuid}
+                    message_id: {type: string, format: uuid}
+                    source_kind: {type: string}
+                    label: {type: string}
+                    subtitle: {type: string, nullable: true}
+                    url: {type: string, nullable: true}
+                    external_ref: {type: string, nullable: true}
+                    provider: {type: string}
+                    tool: {type: string}
+                    created_at: {type: string, format: date-time}
+
+  /api/v1/chats/{chat_id}/ledger:
+    parameters:
+      - name: chat_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: message_id
+        in: query
+        required: false
+        schema: {type: string, format: uuid}
+        description: Narrow to a single assistant turn.
+    get:
+      tags: [messages]
+      summary: Citation Ledger for a chat — one-click trace (P1-A3)
+      responses:
+        '200':
+          description: Ledger entries resolved to source + passage(s) + status + provenance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  chat_id: {type: string, format: uuid}
+                  entries:
+                    type: array
+                    items: {$ref: '#/components/schemas/LedgerEntry'}
+                  gates:
+                    type: array
+                    description: Per-turn fiduciary-grade verdicts (ADR 0018 D3).
+                    items:
+                      type: object
+                      properties:
+                        message_id: {type: string, format: uuid}
+                        gate_status: {type: string, enum: [fiduciary_grade, supported_only, flagged]}
+                        pass_count: {type: integer}
+                        supported_count: {type: integer}
+                        fail_count: {type: integer}
+                        total_assertions: {type: integer}
+                        confidence: {type: number, nullable: true}
+                        created_at: {type: string, format: date-time}
+        '404':
+          description: Chat (or filtered message) does not exist
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
 
   # ----------- SKILLS -----------
   /api/v1/skills:
@@ -3677,6 +3827,44 @@ paths:
           description: Chat not found
 
   # ============================================================
+  # PR5b Task 7 — chat tool-call resume gate
+  # ============================================================
+
+  /api/v1/chats/{chat_id}/tool-calls/{pending_call_id}:
+    post:
+      summary: Approve or deny a pending destructive chat tool-call; resumes the turn
+      tags: [chats]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: chat_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: pending_call_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolCallDecisionRequest'
+      responses:
+        '200':
+          description: SSE stream — resumes the turn after approval or denial
+          content:
+            text/event-stream:
+              schema: { type: string }
+        '400':
+          description: Malformed request body
+        '404':
+          description: Chat or pending tool-call not found (id-probing-safe)
+        '409':
+          description: Tool-call already resolved or confirmation expired
+
+  # ============================================================
   # M3-D1 — slack-bridge persistence surface
   # ============================================================
 
@@ -3904,6 +4092,164 @@ paths:
         '404':
           description: Session not found
 
+  /api/v1/autonomous/sessions/{session_id}/findings:
+    get:
+      tags: [autonomous]
+      summary: List a session's persisted findings (work-product, stable order)
+      description: |
+        Returns the run's persisted findings (the ``emit_finding`` chokepoint
+        work-product) ordered by ``created_at ASC, id ASC``. Rows a run
+        emits in its single executor commit typically share one
+        ``created_at`` (transaction-stable ``now()``), so ``id`` is the
+        deterministic tiebreaker that keeps pagination stable — a
+        repeatable order, not a guaranteed emission sequence. This differs
+        intentionally from the newest-first autonomous lists: these are one
+        run's output.
+
+        Owner-gated by loading the owned session first (the findings table
+        has no ``user_id`` — authz is via the parent session). Another
+        user's ``session_id`` — or a missing one — returns 404 (not 403) to
+        avoid existence disclosure. ``limit`` is clamped to [1, 200];
+        ``offset`` to [0, ∞).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, default: 50, minimum: 1, maximum: 200}
+          description: Maximum number of findings to return (clamped to [1, 200]).
+        - name: offset
+          in: query
+          required: false
+          schema: {type: integer, default: 0, minimum: 0}
+          description: Zero-based index of the first result to return.
+      responses:
+        '200':
+          description: Paginated list of the session's findings (stable created_at, id order)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutonomousFindingListResponse'
+        '401':
+          description: Not authenticated
+        '404':
+          description: Session not found
+
+  /api/v1/autonomous/sessions/{session_id}/artifacts:
+    get:
+      tags: [autonomous]
+      summary: List a session's persisted document-grade artifacts (work-product, stable order)
+      description: |
+        Returns the run's persisted artifact references (the
+        ``emit_artifact`` chokepoint work-product — markdown memos an
+        opted-in run saved into its target knowledge base as real
+        documents) ordered by ``created_at ASC, id ASC`` — one run's rows
+        typically share ``created_at`` (transaction-stable ``now()``), so
+        ``id`` is the deterministic tiebreaker that keeps pagination
+        stable; a repeatable order, not a guaranteed emission sequence.
+        Mirrors the findings read above.
+
+        Owner-gated by loading the owned session first (the artifacts
+        table has no ``user_id`` — authz is via the parent session).
+        Another user's ``session_id`` — or a missing one — returns 404
+        (not 403) to avoid existence disclosure. ``limit`` is clamped to
+        [1, 200]; ``offset`` to [0, ∞).
+
+        ``document_id`` is enriched at read time via the unique
+        ``documents.file_id``. Deletion semantics: a hard file-delete
+        SET-NULLs ``file_id`` (name/size metadata survives; both refs
+        return null); deleting the session removes these reference rows
+        but never the KB document — the document outlives the session.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, default: 50, minimum: 1, maximum: 200}
+          description: Maximum number of artifacts to return (clamped to [1, 200]).
+        - name: offset
+          in: query
+          required: false
+          schema: {type: integer, default: 0, minimum: 0}
+          description: Zero-based index of the first result to return.
+      responses:
+        '200':
+          description: Paginated list of the session's artifact references (stable created_at, id order)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutonomousArtifactListResponse'
+        '401':
+          description: Not authenticated
+        '404':
+          description: Session not found
+
+  /api/v1/autonomous/sessions/{session_id}/ledger:
+    get:
+      tags: [autonomous]
+      summary: Citation ledger + fiduciary gate for an autonomous session (WS-D PR2 C5)
+      description: |
+        Returns ``{chat_id, entries, gates}`` — the identical shape
+        produced by ``GET /api/v1/chats/{chat_id}/ledger`` — so the
+        PR2 UI can reuse the chat ledger component directly without
+        adaptation. For a session ledger, ``gates`` always has exactly
+        one element (the single fiduciary-grade gate manufactured by
+        ``build_session_ledger``). Reuses ``resolve_ledger_entries`` and
+        ``resolve_gates`` — the same functions the chat ledger endpoint
+        calls.
+
+        Owner-gated: another user's ``session_id`` or a missing session
+        returns 404 (not 403) to avoid existence disclosure. Also
+        returns 404 if the session exists but ``build_session_ledger``
+        has not yet manufactured the hidden backing chat.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Ledger entries resolved to source + passage(s) + status + provenance, plus the session's single fiduciary-grade gate
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  chat_id: {type: string, format: uuid}
+                  entries:
+                    type: array
+                    items: {$ref: '#/components/schemas/LedgerEntry'}
+                  gates:
+                    type: array
+                    description: Exactly one element for a session ledger — the gate manufactured by build_session_ledger (ADR 0018 D3).
+                    items:
+                      type: object
+                      properties:
+                        message_id: {type: string, format: uuid}
+                        gate_status: {type: string, enum: [fiduciary_grade, supported_only, flagged]}
+                        pass_count: {type: integer}
+                        supported_count: {type: integer}
+                        fail_count: {type: integer}
+                        total_assertions: {type: integer}
+                        confidence: {type: number, nullable: true}
+                        created_at: {type: string, format: date-time}
+        '401':
+          description: Not authenticated
+        '404':
+          description: Session not found, or session has no ledger yet
+
   /api/v1/autonomous/sessions/{session_id}/halt:
     post:
       tags: [autonomous]
@@ -3960,6 +4306,11 @@ paths:
             type: string
             enum: [proposed, kept, dismissed]
           description: Filter by review state; omit to return all non-deleted entries.
+        - name: source_session_id
+          in: query
+          required: false
+          schema: {type: string, format: uuid}
+          description: Narrow to the memories a specific run proposed; omit for all.
         - name: limit
           in: query
           required: false
@@ -4639,6 +4990,623 @@ paths:
           description: Referenced project not found
         '422':
           description: Invalid target (need exactly one of playbook_id/skill_ref)
+
+  /api/v1/research/capabilities:
+    get:
+      tags: [research]
+      summary: Report whether case-law research is enabled on this server
+      description: |
+        WS3b. Returns a positive "research enabled?" signal derived from the
+        gateway's sanitised config.  ``enabled`` is ``true`` when at least one
+        ``courtlistener`` tool-provider is declared in ``gateway.yaml``;
+        ``false`` otherwise.  The UI uses this to render a calm "not configured"
+        gate rather than treating an absent CourtListener as an outage.
+        Requires an authenticated user (bearer token).
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Research capability status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [enabled, providers]
+                properties:
+                  enabled:
+                    type: boolean
+                  providers:
+                    type: array
+                    items:
+                      type: object
+                      required: [name, type]
+                      properties:
+                        name: {type: string}
+                        type: {type: string}
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/v1/research/verify-citations:
+    post:
+      tags: [research]
+      summary: Verify citations found in a text block
+      description: |
+        WS3b. Passes the supplied text to the CourtListener gateway tool
+        ``verify_citations`` and returns the per-citation verification
+        results (HTTP status, matching cluster ids). Stateless — no DB
+        write. Requires an authenticated user (bearer token).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text:
+                  type: string
+                  minLength: 1
+                  maxLength: 64000
+      responses:
+        '200':
+          description: Citation verification results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  citations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        citation: {type: string, nullable: true}
+                        normalized_citations:
+                          type: array
+                          items: {type: string}
+                        status: {type: integer, nullable: true}
+                        error_message: {type: string, nullable: true}
+                        clusters:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              id: {type: integer, nullable: true}
+                              case_name: {type: string, nullable: true}
+                              absolute_url: {type: string, nullable: true}
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/v1/research/search:
+    post:
+      tags: [research]
+      summary: Search case law via CourtListener
+      description: |
+        WS3b. Proxies a full-text case-law search to the CourtListener
+        gateway tool ``search_case_law``. Returns a paginated result set
+        with case metadata. Stateless — no DB write. Requires an
+        authenticated user (bearer token).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [q]
+              properties:
+                q:
+                  type: string
+                  minLength: 1
+                court:
+                  type: string
+                  nullable: true
+                order_by:
+                  type: string
+                  nullable: true
+                cursor:
+                  type: string
+                  nullable: true
+                  description: "Opaque pagination cursor from a prior response's next_cursor; fetch the next page."
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                    nullable: true
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  next_cursor:
+                    type: string
+                    nullable: true
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/v1/research/clusters/{cluster_id}:
+    get:
+      tags: [research]
+      summary: Fetch and cache a CourtListener opinion cluster
+      description: |
+        WS3b. Read-through cache: if the cluster is already in the DB
+        the cached metadata is returned immediately; otherwise the
+        gateway tool ``get_cases`` is called, the opinion plaintext is
+        stored in object storage, and the metadata is persisted in the
+        DB. Requires an authenticated user (bearer token).
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: cluster_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Cluster metadata with opinion list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cluster, opinions]
+                properties:
+                  cluster:
+                    type: object
+                    required: [cluster_id]
+                    properties:
+                      cluster_id: {type: integer}
+                      case_name: {type: string, nullable: true}
+                      court: {type: string, nullable: true}
+                      date_filed: {type: string, nullable: true}
+                      absolute_url: {type: string, nullable: true}
+                  opinions:
+                    type: array
+                    items:
+                      type: object
+                      required: [opinion_id, char_length]
+                      properties:
+                        opinion_id: {type: integer}
+                        text_field_used:
+                          type: string
+                          nullable: true
+                          enum: [html_with_citations, html_columbia, html_lawbox, xml_harvard, html_anon_2020, html, plain_text]
+                        char_length: {type: integer}
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/v1/research/opinions/{opinion_id}:
+    get:
+      tags: [research]
+      summary: Read cached opinion plaintext
+      description: |
+        WS3b. Returns the full plaintext of a previously fetched opinion
+        from object storage. Returns 404 if the cluster containing this
+        opinion was never fetched (call
+        ``GET /api/v1/research/clusters/{cluster_id}`` first). Requires
+        an authenticated user (bearer token).
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: opinion_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Opinion plaintext
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [opinion_id, cluster_id, text]
+                properties:
+                  opinion_id: {type: integer}
+                  cluster_id: {type: integer}
+                  text_field_used:
+                    type: string
+                    nullable: true
+                    enum: [html_with_citations, html_columbia, html_lawbox, xml_harvard, html_anon_2020, html, plain_text]
+                  text: {type: string}
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '404':
+          description: Opinion not yet fetched; call GET /clusters/{id} first
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/v1/research/find-in-case:
+    post:
+      tags: [research]
+      summary: Find keyword matches within a cached opinion
+      description: |
+        WS3b. Performs a case-insensitive substring search over the
+        cached plaintext of ``opinion_id``, returning up to
+        ``max_matches`` snippets with character positions. Returns 404
+        if the opinion was never fetched. Requires an authenticated
+        user (bearer token).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [opinion_id, query]
+              properties:
+                opinion_id:
+                  type: integer
+                query:
+                  type: string
+                  minLength: 1
+                max_matches:
+                  type: integer
+                  minimum: 1
+                  maximum: 10
+                  default: 3
+      responses:
+        '200':
+          description: Match snippets
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [opinion_id, matches]
+                properties:
+                  opinion_id: {type: integer}
+                  matches:
+                    type: array
+                    items:
+                      type: object
+                      required: [position, snippet]
+                      properties:
+                        position: {type: integer}
+                        snippet: {type: string}
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '404':
+          description: Opinion not yet fetched; call GET /clusters/{id} first
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/v1/research/sources:
+    get:
+      tags: [research]
+      summary: List available content-authority sources from the registry
+      description: |
+        WS-E PR1a (ADR 0016 / P3). Returns one entry per registered
+        content-authority source type, indicating whether it is enabled
+        (configured in the gateway) and its safe metadata fields. Auth
+        keys and cost fields are never included. Requires an
+        authenticated user (bearer token).
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Available content-authority sources
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourcesResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  # WS2/PR4b — MCP registry admin surface
+  /api/v1/admin/mcp:
+    get:
+      tags: [admin]
+      summary: List configured MCP servers and their cached tools (admin only)
+      description: |
+        WS2/PR4b. Returns the operator's configured MCP servers (sourced
+        from gateway config, type==mcp) together with each server's
+        discovery-cached tools and their ``enabled`` toggle state. The
+        caller's bearer token must have ``is_admin = true`` or the
+        endpoint returns 403 ``forbidden``.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: MCP servers with cached tools
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MCPServersResponse'}
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '403':
+          description: Caller is not an admin
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/v1/admin/mcp/{server}/refresh:
+    parameters:
+      - name: server
+        in: path
+        required: true
+        schema: {type: string}
+        description: MCP server name (as returned by the gateway config).
+    post:
+      tags: [admin]
+      summary: Re-discover and reconcile a server's tools (admin only)
+      description: |
+        WS2/PR4b. Triggers a fresh tool-discovery pass against the named
+        MCP server through the gateway (PR4a's GET /v1/tools/{provider}).
+        The discovery cache is reconciled: new tools are inserted with
+        ``enabled=true``; surviving tools preserve their existing
+        ``enabled`` flag; stale tools (no longer returned) are removed.
+        Writes a ``mcp.tools_refreshed`` audit row. 403 when the caller
+        is not an admin.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Refresh complete; returns the updated tool list
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MCPRefreshResponse'}
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '403':
+          description: Caller is not an admin
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/v1/admin/mcp/{server}/tools/{tool}:
+    parameters:
+      - name: server
+        in: path
+        required: true
+        schema: {type: string}
+        description: MCP server name.
+      - name: tool
+        in: path
+        required: true
+        schema: {type: string}
+        description: Tool name within the server's discovery cache.
+    patch:
+      tags: [admin]
+      summary: Enable or disable a cached MCP tool (admin only)
+      description: |
+        WS2/PR4b. Toggles the ``enabled`` flag on a single cached tool.
+        Disabled tools are not exposed to the model in the chat tool-loop
+        (PR5). 404 when the tool is not in the discovery cache (run
+        ``POST .../refresh`` first). Writes a ``mcp.tool_enabled`` audit
+        row when enabling, ``mcp.tool_disabled`` when disabling. 403 when
+        the caller is not an admin.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MCPToolEnableRequest'}
+      responses:
+        '200':
+          description: Tool updated; returns the updated tool view
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MCPToolView'}
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '403':
+          description: Caller is not an admin
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '404':
+          description: Tool not in discovery cache
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  # PR4d Ask 1 — per-user OAuth connections list
+  /api/v1/mcp/oauth:
+    get:
+      tags: [mcp-oauth]
+      summary: List OAuth connection status for all connectable MCP servers (per-user)
+      description: |
+        PR4d Ask 1. ActiveUser-gated (bearer). Returns one entry per
+        configured OAuth-type MCP server together with the calling user's
+        connection state (``connected``, ``scopes``, ``expires_at``).
+        Token bytes are never exposed. Results are ordered by server name
+        for stable output.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Per-user OAuth connection list
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MCPOAuthServersResponse'}
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  # PR4c — per-user MCP OAuth surface
+  /api/v1/mcp/oauth/{server}/authorize:
+    parameters:
+      - name: server
+        in: path
+        required: true
+        schema: {type: string}
+        description: MCP server name (as returned by the gateway config).
+    get:
+      tags: [mcp-oauth]
+      summary: Start the per-user OAuth flow for an MCP server
+      description: |
+        PR4c. ActiveUser-gated (bearer). Mints PKCE state, persists a
+        single-use mcp_oauth_state row, and returns a 302 redirect to the
+        authorization server's authorize endpoint. The callback URL is
+        wired to GET /api/v1/mcp/oauth/{server}/callback.
+      security:
+        - bearerAuth: []
+      responses:
+        '302':
+          description: Redirect to the authorization server authorize endpoint
+          headers:
+            Location:
+              schema: {type: string}
+              description: Authorization server authorize URL with PKCE parameters.
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '404':
+          description: Server is not a configured OAuth MCP provider
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/v1/mcp/oauth/{server}/callback:
+    parameters:
+      - name: server
+        in: path
+        required: true
+        schema: {type: string}
+        description: MCP server name.
+    get:
+      tags: [mcp-oauth]
+      summary: OAuth callback — receive the authorization code from the AS
+      description: |
+        PR4c. PUBLIC (no bearer auth). The browser is redirected here by
+        the authorization server after the user grants consent. The caller
+        is identified via the single-use, TTL-bounded mcp_oauth_state row
+        (``state`` IS the binding). On success, tokens are encrypted and
+        stored and a mcp.oauth_connected audit row is written. Returns 200
+        with the connection summary.
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema: {type: string}
+          description: Authorization code issued by the AS.
+        - name: state
+          in: query
+          required: true
+          schema: {type: string}
+          description: Opaque state value echoed from the authorize request.
+        - name: iss
+          in: query
+          required: false
+          schema: {type: string}
+          description: Issuer identifier (RFC 9207); required when the AS advertised support.
+      responses:
+        '200':
+          description: OAuth flow completed; tokens stored
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MCPOAuthCallbackResponse'}
+        '400':
+          description: Unknown, expired, or replayed state; iss validation failure
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '502':
+          description: Authorization server returned an error on code exchange
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/v1/mcp/oauth/{server}/status:
+    parameters:
+      - name: server
+        in: path
+        required: true
+        schema: {type: string}
+        description: MCP server name.
+    get:
+      tags: [mcp-oauth]
+      summary: Check the calling user's OAuth connection state for an MCP server
+      description: |
+        PR4c. ActiveUser-gated (bearer). Returns whether a stored token
+        exists for the (user, server) pair, the granted scopes, and the
+        token expiry. Token bytes are never exposed.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Connection status
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MCPOAuthStatusResponse'}
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/v1/mcp/oauth/{server}:
+    parameters:
+      - name: server
+        in: path
+        required: true
+        schema: {type: string}
+        description: MCP server name.
+    delete:
+      tags: [mcp-oauth]
+      summary: Revoke the calling user's stored OAuth tokens for an MCP server
+      description: |
+        PR4c. ActiveUser-gated (bearer). Deletes the stored (user, server)
+        token row. Idempotent — returns 204 even when no token was stored.
+        AS-side revocation (RFC 7009) is not called in v1 (DE filed).
+        Writes a mcp.oauth_disconnected audit row when a row was removed.
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Token deleted (or was not present)
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
 
 # ============================================================
 # COMPONENTS
@@ -5400,6 +6368,104 @@ components:
         last_login_at: {type: string, format: date-time, nullable: true}
         deletion_scheduled_at: {type: string, format: date-time, nullable: true}
 
+    # Autonomous run findings (work-product) schemas
+
+    AutonomousFindingRead:
+      type: object
+      description: |
+        Read-only view of an ``autonomous_findings`` row — one analysis
+        finding emitted by a run via the ``emit_finding`` chokepoint.
+        ``content`` is the finding body (the LLM's ``summary``).
+        ``severity`` is LLM-emitted free text (no CHECK; ``info`` |
+        ``warn`` | ``critical`` are the intended values).
+      required:
+        - id
+        - session_id
+        - severity
+        - title
+        - content
+        - created_at
+      properties:
+        id: {type: string, format: uuid}
+        session_id: {type: string, format: uuid}
+        severity: {type: string}
+        title: {type: string}
+        content: {type: string}
+        created_at: {type: string, format: date-time}
+
+    AutonomousFindingListResponse:
+      type: object
+      description: |
+        Paginated list of a session's findings, in stable
+        ``created_at ASC, id ASC`` order — one run's rows typically
+        share ``created_at`` (transaction-stable ``now()``); ``id`` is
+        the pagination tiebreaker. Repeatable, not a guaranteed
+        emission sequence.
+      required: [findings, total_count, limit, offset]
+      properties:
+        findings:
+          type: array
+          items: {$ref: '#/components/schemas/AutonomousFindingRead'}
+        total_count: {type: integer, minimum: 0}
+        limit: {type: integer, minimum: 1, maximum: 200}
+        offset: {type: integer, minimum: 0}
+
+    # Autonomous run artifacts (document-grade work-product, Donna #8) schemas
+
+    AutonomousArtifactRead:
+      type: object
+      description: |
+        Read-only view of an ``autonomous_artifacts`` row — a reference to
+        one document-grade artifact (a markdown memo) an opted-in run
+        persisted into its target knowledge base via the ``emit_artifact``
+        chokepoint. ``name`` and ``mime`` are LLM-emitted free text (no
+        CHECK; the ``severity`` precedent).
+      required:
+        - id
+        - name
+        - mime
+        - size_bytes
+        - created_at
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        mime: {type: string}
+        size_bytes: {type: integer, minimum: 0}
+        file_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            The backing ``files`` row. The FK is ``ON DELETE SET NULL`` —
+            null means the file was later hard-deleted; the name/size
+            metadata here survives. The KB document itself outlives the
+            session (deleting the session removes only this reference).
+        document_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            NOT a column on ``autonomous_artifacts`` — enriched at read
+            time via the unique ``documents.file_id`` (1:1) so a client
+            can deep-link the KB document. Null when ``file_id`` is null
+            or no ``documents`` row exists for the file.
+        created_at: {type: string, format: date-time}
+
+    AutonomousArtifactListResponse:
+      type: object
+      description: |
+        Paginated list of a session's artifact references, in the same
+        stable ``created_at ASC, id ASC`` order as the findings list —
+        repeatable, not a guaranteed emission sequence.
+      required: [artifacts, total_count, limit, offset]
+      properties:
+        artifacts:
+          type: array
+          items: {$ref: '#/components/schemas/AutonomousArtifactRead'}
+        total_count: {type: integer, minimum: 0}
+        limit: {type: integer, minimum: 1, maximum: 200}
+        offset: {type: integer, minimum: 0}
+
     # M4-B1 — Autonomous memory curation schemas
 
     AutonomousMemoryRead:
@@ -5550,6 +6616,7 @@ components:
         - user_id
         - cron_expr
         - enabled
+        - emit_artifacts
         - created_at
         - updated_at
       properties:
@@ -5562,6 +6629,12 @@ components:
         skill_ref: {type: string, nullable: true}
         target_kb_id: {type: string, format: uuid, nullable: true}
         enabled: {type: boolean}
+        emit_artifacts:
+          type: boolean
+          description: |
+            Opt-in document-grade artifact emission (Donna #8) for the
+            schedule's sessions; default off so existing automations are
+            unchanged.
         max_cost_usd: {type: string, nullable: true}
         last_run_at: {type: string, format: date-time, nullable: true}
         next_run_at: {type: string, format: date-time, nullable: true}
@@ -5585,6 +6658,13 @@ components:
         target_kb_id: {type: string, format: uuid, nullable: true}
         project_id: {type: string, format: uuid, nullable: true}
         enabled: {type: boolean, default: true}
+        emit_artifacts:
+          type: boolean
+          default: false
+          description: |
+            Opt-in document-grade artifact emission (Donna #8) for the
+            schedule's sessions; default off so existing automations are
+            unchanged.
         max_cost_usd: {type: string, nullable: true}
 
     AutonomousScheduleUpdate:
@@ -5599,6 +6679,12 @@ components:
         name: {type: string, nullable: true}
         cron_expr: {type: string, nullable: true}
         enabled: {type: boolean, nullable: true}
+        emit_artifacts:
+          type: boolean
+          nullable: true
+          description: |
+            Toggle opt-in document-grade artifact emission (Donna #8)
+            for the schedule's future sessions; omitted/null = unchanged.
         playbook_id: {type: string, format: uuid, nullable: true}
         skill_ref: {type: string, nullable: true}
         target_kb_id: {type: string, format: uuid, nullable: true}
@@ -5612,13 +6698,21 @@ components:
         ``trigger_kind='manual'`` session.  Exactly one of ``playbook_id``
         / ``skill_ref`` must be set (zero or both → 422).  ``target_kb_id``
         / ``project_id`` are optional scope.  ``max_cost_usd`` is the
-        per-run cap (NULL → fall back to the config default).
+        per-run cap (NULL → fall back to the config default).  A manual
+        run has no schedule/watch row to inherit ``emit_artifacts`` from,
+        so this body IS the opt-in source.
       properties:
         playbook_id: {type: string, format: uuid, nullable: true}
         skill_ref: {type: string, nullable: true}
         target_kb_id: {type: string, format: uuid, nullable: true}
         project_id: {type: string, format: uuid, nullable: true}
         max_cost_usd: {type: string, nullable: true}
+        emit_artifacts:
+          type: boolean
+          default: false
+          description: |
+            Opt-in document-grade artifact emission (Donna #8) for this
+            one-off run; default off so existing callers are unchanged.
 
     AutonomousScheduleListResponse:
       type: object
@@ -5645,6 +6739,7 @@ components:
         - user_id
         - knowledge_base_id
         - enabled
+        - emit_artifacts
         - created_at
         - updated_at
       properties:
@@ -5655,6 +6750,12 @@ components:
         playbook_id: {type: string, format: uuid, nullable: true}
         skill_ref: {type: string, nullable: true}
         enabled: {type: boolean}
+        emit_artifacts:
+          type: boolean
+          description: |
+            Opt-in document-grade artifact emission (Donna #8) for the
+            watch's sessions; default off so existing automations are
+            unchanged.
         max_cost_usd: {type: string, nullable: true}
         deleted_at: {type: string, format: date-time, nullable: true}
         created_at: {type: string, format: date-time}
@@ -5674,6 +6775,13 @@ components:
         skill_ref: {type: string, nullable: true}
         project_id: {type: string, format: uuid, nullable: true}
         enabled: {type: boolean, default: true}
+        emit_artifacts:
+          type: boolean
+          default: false
+          description: |
+            Opt-in document-grade artifact emission (Donna #8) for the
+            watch's sessions; default off so existing automations are
+            unchanged.
         max_cost_usd: {type: string, nullable: true}
 
     AutonomousWatchUpdate:
@@ -5687,6 +6795,12 @@ components:
         404 (id-probing-safe).
       properties:
         enabled: {type: boolean, nullable: true}
+        emit_artifacts:
+          type: boolean
+          nullable: true
+          description: |
+            Toggle opt-in document-grade artifact emission (Donna #8)
+            for the watch's future sessions; omitted/null = unchanged.
         playbook_id: {type: string, format: uuid, nullable: true}
         skill_ref: {type: string, nullable: true}
         project_id: {type: string, format: uuid, nullable: true}
@@ -5714,7 +6828,9 @@ components:
         marking read is the dismiss action. ``channel`` is one of
         ``in_app`` / ``email`` / ``webhook`` (``webhook`` reserved).
         ``body``/``payload`` carry counts/IDs + a receipt link — never raw
-        entity values.
+        entity values. A run-completion notification's ``payload`` carries
+        ``finding_count`` and ``artifact_count`` (``artifact_count`` is 0
+        unless the run opted in via ``emit_artifacts``).
       required:
         - id
         - user_id
@@ -6099,6 +7215,14 @@ components:
           type: array
           items: {type: string, format: uuid}
           description: "Files attached to this project, ordered by attachment time"
+        attached_knowledge_base_ids:
+          type: array
+          items: {type: string, format: uuid}
+          description: |
+            Knowledge bases attached to this project (matter), ordered by
+            attachment time (Wave D.1 T3). Mutated by
+            ``POST /api/v1/projects/{project_id}/knowledge-bases`` and
+            ``DELETE /api/v1/projects/{project_id}/knowledge-bases/{kb_id}``.
         is_sandbox:
           type: boolean
           default: false
@@ -6176,6 +7300,15 @@ components:
         message_count:
           type: integer
           description: "Count of persisted messages in this chat."
+        sticky_skills:
+          type: array
+          items: {type: string}
+          description: |
+            Opt-in per-chat "sticky skills" set (issue #207 finding 4).
+            Empty means the sticky toggle is off (a new chat never inherits
+            stickiness). When non-empty, these skill slugs are auto-applied
+            (unioned) to every turn in this chat until cleared. Set via
+            `MessageCreate.set_sticky`.
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
 
@@ -6272,6 +7405,16 @@ components:
             C2: skill names to attach. The backend forwards these as
             `lq_ai_skills` to the gateway, which fetches each from the
             backend's internal-skills endpoint and assembles the prompt.
+        set_sticky:
+          type: boolean
+          nullable: true
+          default: null
+          description: |
+            Issue #207 finding 4 — opt-in per-chat "sticky skills" toggle.
+            `true` snapshots this turn's applied skills as the chat's sticky
+            set (auto-applied to later turns without re-sending); `false`
+            clears it; omitted/null leaves it unchanged. Off by default — a
+            new chat never inherits stickiness (fail-restrictive).
         skill_inputs:
           type: object
           additionalProperties:
@@ -6576,6 +7719,16 @@ components:
                 non-empty ``columns`` list at load time.
               items:
                 $ref: '#/components/schemas/ColumnSpec'
+            tool_usage:
+              type: array
+              items: {type: string}
+              nullable: true
+              description: Connector identifiers the skill declares it uses (C5).
+            unavailable_tool_usage:
+              type: array
+              items: {type: string}
+              nullable: true
+              description: Declared connectors not configured in this deployment; null when undeterminable. Informational, never gating.
 
     # Wave A — Skill inputs (form schema for the skill-input-form pattern).
     SkillInputDef:
@@ -6769,14 +7922,17 @@ components:
             Lifecycle: `pending` (just uploaded; C4 sets this on insert)
             → `processing` (C5 worker has picked it up) → `ready`
             (parsed, chunks persisted) OR `failed` (with `ingestion_error`
-            set; e.g., `unsupported_type` for non-PDF MIMEs in M1, or
-            `parse_failed` for corrupt PDFs).
+            set; e.g., `unsupported_type` for unsupported MIMEs (anything
+            that is neither PDF nor text/Markdown), `decode_error` for a
+            non-UTF-8 text upload, or `parse_failed` for corrupt PDFs).
         ingestion_error:
           type: string
           nullable: true
           description: |
-            Set when `ingestion_status='failed'`. M1 values include
-            `unsupported_type`, `unsupported_content`, `parse_failed`.
+            Set when `ingestion_status='failed'`. Values include
+            `unsupported_type`, `unsupported_content`, `parse_failed`,
+            and `decode_error` (a `text/plain` or `text/markdown` upload
+            whose bytes are not valid UTF-8).
         page_count:
           type: integer
           nullable: true
@@ -6790,8 +7946,9 @@ components:
           description: |
             Populated by the C5 document pipeline once
             `ingestion_status='ready'`; counts characters of the
-            canonical PyMuPDF-extracted text, not of the original
-            PDF byte stream.
+            canonical extracted text (PyMuPDF for PDF; the verbatim
+            decoded bytes for text/Markdown), not the original byte
+            stream.
         document_id:
           type: string
           format: uuid
@@ -7236,6 +8393,114 @@ components:
             Replacement plaintext provider key. Same handling as
             ProviderKeySetRequest.api_key.
 
+    MCPToolView:
+      type: object
+      required: [name, read_only, destructive, requires_confirmation, enabled]
+      properties:
+        name: {type: string}
+        description: {type: string, nullable: true}
+        parameters: {type: object, additionalProperties: true}
+        read_only: {type: boolean}
+        destructive: {type: boolean}
+        requires_confirmation: {type: boolean}
+        enabled: {type: boolean}
+
+    MCPServerView:
+      type: object
+      required: [name, type, auth, tools]
+      properties:
+        name: {type: string}
+        type: {type: string}
+        auth:
+          type: string
+          enum: [none, bearer, oauth]
+          description: |
+            Authentication mode for this MCP server. One of ``none``,
+            ``bearer``, or ``oauth``. Read from the gateway config
+            ``auth`` field; defaults to ``none`` when absent.
+        tools:
+          type: array
+          items: {$ref: '#/components/schemas/MCPToolView'}
+
+    MCPServersResponse:
+      type: object
+      required: [servers]
+      properties:
+        servers:
+          type: array
+          items: {$ref: '#/components/schemas/MCPServerView'}
+
+    MCPRefreshResponse:
+      type: object
+      required: [server, tools]
+      properties:
+        server: {type: string}
+        tools:
+          type: array
+          items: {$ref: '#/components/schemas/MCPToolView'}
+
+    MCPToolEnableRequest:
+      type: object
+      required: [enabled]
+      additionalProperties: false
+      properties:
+        enabled: {type: boolean}
+
+    MCPOAuthCallbackResponse:
+      type: object
+      required: [connected, server, scopes]
+      properties:
+        connected: {type: boolean}
+        server: {type: string}
+        scopes:
+          type: array
+          items: {type: string}
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    MCPOAuthStatusResponse:
+      type: object
+      required: [connected, scopes]
+      properties:
+        connected: {type: boolean}
+        scopes:
+          type: array
+          items: {type: string}
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    MCPOAuthServerStatus:
+      type: object
+      required: [server, connected, scopes]
+      description: |
+        PR4d Ask 1. Per-server OAuth connection status for a single user.
+        Token bytes are never included.
+      properties:
+        server: {type: string}
+        connected: {type: boolean}
+        scopes:
+          type: array
+          items: {type: string}
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    MCPOAuthServersResponse:
+      type: object
+      required: [servers]
+      description: |
+        PR4d Ask 1. Response body for GET /api/v1/mcp/oauth — list of all
+        connectable OAuth MCP servers with the calling user's connection state.
+      properties:
+        servers:
+          type: array
+          items: {$ref: '#/components/schemas/MCPOAuthServerStatus'}
+
     ProviderKeyStatus:
       type: object
       required: [provider, type, configured, last4, source]
@@ -7279,6 +8544,15 @@ components:
         provider_keys:
           type: array
           items: {$ref: '#/components/schemas/ProviderKeyStatus'}
+
+    ToolCallDecisionRequest:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [approve, deny]
+          description: Whether to approve or deny the pending tool call.
 
     Error:
       type: object
@@ -7340,6 +8614,51 @@ components:
                 - skill_input_missing
             message: {type: string}
             details: {type: object, additionalProperties: true}
+
+    LedgerEntry:
+      type: object
+      description: One citation-ledger entry resolved to its source (ADR 0018 D4).
+      properties:
+        id: {type: string, format: uuid}
+        message_id: {type: string, format: uuid}
+        source_kind: {type: string, enum: [kb_document, caselaw, mcp]}
+        verification_status: {type: string}
+        confidence: {type: number, nullable: true}
+        provider: {type: string, nullable: true}
+        retrieved_at: {type: string, format: date-time, nullable: true}
+        treatment_id: {type: string, format: uuid, nullable: true}
+        created_at: {type: string, format: date-time}
+        source:
+          type: object
+          description: Resolved source block; shape varies by kind. Quote kinds carry passages[].
+
+    SourcesResponse:
+      type: object
+      description: Envelope for GET /api/v1/research/sources (WS-E PR1a).
+      required: [sources]
+      properties:
+        sources:
+          type: array
+          items: {$ref: '#/components/schemas/AvailableSourceResponse'}
+
+    AvailableSourceResponse:
+      type: object
+      description: |
+        One content-authority source registry entry. Exposes only the
+        safe fields defined by P3 (ADR 0016): name, type, jurisdiction,
+        coverage, content_kinds, enabled, egress_tier. Auth keys and
+        cost fields are NEVER included.
+      required: [type, jurisdiction, coverage, content_kinds, enabled]
+      properties:
+        name: {type: string, nullable: true}
+        type: {type: string}
+        jurisdiction: {type: string}
+        coverage: {type: string}
+        content_kinds:
+          type: array
+          items: {type: string}
+        enabled: {type: boolean}
+        egress_tier: {type: integer, nullable: true}
 
 security:
   - bearerAuth: []

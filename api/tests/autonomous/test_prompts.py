@@ -28,6 +28,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.autonomous.prompts import (
+    ARTIFACT_OUTPUT_INSTRUCTION,
     STRUCTURED_OUTPUT_INSTRUCTION,
     assemble_analysis_messages,
 )
@@ -87,6 +88,53 @@ def test_structured_output_instruction_carries_schema_keys() -> None:
     assert "suggested_precedents" in inst
     assert "privilege_concerns" in inst
     assert "scope_concerns" in inst
+
+
+def test_artifact_instruction_carries_schema_keys() -> None:
+    """The artifact tail names the key + inner shape the drafting node maps."""
+    inst = ARTIFACT_OUTPUT_INSTRUCTION
+    assert "artifacts" in inst
+    assert "name" in inst
+    assert "content_md" in inst
+
+
+@pytest.mark.asyncio
+async def test_artifact_instruction_appended_when_opted_in(
+    db_session: AsyncSession,
+    session_with_skill_ref: AutonomousSession,
+    sample_chunks: list[dict[str, object]],
+) -> None:
+    """params["emit_artifacts"]=True → the artifact tail follows the
+    structured-output tail in the system prompt (Donna ask #8)."""
+    session_with_skill_ref.params = {
+        **(session_with_skill_ref.params or {}),
+        "emit_artifacts": True,
+    }
+    await db_session.flush()
+
+    msgs = await assemble_analysis_messages(
+        session_with_skill_ref, chunks=sample_chunks, db=db_session
+    )
+    system = msgs[0]["content"]
+    assert ARTIFACT_OUTPUT_INSTRUCTION in system
+    # Ordering: artifact tail comes AFTER the structured-output tail.
+    assert system.index(ARTIFACT_OUTPUT_INSTRUCTION) > system.index(STRUCTURED_OUTPUT_INSTRUCTION)
+
+
+@pytest.mark.asyncio
+async def test_artifact_instruction_absent_when_flag_off(
+    db_session: AsyncSession,
+    session_with_skill_ref: AutonomousSession,
+    sample_chunks: list[dict[str, object]],
+) -> None:
+    """No emit_artifacts key in params (the non-opted-in default) → the
+    model is never told about the ``artifacts`` key."""
+    msgs = await assemble_analysis_messages(
+        session_with_skill_ref, chunks=sample_chunks, db=db_session
+    )
+    full = "\n".join(m["content"] for m in msgs)
+    assert ARTIFACT_OUTPUT_INSTRUCTION not in full
+    assert "content_md" not in full
 
 
 @pytest.mark.asyncio

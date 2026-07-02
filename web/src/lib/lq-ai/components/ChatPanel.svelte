@@ -19,9 +19,7 @@
 	 *   - Empty query is allowed (`/` alone opens the popover with the
 	 *     "no-query" empty state per SlashPopover.emptyStateKind()).
 	 */
-	export type SlashDetection =
-		| { open: false }
-		| { open: true; query: string; slashIndex: number };
+	export type SlashDetection = { open: false } | { open: true; query: string; slashIndex: number };
 
 	export function isAtLineStart(text: string, pos: number): boolean {
 		if (pos === 0) return true;
@@ -84,16 +82,9 @@
 		projectsStore,
 		skillsStore
 	} from '$lib/lq-ai/stores';
-	import {
-		consumeMessageStream
-	} from '$lib/lq-ai/sse/parser';
-	import type {
-		Chat,
-		FileMeta,
-		Message,
-		Project,
-		Skill
-	} from '$lib/lq-ai/types';
+	import { consumeMessageStream } from '$lib/lq-ai/sse/parser';
+	import { buildAuthorizeUrl, type PendingGate } from '$lib/lq-ai/chat/toolGate';
+	import type { Chat, FileMeta, Message, Project, Skill } from '$lib/lq-ai/types';
 
 	import ChatSidebar from '$lib/lq-ai/components/ChatSidebar.svelte';
 	import AttachedFilesPanel from '$lib/lq-ai/components/AttachedFilesPanel.svelte';
@@ -137,6 +128,22 @@
 	// (not Map) so Svelte 4 reactivity tracks the assignment.
 	let attachmentSources: Record<string, string> = {};
 
+	// Issue #207 finding 4 — opt-in "sticky skills" toggle. `stickyEnabled`
+	// mirrors the chat's persisted sticky set (on when non-empty). `stickyDirty`
+	// marks that the user flipped the toggle since the last send, so we send
+	// `set_sticky` ONLY on a real change — otherwise the backend leaves the set
+	// unchanged and just carries it forward (we must not re-snapshot every turn).
+	// `stickyInitChatId` tracks which chat we initialized from so a chat switch
+	// re-syncs the toggle without clobbering an in-progress toggle mid-chat.
+	let stickyEnabled = false;
+	let stickyDirty = false;
+	let stickyInitChatId: string | null = null;
+
+	function toggleSticky(): void {
+		stickyEnabled = !stickyEnabled;
+		stickyDirty = true;
+	}
+
 	// Wave D.1 T20 follow-on (deferral A + B) — Enhance Prompt tracking.
 	// `pendingEnhancement` holds the most recent "Use enhanced" outcome
 	// from EnhancePromptExpansion; we use it on send to (a) inject
@@ -166,6 +173,15 @@
 	let streamingMessageId: string | null = null;
 	let streamAbort: AbortController | null = null;
 	let sendError: string | null = null;
+
+	// PR6b — governed tool-loop gate. When the stream pauses on a
+	// `tool_confirmation_required` or `mcp_authorization_required` terminal
+	// frame, `pendingGate` holds the gate keyed to the assistant message whose
+	// turn paused; the resume/connect handlers act on it. `gateBusy` disables
+	// the card's buttons while a resume POST is in flight. Both reset whenever a
+	// new stream starts for that message (see `consumeIntoMessage`).
+	let pendingGate: PendingGate | null = null;
+	let gateBusy = false;
 
 	// T6 — Enhance Prompt panel reference. Parent calls expansionPanel.open().
 	let expansionPanel: EnhancePromptExpansion | null = null;
@@ -269,9 +285,7 @@
 		// the assistant rendering path takes over for that slot.
 		const replacing = overrideMessage;
 		if (replacing) {
-			messagesStore.update(($m) =>
-				$m.map((m) => (m.id === replacing.id ? newAiMessage : m))
-			);
+			messagesStore.update(($m) => $m.map((m) => (m.id === replacing.id ? newAiMessage : m)));
 		}
 		closeOverrideModal();
 	}
@@ -442,6 +456,85 @@
 	}
 
 	// ---- send + stream ----
+
+	/**
+	 * Consume one SSE stream into a single assistant message bubble. Shared by
+	 * the initial send and the resume-after-confirmation POST so a chained gate
+	 * (the resumed turn pausing again) is handled identically. `assistantId0` is
+	 * the message id the stream should write into — the optimistic draft id on
+	 * the initial send (reconciled to the persisted id on `start`), or the
+	 * already-persisted id on a resume.
+	 */
+	async function consumeIntoMessage(
+		body: ReadableStream<Uint8Array>,
+		assistantId0: string
+	): Promise<void> {
+		let assistantId = assistantId0;
+		await consumeMessageStream(body, {
+			onStart: (frame) => {
+				// Reconcile the optimistic draft id with the persisted id on the
+				// initial send; on resume the id is already persisted so this is a
+				// no-op remap.
+				const newId = frame.lq_ai_message_id;
+				if (newId !== assistantId) {
+					const prev = assistantId;
+					messagesStore.update(($m) => $m.map((m) => (m.id === prev ? { ...m, id: newId } : m)));
+					assistantId = newId;
+				}
+				streamingMessageId = assistantId;
+				// A fresh stream supersedes any prior gate card on this message.
+				pendingGate = null;
+			},
+			onDelta: (frame) => {
+				messagesStore.update(($m) =>
+					$m.map((m) =>
+						m.id === assistantId
+							? {
+									...m,
+									content: (m.content ?? '') + frame.delta,
+									routed_inference_tier: frame.routed_inference_tier ?? m.routed_inference_tier,
+									applied_skills: frame.applied_skills ?? m.applied_skills
+								}
+							: m
+					)
+				);
+			},
+			onComplete: (frame) => {
+				streamingMessageId = null;
+				messagesStore.update(($m) =>
+					$m.map((m) =>
+						m.id === assistantId
+							? {
+									...m,
+									...frame.message,
+									applied_skills: frame.applied_skills ?? frame.message.applied_skills,
+									routed_inference_tier:
+										frame.routed_inference_tier ?? frame.message.routed_inference_tier,
+									routed_provider: frame.routed_provider ?? frame.message.routed_provider,
+									citations: frame.citations ?? frame.message.citations ?? []
+								}
+							: m
+					)
+				);
+			},
+			onError: (frame) => {
+				streamingMessageId = null;
+				sendError = `${frame.error.code}: ${frame.error.message}`;
+				messagesStore.update(($m) =>
+					$m.map((m) => (m.id === assistantId ? { ...m, error_code: frame.error.code } : m))
+				);
+			},
+			onToolConfirmation: (frame) => {
+				streamingMessageId = null;
+				pendingGate = { assistantId, kind: 'confirm', frame };
+			},
+			onMcpAuthorization: (frame) => {
+				streamingMessageId = null;
+				pendingGate = { assistantId, kind: 'connect', frame };
+			}
+		});
+	}
+
 	async function sendMessage() {
 		const chat = $activeChatStore;
 		if (!chat) return;
@@ -466,6 +559,9 @@
 		}
 
 		sendError = null;
+		// Clear any prior gate card up front: a new turn supersedes a stranded
+		// gate even if this send throws before the stream's `onStart` fires.
+		pendingGate = null;
 
 		// Wave D.1 T20 follow-on: if the operator clicked "Use enhanced"
 		// and the composer still holds the AI-enhanced text, inject
@@ -537,17 +633,21 @@
 				{
 					content: composerText,
 					model: currentModelId ?? undefined,
-					attached_skills:
-						attachedSkillsPayload.length > 0 ? attachedSkillsPayload : undefined,
+					attached_skills: attachedSkillsPayload.length > 0 ? attachedSkillsPayload : undefined,
 					skill_inputs:
 						Object.keys(skillInputs).length > 0
 							? (skillInputs as Record<string, Record<string, unknown>>)
 							: undefined,
+					// Issue #207 finding 4 — only send set_sticky on a real toggle
+					// change; otherwise leave the chat's sticky set unchanged.
+					set_sticky: stickyDirty ? stickyEnabled : undefined,
 					stream: true
 				},
 				streamAbort.signal
 			);
 			composerText = '';
+			// The toggle change has now been applied server-side for this turn.
+			stickyDirty = false;
 			// Clear the pending-enhancement marker now that the send is in
 			// flight. The enhancementOriginals map keeps the captured
 			// original keyed by content so the pill's tap-to-diff still
@@ -558,59 +658,7 @@
 				throw new Error('Empty stream body');
 			}
 
-			let assistantId = draftAssistantId;
-
-			await consumeMessageStream(res.body, {
-				onStart: (frame) => {
-					// Replace the draft id with the persisted id.
-					assistantId = frame.lq_ai_message_id;
-					streamingMessageId = assistantId;
-					messagesStore.update(($m) =>
-						$m.map((m) => (m.id === draftAssistantId ? { ...m, id: assistantId } : m))
-					);
-				},
-				onDelta: (frame) => {
-					messagesStore.update(($m) =>
-						$m.map((m) =>
-							m.id === assistantId
-								? {
-										...m,
-										content: (m.content ?? '') + frame.delta,
-										routed_inference_tier: frame.routed_inference_tier ?? m.routed_inference_tier,
-										applied_skills: frame.applied_skills ?? m.applied_skills
-								  }
-								: m
-						)
-					);
-				},
-				onComplete: (frame) => {
-					streamingMessageId = null;
-					messagesStore.update(($m) =>
-						$m.map((m) =>
-							m.id === assistantId
-								? {
-										...m,
-										...frame.message,
-										applied_skills: frame.applied_skills ?? frame.message.applied_skills,
-										routed_inference_tier:
-											frame.routed_inference_tier ?? frame.message.routed_inference_tier,
-										routed_provider: frame.routed_provider ?? frame.message.routed_provider,
-										citations: frame.citations ?? frame.message.citations ?? []
-								  }
-								: m
-						)
-					);
-				},
-				onError: (frame) => {
-					streamingMessageId = null;
-					sendError = `${frame.error.code}: ${frame.error.message}`;
-					messagesStore.update(($m) =>
-						$m.map((m) =>
-							m.id === assistantId ? { ...m, error_code: frame.error.code } : m
-						)
-					);
-				}
-			});
+			await consumeIntoMessage(res.body, draftAssistantId);
 		} catch (e: unknown) {
 			streamingMessageId = null;
 			console.error('lq-ai: stream failed', e);
@@ -623,6 +671,60 @@
 	function abortStream() {
 		streamAbort?.abort();
 		streamingMessageId = null;
+	}
+
+	// PR6b — resume a paused turn after the user approves/denies the gated
+	// tool. The resume POST returns a fresh SSE stream that finalizes the SAME
+	// assistant bubble (via `consumeIntoMessage`), so a chained gate just pauses
+	// again on the same message. A 409/410 means the pending call expired or was
+	// already resolved — surface the inline re-send hint rather than a raw error.
+	async function decideToolCall(decision: 'approve' | 'deny') {
+		if (!pendingGate || pendingGate.kind !== 'confirm') return;
+		const chat = $activeChatStore;
+		if (!chat) return;
+		const { assistantId, frame } = pendingGate;
+		gateBusy = true;
+		try {
+			const res = await messagesApi.resumeToolCall(chat.id, frame.pending_call_id, decision);
+			if (!res.body) throw new Error('Empty stream body');
+			pendingGate = null;
+			await consumeIntoMessage(res.body, assistantId);
+		} catch (e: unknown) {
+			const status = (e as { status?: number })?.status;
+			if (status === 409 || status === 410) {
+				pendingGate = null;
+				sendError = 'This confirmation expired — re-send your message to continue.';
+			} else {
+				sendError = e instanceof Error ? e.message : 'Could not resume the tool call.';
+			}
+		} finally {
+			gateBusy = false;
+		}
+	}
+
+	// PR6b — connect-on-demand. Same-tab redirect to the gateway's authorize URL
+	// with a `return_url` back to this chat; PR4d lands back here with
+	// `?mcp_connected` (handled by the chats route, which then re-sends).
+	function connectMcp() {
+		if (!pendingGate || pendingGate.kind !== 'connect') return;
+		const returnUrl = window.location.href;
+		window.location.href = buildAuthorizeUrl(pendingGate.frame.authorize_url, returnUrl);
+	}
+
+	// PR6b — re-send the last user message. Exposed so the chats route can drive
+	// the "Continue" button after an OAuth return (`?mcp_connected`). Reuses the
+	// normal send path so streaming + skills + model selection stay consistent.
+	export function resendLastUserMessage(): void {
+		const list = get(messagesStore);
+		for (let i = list.length - 1; i >= 0; i--) {
+			const candidate = list[i];
+			const isUser = candidate.kind === 'user' || candidate.role === 'user';
+			if (isUser && candidate.content) {
+				composerText = candidate.content;
+				void sendMessage();
+				return;
+			}
+		}
 	}
 
 	function handleAppliedSkillClicked(name: string) {
@@ -770,8 +872,17 @@
 			: groups;
 	$: activeChat = $activeChatStore;
 	$: messages = $messagesStore;
+	// Issue #207 finding 4 — re-sync the sticky toggle from the chat's persisted
+	// set whenever the active chat changes (initial load + switches). Fires only
+	// on an id change so it never clobbers an in-progress toggle within a chat;
+	// a brand-new chat has an empty set → toggle off (fail-restrictive).
+	$: if (activeChat && activeChat.id !== stickyInitChatId) {
+		stickyInitChatId = activeChat.id;
+		stickyEnabled = (activeChat.sticky_skills?.length ?? 0) > 0;
+		stickyDirty = false;
+	}
 	$: projectAttachedSkills = activeChat?.project_id
-		? $projectsStore.find((p) => p.id === activeChat?.project_id)?.attached_skill_names ?? []
+		? ($projectsStore.find((p) => p.id === activeChat?.project_id)?.attached_skill_names ?? [])
 		: [];
 
 	// T12 — derive the project id + attached-KB ids the AttachKBModal needs.
@@ -780,7 +891,7 @@
 	// modal's "currently attached" badge without a manual refresh.
 	$: composerProjectId = activeChat?.project_id ?? null;
 	$: composerAttachedKbIds = composerProjectId
-		? $projectsStore.find((p) => p.id === composerProjectId)?.attached_knowledge_base_ids ?? []
+		? ($projectsStore.find((p) => p.id === composerProjectId)?.attached_knowledge_base_ids ?? [])
 		: [];
 
 	// Wave D.1 T19 — Restore receipts drawer open-state when the active
@@ -794,9 +905,7 @@
 	// picker's default (``smart`` if available, else the first row) when
 	// the user hasn't picked yet for this chat.
 	$: currentModelId = activeChat
-		? modelByChat[activeChat.id] ??
-		  defaultSelection(groupModels(availableModels))?.id ??
-		  null
+		? (modelByChat[activeChat.id] ?? defaultSelection(groupModels(availableModels))?.id ?? null)
 		: null;
 
 	// Wave D.1 T15 — role for the refusal-bubble override-button gate.
@@ -892,6 +1001,11 @@
 			onRefusalOverrideRequested={handleRefusalOverrideRequested}
 			onRefusalExplainerRequested={handleRefusalExplainerRequested}
 			{enhancementOriginals}
+			{pendingGate}
+			{gateBusy}
+			onGateApprove={() => decideToolCall('approve')}
+			onGateDeny={() => decideToolCall('deny')}
+			onGateConnect={connectMcp}
 		/>
 
 		{#if activeChat}
@@ -905,6 +1019,27 @@
 						selectedId={currentModelId}
 						onSelect={selectModel}
 					/>
+					<!-- Issue #207 finding 4 — opt-in "sticky skills" toggle. Off by
+					     default; when on, the skills applied here stay applied to
+					     follow-up messages in this chat (resets for a new chat). -->
+					<button
+						type="button"
+						role="switch"
+						aria-checked={stickyEnabled}
+						on:click={toggleSticky}
+						data-testid="lq-ai-sticky-toggle"
+						title="Keep the skills applied here active for follow-up messages in this chat. Off by default; a new chat starts fresh."
+						class="flex items-center gap-2 text-xs font-medium px-2 py-1 rounded-md border transition-colors {stickyEnabled
+							? 'border-emerald-500 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40'
+							: 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'}"
+					>
+						<span
+							class="inline-block w-2 h-2 rounded-full {stickyEnabled
+								? 'bg-emerald-500'
+								: 'bg-gray-300 dark:bg-gray-600'}"
+						></span>
+						Keep skills on
+					</button>
 				</div>
 
 				<SkillPicker
@@ -920,9 +1055,7 @@
 
 				<SavedPromptsPanel
 					onInsert={(text) => {
-						composerText = composerText.trim()
-							? `${composerText.trimEnd()}\n\n${text}`
-							: text;
+						composerText = composerText.trim() ? `${composerText.trimEnd()}\n\n${text}` : text;
 					}}
 				/>
 

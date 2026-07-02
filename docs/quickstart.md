@@ -43,13 +43,15 @@ LQ_AI_DEFAULT_MODEL=smart  # resolves to claude-opus-4-7 by default
 
 Set at least one provider key. The starter skills are model-agnostic but were drafted and calibrated against Anthropic's Claude family; if you use a different provider, output will be similar in shape but may differ in calibration nuance.
 
+> Provider keys are not limited to `.env`. Once `LQ_AI_GATEWAY_MASTER_KEY` is set, an admin can add, rotate, and revoke keys at runtime through the admin provider-keys surface (`/api/v1/admin/provider-keys`), which encrypts the key into `gateway.yaml` and hot-applies it to the live gateway — no restart. The `.env` path here is the simplest for a first run; the runtime path is the operator-facing way to manage keys after the stack is up. See [`gateway.yaml.example`](../gateway.yaml.example).
+
 Then start the stack:
 
 ```bash
 docker compose up -d
 ```
 
-First run pulls images across the eight always-on services — `postgres`, `redis`, `minio`, `gateway`, `api`, `ingest-worker`, `arq-worker`, `web` (the `ingest-worker` and `arq-worker` background workers run unconditionally; the local-Ollama, PaddleOCR, and Slack/Teams services are opt-in Compose profiles). On a reasonable connection this takes 2–4 minutes. Subsequent runs reuse the images and start in seconds.
+First run pulls images across the eight always-on services — `postgres`, `redis`, `minio`, `gateway`, `api`, `ingest-worker`, `arq-worker`, `web` (the `ingest-worker` and `arq-worker` background workers run unconditionally; the local-Ollama (`--profile local`) and Slack/Teams (`--profile slack` / `--profile teams`) services are opt-in Compose profiles). On a reasonable connection this takes 2–4 minutes. Subsequent runs reuse the images and start in seconds.
 
 When the stack is up, you should see something like this in the API container's logs:
 
@@ -406,7 +408,7 @@ Verify your `.env` has at least one provider key set and matches the model alias
 
 ### Citation engine fails on the sample NDA
 
-The sample is markdown rather than PDF. The Citation Engine handles markdown with synthetic page boundaries; if you see verification errors, check the API logs. Most often this is a PaddleOCR/Mistral OCR configuration issue triggered when the pipeline tries to OCR a document that doesn't need OCR — the workaround is to upload the document with explicit `format=markdown` (the file picker should detect this, but some configurations require it explicit).
+The sample is markdown rather than PDF. The Citation Engine handles markdown with synthetic page boundaries; if you see verification errors, check the API logs. The ingestion pipeline is PyMuPDF + Docling and parses text-bearing documents only — there is no OCR step (scanned-PDF OCR is not implemented; DE-320), so a verification miss is not an OCR configuration issue. Confirm the document carries extractable text rather than being a scanned image.
 
 ### "Tier 4 not allowed" message
 

@@ -245,7 +245,8 @@ async def _installed_skill_registry() -> AsyncIterator[None]:
 
     :mod:`app.autonomous.prompts` reads the registry holder from
     ``app.state`` when no explicit registry is passed.  In production
-    the lifespan handler populates it (``app/main.py:88``); in tests we
+    both startup paths populate it via
+    :func:`app.skills.bootstrap.install_skill_registry`; in tests we
     install the C1-fixtures registry so ``alpha-test-skill`` is
     resolvable.  The previous holder (if any) is restored on teardown.
     """
@@ -619,6 +620,106 @@ async def running_session_at_delivery(db_session: AsyncSession) -> AutonomousSes
     """Running session ready for the delivery node (terminal_reason regression)."""
     user = await _make_optedin_user(db_session)
     return await _make_running_session(db_session, user=user, trigger_kind="watch", params={})
+
+
+# ---------------------------------------------------------------------------
+# WS-D PR1 — agentic-loop fixtures (test_agentic_loop.py)
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def seeded_matter_session(
+    db_session: AsyncSession,
+    _installed_skill_registry: None,
+) -> AutonomousSession:
+    """Running, opted-in, skill-ref session with a matter query.
+
+    Carries ``params["skill_ref"]`` + ``params["query"]`` so the analysis
+    node's loop gate engages.  Tests must also set ``state["query"]``
+    (which the real executor seeds from ``session.params["query"]`` at
+    executor.py:116 — the fixture mirrors production params truthfully).
+    Requests :func:`_installed_skill_registry` so ``alpha-test-skill``
+    resolves during synthesis prompt assembly.
+    """
+    user = await _make_optedin_user(db_session)
+    return await _make_running_session(
+        db_session,
+        user=user,
+        trigger_kind="manual",
+        params={
+            "skill_ref": _FIXTURE_SKILL_REF,
+            "query": "Is the assignment clause enforceable?",
+        },
+    )
+
+
+@pytest_asyncio.fixture
+async def seeded_playbook_matter_session(
+    db_session: AsyncSession,
+) -> AutonomousSession:
+    """Running session with ``playbook_id`` + ``query`` for I1 synthesis-intent test.
+
+    Carries ``params["playbook_id"]`` + ``params["query"]`` so the analysis
+    node's loop gate engages AND the synthesis intent resolves to
+    ``ToolIntent.run_playbook`` (not ``run_skill``).  No skill registry is
+    required because the prompt assembler resolves the playbook from the DB.
+    """
+    user = await _make_optedin_user(db_session)
+    playbook = Playbook(
+        name="Agentic Loop Fixture Playbook",
+        contract_type="NDA",
+        description="Used by the I1 synthesis-intent test in test_agentic_loop.py.",
+    )
+    db_session.add(playbook)
+    await db_session.flush()
+    position = PlaybookPosition(
+        playbook_id=playbook.id,
+        issue="Confidentiality term",
+        description="Receiving Party obligation scope.",
+        standard_language=(
+            "The Receiving Party shall hold Confidential Information in confidence "
+            "and shall not disclose it to any third party."
+        ),
+        severity_if_missing="high",
+        detection_keywords=["confidential"],
+        detection_examples=[],
+        redline_strategy="Tighten to the standard language above.",
+        fallback_tiers=[],
+        position_order=0,
+    )
+    db_session.add(position)
+    await db_session.flush()
+    return await _make_running_session(
+        db_session,
+        user=user,
+        trigger_kind="manual",
+        params={
+            "playbook_id": str(playbook.id),
+            "query": "Is the indemnification clause market-standard?",
+        },
+    )
+
+
+@pytest_asyncio.fixture
+async def seeded_skill_session_no_query(
+    db_session: AsyncSession,
+    _installed_skill_registry: None,
+) -> AutonomousSession:
+    """Running, opted-in, skill-ref session WITHOUT a matter query.
+
+    Triggers the query-less single-call path in ``make_analysis_node``
+    (invariant #1 test).  ``params`` carries only ``skill_ref`` — no
+    ``query`` — so ``(state.get('query') or '').strip()`` is empty and
+    the loop gate does not engage.  Requests :func:`_installed_skill_registry`
+    so the single-call ``assemble_analysis_messages`` can resolve the skill.
+    """
+    user = await _make_optedin_user(db_session)
+    return await _make_running_session(
+        db_session,
+        user=user,
+        trigger_kind="manual",
+        params={"skill_ref": _FIXTURE_SKILL_REF},
+    )
 
 
 @pytest.fixture

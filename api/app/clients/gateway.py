@@ -60,7 +60,7 @@ import json
 import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, NoReturn
 
 import httpx
 from pydantic import ValidationError as PydanticValidationError
@@ -684,6 +684,114 @@ class GatewayClient:
                 details={"status_code": response.status_code},
             ) from exc
 
+    # --- Tool-provider dispatch (PR3a ADR 0014) ------------------------------
+
+    async def call_tool(
+        self,
+        provider: str,
+        tool: str,
+        args: dict[str, Any],
+        *,
+        max_allowed_tier: int | None = None,
+        user_token: str | None = None,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        """POST /v1/tools/{provider}/{tool} on the gateway (ADR 0014 transport).
+
+        Returns the gateway's ``{provider, tool, payload, tier}`` dict. Errors
+        translate exactly like ``list_models``: timeout -> GatewayTimeout,
+        transport -> GatewayUnreachable, structured 4xx -> mapped LQAIError.
+
+        ``user_token`` (for ``auth: oauth`` MCP servers, PR4c) is sent in the
+        ``X-LQ-AI-User-Token`` header — never a query param or body field (it
+        would land in access logs). Mirrors ``discover_tools``."""
+        headers = self._build_headers(request_id=request_id)
+        if user_token is not None:
+            # Per-user OAuth token for `auth: oauth` MCP servers. Header,
+            # never query/body (PR4c discipline — keeps it out of access
+            # logs and never written to tool_egress_log).
+            headers["X-LQ-AI-User-Token"] = user_token
+        body: dict[str, Any] = {"args": args}
+        if max_allowed_tier is not None:
+            body["max_allowed_tier"] = max_allowed_tier
+        op = f"call_tool:{provider}/{tool}"
+        try:
+            response = await self._client.post(
+                f"/v1/tools/{provider}/{tool}", json=body, headers=headers
+            )
+        except httpx.TimeoutException as exc:
+            raise GatewayTimeout(
+                "Gateway did not respond within the configured timeout",
+                details={"timeout_seconds": self._timeout},
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise GatewayUnreachable(
+                "Could not reach the Inference Gateway",
+                details={"transport_error": type(exc).__name__},
+            ) from exc
+        if response.status_code >= 400:
+            self._raise_for_gateway_error(
+                status_code=response.status_code,
+                body_bytes=response.content,
+                op=op,
+                request_id=request_id,
+            )
+        try:
+            payload: dict[str, Any] = response.json()
+            return payload
+        except json.JSONDecodeError as exc:
+            raise GatewayInvalidResponse(
+                "Gateway call_tool returned a non-JSON success response",
+                details={"status_code": response.status_code},
+            ) from exc
+
+    # --- MCP tool discovery (PR4b/WS2) --------------------------------------
+
+    async def discover_tools(
+        self,
+        provider: str,
+        *,
+        user_token: str | None = None,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        """GET /v1/tools/{provider} on the gateway (PR4a discovery transport).
+
+        Returns the gateway's ``{provider, tools:[...]}`` dict. ``user_token``
+        (for ``auth: oauth`` MCP servers, PR4c) is sent in the
+        ``X-LQ-AI-User-Token`` header — never a query param (it would land in
+        access logs). Errors translate like ``call_tool``."""
+        headers = self._build_headers(request_id=request_id)
+        if user_token is not None:
+            headers["X-LQ-AI-User-Token"] = user_token
+        op = f"discover_tools:{provider}"
+        try:
+            response = await self._client.get(f"/v1/tools/{provider}", headers=headers)
+        except httpx.TimeoutException as exc:
+            raise GatewayTimeout(
+                "Gateway did not respond within the configured timeout",
+                details={"timeout_seconds": self._timeout},
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise GatewayUnreachable(
+                "Could not reach the Inference Gateway",
+                details={"transport_error": type(exc).__name__},
+            ) from exc
+        if response.status_code >= 400:
+            self._raise_for_gateway_error(
+                status_code=response.status_code,
+                body_bytes=response.content,
+                op=op,
+                request_id=request_id,
+            )
+        try:
+            payload: dict[str, Any] = response.json()
+            return payload
+        except json.JSONDecodeError as exc:
+            raise GatewayInvalidResponse(
+                "Gateway discover_tools returned a non-JSON success response",
+                details={"status_code": response.status_code},
+            ) from exc
+
     # --- Admin: alias CRUD (D0.5) -------------------------------------------
 
     async def list_aliases(
@@ -862,6 +970,191 @@ class GatewayClient:
             request_id=request_id,
         )
 
+    async def list_tool_providers(
+        self,
+        *,
+        request_id: str | None = None,
+    ) -> list[dict[str, str]]:
+        """GET /admin/v1/config; return configured tool providers as [{name, type}].
+
+        The api holds the gateway key (stamped on every request), so it can read
+        the gateway's sanitized config (env-var names only, never secret values).
+        Used by the research capabilities signal + provider-name resolution.
+
+        Extra fields (base_url, api_key_env, …) are stripped — the capabilities
+        consumer needs only name and type, and we don't want to widen the surface.
+        Malformed entries (non-dict, missing name/type) are silently filtered.
+        """
+
+        config = await self.get_admin_config(request_id=request_id)
+        providers = config.get("tool_providers") or []
+        return [
+            {"name": p["name"], "type": p["type"]}
+            for p in providers
+            if isinstance(p, dict) and "name" in p and "type" in p
+        ]
+
+    async def list_mcp_oauth_config(
+        self,
+        *,
+        request_id: str | None = None,
+    ) -> list[dict[str, str]]:
+        """GET /admin/v1/config; return MCP providers configured for OAuth.
+
+        Reads the gateway's sanitised config and returns, for each
+        ``tool_providers`` entry whose ``type == "mcp"`` and
+        ``auth == "oauth"``, the minimal non-secret tuple:
+
+        ``{"name": ..., "server_url": ..., "oauth_client_id": ...}``
+
+        (``server_url`` is the gateway's ``base_url`` field, renamed for
+        api-layer clarity.)  Malformed entries (non-dict, or any of
+        name/base_url/oauth_client_id missing) are silently filtered so a
+        single mis-typed YAML key never breaks the whole list.
+        """
+
+        config = await self.get_admin_config(request_id=request_id)
+        providers = config.get("tool_providers") or []
+        return [
+            {
+                "name": p["name"],
+                "server_url": p["base_url"],
+                "oauth_client_id": p["oauth_client_id"],
+            }
+            for p in providers
+            if (
+                isinstance(p, dict)
+                and p.get("type") == "mcp"
+                and p.get("auth") == "oauth"
+                and "name" in p
+                and "base_url" in p
+                and "oauth_client_id" in p
+            )
+        ]
+
+    async def oauth_discover(
+        self,
+        provider: str,
+        *,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        """POST /v1/oauth/{provider}/discover on the gateway (PR4c passthrough).
+
+        Returns the merged OAuth metadata dict from the gateway
+        (``authorization_endpoint``, ``token_endpoint``, ``issuer``,
+        ``resource``, ``scopes_supported``,
+        ``authorization_response_iss_parameter_supported``).
+
+        Errors translate exactly like ``call_tool``: timeout →
+        :class:`GatewayTimeout`, transport → :class:`GatewayUnreachable`,
+        structured 4xx/5xx envelope → mapped via
+        :func:`~app.errors.map_gateway_error_code`.
+        """
+
+        headers = self._build_headers(request_id=request_id)
+        op = f"oauth_discover:{provider}"
+        try:
+            response = await self._client.post(
+                f"/v1/oauth/{provider}/discover", json={}, headers=headers
+            )
+        except httpx.TimeoutException as exc:
+            raise GatewayTimeout(
+                "Gateway did not respond within the configured timeout",
+                details={"timeout_seconds": self._timeout},
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise GatewayUnreachable(
+                "Could not reach the Inference Gateway",
+                details={"transport_error": type(exc).__name__},
+            ) from exc
+        if response.status_code >= 400:
+            self._raise_for_gateway_error(
+                status_code=response.status_code,
+                body_bytes=response.content,
+                op=op,
+                request_id=request_id,
+            )
+        try:
+            payload: dict[str, Any] = response.json()
+            return payload
+        except json.JSONDecodeError as exc:
+            raise GatewayInvalidResponse(
+                "Gateway oauth_discover returned a non-JSON success response",
+                details={"status_code": response.status_code},
+            ) from exc
+
+    async def oauth_token(
+        self,
+        provider: str,
+        *,
+        token_endpoint: str,
+        form: dict[str, str],
+        request_id: str | None = None,
+    ) -> tuple[int, dict[str, Any]]:
+        """POST /v1/oauth/{provider}/token on the gateway (PR4c passthrough).
+
+        The gateway relays the auth-server (AS) response VERBATIM —
+        including the AS's HTTP status.  The discriminator between a
+        relayed AS response and a gateway-level error envelope is the
+        shape of ``body["error"]``:
+
+        * RFC 6749 §5.2 makes the ``error`` field a **string** token
+          (``"invalid_grant"``, ``"access_denied"`` …).  A relayed AS
+          error therefore has ``body["error"]`` as a string.
+        * The gateway's own error envelope has ``body["error"]`` as an
+          **object** (``{"code": ..., "message": ...}``).
+
+        Returns ``(status_code, body)`` for both a success token response
+        and a relayed AS OAuth error — the **service layer** (Task 4B)
+        interprets those.  Only raises for:
+
+        * Transport failures (``httpx.TimeoutException`` / ``httpx.HTTPError``).
+        * Gateway-envelope errors (``body["error"]`` is a dict).
+        * Non-JSON success body → :class:`GatewayInvalidResponse`.
+
+        Security: ``form`` and the response body contain OAuth
+        credentials.  This method MUST NOT log either.
+        """
+
+        headers = self._build_headers(request_id=request_id)
+        op = f"oauth_token:{provider}"
+        body_out: dict[str, Any] = {"token_endpoint": token_endpoint, "form": form}
+        try:
+            response = await self._client.post(
+                f"/v1/oauth/{provider}/token", json=body_out, headers=headers
+            )
+        except httpx.TimeoutException as exc:
+            raise GatewayTimeout(
+                "Gateway did not respond within the configured timeout",
+                details={"timeout_seconds": self._timeout},
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise GatewayUnreachable(
+                "Could not reach the Inference Gateway",
+                details={"transport_error": type(exc).__name__},
+            ) from exc
+
+        try:
+            body: dict[str, Any] = response.json()
+        except json.JSONDecodeError as exc:
+            raise GatewayInvalidResponse(
+                "Gateway oauth_token returned a non-JSON response",
+                details={"status_code": response.status_code},
+            ) from exc
+
+        # Discriminate: gateway envelope (error is a dict) vs. relayed AS
+        # response (error is a string per RFC 6749, or absent on success).
+        if response.status_code >= 400 and isinstance(body.get("error"), dict):
+            self._raise_for_gateway_error(
+                status_code=response.status_code,
+                body_bytes=response.content,
+                op=op,
+                request_id=request_id,
+            )
+
+        # Relayed AS response (token or RFC 6749 OAuth error with string error).
+        return (response.status_code, body)
+
     async def get_tier_config(
         self,
         *,
@@ -975,7 +1268,7 @@ class GatewayClient:
         body_bytes: bytes,
         op: str,
         request_id: str | None,
-    ) -> None:
+    ) -> NoReturn:
         """Parse a non-2xx gateway response and raise the right LQAIError.
 
         ``status_code == 401`` is special-cased per the brief: the user

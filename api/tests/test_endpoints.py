@@ -67,6 +67,14 @@ _PARAM_VALUES: dict[str, str] = {
     # M3-D4 — admin intake-bridges surface
     "workspace_id": _DUMMY_UUID,
     "tenant_id": _DUMMY_UUID,
+    # WS3b — research surface
+    "cluster_id": "1",
+    "opinion_id": "1",
+    # WS2/PR4b — MCP registry admin surface
+    "server": "acme-mcp",
+    "tool": "read_doc",
+    # PR5b Task 7 — resume pending tool call
+    "pending_call_id": _DUMMY_UUID,
 }
 
 
@@ -122,6 +130,8 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("GET", "/api/v1/chats/{chat_id}/messages"),
     ("POST", "/api/v1/chats/{chat_id}/messages"),
     ("GET", "/api/v1/chats/{chat_id}/messages/{message_id}/citations"),
+    ("GET", "/api/v1/chats/{chat_id}/messages/{message_id}/sources"),
+    ("GET", "/api/v1/chats/{chat_id}/ledger"),
     # C1 — Skill Service: filesystem loading
     ("GET", "/api/v1/skills"),
     ("GET", "/api/v1/skills/{skill_name}"),
@@ -294,11 +304,36 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("PATCH", "/api/v1/autonomous/schedules/{schedule_id}"),
     ("GET", "/api/v1/autonomous/sessions"),
     ("GET", "/api/v1/autonomous/sessions/{session_id}"),
+    ("GET", "/api/v1/autonomous/sessions/{session_id}/artifacts"),
+    ("GET", "/api/v1/autonomous/sessions/{session_id}/findings"),
+    ("GET", "/api/v1/autonomous/sessions/{session_id}/ledger"),
     ("POST", "/api/v1/autonomous/sessions/{session_id}/halt"),
     ("GET", "/api/v1/autonomous/watches"),
     ("POST", "/api/v1/autonomous/watches"),
     ("DELETE", "/api/v1/autonomous/watches/{watch_id}"),
     ("PATCH", "/api/v1/autonomous/watches/{watch_id}"),
+    # WS3b — case-law research surface
+    ("GET", "/api/v1/research/capabilities"),
+    ("POST", "/api/v1/research/verify-citations"),
+    ("POST", "/api/v1/research/search"),
+    ("GET", "/api/v1/research/clusters/{cluster_id}"),
+    ("GET", "/api/v1/research/opinions/{opinion_id}"),
+    ("POST", "/api/v1/research/find-in-case"),
+    # WS-E PR1a — content-authority source registry
+    ("GET", "/api/v1/research/sources"),
+    # WS2/PR4b — MCP registry admin surface
+    ("GET", "/api/v1/admin/mcp"),
+    ("POST", "/api/v1/admin/mcp/{server}/refresh"),
+    ("PATCH", "/api/v1/admin/mcp/{server}/tools/{tool}"),
+    # PR4c — per-user MCP OAuth surface
+    ("GET", "/api/v1/mcp/oauth/{server}/authorize"),
+    ("GET", "/api/v1/mcp/oauth/{server}/callback"),
+    ("GET", "/api/v1/mcp/oauth/{server}/status"),
+    ("DELETE", "/api/v1/mcp/oauth/{server}"),
+    # PR4d Ask 1 — per-user OAuth connections list
+    ("GET", "/api/v1/mcp/oauth"),
+    # PR5b Task 7 — resume pending tool call
+    ("POST", "/api/v1/chats/{chat_id}/tool-calls/{pending_call_id}"),
 }
 
 

@@ -313,7 +313,11 @@ def test_to_ollama_request_stream_flag_forwarded() -> None:
 @pytest.mark.unit
 def test_to_ollama_request_forwards_tools_and_tool_choice() -> None:
     """``tools`` and ``tool_choice`` (extension fields) forward verbatim
-    to Ollama's 0.4+ tool-use surface."""
+    to Ollama's 0.4+ tool-use surface.
+
+    PR5b regression pin: tools/tool_choice must survive the explicit field
+    promotion in ``ChatCompletionRequest`` and still reach the upstream body.
+    """
 
     raw = {
         "model": "llama3.1",
@@ -333,7 +337,7 @@ def test_to_ollama_request_forwards_tools_and_tool_choice() -> None:
     req = ChatCompletionRequest.model_validate(raw)
     body = _to_ollama_request(req, model="llama3.1", stream=False)
     assert body["tools"][0]["function"]["name"] == "get_time"
-    assert body["tool_choice"] == "auto"
+    assert body["tool_choice"] == "auto"  # PR5b regression pin
 
 
 @pytest.mark.unit

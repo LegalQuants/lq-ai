@@ -86,3 +86,29 @@ async def test_enqueue_get_pool_failure_returns_false() -> None:
         ok = await enqueue_ingest_job(_uuid.uuid4())
 
     assert ok is False
+
+
+@pytest.mark.unit
+async def test_enqueue_treatment_uses_dedup_job_id() -> None:
+    """Treatment enqueue passes _job_id for arq coalescing (DE-363)."""
+
+    import uuid as _uuid
+
+    from app.workers.queue import (
+        TREATMENT_DERIVATION_JOB_NAME,
+        enqueue_treatment_derivation_job,
+    )
+
+    fake_pool = AsyncMock()
+    fake_pool.enqueue_job = AsyncMock(return_value="job-id")
+
+    with patch("app.workers.queue._get_pool", AsyncMock(return_value=fake_pool)):
+        mid = _uuid.uuid4()
+        ok = await enqueue_treatment_derivation_job(mid)
+
+    assert ok is True
+    fake_pool.enqueue_job.assert_awaited_once()
+    args, kwargs = fake_pool.enqueue_job.call_args
+    assert args[0] == TREATMENT_DERIVATION_JOB_NAME
+    assert args[1] == str(mid)
+    assert kwargs.get("_job_id") == f"treatment:{mid}"

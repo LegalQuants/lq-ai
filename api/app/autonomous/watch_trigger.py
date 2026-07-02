@@ -60,7 +60,9 @@ async def fire_watches_for_kb(
        by ``watch.user_id`` with ``trigger_kind='watch'``, ``trigger_ref``
        = the watch id, ``status='running'``, ``current_phase='intake'``,
        and ``params`` carrying the non-null subset of ``{"kb_id",
-       "playbook_id", "skill_ref", "file_id"}``.
+       "playbook_id", "skill_ref", "file_id", "emit_artifacts"}``
+       (``emit_artifacts`` is set — to ``True`` — only when the watch
+       opted in; Donna ask #8).
     2. Commits once after all session rows are created.
     3. ``await enqueue(session.id)`` for each created session — best-effort;
        the helper swallows transport errors and returns bool, and the loop
@@ -97,6 +99,10 @@ async def fire_watches_for_kb(
             params["playbook_id"] = str(watch.playbook_id)
         if watch.skill_ref is not None:
             params["skill_ref"] = watch.skill_ref
+        if watch.emit_artifacts:
+            # Opt-in (Donna ask #8) — non-null-subset convention: the key
+            # is present iff the watch opted in.
+            params["emit_artifacts"] = True
 
         session = AutonomousSession(
             user_id=watch.user_id,

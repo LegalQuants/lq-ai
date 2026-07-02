@@ -175,8 +175,13 @@ async def run_autonomous_session(
         await db.commit()
 
     except Exception as exc:
-        # Any in-graph exception: persist the failure and don't re-raise.
-        # The arq worker already accepted the job; the caller polls the row.
+        # C1b defense-in-depth: a poisoned AsyncSession (e.g. a DBAPIError
+        # from a bad SQL arg that reached the handler) leaves the transaction
+        # in an aborted state.  The commit() below would then also raise a
+        # PendingRollbackError, stranding the session at status='running'
+        # (zombie).  rollback() first so the subsequent get()/commit() always
+        # succeeds, regardless of whether the tx was poisoned or clean.
+        await db.rollback()
         logger.exception(
             "autonomous executor crashed mid-graph",
             extra={
@@ -185,10 +190,14 @@ async def run_autonomous_session(
                 "error_type": type(exc).__name__,
             },
         )
-        session.status = "failed"
-        session.error = f"{type(exc).__name__}: {exc}"[:2000]
-        session.completed_at = datetime.now(UTC)
-        await db.commit()
+        # Re-fetch after rollback: the rollback may have expired or detached
+        # the in-memory row; a fresh get() is always safe here.
+        session = await db.get(AutonomousSession, session_id)
+        if session is not None:
+            session.status = "failed"
+            session.error = f"{type(exc).__name__}: {exc}"[:2000]
+            session.completed_at = datetime.now(UTC)
+            await db.commit()
 
 
 def _build_graph(

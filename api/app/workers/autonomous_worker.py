@@ -311,7 +311,9 @@ async def _run_schedule_sweep(
        ``trigger_kind='schedule'``, ``trigger_ref`` = the schedule id,
        ``status='running'``, ``current_phase='intake'``, and ``params``
        carrying the non-null subset of the schedule's target
-       (``kb_id`` ← ``target_kb_id``, ``playbook_id``, ``skill_ref``).
+       (``kb_id`` ← ``target_kb_id``, ``playbook_id``, ``skill_ref``,
+       plus ``emit_artifacts`` — set to ``True`` only when the schedule
+       opted in; Donna ask #8).
     2. Flushes to obtain the session id, then ``await enqueue(id)`` —
        best-effort; a failed enqueue leaves the row at ``running`` for
        manual re-enqueue (matching the queue-helper posture).
@@ -375,6 +377,10 @@ async def _run_schedule_sweep(
                 params["playbook_id"] = str(schedule.playbook_id)
             if schedule.skill_ref is not None:
                 params["skill_ref"] = schedule.skill_ref
+            if schedule.emit_artifacts:
+                # Opt-in (Donna ask #8) — non-null-subset convention: the
+                # key is present iff the schedule opted in.
+                params["emit_artifacts"] = True
 
             session = AutonomousSession(
                 user_id=schedule.user_id,

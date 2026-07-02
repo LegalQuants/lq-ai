@@ -317,6 +317,17 @@ CREATE TABLE chats (
     title       TEXT NOT NULL DEFAULT 'New chat'
                   CHECK (char_length(title) > 0 AND char_length(title) <= 200),
     archived_at TIMESTAMPTZ,
+    -- Opt-in per-chat "sticky skills" set (issue #207 finding 4, migration 0056).
+    -- Empty = sticky toggle OFF (fail-restrictive; a new chat never inherits it).
+    -- When non-empty, these skill slugs are unioned into every turn's effective
+    -- skills until cleared. Set via MessageCreate.set_sticky.
+    sticky_skills TEXT[] NOT NULL DEFAULT '{}',
+    -- Session-owned chat marker (WS-D PR2, migration 0063). Non-null when this
+    -- chat was manufactured by an autonomous session to route its work product
+    -- through the citation ledger + fiduciary gate. Excluded from list_chats and
+    -- search_chats so it is invisible in the user's chat list. Direct GET by id
+    -- still works. ON DELETE SET NULL so archiving the session doesn't cascade.
+    autonomous_session_id UUID REFERENCES autonomous_sessions(id) ON DELETE SET NULL,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -478,6 +489,178 @@ Candidates that fail Stage 1 are dropped (not persisted) until later
 stages ship; the M2-C2 UI work decides what to render for "model
 emitted but we couldn't verify."
 
+### `message_tool_sources` (migration 0055, PR6c)
+
+One row per external source (e.g. a CourtListener case-law cluster) that a
+research tool *returned* during an assistant turn. This is
+**retrieval-provenance** — "sources consulted" — and is deliberately distinct
+from `message_citations` (which is byte-offset quote-verification against
+uploaded documents). PR6c scope: `source_kind='caselaw'` only; generic MCP
+result provenance is deferred to DE-350.
+
+```sql
+CREATE TABLE message_tool_sources (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    message_id   UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,  -- fk_message_tool_sources_message
+    source_kind  VARCHAR(32) NOT NULL,   -- 'caselaw' in PR6c
+    label        TEXT NOT NULL,          -- display name, e.g. "Roe v. Wade"
+    subtitle     TEXT,                   -- e.g. "scotus · 1973-01-22"
+    url          TEXT,                   -- canonical URL (CourtListener permalink)
+    external_ref TEXT,                   -- provider's opaque identifier (e.g. cluster id)
+    provider     VARCHAR(64) NOT NULL,   -- e.g. 'courtlistener'
+    tool         VARCHAR(64) NOT NULL,   -- tool name that returned this source, e.g. 'search_case_law'
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX ix_message_tool_sources_message_id ON message_tool_sources(message_id);
+```
+
+**Contrast with `message_citations`:**
+
+| Concern | `message_citations` | `message_tool_sources` |
+|---|---|---|
+| What it records | Quote extracted from assistant response, byte-matched against uploaded document | External source a research tool returned during a turn |
+| Input | Uploaded documents (KB / project files) | External provider APIs (CourtListener, etc.) |
+| Verification | Byte-offset exact-match → tolerant → LLM judge | None — provenance only |
+| Granularity | Byte span within a document chunk | One row per returned source cluster |
+| Scope | M2+ (all document types) | PR6c (case-law); DE-350 for generic MCP |
+
+The `(message_id)` index supports the per-turn sources fetch used by the
+sources endpoint (Task 4) and the frontend citation rail (Task 5).
+
+### `message_caselaw_citations` (migration 0057, P1-A1)
+
+Quote-verified citations against external CourtListener opinions (P1-A1);
+parallels `message_citations` but keyed to `opinion_id`/`cluster_id` with
+offsets into the stored opinion plaintext, no `file_id`. One row per
+verbatim passage in an assistant turn that was character-verified against a
+CourtListener opinion the turn consulted. Written by the chat-finalize path
+after the assistant message is persisted. ADR 0018 D2.
+
+```sql
+CREATE TABLE message_caselaw_citations (
+    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    message_id                UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,  -- fk_message_caselaw_citations_message
+    opinion_id                BIGINT NOT NULL,
+    cluster_id                BIGINT NOT NULL,
+    source_offset_start       INTEGER NOT NULL,
+    source_offset_end         INTEGER NOT NULL,
+    source_text               TEXT NOT NULL,
+    verified                  BOOLEAN NOT NULL DEFAULT FALSE,
+    verification_method       TEXT,   -- 'exact_match' | 'tolerant_match' | NULL
+    verification_confidence   FLOAT,
+    partial                   BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT chk_message_caselaw_citations_offset_start_nonneg
+        CHECK (source_offset_start >= 0),
+    CONSTRAINT chk_message_caselaw_citations_offset_end_gt_start
+        CHECK (source_offset_end > source_offset_start),
+    CONSTRAINT chk_message_caselaw_citations_method_values
+        CHECK (
+            verification_method IS NULL
+            OR verification_method IN ('exact_match', 'tolerant_match')
+        ),
+    CONSTRAINT chk_message_caselaw_citations_confidence_range
+        CHECK (
+            verification_confidence IS NULL
+            OR (verification_confidence >= 0 AND verification_confidence <= 1)
+        ),
+    CONSTRAINT chk_message_caselaw_citations_verified_has_method
+        CHECK ((verified = false) OR (verification_method IS NOT NULL))
+);
+
+CREATE INDEX ix_message_caselaw_citations_message_id ON message_caselaw_citations(message_id);
+```
+
+Unlike `message_citations`, there is no `source_file_id` — CourtListener opinions
+are external sources, not uploaded `files`. `opinion_id` and `cluster_id` are
+CourtListener's numeric identifiers; offsets are into the opinion plaintext stored
+by the research service. The `partial` flag indicates the quote was found but only
+partially matched. Stages 3–4 (LLM judge, ensemble) are deferred to a later
+milestone; only `'exact_match'` and `'tolerant_match'` are written by the P1-A1
+verifier.
+
+**Contrast with `message_citations`:**
+
+| Concern | `message_citations` | `message_caselaw_citations` |
+|---|---|---|
+| Source | Uploaded documents (KB / project files) | External CourtListener opinions |
+| Key | `source_file_id` (FK to `files`) | `opinion_id` / `cluster_id` (BigInt) |
+| Offset target | Uploaded document normalized content | Stored opinion plaintext |
+| Method values | `exact_match`, `tolerant_match`, `llm_judge`, `ensemble`, `failed` | `exact_match`, `tolerant_match` (P1-A1) |
+| Confidence type | `NUMERIC(3,2)` | `FLOAT` |
+
+### `citation_ledger_entry` (migration 0058, P1-A2)
+
+The Citation Ledger (ADR 0018 D1) — one thin referencing row per (turn, source), unifying KB-document citations, caselaw citations, and tool-source provenance; metadata-only (no content), in the P3 tripwire.
+
+One row per *(assistant turn, source brought into context)*, accumulated per matter (`project_id`). It **references** exactly one of `message_citations`, `message_caselaw_citations`, or `message_tool_sources` by id (a CHECK constraint enforces exactly-one-non-null) and mirrors that source's verification status as a queryable label. It holds **no content** (`source_text` and payloads live on the referenced rows); it is a metadata index.
+
+```sql
+CREATE TABLE citation_ledger_entry (
+    id                          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id                  UUID REFERENCES projects(id) ON DELETE CASCADE,         -- fk_citation_ledger_entry_project; nullable (chat may be matter-less)
+    chat_id                     UUID NOT NULL REFERENCES chats(id) ON DELETE CASCADE,   -- fk_citation_ledger_entry_chat
+    message_id                  UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE, -- fk_citation_ledger_entry_message
+    source_kind                 TEXT NOT NULL,    -- 'kb_document' | 'caselaw' | 'mcp' | 'kb_chunk'
+    message_citation_id         UUID REFERENCES message_citations(id) ON DELETE CASCADE,          -- fk_citation_ledger_entry_msg_citation; nullable
+    message_caselaw_citation_id UUID REFERENCES message_caselaw_citations(id) ON DELETE CASCADE,  -- fk_citation_ledger_entry_caselaw_citation; nullable
+    message_tool_source_id      UUID REFERENCES message_tool_sources(id) ON DELETE CASCADE,       -- fk_citation_ledger_entry_tool_source; nullable
+    verification_status         TEXT NOT NULL,    -- mirrored cascade label: 'exact_match' | 'tolerant_match' | 'provenance' | etc.
+    confidence                  FLOAT,            -- mirrored cascade confidence [0,1] or NULL
+    provider                    TEXT,             -- retrieval provider (e.g. 'courtlistener') or NULL for KB sources
+    retrieved_at                TIMESTAMPTZ,      -- time the external source was fetched, or NULL for KB sources
+    treatment_id                UUID,             -- reserved for WS-G derived treatment (ADR 0018 D6); always NULL in Phase 1
+    created_at                  TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT chk_citation_ledger_entry_exactly_one_source
+        CHECK (
+            (message_citation_id IS NOT NULL)::int
+            + (message_caselaw_citation_id IS NOT NULL)::int
+            + (message_tool_source_id IS NOT NULL)::int = 1
+        ),
+    CONSTRAINT chk_citation_ledger_entry_confidence_range
+        CHECK (confidence IS NULL OR (confidence >= 0 AND confidence <= 1))
+);
+
+CREATE INDEX ix_citation_ledger_entry_chat_id    ON citation_ledger_entry(chat_id);
+CREATE INDEX ix_citation_ledger_entry_message_id ON citation_ledger_entry(message_id);
+CREATE INDEX ix_citation_ledger_entry_project_id ON citation_ledger_entry(project_id);
+```
+
+**Columns:**
+
+| Column | Type | Nullable | Purpose |
+|---|---|---|---|
+| `id` | UUID PK | NOT NULL | Entry identity |
+| `project_id` | UUID FK → `projects.id` CASCADE | nullable | Matter scope; NULL when the chat belongs to no project |
+| `chat_id` | UUID FK → `chats.id` CASCADE | NOT NULL | Conversation scope |
+| `message_id` | UUID FK → `messages.id` CASCADE | NOT NULL | The assistant turn that brought this source into context |
+| `source_kind` | TEXT | NOT NULL | Kind label: `kb_document`, `caselaw`, `mcp`, `kb_chunk` |
+| `message_citation_id` | UUID FK → `message_citations.id` CASCADE | nullable | Set when source produced a `MessageCitation` (KB quote-verified) |
+| `message_caselaw_citation_id` | UUID FK → `message_caselaw_citations.id` CASCADE | nullable | Set when source produced a `MessageCaselawCitation` (external quote-verified) |
+| `message_tool_source_id` | UUID FK → `message_tool_sources.id` CASCADE | nullable | Set when source is retrieval-provenance only (no quote verification) |
+| `verification_status` | TEXT | NOT NULL | Mirrored cascade label (e.g. `exact_match`, `tolerant_match`, `provenance`) — a label, never payload |
+| `confidence` | FLOAT | nullable | Mirrored cascade confidence [0, 1]; NULL for provenance-only rows |
+| `provider` | TEXT | nullable | Retrieval provider (e.g. `courtlistener`); NULL for KB-document sources |
+| `retrieved_at` | TIMESTAMPTZ | nullable | When the external source was fetched; NULL for KB-document sources |
+| `treatment_id` | UUID | nullable | **Reserved** for WS-G derived treatment (ADR 0018 D6); always NULL in Phase 1 |
+| `created_at` | TIMESTAMPTZ | NOT NULL | Append time; server default `now()` |
+
+**CHECK constraints:**
+
+- `chk_citation_ledger_entry_exactly_one_source` — `(message_citation_id IS NOT NULL)::int + (message_caselaw_citation_id IS NOT NULL)::int + (message_tool_source_id IS NOT NULL)::int = 1`. Exactly one source FK must be non-null; the other two must be null. Enforces the ledger's single-source-per-row invariant.
+- `chk_citation_ledger_entry_confidence_range` — `confidence IS NULL OR (confidence >= 0 AND confidence <= 1)`. Mirrors the range constraint on the underlying citation tables.
+
+**Indexes:**
+
+- `ix_citation_ledger_entry_chat_id` on `(chat_id)` — supports the per-conversation ledger read endpoint (ADR 0018 D4).
+- `ix_citation_ledger_entry_message_id` on `(message_id)` — supports per-turn ledger queries.
+- `ix_citation_ledger_entry_project_id` on `(project_id)` — supports matter-scoped ledger queries and P9 export/delete.
+
+**P3 note:** the ledger intentionally holds **no content** (no `source_text`, no tool payloads). It is added to the `test_transparency_invariants.py` no-raw-payload tripwire scan (ADR 0018 D5) so any future content-bearing column fails CI at collection.
+
 ### `enhance_prompt_interactions` (migration 0015)
 
 One row per Enhance Prompt (⌘E) invocation. Records the raw input, the
@@ -556,7 +739,7 @@ reference is stored unbound.
 > early sketch from before [ADR 0004](adr/0004-skill-loader-locus.md)
 > made skills **filesystem-canonical**. There is no `skills` SQL table,
 > no `skill_reference_files` table, and no `skill_example_files` table in
-> the shipped schema (verified against migrations 0001–0045 and
+> the shipped schema (verified against migrations 0001–0047 and
 > `api/app/models/` — no `Skill` ORM model exists). Built-in skills load
 > from disk at startup; user/team-scoped skills are stored in the
 > **`user_skills`** table (migration 0013, documented below), and the
@@ -1124,6 +1307,63 @@ CREATE INDEX idx_inference_log_refused ON inference_routing_log(timestamp DESC) 
 
 ---
 
+### `tool_egress_log`
+
+Gateway-written (ADR 0014 D3); counts/types only, never raw payloads. One row per outbound tool/data-source call through the gateway. Distinct from `inference_routing_log` (different access pattern and retention) and from `audit_log` (hot path, per-call counts only).
+
+| Column                  | Type        | Nullable | Default              | Notes                                             |
+|-------------------------|-------------|----------|----------------------|---------------------------------------------------|
+| `id`                    | UUID        | NO       | `gen_random_uuid()`  | Primary key                                       |
+| `timestamp`             | TIMESTAMPTZ | NO       | `now()`              | When the call was made                            |
+| `request_id`            | TEXT        | YES      |                      | Correlates with gateway request span              |
+| `provider`              | TEXT        | NO       |                      | Tool provider name (e.g. `courtlistener`)         |
+| `tool`                  | TEXT        | NO       |                      | Tool/endpoint called (e.g. `search_opinions`)     |
+| `tier`                  | INTEGER     | NO       |                      | Egress tier: `0` = no provider resolved (pre-resolution refusal); `1`–`5` = egress tier; CHECK enforced |
+| `bytes_out`             | INTEGER     | YES      |                      | Bytes sent to provider                            |
+| `bytes_in`              | INTEGER     | YES      |                      | Bytes received from provider                      |
+| `anonymization_applied` | BOOLEAN     | NO       | `false`              | Whether PII anonymization ran before egress       |
+| `refused`               | BOOLEAN     | NO       | `false`              | Whether the call was refused by the gateway       |
+| `refusal_reason`        | TEXT        | YES      |                      | E.g. `tier_below_minimum`, `provider_unavailable` |
+
+```sql
+CREATE INDEX ix_tool_egress_log_provider  ON tool_egress_log(provider);
+CREATE INDEX ix_tool_egress_log_timestamp ON tool_egress_log(timestamp);
+```
+
+---
+
+### `research_cluster_metadata` + `research_opinion_metadata` (WS3b)
+
+Read-through metadata cache for CourtListener case law. One row per fetched cluster (case) and one row per fetched opinion. Opinion full-text BODIES live in object storage, referenced by `storage_path`; only metadata is stored in the DB. Introduced by migration `0049_research_metadata.py`.
+
+**`research_cluster_metadata`**
+
+| Column         | Type        | Nullable | Default   | Notes                                    |
+|----------------|-------------|----------|-----------|------------------------------------------|
+| `cluster_id`   | BIGINT      | NO       |           | Primary key; CourtListener cluster ID    |
+| `case_name`    | TEXT        | YES      |           | Case name (e.g. "Obergefell v. Hodges")  |
+| `court`        | TEXT        | YES      |           | Court slug (e.g. `scotus`)               |
+| `date_filed`   | TEXT        | YES      |           | ISO date string from CourtListener       |
+| `absolute_url` | TEXT        | YES      |           | Relative URL on CourtListener            |
+| `cached_at`    | TIMESTAMPTZ | NO       | `now()`   | When this row was fetched and cached     |
+
+**`research_opinion_metadata`**
+
+| Column            | Type        | Nullable | Default   | Notes                                                      |
+|-------------------|-------------|----------|-----------|------------------------------------------------------------|
+| `opinion_id`      | BIGINT      | NO       |           | Primary key; CourtListener opinion ID                      |
+| `cluster_id`      | BIGINT      | NO       |           | FK-by-convention to `research_cluster_metadata.cluster_id` |
+| `text_field_used` | TEXT        | YES      |           | Which CourtListener field supplied the text                |
+| `storage_path`    | TEXT        | NO       |           | Object-storage key for the opinion body (never in DB)      |
+| `char_length`     | INTEGER     | NO       |           | Character count of stored body; used for quota checks      |
+| `cached_at`       | TIMESTAMPTZ | NO       | `now()`   | When this row was fetched and cached                       |
+
+```sql
+CREATE INDEX ix_research_opinion_metadata_cluster_id ON research_opinion_metadata(cluster_id);
+```
+
+---
+
 ## Playbooks (per [PRD §3.7](PRD.md#37-playbooks), M3-A1)
 
 Substrate for the Playbook engine landing in M3. A playbook codifies an
@@ -1524,6 +1764,10 @@ CREATE TABLE autonomous_schedules (
     skill_ref     TEXT,
     target_kb_id  UUID REFERENCES knowledge_bases(id) ON DELETE SET NULL,         -- fk_autonomous_schedules_target_kb_id
     enabled       BOOLEAN NOT NULL DEFAULT TRUE,
+    -- Donna #8 (migration 0047): opt-in document-grade artifact emission
+    -- for the schedule's sessions; default off — existing automations
+    -- see zero behavior/cost change.
+    emit_artifacts BOOLEAN NOT NULL DEFAULT FALSE,
     last_run_at   TIMESTAMPTZ,
     next_run_at   TIMESTAMPTZ,
     -- M4 real-executor work (migration 0045): per-schedule cost cap.
@@ -1559,6 +1803,10 @@ CREATE TABLE autonomous_watches (
     playbook_id        UUID REFERENCES playbooks(id) ON DELETE SET NULL,          -- fk_autonomous_watches_playbook_id
     skill_ref          TEXT,
     enabled            BOOLEAN NOT NULL DEFAULT TRUE,
+    -- Donna #8 (migration 0047): opt-in document-grade artifact emission
+    -- for the watch's sessions; default off — existing automations see
+    -- zero behavior/cost change.
+    emit_artifacts     BOOLEAN NOT NULL DEFAULT FALSE,
     -- M4 real-executor work (migration 0045): per-watch cost cap.
     -- NULL = fall back to settings.autonomous_default_max_cost_usd at spawn.
     max_cost_usd       NUMERIC(10,4),
@@ -1725,6 +1973,85 @@ CREATE INDEX idx_project_context_proposals_user_state
     ON project_context_proposals (user_id, state);
 ```
 
+### `autonomous_findings` (migration 0046)
+
+Persists one row per finding a run emits via the `emit_finding`
+chokepoint, so the run's work-product can be read back after the run
+(`GET /autonomous/sessions/{id}/findings`, stable `created_at, id`
+order — rows from one run share a transaction-stable `now()`). Before
+0046, findings were echoed into transient LangGraph state and only a
+count survived.
+
+**No `user_id` column.** Authz is via the owning session: the read
+endpoint loads the owned session first (404 id-probing-safe), then
+queries by `session_id`. The `session_id` FK is `ON DELETE CASCADE` — a
+finding belongs to one session and is meaningless without it.
+
+**No CHECK on `severity`.** Unlike the other autonomous enum columns,
+`severity` is LLM-emitted free text (`info` | `warn` | `critical` are
+the intended values, but a stray `high` etc. must store, not reject the
+finding row).
+
+```sql
+CREATE TABLE autonomous_findings (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id  UUID NOT NULL REFERENCES autonomous_sessions(id) ON DELETE CASCADE,  -- fk_autonomous_findings_session_id
+    severity    TEXT NOT NULL,  -- LLM-emitted free text; deliberately NO CHECK
+    title       TEXT NOT NULL,
+    content     TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- The read endpoint's by-session query.
+CREATE INDEX ix_autonomous_findings_session_id ON autonomous_findings(session_id);
+```
+
+### `autonomous_artifacts` (migration 0047, Donna #8)
+
+References to document-grade artifacts (markdown memos) an **opted-in**
+run persisted into its target knowledge base via the `emit_artifact`
+chokepoint. This table is the *reference*, not the document — the
+document itself lives in `files` / the KB like any other upload (the
+handler writes File + Document + chunks + KB attach directly). Read
+back via `GET /autonomous/sessions/{id}/artifacts` (stable
+`created_at, id` order — rows from one run share a transaction-stable
+`now()`);
+`document_id` is enriched at read time via the unique
+`documents.file_id` — it is not a column here.
+
+**Deletion semantics.** `session_id` FK is `ON DELETE CASCADE` — the
+artifact *reference* dies with its session. `file_id` FK is `ON DELETE
+SET NULL` — the KB document **outlives** the session (it is the user's
+deliverable); a hard file-delete nulls the ref while the name/size
+metadata survives here.
+
+**No `user_id` column.** Authz is via the owning session, exactly like
+`autonomous_findings` (the read endpoint owner-gates by loading the
+owned session, then queries by `session_id`).
+
+**No CHECK on `name`/`mime`.** Both are LLM-emitted free text (the
+`autonomous_findings.severity` precedent) — whatever the model produces
+must store.
+
+Migration 0047 also adds the opt-in `emit_artifacts` flag (BOOLEAN NOT
+NULL DEFAULT FALSE) to `autonomous_schedules` and `autonomous_watches`
+(documented in their blocks above).
+
+```sql
+CREATE TABLE autonomous_artifacts (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id  UUID NOT NULL REFERENCES autonomous_sessions(id) ON DELETE CASCADE,  -- fk_autonomous_artifacts_session_id
+    file_id     UUID REFERENCES files(id) ON DELETE SET NULL,                        -- fk_autonomous_artifacts_file_id
+    name        TEXT NOT NULL,    -- LLM-emitted free text; deliberately NO CHECK
+    mime        TEXT NOT NULL,    -- LLM-emitted free text; deliberately NO CHECK
+    size_bytes  BIGINT NOT NULL,  -- of the encoded bytes object storage holds
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- The read endpoint's by-session query.
+CREATE INDEX ix_autonomous_artifacts_session_id ON autonomous_artifacts(session_id);
+```
+
 ## M4+ tables (sketched, land at the indicated milestone)
 
 ### `autonomous_tasks` (M4 — **superseded**)
@@ -1808,8 +2135,8 @@ CREATE INDEX idx_relationships_target ON contract_relationships(target_file_id);
 
 ## Migration approach
 
-- **Alembic** for schema migrations. **Migration head is `0045`.** The
-  `0001`–`0045` sequence in `api/alembic/versions/` is the schema truth;
+- **Alembic** for schema migrations. **Migration head is `0047`.** The
+  `0001`–`0047` sequence in `api/alembic/versions/` is the schema truth;
   this document is reconciled to it.
 - `0001_initial.py` creates the core M1 tables (`users`, `user_sessions`,
   `audit_log`, `inference_routing_log`, and the M1 foundation). Note:
@@ -1833,8 +2160,11 @@ CREATE INDEX idx_relationships_target ON contract_relationships(target_file_id);
   precedent upsert index), `0042` (autonomous_sessions.params +
   schedule due-index), `0043` (notifications read-index), `0044`
   (users.autonomous_enabled), `0045` (per-trigger max_cost_usd on
-  watches + schedules). `contract_relationships` remains a sketch — it is
-  **not** created by any migration (see the M4+ sketched section).
+  watches + schedules), `0046` (autonomous_findings — persisted run
+  work-product), `0047` (autonomous_artifacts + the `emit_artifacts`
+  opt-in flag on schedules/watches, Donna #8). `contract_relationships`
+  remains a sketch — it is **not** created by any migration (see the M4+
+  sketched section).
 
 Migration conventions:
 - Every migration is reversible (`downgrade()` always implemented).

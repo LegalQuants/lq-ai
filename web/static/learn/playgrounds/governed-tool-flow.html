@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LQ.AI — Governed Tool Boundary</title>
+<style>
+  :root {
+    --bg: #0c0f14;
+    --bg-elev: #151a23;
+    --bg-elev-2: #1d242f;
+    --border: #2a3340;
+    --border-hover: #3a4555;
+    --text: #e6ebf3;
+    --text-dim: #8a96a8;
+    --text-faint: #5a6578;
+    --accent: #7dd3fc;
+    --accent-dim: #38bdf8;
+    --web: #93c5fd;
+    --api: #fcd34d;
+    --gateway: #c4b5fd;
+    --data: #f9a8d4;
+    --workers: #86efac;
+    --providers: #fda4af;
+    --ok: #34d399;
+    --refused: #f87171;
+    --connect: #fcd34d;
+    --confirm: #c4b5fd;
+    --shadow: rgba(0,0,0,0.4);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+  }
+  .app { display: grid; grid-template-rows: auto 1fr auto; height: 100vh; }
+  header {
+    padding: 12px 20px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 16px;
+  }
+  header h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
+  header .subtitle { color: var(--text-dim); font-size: 13px; }
+  header .spacer { flex: 1; }
+  header a {
+    color: var(--accent); text-decoration: none; font-size: 12px;
+    border: 1px solid var(--border); padding: 4px 10px; border-radius: 4px;
+  }
+  header a:hover { border-color: var(--border-hover); background: var(--bg-elev-2); }
+
+  .main { display: grid; grid-template-columns: 320px 1fr; overflow: hidden; }
+  .controls {
+    background: var(--bg-elev); border-right: 1px solid var(--border);
+    padding: 16px; overflow-y: auto; display: flex; flex-direction: column;
+  }
+  .controls h2 {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-dim); margin: 18px 0 8px;
+  }
+  .controls h2:first-child { margin-top: 0; }
+  .ask {
+    background: var(--bg-elev-2); border: 1px solid var(--border); border-radius: 4px;
+    padding: 8px 10px; font-size: 12.5px; color: var(--text); line-height: 1.4;
+  }
+  .ask .q { color: var(--accent); }
+
+  .toggle {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 7px 8px; border-radius: 4px; cursor: pointer;
+    user-select: none; transition: background 0.1s; font-size: 13px;
+  }
+  .toggle:hover { background: var(--bg-elev-2); }
+  .toggle input { margin: 3px 0 0; cursor: pointer; accent-color: var(--accent); flex-shrink: 0; }
+  .toggle .toggle-label { flex: 1; line-height: 1.4; }
+  .toggle .toggle-label span { display: block; color: var(--text-dim); font-size: 11px; margin-top: 2px; }
+  .toggle.off .toggle-label { color: var(--refused); }
+
+  .avail {
+    background: var(--bg-elev-2); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 4px;
+    padding: 10px 12px; font-size: 11.5px; line-height: 1.5; color: var(--text-dim);
+  }
+  .avail .lab { display: block; font-weight: 700; color: var(--text); font-size: 10.5px;
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 2px; }
+  .avail .next { margin-top: 8px; }
+  .avail .lab.soon { color: var(--connect); }
+
+  .playback { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .pb-btn {
+    background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text);
+    width: 32px; height: 28px; border-radius: 4px; cursor: pointer; font-size: 13px;
+    display: flex; align-items: center; justify-content: center; transition: all 0.1s; flex-shrink: 0;
+  }
+  .pb-btn:hover { border-color: var(--border-hover); color: var(--accent); }
+  .pb-btn:disabled { opacity: 0.35; cursor: default; }
+  .pb-btn.play-active { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+  .step-counter { font-size: 11px; color: var(--text-dim); font-family: ui-monospace, Menlo, monospace; margin-left: auto; white-space: nowrap; }
+  .step-slider { width: 100%; accent-color: var(--accent); margin-top: 6px; }
+
+  .step-list { margin-top: 4px; }
+  .step-item {
+    display: flex; align-items: flex-start; gap: 8px; padding: 6px 8px;
+    border-radius: 4px; cursor: pointer; transition: background 0.1s; opacity: 0.7;
+  }
+  .step-item:hover { background: var(--bg-elev-2); opacity: 1; }
+  .step-item.active { background: rgba(125,211,252,0.10); opacity: 1; }
+  .step-item.past { opacity: 0.8; }
+  .step-item.blocked { opacity: 0.4; }
+  .step-num { font-size: 10px; font-family: ui-monospace, Menlo, monospace; color: var(--text-faint); min-width: 16px; text-align: right; padding-top: 2px; flex-shrink: 0; }
+  .step-item.active .step-num { color: var(--accent); }
+  .step-name { font-size: 12px; line-height: 1.35; color: var(--text-dim); }
+  .step-item.active .step-name { color: var(--text); }
+  .step-dotstate { width: 7px; height: 7px; border-radius: 50%; margin: 4px 0 0; flex-shrink: 0; background: var(--text-faint); }
+  .step-dotstate.ok { background: var(--ok); }
+  .step-dotstate.refused { background: var(--refused); }
+  .step-dotstate.connect { background: var(--connect); }
+  .step-dotstate.confirm { background: var(--confirm); }
+  .step-dotstate.blocked { background: var(--text-faint); }
+
+  .timeline-wrap {
+    overflow-y: auto; padding: 20px 24px;
+    background: radial-gradient(circle at 20% 20%, rgba(125,211,252,0.03), transparent 55%),
+      radial-gradient(circle at 80% 80%, rgba(196,181,253,0.03), transparent 55%), var(--bg);
+  }
+  .timeline { max-width: 720px; margin: 0 auto; position: relative; }
+  .timeline::before {
+    content: ''; position: absolute; left: 20px; top: 0; bottom: 0;
+    width: 2px; background: var(--border); border-radius: 1px;
+  }
+  .step-card {
+    position: relative; margin-left: 52px; margin-bottom: 12px;
+    background: var(--bg-elev); border: 1px solid var(--border); border-radius: 6px;
+    padding: 12px 14px; transition: opacity 0.25s, border-color 0.2s, box-shadow 0.2s; cursor: pointer;
+  }
+  .step-card::before {
+    content: ''; position: absolute; left: -32px; top: 28px; transform: translateY(-50%);
+    width: 10px; height: 2px; background: var(--border);
+  }
+  .step-dot {
+    position: absolute; left: -44px; top: 28px; transform: translate(-50%, -50%);
+    width: 16px; height: 16px; border-radius: 50%; background: var(--bg-elev-2);
+    border: 2px solid var(--border); display: flex; align-items: center; justify-content: center;
+    font-size: 8px; font-family: ui-monospace, Menlo, monospace; color: var(--text-faint);
+    transition: background 0.2s, border-color 0.2s; z-index: 1;
+  }
+  .step-card.is-blocked { opacity: 0.45; }
+  .step-card.is-active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px rgba(125,211,252,0.18), -3px 0 0 0 var(--accent), 0 4px 20px rgba(125,211,252,0.10);
+  }
+  .step-card.is-active .step-dot { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+  .step-card.brk-refused { border-color: var(--refused); }
+  .step-card.brk-refused .step-dot { border-color: var(--refused); color: var(--refused); }
+  .step-card.brk-connect { border-color: var(--connect); }
+  .step-card.brk-connect .step-dot { border-color: var(--connect); color: var(--connect); }
+  .step-card.brk-confirm { border-color: var(--confirm); }
+  .step-card.brk-confirm .step-dot { border-color: var(--confirm); color: var(--confirm); }
+
+  .card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .card-num { font-size: 10px; font-family: ui-monospace, Menlo, monospace; color: var(--text-faint); min-width: 20px; }
+  .is-active .card-num { color: var(--accent); }
+  .card-title { font-size: 13px; font-weight: 600; color: var(--text); flex: 1; }
+  .badge {
+    font-size: 9.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.05em; padding: 2px 6px; border-radius: 3px; color: var(--bg); flex-shrink: 0;
+  }
+  .badge.b-refused { background: var(--refused); }
+  .badge.b-connect { background: var(--connect); color: #1a1200; }
+  .badge.b-confirm { background: var(--confirm); }
+  .badge.b-ok { background: var(--ok); color: #00190f; }
+  .card-posture { font-size: 12.5px; color: var(--text); line-height: 1.45; margin: 2px 0 6px; }
+  .card-recorded {
+    font-size: 11.5px; color: var(--text-dim); line-height: 1.45;
+    background: rgba(52,211,153,0.06); border-left: 2px solid var(--ok);
+    padding: 5px 8px; border-radius: 0 3px 3px 0; margin-top: 6px;
+  }
+  .card-recorded.neg { background: rgba(248,113,113,0.06); border-left-color: var(--refused); }
+  .card-break {
+    font-size: 12px; line-height: 1.45; margin-top: 8px; padding: 7px 9px; border-radius: 4px;
+    background: var(--bg-elev-2); border: 1px dashed var(--border);
+  }
+  .card-break.refused { border-color: var(--refused); color: var(--text); }
+  .card-break.connect { border-color: var(--connect); color: var(--text); }
+  .card-break.confirm { border-color: var(--confirm); color: var(--text); }
+  .card-break b { color: var(--text); }
+  .card-file { font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; color: var(--accent); text-decoration: none; display: inline-block; margin-top: 8px; margin-right: 10px; }
+  .card-file:hover { color: var(--accent-dim); text-decoration: underline; }
+
+  .output { background: var(--bg-elev); border-top: 1px solid var(--border); max-height: 210px; display: grid; grid-template-rows: auto 1fr; }
+  .output-tabs { display: flex; padding: 0 16px; border-bottom: 1px solid var(--border); gap: 4px; align-items: flex-end; }
+  .output-tab {
+    background: transparent; border: none; color: var(--text-dim);
+    padding: 10px 14px; cursor: pointer; font-size: 12px; font-weight: 500;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .output-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .output-tab:hover { color: var(--text); }
+  .output-note { margin-left: auto; font-size: 11px; color: var(--text-faint); padding: 10px 4px; font-style: italic; }
+  .output-body { padding: 12px 16px; overflow-y: auto; font-size: 12px; line-height: 1.6; color: var(--text); }
+  .output-body .pane { display: none; }
+  .output-body .pane.active { display: block; }
+  .output-body .file {
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--accent);
+    text-decoration: none; display: inline-block; padding: 1px 4px; border-radius: 3px;
+    background: rgba(125,211,252,0.08); margin: 2px 6px 2px 0;
+  }
+  .output-body .file:hover { background: rgba(125,211,252,0.16); }
+  .src-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-faint); margin: 0 0 4px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>LQ.AI — Governed Tool Boundary</h1>
+    <span class="subtitle">How a case-law / connector lookup leaves your environment — and everything that gates it.</span>
+    <span class="spacer"></span>
+    <a href="../../" id="learn-home">↩ Learn</a>
+    <a href="https://github.com/LegalQuants/lq-ai" target="_blank" rel="noopener">View source ↗</a>
+  </header>
+
+  <div class="main">
+    <aside class="controls">
+      <h2>The request</h2>
+      <div class="ask">You ask the assistant: <span class="q">"Find appellate cases on the work-product doctrine."</span></div>
+
+      <h2>Guardrails — flip one off</h2>
+      <label class="toggle" data-tog="allowlisted">
+        <input type="checkbox" id="tog-allowlisted" checked>
+        <div class="toggle-label">Connector allowlisted
+          <span>The operator wired this connector in <code>gateway.yaml</code> / <code>mcp.yaml</code>.</span>
+        </div>
+      </label>
+      <label class="toggle" data-tog="tier">
+        <input type="checkbox" id="tog-tier" checked>
+        <div class="toggle-label">Within egress-tier ceiling
+          <span>The connector's tier is within the allowed ceiling.</span>
+        </div>
+      </label>
+      <label class="toggle" data-tog="oauth">
+        <input type="checkbox" id="tog-oauth" checked>
+        <div class="toggle-label">OAuth connected
+          <span>You've connected your account for this connector.</span>
+        </div>
+      </label>
+      <label class="toggle" data-tog="readonly">
+        <input type="checkbox" id="tog-readonly" checked>
+        <div class="toggle-label">Tool is read-only
+          <span>The chosen tool is a read-only lookup (not destructive).</span>
+        </div>
+      </label>
+
+      <h2>Availability</h2>
+      <div class="avail">
+        <span class="lab">Available today</span>
+        The governed backend tool-loop, the gateway egress boundary, per-user OAuth, the per-call audit, the confirmation-gate protocol, the in-chat confirmation prompt + inline connect-on-demand UI that render this gate inside the chat, rich case-law provenance — source-kinded citations with provenance pills for the external sources a tool call pulled in — and the procedural case-law research skill — all shipped and running.
+        <p style="margin:0.5em 0 0">This milestone's capabilities are shipped.</p>
+      </div>
+
+      <h2>Walk the flow</h2>
+      <div class="playback">
+        <button class="pb-btn" id="btn-prev" title="Previous">&#8249;</button>
+        <button class="pb-btn" id="btn-play" title="Play / Pause">&#9654;</button>
+        <button class="pb-btn" id="btn-next" title="Next">&#8250;</button>
+        <button class="pb-btn" id="btn-reset" title="Reset" style="font-size:11px">&#8635;</button>
+        <span class="step-counter" id="step-counter">1 / 7</span>
+      </div>
+      <input type="range" class="step-slider" id="step-slider" min="0" max="6" value="0">
+
+      <h2>Stations</h2>
+      <div class="step-list" id="step-list"></div>
+    </aside>
+
+    <div class="timeline-wrap">
+      <div class="timeline" id="timeline"></div>
+    </div>
+  </div>
+
+  <div class="output">
+    <div class="output-tabs">
+      <button class="output-tab active" data-tab="verify">Verify in source</button>
+      <button class="output-tab" data-tab="why">Why it's built this way</button>
+      <span class="output-note">Illustrative walkthrough — this page makes no live network calls.</span>
+    </div>
+    <div class="output-body">
+      <div class="pane active" id="pane-verify"></div>
+      <div class="pane" id="pane-why"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const REPO = 'https://github.com/LegalQuants/lq-ai/blob/main/';
+
+// The 7 stations of the governed tool path (accurate to merged PR1–PR5b).
+const STATIONS = [
+  { n: 1, title: "Allowlist assembled",
+    posture: "The backend builds a closed, per-turn set of tools from only the research + MCP connectors the operator enabled. The model can't reach beyond it.",
+    recorded: "What's recorded: which tools were offered. The set is operator-config, not model choice.", neg: false,
+    why: "The allowlist IS the closed set (ADR 0015, alternative A): the operator decides which connectors exist; the model picks among them and can't invent new egress.",
+    files: [["api/app/chat/tool_schemas.py", "assemble_allowlist"]] },
+  { n: 2, title: "Model picks a tool",
+    posture: "The model chooses among allowed tools only (e.g. CourtListener search, or an enabled MCP tool) — a closed set, not open-ended function-calling.",
+    recorded: "What's recorded: the chosen tool + provider (names/types only).", neg: false,
+    why: "The chat tool-loop drives the model with exactly the allowlisted function schemas, then routes each proposed call back through governance before anything runs.",
+    files: [["api/app/chat/tool_loop.py", "run_chat_tool_loop"]] },
+  { n: 3, title: "Gateway egress + SSRF check",
+    posture: "The call leaves your environment only through the Inference Gateway, which validates the outbound target. The backend never calls a third party directly — the gateway is the sole egress and the only MCP-protocol speaker.",
+    recorded: "Never sent: anything to a host the operator didn't allowlist.", neg: true,
+    why: "One audited boundary (ADR 0014). The gateway holds the privileged egress; the backend has no path to a third-party host. Outbound hosts are SSRF/allowlist-guarded.",
+    files: [["gateway/app/providers/tool/", "egress adapters + validate_egress_target"], ["docs/adr/0014-gateway-egress-boundary-for-tool-providers.md", "ADR 0014"]] },
+  { n: 4, title: "Tier gate + rate limit",
+    posture: "The connector's egress tier is checked and rate-limited. A call above the allowed tier is refused at the boundary.",
+    recorded: "What's recorded: the egress tier + outcome.", neg: false,
+    why: "Each tool provider carries an egress tier; the gateway refuses a call whose tier exceeds the ceiling and rate-limits per provider — defence in depth even when the backend allows the call.",
+    files: [["gateway/app/router.py", "route_tool_call"], ["docs/adr/0014-gateway-egress-boundary-for-tool-providers.md", "ADR 0014"]] },
+  { n: 5, title: "Per-user OAuth (connectors that need it)",
+    posture: "For OAuth connectors, your personal token travels as a request header — never in a URL, body, or log — and is encrypted at rest. The gateway brokers the call without learning who you are.",
+    recorded: "Never logged: the token. It is carried in a header and stored encrypted (Fernet).", neg: true,
+    why: "The api drives the OAuth flow and stores Fernet-encrypted tokens; the gateway takes a per-call token via the X-LQ-AI-User-Token header (not a query/body param, so it never hits access logs) and stays user-unaware.",
+    files: [["gateway/app/providers/tool/oauth_passthrough.py", "gateway OAuth passthrough"], ["api/app/mcp/oauth.py", "per-user token + Fernet"]] },
+  { n: 6, title: "Audit row written",
+    posture: "Every call (and every refusal) is written to an audit log — counts and types only.",
+    recorded: "Never written to the audit row or any log line: the raw request arguments or the tool's results. Only a digest + outcome.", neg: true,
+    why: "Two layers — the gateway's tool_egress_log (egress boundary) and the api's tool_call_log (governance). Both record provider/tool/tier/outcome and an args digest; raw payloads are never persisted.",
+    files: [["api/app/models/tool_call_log.py", "tool_call_log (counts/types only)"], ["api/app/tools/governance.py", "args_digest, not raw args"]] },
+  { n: 7, title: "Result returned — or a confirmation gate",
+    posture: "Read-only results flow back into your conversation. A tool marked destructive (or any connector tool that isn't explicitly read-only) pauses for your explicit approval before it runs.",
+    recorded: "Safe by default: an un-annotated connector tool requires confirmation rather than running silently.", neg: false,
+    why: "Tool safety flags carried from MCP annotations drive a persist-and-resume confirmation gate: the destructive call is held, you approve or deny, and only then does it run. The autonomous layer is never auto-granted destructive tools.",
+    files: [["api/app/chat/tool_loop.py", "confirmation gate (persist-and-resume)"], ["docs/adr/0015-governed-tool-calling-model.md", "ADR 0015"]] },
+];
+
+// Guardrail toggles. Default ON = protection in place. OFF = break at `at` station.
+const TOGGLES = {
+  allowlisted: { at: 1, kind: "refused",
+    msg: "<b>Refused.</b> The tool never enters the allowlist, so it never reaches the network. Nothing leaves your environment unless the operator wired the connector." },
+  tier: { at: 4, kind: "refused",
+    msg: "<b>Refused at the gateway.</b> The connector's egress tier exceeds the ceiling. Tier-gated egress is enforced at the boundary, not in the backend." },
+  oauth: { at: 5, kind: "connect",
+    msg: "<b>Paused for connect.</b> You haven't connected this connector. The chat surfaces an inline “connect this connector” prompt (per-user consent) before the call proceeds." },
+  readonly: { at: 7, kind: "confirm",
+    msg: "<b>Paused at the confirmation gate.</b> A destructive tool requires your explicit approval before it runs — the chat shows an inline approve/deny prompt and resumes the turn on your decision." },
+};
+const KIND_BADGE = { refused: "REFUSED", connect: "CONNECT", confirm: "CONFIRM" };
+
+const state = { step: 0, playing: false, playTimer: null,
+  toggles: { allowlisted: true, tier: true, oauth: true, readonly: true } };
+
+// Compute, per render, the earliest break station (1-based) and its kind.
+// A "refused" break blocks downstream stations; a "connect"/"confirm" break is a pause.
+function activeBreak() {
+  let best = null;
+  for (const [key, t] of Object.entries(TOGGLES)) {
+    if (!state.toggles[key]) {
+      if (best === null || t.at < best.at) best = { key, at: t.at, kind: t.kind, msg: t.msg };
+    }
+  }
+  return best;
+}
+
+function stationState(i /* 0-based */, brk) {
+  const n = i + 1;
+  if (!brk) return "ok";
+  if (n === brk.at) return brk.kind;        // the break station
+  if (n > brk.at) return brk.kind === "refused" ? "blocked" : "blocked"; // downstream not reached
+  return "ok";                              // upstream of the break: fine
+}
+
+function renderStepList() {
+  const brk = activeBreak();
+  const wrap = document.getElementById('step-list');
+  wrap.innerHTML = '';
+  STATIONS.forEach((s, i) => {
+    const st = stationState(i, brk);
+    const div = document.createElement('div');
+    div.className = 'step-item' + (i === state.step ? ' active' : i < state.step ? ' past' : '') + (st === 'blocked' ? ' blocked' : '');
+    div.innerHTML = `<span class="step-dotstate ${st}"></span><span class="step-num">${i+1}</span><span class="step-name">${s.title}</span>`;
+    div.addEventListener('click', () => { state.step = i; updateAll(); });
+    wrap.appendChild(div);
+  });
+}
+
+function renderTimeline() {
+  const brk = activeBreak();
+  const wrap = document.getElementById('timeline');
+  wrap.innerHTML = '';
+  STATIONS.forEach((s, i) => {
+    const st = stationState(i, brk);
+    const card = document.createElement('div');
+    let cls = 'step-card';
+    if (i === state.step) cls += ' is-active';
+    if (st === 'blocked') cls += ' is-blocked';
+    if (st === 'refused' || st === 'connect' || st === 'confirm') cls += ' brk-' + st;
+    card.className = cls;
+    const isBreakHere = brk && (i + 1) === brk.at;
+    const badge = (st === 'refused' || st === 'connect' || st === 'confirm')
+      ? `<span class="badge b-${st}">${KIND_BADGE[st]}</span>` : '';
+    const recCls = s.neg ? 'card-recorded neg' : 'card-recorded';
+    const breakHtml = isBreakHere ? `<div class="card-break ${brk.kind}">${brk.msg}</div>` : '';
+    const filesHtml = s.files.map(([f, lab]) =>
+      `<a class="card-file" href="${REPO}${f}" target="_blank" rel="noopener" title="${lab}">${f}</a>`).join('');
+    card.innerHTML = `
+      <div class="step-dot">${i+1}</div>
+      <div class="card-header">
+        <span class="card-num">#${i+1}</span>
+        ${badge}
+        <span class="card-title">${s.title}</span>
+      </div>
+      <div class="card-posture">${s.posture}</div>
+      <div class="${recCls}">${s.recorded}</div>
+      ${breakHtml}
+      ${filesHtml}
+    `;
+    card.addEventListener('click', () => { state.step = i; updateAll(); });
+    wrap.appendChild(card);
+  });
+  const activeCard = wrap.querySelector('.is-active');
+  if (activeCard) activeCard.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+function renderOutput() {
+  const s = STATIONS[state.step];
+  const verifyEl = document.getElementById('pane-verify');
+  const whyEl = document.getElementById('pane-why');
+
+  let vh = `<p class="src-label">Station ${s.n} — verify these claims in the source</p>`;
+  s.files.forEach(([f, lab]) => {
+    vh += `<a class="file" href="${REPO}${f}" target="_blank" rel="noopener">${f}</a> <span style="color:var(--text-faint)">${lab}</span><br>`;
+  });
+  vh += `<p class="src-label" style="margin-top:10px">Posture, all stations</p>`;
+  vh += `<span style="color:var(--text-dim)">Operator-allowlisted connectors · sole-egress gateway · tier-gated + rate-limited · per-user OAuth (header-only, encrypted) · counts-only audit · human gate for destructive tools.</span>`;
+  verifyEl.innerHTML = vh;
+
+  whyEl.innerHTML = `<p style="margin:0 0 6px"><strong>Station ${s.n}/7:</strong> ${s.title}</p><p style="color:var(--text-dim);margin:0;line-height:1.6">${s.why}</p>`;
+}
+
+function renderPlayback() {
+  document.getElementById('step-slider').value = state.step;
+  document.getElementById('step-counter').textContent = `${state.step+1} / ${STATIONS.length}`;
+  document.getElementById('btn-prev').disabled = state.step === 0;
+  document.getElementById('btn-next').disabled = state.step === STATIONS.length - 1;
+  const playBtn = document.getElementById('btn-play');
+  playBtn.innerHTML = state.playing ? '&#9646;&#9646;' : '&#9654;';
+  playBtn.classList.toggle('play-active', state.playing);
+}
+
+function renderToggleLabels() {
+  document.querySelectorAll('.toggle').forEach(el => {
+    const key = el.dataset.tog;
+    el.classList.toggle('off', !state.toggles[key]);
+  });
+}
+
+function updateAll() { renderToggleLabels(); renderStepList(); renderTimeline(); renderOutput(); renderPlayback(); }
+
+function stopPlay() {
+  state.playing = false;
+  if (state.playTimer) { clearTimeout(state.playTimer); state.playTimer = null; }
+}
+function advancePlay() {
+  if (!state.playing) return;
+  if (state.step >= STATIONS.length - 1) { stopPlay(); updateAll(); return; }
+  state.step++;
+  updateAll();
+  state.playTimer = setTimeout(advancePlay, 2200);
+}
+
+document.getElementById('btn-prev').addEventListener('click', () => { stopPlay(); if (state.step > 0) { state.step--; updateAll(); } });
+document.getElementById('btn-next').addEventListener('click', () => { stopPlay(); if (state.step < STATIONS.length - 1) { state.step++; updateAll(); } });
+document.getElementById('btn-play').addEventListener('click', () => {
+  if (state.playing) { stopPlay(); updateAll(); } else { state.playing = true; advancePlay(); }
+});
+document.getElementById('btn-reset').addEventListener('click', () => { stopPlay(); state.step = 0; updateAll(); });
+document.getElementById('step-slider').addEventListener('input', e => { stopPlay(); state.step = parseInt(e.target.value, 10); updateAll(); });
+
+document.querySelectorAll('.toggle input').forEach(input => {
+  input.addEventListener('change', e => {
+    const key = e.target.closest('.toggle').dataset.tog;
+    state.toggles[key] = e.target.checked;
+    // Jump the walk to the (earliest) break station so the effect is visible.
+    const brk = activeBreak();
+    if (brk) state.step = brk.at - 1;
+    updateAll();
+  });
+});
+
+document.querySelectorAll('.output-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.output-tab').forEach(t => t.classList.toggle('active', t === tab));
+    document.querySelectorAll('.output-body .pane').forEach(p => p.classList.toggle('active', p.id === `pane-${tab.dataset.tab}`));
+  });
+});
+
+updateAll();
+</script>
+</body>
+</html>

@@ -52,6 +52,8 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/chats/{chat_id}",
         "/api/v1/chats/{chat_id}/messages",
         "/api/v1/chats/{chat_id}/messages/{message_id}/citations",
+        "/api/v1/chats/{chat_id}/messages/{message_id}/sources",
+        "/api/v1/chats/{chat_id}/ledger",
         # skills
         "/api/v1/skills",
         "/api/v1/skills/{skill_name}",
@@ -163,6 +165,12 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/autonomous/sessions",
         "/api/v1/autonomous/sessions/{session_id}",
         "/api/v1/autonomous/sessions/{session_id}/halt",
+        # Findings read-model — a run's persisted findings (work-product)
+        "/api/v1/autonomous/sessions/{session_id}/findings",
+        # Artifacts read-model — a run's document-grade artifact refs (Donna #8)
+        "/api/v1/autonomous/sessions/{session_id}/artifacts",
+        # WS-D PR2 C5 — session citation ledger + fiduciary gate
+        "/api/v1/autonomous/sessions/{session_id}/ledger",
         # M4-B1 — per-user memory curation API (list, keep, dismiss, delete)
         "/api/v1/autonomous/memory",
         "/api/v1/autonomous/memory/{memory_id}/keep",
@@ -186,6 +194,28 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/autonomous/notifications/{notification_id}/read",
         # Phase 1 §4.4 — one-off manual session spawn (run a skill/playbook now)
         "/api/v1/autonomous/run-now",
+        # WS3b — case-law research surface
+        "/api/v1/research/capabilities",
+        "/api/v1/research/verify-citations",
+        "/api/v1/research/search",
+        "/api/v1/research/clusters/{cluster_id}",
+        "/api/v1/research/opinions/{opinion_id}",
+        "/api/v1/research/find-in-case",
+        # WS-E PR1a — content-authority source registry
+        "/api/v1/research/sources",
+        # WS2/PR4b — MCP registry admin surface
+        "/api/v1/admin/mcp",
+        "/api/v1/admin/mcp/{server}/refresh",
+        "/api/v1/admin/mcp/{server}/tools/{tool}",
+        # PR4c — per-user MCP OAuth surface
+        "/api/v1/mcp/oauth/{server}/authorize",
+        "/api/v1/mcp/oauth/{server}/callback",
+        "/api/v1/mcp/oauth/{server}/status",
+        "/api/v1/mcp/oauth/{server}",
+        # PR4d Ask 1 — per-user OAuth connections list
+        "/api/v1/mcp/oauth",
+        # PR5b Task 7 — resume pending tool call
+        "/api/v1/chats/{chat_id}/tool-calls/{pending_call_id}",
     }
 )
 
@@ -279,7 +309,34 @@ async def test_openapi_paths_match_sketch() -> None:
     # Donna #7 adds two new paths:
     # /api/v1/admin/provider-keys
     # /api/v1/admin/provider-keys/{provider}
-    assert len(actual) == 116
+    # Findings read-model adds one new path:
+    # /api/v1/autonomous/sessions/{session_id}/findings
+    # Artifacts read-model (Donna #8) adds one new path:
+    # /api/v1/autonomous/sessions/{session_id}/artifacts
+    # WS3b-follow adds one new path (123 -> 124):
+    # /api/v1/research/capabilities
+    # WS2/PR4b adds three new paths (124 -> 127):
+    # /api/v1/admin/mcp
+    # /api/v1/admin/mcp/{server}/refresh
+    # /api/v1/admin/mcp/{server}/tools/{tool}
+    # PR4c adds four new paths (127 -> 131):
+    # /api/v1/mcp/oauth/{server}/authorize
+    # /api/v1/mcp/oauth/{server}/callback
+    # /api/v1/mcp/oauth/{server}/status
+    # /api/v1/mcp/oauth/{server}
+    # PR4d Ask 1 adds one new path (131 -> 132):
+    # /api/v1/mcp/oauth
+    # PR5b Task 7 adds one new path (132 -> 133):
+    # /api/v1/chats/{chat_id}/tool-calls/{pending_call_id}
+    # PR6c Task 4 adds one new path (133 -> 134):
+    # /api/v1/chats/{chat_id}/messages/{message_id}/sources
+    # P1-A3 adds one new path (134 -> 135):
+    # /api/v1/chats/{chat_id}/ledger
+    # WS-D PR2 C5 adds one new path (135 -> 136):
+    # /api/v1/autonomous/sessions/{session_id}/ledger
+    # WS-E PR1a adds one new path (136 -> 137):
+    # /api/v1/research/sources
+    assert len(actual) == 137
 
 
 @pytest.mark.unit

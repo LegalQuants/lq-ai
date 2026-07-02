@@ -11,6 +11,7 @@ declarative base, so Alembic's autogenerate (when used) sees them.
 from __future__ import annotations
 
 from app.models.audit import AuditLog
+from app.models.authority_text_cache import AuthorityTextCache
 from app.models.autonomous import (
     AutonomousMemory,
     AutonomousNotification,
@@ -20,33 +21,51 @@ from app.models.autonomous import (
     PrecedentEntry,
 )
 from app.models.chat import Chat, Message
+from app.models.chat_pending_tool_call import ChatPendingToolCall
+from app.models.citation_ledger_entry import CitationLedgerEntry
+from app.models.citation_treatment import CitationTreatment
+from app.models.citation_treatment_signal import CitationTreatmentSignal
 from app.models.document import Document, DocumentChunk
 from app.models.enhance_prompt import EnhancePromptInteraction
 from app.models.file import File
 from app.models.inference import InferenceRoutingLog
 from app.models.knowledge import KnowledgeBase, KnowledgeBaseFile
+from app.models.mcp import MCPToolCache
+from app.models.mcp_oauth import MCPOAuthState, MCPOAuthToken
+from app.models.message_authority_citation import MessageAuthorityCitation
+from app.models.message_caselaw_citation import MessageCaselawCitation
+from app.models.message_tool_source import MessageToolSource
 from app.models.organization_profile import OrganizationProfile
 from app.models.playbook import Playbook, PlaybookExecution, PlaybookPosition
 from app.models.project import Project, ProjectFile, ProjectSkill
 from app.models.project_knowledge_base import ProjectKnowledgeBase
+from app.models.research import ResearchClusterMetadata, ResearchOpinionMetadata
 from app.models.saved_prompt import SavedPrompt
 from app.models.slack_workspace import SlackWorkspace
 from app.models.tabular import TabularExecution
 from app.models.team import Team, TeamMember
 from app.models.teams_tenant import TeamsTenant
+from app.models.tool_call_log import ToolCallLog
+from app.models.tool_egress import ToolEgressLog
 from app.models.user import User, UserSession
 from app.models.user_export import UserExportJob
 from app.models.user_skill import UserSkill
 from app.models.work_product import WorkProductAttribution
+from app.models.work_product_fiduciary_gate import WorkProductFiduciaryGate
 
 __all__ = [
     "AuditLog",
+    "AuthorityTextCache",
     "AutonomousMemory",
     "AutonomousNotification",
     "AutonomousSchedule",
     "AutonomousSession",
     "AutonomousWatch",
     "Chat",
+    "ChatPendingToolCall",
+    "CitationLedgerEntry",
+    "CitationTreatment",
+    "CitationTreatmentSignal",
     "Document",
     "DocumentChunk",
     "EnhancePromptInteraction",
@@ -54,7 +73,13 @@ __all__ = [
     "InferenceRoutingLog",
     "KnowledgeBase",
     "KnowledgeBaseFile",
+    "MCPOAuthState",
+    "MCPOAuthToken",
+    "MCPToolCache",
     "Message",
+    "MessageAuthorityCitation",
+    "MessageCaselawCitation",
+    "MessageToolSource",
     "OrganizationProfile",
     "Playbook",
     "PlaybookExecution",
@@ -64,15 +89,20 @@ __all__ = [
     "ProjectFile",
     "ProjectKnowledgeBase",
     "ProjectSkill",
+    "ResearchClusterMetadata",
+    "ResearchOpinionMetadata",
     "SavedPrompt",
     "SlackWorkspace",
     "TabularExecution",
     "Team",
     "TeamMember",
     "TeamsTenant",
+    "ToolCallLog",
+    "ToolEgressLog",
     "User",
     "UserExportJob",
     "UserSession",
     "UserSkill",
     "WorkProductAttribution",
+    "WorkProductFiduciaryGate",
 ]

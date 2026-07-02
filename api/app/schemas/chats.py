@@ -387,6 +387,13 @@ class MessageCreateRequest(BaseModel):
     to bound workload multiplication (I1 — a single message attaching
     thousands of inline refs x 32 KB each is a DoS vector)."""
 
+    set_sticky: bool | None = Field(default=None)
+    """Issue #207 finding 4 — opt-in per-chat "sticky skills" toggle. ``True``
+    snapshots this turn's applied skills as the chat's sticky set (carried into
+    later turns without the client re-sending); ``False`` clears the set;
+    ``None``/omitted leaves it unchanged. Off by default — a new chat never
+    inherits stickiness (fail-restrictive)."""
+
     skill_inputs: dict[str, dict[str, Any]] = Field(default_factory=dict)
     """C2: per-skill input bindings, keyed by skill name. Forwarded as
     ``lq_ai_skill_inputs``. Per-attachment ``inputs`` on
@@ -447,6 +454,9 @@ class ChatResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     message_count: int = 0
+    sticky_skills: list[str] = Field(default_factory=list)
+    """Issue #207 finding 4 — the chat's active sticky-skill set (empty = the
+    sticky toggle is off). Lets the client reflect the toggle state on load."""
 
 
 class MessageResponse(BaseModel):
@@ -585,6 +595,19 @@ class MessagePostResponse(BaseModel):
     this flag lets the UI surface a "couldn't resolve /foo" hint so
     typos don't silently produce non-skill answers."""
 
+    pending_tool_call: dict[str, Any] | None = None
+    """PR5b Task 6 — populated when the chat tool-loop surfaces a
+    confirmation gate (``LoopConfirmation``).  Carries the
+    ``tool_confirmation_required`` payload (``pending_call_id``,
+    ``provider``, ``tool``, ``function_name``, ``args_summary``,
+    ``tier``, ``destructive``).  ``None`` on all normal (non-gate) turns
+    so the existing wire shape is preserved."""
+
+    mcp_authorization_required: dict[str, Any] | None = None
+    """PR5b Task 6 — populated when the chat tool-loop surfaces an OAuth
+    gate (``LoopMcpAuth``).  Carries ``server`` and ``authorize_url``.
+    ``None`` on all normal turns."""
+
 
 # --- Internal: helpers exposed for tests -------------------------------------
 
@@ -599,6 +622,13 @@ def decode_cursor(value: str) -> Cursor:
     """Decode a wire cursor; raises ValueError on malformed input."""
 
     return Cursor.decode(value)
+
+
+class ToolCallDecisionRequest(BaseModel):
+    """Request body for POST /api/v1/chats/{chat_id}/tool-calls/{pending_call_id}."""
+
+    model_config = ConfigDict(extra="forbid")
+    decision: Literal["approve", "deny"]
 
 
 __all__ = [
@@ -622,6 +652,7 @@ __all__ = [
     "MessageListResponse",
     "MessagePostResponse",
     "MessageResponse",
+    "ToolCallDecisionRequest",
     "decode_cursor",
     "derive_chat_title",
     "encode_cursor",

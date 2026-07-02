@@ -66,6 +66,8 @@ servers:
 tags:
   - name: inference
     description: OpenAI-compatible inference endpoints
+  - name: tools
+    description: Tool-call HTTP transport (WS3 / ADR 0014)
   - name: admin
     description: Gateway configuration and operations
   - name: health
@@ -333,6 +335,143 @@ paths:
               schema: {$ref: '#/components/schemas/GatewayError'}
         '503':
           description: No adapter available for any provider that supports embeddings.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GatewayError'}
+
+  # ----------- TOOLS (WS3 / ADR 0014 — tool-call HTTP transport) -----------
+  /v1/tools/{provider}:
+    get:
+      tags: [tools]
+      summary: Discover a tool provider's available tools
+      description: |
+        Returns the live ``list_tools()`` response from the named tool provider.
+        Callers use this to discover available tools and their parameter schemas
+        before invoking via ``POST /v1/tools/{provider}/{tool}``.
+
+        The per-user OAuth token for ``auth: oauth`` MCP servers is supplied via
+        the ``X-LQ-AI-User-Token`` request header (PR4c supplies it). A header
+        is used instead of a query parameter because query strings are written
+        to uvicorn access logs in plaintext; this token must never appear in
+        logs. For ``none`` / ``bearer`` providers the token is ignored and
+        **never logged**.
+
+        Gated by the gateway key (same as the invoke transport).
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: {type: string}
+          description: Name of a configured tool provider (e.g. ``courtlistener``).
+        - name: X-LQ-AI-User-Token
+          in: header
+          required: false
+          schema: {type: string}
+          description: |
+            Optional per-user OAuth token forwarded to the adapter for
+            ``auth: oauth`` MCP servers. Carried as a header (not a query
+            param) so it is never written to access logs. Ignored for
+            ``none`` / ``bearer`` auth providers. Never logged.
+      responses:
+        '200':
+          description: Tool list returned successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolDiscoveryResponse'
+        '401':
+          description: Missing or invalid X-LQ-AI-Gateway-Key
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GatewayError'}
+        '404':
+          description: Provider name not in the tool-provider registry
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GatewayError'}
+        '502':
+          description: Upstream tool provider returned an error during list_tools
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GatewayError'}
+
+  /v1/tools/{provider}/{tool}:
+    post:
+      tags: [tools]
+      summary: Invoke a configured tool provider
+      description: |
+        Dispatches a single tool call to the named ``provider`` / ``tool``
+        combination. The gateway validates the caller's gateway key (when
+        ``LQ_AI_GATEWAY_KEY`` is set), checks the provider is in the live
+        tool-provider registry, enforces the ``max_allowed_tier`` ceiling
+        against the provider's configured ``egress_tier``, and delegates to
+        the adapter (echo / CourtListener / MCP). The egress request is
+        written to ``tool_egress_log`` for audit.
+
+        Per ADR 0014: tool providers are distinct from inference providers.
+        They are configured under ``tool_providers`` in ``gateway.yaml`` and
+        carry their own egress tier (1-5) and allowlist policy. The gateway
+        refuses any provider not in the registry with 403.
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: {type: string}
+          description: Name of a configured tool provider (e.g. ``courtlistener``).
+        - name: tool
+          in: path
+          required: true
+          schema: {type: string}
+          description: Tool name within the provider (e.g. ``search_opinions``).
+        - name: X-LQ-AI-User-Token
+          in: header
+          required: false
+          schema: {type: string}
+          description: |
+            Optional per-user OAuth token forwarded to the adapter for
+            ``auth: oauth`` MCP servers. Carried as a header (not a query
+            param or request body field) so it is never written to access
+            logs. Ignored for ``none`` / ``bearer`` auth providers. Never
+            logged.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolCallRequest'
+      responses:
+        '200':
+          description: Tool call succeeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolCallResponse'
+        '400':
+          description: Unknown tool name or malformed request
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GatewayError'}
+        '401':
+          description: Missing or invalid X-LQ-AI-Gateway-Key
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GatewayError'}
+        '403':
+          description: Provider not in registry, or egress tier exceeds max_allowed_tier
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GatewayError'}
+        '429':
+          description: Tool provider rate limit exceeded
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GatewayError'}
+        '502':
+          description: Upstream tool provider returned an error
           content:
             application/json:
               schema: {$ref: '#/components/schemas/GatewayError'}
@@ -1178,6 +1317,88 @@ components:
           type: array
           items: {$ref: '#/components/schemas/ProviderKeyStatus'}
 
+    ToolCallRequest:
+      type: object
+      required: [args]
+      properties:
+        args:
+          type: object
+          additionalProperties: true
+          description: |
+            Arbitrary key/value arguments forwarded to the tool adapter.
+            Schema is tool-specific; the gateway passes the object through
+            without validation.
+        max_allowed_tier:
+          type: integer
+          minimum: 1
+          maximum: 5
+          nullable: true
+          description: |
+            Optional egress-tier ceiling. If the provider's ``egress_tier``
+            is higher than this value the gateway refuses with 403
+            (``egress_refused``). Omit to allow any tier.
+
+    ToolDiscoveryResponse:
+      type: object
+      required: [provider, tools]
+      properties:
+        provider:
+          type: string
+          description: The configured tool provider name.
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolSpec'
+
+    ToolSpec:
+      type: object
+      required: [name, description, parameters, read_only, destructive, requires_confirmation]
+      properties:
+        name:
+          type: string
+          description: Tool name, unique within the provider.
+        description:
+          type: string
+          description: Human-readable description of what the tool does.
+        parameters:
+          type: object
+          additionalProperties: true
+          description: |
+            JSON Schema describing the tool's argument object. Callers
+            use this to validate args before invoking via POST.
+        read_only:
+          type: boolean
+          description: True if the tool only reads data (no side-effects).
+        destructive:
+          type: boolean
+          description: True if the tool may permanently destroy or modify data.
+        requires_confirmation:
+          type: boolean
+          description: |
+            True if the tool should prompt the user for confirmation before
+            invoking (e.g. filing a document, sending a message).
+
+    ToolCallResponse:
+      type: object
+      required: [provider, tool, payload, tier]
+      properties:
+        provider:
+          type: string
+          description: The configured tool provider name that handled the call.
+        tool:
+          type: string
+          description: The tool name that was invoked.
+        payload:
+          type: object
+          additionalProperties: true
+          description: |
+            The raw JSON payload returned by the tool adapter. Schema is
+            tool-specific; callers must handle the shape for the named tool.
+        tier:
+          type: integer
+          enum: [1, 2, 3, 4, 5]
+          description: The egress tier at which the tool call was routed.
+
     GatewayError:
       type: object
       required: [error]
@@ -1217,6 +1438,10 @@ components:
                 - internal_error
                 # Runtime provider-key management (Donna #7)
                 - failed_precondition
+                # Tool-call HTTP transport (WS3 / PR4a — ADR 0014)
+                - egress_refused
+                - unknown_provider
+                - tool_provider_unavailable
             message: {type: string}
             details: {type: object, additionalProperties: true}
 

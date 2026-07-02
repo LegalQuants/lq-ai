@@ -66,6 +66,11 @@ CODE_PASSWORD_CHANGE_REQUIRED = "password_change_required"
 CODE_PAYLOAD_TOO_LARGE = "payload_too_large"
 CODE_CONFLICT = "conflict"
 CODE_MFA_ENROLLMENT_REQUIRED = "mfa_enrollment_required"
+CODE_RESEARCH_NOT_CONFIGURED = "research_not_configured"
+CODE_MCP_OAUTH_NOT_CONFIGURED = "mcp_oauth_not_configured"
+CODE_MCP_OAUTH_STATE_ERROR = "mcp_oauth_state_error"
+CODE_MCP_OAUTH_EXCHANGE_ERROR = "mcp_oauth_exchange_error"
+CODE_MCP_AUTHORIZATION_REQUIRED = "mcp_authorization_required"
 
 # Backend↔gateway crossing codes (also declared in gateway/app/errors.py).
 # These propagate from gateway responses into backend exceptions; the
@@ -92,6 +97,7 @@ CODE_SKILL_INPUT_MISSING = "skill_input_missing"
 CODE_AUTONOMOUS_HALTED = "autonomous_halted"
 CODE_AUTONOMOUS_TOOL_NOT_GRANTED = "autonomous_tool_not_granted"
 CODE_AUTONOMOUS_COST_CAP_REACHED = "autonomous_cost_cap_reached"
+CODE_TOOL_TIER_REFUSED = "tool_tier_refused"
 
 
 # --- Base class --------------------------------------------------------------
@@ -244,6 +250,15 @@ class MfaEnrollmentRequired(LQAIError):
     http_status = status.HTTP_403_FORBIDDEN
 
 
+class ResearchNotConfigured(LQAIError):
+    """No CourtListener tool-provider is configured in the gateway, so the
+    case-law research surface is unavailable. Distinct from a transient
+    gateway outage so the UI renders a calm 'not enabled' gate, not an error."""
+
+    code = CODE_RESEARCH_NOT_CONFIGURED
+    http_status = status.HTTP_503_SERVICE_UNAVAILABLE
+
+
 class PayloadTooLarge(LQAIError):
     """Request body exceeds the configured upload-size limit — 413.
 
@@ -370,6 +385,40 @@ class CostCapReached(AutonomousBrake):
         super().__init__(message, details=merged, http_status=http_status, code=code)
 
 
+class ToolTierRefused(LQAIError):
+    """A tool call was refused because the provider's egress tier exceeds the
+    caller's ceiling (PR5a D-a2).
+
+    Raised by :func:`~app.tools.governance.governed_tool_invocation` when
+    ``provider_tier > max_allowed_tier``.  An audit row with
+    ``outcome="refused_tier"`` is written before the raise so the refusal
+    is always persisted regardless of how the caller handles the exception.
+
+    Carries ONLY tier integers — no args or result payload.  Maps to 403
+    (the tier ceiling is an authorization boundary, not a server error).
+    """
+
+    code = CODE_TOOL_TIER_REFUSED
+    http_status = status.HTTP_403_FORBIDDEN
+
+    def __init__(
+        self,
+        *,
+        provider: str,
+        tool: str,
+        tier: int,
+        ceiling: int,
+    ) -> None:
+        message = (
+            f"Tool call refused: provider '{provider}' tool '{tool}' "
+            f"requires tier {tier} but ceiling is {ceiling}"
+        )
+        super().__init__(
+            message,
+            details={"provider": provider, "tool": tool, "tier": tier, "ceiling": ceiling},
+        )
+
+
 # --- Gateway-crossing subclasses ---------------------------------------------
 # Raised by the GatewayClient (or by handlers that translate gateway
 # responses) when the backend↔gateway hop fails or surfaces a structured
@@ -478,6 +527,53 @@ class SkillInputMissing(LQAIError):
     http_status = status.HTTP_400_BAD_REQUEST
 
 
+# --- PR4c MCP OAuth typed errors ---------------------------------------------
+
+
+class MCPOAuthNotConfigured(LQAIError):
+    """The requested MCP server is not a configured ``auth: oauth`` provider — 404."""
+
+    code = CODE_MCP_OAUTH_NOT_CONFIGURED
+    http_status = status.HTTP_404_NOT_FOUND
+
+
+class MCPOAuthStateError(LQAIError):
+    """Unknown / expired / replayed state, or an ``iss`` validation failure — 400.
+
+    The message is a fixed, non-secret reason slug; no state value, code, or
+    verifier is ever interpolated.
+    """
+
+    code = CODE_MCP_OAUTH_STATE_ERROR
+    http_status = status.HTTP_400_BAD_REQUEST
+
+
+class MCPOAuthExchangeError(LQAIError):
+    """The AS returned an OAuth error on code-exchange or refresh — 502.
+
+    Carries ONLY the AS ``error`` string code (RFC 6749 §5.2) — never the
+    token form, the code, the verifier, or any token value.
+    """
+
+    code = CODE_MCP_OAUTH_EXCHANGE_ERROR
+    http_status = status.HTTP_502_BAD_GATEWAY
+
+
+class MCPAuthorizationRequired(LQAIError):
+    """Admin refresh was called on a per-user OAuth server — 409.
+
+    Admin refresh covers ``none`` / ``bearer`` servers only. OAuth servers
+    require per-user authorization state that does not exist in the admin
+    context. Callers should direct the user to the user-scoped
+    ``/api/v1/mcp/oauth/{server}/authorize`` flow.
+
+    Carries only the server name — no token or secret material.
+    """
+
+    code = CODE_MCP_AUTHORIZATION_REQUIRED
+    http_status = status.HTTP_409_CONFLICT
+
+
 # --- Code → exception class registry -----------------------------------------
 # Used by the gateway-response translator (in app.clients.gateway) to map
 # a structured gateway error envelope into the right LQAIError subclass.
@@ -534,16 +630,22 @@ __all__ = [
     "CODE_GATEWAY_UNREACHABLE",
     "CODE_INTERNAL_ERROR",
     "CODE_INVALID_MODEL",
+    "CODE_MCP_AUTHORIZATION_REQUIRED",
+    "CODE_MCP_OAUTH_EXCHANGE_ERROR",
+    "CODE_MCP_OAUTH_NOT_CONFIGURED",
+    "CODE_MCP_OAUTH_STATE_ERROR",
     "CODE_MFA_ENROLLMENT_REQUIRED",
     "CODE_NOT_FOUND",
     "CODE_PASSWORD_CHANGE_REQUIRED",
     "CODE_PAYLOAD_TOO_LARGE",
     "CODE_PROVIDER_UNAVAILABLE",
     "CODE_RATE_LIMITED",
+    "CODE_RESEARCH_NOT_CONFIGURED",
     "CODE_SKILL_FETCH_FAILED",
     "CODE_SKILL_INPUT_MISSING",
     "CODE_SKILL_NOT_FOUND",
     "CODE_TIER_BELOW_MINIMUM",
+    "CODE_TOOL_TIER_REFUSED",
     "CODE_UNAUTHORIZED",
     "CODE_VALIDATION_ERROR",
     "AutonomousBrake",
@@ -556,18 +658,24 @@ __all__ = [
     "InternalError",
     "InvalidModel",
     "LQAIError",
+    "MCPAuthorizationRequired",
+    "MCPOAuthExchangeError",
+    "MCPOAuthNotConfigured",
+    "MCPOAuthStateError",
     "MfaEnrollmentRequired",
     "NotFound",
     "PasswordChangeRequired",
     "PayloadTooLarge",
     "ProviderUnavailable",
     "RateLimited",
+    "ResearchNotConfigured",
     "SessionHalted",
     "SkillFetchFailed",
     "SkillInputMissing",
     "SkillNotFound",
     "TierBelowMinimum",
     "ToolNotGranted",
+    "ToolTierRefused",
     "Unauthorized",
     "ValidationError",
     "map_gateway_error_code",

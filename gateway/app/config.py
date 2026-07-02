@@ -118,6 +118,18 @@ class ProviderConfig(BaseModel):
     tier: InferenceTier
     models: list[str] = Field(default_factory=list)
     enabled: bool = True
+    use_max_completion_tokens: bool = False
+    """Send ``max_completion_tokens`` instead of ``max_tokens`` to the
+    provider. OpenAI/Azure GPT-5 and o-series reasoning deployments REJECT
+    ``max_tokens`` (hard HTTP 400) and require ``max_completion_tokens``; it
+    is also accepted by gpt-4o. Default off so OpenAI-compatible servers
+    that only recognize ``max_tokens`` (e.g. vLLM < 0.6.4 rejects unknown
+    fields; LM Studio / Ollama / TGI silently drop them) keep working.
+    Honored only by the OpenAI-family adapters (``openai`` /
+    ``openai_compatible`` / ``azure_openai``). NB: ``max_completion_tokens``
+    caps reasoning + visible output combined — pair this with a generous
+    budget on reasoning models or the response can come back empty with
+    ``finish_reason='length'``."""
 
     @model_validator(mode="after")
     def _exactly_one_key_source(self) -> ProviderConfig:
@@ -130,6 +142,150 @@ class ProviderConfig(BaseModel):
                 f"intended."
             )
         return self
+
+
+# --- Tool / data-source providers (ADR 0014) ---------------------------------
+
+
+ToolProviderType = Literal["echo", "courtlistener", "mcp", "govinfo", "edgar", "eurlex"]
+"""Tool-provider family. ``echo`` is the test/proof type (PR1); ``courtlistener``
+and ``mcp`` land in later PRs; ``govinfo`` is the GovInfo statutory-text adapter
+(WS-E PR1a); ``edgar`` is the SEC EDGAR filings adapter (WS-E PR2a); ``eurlex``
+is the EU EUR-Lex Cellar adapter (WS-E PR2b)."""
+
+
+class EgressAllowlistConfig(BaseModel):
+    """Per-provider outbound host allowlist (the SSRF guard's allow set)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    hosts: list[str] = Field(min_length=1)
+    """Non-empty list of exact hostnames the provider may egress to. An empty
+    allowlist is a misconfiguration, not 'allow all' — reject at config load."""
+
+
+class ToolProviderRateLimitConfig(BaseModel):
+    """Per-provider rate limit, enforced at the adapter (ADR 0014).
+
+    NOT the gateway's global ``rate_limits`` (whose enforcement middleware is
+    unwired). This is a self-contained per-provider limit applied by
+    ``Router.route_tool_call`` before each outbound call."""
+
+    model_config = ConfigDict(extra="allow")
+
+    requests_per_minute: int = Field(default=60, ge=1)
+
+
+class ToolProviderConfig(BaseModel):
+    """One entry under ``tool_providers:`` (ADR 0014 D1).
+
+    Sibling of :class:`ProviderConfig`, not a subclass — a tool provider is
+    invoked via ``invoke_tool``, not ``chat_completion``. Reuses the same two
+    API-key sourcing paths as inference providers (ADR 0011)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    name: str = Field(min_length=1)
+    type: ToolProviderType
+    base_url: str = Field(min_length=1)
+    api_key_env: str | None = None
+    api_key_encrypted: str | None = None
+    egress_tier: InferenceTier
+    """Data-egress tier (ADR 0014 D4). The gateway refuses a call whose
+    matter/skill ceiling is more restrictive (a lower tier number) than this
+    provider's egress_tier."""
+    allowlist: EgressAllowlistConfig
+    rate_limit: ToolProviderRateLimitConfig = Field(default_factory=ToolProviderRateLimitConfig)
+    anonymize_outbound: bool = True
+    """Default True per ADR 0014 D5. NOTE: PR1 parses but does not yet apply
+    the transform (no matter context exists); enforcement lands in WS3/WS4."""
+    enabled: bool = True
+    user_agent: str | None = None
+    """Descriptive ``User-Agent`` header value, required for ``type: edgar``
+    (SEC's fair-access policy substitutes for an API key) and ``type: eurlex``
+    (the EU Publications Office Cellar service has no API-key scheme at all).
+    Unused by other provider types."""
+
+    @model_validator(mode="after")
+    def _exactly_one_key_source(self) -> ToolProviderConfig:
+        if self.api_key_env and self.api_key_encrypted:
+            raise ValueError(
+                f"Tool provider {self.name!r}: set either api_key_env OR "
+                f"api_key_encrypted, not both."
+            )
+        return self
+
+
+# --- MCP server config (PR4a) ------------------------------------------------
+
+
+MCPAuthType = Literal["none", "bearer", "oauth"]
+"""How the gateway authenticates to an MCP server. ``none``/``bearer`` use
+operator-static config; ``oauth`` uses a per-call user token supplied by the
+api (the gateway stays user-unaware — WS2 spec D4)."""
+
+
+class MCPServerConfig(BaseModel):
+    """One entry under ``mcp_servers:`` in ``mcp.yaml``. Synthesized into a
+    ``type: mcp`` :class:`ToolProviderConfig` at load (WS2 spec D2)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1)
+    server_url: str = Field(min_length=1)
+    auth: MCPAuthType = "none"
+    api_key_env: str | None = None
+    api_key_encrypted: str | None = None
+    oauth_client_id: str | None = None
+    """Pre-registered public OAuth client_id for this MCP server.
+    Required when ``auth == "oauth"``; ignored otherwise.  The api reads this
+    via the sanitized ``GET /admin/v1/config`` response to initiate the
+    out-of-band authorization-code flow on behalf of the user (PR4c)."""
+    egress_tier: InferenceTier
+    allowlist: EgressAllowlistConfig
+    rate_limit: ToolProviderRateLimitConfig = Field(default_factory=ToolProviderRateLimitConfig)
+    enabled: bool = True
+
+    @model_validator(mode="after")
+    def _bearer_needs_key(self) -> MCPServerConfig:
+        if self.auth == "bearer" and not (self.api_key_env or self.api_key_encrypted):
+            raise ValueError(
+                f"MCP server {self.name!r}: auth 'bearer' requires api_key_env or api_key_encrypted."
+            )
+        if self.auth in ("none", "oauth") and (self.api_key_env or self.api_key_encrypted):
+            raise ValueError(
+                f"MCP server {self.name!r}: api_key_* is only valid with auth 'bearer'."
+            )
+        if self.auth == "oauth" and not self.oauth_client_id:
+            raise ValueError(
+                f"MCP server {self.name!r}: auth 'oauth' requires oauth_client_id "
+                f"(the pre-registered public client_id for the OAuth flow)."
+            )
+        return self
+
+    def to_tool_provider_config(self) -> ToolProviderConfig:
+        # Build via model_validate so the extra ``auth`` and ``oauth_client_id``
+        # fields (permitted by ToolProviderConfig's ``extra="allow"``) pass
+        # mypy's strict check.
+        # MCP providers intentionally inherit ToolProviderConfig's
+        # ``anonymize_outbound=True`` default (conservative; no field on
+        # MCPServerConfig — the safe posture is always on until WS3/WS4
+        # enforcement lands).
+        return ToolProviderConfig.model_validate(
+            {
+                "name": self.name,
+                "type": "mcp",
+                "base_url": self.server_url,
+                "api_key_env": self.api_key_env,
+                "api_key_encrypted": self.api_key_encrypted,
+                "egress_tier": self.egress_tier,
+                "allowlist": self.allowlist.model_dump(),
+                "rate_limit": self.rate_limit.model_dump(),
+                "enabled": self.enabled,
+                "auth": self.auth,  # extra field; ToolProviderConfig is extra="allow"
+                "oauth_client_id": self.oauth_client_id,  # extra field; None for non-oauth
+            }
+        )
 
 
 # --- Model aliases ------------------------------------------------------------
@@ -423,6 +579,7 @@ class GatewayConfig(BaseModel):
     server: ServerConfig = Field(default_factory=ServerConfig)
     gateway_auth: GatewayAuthConfig = Field(default_factory=GatewayAuthConfig)
     providers: list[ProviderConfig] = Field(default_factory=list)
+    tool_providers: list[ToolProviderConfig] = Field(default_factory=list)
     model_aliases: dict[str, ModelAliasConfig] = Field(default_factory=dict)
     inference_tiers: InferenceTiersConfig = Field(default_factory=InferenceTiersConfig)
     tier_policy: TierPolicyConfig = Field(default_factory=TierPolicyConfig)
@@ -434,6 +591,31 @@ class GatewayConfig(BaseModel):
     circuit_breaker: CircuitBreakerConfig = Field(default_factory=CircuitBreakerConfig)
     request_validation: RequestValidationConfig = Field(default_factory=RequestValidationConfig)
     dev_mode: DevModeConfig = Field(default_factory=DevModeConfig)
+
+    @model_validator(mode="after")
+    def _tool_provider_names_unique(self) -> GatewayConfig:
+        """Reject duplicate tool-provider names.
+
+        ``tool_provider_by_name`` is a linear scan that returns the first
+        match, so a duplicate name would silently shadow the second entry.
+        Catch it at config load — same pattern as inference ``providers``
+        which would also shadow on duplicate names.
+        """
+        names = [tp.name for tp in self.tool_providers]
+        unique_names = {tp.name for tp in self.tool_providers}
+        if len(unique_names) < len(names):
+            seen: set[str] = set()
+            dupes: list[str] = []
+            for name in names:
+                if name in seen:
+                    dupes.append(name)
+                else:
+                    seen.add(name)
+            raise ValueError(
+                f"tool_providers contains duplicate name(s): {sorted(dupes)}. "
+                "Each tool provider must have a unique name."
+            )
+        return self
 
     @model_validator(mode="after")
     def _aliases_reference_known_providers(self) -> GatewayConfig:
@@ -526,6 +708,13 @@ class GatewayConfig(BaseModel):
         """
 
         for provider in self.providers:
+            if provider.name == name:
+                return provider
+        return None
+
+    def tool_provider_by_name(self, name: str) -> ToolProviderConfig | None:
+        """Look up a configured tool provider by name; ``None`` if not found."""
+        for provider in self.tool_providers:
             if provider.name == name:
                 return provider
         return None

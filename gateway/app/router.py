@@ -43,6 +43,7 @@ What B4 *does not* do
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 import uuid
@@ -50,6 +51,7 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Final
+from urllib.parse import urlencode
 
 from app.config import (
     MAX_ALIAS_DEPTH,
@@ -57,6 +59,7 @@ from app.config import (
     GatewayConfig,
     InferenceTiersConfig,
     ProviderConfig,
+    ToolProviderConfig,
 )
 from app.observability import INFERENCE_REQUESTS_TOTAL
 from app.providers import (
@@ -68,6 +71,18 @@ from app.providers import (
     ProviderAdapterError,
     ProviderHTTPError,
     ProviderNetworkError,
+)
+from app.providers.tool.base import ToolProviderAdapter, ToolResult
+from app.providers.tool.egress import EgressRefused
+from app.providers.tool.oauth_passthrough import (
+    discover_oauth_metadata,
+    exchange_oauth_token,
+)
+from app.providers.tool.ratelimit import FixedWindowRateLimiter, RateLimited
+from app.tool_egress_log import (
+    NullToolEgressLogWriter,
+    ToolEgressLogRow,
+    ToolEgressLogWriter,
 )
 
 logger = logging.getLogger(__name__)
@@ -130,6 +145,25 @@ class NoAdapterAvailableError(Exception):
         super().__init__(message)
         self.message = message
         self.last_error = last_error
+
+
+class ToolEgressRefused(Exception):
+    """Raised when a tool call is refused (unknown provider, tier ceiling,
+    rate limit, or SSRF policy). Always paired with an audited refusal row."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+@dataclass(frozen=True)
+class ToolCallRoutedResult:
+    """The router's return value for a governed tool-call dispatch (ADR 0014)."""
+
+    provider: str
+    tool: str
+    payload: object
+    tier: int
 
 
 # --- Resolution data --------------------------------------------------------
@@ -563,6 +597,9 @@ class Router:
         config: GatewayConfig,
         adapters: dict[str, ProviderAdapter],
         config_provider: Callable[[], GatewayConfig] | None = None,
+        tool_adapters: dict[str, ToolProviderAdapter] | None = None,
+        tool_egress_log: ToolEgressLogWriter | None = None,
+        tool_rate_limiter: FixedWindowRateLimiter | None = None,
     ) -> None:
         self._config = config
         self._adapters = adapters
@@ -574,6 +611,18 @@ class Router:
         # without rebuilding the Router. Tests that don't wire the
         # holder still work — the static ``config`` is the fallback.
         self._config_provider = config_provider
+        # ADR 0014 tool-egress additions (keyword-only, defaulted so
+        # existing Router(...) call sites are untouched):
+        self._tool_adapters: dict[str, ToolProviderAdapter] = tool_adapters or {}
+        self._tool_egress_log: ToolEgressLogWriter = tool_egress_log or NullToolEgressLogWriter()
+        if tool_rate_limiter is not None:
+            self._tool_rate_limiter: FixedWindowRateLimiter = tool_rate_limiter
+        else:
+            max_rpm = max(
+                (tp.rate_limit.requests_per_minute for tp in config.tool_providers),
+                default=60,
+            )
+            self._tool_rate_limiter = FixedWindowRateLimiter(requests_per_minute=max_rpm)
 
     @property
     def config(self) -> GatewayConfig:
@@ -690,6 +739,273 @@ class Router:
             f"no adapter available for model {request.model!r}; tried "
             f"{[t.provider.name for t in candidates]}",
         )
+
+    async def route_tool_call(
+        self,
+        provider_name: str,
+        tool: str,
+        args: dict[str, object],
+        *,
+        request_id: str,
+        max_allowed_tier: int | None = None,
+        user_token: str | None = None,
+    ) -> ToolCallRoutedResult:
+        """Govern + dispatch one tool call (ADR 0014 D2/D3/D4).
+
+        Order: resolve provider -> rate limit -> egress-tier ceiling ->
+        adapter invoke (which validates SSRF) -> write audit row. Every
+        refusal writes a ``refused=True`` row before raising.
+        """
+        provider = self.config.tool_provider_by_name(provider_name)
+        adapter = self._tool_adapters.get(provider_name)
+        if provider is None or adapter is None:
+            await self._tool_egress_log.write(
+                ToolEgressLogRow(
+                    provider=provider_name,
+                    tool=tool,
+                    tier=0,
+                    refused=True,
+                    refusal_reason="unknown tool provider",
+                    request_id=request_id,
+                )
+            )
+            raise ToolEgressRefused(f"unknown tool provider {provider_name!r}")
+
+        try:
+            self._tool_rate_limiter.check(provider_name)
+        except RateLimited as exc:
+            await self._tool_egress_log.write(
+                ToolEgressLogRow(
+                    provider=provider_name,
+                    tool=tool,
+                    tier=provider.egress_tier,
+                    refused=True,
+                    refusal_reason="rate limit exceeded",
+                    request_id=request_id,
+                )
+            )
+            raise ToolEgressRefused(str(exc)) from exc
+
+        if max_allowed_tier is not None and provider.egress_tier > max_allowed_tier:
+            await self._tool_egress_log.write(
+                ToolEgressLogRow(
+                    provider=provider_name,
+                    tool=tool,
+                    tier=provider.egress_tier,
+                    refused=True,
+                    refusal_reason="egress_tier exceeds policy ceiling",
+                    request_id=request_id,
+                )
+            )
+            raise ToolEgressRefused(
+                f"egress_tier {provider.egress_tier} exceeds ceiling {max_allowed_tier}"
+            )
+
+        try:
+            result: ToolResult = await adapter.invoke_tool(
+                tool, args, request_id=request_id, user_token=user_token
+            )
+        except EgressRefused as exc:
+            await self._tool_egress_log.write(
+                ToolEgressLogRow(
+                    provider=provider_name,
+                    tool=tool,
+                    tier=provider.egress_tier,
+                    refused=True,
+                    refusal_reason=f"ssrf: {exc.reason}",
+                    request_id=request_id,
+                )
+            )
+            raise ToolEgressRefused(f"egress refused: {exc.reason}") from exc
+
+        await self._tool_egress_log.write(
+            ToolEgressLogRow(
+                provider=provider_name,
+                tool=tool,
+                tier=provider.egress_tier,
+                bytes_out=result.bytes_out,
+                bytes_in=result.bytes_in,
+                anonymization_applied=False,
+                refused=False,
+                request_id=request_id,
+            )
+        )
+        return ToolCallRoutedResult(
+            provider=provider_name,
+            tool=tool,
+            payload=result.payload,
+            tier=provider.egress_tier,
+        )
+
+    async def _resolve_oauth_provider(
+        self, provider_name: str, *, tool: str, request_id: str
+    ) -> ToolProviderConfig:
+        """Resolve an ``auth: oauth`` MCP provider or audit-and-refuse.
+
+        Shared by :meth:`route_oauth_discover` and :meth:`route_oauth_token`.
+        Writes a ``refused=True`` counts-only row (``tier=0``) and raises
+        :class:`ToolEgressRefused` when the provider is unknown, not an MCP
+        server, or not configured for ``oauth``.
+        """
+        provider = self.config.tool_provider_by_name(provider_name)
+        is_oauth_mcp = (
+            provider is not None
+            and getattr(provider, "type", None) == "mcp"
+            and getattr(provider, "auth", None) == "oauth"
+        )
+        if provider is None or not is_oauth_mcp:
+            await self._oauth_refusal_row(
+                provider_name,
+                tool=tool,
+                tier=0,
+                reason="unknown oauth provider",
+                request_id=request_id,
+            )
+            raise ToolEgressRefused(f"unknown oauth provider {provider_name!r}")
+        return provider
+
+    async def _oauth_refusal_row(
+        self, provider_name: str, *, tool: str, tier: int, reason: str, request_id: str
+    ) -> None:
+        await self._tool_egress_log.write(
+            ToolEgressLogRow(
+                provider=provider_name,
+                tool=tool,
+                tier=tier,
+                refused=True,
+                refusal_reason=reason,
+                request_id=request_id,
+            )
+        )
+
+    async def _oauth_rate_limit_check(
+        self, provider_name: str, *, tool: str, tier: int, request_id: str
+    ) -> None:
+        """Apply the per-provider rate limiter; audit + raise on refusal."""
+        try:
+            self._tool_rate_limiter.check(provider_name)
+        except RateLimited as exc:
+            await self._oauth_refusal_row(
+                provider_name,
+                tool=tool,
+                tier=tier,
+                reason="rate limit exceeded",
+                request_id=request_id,
+            )
+            raise ToolEgressRefused(str(exc)) from exc
+
+    async def route_oauth_discover(
+        self, provider_name: str, *, request_id: str
+    ) -> dict[str, object]:
+        """Govern + perform MCP OAuth discovery (PR4c, ADR-0014-pure D-c6).
+
+        Order mirrors :meth:`route_tool_call`: resolve provider (must be an
+        ``auth: oauth`` MCP server) → rate limit → egress-guarded discovery →
+        counts-only audit row. Every refusal audits before raising. NO
+        credential is ever discovered here (discovery is pre-auth), but the
+        audit discipline is identical: counts only, never contents.
+        """
+        provider = await self._resolve_oauth_provider(
+            provider_name, tool="oauth.discover", request_id=request_id
+        )
+
+        await self._oauth_rate_limit_check(
+            provider_name,
+            tool="oauth.discover",
+            tier=provider.egress_tier,
+            request_id=request_id,
+        )
+
+        try:
+            metadata = await discover_oauth_metadata(
+                server_url=provider.base_url,
+                allowlist=provider.allowlist.hosts,
+            )
+        except EgressRefused as exc:
+            await self._oauth_refusal_row(
+                provider_name,
+                tool="oauth.discover",
+                tier=provider.egress_tier,
+                reason=f"ssrf: {exc.reason}",
+                request_id=request_id,
+            )
+            raise ToolEgressRefused(f"egress refused: {exc.reason}") from exc
+
+        await self._tool_egress_log.write(
+            ToolEgressLogRow(
+                provider=provider_name,
+                tool="oauth.discover",
+                tier=provider.egress_tier,
+                bytes_out=0,
+                bytes_in=len(json.dumps(metadata).encode("utf-8")),
+                anonymization_applied=False,
+                refused=False,
+                request_id=request_id,
+            )
+        )
+        return metadata
+
+    async def route_oauth_token(
+        self,
+        provider_name: str,
+        *,
+        token_endpoint: str,
+        form: dict[str, str],
+        request_id: str,
+    ) -> tuple[int, dict[str, object]]:
+        """Govern + proxy an OAuth ``token_endpoint`` form-POST (PR4c).
+
+        Returns ``(as_status, as_body)`` so the route relays the AS response
+        faithfully (a 2xx token response OR a 4xx OAuth error). Every refusal
+        audits before raising. The ``form`` carries the user's ``code`` /
+        ``refresh_token`` / ``code_verifier`` / ``client_id`` and the AS body
+        carries token values — NONE of these is logged, echoed, or written to
+        an audit row. The audit row carries byte counts only.
+        """
+        provider = await self._resolve_oauth_provider(
+            provider_name, tool="oauth.token", request_id=request_id
+        )
+
+        await self._oauth_rate_limit_check(
+            provider_name,
+            tool="oauth.token",
+            tier=provider.egress_tier,
+            request_id=request_id,
+        )
+
+        # Count request bytes from the urlencoded form WITHOUT recording any
+        # value — len of the encoded body, never the body itself.
+        bytes_out = len(urlencode(form).encode("utf-8"))
+
+        try:
+            status_code, body = await exchange_oauth_token(
+                token_endpoint=token_endpoint,
+                form=form,
+                allowlist=provider.allowlist.hosts,
+            )
+        except EgressRefused as exc:
+            await self._oauth_refusal_row(
+                provider_name,
+                tool="oauth.token",
+                tier=provider.egress_tier,
+                reason=f"ssrf: {exc.reason}",
+                request_id=request_id,
+            )
+            raise ToolEgressRefused(f"egress refused: {exc.reason}") from exc
+
+        await self._tool_egress_log.write(
+            ToolEgressLogRow(
+                provider=provider_name,
+                tool="oauth.token",
+                tier=provider.egress_tier,
+                bytes_out=bytes_out,
+                bytes_in=len(json.dumps(body).encode("utf-8")),
+                anonymization_applied=False,
+                refused=False,
+                request_id=request_id,
+            )
+        )
+        return status_code, body
 
 
 def synthesize_request_id(provided: str | None) -> str:

@@ -35,7 +35,7 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from app.config import GatewayConfig
+from app.config import GatewayConfig, MCPServerConfig
 
 __all__ = ["ConfigLoadError", "expand_env_vars", "load_config"]
 
@@ -119,8 +119,13 @@ def expand_env_vars(value: Any) -> Any:
     return value
 
 
-def load_config(path: Path) -> GatewayConfig:
+def load_config(path: Path, *, mcp_path: Path | None = None) -> GatewayConfig:
     """Read, expand, and validate the gateway config at ``path``.
+
+    If ``mcp_path`` is provided and the file exists, load ``mcp_servers``
+    from it, synthesize each into a ``type: mcp`` :class:`ToolProviderConfig`,
+    and merge them into the returned :class:`GatewayConfig`.  The same
+    ``${VAR}`` expansion is applied to the MCP yaml as to the main config.
 
     Raises :class:`ConfigLoadError` for any failure mode. Callers should let
     that bubble out of FastAPI's lifespan so the process exits non-zero — the
@@ -150,9 +155,62 @@ def load_config(path: Path) -> GatewayConfig:
             f"(got {type(parsed).__name__})"
         )
 
-    expanded = expand_env_vars(parsed)
+    expanded: dict[str, Any] = expand_env_vars(parsed)
 
     try:
-        return GatewayConfig.model_validate(expanded)
+        config = GatewayConfig.model_validate(expanded)
     except ValidationError as exc:
         raise ConfigLoadError(f"gateway config {path} failed schema validation:\n{exc}") from exc
+
+    # --- mcp.yaml merge (PR4a Task 2) ----------------------------------------
+
+    if mcp_path is not None and mcp_path.exists():
+        try:
+            mcp_raw_text = mcp_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise ConfigLoadError(f"failed to read mcp config {mcp_path}: {exc}") from exc
+
+        try:
+            mcp_parsed: Any = yaml.safe_load(mcp_raw_text)
+        except yaml.YAMLError as exc:
+            raise ConfigLoadError(f"mcp config {mcp_path} is not valid YAML: {exc}") from exc
+
+        if mcp_parsed is not None:
+            if not isinstance(mcp_parsed, dict):
+                raise ConfigLoadError(
+                    f"mcp config {mcp_path} must be a YAML mapping at the top level "
+                    f"(got {type(mcp_parsed).__name__})"
+                )
+
+            mcp_expanded: dict[str, Any] = expand_env_vars(mcp_parsed)
+            raw_servers: Any = mcp_expanded.get("mcp_servers", [])
+            if not isinstance(raw_servers, list):
+                raise ConfigLoadError(
+                    f"mcp config {mcp_path}: 'mcp_servers' must be a list "
+                    f"(got {type(raw_servers).__name__})"
+                )
+
+            try:
+                mcp_tool_providers = [
+                    MCPServerConfig.model_validate(entry).to_tool_provider_config()
+                    for entry in raw_servers
+                ]
+            except ValidationError as exc:
+                raise ConfigLoadError(
+                    f"mcp config {mcp_path} failed schema validation:\n{exc}"
+                ) from exc
+
+            if mcp_tool_providers:
+                merged_dict = config.model_dump()
+                merged_dict["tool_providers"] = (merged_dict.get("tool_providers") or []) + [
+                    tp.model_dump() for tp in mcp_tool_providers
+                ]
+                try:
+                    config = GatewayConfig.model_validate(merged_dict)
+                except ValidationError as exc:
+                    raise ConfigLoadError(
+                        f"gateway config failed validation after merging mcp config "
+                        f"{mcp_path}:\n{exc}"
+                    ) from exc
+
+    return config

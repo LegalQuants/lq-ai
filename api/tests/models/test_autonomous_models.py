@@ -35,6 +35,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.autonomous import (
+    AutonomousArtifact,
     AutonomousMemory,
     AutonomousSchedule,
     AutonomousSession,
@@ -576,6 +577,7 @@ def test_autonomous_columns_match_migration() -> None:
         "target_kb_id",
         "max_cost_usd",
         "enabled",
+        "emit_artifacts",
         "last_run_at",
         "next_run_at",
         "deleted_at",
@@ -591,6 +593,7 @@ def test_autonomous_columns_match_migration() -> None:
         "skill_ref",
         "max_cost_usd",
         "enabled",
+        "emit_artifacts",
         "deleted_at",
         "created_at",
         "updated_at",
@@ -617,4 +620,13 @@ def test_autonomous_columns_match_migration() -> None:
         "dismissed_at",
         "created_at",
         "updated_at",
+    }
+    assert {c.name for c in inspect(AutonomousArtifact).columns} == {
+        "id",
+        "session_id",
+        "file_id",
+        "name",
+        "mime",
+        "size_bytes",
+        "created_at",
     }
