@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LQ.AI — Matter Session Flow</title>
+<style>
+  :root {
+    --bg: #0c0f14;
+    --bg-elev: #151a23;
+    --bg-elev-2: #1d242f;
+    --border: #2a3340;
+    --border-hover: #3a4555;
+    --text: #e6ebf3;
+    --text-dim: #8a96a8;
+    --text-faint: #5a6578;
+    --accent: #7dd3fc;
+    --accent-dim: #38bdf8;
+    --fid: #f5b544;
+    --ok: #34d399;
+    --halt: #f87171;
+    --fail: #fb7185;
+    --shadow: rgba(0,0,0,0.4);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+  }
+  .app { display: grid; grid-template-rows: auto 1fr auto; height: 100vh; }
+  header {
+    padding: 12px 20px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 16px;
+  }
+  header h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
+  header h1::before {
+    content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--fid); margin-right: 8px; vertical-align: middle;
+  }
+  header .subtitle { color: var(--text-dim); font-size: 13px; }
+  header .spacer { flex: 1; }
+  header a {
+    color: var(--accent); text-decoration: none; font-size: 12px;
+    border: 1px solid var(--border); padding: 4px 10px; border-radius: 4px;
+  }
+  header a:hover { border-color: var(--border-hover); background: var(--bg-elev-2); }
+
+  .main { display: grid; grid-template-columns: 340px 1fr; overflow: hidden; }
+  .controls {
+    background: var(--bg-elev); border-right: 1px solid var(--border);
+    padding: 16px; overflow-y: auto; display: flex; flex-direction: column;
+  }
+  .controls h2 {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--fid); margin: 18px 0 8px;
+    border-bottom: 1px solid var(--border); padding-bottom: 6px;
+  }
+  .controls h2:first-child { margin-top: 0; }
+  .ask {
+    background: var(--bg-elev-2); border: 1px solid var(--border); border-radius: 4px;
+    padding: 8px 10px; font-size: 12.5px; color: var(--text); line-height: 1.4;
+  }
+  .ask .q { color: var(--fid); }
+
+  .avail {
+    background: var(--bg-elev-2); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 4px;
+    padding: 10px 12px; font-size: 11.5px; line-height: 1.55; color: var(--text-dim);
+  }
+  .avail code { color: var(--text); font-size: 11px; }
+
+  .toggle {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 7px 8px; border-radius: 4px; cursor: pointer;
+    user-select: none; transition: background 0.1s; font-size: 13px;
+  }
+  .toggle:hover { background: var(--bg-elev-2); }
+  .toggle input { margin: 3px 0 0; cursor: pointer; accent-color: var(--fid); flex-shrink: 0; }
+  .toggle .toggle-label { flex: 1; line-height: 1.4; }
+  .toggle .toggle-label b { color: var(--text); font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+  .toggle .toggle-label span { display: block; color: var(--text-dim); font-size: 11px; margin-top: 2px; }
+  .toggle.off .toggle-label b { color: var(--halt); }
+
+  .caveat {
+    background: var(--bg-elev-2); border: 1px solid var(--border);
+    border-left: 3px solid var(--fid); border-radius: 4px;
+    padding: 8px 10px; font-size: 11.5px; line-height: 1.5; color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+  .caveat .lab {
+    display: block; font-weight: 700; color: var(--fid); font-size: 10.5px;
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px;
+  }
+  .caveat:last-child { margin-bottom: 0; }
+
+  .playback { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .pb-btn {
+    background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text);
+    width: 32px; height: 28px; border-radius: 4px; cursor: pointer; font-size: 13px;
+    display: flex; align-items: center; justify-content: center; transition: all 0.1s; flex-shrink: 0;
+  }
+  .pb-btn:hover { border-color: var(--border-hover); color: var(--fid); }
+  .pb-btn:disabled { opacity: 0.35; cursor: default; }
+  .pb-btn.play-active { background: var(--fid); border-color: var(--fid); color: var(--bg); }
+  .step-counter { font-size: 11px; color: var(--text-dim); font-family: ui-monospace, Menlo, monospace; margin-left: auto; white-space: nowrap; }
+  .step-slider { width: 100%; accent-color: var(--fid); margin-top: 6px; }
+
+  .step-list { margin-top: 4px; }
+  .step-item {
+    display: flex; align-items: flex-start; gap: 8px; padding: 6px 8px;
+    border-radius: 4px; cursor: pointer; transition: background 0.1s; opacity: 0.7;
+  }
+  .step-item:hover { background: var(--bg-elev-2); opacity: 1; }
+  .step-item.active { background: rgba(245,181,68,0.10); opacity: 1; }
+  .step-item.past { opacity: 0.8; }
+  .step-item.blocked { opacity: 0.4; }
+  .step-num { font-size: 10px; font-family: ui-monospace, Menlo, monospace; color: var(--text-faint); min-width: 16px; text-align: right; padding-top: 2px; flex-shrink: 0; }
+  .step-item.active .step-num { color: var(--fid); }
+  .step-tag { font-size: 9px; font-family: ui-monospace, Menlo, monospace; color: var(--text-faint); min-width: 42px; padding-top: 2px; flex-shrink: 0; }
+  .step-name { font-size: 12px; line-height: 1.35; color: var(--text-dim); }
+  .step-item.active .step-name { color: var(--text); }
+  .step-dotstate { width: 7px; height: 7px; border-radius: 50%; margin: 4px 0 0; flex-shrink: 0; background: var(--text-faint); }
+  .step-dotstate.ok { background: var(--ok); }
+  .step-dotstate.halt { background: var(--halt); }
+  .step-dotstate.fail { background: var(--fail); }
+  .step-dotstate.cap { background: var(--fid); }
+  .step-dotstate.blocked { background: var(--text-faint); }
+
+  .timeline-wrap {
+    overflow-y: auto; padding: 20px 24px;
+    background: radial-gradient(circle at 20% 20%, rgba(245,181,68,0.04), transparent 55%),
+      radial-gradient(circle at 80% 80%, rgba(125,211,252,0.03), transparent 55%), var(--bg);
+  }
+  .timeline { max-width: 760px; margin: 0 auto; position: relative; }
+  .timeline::before {
+    content: ''; position: absolute; left: 20px; top: 0; bottom: 0;
+    width: 2px; background: var(--border); border-radius: 1px;
+  }
+  .step-card {
+    position: relative; margin-left: 52px; margin-bottom: 12px;
+    background: var(--bg-elev); border: 1px solid var(--border); border-radius: 6px;
+    padding: 12px 14px; transition: opacity 0.25s, border-color 0.2s, box-shadow 0.2s; cursor: pointer;
+  }
+  .step-card::before {
+    content: ''; position: absolute; left: -32px; top: 28px; transform: translateY(-50%);
+    width: 10px; height: 2px; background: var(--border);
+  }
+  .step-dot {
+    position: absolute; left: -44px; top: 28px; transform: translate(-50%, -50%);
+    width: 16px; height: 16px; border-radius: 50%; background: var(--bg-elev-2);
+    border: 2px solid var(--border); display: flex; align-items: center; justify-content: center;
+    font-size: 8px; font-family: ui-monospace, Menlo, monospace; color: var(--text-faint);
+    transition: background 0.2s, border-color 0.2s; z-index: 1;
+  }
+  .step-card.is-blocked { opacity: 0.45; }
+  .step-card.is-active {
+    border-color: var(--fid);
+    box-shadow: 0 0 0 1px rgba(245,181,68,0.18), -3px 0 0 0 var(--fid), 0 4px 20px rgba(245,181,68,0.10);
+  }
+  .step-card.is-active .step-dot { background: var(--fid); border-color: var(--fid); color: var(--bg); }
+  .step-card.brk-halt { border-color: var(--halt); }
+  .step-card.brk-halt .step-dot { border-color: var(--halt); color: var(--halt); }
+  .step-card.brk-fail { border-color: var(--fail); }
+  .step-card.brk-fail .step-dot { border-color: var(--fail); color: var(--fail); }
+  .step-card.brk-cap { border-color: var(--fid); }
+  .step-card.brk-cap .step-dot { border-color: var(--fid); color: var(--fid); }
+
+  .card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .card-num { font-size: 10px; font-family: ui-monospace, Menlo, monospace; color: var(--text-faint); min-width: 20px; }
+  .is-active .card-num { color: var(--fid); }
+  .card-phase {
+    font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-faint); border: 1px solid var(--border); border-radius: 3px; padding: 1px 5px;
+    flex-shrink: 0;
+  }
+  .card-title { font-size: 13px; font-weight: 600; color: var(--text); flex: 1; }
+  .badge {
+    font-size: 9.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.05em; padding: 2px 6px; border-radius: 3px; color: var(--bg); flex-shrink: 0;
+  }
+  .badge.b-halt { background: var(--halt); }
+  .badge.b-fail { background: var(--fail); color: #2a0008; }
+  .badge.b-cap { background: var(--fid); color: #1a1200; }
+  .card-posture { font-size: 12.5px; color: var(--text); line-height: 1.5; margin: 2px 0 6px; }
+  .card-recorded {
+    font-size: 11.5px; color: var(--text-dim); line-height: 1.45;
+    background: rgba(52,211,153,0.06); border-left: 2px solid var(--ok);
+    padding: 5px 8px; border-radius: 0 3px 3px 0; margin-top: 6px;
+  }
+  .card-aside {
+    font-size: 11.5px; color: var(--text-dim); line-height: 1.5;
+    background: var(--bg-elev-2); border: 1px dashed var(--border-hover);
+    padding: 6px 9px; border-radius: 4px; margin-top: 8px;
+  }
+  .card-aside b { color: var(--text); }
+  .card-checks { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; }
+  .check-row {
+    display: flex; align-items: center; gap: 7px; font-size: 11.5px;
+    font-family: ui-monospace, Menlo, monospace; padding: 2px 0;
+  }
+  .check-row .ck-icon { width: 14px; text-align: center; flex-shrink: 0; }
+  .check-row.pass .ck-icon { color: var(--ok); }
+  .check-row.fail .ck-icon { color: var(--halt); }
+  .check-row.skip { color: var(--text-faint); }
+  .check-row .ck-lab { color: var(--text-dim); }
+  .check-row.fail .ck-lab { color: var(--text); }
+  .card-break {
+    font-size: 12px; line-height: 1.5; margin-top: 8px; padding: 8px 10px; border-radius: 4px;
+    background: var(--bg-elev-2); border: 1px dashed var(--border);
+  }
+  .card-break.halt { border-color: var(--halt); color: var(--text); }
+  .card-break.fail { border-color: var(--fail); color: var(--text); }
+  .card-break.cap { border-color: var(--fid); color: var(--text); }
+  .card-break b { color: var(--text); }
+  .card-break code { color: var(--text-dim); }
+  .card-file { font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; color: var(--accent); text-decoration: none; display: inline-block; margin-top: 8px; margin-right: 10px; }
+  .card-file:hover { color: var(--accent-dim); text-decoration: underline; }
+
+  .output { background: var(--bg-elev); border-top: 1px solid var(--border); max-height: 210px; display: grid; grid-template-rows: auto 1fr; }
+  .output-tabs { display: flex; padding: 0 16px; border-bottom: 1px solid var(--border); gap: 4px; align-items: flex-end; }
+  .output-tab {
+    background: transparent; border: none; color: var(--text-dim);
+    padding: 10px 14px; cursor: pointer; font-size: 12px; font-weight: 500;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .output-tab.active { color: var(--text); border-bottom-color: var(--fid); }
+  .output-tab:hover { color: var(--text); }
+  .output-note { margin-left: auto; font-size: 11px; color: var(--text-faint); padding: 10px 4px; font-style: italic; }
+  .output-body { padding: 12px 16px; overflow-y: auto; font-size: 12px; line-height: 1.6; color: var(--text); }
+  .output-body .pane { display: none; }
+  .output-body .pane.active { display: block; }
+  .output-body .file {
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--accent);
+    text-decoration: none; display: inline-block; padding: 1px 4px; border-radius: 3px;
+    background: rgba(125,211,252,0.08); margin: 2px 6px 2px 0;
+  }
+  .output-body .file:hover { background: rgba(125,211,252,0.16); }
+  .src-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-faint); margin: 0 0 4px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>LQ.AI — Matter Session Flow</h1>
+    <span class="subtitle">A governed plan &rarr; act &rarr; observe &rarr; replan loop over a matter's research — the same R5&rarr;R6&rarr;R4 brakes, plus one new per-phase step cap.</span>
+    <span class="spacer"></span>
+    <a href="../../" id="learn-home">↩ Learn</a>
+    <a href="https://github.com/LegalQuants/lq-ai" target="_blank" rel="noopener">View source ↗</a>
+  </header>
+
+  <div class="main">
+    <aside class="controls">
+      <h2>The matter</h2>
+      <div class="ask">A lawyer states the matter (the project's stated goal): <span class="q">"Does our Delaware NDA's assignment clause survive a change-of-control? Find controlling authority."</span></div>
+
+      <h2>Closed-set ToolIntents</h2>
+      <div class="avail">
+        The planner may choose ONLY from <code>PLANNER_ALLOWLIST</code>: <code>retrieve_chunks</code>,
+        <code>retrieve_caselaw</code>, <code>call_mcp_tool</code>, <code>retrieve_authority</code>.
+        <code>guard.py</code>'s R6 separately re-checks the choice against the broader
+        <code>PHASE_GRANTS[analysis]</code> (also <code>run_skill</code>, <code>run_playbook</code>,
+        <code>propose_precedent</code>, <code>plan</code> itself) — defense in depth, not a second
+        decision point the model gets to use.
+      </div>
+
+      <h2>Brakes — flip one off (R5 &rarr; R6 &rarr; R4, plus the step cap)</h2>
+      <label class="toggle" data-tog="r5">
+        <input type="checkbox" id="tog-r5" checked>
+        <div class="toggle-label"><b>R5</b> — no external halt requested
+          <span><code>halt_state</code> is re-read from the DB before every call; a Stop click sets <code>halt_requested</code>.</span>
+        </div>
+      </label>
+      <label class="toggle" data-tog="r6">
+        <input type="checkbox" id="tog-r6" checked>
+        <div class="toggle-label"><b>R6</b> — intent within the phase grant
+          <span>The intent is in <code>PHASE_GRANTS[analysis]</code> — should be unreachable for a planner-issued call, since the planner already only proposes from its own closed set.</span>
+        </div>
+      </label>
+      <label class="toggle" data-tog="r4">
+        <input type="checkbox" id="tog-r4" checked>
+        <div class="toggle-label"><b>R4</b> — under the $5.00 cost cap
+          <span><code>max_cost_usd</code> defaults to $5.00 and is always armed; projected spend is checked before every call.</span>
+        </div>
+      </label>
+      <label class="toggle" data-tog="stepcap">
+        <input type="checkbox" id="tog-stepcap" checked>
+        <div class="toggle-label"><b>Step cap</b> — not yet reached
+          <span><code>max_analysis_steps</code> defaults to 6 — WS-D's one new bound; no new brake class.</span>
+        </div>
+      </label>
+
+      <h2>Known gaps</h2>
+      <div class="caveat">
+        <span class="lab">No dedicated intake UI</span>
+        Backend shipped; no dedicated matter-intake UI yet — this capability reuses the autonomous session UI.
+      </div>
+      <div class="caveat">
+        <span class="lab">Closed-set enforcement</span>
+        An out-of-allowlist planner proposal is rejected, not executed (ADR 0015). The model chooses which governed tool and when — never invents one.
+      </div>
+
+      <h2>Walk the flow</h2>
+      <div class="playback">
+        <button class="pb-btn" id="btn-prev" title="Previous">&#8249;</button>
+        <button class="pb-btn" id="btn-play" title="Play / Pause">&#9654;</button>
+        <button class="pb-btn" id="btn-next" title="Next">&#8250;</button>
+        <button class="pb-btn" id="btn-reset" title="Reset" style="font-size:11px">&#8635;</button>
+        <span class="step-counter" id="step-counter">1 / 7</span>
+      </div>
+      <input type="range" class="step-slider" id="step-slider" min="0" max="6" value="0">
+
+      <h2>Stations</h2>
+      <div class="step-list" id="step-list"></div>
+    </aside>
+
+    <div class="timeline-wrap">
+      <div class="timeline" id="timeline"></div>
+    </div>
+  </div>
+
+  <div class="output">
+    <div class="output-tabs">
+      <button class="output-tab active" data-tab="verify">Verify in source</button>
+      <button class="output-tab" data-tab="why">Why it's built this way</button>
+      <span class="output-note">Illustrative walkthrough — this page makes no live network calls.</span>
+    </div>
+    <div class="output-body">
+      <div class="pane active" id="pane-verify"></div>
+      <div class="pane" id="pane-why"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const REPO = 'https://github.com/LegalQuants/lq-ai/blob/main/';
+
+// The 7 stations of a matter-scoped analysis-phase loop, accurate to
+// api/app/autonomous/nodes.py::_run_analysis_loop, planner.py, guard.py,
+// and ADR 0020. Two full plan/act/observe iterations, then the planner
+// signals done (or the step cap forces it), then the mandatory synthesis
+// call, then the deterministic phase backbone continues.
+const STATIONS = [
+  { n: 1, phase: "PLAN", title: "Plan — step 1",
+    posture: "The loop's very first action is itself a governed call: <code>guarded_tool_call(session, ToolIntent.plan, …)</code> — a gateway inference request carrying the matter goal, the (empty) observation log, and the closed <code>PLANNER_ALLOWLIST</code>. Like every tool call in the executor, it is brake-checked R5 → R6 → R4 before it dispatches.",
+    decision: "Decision: <b>retrieve_caselaw</b> — <code>{op: \"search_case_law\", args: {query: \"assignment clause change of control Delaware\"}}</code><br>Rationale: \"Contract-assignment-on-change-of-control is primarily a case-law question — start with controlling caselaw.\"",
+    recorded: "Recorded either way: the chosen intent + one-line rationale land in <code>analysis_plan_trace</code> and the audit log — never a hidden chain-of-thought (ADR 0020 D5).",
+    aside: "<b>Illustrative — what if the model proposed something off-list?</b> If the planner's JSON named an intent outside <code>PLANNER_ALLOWLIST</code> (or wasn't valid JSON), <code>parse_planner_decision</code> returns <code>None</code>. The loop sets <code>halt_reason=\"planner_unparseable\"</code> and stops — the proposal is rejected, not executed (ADR 0015). No exception, no brake — just an honest refusal to act on an invented tool.",
+    showChecks: true,
+    files: [["api/app/autonomous/planner.py", "PLANNER_ALLOWLIST, parse_planner_decision"], ["api/app/autonomous/nodes.py", "_run_analysis_loop"]],
+    why: "The planner's own inference call is not a privileged bypass — it flows through the same chokepoint as any research action. That is what makes the loop's adaptivity safe: there is exactly one governance path (ADR 0016 P6), and the model choosing to think again costs a brake-check like everything else." },
+
+  { n: 2, phase: "ACT", title: "Act — step 1",
+    posture: "The chosen intent — <code>retrieve_caselaw</code> — dispatches through its OWN <code>guarded_tool_call</code>, independently brake-checked R5 → R6 → R4 (every call re-checks; nothing from step 1's check is cached or reused).",
+    recorded: "Observed (illustrative): <code>retrieve_caselaw → 2 result(s): [Illustrative Corp. v. Anti-Assignment Holdings (Del. Ch. 2019; cl=88213); Illustrative Assignment Trust v. Change-of-Control Partners (Del. Ch. 2016; cl=88240)]</code> — appended to the observation log for the next planning step. Evidence item #1 recorded (counts/ids/snippets only — never full opinion text in the trace, P3).",
+    files: [["api/app/autonomous/guard.py", "guarded_tool_call — R5 → R6 → R4"], ["api/app/autonomous/planner.py", "summarize_observation, collect_evidence"]],
+    why: "Observation summaries carry counts, ids, and short snippets — never full retrieved text — into the planner's next-step context and the audit trail (P3, ADR 0016). The full text is used for synthesis, not logged." },
+
+  { n: 3, phase: "PLAN", title: "Plan — step 2",
+    posture: "The planner is re-invoked — another <code>guarded_tool_call(plan, …)</code>, brake-checked again — now with 1 observation in context.",
+    decision: "Decision: <b>retrieve_chunks</b> — <code>{kb_id: \"&lt;matter KB&gt;\", query: \"assignment clause change-of-control language\", top_k: 4}</code><br>Rationale: \"Ground the case-law finding against this matter's own NDA language and any precedent notes already in the matter's knowledge base.\"",
+    recorded: "Recorded: intent + rationale appended to <code>analysis_plan_trace</code>.",
+    files: [["api/app/autonomous/planner.py", "build_planner_messages"], ["api/app/autonomous/nodes.py", "_run_analysis_loop"]],
+    why: "The planner's context grows each step (goal + running observation log), letting it adapt — e.g. pivoting from caselaw to the matter's own documents — without ever leaving the closed <code>ToolIntent</code> vocabulary." },
+
+  { n: 4, phase: "ACT", title: "Act — step 2",
+    posture: "<code>retrieve_chunks</code> dispatches through <code>guarded_tool_call</code>, brake-checked R5 → R6 → R4 again.",
+    recorded: "Observed (illustrative): <code>retrieve_chunks → 3 chunk(s) from ['NDA_v3_signed.pdf', 'assignment-clause-precedent-memo.md']</code>. Evidence item #2 recorded.",
+    files: [["api/app/autonomous/guard.py", "_handle_retrieve_chunks"], ["api/app/autonomous/planner.py", "collect_evidence"]],
+    why: "retrieve_chunks is a local, zero-cost intent (hybrid KB search) — still brake-checked at the same chokepoint as an external, metered lookup like retrieve_caselaw. One governance path, regardless of cost or destination." },
+
+  { n: 5, phase: "PLAN", title: "Plan — step 3 → done",
+    posture: "Before asking the planner again, the loop checks its own bound: <code>while steps &lt; max_steps</code> — <code>max_steps</code> defaults to 6 (<code>DEFAULT_MAX_ANALYSIS_STEPS</code>, overridable per-session via <code>params[\"max_analysis_steps\"]</code>). This walkthrough completes in 2 research steps for brevity: the planner reviews both observations and signals it's done.",
+    decision: "Decision: <b>done</b> — Rationale: \"Controlling caselaw plus this matter's own clause language are both in hand; enough has been gathered.\"",
+    recorded: "Recorded: <code>halt_reason=\"planner_done\"</code>; a final <code>{step, intent: \"done\", rationale}</code> trace entry.",
+    files: [["api/app/autonomous/nodes.py", "_run_analysis_loop — halt_reason"], ["api/app/config.py", "DEFAULT_MAX_ANALYSIS_STEPS = 6"]],
+    why: "The planner deciding it's finished is the normal, healthy exit — the same as reaching the step cap or an unparseable proposal, all three just stop the research `while` loop without raising an exception. What differs by exit reason is only whether there's more or less evidence for the mandatory synthesis step next." },
+
+  { n: 6, phase: "SYNTH", title: "Synthesis",
+    posture: "Whatever ended the loop — the planner saying done, an unparseable proposal, or the step cap — the analysis node makes ONE more governed call: <code>guarded_tool_call(session, synthesis_intent, …)</code> (<code>run_skill</code> or <code>run_playbook</code>), turning the gathered evidence into <code>analysis_content</code>. This call is brake-checked too — R5 → R6 → R4 apply here exactly like every research step.",
+    recorded: "Recorded: <code>analysis_content</code> + <code>analysis_outcome</code>; <code>analysis_evidence</code> carries the numbered evidence items forward to drafting (never raw payloads in the plan trace itself, P3).",
+    files: [["api/app/autonomous/nodes.py", "_run_analysis_loop — synth = await guarded_tool_call(…)"]],
+    why: "The synthesis call is unconditional and always runs after the loop, over however much evidence exists — 2 items here, fewer under a tighter cap, zero if the very first planning call failed to parse. That's the mechanism behind &ldquo;a partial, traceable result — never a fabricated completion&rdquo;: the loop never invents evidence it doesn't have, but it always tries to say something honest about what it does have." },
+
+  { n: 7, phase: "PHASE", title: "Phase complete → drafting → ethics_review → delivery",
+    posture: "The <code>analysis</code> phase ends here. The deterministic phase backbone — <code>intake → analysis → drafting → ethics_review → delivery</code> — is unchanged and unaffected by anything the planner decided: <code>ethics_review</code> and <code>delivery</code> are guaranteed and can never be skipped or self-delivered by the model (ADR 0020 D2).",
+    recorded: "Recorded: the session's receipt surfaces the full plan-and-act trace — every step, intent, rationale, and outcome (ADR 0020 D5).",
+    files: [["docs/adr/0020-governed-agentic-legal-matter-sessions.md", "D2 — scripted phase backbone"], ["api/app/autonomous/phases.py", "run_phase_transition"]],
+    why: "Agency is confined to how the analysis phase researches, never to whether ethics review or delivery happen. A model can adapt its research strategy; it cannot decide to skip the safety-critical transitions (ADR 0020 D2, decision driver #2)." },
+];
+
+// Guardrail toggles, mapped to guard.py's load-bearing R5 → R6 → R4 order
+// via (at, order): all three brakes trip at station 1 — the loop's FIRST
+// guarded_tool_call (the plan call itself) — because a real execution would
+// already have halted there before any later station could run. order ties
+// them to R5=1, R6=2, R4=3 so the earliest-checked brake always wins when
+// more than one is off, matching guard.py's enforcement order exactly.
+// stepcap is a different KIND of break: not an exception, so it does not
+// block the stations after it (synthesis + phase-complete still happen).
+const TOGGLES = {
+  r5: { at: 1, order: 1, kind: "halt",
+    msg: "<b>Halted (R5 temporal).</b> An external halt was requested (e.g. a Stop click) before this call. <code>guarded_tool_call</code> re-reads <code>halt_state</code>, transitions the session to <code>halted</code>, and raises <code>SessionHalted</code> — R6 and R4 are never reached. <b>Terminal status: <code>halted</code></b> — an expected stop; the session's receipt is still built from whatever the audit trail already holds (here: nothing yet — this is the loop's very first call). Nothing downstream runs: no more research, no synthesis, no drafting/ethics_review/delivery this run." },
+  r6: { at: 1, order: 2, kind: "fail",
+    msg: "<b>Refused (R6 contextual).</b> The proposed intent falls outside <code>PHASE_GRANTS[analysis]</code>. <code>guarded_tool_call</code> raises <code>ToolNotGranted</code> — R4 is never reached. This should be unreachable for a planner-issued call, since the planner's own <code>PLANNER_ALLOWLIST</code> is already a subset of the phase grant; R6 firing here signals a bug elsewhere, not a normal operational bound. <b>Terminal status: <code>failed</code></b> (not <code>halted</code>) — the executor classifies this as a programming error, and (unlike R5/R4) no receipt is built for it." },
+  r4: { at: 1, order: 3, kind: "halt",
+    msg: "<b>Halted (R4 economic).</b> This call's projected cost would push <code>session.cost_total_usd</code> past <code>max_cost_usd</code> (default $5.00, always armed). <code>guarded_tool_call</code> latches <code>cost_cap_reached</code>, transitions the session to <code>halted</code>, and raises <code>CostCapReached</code>. <b>Terminal status: <code>halted</code></b> — an expected stop; the receipt is built honestly from whatever was gathered before the cap tripped." },
+  stepcap: { at: 5, order: 0, kind: "cap",
+    msg: "<b>Step cap reached.</b> Illustrating what happens if <code>max_steps</code> (default 6) were already exhausted before this 3rd planning call: the <code>while steps &lt; max_steps</code> loop simply exits — <code>guarded_tool_call(plan, …)</code> is never invoked a 3rd time. <code>halt_reason</code> keeps its initial value, <code>\"step_cap\"</code>. This is <b>not</b> an exception and <b>not</b> a brake (WS-D's one new bound — no new brake class, ADR 0020 D4). Execution continues normally: the mandatory synthesis call still runs next, over whatever evidence exists so far (here: 2 items) — a real, if partial, result, and the deterministic backbone still proceeds to drafting → ethics_review → delivery. Never a fabricated &ldquo;analysis complete.&rdquo;" },
+};
+const KIND_BADGE = { halt: "HALTED", fail: "FAILED", cap: "STEP CAP" };
+
+const state = { step: 0, playing: false, playTimer: null,
+  toggles: { r5: true, r6: true, r4: true, stepcap: true } };
+
+// Compute the earliest break (lowest at, tie-broken by order — R5 < R6 < R4).
+function activeBreak() {
+  let best = null;
+  for (const [key, t] of Object.entries(TOGGLES)) {
+    if (!state.toggles[key]) {
+      if (best === null || t.at < best.at || (t.at === best.at && t.order < best.order)) {
+        best = { key, at: t.at, order: t.order, kind: t.kind, msg: t.msg };
+      }
+    }
+  }
+  return best;
+}
+
+// halt/fail breaks abort the whole run — everything downstream is blocked.
+// A cap break is not an exception: only its own station is affected; the
+// synthesis + phase-complete stations after it still run normally.
+function stationState(i /* 0-based */, brk) {
+  const n = i + 1;
+  if (!brk) return "ok";
+  if (n === brk.at) return brk.kind;
+  if (n > brk.at) return brk.kind === "cap" ? "ok" : "blocked";
+  return "ok";
+}
+
+// The R5 → R6 → R4 sub-check breakdown, shown on station 1 (the loop's
+// first guarded_tool_call) — independent of which station is on screen.
+function renderChokepointChecks() {
+  const order = [
+    ["r5", "R5 · temporal — halt_state"],
+    ["r6", "R6 · contextual — phase grant"],
+    ["r4", "R4 · economic — $5.00 cap"],
+  ];
+  const firstOffIdx = order.findIndex(([k]) => !state.toggles[k]);
+  const rows = order.map(([key, label], idx) => {
+    if (firstOffIdx === -1 || idx < firstOffIdx) {
+      return `<div class="check-row pass"><span class="ck-icon">&#10003;</span><span class="ck-lab">${label} — clear</span></div>`;
+    }
+    if (idx === firstOffIdx) {
+      return `<div class="check-row fail"><span class="ck-icon">&#10007;</span><span class="ck-lab">${label} — <b>fails here, raises immediately</b></span></div>`;
+    }
+    return `<div class="check-row skip"><span class="ck-icon">—</span><span class="ck-lab">${label} — not reached</span></div>`;
+  });
+  return `<div class="card-checks">${rows.join("")}</div>`;
+}
+
+function renderStepList() {
+  const brk = activeBreak();
+  const wrap = document.getElementById('step-list');
+  wrap.innerHTML = '';
+  STATIONS.forEach((s, i) => {
+    const st = stationState(i, brk);
+    const div = document.createElement('div');
+    div.className = 'step-item' + (i === state.step ? ' active' : i < state.step ? ' past' : '') + (st === 'blocked' ? ' blocked' : '');
+    div.innerHTML = `<span class="step-dotstate ${st}"></span><span class="step-num">${i+1}</span><span class="step-tag">${s.phase}</span><span class="step-name">${s.title}</span>`;
+    div.addEventListener('click', () => { state.step = i; updateAll(); });
+    wrap.appendChild(div);
+  });
+}
+
+function renderTimeline() {
+  const brk = activeBreak();
+  const wrap = document.getElementById('timeline');
+  wrap.innerHTML = '';
+  STATIONS.forEach((s, i) => {
+    const st = stationState(i, brk);
+    const card = document.createElement('div');
+    let cls = 'step-card';
+    if (i === state.step) cls += ' is-active';
+    if (st === 'blocked') cls += ' is-blocked';
+    if (st === 'halt' || st === 'fail' || st === 'cap') cls += ' brk-' + st;
+    card.className = cls;
+    const isBreakHere = brk && (i + 1) === brk.at;
+    const badge = (st === 'halt' || st === 'fail' || st === 'cap')
+      ? `<span class="badge b-${st}">${KIND_BADGE[st]}</span>` : '';
+    const decisionHtml = (!isBreakHere && st !== 'blocked' && s.decision) ? `<div class="card-posture">${s.decision}</div>` : '';
+    const recordedHtml = (!isBreakHere && st !== 'blocked' && s.recorded) ? `<div class="card-recorded">${s.recorded}</div>` : '';
+    const asideHtml = s.aside ? `<div class="card-aside">${s.aside}</div>` : '';
+    const checksHtml = (s.showChecks && st !== 'blocked') ? renderChokepointChecks() : '';
+    const breakHtml = isBreakHere ? `<div class="card-break ${brk.kind}">${brk.msg}</div>` : '';
+    const filesHtml = s.files.map(([f, lab]) =>
+      `<a class="card-file" href="${REPO}${f}" target="_blank" rel="noopener" title="${lab}">${f}</a>`).join('');
+    card.innerHTML = `
+      <div class="step-dot">${i+1}</div>
+      <div class="card-header">
+        <span class="card-num">#${i+1}</span>
+        <span class="card-phase">${s.phase}</span>
+        ${badge}
+        <span class="card-title">${s.title}</span>
+      </div>
+      <div class="card-posture">${s.posture}</div>
+      ${checksHtml}
+      ${decisionHtml}
+      ${recordedHtml}
+      ${asideHtml}
+      ${breakHtml}
+      ${filesHtml}
+    `;
+    card.addEventListener('click', () => { state.step = i; updateAll(); });
+    wrap.appendChild(card);
+  });
+  const activeCard = wrap.querySelector('.is-active');
+  if (activeCard) activeCard.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+function renderOutput() {
+  const s = STATIONS[state.step];
+  const verifyEl = document.getElementById('pane-verify');
+  const whyEl = document.getElementById('pane-why');
+
+  let vh = `<p class="src-label">Station ${s.n} — verify these claims in the source</p>`;
+  s.files.forEach(([f, lab]) => {
+    vh += `<a class="file" href="${REPO}${f}" target="_blank" rel="noopener">${f}</a> <span style="color:var(--text-faint)">${lab}</span><br>`;
+  });
+  vh += `<p class="src-label" style="margin-top:10px">Posture, all stations</p>`;
+  vh += `<span style="color:var(--text-dim)">Every step's action AND the planner's own inference call are governed by the one <code>guarded_tool_call</code> chokepoint, R5 → R6 → R4, in that order. The per-phase step cap is a separate, non-exception loop bound (WS-D's only new bound — no new brake class).</span>`;
+  verifyEl.innerHTML = vh;
+
+  whyEl.innerHTML = `<p style="margin:0 0 6px"><strong>Station ${s.n}/7:</strong> ${s.title}</p><p style="color:var(--text-dim);margin:0;line-height:1.6">${s.why}</p>`;
+}
+
+function renderPlayback() {
+  document.getElementById('step-slider').value = state.step;
+  document.getElementById('step-counter').textContent = `${state.step+1} / ${STATIONS.length}`;
+  document.getElementById('btn-prev').disabled = state.step === 0;
+  document.getElementById('btn-next').disabled = state.step === STATIONS.length - 1;
+  const playBtn = document.getElementById('btn-play');
+  playBtn.innerHTML = state.playing ? '&#9646;&#9646;' : '&#9654;';
+  playBtn.classList.toggle('play-active', state.playing);
+}
+
+function renderToggleLabels() {
+  document.querySelectorAll('.toggle').forEach(el => {
+    const key = el.dataset.tog;
+    el.classList.toggle('off', !state.toggles[key]);
+  });
+}
+
+function updateAll() { renderToggleLabels(); renderStepList(); renderTimeline(); renderOutput(); renderPlayback(); }
+
+function stopPlay() {
+  state.playing = false;
+  if (state.playTimer) { clearTimeout(state.playTimer); state.playTimer = null; }
+}
+function advancePlay() {
+  if (!state.playing) return;
+  if (state.step >= STATIONS.length - 1) { stopPlay(); updateAll(); return; }
+  state.step++;
+  updateAll();
+  state.playTimer = setTimeout(advancePlay, 2200);
+}
+
+document.getElementById('btn-prev').addEventListener('click', () => { stopPlay(); if (state.step > 0) { state.step--; updateAll(); } });
+document.getElementById('btn-next').addEventListener('click', () => { stopPlay(); if (state.step < STATIONS.length - 1) { state.step++; updateAll(); } });
+document.getElementById('btn-play').addEventListener('click', () => {
+  if (state.playing) { stopPlay(); updateAll(); } else { state.playing = true; advancePlay(); }
+});
+document.getElementById('btn-reset').addEventListener('click', () => { stopPlay(); state.step = 0; updateAll(); });
+document.getElementById('step-slider').addEventListener('input', e => { stopPlay(); state.step = parseInt(e.target.value, 10); updateAll(); });
+
+document.querySelectorAll('.toggle input').forEach(input => {
+  input.addEventListener('change', e => {
+    const key = e.target.closest('.toggle').dataset.tog;
+    state.toggles[key] = e.target.checked;
+    // Jump the walk to the (earliest) break station so the effect is visible.
+    const brk = activeBreak();
+    if (brk) state.step = brk.at - 1;
+    updateAll();
+  });
+});
+
+document.querySelectorAll('.output-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.output-tab').forEach(t => t.classList.toggle('active', t === tab));
+    document.querySelectorAll('.output-body .pane').forEach(p => p.classList.toggle('active', p.id === `pane-${tab.dataset.tab}`));
+  });
+});
+
+updateAll();
+</script>
+</body>
+</html>
