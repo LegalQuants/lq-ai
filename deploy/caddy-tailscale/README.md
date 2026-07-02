@@ -22,6 +22,8 @@ terminated by the host's **Tailscale** rather than by the proxy itself.
 If you need a publicly reachable URL, use one of the `reverse-proxy` recipes
 instead.
 
+## Why use this
+This Tailscale and Caddy recipe provides a highly secure, private deployment pattern. By isolating your LQ.AI instance within an encrypted Tailscale mesh network, your server doesn't require open firewall ports. Caddy acts as a reverse proxy, leveraging  Tailscale to automatically provision valid HTTPS/SSL certificates with zero manual DNS configuration. The result is easy and secure remote access. You still should follow best practices in securing the underlying server running LQ-AI. 
 ## How it works
 
 ```
@@ -50,7 +52,15 @@ container. Caddy is given no tailnet identity — the host owns that.
 
 ## Quick start (recommended — gives you HTTPS)
 
-1. Bring up the stack with this overlay composed onto the base file:
+1. Edit your .env to include the following variables: 
+
+| ENV Variable | Notes |
+| ------------ | ----- |
+| `CADDY_BIND_ADDR=127.0.0.1` | This is the address you will point to for tailscale serve in conjunction with the below port. |
+| `CADDY_HOST_PORT=80` |  Host port Caddy listens on. 80 is the default so URLs don't need an explicit port; pick a free non-privileged port (e.g. 8080) if something else already owns 80 on the host, and remember to update the `tailscale serve` upstream target accordingly.|
+| `PUBLIC_LQ_AI_API_BASE_URL=/lq-ai-api/v1` | This is the what is configured with the Caddyfile, but you can change it if you change in both places (.env and Caddyfile). This is needed so Caddy knows which traffic to direct to LQ-AI and Open WebUI. |
+
+2. Bring up the stack with this overlay composed onto the base file:
    ```bash
    docker compose \
      -f docker-compose.yml \
