@@ -78,6 +78,7 @@ from app.providers.tool.base import ToolProviderAdapter
 from app.providers.tool.courtlistener import CourtListenerToolAdapter
 from app.providers.tool.echo import EchoToolAdapter
 from app.providers.tool.edgar import EdgarToolAdapter
+from app.providers.tool.eurlex import EurLexToolAdapter
 from app.providers.tool.govinfo import GovInfoToolAdapter
 from app.router import Router
 from app.routing_log import NullRoutingLogWriter, RoutingLogWriter, SQLRoutingLogWriter
@@ -207,6 +208,10 @@ def build_tool_adapter(provider: ToolProviderConfig) -> ToolProviderAdapter | No
         edgar_adapter = EdgarToolAdapter.from_config(provider)
         edgar_adapter.validate_base_url()
         return edgar_adapter
+    if provider.type == "eurlex":
+        eurlex_adapter = EurLexToolAdapter.from_config(provider)
+        eurlex_adapter.validate_base_url()
+        return eurlex_adapter
     return None
 
 

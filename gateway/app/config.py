@@ -147,10 +147,11 @@ class ProviderConfig(BaseModel):
 # --- Tool / data-source providers (ADR 0014) ---------------------------------
 
 
-ToolProviderType = Literal["echo", "courtlistener", "mcp", "govinfo", "edgar"]
+ToolProviderType = Literal["echo", "courtlistener", "mcp", "govinfo", "edgar", "eurlex"]
 """Tool-provider family. ``echo`` is the test/proof type (PR1); ``courtlistener``
 and ``mcp`` land in later PRs; ``govinfo`` is the GovInfo statutory-text adapter
-(WS-E PR1a); ``edgar`` is the SEC EDGAR filings adapter (WS-E PR2a)."""
+(WS-E PR1a); ``edgar`` is the SEC EDGAR filings adapter (WS-E PR2a); ``eurlex``
+is the EU EUR-Lex Cellar adapter (WS-E PR2b)."""
 
 
 class EgressAllowlistConfig(BaseModel):
@@ -201,8 +202,9 @@ class ToolProviderConfig(BaseModel):
     enabled: bool = True
     user_agent: str | None = None
     """Descriptive ``User-Agent`` header value, required for ``type: edgar``
-    (SEC's fair-access policy substitutes for an API key). Unused by other
-    provider types."""
+    (SEC's fair-access policy substitutes for an API key) and ``type: eurlex``
+    (the EU Publications Office Cellar service has no API-key scheme at all).
+    Unused by other provider types."""
 
     @model_validator(mode="after")
     def _exactly_one_key_source(self) -> ToolProviderConfig:
