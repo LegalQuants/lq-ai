@@ -4954,6 +4954,12 @@ PR2b validates `external_ref` against `^[A-Za-z0-9._-]+$` (the `authority_text_c
 
 Two cosmetic follow-ups surfaced by the PR2b Opus whole-branch review, deliberately deferred as non-blocking. (1) `EurLexAdapter.from_response` (`api/app/research/adapters.py`) maps the machine `content_kind` (e.g. `eu_regulation`) into `FetchedAuthority.subtitle`, which is documented as a human heading — EDGAR's subtitle is a human-readable `form_type · filed_date`. A better EUR-Lex subtitle (the document's official title, available once DE-374 search lands, or a friendly kind label) would improve the citation UX; never load-bearing for verification. (2) The adapter's absent-`content_kind`/`url`/`title` payload fallback path (`payload.get(...) or "eu_legislation"`) has no direct unit test — the happy-path mapping test covers the main case. Add a one-line partial-payload test alongside the subtitle fix.
 
+#### DE-377 — Genericize the one named third-party product reference in README
+
+**Priority:** P3 · **Effort:** S · **Status (2026-07-02): filed (DE-365 sub-project 1 whole-branch review).**
+
+The README Slack/Teams intake-bridge paragraph disclaims a scope ("Light intake, deliberately not full triage/SLA/approvals — that is *Streamline AI's* category"). This is a scope-*narrowing* disclaimer, not a competitor-comparison overclaim, so it was left untouched by the DE-365 sub-project 1 honesty audit. But it is the one place the public docs name a specific third-party product, and the milestone's vendor-neutral posture (LQ.AI vs. the generic proprietary category, no named products — the constraint that also binds the DE-365 sub-project 3 comparison) would eventually genericize it (e.g. "dedicated legal-intake/triage platforms"). Small, cosmetic; fold into a later vendor-neutrality sweep or the sub-project 3 comparison work.
+
 ---
 
 ## 10. Appendices
