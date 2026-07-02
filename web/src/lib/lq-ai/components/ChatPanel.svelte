@@ -40,6 +40,35 @@
 			slashIndex
 		};
 	}
+
+	/**
+	 * Per-chat model-selection persistence (bugfix: model-selection-persist-
+	 * refresh). `modelByChat` was a component-local `Record` with no
+	 * persistence, so a full page refresh remounted the component, reset
+	 * modelByChat to `{}`, and currentModelId's reactive fallback silently
+	 * picked the picker's default — discarding the user's choice. Mirrors
+	 * ReceiptsDrawer.svelte's storageKeyForChat/readPersistedOpen/
+	 * writePersistedOpen convention (same file also uses a per-chat
+	 * localStorage key prefix, same optional injectable Storage param for
+	 * testability).
+	 */
+	const MODEL_STORAGE_KEY_PREFIX = 'lq_ai_chat_model_';
+
+	export function modelStorageKeyForChat(chatId: string): string {
+		return `${MODEL_STORAGE_KEY_PREFIX}${chatId}`;
+	}
+
+	export function readPersistedModel(chatId: string, storage?: Storage): string | null {
+		const store = storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
+		if (!store) return null;
+		return store.getItem(modelStorageKeyForChat(chatId));
+	}
+
+	export function writePersistedModel(chatId: string, modelId: string, storage?: Storage): void {
+		const store = storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
+		if (!store) return;
+		store.setItem(modelStorageKeyForChat(chatId), modelId);
+	}
 </script>
 
 <script lang="ts">
@@ -334,6 +363,7 @@
 		const chat = $activeChatStore;
 		if (!chat) return;
 		modelByChat = { ...modelByChat, [chat.id]: id };
+		writePersistedModel(chat.id, id);
 	}
 
 	async function selectChat(chat: Chat) {
@@ -349,6 +379,15 @@
 		// their status polls) so chat A's files are never sent from chat B.
 		abortFilePolls();
 		chatFiles = [];
+		// Hydrate this chat's remembered model choice from localStorage if we
+		// don't already have one in-memory (survives a page refresh; a
+		// same-session choice already in modelByChat always wins).
+		if (!(chat.id in modelByChat)) {
+			const persisted = readPersistedModel(chat.id);
+			if (persisted) {
+				modelByChat = { ...modelByChat, [chat.id]: persisted };
+			}
+		}
 		// Load messages.
 		try {
 			const page = await messagesApi.listMessages(chat.id, { limit: 100 });
