@@ -238,3 +238,24 @@ async def test_assemble_allowlist_adds_both_sources_when_both_available(db, monk
     assert len(authority_specs) == 2
     search_spec = allowlist.resolve("search_authority")
     assert set(search_spec.parameters["properties"]["source"]["enum"]) == {"govinfo", "edgar"}
+
+
+def test_authority_source_enum_is_per_op():
+    # govinfo+edgar support both ops; eurlex supports only get_authority.
+    schemas = build_authority_tool_schemas(enabled_sources=["govinfo", "edgar", "eurlex"])
+    by_name = {s["name"]: s for s in schemas}
+    assert set(by_name["get_authority"]["parameters"]["properties"]["source"]["enum"]) == {
+        "govinfo",
+        "edgar",
+        "eurlex",
+    }
+    assert set(by_name["search_authority"]["parameters"]["properties"]["source"]["enum"]) == {
+        "govinfo",
+        "edgar",
+    }
+
+
+def test_authority_search_omitted_when_no_search_source():
+    # only a get-only source enabled → no search_authority tool at all
+    schemas = build_authority_tool_schemas(enabled_sources=["eurlex"])
+    assert [s["name"] for s in schemas] == ["get_authority"]

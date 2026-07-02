@@ -152,9 +152,12 @@ AUTHORITY_OPS = frozenset(AUTHORITY_TOOL_SCHEMAS)
 def build_authority_tool_schemas(enabled_sources: list[str]) -> list[dict[str, Any]]:
     """Build the per-turn authority function schemas for the enabled sources.
 
-    Injects a `source` enum (the enabled authority source types, in registry
-    order) into each op's shared parameter template. An empty
-    ``enabled_sources`` yields ``[]`` — no authority tools offered this turn.
+    Each op's `source` enum is scoped to the enabled sources whose registry
+    ``ops`` actually include that op (registry order preserved) — a get-only
+    source (e.g. EUR-Lex) is offered under ``get_authority`` but never under
+    ``search_authority``. An op with zero eligible sources is omitted
+    entirely. An empty ``enabled_sources`` yields ``[]`` — no authority tools
+    offered this turn.
 
     Returns a list of ``{"name", "description", "parameters"}`` dicts (the
     same shape :func:`assemble_allowlist` already expects from
@@ -162,9 +165,12 @@ def build_authority_tool_schemas(enabled_sources: list[str]) -> list[dict[str, A
     """
     if not enabled_sources:
         return []
-    source_enum = {"type": "string", "enum": list(enabled_sources)}
     schemas: list[dict[str, Any]] = []
     for op, template in AUTHORITY_TOOL_SCHEMAS.items():
+        op_sources = [s for s in enabled_sources if op in SOURCE_REGISTRY[s].ops]
+        if not op_sources:
+            continue
+        source_enum = {"type": "string", "enum": op_sources}
         properties = {"source": source_enum, **template["parameters"]["properties"]}
         required = ["source", *template["parameters"]["required"]]
         schemas.append(
