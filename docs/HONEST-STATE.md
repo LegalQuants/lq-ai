@@ -1,6 +1,6 @@
 # Honest State
 
-> Catalog of what LQ.AI ships today, what is deferred, and how to verify each. Maintained per release. **Current as of the legal-research + connectors (MCP) milestone close (#158–#193); migration head `0055`.** (Prior baseline: the M4 close plus the post-v0.4.0 "Donna" run, #115–#139, head `0047`.)
+> Catalog of what LQ.AI ships today, what is deferred, and how to verify each. Maintained per release. **Current as of the fiduciary-grade agentic legal work milestone close (ADRs [0018](adr/0018-citation-ledger-and-fiduciary-grade-output.md)–[0021](adr/0021-content-source-registry-and-free-source-expansion.md)); migration head `0064`.** (Prior baselines: the legal-research + connectors (MCP) milestone close, #158–#193, head `0055`; before that, the M4 close plus the post-v0.4.0 "Donna" run, #115–#139, head `0047`.)
 
 ## What this doc is
 
@@ -31,7 +31,9 @@ Status markers reference the roadmap milestones (M1 → M4) documented in [READM
 
 **Legal research + connectors (MCP) — gateway-brokered (shipped after M4; #158–#193).** The assistant can now reach external tools — case-law lookup (CourtListener) and operator-approved MCP connectors — but only through the Inference Gateway, which is extended from sole *inference* egress to sole *tool* egress (ADR [0014](adr/0014-gateway-egress-boundary-for-tool-providers.md)/[0015](adr/0015-governed-tool-calling-model.md)). A governed chat tool-loop routes every tool call through a single `governed_tool_invocation` chokepoint; destructive/connector tools pause for an in-chat **persist-and-resume confirmation gate**; case-law results carry **external-source retrieval provenance** ("Sources consulted", kept architecturally distinct from the Citation Engine's character-verified quotes); per-user connector tokens are Fernet-encrypted at rest and never logged. Detailed in [§5.5](#55-legal-research-and-connectors-mcp-gateway-brokered-shipped-after-m4).
 
-**The honest reading:** an operator can deploy LQ.AI today for everyday in-house work on the starter skills, with character-verified citation grounding, operator-configurable pseudonymization, codified-position playbooks, multi-document tabular review, an opt-in autonomous background layer with hard economic/temporal/contextual brakes, and gateway-brokered legal-research + connector (MCP) access under a governed, human-gated tool-loop. The deferred edges are: in-Word feature surfaces (scaffold today), live-verified chat-platform intake (plumbing today), and the contract relationship graph.
+**Fiduciary-grade agentic legal work — gateway-brokered (shipped after the legal-research + MCP milestone; ADRs 0018–0021).** Building on the governed tool-loop above, the assistant now keeps a per-turn **Citation Ledger** of every source and passage it actually read, computes a pass/fail **fiduciary gate** over every tool-retrieved citation, can run **governed plain-language matter sessions** through the Autonomous Layer's plan → act → observe → replan loop (the analysis phase's implementation, replacing the single scripted call M4 shipped with), reaches three more free authority sources (GovInfo, SEC EDGAR, EUR-Lex) via a **content-source registry**, and derives a "derived, not editorial" case-law **treatment signal**. Migration head `0064`. Detailed in [§5.6](#56-fiduciary-grade-agentic-legal-work-gateway-brokered-shipped-after-legal-research--mcp).
+
+**The honest reading:** an operator can deploy LQ.AI today for everyday in-house work on the starter skills, with character-verified citation grounding, operator-configurable pseudonymization, codified-position playbooks, multi-document tabular review, an opt-in autonomous background layer with hard economic/temporal/contextual brakes, gateway-brokered legal-research + connector (MCP) access under a governed, human-gated tool-loop, and a fiduciary-grade layer (citation ledger, pass/fail gate, governed matter sessions, free authority sources, treatment signal) on top of it. The deferred edges are: in-Word feature surfaces (scaffold today), live-verified chat-platform intake (plumbing today), the contract relationship graph, a dedicated matter-intake UI (the governed-matter-session backend is shipped; it reuses the autonomous session UI today), chat/autonomous fiduciary-gate verdict-tier parity (DE-370, DE-371), and EUR-Lex full-text search / treaty coverage (DE-374, DE-375).
 
 ---
 
@@ -159,7 +161,7 @@ Run a skill (or ad-hoc column spec) across a document corpus into a document × 
 
 ## 5. M4 — Autonomous Layer (shipped)
 
-An opt-in background executor that does real in-loop agentic work under hard brakes. **Not a skeleton** — each phase calls real tools through the chokepoint. Full reference: [`docs/autonomous-layer.md`](autonomous-layer.md).
+An opt-in background executor that does real in-loop agentic work under hard brakes. **Not a skeleton** — each phase calls real tools through the chokepoint. Full reference: [`docs/autonomous-layer.md`](autonomous-layer.md). The analysis phase's implementation described below (a single scripted call) was later replaced by a governed plan → act → observe → replan loop under the same brakes — see [§5.6](#56-fiduciary-grade-agentic-legal-work-gateway-brokered-shipped-after-legal-research--mcp).
 
 | Capability | Status | Verification |
 |---|---|---|
@@ -217,6 +219,29 @@ After M4, LQ.AI gained the ability to reach *external* tools — case-law lookup
 
 ---
 
+## 5.6 Fiduciary-grade agentic legal work, gateway-brokered (shipped after legal research + MCP)
+
+Building on the governed tool-loop in [§5.5](#55-legal-research-and-connectors-mcp-gateway-brokered-shipped-after-m4), a fiduciary-grade milestone shipped next: a per-turn ledger of every source the assistant actually read, a pass/fail gate over every tool-retrieved citation, governed plain-language matter sessions on the Autonomous Layer, three more free authority sources, and a derived case-law treatment signal. Migration head `0064` (ledger/gate `0058`/`0059`; treatment `0061`/`0062`; authority citations + text cache `0064`). Design in [ADR 0018](adr/0018-citation-ledger-and-fiduciary-grade-output.md) (citation ledger + fiduciary gate), [ADR 0019](adr/0019-transparent-validity-treatment-layer.md) (treatment layer), [ADR 0020](adr/0020-governed-agentic-legal-matter-sessions.md) (matter sessions), and [ADR 0021](adr/0021-content-source-registry-and-free-source-expansion.md) (content-source registry) — all `Status: Accepted`, all merged.
+
+| Capability | Status | Verification |
+|---|---|---|
+| Citation Ledger — per-turn record of every source/passage actually read (chat + autonomous sessions), one-click trace from a claim to its ledger entry | shipped | `api/app/citation/ledger.py` (`assemble_ledger_entries`/`resolve_ledger_entries`); `GET /api/v1/chats/{chat_id}/ledger` (`api/app/api/chats.py`), `GET /api/v1/autonomous/sessions/{session_id}/ledger` (`api/app/api/autonomous.py`); migration `0058_citation_ledger_entry.py` |
+| Fiduciary-grade gate — derive-don't-assert PASS/FAIL verdict per assistant message, computed from the ledger's own verification statuses | shipped | `api/app/citation/gate.py` (`compute_and_record_gate`); migration `0059_work_product_fiduciary_gate.py`; ADR 0018 D3 |
+| Governed agentic matter sessions — plain-language "describe your matter" query drives a governed plan → act → observe → replan loop confined to the analysis phase, under the same R4/R5/R6 brakes | shipped | `api/app/autonomous/planner.py`; PRs #239/#240; ADR 0020 |
+| Content-source registry + free authority sources — GovInfo (US Code/CFR statutes and regulations), SEC EDGAR (public company filings), EUR-Lex (EU legislation + CJEU case law by CELEX), alongside CourtListener | shipped | `api/app/research/registry.py` (`SOURCE_REGISTRY`); ADR 0021 |
+| Validity / treatment layer — judge-backed, derived case-law treatment signal (e.g. followed, distinguished, criticized) from citing opinions, with one-click trace back to each citing case read | shipped | `api/app/citation/treatment.py` (`derive_treatment_for_message`); migrations `0061_citation_treatment.py`/`0062_citation_treatment_signal.py`; ADR 0019 |
+
+**Caveats (honest):**
+
+- **No dedicated matter-intake UI yet.** The governed matter-session backend (PRs #239/#240) is shipped, but the plain-language "describe your matter" entry point is a backend seam on session state — it reuses the existing autonomous session UI (`web/src/routes/lq-ai/autonomous/`) rather than a purpose-built intake flow.
+- **Chat/autonomous fiduciary-gate verdict-tier parity is incomplete.** An attributed-authority FAIL tier for chat ([DE-370](PRD.md#9-deferred-enhancements-and-identified-future-work)) and an autonomous-path authority SUPPORTED tier ([DE-371](PRD.md#9-deferred-enhancements-and-identified-future-work)) are both still open.
+- **EUR-Lex is get-by-CELEX only.** `SOURCE_REGISTRY["eurlex"].ops == ("get_authority",)` — no `search_authority`. Full-text search via Cellar SPARQL ([DE-374](PRD.md#9-deferred-enhancements-and-identified-future-work)) and treaty/corrigendum CELEX support ([DE-375](PRD.md#9-deferred-enhancements-and-identified-future-work)) are both open.
+- **The Citation Ledger stores no raw payloads.** Per the ADR 0016 P3 no-raw-payload guarantee, ledger entries reference content by id and character offset only — never raw passages or tool payloads — in the audit layer.
+- **The treatment layer is derived, not editorial.** It never emits a definitive "good law / bad law" verdict; every signal is labeled "derived, not editorial," and the per-case judge pass runs under a bounded cost budget (ADR 0019 D4) rather than reading every citing opinion exhaustively.
+- **Free authority sources are operator-opt-in, off by default.** Each requires a configured `tool_providers` entry in `gateway.yaml` (ADR 0021 D1/D5); an unconfigured registry entry is reported unavailable, never fabricated.
+
+---
+
 ## 6. Capabilities not yet started in source
 
 Honest milestone deferrals — the subsystem does not yet exist (or only as plumbing). Verifiable by absence.
@@ -249,9 +274,9 @@ Engineering rigor is measurable, not asserted. Test **file** counts below are ve
 
 | Practice | Status | Verification |
 |---|---|---|
-| Backend tests (pytest, live Postgres) | M1–milestone | 183 `test_*.py` files in `api/tests/` (incl. `tests/autonomous/`, `tests/citation/`, `tests/tabular/`; pass count refreshed in CI per the `.github/workflows/ci.yml` API gate); `cd api && DATABASE_URL=… pytest` |
-| Gateway tests (pytest) | M1–milestone | 64 `test_*.py` files in `gateway/tests/`; `cd gateway && pytest` |
-| Frontend unit tests (Vitest) | M1–milestone | 76 `*.test.ts` files in `web/src/`; `cd web && npx vitest run` |
+| Backend tests (pytest, live Postgres) | M1–milestone | 233 `test_*.py` files in `api/tests/` (incl. `tests/autonomous/`, `tests/citation/`, `tests/tabular/`; pass count refreshed in CI per the `.github/workflows/ci.yml` API gate); `cd api && DATABASE_URL=… pytest` |
+| Gateway tests (pytest) | M1–milestone | 67 `test_*.py` files in `gateway/tests/`; `cd gateway && pytest` |
+| Frontend unit tests (Vitest) | M1–milestone | 80 `*.test.ts` files in `web/src/`; `cd web && npx vitest run` |
 | Cypress E2E (LQ.AI shell) | M1–milestone | 17 specs in `web/cypress/e2e/` |
 | Ruff lint + format (Python) | M1–M4 | `.github/workflows/ci.yml`: `ruff check api scripts` + `ruff format --check` |
 | mypy (api standard, gateway strict) | M1–M4 | CI `mypy app` per subsystem |
@@ -284,7 +309,7 @@ The web frontend is a fork of OpenWebUI (ADR 0001). `npm run check` (full scope)
 
 ## 10. How to verify everything in this doc
 
-1. Clone the repo and follow the [Quickstart](../README.md#quickstart) to stand the stack up (`docker compose up -d --build` — the api runs migrations 0001→0055 on boot).
+1. Clone the repo and follow the [Quickstart](../README.md#quickstart) to stand the stack up (`docker compose up -d --build` — the api runs migrations 0001→0064 on boot).
 2. Browse the file path or run the test command in the Verification column.
 3. To read source without running the stack, the cited paths are all in the repository.
 
@@ -294,9 +319,9 @@ If a claim does not check out, the codebase is canonical — please [open an iss
 
 ## 11. Known doc/Learn gaps (this maintenance pass)
 
-- **Learn visualizations to add** (shipped capabilities not yet visualized): intake-bridges (Slack/Teams OAuth + workspace lifecycle); the autonomous **four primitives** (watches/schedules/memory/precedent lifecycle — `autonomous-flow.html` covers phases + brakes only); projects/matters + org-profile + privilege tiers; KB hybrid retrieval (BM25 + vector). Tracked in the M4-D2 doc/Learn alignment plan.
+- **Learn visualizations to add** (shipped capabilities not yet visualized): intake-bridges (Slack/Teams OAuth + workspace lifecycle); the autonomous **four primitives** (watches/schedules/memory/precedent lifecycle — `autonomous-flow.html` covers phases + brakes only); projects/matters + org-profile + privilege tiers; KB hybrid retrieval (BM25 + vector); the [§5.6](#56-fiduciary-grade-agentic-legal-work-gateway-brokered-shipped-after-legal-research--mcp) fiduciary-grade capabilities (Citation Ledger trace, fiduciary gate, governed matter sessions, content-source registry, treatment layer — none has a Learn playground yet). Tracked in the M4-D2 doc/Learn alignment plan.
 - **Resolved this session (DEs):** DE-325 (`build_receipt_safe` hardening), DE-326 (fresh-install worker alembic-migration race). DE-327 (Helm worker-migration parity) is open as a community-suitable item.
 
 ## 12. Maintenance note
 
-Maintained per release. Last rewritten at the **M4 close** (Autonomous Layer shipped end-to-end; fresh-install acceptance passed), reconciled against the post-v0.4.0 "Donna" run (#115–#139; head `0047`), then reconciled against the **legal-research + connectors (MCP) milestone** (#158–#193; migration head `0055`; the release-readiness verification pass for v0.5.0). Substantive content drivers: [PRD §3](PRD.md#3-capability-specifications) (capabilities), [PRD §8](PRD.md#8-roadmap) (roadmap), [PRD §9](PRD.md#9-deferred-enhancements-and-identified-future-work) (deferrals), and the per-feature docs (`docs/citation-engine.md`, `docs/playbooks.md`, `docs/tabular-review.md`, `docs/word-addin.md`, `docs/intake-bridges.md`, `docs/autonomous-layer.md`, and the ADRs `docs/adr/0014`/`0015` + `docs/proposals/legal-research-and-mcp.md` for the tool-egress/MCP milestone).
+Maintained per release. Last rewritten at the **M4 close** (Autonomous Layer shipped end-to-end; fresh-install acceptance passed), reconciled against the post-v0.4.0 "Donna" run (#115–#139; head `0047`), then reconciled against the **legal-research + connectors (MCP) milestone** (#158–#193; migration head `0055`; the release-readiness verification pass for v0.5.0), then reconciled a third time against the **fiduciary-grade agentic legal work milestone** (ADRs 0018–0021; migration head `0064`) as part of the DE-365 docs-honesty audit (`docs/audits/2026-07-01-claims-vs-reality.md`), which added [§5.6](#56-fiduciary-grade-agentic-legal-work-gateway-brokered-shipped-after-legal-research--mcp) and refreshed the header, the M4 cross-reference, and the §8 test-file counts. Substantive content drivers: [PRD §3](PRD.md#3-capability-specifications) (capabilities), [PRD §8](PRD.md#8-roadmap) (roadmap), [PRD §9](PRD.md#9-deferred-enhancements-and-identified-future-work) (deferrals), and the per-feature docs (`docs/citation-engine.md`, `docs/playbooks.md`, `docs/tabular-review.md`, `docs/word-addin.md`, `docs/intake-bridges.md`, `docs/autonomous-layer.md`, the ADRs `docs/adr/0014`/`0015` + `docs/proposals/legal-research-and-mcp.md` for the tool-egress/MCP milestone, and ADRs `docs/adr/0018`–`0021` for the fiduciary-grade milestone).
