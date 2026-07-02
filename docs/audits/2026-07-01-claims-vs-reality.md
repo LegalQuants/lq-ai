@@ -109,20 +109,27 @@ below for Tasks 3–5 to resolve (write the doc or drop the link) rather than fi
 
 ## Summary
 
-- **40 rows** across the three documents.
-- Verdict distribution: **25 Accurate**, **8 Stale**, **4 Understated**, **3 Overstated**.
-- The dominant finding, by design of this task, is staleness: none of the three docs
-  mention the fiduciary-grade milestone (ADRs 0018–0021) anywhere, even though all four
+- **40 Direction-A rows** across the three documents (README.md, HONEST-STATE.md,
+  ROADMAP.md), plus **6 Direction-B rows** (shipped-but-undocumented fiduciary-grade
+  capabilities) and one Task-6 consistency-sweep fix (ROADMAP §9.27) found during
+  whole-set verification — 47 tracked findings in total, all now resolved.
+- Direction-A verdict distribution: **25 Accurate**, **8 Stale**, **4 Understated**,
+  **3 Overstated**.
+- The dominant finding, by design of this task, was staleness: none of the three docs
+  mentioned the fiduciary-grade milestone (ADRs 0018–0021) anywhere, even though all four
   ADRs are Accepted and their implementations (citation ledger, fiduciary gate,
   treatment layer, governed matter sessions, content source registry with
-  govinfo/edgar/eurlex) are in `main` as of migration `0064`. Every row marked
-  **Stale** or **Understated** that says "resolved by Direction-B additions" is
-  intentionally *not* resolved in this worksheet — that is the next task's job. This
-  worksheet's job was to locate and verdict every existing claim; Tasks 3–5 consume the
-  `resolution` column as their edit list once Direction B supplies the new-capability
-  prose to insert alongside these fixes.
-- Two rows (24, 25) are pre-existing dangling links unrelated to milestone staleness,
-  surfaced by the link-check helper exactly as the brief anticipated.
+  govinfo/edgar/eurlex) are in `main` as of migration `0064`.
+- **Status: DONE.** Direction A (Task 1) and Direction B (Task 2) built the worksheet;
+  Task 3 reconciled `README.md`, Task 4 reconciled `docs/HONEST-STATE.md` (new §5.6),
+  Task 5 reconciled `docs/ROADMAP.md` (§1 rewrite + §11 DE-200 fix), and Task 6 ran the
+  six-point whole-set verification (below) and fixed one residual consistency issue the
+  Task 5 review surfaced (ROADMAP §9.27's "Depends on MCP subsystem (M5)" clause — the
+  same staleness class as the already-fixed §11.1, corrected the same way). Every row
+  that said "resolved by Direction-B additions" has been resolved in the target
+  document; none remain outstanding.
+- Two rows (24, 25) were pre-existing dangling links unrelated to milestone staleness,
+  surfaced by the link-check helper exactly as the brief anticipated, and fixed by Task 3.
 
 ---
 
@@ -380,3 +387,116 @@ $ grep -niE "thomson|westlaw|cocounsel|reuters" docs/ROADMAP.md
 consistency (row-number cross-references, PRD anchor slugs computed by hand against the
 existing anchor convention confirmed from DE-291/DE-322's already-working links in this same
 file, ADR/HONEST-STATE relative paths verified to exist). Clean.
+
+---
+
+## Task 6 execution notes (consistency-sweep fix)
+
+The Task 5 review surfaced one residual staleness item of the same class already fixed at
+ROADMAP §11.1 (row 40): §9.27 (`DE-264 — LegalQuants ecosystem integration`) still carried a
+`Notes` clause reading "Depends on MCP subsystem (M5)" — framing the MCP-client subsystem
+itself as unbuilt/M5 work, even though `HONEST-STATE.md §5.5` documents it as shipped (part of
+the legal-research + connectors (MCP) milestone, after M4) and §11.1/11.2/11.3 already carry
+the corrected "Builds on the already-shipped MCP-client subsystem (HONEST-STATE §5.5)." phrasing.
+
+Fixed: `docs/ROADMAP.md` line 268 (§9.27) Notes column changed from "Depends on MCP subsystem
+(M5)." to "Builds on the already-shipped MCP-client subsystem (HONEST-STATE §5.5)." — mirroring
+§11.1's wording exactly.
+
+**Sweep for other surviving instances:** `grep -n "MCP" docs/ROADMAP.md` (8 hits) reviewed line
+by line. No other line frames the *MCP-client subsystem* as future/M5 work:
+
+- Line 56 (§ intro) and line 306 (§10 status) already state the subsystem "has shipped."
+- Lines 310–315 (§11.1–11.3, already fixed in Task 5) correctly build on the shipped
+  subsystem while describing individual *connectors* (email/calendar/task/CRM/doc-store) as
+  legitimately still open M5+ work — that is accurate, not stale, since the connectors
+  themselves are genuinely unbuilt.
+- Line 338 (§12.1, DE-040) says "MCP path (M5+) is the integration story" — this describes the
+  *community connector-building trajectory* as M5+, not the client subsystem itself; accurate.
+- Line 342 (§12.5, DE-289) references an "MCP catalog" as a design-reference item, not an
+  unbuilt-subsystem claim.
+
+No other edit was needed; only §9.27 carried the stale framing.
+
+---
+
+## Verification (DONE)
+
+Whole-set verification (the six-point definition-of-done), run against the fully reconciled
+doc set (`README.md`, `docs/HONEST-STATE.md`, `docs/ROADMAP.md`) after the Task 6 §9.27 fix
+above. All six checks pass.
+
+**1. Link resolution over all changed docs.**
+
+```
+$ python3 docs/audits/check_doc_links.py README.md docs/HONEST-STATE.md docs/ROADMAP.md
+OK: 0 dangling link(s)
+```
+
+Outcome: **PASS.**
+
+**2. Markdown well-formed (eyeball each changed table).**
+
+Read in full: the README "Project status" roadmap table (lines 419–425 — 8 header-aligned rows,
+`M1`–`M4`, `Legal research + connectors (MCP)`, `Fiduciary-grade agentic legal work`, `M5–M7`,
+consistent 3-column `| Milestone | Scope | Status |` shape); HONEST-STATE §5.6's new table (lines
+226–230 — 5 rows, consistent 3-column `| Capability | Status | Verification |` shape, matches the
+§5.5 table's structure immediately above it); ROADMAP §1's table (lines 61–75 — 15 rows 1.1–1.15,
+consistent 6-column `| # | Item | Source | Complexity | Effort | Skill | Notes |` shape — 7 columns
+including `#`). All three tables have matching header/separator/row pipe counts and render
+correctly. Outcome: **PASS.**
+
+**3. Cross-document consistency — nothing shipped-in-README is unbuilt-in-HONEST-STATE.**
+
+```
+$ grep -niE "shipped|✓" README.md   # (28 hits, spot-checked above)
+$ grep -n "## 6" docs/HONEST-STATE.md
+245:## 6. Capabilities not yet started in source
+```
+
+HONEST-STATE §6 ("Capabilities not yet started in source") lists exactly three items: in-Word
+feature surfaces, `/lq` Slack/Teams slash-command, and the Contract Repository relationship
+graph. All three are *also* explicitly called out as deferred/not-yet-built in README (Word
+Add-In: "substantive in-pane feature surface... is deferred"; Slack/Teams: "`/lq` slash-command
+quick-skill surface is inert/deferred"; Contract Repository: "relationship graph remains
+roadmap") — README never claims any of the three as shipped. No overlap/contradiction found.
+ROADMAP §1 row 1.8 independently confirms the Contract Repository is "Not yet started in
+source," and §1's intro + §11's status line both agree the MCP-client subsystem and the
+fiduciary-grade milestone are shipped, matching README and HONEST-STATE. Outcome: **PASS.**
+
+**4. Caveat accuracy — DE-370/371/374/375/376 open, DE-373 shipped.**
+
+```
+$ grep -n "DE-37[0-6]" docs/PRD.md
+```
+
+Confirmed each DE's status line: DE-370 "filed", DE-371 "partially addressed" (autonomous
+SUPPORTED-tier + dead-argument cleanup remain open), DE-372 "filed" (not part of the pinned
+caveat set, correctly not asserted shipped anywhere), DE-373 "**SHIPPED** (generate-alongside)",
+DE-374 "filed", DE-375 "filed", DE-376 "filed". Matches the worksheet's Direction-B caveats and
+README/HONEST-STATE/ROADMAP's citations of these DEs exactly — no DE is mis-stated as
+shipped/open in any of the three docs. Outcome: **PASS.**
+
+**5. No overclaim + no named vendor.**
+
+```
+$ grep -niE "thomson|westlaw|cocounsel|reuters" README.md docs/HONEST-STATE.md docs/ROADMAP.md
+(no output, exit 1)
+```
+
+Outcome: **PASS** (zero hits across all three docs).
+
+**6. Worksheet completeness — every verdict row has a verdict + resolution, no "TBD"
+placeholder cell.**
+
+All 40 Direction-A rows (1–40) carry a non-empty `verdict` and `resolution` cell; all 6
+Direction-B rows carry a non-empty `capability`/`anchor`/`honest caveat`/`add-to` cell.
+`grep -n "TBD" docs/audits/2026-07-01-claims-vs-reality.md` returns exactly one hit (row 22),
+which is a *quotation* of README's own roadmap-table cell text ("M5–M7... TBD") describing that
+row's accurately-unresolved community-driven status — not a worksheet placeholder. No cell in
+any table is empty or reads "TBD"/"TODO" as a stand-in for missing analysis. Outcome: **PASS.**
+
+**Overall: 6/6 DoD checks pass.** No real failure was found during verification; the only
+correction made in this task was the anticipated ROADMAP §9.27 MCP-subsystem staleness clause
+(Task 6 execution notes above), which is not a new finding but the known residual the Task 5
+review flagged for this task to close out.
