@@ -243,6 +243,19 @@ providers:
 #     anonymize_outbound: false    # public filings; skip_anonymization=True on results
 #     # (no api_key_env — EDGAR needs only a User-Agent)
 #     # (no cost_per_call — free source; R4 stays a no-op)
+#
+#   - name: eurlex-prod
+#     type: eurlex                 # shipped in WS-E PR2b; uncomment to enable
+#     base_url: https://publications.europa.eu    # EU Cellar (content-negotiation by CELEX)
+#     user_agent: "YourOrg legal-ops@yourorg.example"   # descriptive UA — REQUIRED, no API key
+#     egress_tier: 4               # public EU legal text (ADR 0014 D4)
+#     allowlist:
+#       hosts: [publications.europa.eu]
+#     rate_limit:
+#       requests_per_minute: 60
+#     anonymize_outbound: false    # public legal text; skip_anonymization=True on results
+#     # (no api_key_env — EUR-Lex Cellar needs only a User-Agent)
+#     # (no cost_per_call — free source; R4 stays a no-op)
 
 # ============================================================
 # MODEL ALIASES — friendly names → specific provider/model
