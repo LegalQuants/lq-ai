@@ -7,7 +7,13 @@ info:
     
     This is a **sketch** — it covers the endpoints, request/response shapes, and
     schemas needed to anchor implementation. Expect refinement during M1 build.
-    
+
+    NOTE (DE-373): for a faithful, always-current contract generated from the
+    live app (recommended for client typegen), use the companion
+    `backend-openapi.generated.yaml`, produced by `make openapi` and kept in
+    sync by a CI drift-guard. This hand-authored sketch is the human-facing
+    reference; the generated file is the machine-faithful one.
+
     The Inference Gateway has a separate OpenAPI specification at
     `gateway-openapi.yaml` (consumes OpenAI-compatible inference requests from
     this backend; not directly accessible to end-users).
