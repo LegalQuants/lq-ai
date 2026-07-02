@@ -387,6 +387,8 @@ function renderCards() {
             <div class="sketch-arrow">&darr;</div>
             <div class="sketch-step"><span class="sk-n">4</span>ledger row &rarr; fiduciary gate &mdash; same cascade as uploaded files and caselaw</div>
           </div>`;
+      } else if (spec.key === "courtlistener") {
+        body += `<div class="rejected-note">Not selectable at all via <code>retrieve_caselaw</code> while disabled &mdash; that intent is hardwired to a configured CourtListener provider (<code>service.py</code> <code>_resolve_provider</code>), so a missing/disabled key surfaces here as <code>enabled=False</code>, honestly reported rather than silently dropped (ADR 0021 D5). It was never reachable via <code>retrieve_authority</code> to begin with, enabled or not.</div>`;
       } else {
         body += `<div class="rejected-note">Not selectable by <code>retrieve_authority</code> while disabled &mdash; the handler rejects it as a non-fatal failed observation (ADR 0021 D2/D5), never an exception that escapes the governed path.</div>`;
       }
