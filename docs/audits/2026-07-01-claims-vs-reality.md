@@ -491,9 +491,10 @@ placeholder cell.**
 
 All 40 Direction-A rows (1–40) carry a non-empty `verdict` and `resolution` cell; all 6
 Direction-B rows carry a non-empty `capability`/`anchor`/`honest caveat`/`add-to` cell.
-`grep -n "TBD" docs/audits/2026-07-01-claims-vs-reality.md` returns exactly one hit (row 22),
-which is a *quotation* of README's own roadmap-table cell text ("M5–M7... TBD") describing that
-row's accurately-unresolved community-driven status — not a worksheet placeholder. No cell in
+`grep -n "TBD" docs/audits/2026-07-01-claims-vs-reality.md` returns one *substantive* hit (row 22)
+— the other matches are this checklist item's own prose describing the check. Row 22 is a
+*quotation* of README's own roadmap-table cell text ("M5–M7... TBD") describing that row's
+accurately-unresolved community-driven status — not a worksheet placeholder. No cell in
 any table is empty or reads "TBD"/"TODO" as a stand-in for missing analysis. Outcome: **PASS.**
 
 **Overall: 6/6 DoD checks pass.** No real failure was found during verification; the only
