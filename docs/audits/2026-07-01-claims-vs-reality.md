@@ -307,3 +307,76 @@ folded into the "Project status" prose rather than given its own paragraph, matc
 `add-to = README status` scope. The new roadmap-table row is the brief's verbatim text. No named
 competitor introduced. Every "✓ Shipped" carries either an inline caveat or points to
 HONEST-STATE for the caveat detail. Self-review: clean.
+
+---
+
+## Task 5 execution notes (docs/ROADMAP.md)
+
+Applied against `docs/ROADMAP.md` only, per Direction-A resolutions rows 36–40 and the
+Direction-B **Content-source registry + free authority sources** row (`add-to` includes
+ROADMAP).
+
+- **§1 rewrite (rows 37/38).** Retitled "M4 close-out" → "fiduciary-grade milestone punch
+  list + M4 close-out"; the new intro states that M4, the legal-research+MCP milestone, and
+  the fiduciary-grade milestone (ADR 0018–0021) have all shipped, linking
+  `HONEST-STATE.md#5.6` for the shipped catalog. Old row 1.1 ("Wire real in-loop agentic work
+  into the executor") is **removed** (shipped by WS-D/ADR 0020, not left in the punch list per
+  the doc's own "ships → row moves out" convention). Five new rows add the fiduciary-grade
+  milestone's confirmed-open DEs — 1.1 DE-370, 1.2 DE-371, 1.3 DE-374, 1.4 DE-375, 1.5 DE-376
+  (Effort/Priority pulled verbatim from each DE's PRD status line) — plus 1.6 a
+  "Matter-intake UI for governed agentic matter sessions" row (no DE filed yet, per the task
+  brief's "+ matter-intake UI" punch-list note; cites ADR 0020 + PRs #239/#240). Rows 1.2/1.3
+  (M4-D2 acceptance lap; Contract Repository) and 1.4–1.10 (DE-293/294/321/322/323/324/333,
+  verdict "Accurate" / row 39 "no change") are preserved verbatim, renumbered 1.7–1.15.
+- **§11 DE-200/MCP reconciliation (row 40).** Removed the DE-200 row entirely (the MCP-client
+  subsystem it described is the same subsystem `HONEST-STATE.md §5.5` documents as shipped —
+  keeping a "not yet built" row for a shipped subsystem was the row-40 finding). Rewrote the
+  §11 status line to say the MCP-client subsystem "has shipped" (linking HONEST-STATE §5.5)
+  rather than "architectural slots... committed in M1–M4". Renumbered 11.2→11.19 down to
+  11.1–11.19 and fixed the two internal `Depends on 11.1` dependency notes (old rows 11.2
+  DE-201 and 11.3 DE-202, whose dependency was on the now-removed DE-200 row) to instead say
+  the dependency is already satisfied ("Builds on the already-shipped MCP-client subsystem");
+  also re-pointed the two downstream `Depends on 11.3` / `Depends on 11.4` notes (DE-209,
+  DE-210) to their shifted row numbers (11.2, 11.3) so no note references a stale row number
+  after the shift-by-one.
+- **Maintenance footer.** "Last regenerated" bumped from `2026-05-29` to `2026-07-01`, with a
+  pointer to this audit and migration head `0064`.
+- **DE-373 / DE-372.** Neither DE-373 (shipped) nor DE-372 (open, but explicitly excluded from
+  the task's pinned open-DE set) previously appeared anywhere in ROADMAP.md, so no row needed
+  adding or removing for either — confirmed by `grep -n "DE-37[23]" docs/ROADMAP.md` returning
+  nothing before this edit.
+- **PRD.md — not touched.** No row in the worksheet's Direction-A `docs/ROADMAP.md` table or
+  the Direction-B table records a concrete PRD §8 inaccuracy (`grep -n "PRD §8\|PRD.md §8"`
+  against this worksheet returns nothing); per the task's finding-gated instruction, PRD.md is
+  unmodified.
+
+**Link-check (Step 3):**
+
+```
+$ python3 docs/audits/check_doc_links.py docs/ROADMAP.md
+OK: 0 dangling link(s)
+```
+
+**Three-way consistency (Step 3):** grepped "citation ledger", "matter session", "eur-lex", and
+"mcp" (case-insensitive) across `README.md`, `docs/HONEST-STATE.md`, and `docs/ROADMAP.md`.
+Every mention of these capabilities in ROADMAP now frames them as shipped (the §1 intro
+paragraph and the §11 status line), matching README's "✓ Shipped" roadmap-table row and
+HONEST-STATE §5.5/§5.6's "shipped" verdicts. The only ROADMAP rows for these capability names
+are the genuinely-open trailing DEs (DE-370/371/374/375/376, the EUR-Lex search/treaty gaps,
+the matter-intake UI gap) — each of which is *also* named as an open caveat in HONEST-STATE
+§5.6 (except DE-376 and DE-372/DE-373, which HONEST-STATE's caveat list doesn't call out
+individually; that is not a consistency violation, since the three-way constraint runs one
+direction — nothing shipped in README/HONEST-STATE may read as future/unbuilt in ROADMAP, not
+the reverse). No item shipped in one doc reads as future/unbuilt in another.
+
+**Vendor-neutral grep (Step 4):**
+
+```
+$ grep -niE "thomson|westlaw|cocounsel|reuters" docs/ROADMAP.md
+(no output, exit 1)
+```
+
+**Self-review:** re-read the full §1 and §11 tables post-edit for internal reference
+consistency (row-number cross-references, PRD anchor slugs computed by hand against the
+existing anchor convention confirmed from DE-291/DE-322's already-working links in this same
+file, ADR/HONEST-STATE relative paths verified to exist). Clean.
