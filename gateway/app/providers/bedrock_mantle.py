@@ -13,15 +13,18 @@ signing:
 * **Messages** (``POST /anthropic/v1/messages``, off the Mantle *domain
   root* — NOT ``/v1``-relative to ``base_url`` like the other two tiers)
   — current-generation Anthropic models (e.g. ``anthropic.claude-opus-4-8``).
-  New translation adapted from :mod:`app.providers.anthropic`'s Messages
-  parser — not assumed byte-identical to direct api.anthropic.com
-  responses. Path bug fixed 2026-07-02: the original implementation
-  posted the relative path against a client whose ``base_url`` already
-  ends in ``/v1``, producing ``.../v1/anthropic/v1/messages`` — a bogus
-  double-``/v1`` URL that 404s. Verified live against a real AWS
-  account: the correct URL (domain root + ``/anthropic/v1/messages``)
-  returns a real, structured entitlement response (403
-  ``permission_error``) instead of an opaque 404.
+  AWS documents Mantle's Messages tier as wire-compatible with direct
+  api.anthropic.com, so request/response/SSE translation reuses
+  :mod:`app.providers.anthropic`'s functions directly (``_to_anthropic_request``,
+  ``_from_anthropic_response``, ``_iter_sse_events``, ``_make_chunk``) rather
+  than a duplicated copy — the only Mantle-specific pieces are the URL and
+  error classification. Path bug fixed 2026-07-02: the original
+  implementation posted the relative path against a client whose
+  ``base_url`` already ends in ``/v1``, producing
+  ``.../v1/anthropic/v1/messages`` — a bogus double-``/v1`` URL that 404s.
+  Verified live against a real AWS account: the correct URL (domain root +
+  ``/anthropic/v1/messages``) returns a real, structured entitlement
+  response (403 ``permission_error``) instead of an opaque 404.
 * **Responses** — current-generation OpenAI models (e.g.
   ``openai.gpt-5.5``) and a handful of other model families. Entirely
   new translation; no existing gateway code speaks the Responses wire
@@ -123,6 +126,12 @@ from typing import Any
 import httpx
 
 from app.config import ProviderConfig
+from app.providers.anthropic import (
+    _from_anthropic_response,
+    _iter_sse_events,
+    _make_chunk,
+    _to_anthropic_request,
+)
 from app.providers.base import (
     ProviderAdapter,
     ProviderHealth,
@@ -451,7 +460,7 @@ class BedrockMantleAdapter(ProviderAdapter):
         model: str,
         stream: bool,
     ) -> ChatCompletionResponse | AsyncIterator[ChatCompletionChunk]:
-        body = _to_messages_request(request, model=model, stream=stream)
+        body = _to_anthropic_request(request, model=model, stream=stream)
         headers = self._messages_auth_headers()
 
         if stream:
@@ -521,7 +530,7 @@ class BedrockMantleAdapter(ProviderAdapter):
                 details={"provider": self.name},
             ) from exc
 
-        return _from_messages_response(payload, requested_model=model)
+        return _from_anthropic_response(payload, requested_model=model)
 
     # --- F3: Responses tier (current-gen OpenAI) --------------------------------
 
@@ -591,7 +600,11 @@ class BedrockMantleAdapter(ProviderAdapter):
         except ProviderHTTPError as exc:
             if exc.details.get("mantle_error_class") != "unsupported_api_for_model":
                 raise
-            fallback_url = "/responses" if url == self._responses_exception_url() else self._responses_exception_url()
+            fallback_url = (
+                "/responses"
+                if url == self._responses_exception_url()
+                else self._responses_exception_url()
+            )
             result = await self._responses_unary(fallback_url, body, headers, model=model)
             self._responses_url_cache[model] = fallback_url
             return result
@@ -629,191 +642,6 @@ class BedrockMantleAdapter(ProviderAdapter):
         return _from_responses_response(payload, requested_model=model)
 
 
-# --- F2 translation: gateway -> Messages --------------------------------------
-
-
-def _to_messages_request(
-    request: ChatCompletionRequest,
-    *,
-    model: str,
-    stream: bool,
-) -> dict[str, Any]:
-    """Build the Mantle Messages request body.
-
-    Adapted from :func:`app.providers.anthropic._to_anthropic_request` —
-    same mapping rules (system-message extraction, tool_use/tool_result
-    round-tripping, tools/tool_choice translation). Kept as a sibling
-    function rather than an import because A4 (wire-compatibility with
-    direct-Anthropic Messages) is unvalidated pending live entitlement;
-    extracting shared logic now would be a premature abstraction over an
-    unverified assumption.
-    """
-
-    system_chunks: list[str] = []
-    chat_messages: list[dict[str, Any]] = []
-    for msg in request.messages:
-        content = msg.content or ""
-        if msg.role == "system":
-            if content:
-                system_chunks.append(content)
-            continue
-        if msg.role == "tool":
-            chat_messages.append(
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": msg.tool_call_id or "",
-                            "content": content,
-                        }
-                    ],
-                }
-            )
-            continue
-        if msg.role == "assistant" and msg.tool_calls:
-            content_blocks: list[dict[str, Any]] = []
-            if msg.content:
-                content_blocks.append({"type": "text", "text": msg.content})
-            for tc in msg.tool_calls:
-                fn = tc.get("function", {})
-                try:
-                    parsed_input = json.loads(fn.get("arguments") or "{}")
-                except (ValueError, TypeError):
-                    parsed_input = {}
-                content_blocks.append(
-                    {
-                        "type": "tool_use",
-                        "id": tc.get("id", ""),
-                        "name": fn.get("name", ""),
-                        "input": parsed_input,
-                    }
-                )
-            chat_messages.append({"role": "assistant", "content": content_blocks})
-            continue
-        chat_messages.append({"role": msg.role, "content": content})
-
-    body: dict[str, Any] = {
-        "model": model,
-        "messages": chat_messages,
-        "max_tokens": request.max_tokens or MANTLE_DEFAULT_MAX_TOKENS,
-        "stream": stream,
-    }
-    if system_chunks:
-        body["system"] = "\n\n".join(system_chunks)
-    if request.temperature is not None:
-        body["temperature"] = request.temperature
-    if request.top_p is not None:
-        body["top_p"] = request.top_p
-    if request.stop is not None:
-        body["stop_sequences"] = (
-            [request.stop] if isinstance(request.stop, str) else list(request.stop)
-        )
-
-    extra = request.model_extra or {}
-    raw_tools = request.tools if request.tools is not None else extra.get("tools")
-    if raw_tools:
-        anthropic_tools: list[dict[str, Any]] = []
-        for t in raw_tools:
-            fn = t.get("function", t) if isinstance(t, dict) else {}
-            anthropic_tools.append(
-                {
-                    "name": fn.get("name", ""),
-                    "description": fn.get("description", "") or "",
-                    "input_schema": fn.get("parameters") or {"type": "object", "properties": {}},
-                }
-            )
-        body["tools"] = anthropic_tools
-
-        raw_choice = (
-            request.tool_choice if request.tool_choice is not None else extra.get("tool_choice")
-        )
-        if raw_choice is None or raw_choice == "auto":
-            body["tool_choice"] = {"type": "auto"}
-        elif raw_choice == "none":
-            body.pop("tools", None)
-        elif raw_choice == "required":
-            body["tool_choice"] = {"type": "any"}
-        elif isinstance(raw_choice, dict):
-            fn_choice = raw_choice.get("function", {})
-            if fn_choice.get("name"):
-                body["tool_choice"] = {"type": "tool", "name": fn_choice["name"]}
-    return body
-
-
-# --- F2 translation: Messages -> gateway (non-streaming) ----------------------
-
-
-def _from_messages_response(
-    payload: dict[str, Any],
-    *,
-    requested_model: str,
-) -> ChatCompletionResponse:
-    """Translate a Mantle Messages response into :class:`ChatCompletionResponse`.
-
-    Field mapping matches :func:`app.providers.anthropic._from_anthropic_response`.
-    **Not yet live-verified** (spec A4/A5) — implemented against AWS's
-    documented Messages schema; diff against a real captured response
-    once account entitlement allows a 200-OK call, per
-    ``.aidlc/bedrock-mantle-adapter/tasks.md`` Task 7's checkpoint.
-    """
-
-    blocks = payload.get("content") or []
-    text_parts: list[str] = []
-    for block in blocks:
-        if isinstance(block, dict) and block.get("type") == "text":
-            text_parts.append(str(block.get("text", "")))
-    text = "".join(text_parts)
-
-    tool_calls: list[dict[str, Any]] = []
-    for block in blocks:
-        if isinstance(block, dict) and block.get("type") == "tool_use":
-            tool_calls.append(
-                {
-                    "id": str(block.get("id", "")),
-                    "type": "function",
-                    "function": {
-                        "name": str(block.get("name", "")),
-                        "arguments": json.dumps(block.get("input") or {}),
-                    },
-                }
-            )
-
-    stop_reason_raw = payload.get("stop_reason")
-    finish_reason: FinishReason | None = None
-    if isinstance(stop_reason_raw, str):
-        finish_reason = STOP_REASON_MAP.get(stop_reason_raw, "stop")
-
-    usage_raw = payload.get("usage") or {}
-    usage = ChatCompletionUsage(
-        prompt_tokens=int(usage_raw.get("input_tokens", 0)),
-        completion_tokens=int(usage_raw.get("output_tokens", 0)),
-        total_tokens=int(usage_raw.get("input_tokens", 0)) + int(usage_raw.get("output_tokens", 0)),
-    )
-
-    response_id = str(payload.get("id") or f"chatcmpl-{uuid.uuid4().hex}")
-    response_model = str(payload.get("model") or requested_model)
-
-    message = ChatCompletionMessage(
-        role="assistant",
-        content=text or None,
-        tool_calls=tool_calls or None,
-    )
-    return ChatCompletionResponse(
-        id=response_id,
-        created=int(time.time()),
-        model=response_model,
-        choices=[
-            ChatCompletionChoice(
-                index=0,
-                message=message,
-                finish_reason=finish_reason,
-            )
-        ],
-        usage=usage,
-    )
-
-
 # --- F2 translation: Messages SSE -> gateway chunks ----------------------------
 
 
@@ -828,9 +656,16 @@ async def _messages_stream_iter(
 ) -> AsyncIterator[ChatCompletionChunk]:
     """Stream Mantle Messages SSE and translate to OpenAI chunks.
 
-    Event vocabulary and translation logic mirror
-    :func:`app.providers.anthropic._anthropic_stream_iter`. Not yet
-    live-verified (A4) — same checkpoint as :func:`_from_messages_response`.
+    Mantle-specific glue around the shared SSE-event vocabulary and chunk
+    translation (reused directly from :mod:`app.providers.anthropic` —
+    :func:`_iter_sse_events`, :func:`_make_chunk` — since AWS documents the
+    Messages tier as wire-compatible with direct api.anthropic.com, and
+    the request/response translation is the identical
+    :func:`~app.providers.anthropic._to_anthropic_request` /
+    :func:`~app.providers.anthropic._from_anthropic_response`). What's
+    Mantle-specific here: the per-model ``url`` (see
+    :meth:`BedrockMantleAdapter._messages_url`) and Mantle's own error
+    classification (:func:`_raise_from_mantle_error_body`).
     """
 
     response_id = f"chatcmpl-{uuid.uuid4().hex}"
@@ -924,49 +759,6 @@ async def _messages_stream_iter(
             total_tokens=prompt_tokens + completion_tokens,
         ),
     )
-
-
-def _make_chunk(
-    *,
-    response_id: str,
-    created: int,
-    model: str,
-    delta: ChatCompletionDelta,
-) -> ChatCompletionChunk:
-    return ChatCompletionChunk(
-        id=response_id,
-        created=created,
-        model=model,
-        choices=[ChatCompletionChunkChoice(index=0, delta=delta, finish_reason=None)],
-    )
-
-
-async def _iter_sse_events(
-    response: httpx.Response,
-) -> AsyncIterator[tuple[str | None, str]]:
-    """Iterate ``(event, data)`` tuples from an SSE response (Messages
-    tier — named events). Identical subset-of-SSE handling to
-    :func:`app.providers.anthropic._iter_sse_events`."""
-
-    event_type: str | None = None
-    data_lines: list[str] = []
-    async for line in response.aiter_lines():
-        if line == "":
-            if data_lines:
-                yield event_type, "\n".join(data_lines)
-            event_type = None
-            data_lines = []
-            continue
-        if line.startswith(":"):
-            continue
-        if line.startswith("event:"):
-            event_type = line[len("event:") :].strip()
-            continue
-        if line.startswith("data:"):
-            data_lines.append(line[len("data:") :].lstrip(" "))
-            continue
-    if data_lines:
-        yield event_type, "\n".join(data_lines)
 
 
 # --- F3 translation: gateway -> Responses --------------------------------------

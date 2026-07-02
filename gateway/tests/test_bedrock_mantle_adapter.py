@@ -7,9 +7,13 @@ the server-side-tool-calling egress-boundary guard (FR3.7), and the
 three live-verified error classes (entitlement-403, entitlement-401,
 wrong-API-for-model-400).
 
-F2/F3 response-shape tests run against fixtures built from AWS's
-documented schema / the OpenAI Responses SDK schema (A4/A5 unvalidated
-pending live entitlement — see ``.aidlc/bedrock-mantle-adapter/spec.md``).
+F2 reuses app.providers.anthropic's request/response/SSE translation
+directly (see bedrock_mantle.py's module docstring), so its tests
+exercise the same functions already covered by test_anthropic_provider.py
+and test_anthropic_adapter.py. F3 response-shape tests run against
+fixtures built from the OpenAI Responses SDK schema; live-tested paths
+and remaining entitlement-blocked gaps are listed in
+BedrockMantleAdapter's RESPONSES_EXCEPTION_MODEL_PREFIXES docstring.
 """
 
 from __future__ import annotations
@@ -389,7 +393,9 @@ async def test_responses_tier_happy_path_unary() -> None:
         "usage": {"input_tokens": 8, "output_tokens": 3},
     }
     with respx.mock(base_url=MANTLE_BASE) as router:
-        route = router.post(MANTLE_RESPONSES_EXCEPTION_URL).mock(return_value=httpx.Response(200, json=payload))
+        route = router.post(MANTLE_RESPONSES_EXCEPTION_URL).mock(
+            return_value=httpx.Response(200, json=payload)
+        )
         client = httpx.AsyncClient(base_url=MANTLE_BASE)
         try:
             adapter = _adapter(client)
@@ -435,7 +441,9 @@ async def test_responses_tier_function_call_mapping() -> None:
         "usage": {"input_tokens": 6, "output_tokens": 4},
     }
     with respx.mock(base_url=MANTLE_BASE) as router:
-        router.post(MANTLE_RESPONSES_EXCEPTION_URL).mock(return_value=httpx.Response(200, json=payload))
+        router.post(MANTLE_RESPONSES_EXCEPTION_URL).mock(
+            return_value=httpx.Response(200, json=payload)
+        )
         client = httpx.AsyncClient(base_url=MANTLE_BASE)
         try:
             adapter = _adapter(client)
@@ -491,7 +499,9 @@ async def test_responses_tier_drops_reasoning_items() -> None:
         "usage": {"input_tokens": 4, "output_tokens": 2},
     }
     with respx.mock(base_url=MANTLE_BASE) as router:
-        router.post(MANTLE_RESPONSES_EXCEPTION_URL).mock(return_value=httpx.Response(200, json=payload))
+        router.post(MANTLE_RESPONSES_EXCEPTION_URL).mock(
+            return_value=httpx.Response(200, json=payload)
+        )
         client = httpx.AsyncClient(base_url=MANTLE_BASE)
         try:
             adapter = _adapter(client)
@@ -540,7 +550,9 @@ async def test_responses_tier_out_of_scope_item_type_dropped_not_corrupted() -> 
         "usage": {"input_tokens": 4, "output_tokens": 2},
     }
     with respx.mock(base_url=MANTLE_BASE) as router:
-        router.post(MANTLE_RESPONSES_EXCEPTION_URL).mock(return_value=httpx.Response(200, json=payload))
+        router.post(MANTLE_RESPONSES_EXCEPTION_URL).mock(
+            return_value=httpx.Response(200, json=payload)
+        )
         client = httpx.AsyncClient(base_url=MANTLE_BASE)
         try:
             adapter = _adapter(client)
@@ -625,7 +637,9 @@ async def test_responses_tier_no_tools_configured_sends_no_tools_field() -> None
         "usage": {"input_tokens": 2, "output_tokens": 2},
     }
     with respx.mock(base_url=MANTLE_BASE) as router:
-        route = router.post(MANTLE_RESPONSES_EXCEPTION_URL).mock(return_value=httpx.Response(200, json=payload))
+        route = router.post(MANTLE_RESPONSES_EXCEPTION_URL).mock(
+            return_value=httpx.Response(200, json=payload)
+        )
         client = httpx.AsyncClient(base_url=MANTLE_BASE)
         try:
             adapter = _adapter(client)
@@ -664,7 +678,9 @@ async def test_responses_tier_governed_tools_translate_correctly() -> None:
         "usage": {"input_tokens": 2, "output_tokens": 2},
     }
     with respx.mock(base_url=MANTLE_BASE) as router:
-        route = router.post(MANTLE_RESPONSES_EXCEPTION_URL).mock(return_value=httpx.Response(200, json=payload))
+        route = router.post(MANTLE_RESPONSES_EXCEPTION_URL).mock(
+            return_value=httpx.Response(200, json=payload)
+        )
         client = httpx.AsyncClient(base_url=MANTLE_BASE)
         try:
             adapter = _adapter(client)
@@ -714,9 +730,7 @@ async def test_messages_tier_entitlement_403_maps_to_http_error_not_auth_error()
         "error": {"type": "permission_error", "message": "You do not have access to this model."},
     }
     with respx.mock(base_url=MANTLE_BASE) as router:
-        router.post(MANTLE_MESSAGES_URL).mock(
-            return_value=httpx.Response(403, json=error_body)
-        )
+        router.post(MANTLE_MESSAGES_URL).mock(return_value=httpx.Response(403, json=error_body))
         client = httpx.AsyncClient(base_url=MANTLE_BASE)
         try:
             adapter = _adapter(client)
@@ -749,7 +763,9 @@ async def test_responses_tier_entitlement_401_maps_to_http_error_not_auth_error(
         }
     }
     with respx.mock(base_url=MANTLE_BASE) as router:
-        router.post(MANTLE_RESPONSES_EXCEPTION_URL).mock(return_value=httpx.Response(401, json=error_body))
+        router.post(MANTLE_RESPONSES_EXCEPTION_URL).mock(
+            return_value=httpx.Response(401, json=error_body)
+        )
         client = httpx.AsyncClient(base_url=MANTLE_BASE)
         try:
             adapter = _adapter(client)
@@ -842,7 +858,9 @@ async def test_responses_tier_wrong_api_for_model_400_both_paths_reject() -> Non
         }
     }
     with respx.mock(base_url=MANTLE_BASE) as router:
-        router.post(MANTLE_RESPONSES_EXCEPTION_URL).mock(return_value=httpx.Response(400, json=error_body))
+        router.post(MANTLE_RESPONSES_EXCEPTION_URL).mock(
+            return_value=httpx.Response(400, json=error_body)
+        )
         router.post("/responses").mock(return_value=httpx.Response(400, json=error_body))
         client = httpx.AsyncClient(base_url=MANTLE_BASE)
         try:
@@ -868,9 +886,7 @@ async def test_error_mapping_never_leaks_api_key() -> None:
 
     error_body = {"error": {"type": "permission_error", "message": "denied"}}
     with respx.mock(base_url=MANTLE_BASE) as router:
-        router.post(MANTLE_MESSAGES_URL).mock(
-            return_value=httpx.Response(403, json=error_body)
-        )
+        router.post(MANTLE_MESSAGES_URL).mock(return_value=httpx.Response(403, json=error_body))
         client = httpx.AsyncClient(base_url=MANTLE_BASE)
         try:
             adapter = _adapter(client)
