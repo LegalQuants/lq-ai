@@ -10,10 +10,18 @@ signing:
   tier reuses :class:`~app.providers.openai.OpenAIAdapter`'s
   translation helpers verbatim; ``BedrockMantleAdapter`` only overrides
   construction and auth.
-* **Messages** (``POST /anthropic/v1/messages``) — current-generation
-  Anthropic models (e.g. ``anthropic.claude-opus-4-8``). New translation
-  adapted from :mod:`app.providers.anthropic`'s Messages parser — not
-  assumed byte-identical to direct api.anthropic.com responses.
+* **Messages** (``POST /anthropic/v1/messages``, off the Mantle *domain
+  root* — NOT ``/v1``-relative to ``base_url`` like the other two tiers)
+  — current-generation Anthropic models (e.g. ``anthropic.claude-opus-4-8``).
+  New translation adapted from :mod:`app.providers.anthropic`'s Messages
+  parser — not assumed byte-identical to direct api.anthropic.com
+  responses. Path bug fixed 2026-07-02: the original implementation
+  posted the relative path against a client whose ``base_url`` already
+  ends in ``/v1``, producing ``.../v1/anthropic/v1/messages`` — a bogus
+  double-``/v1`` URL that 404s. Verified live against a real AWS
+  account: the correct URL (domain root + ``/anthropic/v1/messages``)
+  returns a real, structured entitlement response (403
+  ``permission_error``) instead of an opaque 404.
 * **Responses** (``POST /responses``, under the same ``.../v1`` base
   URL as Chat Completions) — current-generation OpenAI models (e.g.
   ``openai.gpt-5.5``). Entirely new translation; no existing gateway
@@ -392,6 +400,7 @@ class BedrockMantleAdapter(ProviderAdapter):
         if stream:
             return _messages_stream_iter(
                 client=self._client,
+                url=self._messages_url(),
                 body=body,
                 headers=headers,
                 provider_name=self.name,
@@ -408,6 +417,24 @@ class BedrockMantleAdapter(ProviderAdapter):
         headers["anthropic-version"] = MANTLE_ANTHROPIC_API_VERSION
         return headers
 
+    def _messages_url(self) -> str:
+        """Absolute URL for the Messages tier.
+
+        Unlike Chat Completions and Responses (both ``/v1``-relative to
+        ``base_url``), Messages lives at ``/anthropic/v1/messages`` off the
+        Mantle *domain root* — confirmed live: posting the relative path
+        against ``self._client`` (whose ``base_url`` already ends in
+        ``/v1``) produces ``.../v1/anthropic/v1/messages``, a bogus URL that
+        404s (verified against a real AWS account). Strips exactly one
+        trailing ``/v1`` segment from ``self._base_url`` rather than the
+        whole domain, so a differently-shaped operator ``base_url`` still
+        degrades predictably instead of silently mismatching."""
+
+        root = self._base_url
+        if root.endswith("/v1"):
+            root = root[: -len("/v1")]
+        return f"{root}/anthropic/v1/messages"
+
     async def _messages_unary(
         self,
         body: dict[str, Any],
@@ -417,7 +444,7 @@ class BedrockMantleAdapter(ProviderAdapter):
     ) -> ChatCompletionResponse:
         try:
             response = await self._client.post(
-                "/anthropic/v1/messages",
+                self._messages_url(),
                 json=body,
                 headers=headers,
             )
@@ -684,6 +711,7 @@ def _from_messages_response(
 async def _messages_stream_iter(
     *,
     client: httpx.AsyncClient,
+    url: str,
     body: dict[str, Any],
     headers: dict[str, str],
     provider_name: str,
@@ -705,9 +733,7 @@ async def _messages_stream_iter(
     role_emitted = False
 
     try:
-        async with client.stream(
-            "POST", "/anthropic/v1/messages", json=body, headers=headers
-        ) as response:
+        async with client.stream("POST", url, json=body, headers=headers) as response:
             if response.status_code >= 400:
                 error_body = await response.aread()
                 _raise_from_mantle_error_body(
