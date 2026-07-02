@@ -263,10 +263,20 @@ async def verify_and_persist_authority_citations(
     """
     # Only get_authority-sourced refs carry a cached body; filter to authority
     # content kinds with an external_ref.  EDGAR's "sec_filing" is covered as
-    # of WS-E PR2a (DE-371); EUR-Lex content kinds are still pending PR2b —
-    # a content kind outside this set is silently not verified (a
+    # of WS-E PR2a (DE-371); EUR-Lex's eu_* kinds are covered as of WS-E PR2b
+    # (DE-374) — treaty/corrigendum CELEX handling is still pending (DE-375).
+    # A content kind outside this set is silently not verified (a
     # conservative drop, never a false claim, but it means no ledger row).
-    _VERIFIABLE_CONTENT_KINDS = {"statute", "regulation", "sec_filing"}
+    _VERIFIABLE_CONTENT_KINDS = {
+        "statute",
+        "regulation",
+        "sec_filing",
+        "eu_regulation",
+        "eu_directive",
+        "eu_decision",
+        "eu_caselaw",
+        "eu_legislation",
+    }
     refs = [
         r for r in tool_sources if r.source_kind in _VERIFIABLE_CONTENT_KINDS and r.external_ref
     ]

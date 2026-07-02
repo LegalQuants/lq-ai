@@ -387,6 +387,67 @@ async def test_sec_filing_verbatim_quote_persists_pass_row(
     assert rows[0].external_ref == "0000320193-24-000123"
 
 
+_EURLEX_BODY = (
+    "Personal data shall be processed lawfully, fairly and in a transparent "
+    "manner in relation to the data subject."
+)
+
+
+@pytest_asyncio.fixture
+async def seeded_eurlex_authority_cache(
+    db_session: AsyncSession, fake_storage: dict[str, bytes]
+) -> None:
+    """Store _EURLEX_BODY under (eurlex, 32016R0679) in the fake cache."""
+    await store_authority_text(
+        db_session, source_type="eurlex", external_ref="32016R0679", text=_EURLEX_BODY
+    )
+
+
+@pytest.mark.asyncio
+async def test_eu_regulation_verbatim_quote_persists_pass_row(
+    db_session: AsyncSession,
+    seeded_message: uuid.UUID,
+    seeded_eurlex_authority_cache: None,
+) -> None:
+    """DE-374: eu_regulation (EUR-Lex) quotes verify, mirroring the sec_filing case."""
+    message_id = seeded_message
+    text = f"The regulation states:\n\n> {_EURLEX_BODY}\n\nThat is the requirement."
+    eurlex_rec = ToolSourceRecord(
+        source_kind="eu_regulation",
+        label="Regulation (EU) 2016/679 (GDPR)",
+        subtitle="Article 5",
+        url="u",
+        external_ref="32016R0679",
+        provider="eurlex",
+        tool="get_authority",
+    )
+    n = await verify_and_persist_authority_citations(
+        db_session,
+        message_id=message_id,
+        assistant_text=text,
+        tool_sources=[eurlex_rec],
+        gateway=None,
+    )
+    assert n == 1
+    rows = (
+        (
+            await db_session.execute(
+                select(MessageAuthorityCitation).where(
+                    MessageAuthorityCitation.message_id == message_id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0].verified is True
+    assert rows[0].verification_method == "exact_match"
+    assert rows[0].content_kind == "eu_regulation"
+    assert rows[0].source_type == "eurlex"
+    assert rows[0].external_ref == "32016R0679"
+
+
 @pytest.mark.asyncio
 async def test_gateway_none_skips_pass_b(
     db_session: AsyncSession,

@@ -20,7 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from app.research.adapters import EdgarAdapter, GovInfoAdapter, SourceAdapter
+from app.research.adapters import EdgarAdapter, EurLexAdapter, GovInfoAdapter, SourceAdapter
 
 # ---------------------------------------------------------------------------
 # SourceSpec — static registry entry
@@ -79,6 +79,20 @@ SOURCE_REGISTRY: dict[str, SourceSpec] = {
         content_kinds=("sec_filing",),
         ops=("search_authority", "get_authority"),
         adapter=EdgarAdapter(),
+    ),
+    "eurlex": SourceSpec(
+        type="eurlex",
+        jurisdiction="eu",
+        coverage="EU legislation & CJEU case law via EUR-Lex/Cellar — retrieve by CELEX id",
+        content_kinds=(
+            "eu_regulation",
+            "eu_directive",
+            "eu_decision",
+            "eu_caselaw",
+            "eu_legislation",
+        ),
+        ops=("get_authority",),
+        adapter=EurLexAdapter(),
     ),
 }
 

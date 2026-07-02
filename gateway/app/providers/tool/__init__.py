@@ -18,12 +18,14 @@ from app.providers.tool.base import (
 from app.providers.tool.courtlistener import CourtListenerToolAdapter
 from app.providers.tool.echo import EchoToolAdapter
 from app.providers.tool.edgar import EdgarToolAdapter
+from app.providers.tool.eurlex import EurLexToolAdapter
 from app.providers.tool.govinfo import GovInfoToolAdapter
 
 __all__ = [
     "CourtListenerToolAdapter",
     "EchoToolAdapter",
     "EdgarToolAdapter",
+    "EurLexToolAdapter",
     "GovInfoToolAdapter",
     "ToolProviderAdapter",
     "ToolProviderAuthError",

@@ -201,3 +201,41 @@ class EdgarAdapter:
             external_ref=external_ref,
             content_kind="sec_filing",
         )
+
+
+class EurLexAdapter:
+    """Normalises EUR-Lex gateway payloads into ``FetchedAuthority`` objects.
+
+    Handles the single EUR-Lex tool operation exposed by the gateway:
+
+    ``get_authority``
+        Payload: ``{external_ref, title, url, text, content_kind?}``
+        Returns a fully-hydrated ``FetchedAuthority`` with the retrieved
+        EU legislation or CJEU case-law text.
+
+    EUR-Lex has no full-text search endpoint wired through the gateway —
+    retrieval is by CELEX id only, so this adapter is a thin carry-through:
+    the gateway adapter already derives ``content_kind`` from the CELEX
+    descriptor (sector digit) and passes it through in the payload; this
+    adapter just reads it, falling back to ``"eu_legislation"`` if absent.
+    """
+
+    def from_response(self, op: str, payload: dict[str, Any]) -> FetchedAuthority:
+        if op == "get_authority":
+            return self._from_get_authority(payload)
+        raise ValueError(f"EurLexAdapter: unsupported op {op!r}")
+
+    def _from_get_authority(self, payload: dict[str, Any]) -> FetchedAuthority:
+        title: str = payload.get("title") or ""
+        url: str = payload.get("url") or ""
+        text: str = payload.get("text") or ""
+        external_ref: str = payload.get("external_ref") or ""
+        content_kind: str = payload.get("content_kind") or "eu_legislation"
+        return FetchedAuthority(
+            citable_text=text,
+            label=title,
+            subtitle=content_kind,
+            url=url,
+            external_ref=external_ref,
+            content_kind=content_kind,
+        )
