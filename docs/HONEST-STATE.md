@@ -65,14 +65,16 @@ The surface in-house counsel touches every day. Every row is wired end-to-end in
 
 ## 2. Inference gateway and providers
 
-The Inference Gateway is the security boundary — the only component holding privileged provider API keys and the only component making outbound calls. As of the legal-research + MCP milestone this extends from inference egress to **tool egress**: case-law (CourtListener) and MCP-connector calls also leave only through the gateway, SSRF-guarded and audited (see [§5.5](#55-legal-research-and-connectors-mcp-gateway-brokered-shipped-after-m4)). The backend (`api/app`) holds exactly one outbound HTTP client, pointed at the gateway. Four provider adapters ship: Anthropic, OpenAI, Azure OpenAI, Ollama (local Tier 1). Google Vertex AI and AWS Bedrock are spec'd in PRD §9 as contributor-friendly work and remain deferred.
+The Inference Gateway is the security boundary — the only component holding privileged provider API keys and the only component making outbound calls. As of the legal-research + MCP milestone this extends from inference egress to **tool egress**: case-law (CourtListener) and MCP-connector calls also leave only through the gateway, SSRF-guarded and audited (see [§5.5](#55-legal-research-and-connectors-mcp-gateway-brokered-shipped-after-m4)). The backend (`api/app`) holds exactly one outbound HTTP client, pointed at the gateway. Five provider adapters ship: Anthropic, OpenAI, Azure OpenAI, AWS Bedrock (Mantle), Ollama (local Tier 1). Google Vertex AI is spec'd in PRD §9 as contributor-friendly work and remains deferred.
 
 | Capability | Status | Verification |
 |---|---|---|
 | Inference gateway with provider routing | M1 | `gateway/app/router.py` |
 | Anthropic / OpenAI / Ollama provider adapters | M1 | `gateway/app/providers/{anthropic,openai,ollama}.py`; Ollama via `docker compose --profile local` |
 | Azure OpenAI provider adapter | M2 | `gateway/app/providers/azure_openai.py` ([DE-267](PRD.md#9-deferred-enhancements-and-identified-future-work), closed in M2) |
-| Google Vertex AI / AWS Bedrock provider adapters | deferred (community-friendly) | Wire-format specs in PRD §9 (DE-034 / DE-035) |
+| AWS Bedrock (Mantle) provider adapter — Chat Completions tier (legacy/compat models) | shipped, live-verified | `gateway/app/providers/bedrock_mantle.py` ([DE-035](PRD.md#9-deferred-enhancements-and-identified-future-work)); `pytest -m provider tests/test_bedrock_mantle_adapter.py` |
+| AWS Bedrock (Mantle) provider adapter — Messages / Responses tiers (current-gen Anthropic/OpenAI models) | partial — implemented and unit-tested against documented schema; live 200-OK verification blocked on AWS account model entitlement, not on missing code | `gateway/app/providers/bedrock_mantle.py` ([DE-035](PRD.md#9-deferred-enhancements-and-identified-future-work)) |
+| Google Vertex AI provider adapter | deferred (community-friendly) | Wire-format spec in PRD §9 (DE-034) |
 | Tier enforcement (Tiers 1–5) + privileged-matter tier floor | M1 | `gateway/app/tier_floor.py` |
 | Anonymization pre/post middleware | M2 | `gateway/app/anonymization/middleware.py` (wired on the request path at `gateway/app/api/inference.py`); see §3.2. Recognizer accuracy on a legal corpus is empirically unmeasured — [DE-282](PRD.md#9-deferred-enhancements-and-identified-future-work). |
 | Routing log (per-inference) | M1 | `gateway/app/routing_log.py` |

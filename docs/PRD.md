@@ -2281,59 +2281,47 @@ Hand-rolled implementation needs: `cryptography` for RSA signing (already a gate
 
 **Estimated effort:** 8–12 hours including JWT auth + tests + live smoke. Existing AnthropicAdapter is the template for request/response translation; the JWT/token-exchange flow is the new work.
 
-#### DE-035 — AWS Bedrock provider adapter (Anthropic on Bedrock)
+#### DE-035 — AWS Bedrock provider adapter (Bedrock Mantle, supersedes InvokeModel/SigV4)
 
 **Priority:** P1 · **Effort:** M
 
-**Context:** PRD §4 calls for Bedrock support as one of the v1 providers. M1 ships the Anthropic, OpenAI, and Ollama adapters; the Bedrock adapter is the Tier-3 path for operators who want Anthropic-quality models routed through their own AWS account under their existing AWS DPA, with no third-party processor introduced.
+**Context:** PRD §4 calls for Bedrock support as one of the v1 providers. M1 ships the Anthropic, OpenAI, and Ollama adapters; Bedrock is the Tier-3 path for operators who want current-generation models routed through their own AWS account under their existing AWS DPA, with no third-party processor introduced.
 
-The architectural slot exists: `ProviderType` already accepts `"bedrock"`, `gateway.yaml.example` documents the `bedrock` provider entry (type, base_url with region template, aws_region, aws_access_key_env, aws_secret_key_env, tier), and `gateway/app/main.py`'s adapter dispatch has a placeholder branch. The work is the adapter implementation itself.
+This entry supersedes the original InvokeModel/SigV4 plan (hand-rolled SigV4 signer + hand-rolled AWS Event Stream binary frame parser, ~300 LOC combined, scoped to Anthropic-on-Bedrock only). Live testing against a real AWS account (2026-07-01) established that AWS's **Bedrock Mantle** endpoint (`bedrock-mantle.{region}.api.aws`) serves the same models over three OpenAI/Anthropic-native wire protocols — Chat Completions, Messages, Responses — authenticated with a single Bearer token (`AWS_BEARER_TOKEN_BEDROCK`, an IAM-backed Bedrock API key) instead of per-request SigV4 signing. This eliminates the signer and the binary frame parser entirely, and additionally carries a hardware-attested Zero Operator Access (ZOA) custody guarantee (no SSH/Session Manager access for AWS operators, NitroTPM-attested immutable compute) — a stronger custody story than a contractual zero-data-retention clause alone. `"bedrock"` (InvokeModel) remains in `ProviderType` as a fallback path for operators who need it; `"bedrock_mantle"` is the new, preferred provider type for new deployments.
 
-**Wire format (Anthropic-on-Bedrock specifically).** Bedrock-Runtime hosts Anthropic models at:
+**Why three tiers, not one adapter.** Live testing showed current-generation models do not uniformly support all three Mantle protocols — each model's [AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards.html) documents its own supported endpoint/API combination, and that support set varies by model:
 
-```
-POST https://bedrock-runtime.{AWS_REGION}.amazonaws.com/model/{MODEL_ID}/invoke
-POST https://bedrock-runtime.{AWS_REGION}.amazonaws.com/model/{MODEL_ID}/invoke-with-response-stream
-```
+- Current-generation Anthropic models (e.g. `anthropic.claude-opus-4-8`): `Messages`, `Converse`, `Invoke` — no `Chat Completions`, no `Responses`.
+- Current-generation OpenAI models (e.g. `openai.gpt-5.5`): `Responses` only — no `Chat Completions`, no `Converse`, no `Invoke`.
+- Legacy/compat models (e.g. `openai.gpt-oss-20b`, older Llama/Claude generations): `Chat Completions` + `Converse` + `Invoke` on `bedrock-runtime`; Mantle (`bedrock-mantle`) support varies per model card and should be checked per model before routing.
 
-Where `MODEL_ID` is the Bedrock-specific identifier (e.g., `anthropic.claude-opus-4-7-v1:0` from `gateway.yaml.example`). The request body is the Anthropic Messages body shape **with the `model` field removed** (Bedrock derives it from the URL) and `anthropic_version: "bedrock-2023-05-31"` added at the body root. The response body for `/invoke` is identical to Anthropic Messages.
+**Wire format.**
 
-**Streaming protocol — critical departure from Anthropic-direct.** Bedrock's `/invoke-with-response-stream` does **not** use SSE. It uses the AWS Event Stream binary protocol — a length-prefixed framing format where each frame has a header block (HTTP/2-style key/value pairs) plus a payload. For Anthropic streams, each frame's payload is a JSON object of shape `{"bytes": "<base64>"}` and the base64-decoded bytes are an Anthropic SSE event payload (the same `message_start` / `content_block_delta` / etc. payload that the direct Anthropic API emits in `data:` lines).
+- **Chat Completions** (`POST /v1/chat/completions`) — identical wire shape to OpenAI's Chat Completions. The adapter reuses `gateway/app/providers/openai.py`'s translation helpers verbatim; no new translation code for this tier.
+- **Messages** (`POST /anthropic/v1/messages`) — Anthropic Messages wire shape. New translation adapted from `gateway/app/providers/anthropic.py`'s existing Messages/SSE parser; not assumed byte-identical to direct api.anthropic.com responses (do not assume "Bedrock's Converse/Messages family is exactly like Anthropic's" without verification).
+- **Responses** (`POST /responses`, under the same `.../v1` base URL as Chat Completions) — OpenAI Responses wire shape (`output[]` typed-item list: message / function_call / reasoning / 20+ other types). Entirely new translation; no existing gateway code speaks this format. Note: some model families (e.g. Google Gemma 4) use a different base path (`.../openai/v1/responses`) per their own model card; the adapter targets the general convention that GPT-5.4/5.5 use, not per-model-family path overrides. Server-side/built-in tool calling is a live risk to ADR 0014's single-egress-boundary guarantee — the request-translation function must only ever forward the gateway's own governed `tools`/`tool_choice`, never default to or pass through AWS/OpenAI built-in tool types.
 
-Frame parser shape (hand-rolled per the AWS Event Stream spec — ~100 LOC):
+**Auth.** `Authorization: Bearer <bedrock-api-key>` on every call, for every tier — not SigV4, not a JWT. The Bedrock API key is IAM-backed (either a pre-signed credential inheriting the caller's IAM principal, or minted via `CreateServiceSpecificCredential` against a backing IAM user); it is not a bypass of IAM authorization, and the account-level model-entitlement gate is separate from and downstream of this transport-auth check.
 
-```
-Frame := TotalLength(4B) HeadersLength(4B) PreludeCRC(4B) Headers(...) Payload(...) FrameCRC(4B)
-Header := NameLen(1B) Name(...) Type(1B) ValueLen(2B) Value(...)
-```
+**Error mapping.** Live testing found three distinct error classes that must map to distinct, actionable codes — never a generic `unauthorized`, since surfacing an entitlement or model-routing problem as an auth failure misleads operators into rotating a working credential:
 
-The relevant header is `:event-type` (`chunk` for data frames, `exception` for errors). On a `chunk` frame, parse the JSON payload, base64-decode the `bytes` field, then translate the inner Anthropic SSE event into an OpenAI-shaped `ChatCompletionChunk` (the existing `gateway/app/providers/anthropic.py:_anthropic_stream_iter` already has this translation; refactor to be reusable).
+1. `403`, Anthropic-native envelope (`{"type": "error", "error": {"type": "permission_error", ...}}`) on the Messages surface — model not entitled on this AWS account.
+2. `401`, OpenAI-native envelope (`{"error": {"type": "permission_denied_error", ...}}`) on the Responses surface — also entitlement, despite the auth-shaped status code.
+3. `400`, OpenAI-native envelope (`{"error": {"code": "validation_error", "type": "invalid_request_error", "message": "The model '<id>' does not support the '<path>' API"}}`) on the Responses surface — wrong API path for this model (the adapter's model-ID routing sent a request to a tier this particular model doesn't support). Operators should verify the [AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards.html) for a given model before assuming it supports a given Mantle protocol.
 
-**Auth.** Bedrock uses AWS SigV4 request signing. The signing flow per signature:
-
-1. Build the canonical request: `<HTTPVerb>\n<URI-encoded-path>\n<canonical-query-string>\n<canonical-headers>\n<signed-header-names>\n<hex(sha256(body))>`.
-2. Build the string-to-sign: `AWS4-HMAC-SHA256\n<ISO8601-UTC>\n<credential-scope>\n<hex(sha256(canonical-request))>`. Credential scope is `<date>/<region>/bedrock/aws4_request`.
-3. Derive signing key: HMAC chain `kSecret -> kDate -> kRegion -> kService -> kSigning`.
-4. Sign: `signature = hex(HMAC-SHA256(kSigning, string-to-sign))`.
-5. Set headers: `Authorization: AWS4-HMAC-SHA256 Credential=<access-key>/<scope>, SignedHeaders=<names>, Signature=<sig>`, plus `x-amz-date`, `x-amz-content-sha256`, and (if STS session) `x-amz-security-token`.
-
-Hand-rolled implementation needs: `hmac` and `hashlib` from stdlib (no new deps). ~200 LOC. Alternative: depend on `boto3` purely for the signer (adds large transitive tree but is canonical). PRD §4 "no LLM-SDK dep" posture argues hand-rolled, especially because the SigV4 implementation is small and well-specified.
-
-**Error mapping.** Bedrock returns `403 AccessDeniedException` (auth error), `404 ResourceNotFoundException` (model not enabled in this region — map to `invalid_model`), `424 ModelStreamErrorException` (mid-stream model failure — surface as `ProviderHTTPError`), `429 ThrottlingException` (rate-limit, fallback-eligible), `5xx` (`ServiceUnavailableException` etc., fallback-eligible). Errors come back in the AWS standard JSON envelope.
-
-**Tier handling.** Bedrock is Tier 3 by default (operator's AWS account, ZDR by AWS terms) per `gateway.yaml.example`. The tier resolver already supports this; no changes needed.
+**Tier handling.** Bedrock Mantle is Tier 3 by default (operator's AWS account; ZDR + ZOA by AWS terms) per `gateway.yaml.example`. The tier resolver already supports this; no changes needed.
 
 **Acceptance criteria:**
-- `BedrockAdapter` in `gateway/app/providers/bedrock.py` implementing `ProviderAdapter` contract: `chat_completion` (unary via `/invoke` + streaming via `/invoke-with-response-stream` with AWS Event Stream frame parsing), `embeddings` raises `ProviderUnsupportedError` (Bedrock has separate embedding models; out of scope for this DE).
-- `health_check` probes `GET /foundation-models` on the Bedrock control-plane (cheapest authenticated GET against the region) — note this is `bedrock.{region}.amazonaws.com`, not `bedrock-runtime`. Health probe signs SigV4 for service `bedrock` not `bedrock-runtime`.
-- Hand-rolled SigV4 signer in `gateway/app/providers/_sigv4.py` (or inlined); covers the path-encoding, query-canonicalization, and STS-session-token cases.
-- AWS Event Stream binary frame parser supporting `chunk` and `exception` event types.
-- Refactor: extract Anthropic SSE-event-to-OpenAI-chunk translation from `gateway/app/providers/anthropic.py` into a shared helper so both `AnthropicAdapter` and `BedrockAdapter` use it.
-- Unit tests with mocked httpx covering: happy path (unary + streaming with crafted event-stream frames), 403/404/429/5xx error mapping, SigV4 signature determinism (canonical-request fixtures match AWS-spec test vectors), no-key-leak invariant.
-- `gateway/app/main.py` lifespan handles `provider.type == "bedrock"` and instantiates `BedrockAdapter`; missing creds at startup is a warning, not fatal.
-- Live smoke verified against a real AWS account with Bedrock Claude access enabled in at least one region.
+- `BedrockMantleAdapter` in `gateway/app/providers/bedrock_mantle.py` implementing `ProviderAdapter`: `chat_completion` dispatches per-request by model-ID prefix to the Chat Completions, Messages, or Responses tier; `embeddings` raises `ProviderUnsupportedError` (Bedrock embedding models out of scope, matching the original DE-035 scope decision).
+- Chat Completions tier: reuses `gateway/app/providers/openai.py` helpers verbatim; unary + streaming.
+- Messages tier: request/response/SSE translation adapted from `gateway/app/providers/anthropic.py`; unary + streaming; tool-call (`tool_use`) mapping.
+- Responses tier: new request/response/SSE translation; unary + streaming; `function_call` → gateway `tool_calls` mapping (pure wire-format translation only — governance/allowlisting stays in `api/app/api/chats.py` per ADR 0015); explicit drop of `reasoning` items; explicit reject/drop (never silent absorb) of out-of-scope `output[]` item types; hard requirement + test that no built-in/server-side tool type is ever added or defaulted into the outbound `tools` field.
+- Shared error-class mapping across the three classes above, each distinguishable in `ProviderHTTPError.details`.
+- Unit tests (`respx`-mocked httpx) covering all three tiers' happy paths and error mapping, following `gateway/app/providers/azure_openai.py`'s test pattern.
+- `gateway/app/main.py`'s `build_adapter` handles `provider.type == "bedrock_mantle"` and instantiates `BedrockMantleAdapter`; missing creds at startup is a warning, not fatal (matches the Anthropic adapter pattern).
+- Live smoke verified against a real AWS account for the Chat Completions tier (legacy/compat model). Messages and Responses tiers ship against documented-schema fixtures when live entitlement for a current-generation model is not yet available at merge time; promote to a live smoke test once entitlement allows a real 200-OK capture.
 
-**Estimated effort:** 12–16 hours including SigV4 signer + event-stream parser + tests + live smoke. The event-stream parser is the most novel piece; the SigV4 signer is small but exacting (AWS provides spec test vectors that the implementation can hit exactly).
+**Estimated effort:** 8–12 hours including three-tier translation + tests + live smoke on the Chat Completions tier. No SigV4 signer, no binary event-stream parser — the Mantle endpoint removes both relative to the original InvokeModel plan; the remaining work is bounded translation, concentrated in the Responses tier (no existing gateway code to adapt from, unlike Messages' relationship to `anthropic.py`).
 
 ### Capability extensions
 
