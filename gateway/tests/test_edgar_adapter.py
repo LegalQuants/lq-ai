@@ -108,6 +108,48 @@ async def test_search_authority_normalizes_hits_and_builds_external_ref(
 
 
 @pytest.mark.unit
+async def test_search_authority_drops_hit_with_non_numeric_cik(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A malformed (non-numeric) CIK must drop that hit, not abort the whole search.
+    body = {
+        "hits": {
+            "total": {"value": 2, "relation": "eq"},
+            "hits": [
+                {
+                    "_id": "0001193125-09-237465:bad.htm",
+                    "_source": {
+                        "ciks": ["NOT-A-NUMBER"],
+                        "display_names": ["BAD CO"],
+                        "form": "10-K",
+                        "adsh": "0001193125-09-237465",
+                        "file_date": "2009-11-18",
+                    },
+                },
+                {
+                    "_id": "0001193125-09-237465:good.htm",
+                    "_source": {
+                        "ciks": ["0001005010"],
+                        "display_names": ["GOOD CORP"],
+                        "form": "10-K",
+                        "adsh": "0001193125-09-237465",
+                        "file_date": "2009-11-18",
+                    },
+                },
+            ],
+        }
+    }
+    adapter = _adapter(monkeypatch)
+    with respx.mock:
+        respx.get("https://efts.sec.gov/LATEST/search-index").mock(
+            return_value=httpx.Response(200, json=body)
+        )
+        out = await adapter.invoke_tool("search_authority", {"query": "revenue"}, request_id="r1")
+    refs = [r["external_ref"] for r in out.payload["results"]]
+    assert refs == ["1005010_000119312509237465_good.htm"]
+
+
+@pytest.mark.unit
 async def test_search_authority_sends_user_agent(monkeypatch: pytest.MonkeyPatch) -> None:
     adapter = _adapter(monkeypatch)
     with respx.mock:

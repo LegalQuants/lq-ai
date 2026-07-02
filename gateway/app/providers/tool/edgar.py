@@ -203,7 +203,12 @@ class EdgarToolAdapter(ToolProviderAdapter):
             cik = ciks[0] if ciks else ""
             external_ref = ""
             if cik and accession and document:
-                external_ref = f"{int(cik)}_{accession.replace('-', '')}_{document}"
+                try:
+                    external_ref = f"{int(cik)}_{accession.replace('-', '')}_{document}"
+                except ValueError:
+                    # Non-numeric CIK (malformed upstream data): drop this hit
+                    # rather than aborting the whole search, per the drop invariant.
+                    external_ref = ""
             if not external_ref:
                 continue
             names = source.get("display_names") or []
