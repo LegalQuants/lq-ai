@@ -36,6 +36,10 @@ MANTLE_BASE = "https://bedrock-mantle.us-east-1.api.aws/v1"
 # Messages lives off the Mantle domain root, NOT /v1-relative to MANTLE_BASE
 # like Chat Completions/Responses (see bedrock_mantle.py::_messages_url).
 MANTLE_MESSAGES_URL = "https://bedrock-mantle.us-east-1.api.aws/anthropic/v1/messages"
+# RESPONSES_MODEL (openai.gpt-5.5) is in RESPONSES_EXCEPTION_MODEL_PREFIXES,
+# so its Responses tier also lives off the domain root, not MANTLE_BASE
+# (see bedrock_mantle.py::_responses_url).
+MANTLE_RESPONSES_EXCEPTION_URL = "https://bedrock-mantle.us-east-1.api.aws/openai/v1/responses"
 CHAT_COMPLETIONS_MODEL = "openai.gpt-oss-20b"
 MESSAGES_MODEL = "anthropic.claude-opus-4-8"
 RESPONSES_MODEL = "openai.gpt-5.5"
@@ -149,12 +153,45 @@ async def test_embeddings_unsupported() -> None:
         ("anthropic.claude-haiku-4-5", "messages"),
         ("openai.gpt-5.5", "responses"),
         ("openai.gpt-5-mini", "responses"),
+        # Live-tested 2026-07-02: 401 access_denied on Chat Completions,
+        # 200 on Responses, on this account.
+        ("google.gemma-4-31b", "responses"),
+        ("xai.grok-4.3", "responses"),
         ("openai.gpt-oss-20b", "chat_completions"),
         ("meta.llama3-70b", "chat_completions"),
     ],
 )
 def test_route_protocol(model: str, expected: str) -> None:
     assert BedrockMantleAdapter._route_protocol(model) == expected
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("model", "expected_url"),
+    [
+        # Exception path — live-tested 2026-07-02 (see
+        # RESPONSES_EXCEPTION_MODEL_PREFIXES docstring).
+        ("google.gemma-4-31b", MANTLE_RESPONSES_EXCEPTION_URL),
+        ("xai.grok-4.3", MANTLE_RESPONSES_EXCEPTION_URL),
+        ("openai.gpt-5.4", MANTLE_RESPONSES_EXCEPTION_URL),
+        ("openai.gpt-5.5", MANTLE_RESPONSES_EXCEPTION_URL),
+        # Exception path is also the DEFAULT for any model not in
+        # RESPONSES_GENERAL_PATH_MODEL_PREFIXES — untested for this specific
+        # model, but the best-evidenced guess per the observed trend.
+        ("openai.gpt-5-mini", MANTLE_RESPONSES_EXCEPTION_URL),
+        # General path — /responses relative to base_url. Only models
+        # confirmed to need it are in RESPONSES_GENERAL_PATH_MODEL_PREFIXES.
+        ("openai.gpt-oss-20b", "/responses"),
+        ("zai.glm-5", "/responses"),
+    ],
+)
+def test_responses_url_per_model(model: str, expected_url: str) -> None:
+    client = httpx.AsyncClient(base_url=MANTLE_BASE)
+    try:
+        adapter = _adapter(client)
+        assert adapter._responses_url(model) == expected_url
+    finally:
+        pass
 
 
 # --- F1: Chat Completions tier --------------------------------------------
@@ -352,7 +389,7 @@ async def test_responses_tier_happy_path_unary() -> None:
         "usage": {"input_tokens": 8, "output_tokens": 3},
     }
     with respx.mock(base_url=MANTLE_BASE) as router:
-        route = router.post("/responses").mock(return_value=httpx.Response(200, json=payload))
+        route = router.post(MANTLE_RESPONSES_EXCEPTION_URL).mock(return_value=httpx.Response(200, json=payload))
         client = httpx.AsyncClient(base_url=MANTLE_BASE)
         try:
             adapter = _adapter(client)
@@ -398,7 +435,7 @@ async def test_responses_tier_function_call_mapping() -> None:
         "usage": {"input_tokens": 6, "output_tokens": 4},
     }
     with respx.mock(base_url=MANTLE_BASE) as router:
-        router.post("/responses").mock(return_value=httpx.Response(200, json=payload))
+        router.post(MANTLE_RESPONSES_EXCEPTION_URL).mock(return_value=httpx.Response(200, json=payload))
         client = httpx.AsyncClient(base_url=MANTLE_BASE)
         try:
             adapter = _adapter(client)
@@ -454,7 +491,7 @@ async def test_responses_tier_drops_reasoning_items() -> None:
         "usage": {"input_tokens": 4, "output_tokens": 2},
     }
     with respx.mock(base_url=MANTLE_BASE) as router:
-        router.post("/responses").mock(return_value=httpx.Response(200, json=payload))
+        router.post(MANTLE_RESPONSES_EXCEPTION_URL).mock(return_value=httpx.Response(200, json=payload))
         client = httpx.AsyncClient(base_url=MANTLE_BASE)
         try:
             adapter = _adapter(client)
@@ -503,7 +540,7 @@ async def test_responses_tier_out_of_scope_item_type_dropped_not_corrupted() -> 
         "usage": {"input_tokens": 4, "output_tokens": 2},
     }
     with respx.mock(base_url=MANTLE_BASE) as router:
-        router.post("/responses").mock(return_value=httpx.Response(200, json=payload))
+        router.post(MANTLE_RESPONSES_EXCEPTION_URL).mock(return_value=httpx.Response(200, json=payload))
         client = httpx.AsyncClient(base_url=MANTLE_BASE)
         try:
             adapter = _adapter(client)
@@ -536,7 +573,7 @@ async def test_responses_tier_streaming_happy_path() -> None:
         '{"input_tokens":3,"output_tokens":1}}}\n\n'
     )
     with respx.mock(base_url=MANTLE_BASE) as router:
-        router.post("/responses").mock(
+        router.post(MANTLE_RESPONSES_EXCEPTION_URL).mock(
             return_value=httpx.Response(
                 200, content=sse_body.encode(), headers={"content-type": "text/event-stream"}
             )
@@ -588,7 +625,7 @@ async def test_responses_tier_no_tools_configured_sends_no_tools_field() -> None
         "usage": {"input_tokens": 2, "output_tokens": 2},
     }
     with respx.mock(base_url=MANTLE_BASE) as router:
-        route = router.post("/responses").mock(return_value=httpx.Response(200, json=payload))
+        route = router.post(MANTLE_RESPONSES_EXCEPTION_URL).mock(return_value=httpx.Response(200, json=payload))
         client = httpx.AsyncClient(base_url=MANTLE_BASE)
         try:
             adapter = _adapter(client)
@@ -627,7 +664,7 @@ async def test_responses_tier_governed_tools_translate_correctly() -> None:
         "usage": {"input_tokens": 2, "output_tokens": 2},
     }
     with respx.mock(base_url=MANTLE_BASE) as router:
-        route = router.post("/responses").mock(return_value=httpx.Response(200, json=payload))
+        route = router.post(MANTLE_RESPONSES_EXCEPTION_URL).mock(return_value=httpx.Response(200, json=payload))
         client = httpx.AsyncClient(base_url=MANTLE_BASE)
         try:
             adapter = _adapter(client)
@@ -712,7 +749,7 @@ async def test_responses_tier_entitlement_401_maps_to_http_error_not_auth_error(
         }
     }
     with respx.mock(base_url=MANTLE_BASE) as router:
-        router.post("/responses").mock(return_value=httpx.Response(401, json=error_body))
+        router.post(MANTLE_RESPONSES_EXCEPTION_URL).mock(return_value=httpx.Response(401, json=error_body))
         client = httpx.AsyncClient(base_url=MANTLE_BASE)
         try:
             adapter = _adapter(client)
@@ -732,13 +769,69 @@ async def test_responses_tier_entitlement_401_maps_to_http_error_not_auth_error(
 
 
 @pytest.mark.unit
-async def test_responses_tier_wrong_api_for_model_400() -> None:
-    """Error class 3: 400, wrong API path for this model (Responses).
+async def test_responses_tier_wrong_path_guess_falls_back_and_succeeds() -> None:
+    """A model not in either known-model list defaults to the exception
+    path; if that guess is wrong (AWS's 400 "does not support" signature),
+    the adapter retries the general path once and succeeds — matching
+    live-observed behavior for a hypothetical unknown model family."""
 
-    A model that ``_route_protocol`` sends to the Responses tier but
-    that doesn't actually support it on Mantle — must be distinguishable
-    from the entitlement classes (1)/(2).
-    """
+    unknown_model = "some-vendor.new-model-1"
+    error_body = {
+        "error": {
+            "code": "validation_error",
+            "type": "invalid_request_error",
+            "message": f"The model '{unknown_model}' does not support the "
+            "'/openai/v1/responses' API",
+        }
+    }
+    payload = {
+        "id": "resp_fallback",
+        "object": "response",
+        "model": unknown_model,
+        "output": [
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "hi from fallback"}],
+            }
+        ],
+        "usage": {"input_tokens": 3, "output_tokens": 2},
+    }
+    exception_url = "https://bedrock-mantle.us-east-1.api.aws/openai/v1/responses"
+    with respx.mock(base_url=MANTLE_BASE) as router:
+        router.post(exception_url).mock(return_value=httpx.Response(400, json=error_body))
+        router.post("/responses").mock(return_value=httpx.Response(200, json=payload))
+        client = httpx.AsyncClient(base_url=MANTLE_BASE)
+        try:
+            adapter = _adapter(client)
+            assert unknown_model not in adapter._responses_url_cache
+            # _route_protocol doesn't know this model family; bypass
+            # routing to exercise the Responses-tier fallback directly,
+            # matching how an operator-configured alias would explicitly
+            # route an unrecognized model to this tier.
+            result = await adapter._responses_chat_completion(
+                ChatCompletionRequest(
+                    model="alias",
+                    messages=[ChatCompletionMessage(role="user", content="hi")],
+                ),
+                model=unknown_model,
+                stream=False,
+            )
+        finally:
+            await client.aclose()
+    assert isinstance(result, ChatCompletionResponse)
+    assert result.choices[0].message.content == "hi from fallback"
+    # Cached so a second call for the same model skips straight to the
+    # path that actually worked.
+    assert adapter._responses_url_cache[unknown_model] == "/responses"
+
+
+@pytest.mark.unit
+async def test_responses_tier_wrong_api_for_model_400_both_paths_reject() -> None:
+    """Error class 3: 400, wrong API path — when BOTH paths reject the
+    model (e.g. a Chat-Completions-only model like zai.glm-5, live-tested
+    2026-07-02), the fallback's own failure must still be distinguishable
+    from the entitlement classes (1)/(2), not swallowed or misreported."""
 
     error_body = {
         "error": {
@@ -749,6 +842,7 @@ async def test_responses_tier_wrong_api_for_model_400() -> None:
         }
     }
     with respx.mock(base_url=MANTLE_BASE) as router:
+        router.post(MANTLE_RESPONSES_EXCEPTION_URL).mock(return_value=httpx.Response(400, json=error_body))
         router.post("/responses").mock(return_value=httpx.Response(400, json=error_body))
         client = httpx.AsyncClient(base_url=MANTLE_BASE)
         try:

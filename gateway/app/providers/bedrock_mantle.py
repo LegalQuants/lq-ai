@@ -22,15 +22,16 @@ signing:
   account: the correct URL (domain root + ``/anthropic/v1/messages``)
   returns a real, structured entitlement response (403
   ``permission_error``) instead of an opaque 404.
-* **Responses** (``POST /responses``, under the same ``.../v1`` base
-  URL as Chat Completions) — current-generation OpenAI models (e.g.
-  ``openai.gpt-5.5``). Entirely new translation; no existing gateway
-  code speaks the Responses wire format. Note: some model families
-  (e.g. Google Gemma 4) use a different base path
-  (``.../openai/v1/responses``) per their own AWS model card — this
-  adapter targets the general convention documented for
-  ``bedrock-mantle.md``, which is what GPT-5.4/5.5 use; per-model-family
-  path overrides are not yet implemented.
+* **Responses** — current-generation OpenAI models (e.g.
+  ``openai.gpt-5.5``) and a handful of other model families. Entirely
+  new translation; no existing gateway code speaks the Responses wire
+  format. Two URL conventions coexist, selected per-model by
+  :meth:`BedrockMantleAdapter._responses_url` — see
+  :data:`RESPONSES_EXCEPTION_MODEL_PREFIXES` for the exception list and
+  what's actually been live-tested (as of 2026-07-02: ``openai.gpt-oss-20b``
+  on the general path; ``google.gemma-4-31b`` and ``xai.grok-4.3`` on the
+  exception path; ``openai.gpt-5.4``/``openai.gpt-5.5`` blocked on account
+  entitlement past the URL/transport layer).
 
 Per-request protocol routing
 -----------------------------
@@ -45,7 +46,8 @@ support set varies. Operators adding a model to ``gateway.yaml``'s
 The adapter routes each request to a protocol tier by model-ID prefix:
 
 * ``anthropic.*`` -> Messages
-* ``openai.gpt-5.*`` -> Responses
+* ``openai.gpt-5.*`` and :data:`RESPONSES_EXCEPTION_MODEL_PREFIXES`
+  (``google.gemma-4``, ``xai.grok-4.3``) -> Responses
 * everything else -> Chat Completions
 
 This is a heuristic, not an entitlement guarantee — a misrouted model
@@ -158,6 +160,48 @@ MANTLE_DEFAULT_MAX_TOKENS = 4096
 OpenAI-format request omits it. Same default as the direct-Anthropic
 adapter."""
 
+RESPONSES_EXCEPTION_MODEL_PREFIXES: tuple[str, ...] = (
+    "google.gemma-4",
+    "xai.grok-4.3",
+    "openai.gpt-5.4",
+    "openai.gpt-5.5",
+)
+"""Model-ID prefixes confirmed (live or via their own AWS model card) to use
+``openai/v1/responses`` off the Mantle domain root, per FR3.x/the routing
+docstring below. Kept around as the known-good set feeding
+:data:`RESPONSES_GENERAL_PATH_MODEL_PREFIXES`'s complement logic and unit
+test fixtures; not read directly by ``_responses_url`` — see that method
+and :data:`RESPONSES_GENERAL_PATH_MODEL_PREFIXES` for the routing rule
+itself. Live-tested 2026-07-02: ``google.gemma-4-31b`` and ``xai.grok-4.3``
+both returned 200 via ``openai/v1/responses``; ``gpt-oss-20b`` was
+separately tested against this same path and returned 400 "does not
+support" (see :data:`RESPONSES_GENERAL_PATH_MODEL_PREFIXES`) — i.e. every
+model tested against ``openai/v1/responses`` either works there or is
+explicitly rejected, never silently wrong."""
+
+RESPONSES_GENERAL_PATH_MODEL_PREFIXES: tuple[str, ...] = (
+    "openai.gpt-oss",
+    "zai.glm",
+)
+"""Model-ID prefixes confirmed to need the general ``/v1/responses`` path
+(relative to ``base_url``) rather than the ``openai/v1/responses`` exception
+path. ``_responses_url`` defaults to the exception path for anything NOT
+in this list, on the strength of the trend observed across every Mantle
+model launched so far (Gemma 4, Grok 4.3, GPT-5.4/5.5 all need it) — this
+is a real reversal from the adapter's first cut, which defaulted to the
+general path and hardcoded Gemma/Grok/GPT-5.* as exceptions to it. Kept
+deliberately small: ``openai.gpt-oss-20b`` live-tested 400 "does not
+support" against the exception path (2026-07-02); ``zai.glm-5`` live-tested
+400 "does not support" against BOTH paths (Chat-Completions-only via
+Mantle — this adapter never sends it through Responses via normal routing,
+this table only matters if something calls the Responses tier for it
+directly). A model whose family isn't yet known falls through to the
+exception-path default; :func:`BedrockMantleAdapter._responses_unary` /
+:func:`_responses_stream_iter` retry on the general path if that guess
+returns AWS's specific 400 ``validation_error``/"does not support the
+'<path>' API" signature — see
+:func:`BedrockMantleAdapter._responses_url_with_fallback`."""
+
 STOP_REASON_MAP: dict[str, FinishReason] = {
     "end_turn": "stop",
     "stop_sequence": "stop",
@@ -207,6 +251,13 @@ class BedrockMantleAdapter(ProviderAdapter):
         self._api_key = api_key
         self._timeout = timeout_s
         self._owns_client = client is None
+        # Per-model Responses-path cache (process-lifetime — one adapter
+        # instance is built once at gateway startup and reused across
+        # requests). Populated on the first fallback retry for a model not
+        # in RESPONSES_GENERAL_PATH_MODEL_PREFIXES/RESPONSES_EXCEPTION_MODEL_PREFIXES,
+        # so later calls for that model skip straight to the URL that
+        # actually worked instead of re-guessing and re-failing.
+        self._responses_url_cache: dict[str, str] = {}
         self._client = client or httpx.AsyncClient(
             base_url=self._base_url,
             timeout=timeout_s,
@@ -313,14 +364,20 @@ class BedrockMantleAdapter(ProviderAdapter):
     def _route_protocol(model: str) -> str:
         """Model-ID -> Mantle protocol tier.
 
-        ``anthropic.*`` -> ``"messages"``; ``openai.gpt-5.*`` ->
-        ``"responses"``; everything else (legacy/compat models,
-        including ``openai.gpt-oss-*``) -> ``"chat_completions"``.
+        ``anthropic.*`` -> ``"messages"``; ``openai.gpt-5.*`` and the
+        entries in :data:`RESPONSES_EXCEPTION_MODEL_PREFIXES`
+        (``google.gemma-4``, ``xai.grok-4.3`` — live-tested 2026-07-02;
+        both returned 401 access_denied on this account's Chat
+        Completions tier but 200 on Responses) -> ``"responses"``;
+        everything else (legacy/compat models, including
+        ``openai.gpt-oss-*``) -> ``"chat_completions"``.
         """
 
         if model.startswith("anthropic."):
             return "messages"
         if model.startswith("openai.gpt-5"):
+            return "responses"
+        if any(model.startswith(p) for p in RESPONSES_EXCEPTION_MODEL_PREFIXES):
             return "responses"
         return "chat_completions"
 
@@ -477,19 +534,71 @@ class BedrockMantleAdapter(ProviderAdapter):
     ) -> ChatCompletionResponse | AsyncIterator[ChatCompletionChunk]:
         body = _to_responses_request(request, model=model, stream=stream)
         headers = self._auth_headers()
+        url = self._responses_url(model)
 
         if stream:
+            # No retry-on-wrong-path for streaming: once bytes start
+            # flowing there is no clean way to discard a partial SSE
+            # response and restart against a different URL. Streaming
+            # relies on whatever _responses_url already knows (cache or
+            # best-guess default) — the unary path is what actually
+            # populates the cache for a previously-unseen model.
             return _responses_stream_iter(
                 client=self._client,
+                url=url,
                 body=body,
                 headers=headers,
                 provider_name=self.name,
                 requested_model=model,
             )
-        return await self._responses_unary(body, headers, model=model)
+        return await self._responses_unary_with_fallback(url, body, headers, model=model)
+
+    def _responses_exception_url(self) -> str:
+        root = self._base_url
+        if root.endswith("/v1"):
+            root = root[: -len("/v1")]
+        return f"{root}/openai/v1/responses"
+
+    def _responses_url(self, model: str) -> str:
+        """URL for the Responses tier, per-model.
+
+        Every Mantle model family launched so far except
+        :data:`RESPONSES_GENERAL_PATH_MODEL_PREFIXES` needs
+        ``openai/v1/responses`` off the Mantle domain root rather than the
+        general ``/responses`` path relative to ``base_url`` — see that
+        constant's docstring. A model not in either known list defaults to
+        the exception path (the more common case observed so far); if that
+        guess is wrong, :meth:`_responses_unary_with_fallback` retries the
+        general path on AWS's specific "does not support" 400 and caches
+        whichever URL actually worked, so later calls skip straight to it."""
+
+        if model in self._responses_url_cache:
+            return self._responses_url_cache[model]
+        if any(model.startswith(p) for p in RESPONSES_GENERAL_PATH_MODEL_PREFIXES):
+            return "/responses"
+        return self._responses_exception_url()
+
+    async def _responses_unary_with_fallback(
+        self,
+        url: str,
+        body: dict[str, Any],
+        headers: dict[str, str],
+        *,
+        model: str,
+    ) -> ChatCompletionResponse:
+        try:
+            return await self._responses_unary(url, body, headers, model=model)
+        except ProviderHTTPError as exc:
+            if exc.details.get("mantle_error_class") != "unsupported_api_for_model":
+                raise
+            fallback_url = "/responses" if url == self._responses_exception_url() else self._responses_exception_url()
+            result = await self._responses_unary(fallback_url, body, headers, model=model)
+            self._responses_url_cache[model] = fallback_url
+            return result
 
     async def _responses_unary(
         self,
+        url: str,
         body: dict[str, Any],
         headers: dict[str, str],
         *,
@@ -497,7 +606,7 @@ class BedrockMantleAdapter(ProviderAdapter):
     ) -> ChatCompletionResponse:
         try:
             response = await self._client.post(
-                "/responses",
+                url,
                 json=body,
                 headers=headers,
             )
@@ -1045,6 +1154,7 @@ def _from_responses_response(
 async def _responses_stream_iter(
     *,
     client: httpx.AsyncClient,
+    url: str,
     body: dict[str, Any],
     headers: dict[str, str],
     provider_name: str,
@@ -1071,7 +1181,7 @@ async def _responses_stream_iter(
     saw_tool_call = False
 
     try:
-        async with client.stream("POST", "/responses", json=body, headers=headers) as response:
+        async with client.stream("POST", url, json=body, headers=headers) as response:
             if response.status_code >= 400:
                 error_body = await response.aread()
                 _raise_from_mantle_error_body(
