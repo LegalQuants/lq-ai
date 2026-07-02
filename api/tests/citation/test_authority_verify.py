@@ -326,6 +326,67 @@ async def test_paraphrase_budget_cap(
     assert gateway.call_count == 0
 
 
+_EDGAR_BODY = (
+    "Item 1A. Risk Factors. Our business is subject to numerous risks and "
+    "uncertainties, including those highlighted in this Annual Report on Form 10-K."
+)
+
+
+@pytest_asyncio.fixture
+async def seeded_edgar_authority_cache(
+    db_session: AsyncSession, fake_storage: dict[str, bytes]
+) -> None:
+    """Store _EDGAR_BODY under (edgar, 0000320193-24-000123) in the fake cache."""
+    await store_authority_text(
+        db_session, source_type="edgar", external_ref="0000320193-24-000123", text=_EDGAR_BODY
+    )
+
+
+@pytest.mark.asyncio
+async def test_sec_filing_verbatim_quote_persists_pass_row(
+    db_session: AsyncSession,
+    seeded_message: uuid.UUID,
+    seeded_edgar_authority_cache: None,
+) -> None:
+    """DE-371: sec_filing (EDGAR) quotes verify, mirroring the statute case."""
+    message_id = seeded_message
+    text = f"The filing states:\n\n> {_EDGAR_BODY}\n\nThat is the disclosure."
+    edgar_rec = ToolSourceRecord(
+        source_kind="sec_filing",
+        label="Apple Inc. 10-K",
+        subtitle="Risk Factors",
+        url="u",
+        external_ref="0000320193-24-000123",
+        provider="edgar",
+        tool="get_authority",
+    )
+    n = await verify_and_persist_authority_citations(
+        db_session,
+        message_id=message_id,
+        assistant_text=text,
+        tool_sources=[edgar_rec],
+        gateway=None,
+    )
+    assert n == 1
+    rows = (
+        (
+            await db_session.execute(
+                select(MessageAuthorityCitation).where(
+                    MessageAuthorityCitation.message_id == message_id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0].verified is True
+    assert rows[0].verification_method == "exact_match"
+    assert rows[0].content_kind == "sec_filing"
+    assert rows[0].source_type == "edgar"
+    assert rows[0].external_ref == "0000320193-24-000123"
+
+
 @pytest.mark.asyncio
 async def test_gateway_none_skips_pass_b(
     db_session: AsyncSession,

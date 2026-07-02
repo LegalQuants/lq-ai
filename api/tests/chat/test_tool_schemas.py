@@ -174,3 +174,67 @@ async def test_assemble_allowlist_authority_failure_does_not_kill_other_ops(db, 
         # Should not raise, and should still return a (possibly empty) allowlist.
         allowlist = await assemble_allowlist(db, gateway=_FakeGateway(), request_id="r1")
     assert not any(s.kind == "authority" for s in allowlist.specs.values())
+
+
+# ---------------------------------------------------------------------------
+# Registry-driven authority wiring (WS-E PR2a Task 3)
+# ---------------------------------------------------------------------------
+
+from app.chat.tool_schemas import build_authority_tool_schemas  # noqa: E402
+
+
+def test_authority_source_enum_lists_enabled_sources():
+    # both govinfo + edgar enabled → source enum has both
+    schemas = build_authority_tool_schemas(enabled_sources=["govinfo", "edgar"])
+    search = next(s for s in schemas if s["name"] == "search_authority")
+    source_prop = search["parameters"]["properties"]["source"]
+    assert set(source_prop["enum"]) == {"govinfo", "edgar"}
+
+
+def test_authority_schemas_empty_when_no_sources():
+    assert build_authority_tool_schemas(enabled_sources=[]) == []
+
+
+def test_govinfo_only_still_works():
+    schemas = build_authority_tool_schemas(enabled_sources=["govinfo"])
+    search = next(s for s in schemas if s["name"] == "search_authority")
+    assert search["parameters"]["properties"]["source"]["enum"] == ["govinfo"]
+
+
+def test_authority_schemas_require_source_and_op_specific_fields():
+    schemas = build_authority_tool_schemas(enabled_sources=["govinfo", "edgar"])
+    search = next(s for s in schemas if s["name"] == "search_authority")
+    get_ = next(s for s in schemas if s["name"] == "get_authority")
+    assert search["parameters"]["required"] == ["source", "query"]
+    # get_authority has no single universal required id field (govinfo:
+    # package_id, edgar: external_ref) — only `source` is universally required.
+    assert get_["parameters"]["required"] == ["source"]
+    assert "package_id" in get_["parameters"]["properties"]
+    assert "external_ref" in get_["parameters"]["properties"]
+
+
+class _FakeEdgarSource:
+    type = "edgar"
+    enabled = True
+
+
+@pytest.mark.asyncio
+async def test_assemble_allowlist_adds_both_sources_when_both_available(db, monkeypatch):
+    async def _fake_resolve(gateway):
+        return [_FakeGovInfoSource(), _FakeEdgarSource()]
+
+    monkeypatch.setattr("app.chat.tool_schemas.resolve_available_sources", _fake_resolve)
+    with (
+        patch(
+            "app.chat.tool_schemas.get_capabilities",
+            new=AsyncMock(return_value={"enabled": False, "providers": []}),
+        ),
+        patch("app.chat.tool_schemas.list_servers", new=AsyncMock(return_value=[])),
+    ):
+        allowlist = await assemble_allowlist(db, gateway=_FakeGateway(), request_id="r1")
+    authority_specs = [s for s in allowlist.specs.values() if s.kind == "authority"]
+    # ONE search_authority + ONE get_authority spec — not one pair per source.
+    assert {s.tool for s in authority_specs} == {"search_authority", "get_authority"}
+    assert len(authority_specs) == 2
+    search_spec = allowlist.resolve("search_authority")
+    assert set(search_spec.parameters["properties"]["source"]["enum"]) == {"govinfo", "edgar"}

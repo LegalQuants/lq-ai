@@ -230,6 +230,19 @@ providers:
 #     # for future cost-tracking dashboards; omit or set to 0 for free sources:
 #     # cost_per_call: 0.0
 #     # cost_per_unit: 0.0
+#
+#   - name: edgar-prod
+#     type: edgar                  # shipped in WS-E PR2a; uncomment to enable
+#     base_url: https://efts.sec.gov          # full-text search host; get_authority reaches www.sec.gov
+#     user_agent: "YourOrg legal-ops@yourorg.example"   # SEC fair-access policy — REQUIRED, no API key
+#     egress_tier: 4               # public filing data (ADR 0014 D4)
+#     allowlist:
+#       hosts: [efts.sec.gov, www.sec.gov]
+#     rate_limit:
+#       requests_per_minute: 300   # SEC allows ~10 req/s
+#     anonymize_outbound: false    # public filings; skip_anonymization=True on results
+#     # (no api_key_env — EDGAR needs only a User-Agent)
+#     # (no cost_per_call — free source; R4 stays a no-op)
 
 # ============================================================
 # MODEL ALIASES — friendly names → specific provider/model

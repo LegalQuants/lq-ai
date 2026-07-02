@@ -77,6 +77,7 @@ from app.providers import (
 from app.providers.tool.base import ToolProviderAdapter
 from app.providers.tool.courtlistener import CourtListenerToolAdapter
 from app.providers.tool.echo import EchoToolAdapter
+from app.providers.tool.edgar import EdgarToolAdapter
 from app.providers.tool.govinfo import GovInfoToolAdapter
 from app.router import Router
 from app.routing_log import NullRoutingLogWriter, RoutingLogWriter, SQLRoutingLogWriter
@@ -202,6 +203,10 @@ def build_tool_adapter(provider: ToolProviderConfig) -> ToolProviderAdapter | No
         govinfo_adapter = GovInfoToolAdapter.from_config(provider)
         govinfo_adapter.validate_base_url()
         return govinfo_adapter
+    if provider.type == "edgar":
+        edgar_adapter = EdgarToolAdapter.from_config(provider)
+        edgar_adapter.validate_base_url()
+        return edgar_adapter
     return None
 
 

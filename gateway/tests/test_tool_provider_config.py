@@ -58,6 +58,27 @@ def test_tool_provider_requires_nonempty_allowlist() -> None:
 
 
 @pytest.mark.unit
+def test_tool_provider_config_parses_edgar_user_agent() -> None:
+    cfg = GatewayConfig.model_validate(
+        {
+            "tool_providers": [
+                {
+                    "name": "edgar-prod",
+                    "type": "edgar",
+                    "base_url": "https://efts.sec.gov",
+                    "egress_tier": 4,
+                    "allowlist": {"hosts": ["efts.sec.gov", "www.sec.gov"]},
+                    "user_agent": "LQ.AI test ops@lq.ai",
+                }
+            ]
+        }
+    )
+    tp = cfg.tool_providers[0]
+    assert tp.user_agent == "LQ.AI test ops@lq.ai"
+    assert tp.api_key_env is None
+
+
+@pytest.mark.unit
 def test_tool_provider_by_name_accessor() -> None:
     cfg = GatewayConfig.model_validate(
         {

@@ -262,11 +262,11 @@ async def verify_and_persist_authority_citations(
     DE-370.  Best-effort: per-ref/per-passage exceptions are logged and skipped.
     """
     # Only get_authority-sourced refs carry a cached body; filter to authority
-    # content kinds with an external_ref.  NOTE: this set must grow as WS-E PR2
-    # adds sources with new content kinds (e.g. SEC filings, EUR-Lex) — a
-    # content kind outside this set is silently not verified (a conservative
-    # drop, never a false claim, but it means no ledger row).  See DE-371/PR2.
-    _VERIFIABLE_CONTENT_KINDS = {"statute", "regulation"}
+    # content kinds with an external_ref.  EDGAR's "sec_filing" is covered as
+    # of WS-E PR2a (DE-371); EUR-Lex content kinds are still pending PR2b —
+    # a content kind outside this set is silently not verified (a
+    # conservative drop, never a false claim, but it means no ledger row).
+    _VERIFIABLE_CONTENT_KINDS = {"statute", "regulation", "sec_filing"}
     refs = [
         r for r in tool_sources if r.source_kind in _VERIFIABLE_CONTENT_KINDS and r.external_ref
     ]
