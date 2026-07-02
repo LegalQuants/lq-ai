@@ -123,3 +123,147 @@ below for Tasks 3–5 to resolve (write the doc or drop the link) rather than fi
   prose to insert alongside these fixes.
 - Two rows (24, 25) are pre-existing dangling links unrelated to milestone staleness,
   surfaced by the link-check helper exactly as the brief anticipated.
+
+---
+
+## Direction B — code→docs (shipped-but-undocumented)
+
+> Direction B works the opposite direction from Direction A: instead of checking existing
+> doc claims against code, it enumerates what the code (and the ADRs that govern it)
+> actually ships, and records the anchor artifact, an honest caveat, and where each
+> capability belongs in the docs. This is the fiduciary-grade milestone (ADRs 0018–0021,
+> all `Status: Accepted`, all merged to `main` as of migration `0064`) that Direction A's
+> row 19/31/37/38 findings identified as entirely absent from README/HONEST-STATE/ROADMAP.
+> Read in full for this pass: `docs/adr/0018-citation-ledger-and-fiduciary-grade-output.md`,
+> `docs/adr/0019-transparent-validity-treatment-layer.md`,
+> `docs/adr/0020-governed-agentic-legal-matter-sessions.md`,
+> `docs/adr/0021-content-source-registry-and-free-source-expansion.md`,
+> `api/app/research/registry.py`, `api/app/citation/ledger.py`, `api/app/citation/gate.py`,
+> `api/app/citation/treatment.py`, `api/app/citation/authority.py`,
+> `api/app/tools/governance.py`, and the open-DE entries in `docs/PRD.md` §9.
+>
+> Every anchor below was independently verified to exist (`test -e`, or a direct `grep`
+> for the named symbol) before being cited — see the verification notes under each row
+> group and in the task report. No capability row is asserted from the ADR text alone
+> without a matching code artifact.
+
+| capability | anchor | honest caveat | add-to |
+|---|---|---|---|
+| Citation Ledger | ADR 0018; `api/app/citation/ledger.py` | references content by id/offset only — no raw payloads in the audit layer (P3, ADR 0016) | README narrative + status; HONEST-STATE |
+| Fiduciary-grade gate | ADR 0018; `api/app/citation/gate.py` | chat vs autonomous parity gaps: DE-370, DE-371 still open | README narrative + status; HONEST-STATE |
+| Governed agentic matter sessions | ADR 0020; PRs #239/#240 | on the autonomous layer under R5→R6→R4 brakes; no dedicated matter-intake UI yet | README status/roadmap; HONEST-STATE (UI gap) |
+| Content-source registry + free authority sources | ADR 0021; `SOURCE_REGISTRY` | behind operator config; EUR-Lex get-by-CELEX only (search=DE-374; treaty=DE-375) | README narrative + status; ROADMAP |
+| Validity / treatment layer | ADR 0019; `api/app/citation/treatment.py` | "derived, not editorial," not an authoritative citator; per-case judge budget | README narrative + status; HONEST-STATE |
+| Governed egress cost model | DE-344; `api/app/tools/governance.py` | configured per-call rate, not response-parsed; fails-open on gateway-config failure | README status |
+
+### Verification notes (Step 1 detail)
+
+- **Citation Ledger.** ADR 0018 is `Status: Accepted (2026-06-24)`. `api/app/citation/ledger.py`
+  exists and implements `assemble_ledger_entries`/`resolve_ledger_entries`; ADR 0018 D5 pins
+  the no-raw-payload guarantee ("ids, offsets, status labels, confidence numbers, provenance
+  metadata, and timestamps — never raw passages or tool payloads") and states the ledger is
+  added to the `test_transparency_invariants.py` no-raw-payload tripwire — matches the row's
+  caveat exactly.
+- **Fiduciary-grade gate.** `api/app/citation/gate.py` exists; `compute_and_record_gate` buckets
+  ledger entries into `PASS_STATUSES`/`FAIL_STATUSES` and upserts one
+  `WorkProductFiduciaryGate` verdict per assistant message (ADR 0018 D3). `docs/PRD.md`
+  confirms DE-370 ("Attributed-authority FAIL tier (chat)") and DE-371 ("Autonomous-path
+  authority SUPPORTED tier") are both still open (listed under the un-shipped
+  deferred-enhancements section, no SHIPPED marker on either DE header) — the chat/autonomous
+  parity gap is real and current.
+- **Governed agentic matter sessions.** ADR 0020 is `Status: Accepted (2026-06-28)`; D1–D2 pin
+  the governed `plan → act → observe → replan` loop confined to the `analysis` phase under the
+  existing R5→R6→R4 brakes (`guarded_tool_call`, unchanged). `web/src/routes/lq-ai/autonomous/`
+  ships session list/detail, schedules, watches, and a `configure/` page, but no
+  plain-language "describe your matter" intake flow was found (`grep -rn "matter.intake\|
+  MatterIntake" web/src` → no matches) — ADR 0020 D3's plain-language intake is a backend
+  seam (`query` on session state feeding the `intake` phase), not yet a dedicated UI
+  affordance. The caveat is accurate.
+- **Content-source registry + free authority sources.** `api/app/research/registry.py`
+  `SOURCE_REGISTRY` has four keys: `courtlistener` (pre-existing), `govinfo`, `edgar`, `eurlex`
+  (WS-E PR1a/PR2a/PR2b). The `eurlex` entry's `ops=("get_authority",)` only — no
+  `search_authority` — confirming get-by-CELEX-only; `docs/PRD.md` DE-374 ("EUR-Lex full-text
+  search via Cellar SPARQL") and DE-375 ("EUR-Lex treaty/corrigendum CELEX support") are both
+  open, matching the caveat verbatim. Every source in the registry additionally requires an
+  operator-configured `tool_providers` entry in `gateway.yaml` (ADR 0021 D1/D5) — "behind
+  operator config" is accurate, not merely a formality (a registry entry with no matching
+  gateway provider is reported unavailable, never fabricated).
+- **Validity / treatment layer.** ADR 0019 is `Status: Accepted (2026-06-26)`; D1 states the
+  binding posture verbatim: "It never emits a definitive 'good law / bad law' verdict. Every
+  derived signal is labeled 'derived, not editorial.'" `api/app/citation/treatment.py` exists
+  and implements `derive_treatment_for_message`/`_run_judge_pass`, reading citing opinions via
+  `research_service.get_citing_opinions` (itself confirmed live in
+  `api/app/research/service.py` and `gateway/app/providers/tool/courtlistener.py`). ADR 0019 D4
+  ("WS-G PR2 ... a hard cap N, bounded by a per-case cost budget") confirms the per-case judge
+  budget caveat.
+- **Governed egress cost model.** `api/app/tools/governance.py` `_load_provider_tier_cache`
+  reads `cost_per_call` off each `tool_providers` gateway entry into `_provider_cost_cache`
+  (a configured rate, never parsed from a provider's response) and wraps the entire fetch in
+  `try/except Exception` — on failure it logs a warning and leaves the cost/tier caches empty,
+  so cost lookups silently fall back to their defaults (`Decimal("0")` per the module's own
+  comment) rather than blocking egress. That is "fails-open on gateway-config failure" exactly.
+
+### Additional capabilities considered and not added as separate rows
+
+Two capabilities surfaced during Step 1 reading that overlap the six above closely enough that
+a separate row would duplicate rather than add information; noted here so Tasks 3–5 know they
+were considered:
+
+- **One-click citation trace read model** (ADR 0018 D4) — `GET /api/v1/chats/{chat_id}/ledger`
+  exists (`api/app/api/chats.py:1796`; also `GET /api/v1/autonomous/sessions/{session_id}/ledger`,
+  `api/app/api/autonomous.py:660`) and is documented in `docs/api/backend-openapi.yaml`. This is
+  folded into the **Citation Ledger** row above rather than broken out, since it is the ledger's
+  read surface, not a distinct capability.
+- **`get_citing_opinions` citing-graph egress operation** (ADR 0019 D3) — confirmed live in
+  `gateway/app/providers/tool/courtlistener.py` and wired through
+  `api/app/research/service.py`. Folded into the **Validity / treatment layer** row above, since
+  it is the data source the treatment judge reads, not a user-facing capability of its own.
+
+No further shipped-but-undocumented capabilities beyond the six (plus the two folded items
+above) were found in this pass.
+
+### Reconciliation notes
+
+- **Row 19** (README "Project status" prose frames the legal-research+MCP milestone as the
+  current shipped state) is resolved by the **Citation Ledger**, **Fiduciary-grade gate**,
+  **Governed agentic matter sessions**, **Content-source registry**, and **Validity/treatment
+  layer** rows above — Task 3's README edit should add a milestone paragraph naming all four
+  ADRs (0018–0021) and move the "current shipped" pointer forward, per row 19's resolution.
+- **Row 21** (README roadmap table has no row for what shipped after the MCP milestone) is
+  resolved by the same five rows — Task 3 adds one "Fiduciary-grade agentic legal work" table
+  row citing ADR 0018–0021, per row 21's resolution text.
+- **Row 31** (HONEST-STATE has no section for the fiduciary-grade milestone at all) is resolved
+  by all six Direction-B rows together — Task 4's new "§5.6 Fiduciary-grade agentic legal work"
+  section should cover each of the six capabilities, carrying forward each row's honest caveat
+  verbatim (the DE-370/DE-371 gate parity gap, the no-matter-intake-UI gap, the EUR-Lex
+  get-by-CELEX-only scope, the "derived, not editorial" treatment posture, and the fails-open
+  cost model) rather than a bare "shipped" claim.
+- **Row 28/29** (HONEST-STATE header/§12 pin migration head `0055` and the MCP milestone as the
+  last reconciliation pass) are resolved procedurally, not by a specific capability row — Task
+  4 updates the header to migration `0064` and adds a third reconciliation pass referencing this
+  worksheet.
+- **Row 37** (ROADMAP §1.1 describes the plan→act→observe→replan loop as "in progress") is
+  resolved by the **Governed agentic matter sessions** row — that loop is exactly ADR 0020's
+  D1, shipped, not in progress; Task 5 should strike or mark it done.
+- **Row 38** (ROADMAP §1 header frames the active milestone as "M4 close-out" with no mention of
+  the fiduciary-grade work) is resolved by all six rows collectively, with the **Content-source
+  registry** row's DE-374/DE-375 caveats and the **Fiduciary-grade gate** row's DE-370/DE-371
+  caveats supplying the "actual remaining open items" row 38 asks for — Task 5's rewrite should
+  list DE-370, DE-371, DE-374, DE-375, DE-376 explicitly (all confirmed open, see Step 1 grep
+  below) as the milestone's genuine punch list, not a generic "M4 close-out" placeholder.
+- **No contradictions found.** Every Direction-A row that deferred to "Direction-B additions"
+  is fully covered by at least one Direction-B row above; no Direction-B row above conflicts
+  with a Direction-A "Accurate" verdict (the six new capabilities are additions to the docs,
+  not corrections of existing accurate claims).
+- **Open-DE confirmation (re-verified for this section):** `grep -n "DE-37[0-6]" docs/PRD.md`
+  returns DE-370 through DE-376 with no SHIPPED marker on any of DE-370, DE-371, DE-374,
+  DE-375, or DE-376 (DE-372 and DE-373 are also open but were not part of the six-capability
+  caveats above; DE-344 itself is SHIPPED, which is why it anchors the **Governed egress cost
+  model** row rather than appearing as an open caveat).
+
+### Link-check helper (Direction-B pass)
+
+```
+$ python3 docs/audits/check_doc_links.py docs/audits/2026-07-01-claims-vs-reality.md
+OK: 0 dangling link(s)
+```
