@@ -9199,13 +9199,19 @@ paths:
         functions the chat ledger endpoint calls.
 
 
-        Owner-gated via ``_load_owned_session``; another user''s ``session_id``
+        Owner-gated via ``_load_session_for_reader``; a non-privileged non-owner''s
 
-        or a missing session returns 404 (not 403) to avoid existence
+        ``session_id`` or a missing session returns 404 (not 403) to avoid
 
-        disclosure.  Returns 404 if the session exists but ``build_session_ledger``
+        existence disclosure. A privileged reader (admin/auditor) may read
 
-        has not been called yet (no hidden chat manufactured).'
+        another user''s session ledger; that cross-user read writes one
+
+        ``auditor_audit`` row (``session_ledger_viewed``). Returns 404 if the
+
+        session exists but ``build_session_ledger`` has not been called yet
+
+        (no hidden chat manufactured).'
       operationId: get_session_ledger_api_v1_autonomous_sessions__session_id__ledger_get
       parameters:
       - in: path
@@ -9959,11 +9965,11 @@ paths:
     get:
       description: Wave D.1 T5 (spec §7.6). Merges chronological events from ``messages``
         (+ denorm ``applied_skills``), ``inference_routing_log``, and ``audit_log``
-        into one timestamp-ordered stream. Owner-of-chat or admin only. Filter with
-        ``?event_kinds=message,audit`` etc. Inference/error event ``detail`` includes
-        ``anonymization_applied`` (bool — the source of truth for the UI's anonymization
-        indicator) and ``message_id`` (the assistant message the indicator pins to;
-        may be null).
+        into one timestamp-ordered stream. Owner-of-chat, admin, or the read-only
+        cross-user ``auditor`` role. Filter with ``?event_kinds=message,audit`` etc.
+        Inference/error event ``detail`` includes ``anonymization_applied`` (bool
+        — the source of truth for the UI's anonymization indicator) and ``message_id``
+        (the assistant message the indicator pins to; may be null).
       operationId: get_chat_receipts_api_v1_chats__chat_id__receipts_get
       parameters:
       - in: path
@@ -10014,7 +10020,16 @@ paths:
 
         ``Content-Type: application/jsonl`` + ``Content-Disposition: attachment;
 
-        filename="chat-{id}-receipts.jsonl"`` so browsers trigger a download.'
+        filename="chat-{id}-receipts.jsonl"`` so browsers trigger a download.
+
+
+        Authorization mirrors :func:`get_chat_receipts` (owner, admin, or
+
+        ``auditor``); a privileged cross-user export writes its own
+
+        ``receipts_exported`` audit row (distinct from the read endpoint''s
+
+        ``receipts_viewed``) rather than delegating to the read handler.'
       operationId: export_chat_receipts_api_v1_chats__chat_id__receipts_export_jsonl_get
       parameters:
       - in: path
