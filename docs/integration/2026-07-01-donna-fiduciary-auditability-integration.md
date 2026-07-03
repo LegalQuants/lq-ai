@@ -12,13 +12,13 @@
 |---|---|
 | **🟢 SHIPPED** | On `main` today (pin ≈ `36b5126`). Buildable now. |
 | **🟡 IN REVIEW (#251)** | On branch `feat/wse-pr1c-chat-authority` (HEAD `a8e9f56`), security-gated PR **#251**, not yet merged. Lands at the squash SHA once merged. |
-| **🟡 branch `feat/cross-user-auditor-role`** | A second, unrelated in-progress branch (§2.6a only — the cross-user `auditor` role). Not yet a numbered PR as of this note. Lands at its own squash SHA once merged. |
+| **🟢 MERGED (#266)** | The cross-user `auditor` role (§2.6a) — merged to `main` at squash SHA `e40b98c8`. Buildable now; bump your pin. |
 
 **The one thing gated behind #251** is *chat-turn* authority (statute/regulation) citation verification.
 Everything else in this doc — the ledger, the fiduciary gate, provenance, caselaw citations,
 the treatment layer, the authority substrate for **autonomous** sessions, and `/research/sources` —
-is 🟢 shipped on `main`, **except §2.6a** (the cross-user `auditor` role), which is on its own
-in-progress branch per the second 🟡 row above.
+is 🟢 shipped on `main` — **including §2.6a** (the cross-user `auditor` role), merged as PR #266 at
+`e40b98c8`.
 
 ## The two sections that actually de-risk your build
 
@@ -321,7 +321,7 @@ cost surface**: top-level `cost_total_usd`, `max_cost_usd`, `cost_cap_reached`, 
   > endpoints **do** have a privileged bypass. Read §2.6a for the current contract; the paragraphs
   > above are left in place only as the "before" reference the PR diff makes sense against.
 
-## 2.6a Cross-user auditor role — delivered contract (🟡 branch `feat/cross-user-auditor-role`, not yet merged)
+## 2.6a Cross-user auditor role — delivered contract (🟢 MERGED to `main` at `e40b98c8`, PR #266)
 
 This is new since the rest of §2 was written, and it changes two of the "no admin bypass" / "no
 auditor role" claims above. Build against this; it will supersede §2.6 once merged.
@@ -339,6 +339,8 @@ it exactly as they reject `viewer` today.
 `is_privileged_reader(user) = user.is_admin or user.role == "auditor"`, now gates cross-user read on:
 - `GET /chats/{chat_id}/ledger`
 - `GET /chats/{chat_id}/messages/{message_id}/sources`
+- `GET /chats/{chat_id}/messages/{message_id}/citations` (the per-message citations view, incl. the
+  quoted `source_text` + verification verdicts)
 - `GET /autonomous/sessions/{session_id}/ledger`
 - `GET /chats/{chat_id}/receipts` and `GET /chats/{chat_id}/receipts/export.jsonl` (these already had
   an admin bypass; `auditor` now joins it — no behavior change for admins)
@@ -351,18 +353,20 @@ separate endpoint is needed to audit gate verdicts cross-user.
 | Caller | Resource | Result |
 |---|---|---|
 | Owner | any of the above | `200`, no audit row written |
-| Privileged (`admin` or `auditor`), non-owner | ledger / sources / session-ledger | `200` **+ one `audit_log` row** |
+| Privileged (`admin` or `auditor`), non-owner | ledger / sources / citations / session-ledger | `200` **+ one `audit_log` row** |
 | Privileged (`admin` or `auditor`), non-owner | receipts (read or export) | `200` **+ one `audit_log` row** (unchanged shape from the existing admin bypass) |
-| Non-privileged (`member`/`viewer`), non-owner | ledger / sources / session-ledger | **`404`** — indistinguishable from a nonexistent id (existence-safe; unchanged posture from §2.6) |
+| Non-privileged (`member`/`viewer`), non-owner | ledger / sources / citations / session-ledger | **`404`** — indistinguishable from a nonexistent id (existence-safe; unchanged posture from §2.6) |
 | Non-privileged (`member`/`viewer`), non-owner | receipts | **`403`** — unchanged; receipts never adopted the existence-safe 404 redesign |
 | anyone | nonexistent id | `404` |
 
 **Audit-the-auditor.** Every privileged cross-user read (never an owner read) writes one `audit_log`
 row via a shared wrapper (`app/auditor_audit.py`), then the handler `await`s `db.commit()`. `action` is
-one of a closed set: `auditor.ledger_viewed`, `auditor.sources_viewed`,
+one of a closed set: `auditor.ledger_viewed`, `auditor.sources_viewed`, `auditor.citations_viewed`,
 `auditor.session_ledger_viewed`, `auditor.receipts_viewed`, `auditor.receipts_exported`. `details`
-carries `{"viewed_user_id": "<owner's user id>"}`. There is no separate "auditor activity" API —
-consume this the same way you'd consume any other `audit_log` row.
+carries `{"viewed_user_id": "<owner's user id>"}`, and the row also captures the requester's
+`ip_address` / `user_agent` / `request_id` (the standard `audit_log` request-context columns). There
+is no separate "auditor activity" API — consume this the same way you'd consume any other `audit_log`
+row.
 
 **Out of scope — be honest about this with your users.**
 - **No cross-user listing/discovery.** An auditor (or admin) reads a chat/session/message by *known*
@@ -378,9 +382,9 @@ consume this the same way you'd consume any other `audit_log` row.
   through `is_privileged_reader`; don't assume every GET endpoint in the system has been audited for
   this bypass — only the five listed above are confirmed).
 
-**Pin.** Not yet merged as of this note. Once merged to `main`, this section will list the squash SHA
-— bump your pin to it to build against this contract; today it exists only on branch
-`feat/cross-user-auditor-role`.
+**Pin.** ✅ Merged to `main` as **PR #266**, squash SHA **`e40b98c8`** (full
+`e40b98c8920f60b11ac798dd250f578855151ca1`). Bump your `vendor/lq-ai` pin to it, run `npm run gen:api`,
+and build against this contract.
 
 ## 2.7 Loosely-typed fields — hand-write defensive parsers here
 
@@ -606,5 +610,5 @@ ships, but don't imply cryptographic integrity now.
 - Anything to never display / redact? **No hidden fields**; `passages[].text` is quoted content (show it).
 - Real-time channel? **SSE only, no webhooks.** Audit does not ride SSE.
 - Sync or eventual writes? **Ledger + gate: synchronous. Treatment: eventual (poll).**
-- New role/scope to respect? **Yes, as of §2.6a** (🟡 not yet merged) — a read-only `auditor` role
-  now grants cross-user read on ledger/sources/session-ledger/receipts, audited every time.
+- New role/scope to respect? **Yes, as of §2.6a** (🟢 merged, `e40b98c8`) — a read-only `auditor` role
+  grants cross-user read on ledger/sources/citations/session-ledger/receipts, audited every time.
