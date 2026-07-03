@@ -4974,6 +4974,12 @@ Donna requested (`Donna/docs/upstream-requests/lq-ai-signed-attestation-export.m
 
 **Deferred deliberately.** The crux is not the endpoint but **key management**: a real signing key is a new long-lived backend secret to generate, protect, and rotate — a gateway-adjacent trust decision that deserves its own design + security-reviewed pass, not a bolt-on. Scope when picked up: payload canonicalisation (byte-stable), signature format + algorithm (JWS vs COSE), where the signing key lives + rotation, public-key vs verify-endpoint distribution, whether the signature covers ledger+gate or only `content_hash`es, whether to ship the Merkle layer now or a JWS-only v1 first, and the endpoint auth scope (owner-scoped; a reviewer variant composes with the [DE-378](#de-378)-adjacent auditor role, [PR #266](https://github.com/LegalQuants/lq-ai/pull/266), merged `e40b98c8`). An unsigned-but-canonical export endpoint would be a useful intermediate, but the value Donna's users want is the **verifiable** attestation.
 
+#### DE-380 — Web client should derive the API base URL from config, not hardcode `localhost:8000`
+
+**Priority:** P3 · **Effort:** S · **Status (2026-07-03): filed (v0.6.0 release-readiness gate).**
+
+The web frontend issues browser-side API calls to a hardcoded `http://localhost:8000` (observed at `auth/login`) rather than deriving the base URL from the operator-configured `API_HOST_PORT` / a public base-URL env var. Consequence: an operator who remaps `API_HOST_PORT` off the default `8000` (e.g. to run a second stack, or behind a different published port) gets a fully working backend but a browser UI that fails with `ERR_CONNECTION_REFUSED` on every call. The documented default path (`API_HOST_PORT=8000`) works, so this is not a blocker — but the web client should read the configured API base URL so a remapped deployment isn't silently broken. Surfaced during the v0.6.0 fresh-clone gate when the api was remapped to coexist with another running stack.
+
 ---
 
 ## 10. Appendices
