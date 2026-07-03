@@ -31,7 +31,7 @@ CREATE TABLE users (
     display_name          TEXT,
     hashed_password       TEXT NOT NULL,
     is_admin              BOOLEAN NOT NULL DEFAULT FALSE,
-    role                  TEXT NOT NULL DEFAULT 'member',       -- PRD §5.2 RBAC; CHECK (role IN ('admin','member','viewer'))
+    role                  TEXT NOT NULL DEFAULT 'member',       -- PRD §5.2 RBAC; CHECK (role IN ('admin','member','viewer','auditor'))
     mfa_enabled           BOOLEAN NOT NULL DEFAULT FALSE,
     must_change_password  BOOLEAN NOT NULL DEFAULT FALSE,  -- B2: first-run admin + reset-admin
     totp_secret           TEXT,
@@ -60,7 +60,7 @@ CREATE INDEX idx_users_deletion_scheduled ON users(deletion_scheduled_at) WHERE 
 
 | Column | Migration | Notes |
 |---|---|---|
-| `role` | 0017 | Three-role RBAC per PRD §5.2 (`admin`, `member`, `viewer`). Kept in sync with `is_admin` (role=`admin` iff `is_admin=true`). |
+| `role` | 0017; widened 0065 | RBAC per PRD §5.2 (`admin`, `member`, `viewer`, `auditor`). Kept in sync with `is_admin` (role=`admin` iff `is_admin=true`). `auditor` (0065) is a read-only, deployment-wide cross-user reviewer role — non-mutating like `viewer`, but distinct: see the cross-user auditor spec. |
 | `reasoning_visibility` | 0015 | Enhance Prompt reasoning display mode (§3.2). Default `disclosure` = collapsed behind toggle. |
 | `featured_tools` | 0019 | Dashboard tool surfacing: `prominent` (cards) vs. `inline` (toolbar only). |
 | `workspace_layout` | 0019 | Matter workspace pane count for Wave C: `three_pane`, `two_pane`, `one_pane`. |

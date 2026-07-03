@@ -15,8 +15,14 @@ re-merging on each request is cheap. No new materialized table.
 A materialized ``chat_receipts`` projection is a v1.1+ candidate if
 latency degrades under longer chats.
 
-Owner-of-the-chat OR admin can read; everyone else gets 404 on the
-chat lookup (no information leak about chat existence).
+Owner-of-the-chat, admin, or the read-only cross-user ``auditor`` role
+can read (``is_privileged_reader``); everyone else gets 403 (this
+endpoint does not use the existence-safe-404 pattern used by
+``/ledger`` and `/messages/{id}/sources`` — its 403 predates that
+convention and is left unchanged here). A privileged reader viewing
+another user's chat writes one ``auditor_audit`` row per request
+(``receipts_viewed`` for the read endpoint, ``receipts_exported`` for
+the JSONL export sibling below) — "audit the auditor."
 
 Filter via ``?event_kinds=message,inference`` (comma-separated subset
 of ``message``, ``inference``, ``audit``, ``skill``, ``retrieval``,
@@ -32,18 +38,20 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import ActiveUser
+from app.api.dependencies import ActiveUser, is_privileged_reader
+from app.auditor_audit import auditor_audit
 from app.db.session import get_db
 from app.errors import Forbidden, NotFound
 from app.models.audit import AuditLog
 from app.models.chat import Chat, Message
 from app.models.inference import InferenceRoutingLog
+from app.models.user import User
 
 router = APIRouter(prefix="/chats", tags=["chats"])
 
@@ -65,53 +73,55 @@ class ReceiptEvent(BaseModel):
     detail: dict[str, Any]
 
 
-@router.get(
-    "/{chat_id}/receipts",
-    response_model=list[ReceiptEvent],
-    summary="Chronological event log for a chat (replay-at-read)",
-    description=(
-        "Wave D.1 T5 (spec §7.6). Merges chronological events from "
-        "``messages`` (+ denorm ``applied_skills``), "
-        "``inference_routing_log``, and ``audit_log`` into one "
-        "timestamp-ordered stream. Owner-of-chat or admin only. "
-        "Filter with ``?event_kinds=message,audit`` etc. "
-        "Inference/error event ``detail`` includes ``anonymization_applied`` "
-        "(bool — the source of truth for the UI's anonymization indicator) and "
-        "``message_id`` (the assistant message the indicator pins to; may be null)."
-    ),
-)
-async def get_chat_receipts(
-    chat_id: uuid.UUID,
-    user: ActiveUser,
-    db: Annotated[AsyncSession, Depends(get_db)],
-    event_kinds: Annotated[
-        str | None,
-        Query(
-            description=(
-                "Comma-separated subset of: message, inference, audit, "
-                "skill, retrieval, error. Omit for all kinds."
-            )
-        ),
-    ] = None,
-) -> list[ReceiptEvent]:
+async def _authorize_receipts_access(
+    db: AsyncSession, chat_id: uuid.UUID, user: User
+) -> tuple[Chat, bool]:
+    """Look up the chat and authorize the caller for receipts access.
+
+    Returns ``(chat, was_privileged_cross_user)``. Owner → ``(chat,
+    False)``. A privileged reader (admin or the read-only cross-user
+    ``auditor`` role, per ``is_privileged_reader``) reading a chat they
+    do not own → ``(chat, True)`` — the caller then writes exactly one
+    ``auditor_audit`` row. Raises ``NotFound`` if the chat does not
+    exist; raises ``Forbidden`` if the caller neither owns the chat nor
+    is a privileged reader — this endpoint's existing 403-for-non-owner
+    behavior is unchanged (no existence-safety redesign here).
+    """
     chat = await db.get(Chat, chat_id)
     if chat is None:
         raise NotFound(
             "Chat not found.",
             details={"chat_id": str(chat_id)},
         )
-    if chat.owner_id != user.id and not user.is_admin:
+    privileged = is_privileged_reader(user)
+    if chat.owner_id != user.id and not privileged:
         raise Forbidden(
             "You do not own this chat.",
             details={"chat_id": str(chat_id)},
         )
+    was_privileged = chat.owner_id != user.id and privileged
+    return chat, was_privileged
 
-    requested: frozenset[str] = (
+
+def _parse_event_kinds(event_kinds: str | None) -> frozenset[str]:
+    """``requested ∩ allowed`` — unknown tokens degrade to the safe default."""
+    return (
         frozenset(k.strip() for k in event_kinds.split(",") if k.strip()) & _ALL_KINDS
         if event_kinds
         else _ALL_KINDS
     )
 
+
+async def _build_receipt_events(
+    chat_id: uuid.UUID,
+    requested: frozenset[str],
+    db: AsyncSession,
+) -> list[ReceiptEvent]:
+    """Merge the four source tables into one timestamp-ordered event stream.
+
+    No authorization here — callers authorize via
+    :func:`_authorize_receipts_access` before calling this.
+    """
     events: list[ReceiptEvent] = []
 
     # messages + denorm skill events
@@ -242,6 +252,54 @@ async def get_chat_receipts(
 
 
 @router.get(
+    "/{chat_id}/receipts",
+    response_model=list[ReceiptEvent],
+    summary="Chronological event log for a chat (replay-at-read)",
+    description=(
+        "Wave D.1 T5 (spec §7.6). Merges chronological events from "
+        "``messages`` (+ denorm ``applied_skills``), "
+        "``inference_routing_log``, and ``audit_log`` into one "
+        "timestamp-ordered stream. Owner-of-chat, admin, or the "
+        "read-only cross-user ``auditor`` role. "
+        "Filter with ``?event_kinds=message,audit`` etc. "
+        "Inference/error event ``detail`` includes ``anonymization_applied`` "
+        "(bool — the source of truth for the UI's anonymization indicator) and "
+        "``message_id`` (the assistant message the indicator pins to; may be null)."
+    ),
+)
+async def get_chat_receipts(
+    chat_id: uuid.UUID,
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
+    event_kinds: Annotated[
+        str | None,
+        Query(
+            description=(
+                "Comma-separated subset of: message, inference, audit, "
+                "skill, retrieval, error. Omit for all kinds."
+            )
+        ),
+    ] = None,
+) -> list[ReceiptEvent]:
+    chat, was_privileged = await _authorize_receipts_access(db, chat_id, user)
+    if was_privileged:
+        await auditor_audit(
+            db,
+            user=user,
+            event="receipts_viewed",
+            resource_type="chat",
+            resource_id=str(chat_id),
+            viewed_user_id=chat.owner_id,
+            request=request,
+        )
+        await db.commit()  # GET read-path: persist the audit row explicitly
+
+    requested = _parse_event_kinds(event_kinds)
+    return await _build_receipt_events(chat_id, requested, db)
+
+
+@router.get(
     "/{chat_id}/receipts/export.jsonl",
     summary="Export receipts as JSONL (one event per line)",
     response_class=Response,
@@ -250,19 +308,34 @@ async def export_chat_receipts(
     chat_id: uuid.UUID,
     user: ActiveUser,
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
     event_kinds: Annotated[str | None, Query()] = None,
 ) -> Response:
     """Same payload as the JSON receipts endpoint, serialized as JSONL.
 
     ``Content-Type: application/jsonl`` + ``Content-Disposition: attachment;
     filename="chat-{id}-receipts.jsonl"`` so browsers trigger a download.
+
+    Authorization mirrors :func:`get_chat_receipts` (owner, admin, or
+    ``auditor``); a privileged cross-user export writes its own
+    ``receipts_exported`` audit row (distinct from the read endpoint's
+    ``receipts_viewed``) rather than delegating to the read handler.
     """
-    events = await get_chat_receipts(
-        chat_id=chat_id,
-        user=user,
-        db=db,
-        event_kinds=event_kinds,
-    )
+    chat, was_privileged = await _authorize_receipts_access(db, chat_id, user)
+    if was_privileged:
+        await auditor_audit(
+            db,
+            user=user,
+            event="receipts_exported",
+            resource_type="chat",
+            resource_id=str(chat_id),
+            viewed_user_id=chat.owner_id,
+            request=request,
+        )
+        await db.commit()  # GET read-path: persist the audit row explicitly
+
+    requested = _parse_event_kinds(event_kinds)
+    events = await _build_receipt_events(chat_id, requested, db)
     body = "\n".join(_json.dumps(e.model_dump(mode="json")) for e in events)
     return Response(
         content=body,

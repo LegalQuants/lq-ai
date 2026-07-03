@@ -70,9 +70,10 @@ from pydantic import BaseModel, ValidationError as PydanticValidationError
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import ActiveUser
+from app.api.dependencies import ActiveUser, is_privileged_reader
 from app.api.skills import _resolve_skill_for_user
 from app.audit import audit_action
+from app.auditor_audit import auditor_audit
 from app.autonomous.guard import _args_digest
 from app.chat.tool_loop import (
     LoopConfirmation,
@@ -350,6 +351,33 @@ async def _load_visible_chat(
             details={"chat_id": str(chat_id)},
         )
     return row
+
+
+async def _load_chat_for_reader(
+    db: AsyncSession,
+    chat_id: uuid.UUID,
+    user: User,
+    *,
+    include_archived: bool = True,
+) -> tuple[Chat, bool]:
+    """Load a chat for a *reader*; return ``(chat, was_privileged_cross_user)``.
+
+    Owner → ``(chat, False)``. A privileged reader (admin/auditor) reading a
+    chat they do not own → ``(chat, True)``. Everyone else — and a missing
+    chat — → 404, indistinguishably (existence-safe): a non-privileged
+    non-owner cannot tell "exists, not yours" from "doesn't exist".
+    """
+    stmt = select(Chat).where(Chat.id == chat_id)
+    if not include_archived:
+        stmt = stmt.where(Chat.archived_at.is_(None))
+    row = (await db.execute(stmt)).scalar_one_or_none()
+    if row is None:
+        raise NotFound(f"Chat {chat_id} not found.", details={"chat_id": str(chat_id)})
+    if row.owner_id == user.id:
+        return row, False
+    if is_privileged_reader(user):
+        return row, True
+    raise NotFound(f"Chat {chat_id} not found.", details={"chat_id": str(chat_id)})
 
 
 async def _validate_owned_file_ids(
@@ -1668,6 +1696,7 @@ async def get_citations(
     message_id: str,
     user: ActiveUser,
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
 ) -> list[dict[str, Any]]:
     """Return citations persisted for a message.
 
@@ -1685,9 +1714,12 @@ async def get_citations(
     column. The column itself remains for backward compatibility with
     older clients and is slated for retirement by M2-C2.
 
-    Chat ownership is enforced so a cross-user request can't enumerate
-    message ids — the visibility check uses the same path as message
-    list reads.
+    Owner-of-the-chat, admin, or the read-only cross-user ``auditor`` role
+    can read (``_load_chat_for_reader``); everyone else — and a missing
+    chat — gets an identical 404 (existence-safe), matching
+    :func:`get_chat_ledger` / :func:`get_message_sources`. A privileged
+    reader viewing another user's chat writes one ``auditor_audit`` row
+    (``citations_viewed``).
     """
 
     cid = _validate_chat_id(chat_id)
@@ -1699,7 +1731,18 @@ async def get_citations(
             details={"message_id": message_id},
         ) from exc
 
-    await _load_visible_chat(db, cid, user.id, include_archived=True)
+    chat, was_privileged = await _load_chat_for_reader(db, cid, user, include_archived=True)
+    if was_privileged:
+        await auditor_audit(
+            db,
+            user=user,
+            event="citations_viewed",
+            resource_type="chat",
+            resource_id=str(cid),
+            viewed_user_id=chat.owner_id,
+            request=request,
+        )
+        await db.commit()  # GET read-path: persist the audit row explicitly
 
     # Confirm the message exists (and belongs to the chat) before
     # returning an empty list — distinguishes "no citations" from
@@ -1747,6 +1790,7 @@ async def get_message_sources(
     message_id: str,
     user: ActiveUser,
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
 ) -> list[dict[str, Any]]:
     """Return the external sources (case-law clusters) a message's turn consulted.
 
@@ -1763,7 +1807,18 @@ async def get_message_sources(
             "message_id must be a UUID", details={"message_id": message_id}
         ) from exc
 
-    await _load_visible_chat(db, cid, user.id, include_archived=True)
+    chat, was_privileged = await _load_chat_for_reader(db, cid, user, include_archived=True)
+    if was_privileged:
+        await auditor_audit(
+            db,
+            user=user,
+            event="sources_viewed",
+            resource_type="chat",
+            resource_id=str(cid),
+            viewed_user_id=chat.owner_id,
+            request=request,
+        )
+        await db.commit()  # GET read-path: persist the audit row explicitly
 
     msg_stmt = select(Message.id).where(Message.id == mid, Message.chat_id == cid)
     if (await db.execute(msg_stmt)).scalar_one_or_none() is None:
@@ -1800,6 +1855,7 @@ async def get_chat_ledger(
     chat_id: str,
     user: ActiveUser,
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
     message_id: str | None = None,
 ) -> dict[str, Any]:
     """Return the Citation Ledger for a chat, each entry resolved to its source
@@ -1819,7 +1875,18 @@ async def get_chat_ledger(
                 "message_id must be a UUID", details={"message_id": message_id}
             ) from exc
 
-    await _load_visible_chat(db, cid, user.id, include_archived=True)
+    chat, was_privileged = await _load_chat_for_reader(db, cid, user, include_archived=True)
+    if was_privileged:
+        await auditor_audit(
+            db,
+            user=user,
+            event="ledger_viewed",
+            resource_type="chat",
+            resource_id=str(cid),
+            viewed_user_id=chat.owner_id,
+            request=request,
+        )
+        await db.commit()  # GET read-path: persist the audit row explicitly
 
     if mid is not None:
         msg_stmt = select(Message.id).where(Message.id == mid, Message.chat_id == cid)

@@ -4960,6 +4960,12 @@ Two cosmetic follow-ups surfaced by the PR2b Opus whole-branch review, deliberat
 
 The README Slack/Teams intake-bridge paragraph disclaims a scope ("Light intake, deliberately not full triage/SLA/approvals — that is *Streamline AI's* category"). This is a scope-*narrowing* disclaimer, not a competitor-comparison overclaim, so it was left untouched by the DE-365 sub-project 1 honesty audit. But it is the one place the public docs name a specific third-party product, and the milestone's vendor-neutral posture (LQ.AI vs. the generic proprietary category, no named products — the constraint that also binds the DE-365 sub-project 3 comparison) would eventually genericize it (e.g. "dedicated legal-intake/triage platforms"). Small, cosmetic; fold into a later vendor-neutrality sweep or the sub-project 3 comparison work.
 
+#### DE-378 — Wire `MutatingUser` across mutating endpoints for true read-only `viewer`/`auditor` enforcement
+
+**Priority:** P2 · **Effort:** M · **Status (2026-07-02): filed (cross-user auditor-role implementation).**
+
+The `MutatingUser` dependency + `_MUTATING_ROLES` (`api/app/api/dependencies.py:191`) were introduced (Wave C) to give `viewer` (and now `auditor`) roles read-only logins, but `MutatingUser` is currently **wired to zero route handlers** — every mutating endpoint uses `ActiveUser`. So a `viewer` or `auditor` can still mutate their *own* resources (writes remain owner-scoped, so they can never touch another user's data — this is not a cross-user security hole, but it does mean "read-only role" is not actually enforced). Wiring `MutatingUser` onto the POST/PATCH/DELETE handlers (in place of `ActiveUser`) would make `viewer`/`auditor` genuinely read-only. Deferred from the auditor-role feature (which delivers only the additive cross-user *read* paths) because it touches every mutating endpoint and warrants its own security-reviewed pass.
+
 ---
 
 ## 10. Appendices
