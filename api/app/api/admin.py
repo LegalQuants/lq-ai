@@ -652,7 +652,7 @@ async def revoke_provider_key(
 # Wave C — RBAC three-role management (PRD §5.2)
 # ---------------------------------------------------------------------------
 
-_ROLE_ENUM = frozenset({"admin", "member", "viewer"})
+_ROLE_ENUM = frozenset({"admin", "member", "viewer", "auditor"})
 
 
 class AdminUserRow(BaseModel):

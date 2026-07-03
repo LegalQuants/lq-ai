@@ -3389,7 +3389,7 @@ paths:
       parameters:
         - name: role
           in: query
-          schema: {type: string, enum: [admin, member, viewer]}
+          schema: {type: string, enum: [admin, member, viewer, auditor]}
         - name: email_q
           in: query
           schema: {type: string}
@@ -3418,7 +3418,7 @@ paths:
         schema: {type: string, format: uuid}
     patch:
       tags: [admin]
-      summary: Set a user's RBAC role (admin | member | viewer)
+      summary: Set a user's RBAC role (admin | member | viewer | auditor)
       description: |
         Wave C. Updates ``users.role`` and keeps ``is_admin`` in sync
         (True iff role='admin'). Idempotent: re-applying the same role
@@ -3427,6 +3427,9 @@ paths:
 
         Lockout protection: refuses to demote the last admin in the
         deployment (409 — promote someone else first).
+
+        ``auditor`` (migration 0065) is a read-only, deployment-wide
+        cross-user reviewer role; ``is_admin`` stays False when set.
       requestBody:
         required: true
         content:
@@ -3435,7 +3438,7 @@ paths:
               type: object
               required: [role]
               properties:
-                role: {type: string, enum: [admin, member, viewer]}
+                role: {type: string, enum: [admin, member, viewer, auditor]}
       responses:
         '200':
           description: Updated role
@@ -3447,7 +3450,7 @@ paths:
                 properties:
                   user_id: {type: string, format: uuid}
                   email: {type: string, format: email}
-                  role: {type: string, enum: [admin, member, viewer]}
+                  role: {type: string, enum: [admin, member, viewer, auditor]}
                   is_admin: {type: boolean}
         '403':
           description: Last-admin demotion lockout.
@@ -6360,7 +6363,7 @@ components:
         id: {type: string, format: uuid}
         email: {type: string, format: email}
         display_name: {type: string, nullable: true}
-        role: {type: string, enum: [admin, member, viewer]}
+        role: {type: string, enum: [admin, member, viewer, auditor]}
         is_admin: {type: boolean}
         mfa_enabled: {type: boolean}
         must_change_password: {type: boolean}
@@ -7027,13 +7030,17 @@ components:
         is_admin: {type: boolean}
         role:
           type: string
-          enum: [admin, member, viewer]
+          enum: [admin, member, viewer, auditor]
           default: member
           description: |
-            Wave C — PRD §5.2 RBAC three-role system. ``admin`` has
-            full access; ``member`` can mutate owned resources; ``viewer``
-            is read-only. Mutating endpoints reject ``viewer`` via the
-            ``MutatingUser`` dependency. Kept in sync with ``is_admin``
+            Wave C — PRD §5.2 RBAC system. ``admin`` has full access;
+            ``member`` can mutate owned resources; ``viewer`` is
+            read-only. Mutating endpoints reject ``viewer`` via the
+            ``MutatingUser`` dependency. ``auditor`` (migration 0065)
+            is a read-only, deployment-wide cross-user reviewer role —
+            like ``viewer`` it is excluded from ``_MUTATING_ROLES``, but
+            it is a distinct role (not an operator-admin: ``is_admin``
+            stays False). Kept in sync with ``is_admin``
             (``role='admin'`` iff ``is_admin=true``).
         mfa_enabled: {type: boolean}
         must_change_password:
