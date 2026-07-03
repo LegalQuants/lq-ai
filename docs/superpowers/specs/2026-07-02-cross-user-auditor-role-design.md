@@ -18,7 +18,7 @@ This design adds a **read-only, deployment-wide `auditor` role** that (together 
 ## 2. Goals / non-goals
 
 **Goals**
-- A new `auditor` value in the existing RBAC role enum, granted through the existing admin role API, read-only by construction.
+- A new `auditor` value in the existing RBAC role enum, granted through the existing admin role API. **Write posture:** auditor gains cross-user *read* only; all writes stay owner-scoped, so an auditor can mutate only their own resources (like a `member`) and never another user's. (See §4.1 note — the `MutatingUser` mechanism is currently unwired, so this is NOT "read-only by construction"; true global read-only enforcement is a separate DE.)
 - A unified **privileged-reader** set `{admin, auditor}` that may read any user's: chat ledger, message sources, autonomous-session ledger (+ the embedded fiduciary gate), and the chat-receipts read + export endpoints.
 - Existence-safety preserved: a **non-privileged** non-owner still gets an indistinguishable 404 on the ledger endpoints.
 - **Audit-the-auditor:** every privileged *cross-user* read writes an `audit_log` row.
@@ -34,7 +34,7 @@ This design adds a **read-only, deployment-wide `auditor` role** that (together 
 ## 3. Current state (verified against code, 2026-07-02)
 
 - **Role model:** `User.role` (`api/app/models/user.py:40`, default `member`), CHECK constraint `chk_users_role_enum` (`api/alembic/versions/0017_...py:56-58`, currently `role IN ('admin','member','viewer')`). `User.is_admin` (`user.py:35`) kept in sync by `admin.py` when role changes.
-- **Enum + mutation gate:** `_ROLE_ENUM = {"admin","member","viewer"}` (`api/app/api/admin.py:655`); `_MUTATING_ROLES = {"admin","member"}` (`api/app/api/dependencies.py:191`) — `MutatingUser` 403s any role outside it (so `viewer` and, once added, `auditor` are read-only for free).
+- **Enum + mutation gate:** `_ROLE_ENUM = {"admin","member","viewer"}` (`api/app/api/admin.py:655`); `_MUTATING_ROLES = {"admin","member"}` and `MutatingUser` (`api/app/api/dependencies.py:191`) exist, BUT `MutatingUser` is **wired to zero route handlers** (verified 2026-07-02) — so it does not actually enforce non-mutation for `viewer` today, and won't for `auditor` either. Writes are instead kept safe by **owner-scoping** on every mutating endpoint (a non-owner can't write regardless of role). Auditor's read-only-ness across *other users* is therefore guaranteed by the fact that we add only privileged *read* paths — not by `MutatingUser`.
 - **Granting:** `PATCH /api/v1/admin/users/{user_id}/role` (`admin.py:766-849`) validates against `_ROLE_ENUM`, sets `target.is_admin = body.role == "admin"`, refuses last-admin demotion, writes a `user.role_updated` audit row.
 - **Owner-scoped read endpoints (the ones to change):**
   - `GET /chats/{id}/ledger` — `chats.py:1795` (handler `get_chat_ledger`), via `_load_visible_chat(db, cid, user.id, ...)` (`chats.py:328-352`, filters `Chat.owner_id == owner_id`, 404 on miss/cross-user).
@@ -49,7 +49,7 @@ This design adds a **read-only, deployment-wide `auditor` role** that (together 
 ### 4.1 Role addition
 - Add `"auditor"` to `_ROLE_ENUM` (`admin.py:655`). `PATCH .../role` then accepts it with no further change; `is_admin` stays `False` for an auditor (`body.role == "admin"` is false).
 - Migration **0065** (down_revision `0064`): drop and recreate `chk_users_role_enum` as `role IN ('admin','member','viewer','auditor')`. No data migration (existing rows satisfy the wider set). Downgrade recreates the 3-value constraint (safe only if no `auditor` rows exist — downgrade note in the migration).
-- `_MUTATING_ROLES` is **unchanged** — `auditor ∉ {admin, member}` → `MutatingUser` 403s auditors on every mutating endpoint automatically. (Add a test asserting this; no code change.)
+- `_MUTATING_ROLES` is **unchanged**. Since `MutatingUser` is unwired (§3), this does not by itself block an auditor from mutating their *own* resources — and that's acceptable (writes are owner-scoped; an auditor can't touch another user's data). Add a **unit** test of `get_mutating_user()` asserting it *would* reject an `auditor` (documents the intended contract for if/when `MutatingUser` is wired) — not an endpoint test, since no endpoint uses it. File a DE: "wire `MutatingUser` across mutating endpoints for true read-only `viewer`/`auditor` enforcement."
 
 ### 4.2 Privileged-reader predicate + reader helpers
 - Add a single predicate, e.g. in `api/app/api/dependencies.py` (or a small `authz` helper module):
@@ -78,14 +78,14 @@ This design adds a **read-only, deployment-wide `auditor` role** that (together 
 | `admin` or `auditor`, not owner | **200 + audit row** | **200 + audit row** |
 | `member`/`viewer`, not owner | **404** (existence-safe, unchanged) | **403** (unchanged) |
 | Nonexistent id | 404 | 404 (read) / existing behavior |
-| Any non-`{admin,member}` role on a mutating endpoint | 403 (MutatingUser, unchanged) | 403 |
+| Non-owner (any role) on a mutating endpoint | write blocked by owner-scoping (404/403 per endpoint) — `MutatingUser` is unwired, so role isn't the gate; ownership is | same |
 
 ## 5. Testing
 
 - **Ledger/sources/session-ledger:** extend the existing cross-user tests (`api/tests/integration/test_ledger_endpoint.py:113`, `api/tests/autonomous/test_session_ledger_endpoint.py:162`) to a triad: non-privileged non-owner → 404; `auditor` → 200; `admin` → 200. Assert an `audit_log` row is written with the right action + `viewed_user_id` for the privileged reads, and **not** written for owner reads.
 - **Add the missing test:** `GET /chats/{id}/messages/{mid}/sources` has **no** cross-user ownership test today (`test_message_tool_sources.py` only covers unknown-id 404) — add the triad there.
 - **Receipts:** extend `api/tests/test_chat_receipts.py` — `auditor` joins `admin` in the bypass (200 + audit row); non-privileged still 403; export variant likewise.
-- **Role plumbing:** extend `api/tests/test_wave_c.py` — `PATCH .../role` accepts `auditor` (200, `is_admin` stays False, audit row); an `auditor` is 403'd on a representative mutating endpoint (MutatingUser).
+- **Role plumbing:** extend `api/tests/test_wave_c.py` — `PATCH .../role` accepts `auditor` (200, `is_admin` stays False, audit row); a **unit** test of `get_mutating_user()` asserts it would reject an `auditor` (the contract for a future wiring; no endpoint uses `MutatingUser` today).
 - **Migration:** verified on a throwaway `pgvector/pgvector:pg16` container (conftest auto-migrates); the constraint accepts `auditor` and still rejects a bogus role.
 - Coverage: no decrease (CI-enforced). Run `ruff format` + `ruff check` + `mypy` (api standard).
 
