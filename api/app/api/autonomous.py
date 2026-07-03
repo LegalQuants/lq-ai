@@ -48,8 +48,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 # Mutate endpoints use AutonomousEnabledUser (opt-in required, PRD §3.10);
 # read + halt endpoints use ActiveUser (always reachable for audit access).
-from app.api.dependencies import ActiveUser, AutonomousEnabledUser
+from app.api.dependencies import ActiveUser, AutonomousEnabledUser, is_privileged_reader
 from app.audit import audit_action
+from app.auditor_audit import auditor_audit
 from app.autonomous.audit import autonomous_audit
 from app.autonomous.cron import next_run_after, validate_cron_expr
 from app.autonomous.receipt import build_receipt
@@ -72,6 +73,7 @@ from app.models.chat import Chat
 from app.models.document import Document
 from app.models.knowledge import KnowledgeBase
 from app.models.project import Project
+from app.models.user import User
 from app.schemas.autonomous import (
     AutonomousArtifactListResponse,
     AutonomousArtifactRead,
@@ -271,6 +273,34 @@ async def _load_owned_session(
             detail="autonomous session not found",
         )
     return row
+
+
+async def _load_session_for_reader(
+    db: AsyncSession,
+    *,
+    session_id: uuid.UUID,
+    user: User,
+) -> tuple[AutonomousSession, bool]:
+    """Load a session for a *reader*; return ``(session, was_privileged_cross_user)``.
+
+    Owner → ``(session, False)``. Privileged reader (admin/auditor) non-owner
+    → ``(session, True)``. Everyone else / missing → 404 indistinguishably
+    (existence-safe), matching :func:`_load_owned_session`.
+    """
+    row = (
+        await db.execute(select(AutonomousSession).where(AutonomousSession.id == session_id))
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="autonomous session not found"
+        )
+    if row.user_id == user.id:
+        return row, False
+    if is_privileged_reader(user):
+        return row, True
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND, detail="autonomous session not found"
+    )
 
 
 async def _load_owned_schedule(
@@ -680,12 +710,25 @@ async def get_session_ledger(
     Reuses ``resolve_ledger_entries`` and ``resolve_gates`` — the same
     functions the chat ledger endpoint calls.
 
-    Owner-gated via ``_load_owned_session``; another user's ``session_id``
-    or a missing session returns 404 (not 403) to avoid existence
-    disclosure.  Returns 404 if the session exists but ``build_session_ledger``
-    has not been called yet (no hidden chat manufactured).
+    Owner-gated via ``_load_session_for_reader``; a non-privileged non-owner's
+    ``session_id`` or a missing session returns 404 (not 403) to avoid
+    existence disclosure. A privileged reader (admin/auditor) may read
+    another user's session ledger; that cross-user read writes one
+    ``auditor_audit`` row (``session_ledger_viewed``). Returns 404 if the
+    session exists but ``build_session_ledger`` has not been called yet
+    (no hidden chat manufactured).
     """
-    await _load_owned_session(db, session_id=session_id, user_id=user.id)
+    session, was_privileged = await _load_session_for_reader(db, session_id=session_id, user=user)
+    if was_privileged:
+        await auditor_audit(
+            db,
+            user=user,
+            event="session_ledger_viewed",
+            resource_type="autonomous_session",
+            resource_id=str(session_id),
+            viewed_user_id=session.user_id,
+        )
+        await db.commit()  # GET read-path: persist the audit row explicitly
     chat = (
         (
             await db.execute(
