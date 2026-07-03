@@ -1,4 +1,4 @@
-"""Unit tests for the Bedrock Mantle provider adapter (DE-035 / F1-F3).
+"""Unit tests for the Bedrock Mantle provider adapter (DE-036 / F1-F3).
 
 Covers construction, per-request protocol routing, all three wire-format
 tiers (Chat Completions / Messages / Responses) — happy path unary +

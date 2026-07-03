@@ -1,4 +1,4 @@
-"""AWS Bedrock Mantle provider adapter — DE-035 (supersedes InvokeModel/SigV4).
+"""AWS Bedrock Mantle provider adapter — DE-036 (see DE-035 for the deferred IAM/SigV4 InvokeModel path).
 
 AWS's ``bedrock-mantle.{region}.api.aws`` endpoint serves Bedrock models
 over three native wire protocols, authenticated with a single Bearer
@@ -242,8 +242,7 @@ class BedrockMantleAdapter(ProviderAdapter):
     ``chat_completion`` dispatches per-request by model-ID prefix (see
     module docstring); ``embeddings`` raises
     :class:`ProviderUnsupportedError` (Bedrock embedding models are out
-    of scope for this unit, matching the original DE-035 draft's scope
-    decision).
+    of scope for this unit, matching DE-035's original scope decision).
     """
 
     def __init__(

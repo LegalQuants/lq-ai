@@ -173,9 +173,9 @@ def build_adapter(provider: ProviderConfig) -> ProviderAdapter | None:
         # a deployment-scoped URL (+ api-version) and ``api-key`` auth.
         return AzureOpenAIAdapter.from_config(provider)
     if provider.type == "bedrock_mantle":
-        # DE-035 (Mantle): supersedes the InvokeModel/SigV4 plan. Bearer-
-        # token auth across three wire-protocol tiers (Chat Completions /
-        # Messages / Responses), dispatched per-request by model-ID prefix.
+        # DE-036: Bearer-token auth across three wire-protocol tiers (Chat
+        # Completions / Messages / Responses), dispatched per-request by
+        # model-ID prefix. DE-035 (IAM/SigV4 InvokeModel) remains deferred.
         return BedrockMantleAdapter.from_config(provider)
     if provider.type == "ollama":
         # B6 partial: Ollama is the Mode-2 (air-gapped local inference)
