@@ -23,8 +23,8 @@
 			comparison differs is the axis it measures on: <strong>verifiability, not capability.</strong>
 			No vendor is named below — the "proprietary category" column states one fact, consistently: whatever
 			it claims, it is closed-source, so the claim cannot be independently checked or forked by the user
-			relying on it. Every LQ.AI row below resolves to a design record, a source file, and an interactive
-			playground you can drive yourself.
+			relying on it. Every LQ.AI row below resolves to one or more clickable artifacts — a design record,
+			a source file, and/or an interactive playground you can drive yourself.
 		</p>
 	</header>
 
@@ -143,7 +143,7 @@
 					</tr>
 					<tr>
 						<td>
-							Fiduciary-grade gate (PASS / SUPPORTED / FAIL, recomputed live)
+							Fiduciary-grade gate (PASS / SUPPORTED / FAIL over every citation)
 							<p class="lq-caveat">
 								<strong>Caveat:</strong> chat/autonomous verdict-tier parity is open (<strong
 									>DE-370</strong
