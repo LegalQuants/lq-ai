@@ -4843,13 +4843,13 @@ So the single longest phase (image pull) has neither a stream nor a poll. The re
 
 #### DE-365 — Launch-documentation pass: fiduciary-grade positioning + transparent-by-evidence comparison
 
-**Priority:** P2 · **Effort:** L · **Status: OPEN (end of Phase 2 / pre-launch)**
+**Priority:** P2 · **Effort:** L · **Status (2026-07-03): SHIPPED — all three sub-projects complete.** Sub-1 (docs honesty audit, #260), sub-2 (five Learn-tab fiduciary-grade playgrounds), and sub-3 (evidence-linked comparison + vendor-neutral cleanup, this entry) have all landed. The comparison lives at [`docs/comparison.md`](docs/comparison.md) (canonical) and the in-app `/lq-ai/learn/compare` page (condensed highlights).
 
-**Context:** LQ.AI is plausibly one of the first **fiduciary-evidence-level** legal-tech products — and uniquely, it is **open source, open-telemetry, and self-hosted**, with educational transparency visualizations. The incumbents (Thomson Reuters / Westlaw / CoCounsel) have announced a fiduciary-grade legal-research direction but, per their public statements, are **not launching until later summer 2026**. The end-of-phase documentation does not yet convey the magnitude of what the project gives away for free, nor position it honestly against that announced-but-unshipped competition. Surfaced by the maintainer (2026-06-26).
+**Context:** LQ.AI is plausibly one of the first **fiduciary-evidence-level** legal-tech products — and uniquely, it is **open source, open-telemetry, and self-hosted**, with educational transparency visualizations. Several proprietary "fiduciary-grade"-claiming closed-source incumbents have announced a fiduciary-grade legal-research direction but, per their public statements, are **not launching until later summer 2026**. The end-of-phase documentation does not yet convey the magnitude of what the project gives away for free, nor position it honestly against that announced-but-unshipped competition. Surfaced by the maintainer (2026-06-26).
 
 **Specific scope:**
 1. **Refresh README + docs** and add **clear transparency visualizations** that show how each core principle (derive-don't-assert, the Citation Ledger, the fiduciary-grade gate, governed gateway egress, P3 no-raw-payload, OpenTelemetry tracing, the validity/treatment layer) delivers transparent, auditable results "at every turn."
-2. **Pull the public TR/Westlaw/CoCounsel fiduciary-grade press release/announcement**, enumerate every promised feature/capability, and build an **honest feature-comparison chart**. Each LQ.AI "✓" must **link to the artifact that proves it** — the ADR, the code path, the test, or the live trace — so the comparison is *evidence-backed, not asserted* (a clickable audit trail cannot be FUD-ed; the transparency IS the proof).
+2. **Pull the closed-source incumbents' public fiduciary-grade press releases/announcements**, enumerate every promised feature/capability, and build an **honest feature-comparison chart**. Each LQ.AI "✓" must **link to the artifact that proves it** — the ADR, the code path, the test, or the live trace — so the comparison is *evidence-backed, not asserted* (a clickable audit trail cannot be FUD-ed; the transparency IS the proof).
 3. Frame the inspiration honestly (their announced direction inspired this) while making the defensible, demonstrable claim: massively-funded teams have **not** shipped this level of transparency, and LQ.AI delivers it transparently, open-source, now.
 
 **Constraint:** the conservative-engineering posture (CLAUDE.md principle 4 — never overclaim) binds every comparison claim: honest and unflinching, never hype. Where a capability is partial or roadmapped, say so. The standard for an LQ.AI "✓" is "demonstrable by an in-house lawyer on real documents," tied to a linkable artifact.
@@ -4956,7 +4956,7 @@ Two cosmetic follow-ups surfaced by the PR2b Opus whole-branch review, deliberat
 
 #### DE-377 — Genericize the one named third-party product reference in README
 
-**Priority:** P3 · **Effort:** S · **Status (2026-07-02): filed (DE-365 sub-project 1 whole-branch review).**
+**Priority:** P3 · **Effort:** S · **Status (2026-07-03): resolved (DE-365 sub-3).** The README Slack/Teams paragraph's named-product reference (previously "*Streamline AI's* category") was genericized to a generic category phrase; the public-facing README now names no third-party product anywhere.
 
 The README Slack/Teams intake-bridge paragraph disclaims a scope ("Light intake, deliberately not full triage/SLA/approvals — that is *Streamline AI's* category"). This is a scope-*narrowing* disclaimer, not a competitor-comparison overclaim, so it was left untouched by the DE-365 sub-project 1 honesty audit. But it is the one place the public docs name a specific third-party product, and the milestone's vendor-neutral posture (LQ.AI vs. the generic proprietary category, no named products — the constraint that also binds the DE-365 sub-project 3 comparison) would eventually genericize it (e.g. "dedicated legal-intake/triage platforms"). Small, cosmetic; fold into a later vendor-neutrality sweep or the sub-project 3 comparison work.
 
