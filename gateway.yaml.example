@@ -204,6 +204,9 @@ providers:
 # Every entry is SSRF/allowlist-guarded, tier-tagged, rate-limited, and
 # written to `tool_egress_log`. Uncomment and configure to enable.
 #
+# Runtime alternative: enable these from the app (Settings → Research sources)
+# or POST /api/v1/admin/tool-providers — no YAML edit or restart needed.
+#
 # tool_providers:
 #   - name: courtlistener-prod
 #     type: courtlistener          # courtlistener type is shipped (WS3a); uncomment + set COURTLISTENER_API_TOKEN to enable
