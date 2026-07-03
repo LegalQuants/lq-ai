@@ -16,12 +16,15 @@ in ``provider_keys.py``): the admin endpoints ``await`` them directly under
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from app.config import GatewayConfig
 from app.config_writer import remove_tool_provider, upsert_tool_provider
 from app.secrets import MASTER_KEY_ENV, encrypt_value
 from app.tool_provider_defaults import TOOL_PROVIDER_DEFAULTS
+
+logger = logging.getLogger(__name__)
 
 
 def _source_of(entry: Any) -> str | None:
@@ -111,6 +114,12 @@ async def apply_tool_provider(
         try:
             new_adapter = build_tool_adapter(entry)
         except Exception:  # never leak key material into the log
+            logger.warning(
+                "tool provider %r (%s) key applied but adapter build failed; "
+                "provider has no live adapter",
+                entry.name,
+                provider_type,
+            )
             new_adapter = None
         _swap_in_tool_adapter(
             app_state=app_state, provider_name=entry.name, new_adapter=new_adapter

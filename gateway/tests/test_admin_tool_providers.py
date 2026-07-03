@@ -153,6 +153,38 @@ async def test_post_enable_keyless_hot_applies(client: AsyncClient, keyed_app: F
 
 
 @pytest.mark.unit
+async def test_hot_apply_reaches_router_from_zero_boot(
+    client: AsyncClient, keyed_app: FastAPI
+) -> None:
+    """Regression: fresh boot with zero tool providers (the shipped default —
+    ``gateway.yaml.example`` ships ``tool_providers:`` commented out) must not
+    leave the Router holding a disconnected copy of ``app.state.tool_adapters``.
+
+    ``Router.__init__`` used to do ``tool_adapters or {}``, which — because an
+    empty dict is falsy — silently substitutes a brand-new dict literal
+    whenever the gateway boots with no tool providers configured. Hot-apply
+    (``_swap_in_tool_adapter``) mutates ``app.state.tool_adapters`` in place,
+    so with the old code the Router never saw the swap: a fresh install could
+    hot-enable a provider (200, ``enabled: true``) that then 404'd on every
+    real tool call until restart.
+    """
+
+    # Precondition: boots with zero tool providers, so the Router was built
+    # with an empty dict — the exact case the ``or {}`` bug mishandled.
+    assert keyed_app.state.tool_adapters == {}
+
+    # The fix requires the Router to hold the SAME dict object as app.state,
+    # not an equal-but-distinct one, so in-place swaps are visible to both.
+    assert keyed_app.state.router._tool_adapters is keyed_app.state.tool_adapters
+
+    r = await client.post("/admin/v1/tool-providers", json={"type": "edgar"})
+    assert r.status_code == 200, r.text
+
+    # The live Router's dispatch dict must reflect the hot-applied adapter.
+    assert "edgar-prod" in keyed_app.state.router._tool_adapters
+
+
+@pytest.mark.unit
 async def test_post_keyed_without_master_key_is_400(
     no_master_key_client: AsyncClient,
 ) -> None:
