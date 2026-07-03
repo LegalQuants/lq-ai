@@ -319,6 +319,14 @@ export interface Message {
 	cost_estimate?: number | null;
 	error_code?: string | null;
 	citations?: Citation[];
+	/**
+	 * referenced-files Phase 2 — client-side stamp of the documents referenced when
+	 * THIS user message was sent ({id, filename} pairs). NOT persisted:
+	 * the backend stores no messages.referenced_file_ids column (ADR
+	 * 0022), so the row disappears on reload. Set only on the optimistic
+	 * user message at send time.
+	 */
+	referenced_files?: Array<{ id: string; filename: string }>;
 	created_at: string;
 	/**
 	 * Refusal-specific surfacings (only populated when `kind === 'refusal'`).
@@ -370,6 +378,14 @@ export interface MessageCreate {
 	 * `false` clears the set; omitted leaves it unchanged. Off by default.
 	 */
 	set_sticky?: boolean | null;
+	/**
+	 * referenced-files Phase 2 — caller-selected matter documents grounding THIS
+	 * turn via file-scoped retrieval + verified citations (ADR 0022).
+	 * Distinct from the (unwired) verbatim file_ids channel. Cap 16
+	 * (MESSAGE_REFERENCED_FILES_MAX, enforced UI-side so the backend 422
+	 * is unreachable through this client).
+	 */
+	referenced_file_ids?: string[];
 }
 
 export interface MessagePostResponse {
@@ -379,6 +395,8 @@ export interface MessagePostResponse {
 	routed_provider?: string | null;
 	cost_estimate?: number | null;
 	applied_skills?: string[];
+	/** referenced-files — echo of the validated referenced_file_ids. */
+	applied_referenced_file_ids?: string[];
 }
 
 // ----- SSE message-stream events -----
@@ -405,6 +423,8 @@ export interface MessageCompleteFrame {
 	applied_skills?: string[];
 	routed_inference_tier?: 1 | 2 | 3 | 4 | 5 | null;
 	routed_provider?: string | null;
+	/** referenced-files — echo of the validated referenced_file_ids (parity with applied_skills). */
+	applied_referenced_file_ids?: string[];
 }
 
 export interface MessageErrorFrame {
