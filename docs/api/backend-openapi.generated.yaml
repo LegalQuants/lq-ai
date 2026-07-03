@@ -9868,11 +9868,17 @@ paths:
         older clients and is slated for retirement by M2-C2.
 
 
-        Chat ownership is enforced so a cross-user request can''t enumerate
+        Owner-of-the-chat, admin, or the read-only cross-user ``auditor`` role
 
-        message ids — the visibility check uses the same path as message
+        can read (``_load_chat_for_reader``); everyone else — and a missing
 
-        list reads.'
+        chat — gets an identical 404 (existence-safe), matching
+
+        :func:`get_chat_ledger` / :func:`get_message_sources`. A privileged
+
+        reader viewing another user''s chat writes one ``auditor_audit`` row
+
+        (``citations_viewed``).'
       operationId: get_citations_api_v1_chats__chat_id__messages__message_id__citations_get
       parameters:
       - in: path

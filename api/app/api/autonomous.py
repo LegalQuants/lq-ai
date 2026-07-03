@@ -698,6 +698,7 @@ async def get_session_ledger(
     session_id: uuid.UUID,
     user: ActiveUser,
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
 ) -> dict[str, Any]:
     """GET /api/v1/autonomous/sessions/{session_id}/ledger
 
@@ -727,6 +728,7 @@ async def get_session_ledger(
             resource_type="autonomous_session",
             resource_id=str(session_id),
             viewed_user_id=session.user_id,
+            request=request,
         )
         await db.commit()  # GET read-path: persist the audit row explicitly
     chat = (

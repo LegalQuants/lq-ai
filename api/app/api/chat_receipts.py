@@ -38,7 +38,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -271,6 +271,7 @@ async def get_chat_receipts(
     chat_id: uuid.UUID,
     user: ActiveUser,
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
     event_kinds: Annotated[
         str | None,
         Query(
@@ -290,6 +291,7 @@ async def get_chat_receipts(
             resource_type="chat",
             resource_id=str(chat_id),
             viewed_user_id=chat.owner_id,
+            request=request,
         )
         await db.commit()  # GET read-path: persist the audit row explicitly
 
@@ -306,6 +308,7 @@ async def export_chat_receipts(
     chat_id: uuid.UUID,
     user: ActiveUser,
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
     event_kinds: Annotated[str | None, Query()] = None,
 ) -> Response:
     """Same payload as the JSON receipts endpoint, serialized as JSONL.
@@ -327,6 +330,7 @@ async def export_chat_receipts(
             resource_type="chat",
             resource_id=str(chat_id),
             viewed_user_id=chat.owner_id,
+            request=request,
         )
         await db.commit()  # GET read-path: persist the audit row explicitly
 

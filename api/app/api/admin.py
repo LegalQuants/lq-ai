@@ -661,7 +661,7 @@ class AdminUserRow(BaseModel):
     id: _uuid_mod.UUID
     email: str
     display_name: str | None
-    role: str  # 'admin' | 'member' | 'viewer'
+    role: str  # 'admin' | 'member' | 'viewer' | 'auditor'
     is_admin: bool
     mfa_enabled: bool
     must_change_password: bool
