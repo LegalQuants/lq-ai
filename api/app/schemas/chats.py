@@ -93,6 +93,17 @@ available to any authenticated user. 16 matches
 :data:`ATTACHED_SKILLS_MAX_LEN`; realistic per-turn document context is
 a handful of files. Requests over the cap 422 at schema time."""
 
+MESSAGE_REFERENCED_FILES_MAX_LEN: int = 16
+"""Hard cap on ``MessageCreateRequest.referenced_file_ids``.
+
+Referenced files drive file-scoped retrieval for a single turn: each id
+triggers an ownership + matter-KB validation SELECT and a per-file
+hybrid-search call. Without a cap a single message could reference
+thousands of files — workload-multiplication DoS available to any
+authenticated user. 16 matches :data:`MESSAGE_FILE_IDS_MAX_LEN`;
+realistic per-turn document references are a handful. Over the cap 422s
+at schema time."""
+
 KNOWN_ATTACHED_SKILL_SOURCES: frozenset[str] = frozenset(
     {"slash", "wizard-tryout", "tryit-tab", "capture", "manual"}
 )
@@ -428,6 +439,20 @@ class MessageCreateRequest(BaseModel):
     ``skill_inputs`` for scalar skill parameters. Omitted / empty is
     fully back-compatible (pre-existing wire shape unchanged)."""
 
+    referenced_file_ids: list[str] = Field(
+        default_factory=list, max_length=MESSAGE_REFERENCED_FILES_MAX_LEN
+    )
+    """referenced-files: caller-selected matter documents to ground THIS turn via
+    file-scoped retrieval. Distinct from :attr:`file_ids` (which injects
+    a file's full text verbatim with no citations): referenced files are
+    retrieved as chunks and merged into the turn's ``retrieved_chunks``
+    so the Citation Engine mints verified, deep-linkable citations for
+    them. KB-only MVP: each id must be caller-owned, ``ready``, and in a
+    Knowledge Base attached to the chat's project (matter scope);
+    otherwise it 404s id-probing-safe. Echoed back as
+    ``applied_referenced_file_ids``. Empty/omitted is a back-compatible
+    no-op."""
+
     stream: bool = False
     """Whether to stream the response as SSE. ``False`` returns a single
     JSON body."""
@@ -580,6 +605,14 @@ class MessagePostResponse(BaseModel):
     frame), not on rows read back via ``GET /chats/{id}/messages``. Empty
     when no file_ids were attached."""
 
+    applied_referenced_file_ids: list[str] = Field(default_factory=list)
+    """referenced-files: caller-selected file ids that were validated (owned +
+    matter-KB + ready) and whose chunks were retrieved to ground this
+    turn — the echo of :attr:`MessageCreateRequest.referenced_file_ids`.
+    Turn-scoped (no ``messages.referenced_file_ids`` column): surfaces on
+    the send response and the SSE ``complete`` frame only. Empty when
+    none were referenced or none validated."""
+
     attached_skill_names: list[str] = Field(default_factory=list)
     """Wave D.2 Task 2.7 — slugs the send-time slash fallback attached
     on the caller's behalf. Distinct from ``applied_skills`` (the
@@ -640,6 +673,7 @@ __all__ = [
     "LIST_LIMIT_DEFAULT",
     "LIST_LIMIT_MAX",
     "MESSAGE_FILE_IDS_MAX_LEN",
+    "MESSAGE_REFERENCED_FILES_MAX_LEN",
     "TITLE_MAX_LEN",
     "AttachedSkillRef",
     "ChatCreateRequest",

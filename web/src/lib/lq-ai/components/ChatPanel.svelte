@@ -40,6 +40,49 @@
 			slashIndex
 		};
 	}
+
+	/**
+	 * referenced-files Phase 2 — @-mention detection for referenced files.
+	 *
+	 * Differs from detectSlashAt on purpose:
+	 *   - Triggers ANYWHERE the `@` starts a word (position 0 or preceded
+	 *     by whitespace), not only at line start — "summarize @exhibit-a"
+	 *     is the core use case.
+	 *   - Query char class is [^\s@] (filenames carry uppercase, dots,
+	 *     underscores); a space terminates the candidate query.
+	 *   - `a@b` / "user@example.com" never trigger (word-start guard).
+	 */
+	export type MentionDetection = { open: false } | { open: true; query: string; atIndex: number };
+
+	export function detectMentionAt(text: string, caret: number): MentionDetection {
+		if (caret === 0) return { open: false };
+		let scan = caret;
+		while (scan > 0 && /[^\s@]/.test(text[scan - 1])) scan--;
+		if (scan === 0 || text[scan - 1] !== '@') return { open: false };
+		const atIndex = scan - 1;
+		if (atIndex > 0 && !/\s/.test(text[atIndex - 1])) return { open: false };
+		return { open: true, query: text.slice(atIndex + 1, caret), atIndex };
+	}
+
+	/**
+	 * Complete a mention selection inline: replace the partial "@query"
+	 * with "@<filename>" so the case name stays readable in the message
+	 * AND rides into the sent content as part of the query (the
+	 * referenced-files set carries the id; the text carries the meaning).
+	 * A separating space is ensured after the completed mention so typing
+	 * continues naturally and the popover does not immediately reopen.
+	 */
+	export function completeMentionAt(
+		text: string,
+		atIndex: number,
+		queryLength: number,
+		filename: string
+	): string {
+		const before = text.slice(0, atIndex);
+		const after = text.slice(atIndex + 1 + queryLength);
+		const sep = /^\s/.test(after) ? '' : ' ';
+		return `${before}@${filename}${sep}${after}`;
+	}
 </script>
 
 <script lang="ts">
@@ -101,6 +144,16 @@
 		readPersistedOpen as readReceiptsDrawerOpen
 	} from '$lib/lq-ai/components/ReceiptsDrawer.svelte';
 	import SlashPopover from '$lib/lq-ai/components/SlashPopover.svelte';
+	import MentionPopover from '$lib/lq-ai/components/MentionPopover.svelte';
+	import FilePickerDropdown from '$lib/lq-ai/components/FilePickerDropdown.svelte';
+	import ReferencedFilesChips from '$lib/lq-ai/components/ReferencedFilesChips.svelte';
+	import {
+		MESSAGE_REFERENCED_FILES_MAX,
+		addReferencedFile,
+		loadReferenceableFiles,
+		removeReferencedFile,
+		type ReferencedFile
+	} from '$lib/lq-ai/files/referenceable';
 	import type { SkillAutocompleteItem } from '$lib/lq-ai/types';
 	import { auth } from '$lib/lq-ai/auth/store';
 	import { createEventDispatcher } from 'svelte';
@@ -330,6 +383,14 @@
 		attachedSkillNames = [];
 		attachmentSources = {};
 		skillInputs = {};
+		// referenced-files — referenced files are per-draft; the referenceable cache
+		// is per-project and re-validated lazily by ensureReferenceable().
+		referencedFiles = [];
+		referencedNotice = null;
+		filePickerOpen = false;
+		mentionOpen = false;
+		mentionQuery = '';
+		mentionAtIndex = -1;
 		// Load messages.
 		try {
 			const page = await messagesApi.listMessages(chat.id, { limit: 100 });
@@ -595,6 +656,10 @@
 			content: composerText,
 			applied_skills: sentSkillsForUser,
 			is_enhanced: isEnhancedSend,
+			referenced_files:
+				referencedFiles.length > 0
+					? referencedFiles.map(({ id, filename }) => ({ id, filename }))
+					: undefined,
 			created_at: new Date().toISOString()
 		};
 		messagesStore.update(($m) => [...$m, userMsg]);
@@ -641,11 +706,24 @@
 					// Issue #207 finding 4 — only send set_sticky on a real toggle
 					// change; otherwise leave the chat's sticky set unchanged.
 					set_sticky: stickyDirty ? stickyEnabled : undefined,
+					// referenced-files Phase 2 — ground this turn in the user-selected
+					// matter documents (file-scoped retrieval + citations).
+					referenced_file_ids:
+						referencedFiles.length > 0 ? referencedFiles.map((f) => f.id) : undefined,
 					stream: true
 				},
 				streamAbort.signal
 			);
 			composerText = '';
+			// Referenced files are turn-scoped (like the backend channel):
+			// clear on a successfully-initiated send, preserve on failure so
+			// the user can adjust and retry.
+			referencedFiles = [];
+			referencedNotice = null;
+			filePickerOpen = false;
+			mentionOpen = false;
+			mentionQuery = '';
+			mentionAtIndex = -1;
 			// The toggle change has now been applied server-side for this turn.
 			stickyDirty = false;
 			// Clear the pending-enhancement marker now that the send is in
@@ -769,13 +847,13 @@
 	}
 
 	function handleComposerKeydown(e: KeyboardEvent): void {
-		// When the slash popover is open it owns Arrow/Enter/Escape via its
+		// When the slash or mention popover is open it owns Arrow/Enter/Escape via its
 		// own <svelte:window on:keydown>, which stopPropagation()s. Those
 		// keystrokes don't reach this handler. We only need to prevent the
 		// composer's own shortcuts (Cmd/Ctrl+E) from firing while the
 		// popover is open so the operator can finish skill selection
 		// without accidentally launching Enhance Prompt.
-		if (slashOpen) return;
+		if (slashOpen || mentionOpen) return;
 		if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
 			e.preventDefault();
 			expansionPanel?.open();
@@ -798,6 +876,104 @@
 	let slashQuery = '';
 	let slashStartIndex = -1;
 
+	// referenced-files Phase 2 — referenced files. One authoritative, deduped,
+	// cap-16 list feeding `referenced_file_ids`; both the @-mention
+	// popover and the picker mutate it. Plain array reassignment (not
+	// Map mutation) so Svelte 4 reactivity tracks changes.
+	let referencedFiles: ReferencedFile[] = [];
+	let referencedNotice: string | null = null;
+
+	// The referenceable set (all files across the matter's attached KBs),
+	// lazily loaded per project and cached until a chat/project switch or
+	// an explicit refresh (picker re-open / retry).
+	let referenceable: ReferencedFile[] = [];
+	let referenceableLoading = false;
+	let referenceableError: string | null = null;
+	let referenceableFailedKbCount = 0;
+	let referenceableLoadedForProject: string | null = null;
+
+	let filePickerOpen = false;
+	let mentionOpen = false;
+	let mentionQuery = '';
+	let mentionAtIndex = -1;
+
+	async function ensureReferenceable(force = false): Promise<void> {
+		// Capture the project id at entry: a chat/project switch while the
+		// load is in flight must not let project-A files be cached as
+		// project-B's referenceable set (whole-send 404 risk, ADR 0022).
+		const pid = composerProjectId;
+		if (!pid) return;
+		if (!force && referenceableLoadedForProject === pid) return;
+		referenceableLoading = true;
+		referenceableError = null;
+		try {
+			const load = await loadReferenceableFiles(pid);
+			if (pid !== composerProjectId) return; // superseded by a switch
+			referenceable = load.files;
+			referenceableFailedKbCount = load.failedKbCount;
+			referenceableLoadedForProject = pid;
+		} catch (e: unknown) {
+			if (pid !== composerProjectId) return;
+			referenceableError = e instanceof Error ? e.message : 'Failed to load documents';
+			referenceable = [];
+			referenceableFailedKbCount = 0;
+			referenceableLoadedForProject = null;
+		} finally {
+			if (pid === composerProjectId) referenceableLoading = false;
+		}
+	}
+
+	function addReference(file: ReferencedFile): void {
+		const result = addReferencedFile(referencedFiles, file);
+		if (result.added) {
+			referencedFiles = result.list;
+			referencedNotice = null;
+		} else if (result.reason === 'cap') {
+			referencedNotice = `You can reference up to ${MESSAGE_REFERENCED_FILES_MAX} documents per message.`;
+		}
+		// 'duplicate' and 'not-ready' are silent no-ops: the picker
+		// disables those rows and the mention popover never offers them.
+	}
+
+	function removeReference(id: string): void {
+		referencedFiles = removeReferencedFile(referencedFiles, id);
+		referencedNotice = null;
+	}
+
+	function toggleReference(file: ReferencedFile): void {
+		if (referencedFiles.some((f) => f.id === file.id)) removeReference(file.id);
+		else addReference(file);
+	}
+
+	function toggleFilePicker(): void {
+		filePickerOpen = !filePickerOpen;
+		if (filePickerOpen) {
+			mentionOpen = false;
+			void ensureReferenceable(true);
+		}
+	}
+
+	function onMentionSelect(file: ReferencedFile): void {
+		if (mentionAtIndex >= 0) {
+			composerText = completeMentionAt(
+				composerText,
+				mentionAtIndex,
+				mentionQuery.length,
+				file.filename
+			);
+		}
+		addReference(file);
+		mentionOpen = false;
+		mentionQuery = '';
+		mentionAtIndex = -1;
+	}
+
+	function onMentionDismiss(): void {
+		mentionOpen = false;
+		mentionQuery = '';
+		mentionAtIndex = -1;
+	}
+
 	function onComposerInput(e: Event): void {
 		const ta = e.target as HTMLTextAreaElement;
 		// `bind:value` has already updated `composerText` before this
@@ -812,6 +988,24 @@
 			slashOpen = false;
 			slashQuery = '';
 			slashStartIndex = -1;
+		}
+
+		// referenced-files Phase 2 — @-mention detection. Only offered in project
+		// chats (a projectless chat has no referenceable set; the backend
+		// 404s any referenced id there — never render the affordance).
+		const mention = composerProjectId
+			? detectMentionAt(ta.value, ta.selectionStart)
+			: { open: false as const };
+		if (mention.open) {
+			mentionOpen = true;
+			mentionQuery = mention.query;
+			mentionAtIndex = mention.atIndex;
+			filePickerOpen = false;
+			void ensureReferenceable();
+		} else {
+			mentionOpen = false;
+			mentionQuery = '';
+			mentionAtIndex = -1;
 		}
 	}
 
@@ -1068,6 +1262,12 @@
 					</div>
 				{/if}
 
+				<ReferencedFilesChips
+					files={referencedFiles}
+					notice={referencedNotice}
+					onRemove={removeReference}
+				/>
+
 				<div class="flex items-end gap-2">
 					<div class="lq-composer-wrap flex-1">
 						<textarea
@@ -1085,6 +1285,20 @@
 									query={slashQuery}
 									onSelect={onSlashSelect}
 									onDismiss={onSlashDismiss}
+								/>
+							</div>
+						{/if}
+
+						{#if mentionOpen}
+							<div class="lq-composer-popover" data-testid="lq-ai-mention-popover-anchor">
+								<MentionPopover
+									query={mentionQuery}
+									files={referenceable}
+									loading={referenceableLoading}
+									error={referenceableError}
+									onSelect={onMentionSelect}
+									onDismiss={onMentionDismiss}
+									onRetry={() => void ensureReferenceable(true)}
 								/>
 							</div>
 						{/if}
@@ -1110,6 +1324,34 @@
 							>
 								📎
 							</button>
+
+							<div class="lq-file-picker-anchor">
+								<button
+									type="button"
+									class="lq-btn-secondary text-sm"
+									aria-label="Reference matter documents"
+									title="Reference matter documents in this message"
+									on:click={toggleFilePicker}
+									data-testid="lq-ai-file-picker-btn"
+								>
+									📄
+								</button>
+								{#if filePickerOpen}
+									<div class="lq-composer-popover">
+										<FilePickerDropdown
+											files={referenceable}
+											loading={referenceableLoading}
+											error={referenceableError}
+											failedKbCount={referenceableFailedKbCount}
+											selectedIds={referencedFiles.map((f) => f.id)}
+											capReached={referencedFiles.length >= MESSAGE_REFERENCED_FILES_MAX}
+											onToggle={toggleReference}
+											onClose={() => (filePickerOpen = false)}
+											onRetry={() => void ensureReferenceable(true)}
+										/>
+									</div>
+								{/if}
+							</div>
 						{/if}
 						<button
 							type="button"
@@ -1215,6 +1457,10 @@
 		bottom: calc(100% + 4px);
 		left: 0;
 		z-index: 50;
+	}
+
+	.lq-file-picker-anchor {
+		position: relative;
 	}
 
 	.lq-composer {

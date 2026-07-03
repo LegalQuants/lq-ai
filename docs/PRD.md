@@ -335,6 +335,8 @@ This section specifies each major capability. Every capability section follows t
 - `GET /api/v1/chats` — list user's chats.
 - `GET /api/v1/chats/{id}` — get chat with messages.
 - `POST /api/v1/chats/{id}/messages` — post message, stream response. Accepts a per-message `file_ids` list that attaches files for that turn only (passed to the gateway as `lq_ai_file_ids`, injected as document-context per Decision M2-1) and echoes the applied set back as `applied_file_ids`; this is a **separate channel from** `skill_inputs` (post-v0.4.0, #116/#117).
+  A parallel `referenced_file_ids` list references matter documents that are **retrieved and cited** (KB-only MVP), as opposed to `file_ids` which injects verbatim text without citations.
+The web composer surfaces this channel through two affordances: an inline `@`-mention popover and a multi-select document picker, converging on one deduped, cap-16 chip set; non-`ready` documents render disabled ("Preparing..."), so the UI can never assemble a set the backend would reject.
 - `PATCH /api/v1/chats/{id}` — update chat (rename, archive, pin, share).
 - `DELETE /api/v1/chats/{id}` — delete chat.
 - `GET /api/v1/chats/search?q=...` — search chats.
@@ -430,6 +432,8 @@ This section specifies each major capability. Every capability section follows t
 The verification entry point is [`api/app/citation/verification.py::verify`](../api/app/citation/verification.py); the M2-C2 UI rendering states are documented in [`docs/citation-engine.md`](citation-engine.md). Failed citations render as "unverified" rather than silently disappearing. The Anonymization Layer integration (M2-D2) skips pseudonymization on the retrieval-context system message so source quotes reach the model intact for citation grounding; see [§4.7](#47-anonymization-layer-m2) and [`docs/security/anonymization.md`](security/anonymization.md). Privileged-project audit-trail invariants are pinned in [`api/tests/test_chat_citations.py::test_chat_send_privileged_project_full_audit_trail`](../api/tests/test_chat_citations.py).
 
 The body of this section describes the design contract; deviations from the as-shipped pipeline (none currently known) would surface as PRD §9 entries.
+
+**Retrieval sources feeding verification.** The chunks a citation is verified against are not limited to project-wide KB retrieval: a caller can pass `referenced_file_ids` on the chat send (§3.1) to explicitly scope retrieval to specific matter documents. The same four-stage cascade above verifies citations against those file-scoped chunks exactly as it does against ordinary KB-search chunks — there is no separate verification path for explicitly referenced files, only a different, caller-directed *retrieval* step feeding the same verifier.
 
 **Scope clarification (2026-05-17).** The Citation Engine validates **KB-quote accuracy** — the model's response is an accurate representation of cited knowledge-base documents. Two related citation-checking surfaces are explicitly out of scope and tracked separately: **case citation validation** (Bluebook resolution via CourtListener) at [DE-279](#de-279--case-citation-validation-bluebook-resolution-via-courtlistener), and **case-content accuracy** (statement vs judicial opinion) at [DE-280](#de-280--case-content-accuracy-statement-vs-judicial-opinion). The three are architecturally distinct; see [`docs/citation-engine.md` §Scope](citation-engine.md#scope) for the taxonomy.
 
@@ -4959,6 +4963,16 @@ Two cosmetic follow-ups surfaced by the PR2b Opus whole-branch review, deliberat
 **Priority:** P3 · **Effort:** S · **Status (2026-07-02): filed (DE-365 sub-project 1 whole-branch review).**
 
 The README Slack/Teams intake-bridge paragraph disclaims a scope ("Light intake, deliberately not full triage/SLA/approvals — that is *Streamline AI's* category"). This is a scope-*narrowing* disclaimer, not a competitor-comparison overclaim, so it was left untouched by the DE-365 sub-project 1 honesty audit. But it is the one place the public docs name a specific third-party product, and the milestone's vendor-neutral posture (LQ.AI vs. the generic proprietary category, no named products — the constraint that also binds the DE-365 sub-project 3 comparison) would eventually genericize it (e.g. "dedicated legal-intake/triage platforms"). Small, cosmetic; fold into a later vendor-neutrality sweep or the sub-project 3 comparison work.
+
+#### Referenced files: file-scoped retrieved + cited grounding for chat
+
+**Priority:** P2 · **Effort:** M · **Status (2026-07-02): SHIPPED (backend); 2026-07-03: SHIPPED (frontend).**
+
+Adds a `referenced_file_ids` list (cap 16) to `POST /api/v1/chats/{id}/messages`, distinct from the existing `file_ids` verbatim-injection channel (§3.1): each referenced id names a caller-owned, `ready`, matter-scoped Knowledge Base document (else 404, id-probing-safe); `send_message` runs file-scoped hybrid retrieval (`hybrid_search_files`, top_k 6/file, referenced total capped at 12) per file, merges the results into the turn's retrieved-chunk set (merged cap raised 10→16 when references are present, unchanged at 10 for pure-KB-search turns, referenced chunks prioritized), and the model's citations against those chunks flow through the **existing** Citation Engine cascade unmodified (§3.3) — no parallel verifier.
+
+The per-file retrieval `hybrid_alpha` is the MIN of the alpha configured on each referenced file's matter Knowledge Base, honoring operator hybrid-search tuning rather than a hardcoded default. The validated set echoes back as `applied_referenced_file_ids` on the send response and the SSE `complete` frame (mirrors `applied_file_ids`); audit records a new `inference.message_referenced_files` entry and extends the existing `inference.kb_chunks_retrieved` entry with an additive `retrieved_count` so referenced-file contribution is distinguishable from ordinary KB-wide RAG in the trace.
+
+The web composer ships an `@`-mention popover plus a multi-select document picker, with one authoritative cap-16 referenced set fed by both. Known limitation: the composer's referenced set clears once the send stream opens, so an SSE-level failure or resend affordance retries the turn without `referenced_file_ids`; the user must re-reference manually.
 
 ---
 

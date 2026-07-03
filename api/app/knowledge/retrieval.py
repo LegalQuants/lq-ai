@@ -121,6 +121,27 @@ async def hybrid_search(
             limit=candidate_limit,
         )
 
+    return await _combine_and_hydrate(
+        db, vector_rows=vector_rows, fts_rows=fts_rows, top_k=top_k, alpha=alpha
+    )
+
+
+async def _combine_and_hydrate(
+    db: AsyncSession,
+    *,
+    vector_rows: list[tuple[uuid.UUID, float]],
+    fts_rows: list[tuple[uuid.UUID, float]],
+    top_k: int,
+    alpha: float,
+) -> list[HybridSearchResult]:
+    """Min-max normalize, linearly combine, take top_k, hydrate.
+
+    Shared by :func:`hybrid_search` (KB-scoped) and
+    :func:`hybrid_search_files` (file-scoped) — the only difference
+    between the two is which candidate SQL produced ``vector_rows`` /
+    ``fts_rows``.
+    """
+
     if not vector_rows and not fts_rows:
         return []
 
@@ -178,6 +199,59 @@ async def hybrid_search(
     # Re-sort because _hydrate_chunks doesn't preserve order.
     results.sort(key=lambda r: r.hybrid_score, reverse=True)
     return results
+
+
+# ---------------------------------------------------------------------------
+# File-scoped hybrid search entry point
+# ---------------------------------------------------------------------------
+
+
+async def hybrid_search_files(
+    db: AsyncSession,
+    *,
+    file_ids: list[uuid.UUID],
+    query: str,
+    query_embedding: list[float] | None,
+    top_k: int,
+    alpha: float,
+) -> list[HybridSearchResult]:
+    """Hybrid search scoped to an explicit set of file ids.
+
+    Same score model as :func:`hybrid_search` (pgvector cosine + FTS,
+    min-max normalized, ``(1-alpha)*vec + alpha*fts``) but the candidate
+    set is ``document_chunks`` whose owning file is in ``file_ids`` (not
+    a KB join). Callers MUST have already authorized ``file_ids`` — this
+    primitive does no ownership check, matching :func:`hybrid_search`'s
+    contract (the handler enforces scope).
+    """
+    if not file_ids:
+        return []
+    alpha = max(0.0, min(1.0, alpha))
+    candidate_limit = top_k * CANDIDATE_OVERSHOOT
+    ids = [str(fid) for fid in file_ids]
+
+    vector_rows: list[tuple[uuid.UUID, float]] = []
+    if query_embedding is not None and alpha < 1.0:
+        result = await db.execute(
+            _VECTOR_SQL_FILES,
+            {"file_ids": ids, "q_emb": _format_vector(query_embedding), "limit": candidate_limit},
+        )
+        vector_rows = [
+            (uuid.UUID(str(r["chunk_id"])), float(r["vec_score"])) for r in result.mappings().all()
+        ]
+
+    fts_rows: list[tuple[uuid.UUID, float]] = []
+    if alpha > 0.0:
+        result = await db.execute(
+            _FTS_SQL_FILES, {"file_ids": ids, "q": query, "limit": candidate_limit}
+        )
+        fts_rows = [
+            (uuid.UUID(str(r["chunk_id"])), float(r["fts_rank"])) for r in result.mappings().all()
+        ]
+
+    return await _combine_and_hydrate(
+        db, vector_rows=vector_rows, fts_rows=fts_rows, top_k=top_k, alpha=alpha
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -264,6 +338,45 @@ async def _fts_candidates(
     result = await db.execute(_FTS_SQL, {"kb_id": str(kb_id), "q": query, "limit": limit})
     rows = result.mappings().all()
     return [(uuid.UUID(str(row["chunk_id"])), float(row["fts_rank"])) for row in rows]
+
+
+# ---------------------------------------------------------------------------
+# File-scoped side queries
+# ---------------------------------------------------------------------------
+
+
+_VECTOR_SQL_FILES = text(
+    """
+    SELECT dc.id AS chunk_id,
+           1.0 - (dc.embedding <=> CAST(:q_emb AS vector)) AS vec_score
+      FROM document_chunks dc
+      JOIN documents d ON d.id = dc.document_id
+      JOIN files f ON f.id = d.file_id
+     WHERE f.id = ANY(:file_ids)
+       AND f.deleted_at IS NULL
+       AND f.ingestion_status = 'ready'
+       AND dc.embedding IS NOT NULL
+     ORDER BY dc.embedding <=> CAST(:q_emb AS vector)
+     LIMIT :limit
+    """
+)
+
+
+_FTS_SQL_FILES = text(
+    """
+    SELECT dc.id AS chunk_id,
+           ts_rank_cd(dc.content_tsv, plainto_tsquery('english', :q)) AS fts_rank
+      FROM document_chunks dc
+      JOIN documents d ON d.id = dc.document_id
+      JOIN files f ON f.id = d.file_id
+     WHERE f.id = ANY(:file_ids)
+       AND f.deleted_at IS NULL
+       AND f.ingestion_status = 'ready'
+       AND dc.content_tsv @@ plainto_tsquery('english', :q)
+     ORDER BY fts_rank DESC
+     LIMIT :limit
+    """
+)
 
 
 _HYDRATE_SQL = text(

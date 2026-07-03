@@ -97,13 +97,13 @@ from app.config import get_settings
 from app.db.session import get_db
 from app.errors import Conflict, InternalError, LQAIError, NotFound, ValidationError
 from app.knowledge.embed import DEFAULT_EMBEDDING_MODEL, request_embedding_vector
-from app.knowledge.retrieval import HybridSearchResult, hybrid_search
+from app.knowledge.retrieval import HybridSearchResult, hybrid_search, hybrid_search_files
 from app.models.chat import Chat, Message, MessageCitation
 from app.models.chat_pending_tool_call import ChatPendingToolCall
 from app.models.document import Document
 from app.models.file import File
 from app.models.inference import InferenceRoutingLog
-from app.models.knowledge import KnowledgeBase
+from app.models.knowledge import KnowledgeBase, KnowledgeBaseFile
 from app.models.message_tool_source import MessageToolSource
 from app.models.project import Project
 from app.models.project_knowledge_base import ProjectKnowledgeBase
@@ -410,6 +410,92 @@ async def _validate_owned_file_ids(
             )
 
     return [str(fid) for fid in parsed]
+
+
+async def _validate_referenced_file_ids(
+    db: AsyncSession,
+    referenced_file_ids: list[str],
+    *,
+    owner_id: uuid.UUID,
+    project_id: uuid.UUID | None,
+) -> tuple[list[str], dict[str, float]]:
+    """Validate caller-referenced files for file-scoped retrieval (referenced-files).
+
+    KB-only MVP + matter scope: each id must (1) parse as a UUID, (2)
+    resolve to a caller-owned, non-deleted, ``ingestion_status='ready'``
+    file that (3) is attached to a Knowledge Base which is itself
+    attached to the chat's ``project_id``. Any id failing any check —
+    including a projectless chat (no matter, so nothing is referenceable)
+    — raises :class:`NotFound` (404), id-probing-safe and message-
+    identical to the nonexistent-id case, consistent with
+    :func:`_validate_owned_file_ids`.
+
+    Returns ``(validated_ids, alpha_by_id)``: ids as strings (deduped,
+    order-preserving) and each file's retrieval alpha — the MIN
+    ``hybrid_alpha`` across the matter KBs containing it (deterministic
+    when a file sits in several attached KBs; MIN favors the vector
+    side). Empty input returns ``([], {})`` without a DB round-trip.
+    """
+
+    if not referenced_file_ids:
+        return [], {}
+
+    # Parse + dedupe while preserving first-seen order, mirroring
+    # _validate_owned_file_ids's id-probing-safe posture: a malformed id
+    # is a 404 (not a 422) so it's indistinguishable from "not yours".
+    parsed: list[uuid.UUID] = []
+    seen: set[uuid.UUID] = set()
+    for raw in referenced_file_ids:
+        try:
+            fid = uuid.UUID(raw)
+        except (ValueError, AttributeError) as exc:
+            raise NotFound(
+                f"File {raw} not found.",
+                details={"file_id": str(raw)},
+            ) from exc
+        if fid not in seen:
+            seen.add(fid)
+            parsed.append(fid)
+
+    # A projectless chat has no matter, so nothing is referenceable —
+    # fail restrictive rather than run a query that can never match (P4).
+    if project_id is None:
+        raise NotFound(
+            f"File {parsed[0]} not found.",
+            details={"file_id": str(parsed[0])},
+        )
+
+    # Single SELECT for all ids: owner-scoped, ready, and joined through
+    # to a KB attached to this chat's project. func.min(hybrid_alpha)
+    # collapses multi-KB membership to one conservative (vector-favoring)
+    # alpha per file in the same round-trip.
+    stmt = (
+        select(File.id, func.min(KnowledgeBase.hybrid_alpha))
+        .join(KnowledgeBaseFile, KnowledgeBaseFile.file_id == File.id)
+        .join(KnowledgeBase, KnowledgeBase.id == KnowledgeBaseFile.kb_id)
+        .join(
+            ProjectKnowledgeBase,
+            ProjectKnowledgeBase.knowledge_base_id == KnowledgeBaseFile.kb_id,
+        )
+        .where(
+            File.id.in_(parsed),
+            File.owner_id == owner_id,
+            File.deleted_at.is_(None),
+            File.ingestion_status == "ready",
+            ProjectKnowledgeBase.project_id == project_id,
+        )
+        .group_by(File.id)
+    )
+    rows = (await db.execute(stmt)).all()
+    alpha_by_id: dict[str, float] = {str(fid): float(alpha) for fid, alpha in rows}
+    for fid in parsed:
+        if str(fid) not in alpha_by_id:
+            raise NotFound(
+                f"File {fid} not found.",
+                details={"file_id": str(fid)},
+            )
+
+    return [str(fid) for fid in parsed], alpha_by_id
 
 
 async def _load_attached_file_contexts(
@@ -951,6 +1037,20 @@ RAG_TOP_K_PER_KB: int = 5
 # context-prepend size when many KBs are attached.
 RAG_MAX_TOTAL_CHUNKS: int = 10
 
+# referenced-files — file-scoped retrieval for explicitly referenced files. An
+# explicit reference means "answer over THIS document": each referenced
+# file gets its own top-k budget (round-robin interleaved, so no file is
+# starved by a dominant sibling), and referenced chunks take priority
+# over KB-wide RAG chunks in the merged context set. When references are
+# present the merged bound rises to MERGED_MAX_TOTAL_CHUNKS (explicit
+# reference justifies the context spend — ADR 0022); referenced chunks
+# are capped at REFERENCED_MAX_CHUNKS so KB RAG always retains at least
+# four slots when it has results. Pure-KB turns keep the shipped
+# RAG_MAX_TOTAL_CHUNKS bound — zero behavior change.
+REFERENCED_TOP_K_PER_FILE: int = 6
+REFERENCED_MAX_CHUNKS: int = 12
+MERGED_MAX_TOTAL_CHUNKS: int = 16
+
 
 async def _load_attached_kb_ids_for_chat(
     db: AsyncSession, project_id: uuid.UUID
@@ -979,20 +1079,24 @@ async def _retrieve_kb_context_for_chat(
     query: str,
     gateway: GatewayClient,
     request_id: str | None,
-) -> tuple[list[HybridSearchResult], list[uuid.UUID]]:
+) -> tuple[list[HybridSearchResult], list[uuid.UUID], list[float] | None]:
     """Run hybrid search across every KB attached to the chat's project.
 
-    Returns a 2-tuple ``(chunks, kb_ids_searched)`` where ``chunks`` is
-    the merged-then-truncated list of :class:`HybridSearchResult`
-    ordered by descending ``hybrid_score`` (capped at
-    :data:`RAG_MAX_TOTAL_CHUNKS`) and ``kb_ids_searched`` is the list of
-    KB ids we actually queried (empty if the chat has no project or the
-    project has no KBs attached).
+    Returns a 3-tuple ``(chunks, kb_ids_searched, query_embedding)`` where
+    ``chunks`` is the merged-then-truncated list of
+    :class:`HybridSearchResult` ordered by descending ``hybrid_score``
+    (capped at :data:`RAG_MAX_TOTAL_CHUNKS`), ``kb_ids_searched`` is the
+    list of KB ids we actually queried (empty if the chat has no project
+    or the project has no KBs attached), and ``query_embedding`` is the
+    vector computed for ``query`` (``None`` on the early exits, on
+    all-FTS KBs, or on embed-fetch failure).
 
     The embedding for ``query`` is computed once and reused across every
     KB call — embed-on-read is the same shape as ``query_kb``. If the
     embed fetch fails we downgrade to FTS-only retrieval per KB (the
-    same fallback ``query_kb`` uses).
+    same fallback ``query_kb`` uses). The embedding is returned so the
+    referenced-files referenced-file pass can reuse it without a second embed call
+    (referenced files live in the same attached KBs).
 
     The audit-row write is the caller's responsibility — this helper
     only does retrieval. Empty-result handling is the caller's too
@@ -1000,11 +1104,11 @@ async def _retrieve_kb_context_for_chat(
     """
 
     if chat.project_id is None:
-        return [], []
+        return [], [], None
 
     kb_ids = await _load_attached_kb_ids_for_chat(db, chat.project_id)
     if not kb_ids:
-        return [], []
+        return [], [], None
 
     # Load KB rows (for hybrid_alpha per KB). One SELECT for the set.
     kb_stmt = select(KnowledgeBase).where(KnowledgeBase.id.in_(kb_ids))
@@ -1064,11 +1168,105 @@ async def _retrieve_kb_context_for_chat(
         merged.extend(results)
 
     if not merged:
-        return [], [kb.id for kb in kb_rows]
+        return [], [kb.id for kb in kb_rows], query_embedding
 
     merged.sort(key=lambda r: r.hybrid_score, reverse=True)
     top = merged[:RAG_MAX_TOTAL_CHUNKS]
-    return top, [kb.id for kb in kb_rows]
+    return top, [kb.id for kb in kb_rows], query_embedding
+
+
+async def _retrieve_referenced_file_context(
+    db: AsyncSession,
+    *,
+    referenced_file_ids: list[str],
+    alpha_by_id: dict[str, float],
+    query: str,
+    query_embedding: list[float] | None,
+) -> list[HybridSearchResult]:
+    """Per-file hybrid search for explicitly referenced files (referenced-files).
+
+    Ids are already validated (owned + matter-KB + ready) by
+    :func:`_validate_referenced_file_ids`, which also supplied each
+    file's matter-KB ``hybrid_alpha`` (MIN across containing KBs).
+    ``query_embedding`` is the one computed by the KB pass — referenced
+    files live in the same attached KBs, so no second embed call is made
+    (``None`` degrades to FTS-only, the same fallback the KB path uses).
+
+    Each file gets its own :data:`REFERENCED_TOP_K_PER_FILE` budget
+    (per-file, not global top-k, so one dominant document cannot starve
+    the others), and the per-file result lists are round-robin
+    interleaved up to :data:`REFERENCED_MAX_CHUNKS`. A per-file search
+    failure is logged and skipped (fail-soft, mirroring the per-KB loop).
+    """
+    if not referenced_file_ids:
+        return []
+
+    per_file: list[list[HybridSearchResult]] = []
+    for fid in referenced_file_ids:
+        alpha = alpha_by_id.get(fid, 0.5)
+        try:
+            results = await hybrid_search_files(
+                db,
+                file_ids=[uuid.UUID(fid)],
+                query=query,
+                query_embedding=query_embedding,
+                top_k=REFERENCED_TOP_K_PER_FILE,
+                alpha=alpha,
+            )
+        except Exception:
+            log.exception(
+                "chat-send referenced-files: hybrid_search_files failed for file; skipping",
+                extra={"event": "chat_ref_file_search_failed", "file_id": fid},
+            )
+            continue
+        if results:
+            per_file.append(results)
+
+    # Round-robin interleave so every referenced file is represented
+    # before any file gets a second slot. Order determines the [N]
+    # citation indices, so this is also a fairness property of the
+    # context block.
+    merged: list[HybridSearchResult] = []
+    seen: set[uuid.UUID] = set()
+    for rank in range(REFERENCED_TOP_K_PER_FILE):
+        for results in per_file:
+            if rank >= len(results):
+                continue
+            chunk = results[rank]
+            if chunk.chunk_id in seen:
+                continue
+            seen.add(chunk.chunk_id)
+            merged.append(chunk)
+            if len(merged) >= REFERENCED_MAX_CHUNKS:
+                return merged
+    return merged
+
+
+def _merge_retrieved_chunks(
+    referenced: list[HybridSearchResult],
+    kb: list[HybridSearchResult],
+) -> list[HybridSearchResult]:
+    """Merge referenced-file chunks (priority) with KB-RAG chunks.
+
+    Referenced chunks come first (explicit user intent), then KB chunks
+    not already present (deduped by ``chunk_id``). The cap is
+    :data:`MERGED_MAX_TOTAL_CHUNKS` when referenced chunks are present
+    (referenced ≤ REFERENCED_MAX_CHUNKS, so KB retains ≥ 4 slots) and
+    the shipped :data:`RAG_MAX_TOTAL_CHUNKS` otherwise (pure-KB turns
+    are byte-identical to pre-referenced-files behavior). Order determines the
+    ``[N]`` citation indices in the context block.
+    """
+    cap = MERGED_MAX_TOTAL_CHUNKS if referenced else RAG_MAX_TOTAL_CHUNKS
+    out: list[HybridSearchResult] = []
+    seen: set[uuid.UUID] = set()
+    for chunk in [*referenced, *kb]:
+        if chunk.chunk_id in seen:
+            continue
+        seen.add(chunk.chunk_id)
+        out.append(chunk)
+        if len(out) >= cap:
+            break
+    return out
 
 
 def _format_retrieval_context_block(
@@ -1231,6 +1429,17 @@ async def send_message(
     # ``lq_ai_file_ids`` and echo back as ``applied_file_ids``. Empty /
     # omitted is a no-op (no DB round-trip) — back-compatible.
     effective_file_ids = await _validate_owned_file_ids(db, payload.file_ids, user.id)
+
+    # referenced-files — validate caller-referenced matter files (owned + in a KB
+    # attached to the chat's project + ready). 404 id-probing-safe on any
+    # miss; empty/omitted is a no-op. Also yields each file's matter-KB
+    # hybrid_alpha for the file-scoped retrieval below.
+    effective_referenced_file_ids, referenced_alpha_by_id = await _validate_referenced_file_ids(
+        db,
+        payload.referenced_file_ids,
+        owner_id=user.id,
+        project_id=chat.project_id,
+    )
 
     # Wave D.2 Task 3.0 — merge legacy ``skills`` with new
     # ``attached_skills``. Each ``attached_skills`` entry is XOR'd at
@@ -1417,14 +1626,11 @@ async def send_message(
             project_privileged = bool(project_row[1])
             project_ensemble_verification = bool(project_row[2])
 
-    # Wave D.1 T7b — RAG step: when the chat's project has KBs attached,
-    # run hybrid_search across all of them for the user's just-sent
-    # message, write the T7-shape audit row so Receipts surfaces the
-    # 📎 KB retrieval event, and prepend the retrieved chunks as a
-    # ``system`` message to the gateway request so the LLM actually
-    # sees them. Empty results → no audit row, no context injection
-    # (same guard as T7's query_kb path).
-    retrieved_chunks, kb_ids_searched = await _retrieve_kb_context_for_chat(
+    # Wave D.1 T7b — KB RAG across the project's attached KBs. Returns
+    # the query embedding it computed so the referenced-files referenced-file pass
+    # below can reuse it (referenced files live in the same attached
+    # KBs; one embed call per turn).
+    kb_chunks, kb_ids_searched, rag_query_embedding = await _retrieve_kb_context_for_chat(
         db,
         chat=chat,
         query=effective_content,
@@ -1432,14 +1638,23 @@ async def send_message(
         request_id=request.headers.get("x-request-id"),
     )
 
-    # Build the gateway messages list. T7b prepends a ``system``-role
-    # context block when we have retrieved chunks; this is the
-    # least-invasive injection point — the gateway treats it as a
-    # system message and the C2 / ADR 0007 prompt-assembly logic still
-    # runs on top (the gateway concatenates its own system messages
-    # before the user turn, so the retrieved context shows up at the
-    # very front of the prompt). The user's just-sent message
-    # remains the last entry, unchanged.
+    # referenced-files — per-file retrieval for explicitly referenced files.
+    referenced_chunks = await _retrieve_referenced_file_context(
+        db,
+        referenced_file_ids=effective_referenced_file_ids,
+        alpha_by_id=referenced_alpha_by_id,
+        query=effective_content,
+        query_embedding=rag_query_embedding,
+    )
+
+    # Merge: referenced first (explicit intent), then KB, deduped +
+    # capped. The single ``retrieved_chunks`` local flows to the context
+    # block AND to every _persist_message_citations call site, so both
+    # KB and referenced chunks become citable with no change to the
+    # citation path.
+    retrieved_chunks = _merge_retrieved_chunks(referenced_chunks, kb_chunks)
+    injected_chunk_ids = {c.chunk_id for c in retrieved_chunks}
+
     gw_messages: list[ChatCompletionMessage] = []
     if retrieved_chunks:
         context_block = _format_retrieval_context_block(retrieved_chunks)
@@ -1457,11 +1672,13 @@ async def send_message(
                 lq_ai_skip_anonymization=True,
             )
         )
-        # T7-shape audit row. Same details schema as query_kb (kb_ids
-        # plural here; query_kb is single-KB). The row commits with
-        # its own boundary so it's durable even if the gateway call
-        # later fails — Receipts must show retrieval happened
-        # regardless of LLM-call outcome.
+
+    # T7-shape audit row for KB retrieval. chunk_ids/chunk_count record
+    # what was actually INJECTED after the referenced-files merge (Receipts
+    # fidelity); retrieved_count records what the search returned. On
+    # pure-KB turns the two are identical, preserving T7 semantics.
+    if kb_chunks:
+        kb_injected = [c for c in kb_chunks if c.chunk_id in injected_chunk_ids]
         await audit_action(
             db,
             user_id=user.id,
@@ -1472,9 +1689,29 @@ async def send_message(
             request=request,
             details={
                 "kb_ids": [str(k) for k in kb_ids_searched],
-                "chunk_count": len(retrieved_chunks),
-                "chunk_ids": [str(c.chunk_id) for c in retrieved_chunks],
+                "chunk_count": len(kb_injected),
+                "chunk_ids": [str(c.chunk_id) for c in kb_injected],
+                "retrieved_count": len(kb_chunks),
                 "query_token_estimate": len(effective_content.split()),
+            },
+        )
+        await db.commit()
+
+    # referenced-files audit — counts/ids only (P3), own commit boundary (P5).
+    if effective_referenced_file_ids:
+        await audit_action(
+            db,
+            user_id=user.id,
+            action="inference.message_referenced_files",
+            resource_type="chat",
+            resource_id=str(cid),
+            project_id=chat.project_id,
+            request=request,
+            details={
+                "file_ids": list(effective_referenced_file_ids),
+                "referenced_count": len(effective_referenced_file_ids),
+                "chunk_count": len(referenced_chunks),
+                "chunk_ids": [str(c.chunk_id) for c in referenced_chunks],
             },
         )
         await db.commit()
@@ -1635,6 +1872,7 @@ async def send_message(
             user_message_id=user_message.id,
             request_id=request_id,
             retrieved_chunks=retrieved_chunks,
+            referenced_file_ids=effective_referenced_file_ids,
             http_request=request,
             attached_skill_provenance=attached_skill_provenance,
             project_ensemble_verification=project_ensemble_verification,
@@ -1650,6 +1888,7 @@ async def send_message(
         user_message_id=user_message.id,
         request_id=request_id,
         retrieved_chunks=retrieved_chunks,
+        referenced_file_ids=effective_referenced_file_ids,
         http_request=request,
         attached_skill_names=attached_skill_names,
         slash_unresolved=slash_unresolved,
@@ -2308,6 +2547,7 @@ async def resume_tool_call(
                 },
                 "applied_skills": last_applied_skills or [],
                 "applied_file_ids": [],
+                "applied_referenced_file_ids": [],
                 "citations": [],
                 "routed_inference_tier": last_tier,
                 "routed_provider": last_provider,
@@ -2864,6 +3104,7 @@ async def _non_streaming_response(
     user_message_id: uuid.UUID,
     request_id: str,
     retrieved_chunks: list[HybridSearchResult] | None = None,
+    referenced_file_ids: list[str] | None = None,
     http_request: Request | None = None,
     attached_skill_names: list[str] | None = None,
     slash_unresolved: bool = False,
@@ -3006,6 +3247,7 @@ async def _non_streaming_response(
                 cost_estimate=None,
                 applied_skills=applied_skills,
                 applied_file_ids=list(request.lq_ai_file_ids),
+                applied_referenced_file_ids=list(referenced_file_ids or []),
                 attached_skill_names=list(attached_skill_names or []),
                 slash_unresolved=slash_unresolved,
             )
@@ -3095,6 +3337,7 @@ async def _non_streaming_response(
                 message=placeholder_msg,
                 citations=[],
                 applied_file_ids=list(request.lq_ai_file_ids),
+                applied_referenced_file_ids=list(referenced_file_ids or []),
                 attached_skill_names=list(attached_skill_names or []),
                 slash_unresolved=slash_unresolved,
                 pending_tool_call=gate_payload,
@@ -3125,6 +3368,7 @@ async def _non_streaming_response(
                 message=placeholder_mcp,
                 citations=[],
                 applied_file_ids=list(request.lq_ai_file_ids),
+                applied_referenced_file_ids=list(referenced_file_ids or []),
                 attached_skill_names=list(attached_skill_names or []),
                 slash_unresolved=slash_unresolved,
                 mcp_authorization_required=mcp_payload,
@@ -3230,6 +3474,7 @@ async def _non_streaming_response(
         cost_estimate=response.cost_estimate,
         applied_skills=applied_skills,
         applied_file_ids=list(request.lq_ai_file_ids),
+        applied_referenced_file_ids=list(referenced_file_ids or []),
         attached_skill_names=list(attached_skill_names or []),
         slash_unresolved=slash_unresolved,
     )
@@ -3258,6 +3503,7 @@ async def _stream_response(
     user_message_id: uuid.UUID,
     request_id: str,
     retrieved_chunks: list[HybridSearchResult] | None = None,
+    referenced_file_ids: list[str] | None = None,
     http_request: Request | None = None,
     attached_skill_provenance: list[dict[str, str | None]] | None = None,
     project_ensemble_verification: bool = False,
@@ -3665,6 +3911,7 @@ async def _stream_response(
                 # were forwarded to the gateway for this turn (mirrors
                 # ``applied_skills``; turn-scoped, not persisted).
                 "applied_file_ids": list(request.lq_ai_file_ids),
+                "applied_referenced_file_ids": list(referenced_file_ids or []),
                 "citations": [],
                 "routed_inference_tier": last_tier,
                 "routed_provider": last_provider,

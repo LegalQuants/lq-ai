@@ -7450,6 +7450,18 @@ components:
             alongside `lq_ai_skills` and echoed back as `applied_file_ids`
             on the response / SSE `complete` frame. Capped at 16 entries.
             Omitted / empty is back-compatible.
+        referenced_file_ids:
+          type: array
+          maxItems: 16
+          items:
+            type: string
+            format: uuid
+          description: >
+            referenced-files. Caller-selected matter documents to ground this turn
+            via file-scoped retrieval; retrieved chunks are cited by the
+            Citation Engine. KB-only MVP: each id must be caller-owned,
+            ready, and in a Knowledge Base attached to the chat's project
+            (else 404). Distinct from file_ids (verbatim, uncited).
 
     MessagePostResponse:
       type: object
@@ -7498,6 +7510,12 @@ components:
             `messages.file_ids` column, so this surfaces only on the send
             response (and the SSE `complete` frame), not on rows read
             back via `GET /chats/{id}/messages`. Empty when none attached.
+        applied_referenced_file_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: referenced-files echo of the validated referenced_file_ids.
 
     MessageStreamEvent:
       oneOf:
@@ -7573,6 +7591,15 @@ components:
             `lq_ai_file_ids` for this turn — the echo of
             `MessageCreate.file_ids` (mirrors `applied_skills`).
             Turn-scoped; not persisted. Empty when none attached.
+        applied_referenced_file_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: >
+            referenced-files echo of the validated referenced_file_ids (SSE
+            `complete` frame). Turn-scoped; not persisted. Empty when
+            none attached.
         routed_inference_tier:
           type: integer
           enum: [1,2,3,4,5]

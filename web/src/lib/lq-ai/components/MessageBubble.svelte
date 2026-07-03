@@ -263,6 +263,15 @@
 			</div>
 		{/if}
 
+		{#if message.role === 'user' && message.referenced_files?.length}
+			<!-- referenced-files Phase 2 — session-only stamp (not persisted server-side;
+			     disappears on reload). Shows which matter documents grounded
+			     this turn. -->
+			<div class="lq-msg-referenced" data-testid="lq-ai-referenced-row">
+				📄 Referenced: {message.referenced_files.map((f) => f.filename).join(', ')}
+			</div>
+		{/if}
+
 		{#if message.role === 'user' && message.is_enhanced}
 			<div
 				class="mt-1 flex items-center gap-2 flex-wrap justify-end"
@@ -390,3 +399,11 @@
 		{/if}
 	</div>
 {/if}
+
+<style>
+	.lq-msg-referenced {
+		margin-top: 4px;
+		font-size: 12px;
+		color: var(--lq-text-tertiary, #9ca3af);
+	}
+</style>
