@@ -75,6 +75,8 @@ _PARAM_VALUES: dict[str, str] = {
     "tool": "read_doc",
     # PR5b Task 7 — resume pending tool call
     "pending_call_id": _DUMMY_UUID,
+    # Donna #3 — runtime tool/authority-provider admin proxy
+    "provider_type": "courtlistener",
 }
 
 
@@ -195,6 +197,11 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("POST", "/api/v1/admin/provider-keys"),
     ("PATCH", "/api/v1/admin/provider-keys/{provider}"),
     ("DELETE", "/api/v1/admin/provider-keys/{provider}"),
+    # Donna #3 — runtime tool/authority-provider admin proxy
+    ("GET", "/api/v1/admin/tool-providers"),
+    ("POST", "/api/v1/admin/tool-providers"),
+    ("PATCH", "/api/v1/admin/tool-providers/{provider_type}"),
+    ("DELETE", "/api/v1/admin/tool-providers/{provider_type}"),
     ("GET", "/api/v1/admin/config"),
     # D3 — admin audit-log read endpoint
     ("GET", "/api/v1/admin/audit-log"),

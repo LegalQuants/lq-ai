@@ -4980,6 +4980,24 @@ Donna requested (`Donna/docs/upstream-requests/lq-ai-signed-attestation-export.m
 
 The web frontend issues browser-side API calls to a hardcoded `http://localhost:8000` (observed at `auth/login`) rather than deriving the base URL from the operator-configured `API_HOST_PORT` / a public base-URL env var. Consequence: an operator who remaps `API_HOST_PORT` off the default `8000` (e.g. to run a second stack, or behind a different published port) gets a fully working backend but a browser UI that fails with `ERR_CONNECTION_REFUSED` on every call. The documented default path (`API_HOST_PORT=8000`) works, so this is not a blocker — but the web client should read the configured API base URL so a remapped deployment isn't silently broken. Surfaced during the v0.6.0 fresh-clone gate when the api was remapped to coexist with another running stack.
 
+#### DE-381 — Provider-key admin writes don't emit `audit_log` rows
+
+**Priority:** P3 · **Effort:** S · **Status (2026-07-03): filed (Donna #3 tool-provider admin API).**
+
+The Donna #3 tool-provider admin proxy (`POST`/`PATCH`/`DELETE /api/v1/admin/tool-providers`) writes an `audit_log` row on every successful gateway call, on the reasoning that enabling/disabling a research authority source is an auditable governance action. The older, structurally identical Donna #7 provider-key (BYOK) proxy (`POST`/`PATCH`/`DELETE /api/v1/admin/provider-keys`) — which rotates and revokes the raw gateway-held provider API keys — does **not**: it forwards straight to the `GatewayClient` with no `audit_action` call. Rotating or revoking a provider key is at least as sensitive as toggling a tool provider, so this is an inconsistency, not an intentional distinction. DE-381 backfills `audit_action` calls (mirroring the `tool_provider.*` action names — e.g. `provider_key.set` / `provider_key.rotated` / `provider_key.revoked`) onto the three provider-keys write handlers in `api/app/api/admin.py`, written after the gateway call succeeds so a failed write is never recorded (same pattern as `tool_provider.*` and `update_tier_policy`).
+
+#### DE-382 — Hot-enabled tool provider's rate limit isn't enforced until gateway restart
+
+**Priority:** P3 · **Effort:** M · **Status (2026-07-03): filed (Donna #3 tool-provider admin API).**
+
+The gateway `Router`'s `_tool_rate_limiter` (`gateway/app/router.py`) is a single `FixedWindowRateLimiter` computed once in `Router.__init__` from `max((tp.rate_limit.requests_per_minute for tp in config.tool_providers), default=60)` — the widest configured per-minute rate across all tool providers at construction time. The Donna #3 admin API lets an operator enable a new tool provider (or change its rate limit) at runtime via `gateway.yaml` hot-apply, the same way alias edits take effect immediately through `config_provider`. But `_tool_rate_limiter` is not re-derived from the live config snapshot — it stays pinned to whatever `max_rpm` was true when the `Router` was constructed, so a newly hot-enabled provider with a narrower (or wider) configured limit is rate-limited against the stale value until the gateway process restarts. This fails open, not closed (worst case a newly enabled provider is briefly over- or under-throttled relative to its own configured limit) — not a security hole, but a correctness gap in the hot-reload story DE-382 tracks fixing by re-deriving `_tool_rate_limiter` from `config_provider()` per-request or on config-change, matching how the rest of the config surface is already live.
+
+#### DE-383 — `resolve_available_sources` derives `enabled` from provider presence, not the provider's own `enabled` flag
+
+**Priority:** P3 · **Effort:** S · **Status (2026-07-03): filed (Donna #3 tool-provider admin API); pre-existing gap.**
+
+`api/app/research/registry.py`'s `resolve_available_sources` reports a `SOURCE_REGISTRY` entry as `enabled=True` iff `gateway.list_tool_providers()` returns a configured provider of that `type` — but `GatewayClient.list_tool_providers()` (`api/app/clients/gateway.py`) intentionally projects the gateway's admin config down to `{name, type}` only, stripping every other field including `enabled`. So a tool provider that is configured but explicitly disabled (e.g. via the Donna #3 `PATCH .../tool-providers/{provider_type}` toggle, `enabled=false`) is still reported as an available/enabled research source to callers of `resolve_available_sources` (the research-capabilities signal), because presence in the stripped list is the only signal consulted — the entry's actual `enabled` flag never reaches this code path. This predates Donna #3 but Donna #3 is the first admin surface that lets an operator toggle `enabled` at runtime, which makes the staleness user-visible rather than theoretical. Fix requires `list_tool_providers()` to pass through `enabled` (or a new admin-scoped variant that does) and `resolve_available_sources` to AND it with presence.
+
 ---
 
 ## 10. Appendices
