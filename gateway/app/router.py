@@ -613,7 +613,9 @@ class Router:
         self._config_provider = config_provider
         # ADR 0014 tool-egress additions (keyword-only, defaulted so
         # existing Router(...) call sites are untouched):
-        self._tool_adapters: dict[str, ToolProviderAdapter] = tool_adapters or {}
+        self._tool_adapters: dict[str, ToolProviderAdapter] = (
+            tool_adapters if tool_adapters is not None else {}
+        )
         self._tool_egress_log: ToolEgressLogWriter = tool_egress_log or NullToolEgressLogWriter()
         if tool_rate_limiter is not None:
             self._tool_rate_limiter: FixedWindowRateLimiter = tool_rate_limiter

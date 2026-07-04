@@ -38,7 +38,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import ColumnElement, Select, Text, and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -581,6 +581,27 @@ async def get_admin_config(
 # maps to ValidationError → 400, not a 500).
 
 
+class ToolProviderSetRequest(BaseModel):
+    """Request body for ``POST /api/v1/admin/tool-providers``."""
+
+    # ``extra="forbid"`` is the api-layer SSRF backstop (ADR 0014): a client
+    # cannot smuggle a ``base_url``/``allowlist`` field through — egress
+    # defaults are gateway-owned. Mirrors the gateway request models.
+    model_config = ConfigDict(extra="forbid")
+
+    type: str = Field(min_length=1)
+    api_key: str | None = Field(default=None, min_length=1)
+
+
+class ToolProviderPatchRequest(BaseModel):
+    """Request body for ``PATCH /api/v1/admin/tool-providers/{type}``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    api_key: str | None = Field(default=None, min_length=1)
+    enabled: bool | None = None
+
+
 class ProviderKeySetRequest(BaseModel):
     """Request body for ``POST /api/v1/admin/provider-keys``."""
 
@@ -645,6 +666,156 @@ async def revoke_provider_key(
     """
 
     await gateway.delete_provider_key(provider)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# Donna #3 — runtime tool/authority-provider admin proxy
+# ---------------------------------------------------------------------------
+# Proxies the gateway's ``/admin/v1/tool-providers`` surface (enable/disable
+# an authority source + optional runtime key), mirroring the provider-keys
+# proxy above. Unlike provider-keys, every write here ALSO records an
+# ``audit_log`` row (D1) — enabling/disabling a research authority source is
+# an auditable governance action, not just a key rotation. The audit row is
+# written AFTER the gateway call succeeds: a failing gateway call raises
+# before the audit line runs, so a change that didn't happen is never
+# recorded. This matches ``update_tier_policy`` above.
+#
+# Each write pre-validates ``type``/``provider_type`` against
+# ``SOURCE_REGISTRY`` for a fast, gateway-independent 404 (spec §5) before
+# ever making a network call to the gateway.
+
+
+def _reshape_tool_provider_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Project the gateway status row to the public contract (spec §5)."""
+
+    return {
+        "type": row["type"],
+        "enabled": row["enabled"],
+        "name": row.get("name"),
+        "has_key": row["has_key"],
+        "key_required": row["key_required"],
+        "egress_tier": row.get("egress_tier"),
+    }
+
+
+@router.get("/tool-providers")
+async def list_tool_providers(
+    _admin: AdminUser,
+    gateway: Annotated[GatewayClient, Depends(get_gateway_client)],
+) -> dict[str, Any]:
+    """List authority-source status via the gateway. No secret is returned."""
+
+    result = await gateway.list_tool_providers_admin()
+    return {
+        "tool_providers": [
+            _reshape_tool_provider_row(row) for row in result.get("tool_providers", [])
+        ]
+    }
+
+
+@router.post("/tool-providers")
+async def set_tool_provider(
+    body: ToolProviderSetRequest,
+    admin: AdminUser,
+    request: Request,
+    gateway: Annotated[GatewayClient, Depends(get_gateway_client)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, Any]:
+    """Enable an authority source (+optional key). 400/404 propagate from gateway."""
+
+    from app.research.registry import SOURCE_REGISTRY
+
+    if body.type not in SOURCE_REGISTRY:
+        raise HTTPException(status_code=404, detail=f"unknown source type {body.type!r}")
+    row = await gateway.set_tool_provider(body.model_dump(mode="json", exclude_none=True))
+    from app.audit import audit_action
+
+    await audit_action(
+        db,
+        user_id=admin.id,
+        action="tool_provider.enabled",
+        resource_type="tool_provider",
+        resource_id=body.type,
+        request=request,
+        details={"has_key_supplied": body.api_key is not None},
+    )
+    await db.commit()
+    return _reshape_tool_provider_row(row)
+
+
+@router.patch("/tool-providers/{provider_type}")
+async def patch_tool_provider(
+    provider_type: str,
+    body: ToolProviderPatchRequest,
+    admin: AdminUser,
+    request: Request,
+    gateway: Annotated[GatewayClient, Depends(get_gateway_client)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, Any]:
+    """Rotate key and/or toggle enabled. 400/404/409 propagate from gateway."""
+
+    from app.research.registry import SOURCE_REGISTRY
+
+    if provider_type not in SOURCE_REGISTRY:
+        raise HTTPException(status_code=404, detail=f"unknown source type {provider_type!r}")
+    row = await gateway.patch_tool_provider(
+        provider_type, body.model_dump(mode="json", exclude_none=True)
+    )
+    from app.audit import audit_action
+
+    await audit_action(
+        db,
+        user_id=admin.id,
+        action="tool_provider.updated",
+        resource_type="tool_provider",
+        resource_id=provider_type,
+        request=request,
+        details={
+            "has_key_supplied": body.api_key is not None,
+            "enabled": body.enabled,
+        },
+    )
+    await db.commit()
+    return _reshape_tool_provider_row(row)
+
+
+@router.delete(
+    "/tool-providers/{provider_type}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+async def disable_tool_provider(
+    provider_type: str,
+    admin: AdminUser,
+    request: Request,
+    gateway: Annotated[GatewayClient, Depends(get_gateway_client)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Response:
+    """Disable an authority source. 404/409 propagate from the gateway.
+
+    Uses the canonical DELETE-204 recipe (``response_class=Response`` plus an
+    explicit empty ``Response`` return) so the 204 carries a genuinely empty
+    body.
+    """
+
+    from app.research.registry import SOURCE_REGISTRY
+
+    if provider_type not in SOURCE_REGISTRY:
+        raise HTTPException(status_code=404, detail=f"unknown source type {provider_type!r}")
+    await gateway.delete_tool_provider(provider_type)
+    from app.audit import audit_action
+
+    await audit_action(
+        db,
+        user_id=admin.id,
+        action="tool_provider.disabled",
+        resource_type="tool_provider",
+        resource_id=provider_type,
+        request=request,
+        details={},
+    )
+    await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

@@ -307,6 +307,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # lock binds to the right loop.
     app.state.provider_key_lock = asyncio.Lock()
 
+    # Task 2 (runtime tool-provider admin API, Donna #3): mirrors the
+    # provider-key lock/retired-list pair one layer down for tool
+    # providers. Serializes the write -> reload -> swap sequence for
+    # /admin/v1/tool-providers mutations; the retired list holds adapters
+    # displaced by a hot-apply/remove so shutdown closes them once (moved,
+    # never copied — see ``_swap_in_tool_adapter`` in tool_provider_keys.py).
+    app.state.tool_provider_key_lock = asyncio.Lock()
+    retired_tool_adapters: list[ToolProviderAdapter] = []
+    app.state.retired_tool_adapters = retired_tool_adapters
+
     # B4: wire the inference_routing_log writer. ``DATABASE_URL`` is
     # optional — without it the gateway falls back to a no-op writer
     # so the data path keeps working in degraded deployments. The
@@ -432,6 +442,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 await tool_adapter.aclose()
             except Exception:
                 logger.exception("error closing tool adapter %r", tool_name)
+        # Task 2: close any tool adapters retired by a runtime hot-apply /
+        # remove. Defensive ``getattr`` — a test bypassing the lifespan may
+        # not have set the attribute.
+        retired_tools = getattr(app.state, "retired_tool_adapters", [])
+        if retired_tools:
+            logger.info("closing %d retired tool adapters", len(retired_tools))
+            for tool_adapter in retired_tools:
+                try:
+                    await tool_adapter.aclose()
+                except Exception:
+                    logger.exception("error closing retired tool adapter")
         try:
             await close_backend_client()
         except Exception:

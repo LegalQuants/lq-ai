@@ -5654,6 +5654,41 @@ components:
       - refresh_token
       title: TokenResponse
       type: object
+    ToolProviderPatchRequest:
+      additionalProperties: false
+      description: Request body for ``PATCH /api/v1/admin/tool-providers/{type}``.
+      properties:
+        api_key:
+          anyOf:
+          - minLength: 1
+            type: string
+          - type: 'null'
+          title: Api Key
+        enabled:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Enabled
+      title: ToolProviderPatchRequest
+      type: object
+    ToolProviderSetRequest:
+      additionalProperties: false
+      description: Request body for ``POST /api/v1/admin/tool-providers``.
+      properties:
+        api_key:
+          anyOf:
+          - minLength: 1
+            type: string
+          - type: 'null'
+          title: Api Key
+        type:
+          minLength: 1
+          title: Type
+          type: string
+      required:
+      - type
+      title: ToolProviderSetRequest
+      type: object
     TriggerKind:
       description: 'How an autonomous session was started.
 
@@ -7403,6 +7438,123 @@ paths:
       security:
       - OAuth2PasswordBearer: []
       summary: Update Tier Policy
+      tags:
+      - admin
+  /api/v1/admin/tool-providers:
+    get:
+      description: List authority-source status via the gateway. No secret is returned.
+      operationId: list_tool_providers_api_v1_admin_tool_providers_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response List Tool Providers Api V1 Admin Tool Providers Get
+                type: object
+          description: Successful Response
+      security:
+      - OAuth2PasswordBearer: []
+      summary: List Tool Providers
+      tags:
+      - admin
+    post:
+      description: Enable an authority source (+optional key). 400/404 propagate from
+        gateway.
+      operationId: set_tool_provider_api_v1_admin_tool_providers_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolProviderSetRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Set Tool Provider Api V1 Admin Tool Providers Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Set Tool Provider
+      tags:
+      - admin
+  /api/v1/admin/tool-providers/{provider_type}:
+    delete:
+      description: 'Disable an authority source. 404/409 propagate from the gateway.
+
+
+        Uses the canonical DELETE-204 recipe (``response_class=Response`` plus an
+
+        explicit empty ``Response`` return) so the 204 carries a genuinely empty
+
+        body.'
+      operationId: disable_tool_provider_api_v1_admin_tool_providers__provider_type__delete
+      parameters:
+      - in: path
+        name: provider_type
+        required: true
+        schema:
+          title: Provider Type
+          type: string
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Disable Tool Provider
+      tags:
+      - admin
+    patch:
+      description: Rotate key and/or toggle enabled. 400/404/409 propagate from gateway.
+      operationId: patch_tool_provider_api_v1_admin_tool_providers__provider_type__patch
+      parameters:
+      - in: path
+        name: provider_type
+        required: true
+        schema:
+          title: Provider Type
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolProviderPatchRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Patch Tool Provider Api V1 Admin Tool Providers  Provider
+                  Type  Patch
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Patch Tool Provider
       tags:
       - admin
   /api/v1/admin/usage:
