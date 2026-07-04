@@ -3,6 +3,7 @@ import {
 	parseComposePs,
 	composeBaseArgs,
 	psArgs,
+	pullArgs,
 	upArgs,
 	downArgs,
 	downVArgs,
@@ -27,6 +28,9 @@ describe('composeBaseArgs', () => {
 describe('argv builders', () => {
 	it('ps requests JSON', () => {
 		expect(psArgs(base)).toEqual([...base, 'ps', '--format', 'json'])
+	})
+	it('pull refreshes images for the configured tag', () => {
+		expect(pullArgs(base)).toEqual([...base, 'pull'])
 	})
 	it('up is detached', () => {
 		expect(upArgs(base)).toEqual([...base, 'up', '-d'])
