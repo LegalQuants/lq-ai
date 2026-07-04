@@ -5004,6 +5004,12 @@ The gateway `Router`'s `_tool_rate_limiter` (`gateway/app/router.py`) is a singl
 
 `gateway/app/config_writer.py`'s `remove_tool_provider` enforces the "the runtime API only removes entries it owns" invariant by raising `409` when the matched `tool_providers` entry carries an `api_key_env` (an operator's environment-sourced key, not runtime-revocable). But the keyless authority sources (EDGAR, EUR-Lex) never have an `api_key_env` — they authenticate with only a `user_agent`. So a keyless entry an operator hand-added to `gateway.yaml` is byte-indistinguishable from one the runtime API created, and a `DELETE /api/v1/admin/tool-providers/{edgar|eurlex}` will rewrite the YAML to remove it with no `409`. This is not a security hole (the surface is `AdminUser`-gated on the operator's own gateway, and the entry is rebuilt from `TOOL_PROVIDER_DEFAULTS` on re-enable), but the ownership invariant leaks for keyless env-configured entries. Fix requires a durable "runtime-managed" marker on entries the admin API creates (e.g. a `managed_by: runtime` field the writer sets and `remove_tool_provider` checks) so hand-authored keyless entries get the same `409` protection as env-keyed ones.
 
+#### DE-385 — `desktop/package-lock.json` top-level version is stale (`0.5.2`), out of sync with `package.json`
+
+**Priority:** P3 · **Effort:** XS · **Status (2026-07-04): filed (v0.6.1 release).**
+
+`desktop/package.json` is bumped by hand each release (0.6.0 → 0.6.1 at v0.6.1), but `desktop/package-lock.json` still carries `"version": "0.5.2"` at its top level (and in `packages[""].version`) — it was never regenerated when `package.json` moved to 0.6.0 at the v0.6.0 cut, and the v0.6.1 bump left it untouched (hand-editing the lockfile version risks desyncing the resolved dependency tree, so it was deliberately not patched inline). npm keeps the lockfile version in sync only on `npm install`. The desktop app itself versions on its own `desktop-vX.Y.Z` tag track (independent of the lock's stale field), so this is cosmetic/hygiene, not a build correctness bug — but it makes the lockfile a misleading provenance artifact. Fix: run `npm install` in `desktop/` (no dependency changes intended — just let npm rewrite the version field), verify the diff is version-only, and commit; then fold a "regenerate the lockfile" step into the release checklist so `package.json` and the lock never drift again.
+
 ---
 
 ## 10. Appendices
