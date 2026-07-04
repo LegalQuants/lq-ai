@@ -89,6 +89,13 @@ services:
       # Auth — backend → gateway (and gateway → backend for C2 skill fetches).
       # The gateway uses the SAME shared secret in BOTH directions.
       LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
+      # Enables the runtime encrypted-at-rest key store (ADR 0011). Optional for
+      # boot, but forwarded so `docker compose up` supports the in-app admin key
+      # setters — Configure → Provider keys AND Admin → Research sources (enable
+      # CourtListener/GovInfo). Without it those write endpoints return
+      # 400 failed_precondition. Defaults empty (runtime key storage disabled);
+      # set it in .env to enable. Mirrors docker-compose.release.yml.
+      LQ_AI_GATEWAY_MASTER_KEY: ${LQ_AI_GATEWAY_MASTER_KEY:-}
       # C2 — backend HTTP client for skill prompt assembly (ADR 0007).
       LQ_AI_API_URL: ${LQ_AI_API_URL:-http://api:8000}
       LQ_AI_SKILL_CACHE_TTL_SECONDS: ${LQ_AI_SKILL_CACHE_TTL_SECONDS:-60}
