@@ -38,7 +38,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import ColumnElement, Select, Text, and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -584,12 +584,19 @@ async def get_admin_config(
 class ToolProviderSetRequest(BaseModel):
     """Request body for ``POST /api/v1/admin/tool-providers``."""
 
+    # ``extra="forbid"`` is the api-layer SSRF backstop (ADR 0014): a client
+    # cannot smuggle a ``base_url``/``allowlist`` field through — egress
+    # defaults are gateway-owned. Mirrors the gateway request models.
+    model_config = ConfigDict(extra="forbid")
+
     type: str = Field(min_length=1)
     api_key: str | None = Field(default=None, min_length=1)
 
 
 class ToolProviderPatchRequest(BaseModel):
     """Request body for ``PATCH /api/v1/admin/tool-providers/{type}``."""
+
+    model_config = ConfigDict(extra="forbid")
 
     api_key: str | None = Field(default=None, min_length=1)
     enabled: bool | None = None

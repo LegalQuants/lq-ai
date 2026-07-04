@@ -5655,6 +5655,7 @@ components:
       title: TokenResponse
       type: object
     ToolProviderPatchRequest:
+      additionalProperties: false
       description: Request body for ``PATCH /api/v1/admin/tool-providers/{type}``.
       properties:
         api_key:
@@ -5671,6 +5672,7 @@ components:
       title: ToolProviderPatchRequest
       type: object
     ToolProviderSetRequest:
+      additionalProperties: false
       description: Request body for ``POST /api/v1/admin/tool-providers``.
       properties:
         api_key:
