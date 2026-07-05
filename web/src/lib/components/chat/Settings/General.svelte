@@ -126,8 +126,10 @@
 	const applyTheme = (_theme: string) => {
 		let themeToApply = _theme === 'oled-dark' ? 'dark' : _theme === 'her' ? 'light' : _theme;
 
+		// LQ.AI: dark mode isn't a supported deployment theme (see app.html);
+		// 'system' always resolves to light rather than the OS preference.
 		if (_theme === 'system') {
-			themeToApply = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+			themeToApply = 'light';
 		}
 
 		if (themeToApply === 'dark' && !_theme.includes('oled')) {
@@ -152,11 +154,8 @@
 		const metaThemeColor = document.querySelector('meta[name="theme-color"]');
 		if (metaThemeColor) {
 			if (_theme.includes('system')) {
-				const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
-					? 'dark'
-					: 'light';
-				console.log('Setting system meta theme color: ' + systemTheme);
-				metaThemeColor.setAttribute('content', systemTheme === 'light' ? '#ffffff' : '#171717');
+				console.log('Setting system meta theme color: light');
+				metaThemeColor.setAttribute('content', '#ffffff');
 			} else {
 				console.log('Setting meta theme color: ' + _theme);
 				metaThemeColor.setAttribute(
