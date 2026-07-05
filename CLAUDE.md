@@ -268,6 +268,7 @@ When you need to find something quickly:
 | Implementation tasks | [docs/M1-IMPLEMENTATION-ORDER.md](docs/M1-IMPLEMENTATION-ORDER.md) |
 | Code style | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | Skill conventions | [docs/skill-authoring-guide.md](docs/skill-authoring-guide.md) |
+| Frontend dev loop (HMR) | [web/docs/frontend-dev.md](web/docs/frontend-dev.md) |
 | What's already implemented | Existing code in `api/`, `gateway/`, `web/` |
 | What's deferred | [docs/PRD.md §9](docs/PRD.md#9-deferred-enhancements-and-identified-future-work) |
 | Contributor-pickup mini-PRDs | [docs/proposals/](docs/proposals/) |
