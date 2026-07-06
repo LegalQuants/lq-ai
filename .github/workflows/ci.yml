@@ -12,6 +12,10 @@ name: CI
 #   - Cypress E2E (heavier; needs a stack-up step + LLM provider keys)
 #   - Coverage gates (no-decrease enforcement)
 #   - Dependency-license check (likely Wave F polish)
+#
+# Runtime boot validation (full compose build + up --wait + soak) lives in
+# stack-smoke.yml and runs on dependency-manifest PRs, pushes to main, and
+# manual dispatch — see issue #283.
 
 on:
   pull_request:
