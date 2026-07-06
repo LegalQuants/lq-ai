@@ -182,6 +182,26 @@ Pytest coverage target is **80%** across `api/` and `gateway/`. The CI configura
 - **End-to-end tests** — Playwright tests covering happy paths in the web UI. Run on every PR.
 - **Fuzzing** — the Inference Gateway's OpenAI compatibility surface is fuzzed continuously in CI against the OpenAI API spec.
 
+### Stack smoke test (build + boot the whole stack)
+
+The suites above run in-process and never boot the real servers, so they miss whole classes of breakage: a server that won't start (uvicorn), a Redis client that fails on connect (the arq workers), a lazily-imported dependency that breaks (docling is only imported inside ingest jobs), or an OpenWebUI-core build failure (the `web` production build is outside the scoped typecheck and the Vitest suite). The stack smoke test closes that gap by building every default-profile image, booting the full compose stack, waiting for every healthcheck, probing the api/gateway/web health endpoints and the ingest worker's lazy imports, then holding for a soak period and failing if any container restarted.
+
+CI runs it (`.github/workflows/stack-smoke.yml`) on PRs that touch dependency manifests — `pyproject.toml`, `web/package.json`/`package-lock.json`, Dockerfiles, `docker-compose.yml` — which covers dependabot PRs, plus pushes to `main` and manual dispatch.
+
+**Run it locally** before submitting a change that could break the stack at build or boot time (a dependency bump, a Dockerfile or compose edit, a new migration):
+
+```bash
+./scripts/stack-smoke.sh
+```
+
+Notes for local runs:
+
+- **No provider API keys are needed** — nothing in the smoke performs inference. If you have no `.env`, the script writes one with dummy secrets; an existing `.env` is respected.
+- It operates on the same compose project as your dev stack and recreates the containers (`--force-recreate`) so the restart-count assertion starts from zero. Named volumes (Postgres data, MinIO objects, model caches) are untouched. As always, never `docker compose down -v`.
+- A cold build needs roughly 25 GB of free disk and 20–30 minutes (the api image pulls docling/torch); warm rebuilds are much faster.
+- Tune with `SOAK_SECONDS` (default 75) and `WAIT_TIMEOUT` (default 900) environment variables.
+- It proves "builds, migrates, boots, and holds" — it does **not** prove features work. Feature-level verification still belongs to the test categories above.
+
 ### Test stack conventions (Python)
 
 Locked-in choices so new tests don't drift across `api/` and `gateway/`. Changes to these defaults need a PR with rationale.

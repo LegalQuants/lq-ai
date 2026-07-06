@@ -1,4 +1,5 @@
-# Stack-boot smoke test (issue #283).
+# Stack-boot smoke test (issue #283). The check itself is
+# scripts/stack-smoke.sh — run that locally to reproduce this job.
 #
 # Builds the full default-profile compose stack and asserts it stands:
 # every service reaches its healthcheck, holds for a soak period without
@@ -64,69 +65,16 @@ jobs:
           sudo docker image prune -af
           df -h /
 
-      - name: Write CI .env
-        # Dummy values for the four secrets compose requires (see
-        # .env.example). Provider API keys stay unset — the stack boots
-        # without them and this workflow performs no inference.
-        run: |
-          cat > .env <<'EOF'
-          POSTGRES_PASSWORD=ci-smoke-postgres
-          MINIO_ROOT_PASSWORD=ci-smoke-minio-password
-          LQ_AI_GATEWAY_KEY=ci-smoke-gateway-key
-          JWT_SECRET=ci-smoke-jwt-secret-0123456789abcdef0123456789abcdef
-          EOF
-
-      - name: Build images
-        # api, ingest-worker, and arq-worker share the ./api build
-        # context and produce byte-identical images. Letting `up --build`
-        # build all three exports the ~12 GB image three times
-        # concurrently, which can exhaust runner disk mid-extraction
-        # (observed during local verification). Build each distinct
-        # image once and tag the worker images from the api image —
-        # compose image names are stable because docker-compose.yml
-        # pins the project name (`name: lq-ai`).
-        run: |
-          docker compose build gateway web
-          docker compose build api
-          docker tag lq-ai-api:latest lq-ai-ingest-worker:latest
-          docker tag lq-ai-api:latest lq-ai-arq-worker:latest
-
-      - name: Boot the stack
-        # --wait blocks until every default-profile service reports
-        # healthy (all of them define healthchecks) and fails the step
-        # if any container exits or never becomes healthy.
-        run: docker compose up -d --wait --wait-timeout 900 --no-build
-
-      - name: Probe health endpoints from the host
-        run: |
-          curl -fsS http://127.0.0.1:8000/health
-          curl -fsS http://127.0.0.1:8001/health
-          curl -fsS http://127.0.0.1:3000/health
-
-      - name: Probe lazily-imported dependencies
-        # The ingest worker defers docling imports into job functions
-        # (see api/app/workers/document_pipeline.py), so a broken
-        # docling survives boot. Import it explicitly.
-        run: docker compose exec -T ingest-worker python -c "from docling.document_converter import DocumentConverter"
-
-      - name: Soak
-        # Healthchecks can flicker healthy on a crash-looping service;
-        # hold long enough for a loop to show up as restarts.
-        run: sleep 75
-
-      - name: Assert no container restarted
-        run: |
-          failed=0
-          for id in $(docker compose ps -q); do
-            name=$(docker inspect --format '{{.Name}}' "$id")
-            restarts=$(docker inspect --format '{{.RestartCount}}' "$id")
-            status=$(docker inspect --format '{{.State.Status}}' "$id")
-            echo "$name status=$status restarts=$restarts"
-            if [ "$restarts" != "0" ] || [ "$status" != "running" ]; then
-              failed=1
-            fi
-          done
-          exit "$failed"
+      - name: Run the stack smoke
+        # The smoke itself lives in scripts/stack-smoke.sh — the single
+        # source of truth, so contributors can run the exact same check
+        # locally before submitting a risky change (see CONTRIBUTING.md
+        # "Stack smoke test"). It writes a dummy .env (no provider keys
+        # are needed; nothing performs inference), builds the images,
+        # boots the stack to healthy, probes health endpoints and
+        # lazily-imported deps, soaks, and asserts no container
+        # restarted.
+        run: ./scripts/stack-smoke.sh
 
       - name: Dump stack state on failure
         if: failure()
