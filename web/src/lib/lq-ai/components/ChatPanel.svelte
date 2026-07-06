@@ -100,10 +100,19 @@
 	import ReceiptsDrawer, {
 		readPersistedOpen as readReceiptsDrawerOpen
 	} from '$lib/lq-ai/components/ReceiptsDrawer.svelte';
+	import { IconPaperclip, IconSparkles, IconReceipt, IconSparkleHighlight, IconBabyCarriage } from '@tabler/icons-svelte';
+	import LqButton from '$lib/lq-ai/components/shared/LqButton.svelte';
+	import LqGroup from '$lib/lq-ai/components/shared/LqGroup.svelte';
+	import LqStack from '$lib/lq-ai/components/shared/LqStack.svelte';
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
+	import LqAlert from '$lib/lq-ai/components/shared/LqAlert.svelte';
+	import LqSwitch from '$lib/lq-ai/components/shared/LqSwitch.svelte';
 	import SlashPopover from '$lib/lq-ai/components/SlashPopover.svelte';
 	import type { SkillAutocompleteItem } from '$lib/lq-ai/types';
 	import { auth } from '$lib/lq-ai/auth/store';
 	import { createEventDispatcher } from 'svelte';
+	import { space } from 'postcss/lib/list';
 
 	// ---- component props ----
 	export let projectIdFilter: string | undefined = undefined;
@@ -138,11 +147,6 @@
 	let stickyEnabled = false;
 	let stickyDirty = false;
 	let stickyInitChatId: string | null = null;
-
-	function toggleSticky(): void {
-		stickyEnabled = !stickyEnabled;
-		stickyDirty = true;
-	}
 
 	// Wave D.1 T20 follow-on (deferral A + B) — Enhance Prompt tracking.
 	// `pendingEnhancement` holds the most recent "Use enhanced" outcome
@@ -186,19 +190,19 @@
 	// T6 — Enhance Prompt panel reference. Parent calls expansionPanel.open().
 	let expansionPanel: EnhancePromptExpansion | null = null;
 
-	// T12 — Attach-KB modal state. The composer 📎 button mounts the shared
-	// AttachKBModal scoped to the active chat's project. Successful attaches
-	// bubble up to the matter workspace via the `kbsAttached` event so the
-	// matter rail can refresh its KB list. The modal is only meaningful when
-	// the active chat lives inside a project (legal matter); for project-less
-	// chats the 📎 button is hidden.
+	// T12 — Attach-KB modal state. The composer's attach-KB button (IconPaperclip)
+	// mounts the shared AttachKBModal scoped to the active chat's project.
+	// Successful attaches bubble up to the matter workspace via the
+	// `kbsAttached` event so the matter rail can refresh its KB list. The
+	// modal is only meaningful when the active chat lives inside a project
+	// (legal matter); for project-less chats the button is hidden.
 	let attachKbModalOpen = false;
 	const dispatch = createEventDispatcher<{ kbsAttached: { kbIds: string[] } }>();
 
-	// Wave D.1 T19 — Receipts drawer state. The composer 📜 button toggles
-	// the right-side receipts drawer (T18). Open state is restored from
-	// localStorage when the active chat changes, so it survives reloads and
-	// chat switches.
+	// Wave D.1 T19 — Receipts drawer state. The composer's receipts button
+	// (IconReceipt) toggles the right-side receipts drawer (T18). Open
+	// state is restored from localStorage when the active chat changes, so
+	// it survives reloads and chat switches.
 	let receiptsDrawerOpen = false;
 
 	function openAttachKbModal(): void {
@@ -963,34 +967,31 @@
 	/>
 
 	<section class="flex-1 flex flex-col overflow-hidden">
-		<div
-			class="px-4 py-2 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between"
-			data-testid="lq-ai-chat-header"
-		>
+		<LqGroup justify="space-between" padding="xs" class="border-b border-gray-200" data-testid="lq-ai-chat-header">
 			{#if activeChat}
-				<div>
-					<h2 class="lq-text-panel-h">
+				<LqGroup justify="space-between">
+					<LqTitle order={5} weight="semibold">
 						{activeChat.title || 'Untitled chat'}
-					</h2>
+					</LqTitle>
 					{#if activeChat.project_id}
-						<p class="text-xs text-gray-500">
+						<LqText size="xs" tone="secondary">
 							In project: {$projectsStore.find((p) => p.id === activeChat.project_id)?.name ??
 								activeChat.project_id}
-						</p>
+						</LqText>
 					{/if}
-				</div>
-				<div class="flex items-center gap-2">
+					</LqGroup>
+				<LqGroup gap="sm">
 					{#if messages[messages.length - 1]?.role === 'assistant' && messages[messages.length - 1]?.routed_inference_tier}
 						<TierBadge
 							tier={messages[messages.length - 1].routed_inference_tier ?? null}
 							provider={messages[messages.length - 1].routed_provider ?? null}
 						/>
 					{/if}
-				</div>
+				</LqGroup>
 			{:else}
-				<h2 class="text-sm text-gray-500">Pick or create a chat to start.</h2>
+				<LqText size="sm" tone="secondary">Pick or create a chat to start.</LqText>
 			{/if}
-		</div>
+		</LqGroup>
 
 		<MessageList
 			{messages}
@@ -1009,11 +1010,8 @@
 		/>
 
 		{#if activeChat}
-			<div
-				class="border-t border-gray-200 dark:border-gray-800 p-3 space-y-2"
-				data-testid="lq-ai-composer"
-			>
-				<div class="flex items-center justify-between">
+			<LqStack gap="sm" class="border-t border-gray-200" data-testid="lq-ai-composer">
+				<LqGroup justify="space-between">
 					<ModelPicker
 						models={availableModels}
 						selectedId={currentModelId}
@@ -1022,25 +1020,21 @@
 					<!-- Issue #207 finding 4 — opt-in "sticky skills" toggle. Off by
 					     default; when on, the skills applied here stay applied to
 					     follow-up messages in this chat (resets for a new chat). -->
-					<button
-						type="button"
-						role="switch"
-						aria-checked={stickyEnabled}
-						on:click={toggleSticky}
+					<LqGroup
+						gap="xs"
 						data-testid="lq-ai-sticky-toggle"
 						title="Keep the skills applied here active for follow-up messages in this chat. Off by default; a new chat starts fresh."
-						class="flex items-center gap-2 text-xs font-medium px-2 py-1 rounded-md border transition-colors {stickyEnabled
-							? 'border-emerald-500 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40'
-							: 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'}"
 					>
-						<span
-							class="inline-block w-2 h-2 rounded-full {stickyEnabled
-								? 'bg-emerald-500'
-								: 'bg-gray-300 dark:bg-gray-600'}"
-						></span>
-						Keep skills on
-					</button>
-				</div>
+						<LqSwitch
+							checked={stickyEnabled}
+							onCheckedChange={(value) => {
+								stickyEnabled = value;
+								stickyDirty = true;
+							}}
+						/>
+						<LqText size="xs" tone="secondary">Keep skills on</LqText>
+					</LqGroup>
+				</LqGroup>
 
 				<SkillPicker
 					availableSkills={$skillsStore}
@@ -1060,15 +1054,12 @@
 				/>
 
 				{#if sendError}
-					<div
-						class="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1"
-						data-testid="lq-ai-send-error"
-					>
+					<LqAlert tone="red" data-testid="lq-ai-send-error">
 						{sendError}
-					</div>
+					</LqAlert>
 				{/if}
 
-				<div class="flex items-end gap-2">
+				<LqGroup align="flex-end" gap="sm">
 					<div class="lq-composer-wrap flex-1">
 						<textarea
 							class="lq-composer w-full text-sm resize-none"
@@ -1078,7 +1069,7 @@
 							data-testid="lq-ai-composer-input"
 							on:keydown={handleComposerKeydown}
 							on:input={onComposerInput}
-						></textarea>
+						/>
 						{#if slashOpen}
 							<div class="lq-composer-popover" data-testid="lq-ai-slash-popover-anchor">
 								<SlashPopover
@@ -1090,60 +1081,63 @@
 						{/if}
 					</div>
 					{#if streamingMessageId}
-						<button
-							type="button"
-							class="lq-btn-abort text-sm font-medium"
+						<LqButton
+							variant="filled"
+							tone="red"
 							on:click={abortStream}
 							data-testid="lq-ai-abort-btn"
 						>
 							Stop
-						</button>
+						</LqButton>
 					{:else}
 						{#if composerProjectId}
-							<button
-								type="button"
-								class="lq-btn-secondary text-sm"
+							<LqButton
+								variant="outline"
+								tone="sage"
+								size="sm"
 								aria-label="Attach knowledge base"
 								title="Attach a knowledge base to this matter"
+								disabled={true}
 								on:click={openAttachKbModal}
 								data-testid="lq-ai-attach-kb-btn"
 							>
-								📎
-							</button>
+								<IconPaperclip size={16} />
+							</LqButton>
 						{/if}
-						<button
-							type="button"
-							class="lq-btn-secondary text-sm"
+						<LqGroup gap="xs">
+						<LqButton
+							size="sm"
+							variant={enhanceIsRefine ? 'filled' : 'outline'}
 							aria-label={enhanceButtonAriaLabel}
 							title={enhanceButtonTitle}
-							on:click={() => expansionPanel?.open()}
+							onclick={() => expansionPanel?.open()}
 							disabled={!composerText.trim() || !!streamingMessageId}
 							data-testid="lq-ai-enhance-btn"
 							data-enhance-mode={enhanceIsRefine ? 'refine' : 'enhance'}
 						>
-							✨
-						</button>
-						<button
-							type="button"
-							class="lq-btn-secondary text-sm"
+							<IconSparkles size={16} />
+						</LqButton>
+						<LqButton
+							size="sm"
+							variant={receiptsDrawerOpen ? 'filled' : 'outline'}
 							aria-label="Toggle receipts drawer"
 							title="Toggle receipts"
 							on:click={() => (receiptsDrawerOpen = !receiptsDrawerOpen)}
 							data-testid="lq-ai-receipts-toggle"
 						>
-							📜
-						</button>
-						<button
-							type="button"
-							class="lq-btn-send text-sm font-medium disabled:opacity-50"
+							<IconReceipt size={16} />
+						</LqButton>
+						<LqButton
+							size="sm"
 							on:click={sendMessage}
 							disabled={!composerText.trim()}
 							data-testid="lq-ai-send-btn"
 						>
 							Send
-						</button>
+						</LqButton>
+						</LqGroup>
 					{/if}
-				</div>
+				</LqGroup>
 
 				<EnhancePromptExpansion
 					bind:this={expansionPanel}
@@ -1154,7 +1148,7 @@
 					onKeepOriginal={handleKeepOriginal}
 					onDismiss={handleEnhanceDismiss}
 				/>
-			</div>
+			</LqStack>
 		{/if}
 		<AmbientFooter provider={footerProvider} tier={footerTier} />
 	</section>
@@ -1232,52 +1226,4 @@
 		color: var(--lq-text-tertiary);
 	}
 
-	.lq-btn-send {
-		background: var(--lq-accent);
-		color: white;
-		border: 0;
-		border-radius: var(--lq-radius);
-		padding: 8px 16px;
-		cursor: pointer;
-	}
-	.lq-btn-send:hover {
-		filter: brightness(0.95);
-	}
-	.lq-btn-send:focus-visible {
-		outline: 2px solid var(--lq-accent);
-		outline-offset: 2px;
-	}
-
-	.lq-btn-abort {
-		background: #dc2626;
-		color: white;
-		border: 0;
-		border-radius: var(--lq-radius);
-		padding: 8px 16px;
-		cursor: pointer;
-	}
-	.lq-btn-abort:hover {
-		filter: brightness(0.95);
-	}
-
-	.lq-btn-secondary {
-		background: white;
-		color: var(--lq-accent);
-		border: 1px solid var(--lq-accent-border);
-		border-radius: var(--lq-radius);
-		padding: 8px 12px;
-		font-size: 14px;
-		cursor: pointer;
-	}
-	.lq-btn-secondary:hover {
-		background: var(--lq-accent-soft);
-	}
-	.lq-btn-secondary:disabled {
-		opacity: 0.5;
-		cursor: default;
-	}
-	.lq-btn-secondary:focus-visible {
-		outline: 2px solid var(--lq-accent);
-		outline-offset: 2px;
-	}
 </style>
