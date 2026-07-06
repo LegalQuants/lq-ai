@@ -51,13 +51,17 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Free runner disk space
-        # The ingest-worker image (docling/easyocr/torch) plus the other
-        # three built images need more space than a hosted runner has
-        # free by default. Dropping the pre-installed toolchains we
-        # don't use reclaims ~15 GB.
+        # The api-family image unpacks to ~12 GB on its own (docling
+        # pulls CUDA-enabled torch), and the BuildKit cache costs about
+        # as much again, so the default ~14 GB of free runner space is
+        # not enough. Dropping the pre-installed toolchains we don't
+        # use and the runner's preloaded docker images reclaims ~25 GB.
         run: |
           df -h /
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /opt/hostedtoolcache/CodeQL /usr/lib/jvm /usr/share/swift \
+            /usr/local/.ghcup /usr/local/share/boost /usr/local/lib/node_modules
+          sudo docker image prune -af
           df -h /
 
       - name: Write CI .env
