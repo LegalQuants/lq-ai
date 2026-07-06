@@ -76,11 +76,26 @@ jobs:
           JWT_SECRET=ci-smoke-jwt-secret-0123456789abcdef0123456789abcdef
           EOF
 
-      - name: Build and boot the stack
+      - name: Build images
+        # api, ingest-worker, and arq-worker share the ./api build
+        # context and produce byte-identical images. Letting `up --build`
+        # build all three exports the ~12 GB image three times
+        # concurrently, which can exhaust runner disk mid-extraction
+        # (observed during local verification). Build each distinct
+        # image once and tag the worker images from the api image —
+        # compose image names are stable because docker-compose.yml
+        # pins the project name (`name: lq-ai`).
+        run: |
+          docker compose build gateway web
+          docker compose build api
+          docker tag lq-ai-api:latest lq-ai-ingest-worker:latest
+          docker tag lq-ai-api:latest lq-ai-arq-worker:latest
+
+      - name: Boot the stack
         # --wait blocks until every default-profile service reports
         # healthy (all of them define healthchecks) and fails the step
         # if any container exits or never becomes healthy.
-        run: docker compose up -d --build --wait --wait-timeout 900
+        run: docker compose up -d --wait --wait-timeout 900 --no-build
 
       - name: Probe health endpoints from the host
         run: |
