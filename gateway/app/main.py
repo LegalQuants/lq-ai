@@ -74,6 +74,7 @@ from app.providers import (
     OpenAIAdapter,
     ProviderAdapter,
 )
+from app.providers.base_url_policy import validate_llm_base_url
 from app.providers.tool.base import ToolProviderAdapter
 from app.providers.tool.courtlistener import CourtListenerToolAdapter
 from app.providers.tool.echo import EchoToolAdapter
@@ -161,6 +162,11 @@ def build_adapter(provider: ProviderConfig) -> ProviderAdapter | None:
 
     if not provider.enabled:
         return None
+    # Egress guard (#288, GW-04): the prompt-carrying LLM path must not send
+    # cleartext to a public host or use a non-http(s) scheme. Validate before
+    # building any adapter so a bad base_url fails at startup — matching the
+    # build-time validation the tool path already does.
+    validate_llm_base_url(provider.base_url)
     if provider.type == "anthropic":
         return AnthropicAdapter.from_config(provider)
     if provider.type in ("openai", "openai_compatible"):
