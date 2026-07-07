@@ -76,8 +76,15 @@ jobs:
         # restarted.
         run: ./scripts/stack-smoke.sh
 
-      - name: Dump stack state on failure
+      # On failure the script itself dumps diagnostics to the job log
+      # and the job summary (failed phase, container states, healthcheck
+      # probe output, disk space, recent logs) and writes full compose
+      # logs to stack-smoke-logs/ — upload those for offline digging.
+      - name: Upload failure diagnostics
         if: failure()
-        run: |
-          docker compose ps -a
-          docker compose logs --no-color --tail 200
+        uses: actions/upload-artifact@v4
+        with:
+          name: stack-smoke-logs
+          path: stack-smoke-logs/
+          if-no-files-found: ignore
+          retention-days: 14

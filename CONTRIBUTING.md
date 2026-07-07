@@ -200,6 +200,7 @@ Notes for local runs:
 - It operates on the same compose project as your dev stack and recreates the containers (`--force-recreate`) so the restart-count assertion starts from zero. Named volumes (Postgres data, MinIO objects, model caches) are untouched. As always, never `docker compose down -v`.
 - A cold build needs roughly 25 GB of free disk and 20–30 minutes (the api image pulls docling/torch); warm rebuilds are much faster.
 - Tune with `SOAK_SECONDS` (default 75) and `WAIT_TIMEOUT` (default 900) environment variables.
+- **On failure** the script reports which phase failed (build / boot / probes / soak), each container's state (exit code, OOM kill, restart count), the last healthcheck probe outputs, disk space, and the last 60 log lines per service; full compose logs land in `stack-smoke-logs/` (gitignored). CI additionally uploads that directory as a workflow artifact and writes the state dump to the job summary.
 - It proves "builds, migrates, boots, and holds" — it does **not** prove features work. Feature-level verification still belongs to the test categories above.
 
 ### Test stack conventions (Python)
