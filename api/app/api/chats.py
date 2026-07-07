@@ -353,6 +353,36 @@ async def _load_visible_chat(
     return row
 
 
+async def _load_visible_project_for_chat(
+    db: AsyncSession,
+    project_id: uuid.UUID,
+    owner_id: uuid.UUID,
+) -> Project:
+    """Validate that ``project_id`` is owned by the caller before accepting it
+    as a chat's project association; 404 on miss / cross-user / archived.
+
+    Mirrors :func:`app.api.knowledge_bases._load_visible_project_for_kb`.
+    Inlined here rather than imported to keep the chat surface free of a
+    reverse dependency on the projects router module — it is a one-statement
+    SELECT. Without this guard a caller can bind a chat to another user's
+    project id and, on ``send_message``, pull that project's attached
+    knowledge-base content into the response and out to the LLM provider.
+    """
+
+    stmt = select(Project).where(
+        Project.id == project_id,
+        Project.owner_id == owner_id,
+        Project.archived_at.is_(None),
+    )
+    row = (await db.execute(stmt)).scalar_one_or_none()
+    if row is None:
+        raise NotFound(
+            f"Project {project_id} not found.",
+            details={"project_id": str(project_id)},
+        )
+    return row
+
+
 async def _load_chat_for_reader(
     db: AsyncSession,
     chat_id: uuid.UUID,
@@ -587,6 +617,9 @@ async def create_chat(
     user: ActiveUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ChatResponse:
+    if payload.project_id is not None:
+        await _load_visible_project_for_chat(db, payload.project_id, user.id)
+
     chat = Chat(
         owner_id=user.id,
         project_id=payload.project_id,
@@ -1035,7 +1068,13 @@ async def _retrieve_kb_context_for_chat(
         return [], []
 
     # Load KB rows (for hybrid_alpha per KB). One SELECT for the set.
-    kb_stmt = select(KnowledgeBase).where(KnowledgeBase.id.in_(kb_ids))
+    # Defense-in-depth: scope to the chat owner so a stale or foreign
+    # ``project_id`` (see _load_visible_project_for_chat) can never surface
+    # another user's KB content, even if one slipped past chat creation.
+    kb_stmt = select(KnowledgeBase).where(
+        KnowledgeBase.id.in_(kb_ids),
+        KnowledgeBase.owner_id == chat.owner_id,
+    )
     kb_rows = (await db.execute(kb_stmt)).scalars().all()
 
     # Embed the query once (reused across every KB). Mirrors the
