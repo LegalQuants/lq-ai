@@ -516,7 +516,9 @@ async def test_retrieve_chunks_since_excludes_artifact_files(
     await db_session.flush()
 
     since = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
-    result = await _handle_retrieve_chunks({"since": since, "kb_id": str(kb.id)}, db=db_session)
+    result = await _handle_retrieve_chunks(
+        {"since": since, "kb_id": str(kb.id)}, db=db_session, owner_id=user.id
+    )
 
     returned_file_ids = {c["file_id"] for c in result.data["chunks"]}
     assert str(ordinary_file.id) in returned_file_ids

@@ -574,7 +574,7 @@ async def _dispatch(
         return ToolResult(cost_usd=Decimal("0"), data={"notification_id": str(note.id)})
 
     if intent == ToolIntent.retrieve_chunks:
-        return await _handle_retrieve_chunks(params, db=db)
+        return await _handle_retrieve_chunks(params, db=db, owner_id=session.user_id)
 
     if intent in (ToolIntent.run_skill, ToolIntent.run_playbook, ToolIntent.plan):
         return await _handle_gateway_inference(
@@ -1149,13 +1149,64 @@ async def _handle_emit_artifact(
     return ToolResult(cost_usd=Decimal("0"), data=data)
 
 
+async def _assert_kb_owned(db: AsyncSession, kb_id: uuid.UUID, owner_id: uuid.UUID) -> None:
+    """Reject a model-supplied ``kb_id`` the session owner does not own.
+
+    :func:`hybrid_search` and the since-fetch scope only by ``kb_id`` and rely
+    on the *handler* having verified ownership upstream (per the retrieval
+    module's contract). In the autonomous loop the planner's ``kb_id`` is
+    model-controlled and therefore prompt-injectable, so the check has to
+    happen here or an injected document could steer retrieval at another
+    tenant's KB (#288, AG-01). 404-shaped (not-found) message so cross-user
+    probing can't tell "exists, not yours" from "doesn't exist".
+    """
+    from sqlalchemy import select
+
+    from app.models.knowledge import KnowledgeBase
+
+    owned = (
+        await db.execute(
+            select(KnowledgeBase.id).where(
+                KnowledgeBase.id == kb_id,
+                KnowledgeBase.owner_id == owner_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if owned is None:
+        raise ValueError(f"knowledge base {kb_id} is not accessible to this session")
+
+
+async def _assert_file_owned(db: AsyncSession, file_id: uuid.UUID, owner_id: uuid.UUID) -> None:
+    """Reject a model-supplied ``file_id`` the session owner does not own
+    (#288, AG-01). See :func:`_assert_kb_owned` for the rationale."""
+    from sqlalchemy import select
+
+    from app.models.file import File as FileModel
+
+    owned = (
+        await db.execute(
+            select(FileModel.id).where(
+                FileModel.id == file_id,
+                FileModel.owner_id == owner_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if owned is None:
+        raise ValueError(f"file {file_id} is not accessible to this session")
+
+
 async def _handle_retrieve_chunks(
     params: dict[str, Any],
     *,
     db: AsyncSession,
+    owner_id: uuid.UUID,
 ) -> ToolResult:
     """Handle ``retrieve_chunks`` — hybrid KB search OR file-scoped OR
     since-scoped fetch.  Zero cost (local retrieval).
+
+    ``owner_id`` is the owning session's ``user_id``; every model-supplied
+    ``kb_id``/``file_id`` is checked against it before retrieval so a
+    prompt-injected document cannot reach another tenant's data (#288, AG-01).
 
     Three modes (mutually exclusive at the top level):
 
@@ -1204,10 +1255,12 @@ async def _handle_retrieve_chunks(
 
     # Mode 2: file-scoped fetch.
     if file_id_raw is not None:
+        await _assert_file_owned(db, uuid.UUID(str(file_id_raw)), owner_id)
         return await _handle_retrieve_chunks_by_file(file_id_raw, db=db)
 
     # Mode 3: since + kb_id scoped fetch.
     if since_raw is not None and kb_id_raw is not None:
+        await _assert_kb_owned(db, uuid.UUID(str(kb_id_raw)), owner_id)
         return await _handle_retrieve_chunks_since(since_raw, kb_id_raw, db=db)
 
     # Mode 1: query-based hybrid search (existing path — unchanged).
@@ -1217,6 +1270,10 @@ async def _handle_retrieve_chunks(
             "`file_id` (file-scoped fetch), or `since` + `kb_id` "
             "(KB-scoped fetch of files attached after a cutoff)."
         )
+    # Mode 1 requires kb_id; verify ownership before searching. If kb_id is
+    # absent the downstream handler raises as before (malformed request).
+    if kb_id_raw is not None:
+        await _assert_kb_owned(db, uuid.UUID(str(kb_id_raw)), owner_id)
     return await _handle_retrieve_chunks_query(params, db=db)
 
 
