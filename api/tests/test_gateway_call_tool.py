@@ -3,6 +3,7 @@ import json as _json
 import httpx
 import pytest
 import respx
+from pydantic import ValidationError
 
 from app.clients.gateway import GatewayClient
 from app.schemas.gateway import ChatCompletionRequest
@@ -75,6 +76,33 @@ def test_api_chat_request_carries_tools() -> None:
     )
     assert req.tools[0]["function"]["name"] == "x"  # type: ignore[index]
     assert req.tool_choice == "auto"
+
+
+def test_api_chat_request_accepts_tools_at_cap() -> None:
+    """DE-358 item 3: exactly 64 tool declarations pass the api boundary."""
+    req = ChatCompletionRequest(
+        model="smart",
+        messages=[{"role": "user", "content": "hi"}],
+        tools=[
+            {"type": "function", "function": {"name": f"tool_{i}", "parameters": {}}}
+            for i in range(64)
+        ],
+    )
+    assert req.tools is not None and len(req.tools) == 64
+
+
+def test_api_chat_request_rejects_tools_over_cap() -> None:
+    """DE-358 item 3: the 65th tool declaration fails validation, mirroring
+    the gateway-side bound (fail restrictive)."""
+    with pytest.raises(ValidationError):
+        ChatCompletionRequest(
+            model="smart",
+            messages=[{"role": "user", "content": "hi"}],
+            tools=[
+                {"type": "function", "function": {"name": f"tool_{i}", "parameters": {}}}
+                for i in range(65)
+            ],
+        )
 
 
 @pytest.mark.asyncio
