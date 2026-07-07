@@ -102,6 +102,7 @@
 	} from '$lib/lq-ai/components/ReceiptsDrawer.svelte';
 	import { IconPaperclip, IconSparkles, IconReceipt, IconSparkleHighlight, IconBabyCarriage } from '@tabler/icons-svelte';
 	import LqButton from '$lib/lq-ai/components/shared/LqButton.svelte';
+	import DictationButton from '$lib/lq-ai/components/Dictation/DictationButton.svelte';
 	import LqGroup from '$lib/lq-ai/components/shared/LqGroup.svelte';
 	import LqStack from '$lib/lq-ai/components/shared/LqStack.svelte';
 	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
@@ -970,7 +971,7 @@
 		<LqGroup justify="space-between" padding="xs" class="border-b border-gray-200" data-testid="lq-ai-chat-header">
 			{#if activeChat}
 				<LqGroup justify="space-between">
-					<LqTitle order={5} weight="semibold">
+					<LqTitle order={3} weight="semibold">
 						{activeChat.title || 'Untitled chat'}
 					</LqTitle>
 					{#if activeChat.project_id}
@@ -1105,36 +1106,43 @@
 							</LqButton>
 						{/if}
 						<LqGroup gap="xs">
-						<LqButton
-							size="sm"
-							variant={enhanceIsRefine ? 'filled' : 'outline'}
-							aria-label={enhanceButtonAriaLabel}
-							title={enhanceButtonTitle}
-							onclick={() => expansionPanel?.open()}
-							disabled={!composerText.trim() || !!streamingMessageId}
-							data-testid="lq-ai-enhance-btn"
-							data-enhance-mode={enhanceIsRefine ? 'refine' : 'enhance'}
-						>
-							<IconSparkles size={16} />
-						</LqButton>
-						<LqButton
-							size="sm"
-							variant={receiptsDrawerOpen ? 'filled' : 'outline'}
-							aria-label="Toggle receipts drawer"
-							title="Toggle receipts"
-							on:click={() => (receiptsDrawerOpen = !receiptsDrawerOpen)}
-							data-testid="lq-ai-receipts-toggle"
-						>
-							<IconReceipt size={16} />
-						</LqButton>
-						<LqButton
-							size="sm"
-							on:click={sendMessage}
-							disabled={!composerText.trim()}
-							data-testid="lq-ai-send-btn"
-						>
-							Send
-						</LqButton>
+							<DictationButton
+								disabled={!!streamingMessageId}
+								onFinal={(transcript) => {
+									const separator = composerText && !composerText.endsWith(' ') ? ' ' : '';
+									composerText = `${composerText}${separator}${transcript}`;
+								}}
+							/>
+							<LqButton
+								size="sm"
+								variant={enhanceIsRefine ? 'filled' : 'outline'}
+								aria-label={enhanceButtonAriaLabel}
+								title={enhanceButtonTitle}
+								onclick={() => expansionPanel?.open()}
+								disabled={!composerText.trim() || !!streamingMessageId}
+								data-testid="lq-ai-enhance-btn"
+								data-enhance-mode={enhanceIsRefine ? 'refine' : 'enhance'}
+							>
+								<IconSparkles size={16} />
+							</LqButton>
+							<LqButton
+								size="sm"
+								variant={receiptsDrawerOpen ? 'filled' : 'outline'}
+								aria-label="Toggle receipts drawer"
+								title="Toggle receipts"
+								on:click={() => (receiptsDrawerOpen = !receiptsDrawerOpen)}
+								data-testid="lq-ai-receipts-toggle"
+							>
+								<IconReceipt size={16} />
+							</LqButton>
+							<LqButton
+								size="sm"
+								on:click={sendMessage}
+								disabled={!composerText.trim()}
+								data-testid="lq-ai-send-btn"
+							>
+								Send
+							</LqButton>
 						</LqGroup>
 					{/if}
 				</LqGroup>
