@@ -26,10 +26,20 @@ on:
     paths:
       - api/pyproject.toml
       - gateway/pyproject.toml
+      # The web image installs its Python backend from these (web/Dockerfile);
+      # a bump here can break the web build just like the JS manifests below.
+      - web/pyproject.toml
+      - web/backend/requirements.txt
       - web/package.json
       - web/package-lock.json
       - "**/Dockerfile"
       - docker-compose.yml
+      # A migration runs on api boot (alembic upgrade head) — the header of
+      # scripts/stack-smoke.sh lists a new migration as a reason to run this.
+      - api/alembic/versions/**
+      # The check itself: a PR that only edits the script (or workflow) must
+      # re-run it, or a regression lands untested and first breaks on main.
+      - scripts/stack-smoke.sh
       - .github/workflows/stack-smoke.yml
   push:
     branches: [main]

@@ -110,9 +110,13 @@ docker compose up -d --wait --wait-timeout "$WAIT_TIMEOUT" --no-build --force-re
 
 PHASE="health probes"
 echo "stack-smoke: probing health endpoints from the host"
-curl -fsS http://127.0.0.1:8000/health && echo
-curl -fsS http://127.0.0.1:8001/health && echo
-curl -fsS http://127.0.0.1:3000/health && echo
+# Each curl is its own simple command so `set -e` aborts on a failed
+# probe. `curl ... && echo` would NOT: only the command after the final
+# `&&` in a list is subject to errexit, so a 5xx / refused connection
+# would be swallowed and the smoke would still report PASS.
+curl -fsS http://127.0.0.1:8000/health; echo
+curl -fsS http://127.0.0.1:8001/health; echo
+curl -fsS http://127.0.0.1:3000/health; echo
 
 # The ingest worker defers docling imports into job functions (see
 # api/app/workers/document_pipeline.py), so a broken docling survives
@@ -127,19 +131,28 @@ PHASE="soak / restart assertion"
 echo "stack-smoke: soaking for ${SOAK_SECONDS}s"
 sleep "$SOAK_SECONDS"
 
+# A crash-loop shows up as restarts>0 / not-running. But `restart:
+# unless-stopped` only restarts on process EXIT — a service that stays
+# alive while its healthcheck goes red (deadlocked worker, dropped DB
+# pool) keeps status=running / restarts=0. Every default service defines
+# a healthcheck, so also fail on an unhealthy container. ('starting' is
+# tolerated — a slow probe mid-cycle after the soak is not a failure;
+# the {{if .State.Health}} guard keeps this robust if a service ever
+# drops its healthcheck.)
 failed=0
 for id in $(docker compose ps -q); do
   name=$(docker inspect --format '{{.Name}}' "$id")
   restarts=$(docker inspect --format '{{.RestartCount}}' "$id")
   status=$(docker inspect --format '{{.State.Status}}' "$id")
-  echo "stack-smoke: ${name} status=${status} restarts=${restarts}"
-  if [ "$restarts" != "0" ] || [ "$status" != "running" ]; then
+  health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$id")
+  echo "stack-smoke: ${name} status=${status} restarts=${restarts} health=${health}"
+  if [ "$restarts" != "0" ] || [ "$status" != "running" ] || [ "$health" = "unhealthy" ]; then
     failed=1
   fi
 done
 
 if [ "$failed" != "0" ]; then
-  echo "stack-smoke: FAIL — a container restarted or is not running" >&2
+  echo "stack-smoke: FAIL — a container restarted, is not running, or went unhealthy" >&2
   exit 1
 fi
 echo "stack-smoke: PASS — stack built, booted, and held for ${SOAK_SECONDS}s"
