@@ -62,6 +62,12 @@ LQ_AI_CORS_ORIGINS=http://localhost:3000,http://localhost:5173
 for the normal fully-dockerized flow. Override it inline, per invocation,
 only when starting `web` for this dev flow (see below).
 
+Next, point the natively-served frontend at LQ.AI's `api/`. Vite only reads env files from `web/`, not the repo root, so the root `.env`'s PUBLIC_LQ_AI_API_BASE_URL never reaches npm run dev — without it the client falls back to the relative /api/v1 (see web/src/lib/lq-ai/api/client.ts), which resolves against :5173 and 404s. Set it in web/.env (creating the file if needed):
+
+```bash
+echo 'PUBLIC_LQ_AI_API_BASE_URL=http://localhost:8000/api/v1' >> web/.env
+```
+
 Then install `web/`'s frontend dependencies on the host once:
 
 ```bash
