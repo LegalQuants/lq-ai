@@ -22,7 +22,9 @@ services:
   # ============================================================
 
   postgres:
-    image: pgvector/pgvector:pg16
+    # Digest-pinned for reproducible boots (matches the pin in
+    # .github/workflows/ci.yml). Bump the tag and digest together.
+    image: pgvector/pgvector:pg16@sha256:ad2e18408bf447f62092a8a5259e7df10505c5a0360bd1a1853ac8b8b0763da2
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-lq_ai}
@@ -40,7 +42,8 @@ services:
       retries: 10
 
   redis:
-    image: redis:7-alpine
+    # Digest-pinned for reproducible boots. Bump the tag and digest together.
+    image: redis:7-alpine@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
@@ -54,7 +57,9 @@ services:
       retries: 10
 
   minio:
-    image: minio/minio:latest
+    # Digest-pinned: `latest` alone is not reproducible. Bump the digest
+    # deliberately (re-resolve `minio/minio:latest`) rather than drifting.
+    image: minio/minio:latest@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -418,7 +423,9 @@ services:
   # ============================================================
 
   ollama:
-    image: ollama/ollama:latest
+    # Digest-pinned: `latest` alone is not reproducible. Bump the digest
+    # deliberately (re-resolve `ollama/ollama:latest`) rather than drifting.
+    image: ollama/ollama:latest@sha256:f1a705f2bd113fb8d15f85f7c217f0dc5f6bebda6b0cc42b82c3ad165ffcb9dc
     profiles: ["local"]
     restart: unless-stopped
     volumes:

@@ -12,6 +12,10 @@ name: CI
 #   - Cypress E2E (heavier; needs a stack-up step + LLM provider keys)
 #   - Coverage gates (no-decrease enforcement)
 #   - Dependency-license check (likely Wave F polish)
+#
+# Runtime boot validation (full compose build + up --wait + soak) lives in
+# stack-smoke.yml and runs on dependency-manifest PRs, pushes to main, and
+# manual dispatch — see issue #283.
 
 on:
   pull_request:
@@ -66,9 +70,11 @@ jobs:
     # Image matches docker-compose.yml: pgvector/pgvector:pg16 carries the
     # pgvector extension binary that migrations require (CREATE EXTENSION
     # IF NOT EXISTS vector). Plain postgres:16-alpine omits it.
+    # Pinned by multi-arch index digest (supply-chain hardening, same as the
+    # action SHA pins); bump the digest when moving to a newer pg16 build.
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:pg16@sha256:ad2e18408bf447f62092a8a5259e7df10505c5a0360bd1a1853ac8b8b0763da2
         env:
           POSTGRES_USER: lq_ai
           POSTGRES_PASSWORD: lq_ai

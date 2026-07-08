@@ -1,0 +1,100 @@
+# Stack-boot smoke test (issue #283). The check itself is
+# scripts/stack-smoke.sh — run that locally to reproduce this job.
+#
+# Builds the full default-profile compose stack and asserts it stands:
+# every service reaches its healthcheck, holds for a soak period without
+# restarting, and answers its health endpoint from the host. Building the
+# web image runs the Vite production build; booting the api runs
+# `alembic upgrade head` against real Postgres.
+#
+# This exists to validate what the per-subsystem CI jobs structurally
+# cannot: server boot (uvicorn), real Redis connections (arq workers),
+# lazily-imported heavy deps (docling), and the OpenWebUI-core build that
+# the scoped svelte-check never touches. It proves "builds, migrates,
+# boots, and holds" — NOT "features work"; E2E remains a future wave
+# (see ci.yml scope comment).
+#
+# Cold builds are expensive (~20-30 min; the ingest image pulls
+# docling/easyocr/torch), so this runs only where it earns its keep:
+# dependency-manifest changes (i.e. dependabot PRs), pushes to main,
+# and manual dispatch. Buildx layer caching is a follow-up (#283).
+
+name: Stack smoke
+
+on:
+  pull_request:
+    paths:
+      - api/pyproject.toml
+      - gateway/pyproject.toml
+      # The web image installs its Python backend from these (web/Dockerfile);
+      # a bump here can break the web build just like the JS manifests below.
+      - web/pyproject.toml
+      - web/backend/requirements.txt
+      - web/package.json
+      - web/package-lock.json
+      - "**/Dockerfile"
+      - docker-compose.yml
+      # A migration runs on api boot (alembic upgrade head) — the header of
+      # scripts/stack-smoke.sh lists a new migration as a reason to run this.
+      - api/alembic/versions/**
+      # The check itself: a PR that only edits the script (or workflow) must
+      # re-run it, or a regression lands untested and first breaks on main.
+      - scripts/stack-smoke.sh
+      - .github/workflows/stack-smoke.yml
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: stack-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  stack-smoke:
+    name: Boot the compose stack and hold
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Free runner disk space
+        # The api-family image unpacks to ~12 GB on its own (docling
+        # pulls CUDA-enabled torch), and the BuildKit cache costs about
+        # as much again, so the default ~14 GB of free runner space is
+        # not enough. Dropping the pre-installed toolchains we don't
+        # use and the runner's preloaded docker images reclaims ~25 GB.
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /opt/hostedtoolcache/CodeQL /usr/lib/jvm /usr/share/swift \
+            /usr/local/.ghcup /usr/local/share/boost /usr/local/lib/node_modules
+          sudo docker image prune -af
+          df -h /
+
+      - name: Run the stack smoke
+        # The smoke itself lives in scripts/stack-smoke.sh — the single
+        # source of truth, so contributors can run the exact same check
+        # locally before submitting a risky change (see CONTRIBUTING.md
+        # "Stack smoke test"). It writes a dummy .env (no provider keys
+        # are needed; nothing performs inference), builds the images,
+        # boots the stack to healthy, probes health endpoints and
+        # lazily-imported deps, soaks, and asserts no container
+        # restarted.
+        run: ./scripts/stack-smoke.sh
+
+      # On failure the script itself dumps diagnostics to the job log
+      # and the job summary (failed phase, container states, healthcheck
+      # probe output, disk space, recent logs) and writes full compose
+      # logs to stack-smoke-logs/ — upload those for offline digging.
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: stack-smoke-logs
+          path: stack-smoke-logs/
+          if-no-files-found: ignore
+          retention-days: 14

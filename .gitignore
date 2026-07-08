@@ -251,3 +251,6 @@ artifacts/
 # Launch announcement drafts (private — used in posts, not in the repo)
 ANNOUNCEMENT.md
 LAUNCH-POST.md
+
+# stack smoke failure diagnostics (scripts/stack-smoke.sh)
+stack-smoke-logs/
