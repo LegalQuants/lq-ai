@@ -90,7 +90,7 @@ These have each bitten this codebase. Violating them corrupts the running dev st
   To **apply** a migration to the dev stack, rebuild the workers (next bullet) — don't reach for host alembic.
 - **When a migration lands, rebuild `api` + `arq-worker` + `ingest-worker` together.** Stale sibling containers crash-loop with "Can't locate revision identified by …" after a daemon bounce — they're all built from the api image and pin the revision.
 - **NEVER `docker compose down -v`.** It wipes volumes — including acceptance/review data that's expensive to recreate. Rebuild a single service (`docker compose build web && docker compose up -d web`), don't nuke volumes.
-- **The `web` container serves a pre-built static bundle (no HMR).** Source can be many commits ahead of what the browser shows. If a UI change "isn't appearing," rebuild `web` before debugging the code.
+- **The `web` container serves a pre-built static bundle (no HMR).** Source can be many commits ahead of what the browser shows. If a UI change "isn't appearing," rebuild `web` before debugging the code — or, better, don't iterate against the container at all: see [web/docs/frontend-dev.md](../../web/docs/frontend-dev.md) for running `web/` natively with Vite HMR against the dockerized backend.
 - **Run BOTH `ruff format` and `ruff check`** locally — CI runs them as separate gates. `ruff check` passing doesn't mean `ruff format` will.
 
 ---
