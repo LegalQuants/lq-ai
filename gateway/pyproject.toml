@@ -89,7 +89,7 @@ dev = [
     # unpinned floor let CI (which resolves latest) drift ahead of dev venvs
     # and fail `ruff format --check` on code that was clean locally. Pin so
     # local == CI. Bump deliberately (and reformat) when upgrading.
-    "ruff==0.15.17",
+    "ruff==0.15.18",
     "mypy>=1.11",
     "types-PyYAML>=6.0",
 ]
