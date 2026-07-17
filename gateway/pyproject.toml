@@ -11,7 +11,7 @@ requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
 authors = [{ name = "LegalQuants" }]
 dependencies = [
-    "fastapi>=0.115,<0.117",
+    "fastapi>=0.115,<0.140",
     "uvicorn[standard]>=0.32,<0.34",
     "pydantic>=2.7,<3",
     "pydantic-settings>=2.4,<3",
