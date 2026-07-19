@@ -745,3 +745,116 @@ async def test_anthropic_round_trips_assistant_tool_use_for_follow_up() -> None:
     assert resp2.choices[0].finish_reason == "stop"
     assert resp2.choices[0].message.content == "Confirmed."
     assert call_count == 2
+
+
+# --- DE-358 item 4: granular tool_choice mode coverage ------------------------
+
+
+def _plain_text_response(request: httpx.Request) -> httpx.Response:
+    return httpx.Response(
+        200,
+        json={
+            "id": "msg_tc",
+            "type": "message",
+            "role": "assistant",
+            "model": "claude-sonnet-4-6",
+            "stop_reason": "end_turn",
+            "content": [{"type": "text", "text": "ok"}],
+            "usage": {"input_tokens": 5, "output_tokens": 2},
+        },
+    )
+
+
+def _tools_request(tool_choice: object) -> ChatCompletionRequest:
+    return ChatCompletionRequest(
+        model="claude-sonnet-4-6",
+        messages=[{"role": "user", "content": "hi"}],
+        tools=[
+            {
+                "type": "function",
+                "function": {
+                    "name": "verify_citations",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            }
+        ],
+        tool_choice=tool_choice,
+    )
+
+
+async def _capture_request_body(req: ChatCompletionRequest) -> dict:
+    captured: dict[str, object] = {}
+
+    def _capture(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return _plain_text_response(request)
+
+    respx.post(f"{ANTHROPIC_BASE}/v1/messages").mock(side_effect=_capture)
+    adapter = _make_adapter()
+    try:
+        await adapter.chat_completion(req, model="claude-sonnet-4-6", stream=False)
+    finally:
+        await adapter.aclose()
+    body = captured["body"]
+    assert isinstance(body, dict)
+    return body
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_anthropic_tool_choice_none_drops_tools() -> None:
+    """DE-358 item 4: ``tool_choice="none"`` — Anthropic has no ``none``
+    mode, so the adapter honors it by omitting ``tools`` (and therefore
+    ``tool_choice``) from the provider request entirely."""
+
+    body = await _capture_request_body(_tools_request("none"))
+    assert "tools" not in body
+    assert "tool_choice" not in body
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_anthropic_tool_choice_required_maps_to_any() -> None:
+    """DE-358 item 4: ``tool_choice="required"`` maps to Anthropic
+    ``{"type": "any"}`` with tools forwarded."""
+
+    body = await _capture_request_body(_tools_request("required"))
+    assert body["tools"][0]["name"] == "verify_citations"
+    assert body["tool_choice"] == {"type": "any"}
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_anthropic_tool_choice_forced_function_maps_to_tool() -> None:
+    """DE-358 item 4: an OpenAI forced-function object maps to Anthropic
+    ``{"type": "tool", "name": ...}``."""
+
+    body = await _capture_request_body(
+        _tools_request({"type": "function", "function": {"name": "verify_citations"}})
+    )
+    assert body["tools"][0]["name"] == "verify_citations"
+    assert body["tool_choice"] == {"type": "tool", "name": "verify_citations"}
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_anthropic_tool_choice_absent_defaults_to_auto() -> None:
+    """DE-358 item 4: with tools present and no explicit ``tool_choice``,
+    ``main`` emits ``{"type": "auto"}`` (unlike the closed PR5b branches,
+    which omitted the field — assertions follow ``main``'s behavior)."""
+
+    body = await _capture_request_body(_tools_request(None))
+    assert body["tools"][0]["name"] == "verify_citations"
+    assert body["tool_choice"] == {"type": "auto"}
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_anthropic_forced_function_without_name_omits_tool_choice() -> None:
+    """DE-358 item 4: a malformed forced-function object (no ``name``)
+    forwards tools but sets no ``tool_choice`` — the provider default
+    applies rather than a fabricated directive."""
+
+    body = await _capture_request_body(_tools_request({"type": "function", "function": {}}))
+    assert body["tools"][0]["name"] == "verify_citations"
+    assert "tool_choice" not in body
