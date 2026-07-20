@@ -61,9 +61,9 @@ sandboxed iframe when the user opens the pane.
 | Piece | Where | What it is |
 |---|---|---|
 | Manifest | [`word-addin/manifest.xml`](../word-addin/manifest.xml) | Office Add-in **XML 1.1+** manifest template. Registers the `TabHome` ribbon button + the task-pane URL. Carries four `{{ DOUBLE_BRACE }}` tokens substituted at install time. |
-| Task pane shell | [`word-addin/src/taskpane/`](../word-addin/src/taskpane/) | React 18 + TypeScript. `taskpane.html` is the page Office loads; `taskpane.tsx` mounts `App.tsx`. |
+| Task pane shell | [`word-addin/src/taskpane/`](../word-addin/src/taskpane/) | React + TypeScript. [`word-addin/taskpane.html`](../word-addin/taskpane.html) (project root, Vite multi-page entry) is the page Office loads; `taskpane.tsx` mounts `App.tsx`. |
 | Commands | [`word-addin/src/commands/`](../word-addin/src/commands/) | Office.js ribbon command surface. No commands wired in M3; feature work lands here. |
-| Bundler | [`word-addin/webpack.config.js`](../word-addin/webpack.config.js) | Webpack (bundler of record per Phase B Decision B-1). Bundles to `dist/`. |
+| Bundler | [`word-addin/vite.config.ts`](../word-addin/vite.config.ts) | Vite (bundler of record per [ADR 0022](adr/0022-word-addin-vite-over-webpack.md), superseding Phase B Decision B-1). Bundles straight to `web/static/word-addin/`. |
 
 The XML manifest — not the JSON unified manifest — is the production
 path for v0.3.0 per **Phase B Decision B-2**: the JSON unified manifest
@@ -229,10 +229,10 @@ a separate trust principal from the web app today.
 
 ## Version handshake (M3-B8)
 
-The handshake exists so an out-of-date add-in surfaces an "Update
-needed" overlay rather than getting stuck against a breaking-change API
-call after the user has already signed in. It is **real and works** —
-distinct from the deferred feature surface.
+The handshake exists so an out-of-date add-in surfaces a notification
+rather than getting stuck against a breaking-change API call after the
+user has already signed in. It is **real and works** — distinct from
+the deferred feature surface.
 
 ### Backend
 
@@ -244,7 +244,7 @@ pattern as the bootstrap router). It returns `WordAddinVersionResponse`:
 
 | Field | Value | Notes |
 |---|---|---|
-| `deployment_version` | api package `__version__` = `0.3.0` | Informational only — the add-in does **not** use this for compatibility decisions; it surfaces it in the overlay so the user can quote it to support. |
+| `deployment_version` | api package `__version__` = `0.3.0` | Informational only — the add-in does **not** use this for compatibility decisions; it surfaces it in the notification so the user can quote it to support. |
 | `addin_min_compatible_version` | `0.3.0` (`ADDIN_MIN_COMPATIBLE_VERSION`) | Lowest add-in version the deployment accepts. Bumped when a breaking change lands in the task-pane bundle, forcing operators to redistribute the manifest. |
 | `addin_max_compatible_version` | `0.3.99` (`ADDIN_MAX_COMPATIBLE_VERSION`) | Highest recognized version. Defaults to accept every `0.3.x` patch so cosmetic add-in fixes don't require a deployment bump; raises when M4 features ship. |
 | `taskpane_bundle_url` | `{origin}/word-addin/taskpane.html` | Canonical bundle entry point. Exists so a future deployment can relocate the bundle without re-issuing the manifest. |
@@ -258,7 +258,7 @@ pattern as the bootstrap router). It returns `WordAddinVersionResponse`:
 
 [`version.ts`](../word-addin/src/taskpane/version.ts) `fetchVersionInfo()`
 runs once on mount in `App.tsx`. The installed version is
-`__ADDIN_VERSION__` — a string webpack's `DefinePlugin` bakes into the
+`__ADDIN_VERSION__` — a string Vite's `define` config bakes into the
 bundle from `package.json` (currently `0.3.0-dev`; `parseVersion` strips
 the non-numeric suffix to `[0, 3, 0]`). Baking it in means **a tampered
 API response can't lie about the installed version** — the comparison
@@ -270,33 +270,38 @@ outcomes:
 
 | `installed` vs range | Status | UI |
 |---|---|---|
-| `< min` | `addin_outdated` | Blocking overlay — operator redistributes a newer manifest. |
-| `> max` | `deployment_outdated` | Blocking overlay — operator updates the deployment. |
-| within range | `compatible` | Normal sign-in / authenticated layout. |
-| handshake failed | `unknown` | **Non-blocking** soft banner; the add-in still renders so an offline operator isn't locked out. |
+| `< min` | `addin_outdated` | Non-blocking notification with a **Refresh** button. |
+| `> max` | `deployment_outdated` | Non-blocking notification with a **Refresh** button. |
+| within range | `compatible` | Normal sign-in / authenticated layout, no notification. |
+| handshake failed | `unknown` | Non-blocking notification, informational only (no Refresh button). |
 
 `fetchVersionInfo` never throws — a network or parse failure yields
 `status="unknown"` rather than crashing the pane. This is the
 best-effort posture: a misconfigured or offline deployment should not
 prevent the user from seeing the task pane at all.
 
-### Three exclusive App states
+None of the four statuses block rendering. The task pane's bundle is
+always served by (and thus always the same release as) the deployment
+— never independently installed — so the only realistic way `installed`
+and the deployment's range can actually disagree is a stale cached
+bundle in Word's WebView, not a genuine version skew. A dismissible,
+non-autoclosing notification prompting a refresh is the appropriate
+response to that, not a blocking overlay (the original M3-B8 design,
+since removed — see `App.tsx`'s docstring for the reasoning).
+
+### Two exclusive App states
 
 [`App.tsx`](../word-addin/src/taskpane/components/App.tsx) renders
 exactly one of:
 
-1. **Update-needed overlay**
-   ([`UpdateNeededOverlay`](../word-addin/src/taskpane/components/UpdateNeededOverlay.tsx))
-   — only for the two strict-incompatibility statuses. Blocks every
-   other path so an out-of-date add-in can't proceed to a doomed OAuth
-   handshake. Shows installed/deployment/range versions for the user to
-   quote to their admin.
-2. **Sign-in gate** — version compatible (or `unknown`) but no stored
-   session. A `unknown` handshake adds a soft `VersionUnknownBanner`.
-3. **Authenticated layout** — header + tab strip + deep-link card per
+1. **Sign-in gate** — no stored session.
+2. **Authenticated layout** — header + tab strip + deep-link card per
    tab. The card bodies state plainly that the in-Word feature is on the
    M4 / community roadmap (DE-287) and link to the equivalent web-app
    surface.
+
+A non-compatible version status surfaces as a notification (see above)
+in either state — it no longer gates which of the two renders.
 
 ---
 

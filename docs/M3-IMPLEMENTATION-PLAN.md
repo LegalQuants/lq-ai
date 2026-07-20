@@ -369,7 +369,7 @@ Each descoped task below carries an inline status marker and retains its origina
   - `manifest.xml` — Office add-in manifest. Targets Word; declares OAuth scopes; references task pane HTML/JS at `{deployment_origin}/word-addin/taskpane.html`.
   - `src/taskpane/` — React 18 + TypeScript task pane shell. Office.js add-in convention is React; this is the **single allowed exception to the no-React-in-`web/` rule** ([CLAUDE.md](../CLAUDE.md)) because Word add-ins are Microsoft-conventionally React.
   - `src/commands/` — Office.js commands (toolbar buttons).
-  - `webpack.config.js` — bundles the add-in JS.
+  - `vite.config.ts` — bundles the add-in JS (Vite; see [ADR 0022](adr/0022-word-addin-vite-over-webpack.md)).
   - `package.json` — pins Office.js, React, TypeScript versions.
 - Task pane UI shell: header (LQ.AI logo + Inference Tier badge placeholder), tab strip (Chat / Skills / Playbooks), empty content area.
 - Manifest generation: a new admin UI flow at `/lq-ai/admin/word-addin` produces a deployment-specific `manifest.xml` with the operator's deployment URL injected. This is the manifest the operator distributes via M365 Admin Center.

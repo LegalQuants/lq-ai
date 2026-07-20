@@ -14,9 +14,7 @@
   --lq-accent-hover: #1d4ed8;
   --lq-warning-bg: #fef3c7;
   --lq-warning-text: #92400e;
-  --lq-font:
-    "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial,
-    sans-serif;
+  --lq-font: "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
 }
 
 * {
@@ -70,191 +68,23 @@ button:focus-visible {
 /* Layout shell ---------------------------------------------------------- */
 
 .lq-app {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
+  display: grid;
+  /* grid-template-rows: auto 1fr; */
+  height: 100vh;
+  overflow: hidden;
 }
 
 .lq-content {
   flex: 1 1 auto;
-  padding: 16px;
 }
-
-/* Header ---------------------------------------------------------------- */
-
-.lq-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--lq-border);
-  background: var(--lq-bg-subtle);
-}
-
-.lq-header-brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.lq-header-logo {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  background: var(--lq-accent);
-  color: white;
-  font-weight: 700;
-  font-size: 12px;
-  letter-spacing: 0.04em;
-}
-
-.lq-header-name {
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 140px;
-}
-
-.lq-header-tier-badge {
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  border: 1px solid var(--lq-border);
-  color: var(--lq-text-subtle);
-  background: var(--lq-bg);
-}
-
-.lq-header-tier-badge-placeholder {
-  font-style: italic;
-  opacity: 0.6;
-  cursor: help;
-}
-
-/* Tab strip ------------------------------------------------------------- */
-
-.lq-tabstrip {
-  display: flex;
-  border-bottom: 1px solid var(--lq-border);
-  background: var(--lq-bg);
-}
-
-.lq-tab {
-  flex: 1 1 auto;
-  padding: 10px 12px;
-  border: none;
-  background: transparent;
-  color: var(--lq-text-subtle);
-  font-weight: 500;
-  border-bottom: 2px solid transparent;
-  transition:
-    color 0.15s ease,
-    border-color 0.15s ease;
-}
-
-.lq-tab:hover {
-  color: var(--lq-text);
-}
-
-.lq-tab-active {
-  color: var(--lq-accent);
-  border-bottom-color: var(--lq-accent);
-}
-
-/* Deep-link card -------------------------------------------------------- */
-
-.lq-card {
-  border: 1px solid var(--lq-border);
-  border-radius: 8px;
-  padding: 16px;
-  background: var(--lq-bg);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.lq-card-title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.lq-card-body {
-  margin: 0;
-  color: var(--lq-text-subtle);
-  font-size: 13px;
-  line-height: 1.55;
-}
-
-.lq-card-cta {
-  align-self: flex-start;
-  background: var(--lq-accent);
-  color: white;
-  padding: 8px 14px;
-  border-radius: 6px;
-  font-weight: 500;
-  transition: background 0.15s ease;
-}
-
-.lq-card-cta:hover {
-  background: var(--lq-accent-hover);
-  text-decoration: none;
-}
-
-/* Footer ---------------------------------------------------------------- */
 
 .lq-footer {
-  padding: 12px 16px;
   border-top: 1px solid var(--lq-border);
   font-size: 12px;
   color: var(--lq-text-subtle);
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
   align-items: center;
-}
-
-.lq-footer-sep {
-  opacity: 0.5;
-}
-
-/* Header right-side cluster (user label + tier badge + sign-out) -------- */
-
-.lq-header-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.lq-header-user {
-  font-size: 12px;
-  color: var(--lq-text-subtle);
-  max-width: 140px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.lq-header-signout {
-  background: transparent;
-  border: 1px solid var(--lq-border);
-  border-radius: 4px;
-  padding: 4px 8px;
-  font-size: 12px;
-  color: var(--lq-text-subtle);
-  transition:
-    border-color 0.15s ease,
-    color 0.15s ease;
-}
-
-.lq-header-signout:hover {
-  color: var(--lq-text);
-  border-color: var(--lq-text-subtle);
 }
 
 /* Sign-in gate ---------------------------------------------------------- */
@@ -324,73 +154,6 @@ button:focus-visible {
   line-height: 1.5;
 }
 
-/* Update-needed overlay -------------------------------------------------- */
-
-.lq-update-overlay {
-  border: 1px solid var(--lq-warning-text);
-  background: var(--lq-warning-bg);
-  color: var(--lq-warning-text);
-  border-radius: 8px;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.lq-update-title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.lq-update-body {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.55;
-}
-
-.lq-update-versions {
-  margin: 4px 0 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
-}
-
-.lq-update-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.lq-update-row dt {
-  color: var(--lq-warning-text);
-  opacity: 0.8;
-}
-
-.lq-update-row dd {
-  margin: 0;
-  font-weight: 600;
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
-}
-
-.lq-update-footnote {
-  margin: 4px 0 0;
-  font-size: 12px;
-  font-style: italic;
-}
-
-/* Soft "version unknown" banner (renders inside normal layout) ---------- */
-
-.lq-version-warning {
-  margin: 0 0 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--lq-border);
-  border-left-width: 3px;
-  border-left-color: var(--lq-warning-text);
-  background: var(--lq-bg-subtle);
-  border-radius: 6px;
-  font-size: 12px;
-  color: var(--lq-text-subtle);
-  line-height: 1.5;
-}
+/* Version-mismatch notices now render as Mantine notifications
+   (actions.showNotification in services/chatClient.ts) rather than an
+   in-page overlay/banner — see App.tsx's docstring. */

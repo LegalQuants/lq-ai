@@ -7,3 +7,4 @@
  * fetch its own version. See `webpack.config.js` for the wiring.
  */
 declare const __ADDIN_VERSION__: string;
+declare module "*.css";
