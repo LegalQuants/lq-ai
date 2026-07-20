@@ -25,7 +25,21 @@
  * The add-in uses the same bearer token shape as the web app. A future
  * DE may add per-client audience scoping if endpoint-level revocation
  * becomes load-bearing.
+ *
+ * Network calls go through the generated client (`@/generated`, see
+ * `openapi-ts.config.ts`) rather than raw `fetch` — `client.setConfig()`
+ * below overrides its codegen-time `baseUrl` (whatever `LQ_AI_OPENAPI_URL`
+ * was at generation time) with the actual runtime deployment origin.
+ * `LoginResponseWire`/`TokenRefreshResponseWire` stay hand-declared
+ * (rather than importing the generated `LoginResponse`/`TokenResponse`
+ * directly) because `token_type`/`role` are loosened from the backend's
+ * literal types to plain `string` here — neither field is read anywhere
+ * in this codebase, so the stricter literal typing bought nothing and
+ * only got in the way of accepting the generated response shapes
+ * without a cast.
  */
+import { client } from "@/generated/client.gen";
+import { refreshApiV1AuthRefreshPost, logoutApiV1AuthLogoutPost } from "@/generated/sdk.gen";
 
 export type UserRole = "admin" | "member";
 
@@ -34,9 +48,9 @@ export interface AuthUser {
   email: string;
   display_name?: string | null;
   is_admin: boolean;
-  role?: UserRole;
+  role?: string;
   mfa_enabled: boolean;
-  must_change_password: boolean;
+  must_change_password?: boolean;
 }
 
 export interface AuthSession {
@@ -48,7 +62,7 @@ export interface AuthSession {
 
 export interface LoginResponseWire {
   access_token: string;
-  token_type: "Bearer";
+  token_type?: string;
   expires_in: number;
   refresh_token?: string;
   user: AuthUser;
@@ -57,7 +71,7 @@ export interface LoginResponseWire {
 export interface TokenRefreshResponseWire {
   access_token: string;
   refresh_token: string;
-  token_type: "Bearer";
+  token_type?: string;
   expires_in: number;
 }
 
@@ -69,6 +83,32 @@ const STORAGE_KEY = "lq-ai-word-addin-session";
 export function deploymentOrigin(): string {
   return window.location.origin;
 }
+
+client.setConfig({ baseUrl: deploymentOrigin() });
+
+// The generated client has no built-in equivalent to `authenticatedFetch`
+// below — nothing attaches a bearer token to its requests otherwise, so
+// every generated-client call (skillClient.get(), modelClient.get(), ...)
+// would silently 401 against any authenticated endpoint. This interceptor
+// is the fix: attach the current session's token to every outgoing
+// request that has one. Safe for the pre-login calls too (login, the
+// version handshake, refresh) — those endpoints don't require auth
+// (`security: null` in the OpenAPI spec), so attaching a token when no
+// session exists yet, or a stale one during refresh, is a no-op either
+// way.
+//
+// NOTE: this does not retry on 401 the way `authenticatedFetch` does —
+// see word-addin/CLAUDE.md's "Required runtime wiring" section. A
+// generated-client call that 401s because the access token expired
+// returns `error` to the caller rather than transparently refreshing
+// and retrying; callers currently just surface that as a notification.
+client.interceptors.request.use((request) => {
+  const session = getSession();
+  if (session) {
+    request.headers.set("Authorization", `Bearer ${session.access_token}`);
+  }
+  return request;
+});
 
 /** Read the persisted session from localStorage. Returns null when no
  *  session is present, when it's malformed, or when it has expired and
@@ -111,10 +151,7 @@ export function storeSession(login: LoginResponseWire): AuthSession {
 
 /** Update the access + refresh tokens after a successful refresh call,
  *  preserving the cached user record. */
-export function updateTokens(
-  session: AuthSession,
-  refresh: TokenRefreshResponseWire
-): AuthSession {
+export function updateTokens(session: AuthSession, refresh: TokenRefreshResponseWire): AuthSession {
   const updated: AuthSession = {
     ...session,
     access_token: refresh.access_token,
@@ -135,37 +172,45 @@ export function clearSession(): void {
  *  a refresh is in flight so concurrent callers share the result. */
 let refreshInFlight: Promise<AuthSession | null> | null = null;
 
+/** Runs the actual refresh attempt. Split out from `refreshAccessToken` so
+ *  the coalescing lock is reset via `.finally()` chained onto the *outer*
+ *  assignment (see below) rather than an internal try/finally — when this
+ *  function returns without ever hitting an `await` (the no-session /
+ *  no-refresh-token guard clause), an async function body runs fully
+ *  synchronously, so an internal `finally` would fire *before* the
+ *  `refreshInFlight = ...` assignment that stores its own promise
+ *  finishes, and that assignment would immediately clobber the reset
+ *  back to a stale non-null promise — wedging every future call behind
+ *  this one's cached result. */
+async function runRefresh(): Promise<AuthSession | null> {
+  const session = getSession();
+  if (!session || !session.refresh_token) {
+    clearSession();
+    return null;
+  }
+  // The generated client never throws by default (throwOnError: false) —
+  // network failures land in `error`/`data: undefined` just like a 4xx,
+  // so this one check covers both cases the old try/catch + `!res.ok`
+  // handled separately.
+  const { data, error } = await refreshApiV1AuthRefreshPost({
+    body: { refresh_token: session.refresh_token },
+  });
+  if (error || !data) {
+    clearSession();
+    return null;
+  }
+  return updateTokens(session, data);
+}
+
 /** Attempt a single refresh. Returns the new session, or null on failure
  *  (in which case the local session has been cleared). Coalesces parallel
  *  callers around one network request. */
 export function refreshAccessToken(): Promise<AuthSession | null> {
   if (refreshInFlight) return refreshInFlight;
 
-  refreshInFlight = (async () => {
-    const session = getSession();
-    if (!session || !session.refresh_token) {
-      clearSession();
-      return null;
-    }
-    try {
-      const res = await fetch(`${deploymentOrigin()}/api/v1/auth/refresh`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: session.refresh_token }),
-      });
-      if (!res.ok) {
-        clearSession();
-        return null;
-      }
-      const wire = (await res.json()) as TokenRefreshResponseWire;
-      return updateTokens(session, wire);
-    } catch {
-      clearSession();
-      return null;
-    } finally {
-      refreshInFlight = null;
-    }
-  })();
+  refreshInFlight = runRefresh().finally(() => {
+    refreshInFlight = null;
+  });
 
   return refreshInFlight;
 }
@@ -173,10 +218,7 @@ export function refreshAccessToken(): Promise<AuthSession | null> {
 /** Fetch wrapper that attaches the bearer token + handles 401-refresh-
  *  retry. Returns the raw Response so callers can inspect status, headers,
  *  and body shape as they see fit. */
-export async function authenticatedFetch(
-  path: string,
-  init: RequestInit = {}
-): Promise<Response> {
+export async function authenticatedFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const session = getSession();
   if (!session) {
     return new Response(null, { status: 401, statusText: "No session" });
@@ -201,22 +243,17 @@ export async function authenticatedFetch(
 }
 
 /** Best-effort logout. Calls the backend so the refresh token is
- *  invalidated server-side, then drops the local session regardless. */
+ *  invalidated server-side, then drops the local session regardless.
+ *  Not wrapped in try/catch — the generated client already swallows
+ *  network/response failures into `error` rather than throwing (see
+ *  `runRefresh` above), and the result is unused here since the local
+ *  clear is the load-bearing step either way. */
 export async function logout(): Promise<void> {
   const session = getSession();
   if (session) {
-    try {
-      await fetch(`${deploymentOrigin()}/api/v1/auth/logout`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-    } catch {
-      // Server may be unreachable, expired token, etc. — local clear
-      // is the load-bearing step.
-    }
+    await logoutApiV1AuthLogoutPost({
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
   }
   clearSession();
 }
