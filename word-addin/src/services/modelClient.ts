@@ -19,7 +19,7 @@ export const modelClient = {
   async get(): Promise<void> {
     const { data, error } = await listModelsApiV1ModelsGet();
     if (error || !data) {
-      actions.showNotification(`Error Loading Models`, false);
+      actions.showNotification(`Error Loading Models`);
       return;
     }
     const models = data as ModelListResponse;
