@@ -52,7 +52,7 @@ export const skillClient = {
   async get(): Promise<void> {
     const { data, error } = await listSkillsApiV1SkillsGet();
     if (error || !data) {
-      actions.showNotification(`Error Loading Skills`);
+      actions.showNotification(`Error Loading Skills`, false);
       return;
     }
     store.set(skillsAtom, data as SkillSummary[]);
