@@ -31,6 +31,7 @@ from app.providers.base import (
     ProviderAuthError,
     ProviderHTTPError,
     ProviderNetworkError,
+    ProviderTimeoutError,
     ProviderUnsupportedError,
 )
 
@@ -126,3 +127,18 @@ def test_failure_reason_records_classified_code_and_upstream_status() -> None:
 
     network = _failure_reason(ProviderNetworkError("dns"))
     assert network == "upstream_error:provider_unavailable"
+
+
+@pytest.mark.unit
+def test_failure_reason_labels_client_timeout_distinctly() -> None:
+    """A gateway-side timeout (ProviderTimeoutError) reads
+    ``client_timeout:...`` in the routing log — distinguishable from an
+    upstream 5xx outage, which reads ``upstream_error:...:status=5xx``.
+    The wire code and HTTP mapping stay identical to any network error."""
+
+    timeout = ProviderTimeoutError("timed out after 300s waiting for Anthropic")
+    assert _failure_reason(timeout) == "client_timeout:provider_unavailable"
+    assert _classify_provider_error(timeout) == ("provider_unavailable", 503)
+
+    outage = _failure_reason(ProviderHTTPError("down", upstream_status=500))
+    assert outage == "upstream_error:provider_unavailable:status=500"

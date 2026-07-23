@@ -50,6 +50,7 @@ from app.providers.base import (
     ProviderHealth,
     ProviderHTTPError,
     ProviderNetworkError,
+    ProviderTimeoutError,
     ProviderUnsupportedError,
 )
 from app.providers.openai_schema import (
@@ -73,9 +74,15 @@ ANTHROPIC_API_VERSION = "2023-06-01"
 """Pinned Anthropic API version. Update deliberately; bump in lockstep
 with changes to the request/response translation below."""
 
-DEFAULT_TIMEOUT_SECONDS = 60.0
+DEFAULT_TIMEOUT_SECONDS = 300.0
 """Default per-request timeout. PRD §4.4 / gateway.yaml.example exposes
-``timeout_s`` on each provider; if absent we use this default."""
+``timeout_s`` on each provider; if absent we use this default.
+
+300s rather than the earlier 60s: frontier drafting responses of
+4-16K output tokens routinely exceed 60s of generation time, and a
+client-side timeout mid-generation surfaced as a provider outage even
+though Anthropic was healthy. Operators wanting a tighter budget set
+``timeout_s`` on the provider entry, which still overrides this."""
 
 DEFAULT_MAX_TOKENS = 4096
 """Anthropic Messages requires ``max_tokens``. When the OpenAI-format
@@ -313,6 +320,15 @@ class AnthropicAdapter(ProviderAdapter):
                 json=anthropic_body,
                 headers=self._auth_headers(),
             )
+        except httpx.TimeoutException as exc:
+            # Our own timeout elapsed — not an upstream failure. Raise the
+            # distinct subclass so the routing log can tell a too-tight
+            # timeout_s from an Anthropic outage.
+            raise ProviderTimeoutError(
+                f"timed out after {self._timeout:g}s waiting for Anthropic "
+                "(client-side timeout; raise timeout_s for long generations)",
+                details={"provider": self.name, "timeout_s": self._timeout},
+            ) from exc
         except httpx.HTTPError as exc:
             raise ProviderNetworkError(
                 f"failed to reach Anthropic: {type(exc).__name__}",
@@ -662,6 +678,14 @@ async def _anthropic_stream_iter(
                     continue
 
                 # ping / unknown -> ignore
+    except httpx.TimeoutException as exc:
+        # Our own timeout elapsed mid-stream — not an upstream failure.
+        # See the unary path for the rationale behind the distinct class.
+        raise ProviderTimeoutError(
+            "timed out waiting for Anthropic stream "
+            "(client-side timeout; raise timeout_s for long generations)",
+            details={"provider": provider_name},
+        ) from exc
     except httpx.HTTPError as exc:
         raise ProviderNetworkError(
             f"failed to stream from Anthropic: {type(exc).__name__}",
