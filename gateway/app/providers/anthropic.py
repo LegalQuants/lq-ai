@@ -14,7 +14,9 @@ Wire-format differences worth knowing
   ``messages: [{role: "user"|"assistant", ...}]``. Multiple system
   messages concatenate with a blank line.
 * Anthropic requires ``max_tokens``. OpenAI doesn't. The adapter falls
-  back to :data:`DEFAULT_MAX_TOKENS` (4096) when the caller omits it.
+  back to the provider's configured ``default_max_tokens`` — or
+  :data:`DEFAULT_MAX_TOKENS` (4096) when unconfigured — when the caller
+  omits it.
 * Anthropic requires ``anthropic-version`` on every request; we pin
   :data:`ANTHROPIC_API_VERSION`.
 * Anthropic returns ``stop_reason`` in {``end_turn``, ``max_tokens``,
@@ -43,7 +45,7 @@ from typing import Any
 
 import httpx
 
-from app.config import ProviderConfig
+from app.config import ProviderConfig, RequestValidationConfig
 from app.providers.base import (
     ProviderAdapter,
     ProviderAuthError,
@@ -81,7 +83,11 @@ DEFAULT_MAX_TOKENS = 4096
 """Anthropic Messages requires ``max_tokens``. When the OpenAI-format
 request omits it, the gateway sends this default. Keeping it modest
 (rather than the per-model ceiling) avoids accidentally enormous
-responses on requests that didn't specify a budget."""
+responses on requests that didn't specify a budget.
+
+Operators can raise (or lower) this per provider via the
+``default_max_tokens`` field on the provider entry; see
+:meth:`AnthropicAdapter.from_config`."""
 
 STOP_REASON_MAP: dict[str, FinishReason] = {
     "end_turn": "stop",
@@ -110,12 +116,14 @@ class AnthropicAdapter(ProviderAdapter):
         base_url: str,
         api_key: str,
         timeout_s: float = DEFAULT_TIMEOUT_SECONDS,
+        default_max_tokens: int = DEFAULT_MAX_TOKENS,
         client: httpx.AsyncClient | None = None,
     ) -> None:
         self.name = name
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self._timeout = timeout_s
+        self._default_max_tokens = default_max_tokens
         self._owns_client = client is None
         self._client = client or httpx.AsyncClient(
             base_url=self._base_url,
@@ -180,11 +188,27 @@ class AnthropicAdapter(ProviderAdapter):
         timeout_raw = extra.get("timeout_s")
         timeout_s = float(timeout_raw) if timeout_raw is not None else DEFAULT_TIMEOUT_SECONDS
 
+        # ``default_max_tokens`` mirrors ``timeout_s``: a forward-looking
+        # per-provider field (#18) that today lives in extra-allow
+        # territory, so read it defensively via ``model_extra``. Falls
+        # back to the module constant when absent. Clamped to the
+        # request-validation ceiling (RequestValidationConfig.max_max_tokens)
+        # so a generous per-provider default can never inject a budget
+        # larger than the gateway would accept on an explicit request.
+        default_max_tokens_raw = extra.get("default_max_tokens")
+        default_max_tokens = (
+            int(default_max_tokens_raw)
+            if default_max_tokens_raw is not None
+            else DEFAULT_MAX_TOKENS
+        )
+        default_max_tokens = min(default_max_tokens, RequestValidationConfig().max_max_tokens)
+
         return cls(
             name=provider.name,
             base_url=provider.base_url,
             api_key=api_key,
             timeout_s=timeout_s,
+            default_max_tokens=default_max_tokens,
             client=client,
         )
 
@@ -206,7 +230,12 @@ class AnthropicAdapter(ProviderAdapter):
         subclass; the route handler maps these to HTTP responses.
         """
 
-        anthropic_body = _to_anthropic_request(request, model=model, stream=stream)
+        anthropic_body = _to_anthropic_request(
+            request,
+            model=model,
+            stream=stream,
+            default_max_tokens=self._default_max_tokens,
+        )
 
         if stream:
             return _anthropic_stream_iter(
@@ -340,6 +369,7 @@ def _to_anthropic_request(
     *,
     model: str,
     stream: bool,
+    default_max_tokens: int = DEFAULT_MAX_TOKENS,
 ) -> dict[str, Any]:
     """Build the Anthropic ``/v1/messages`` request body.
 
@@ -356,7 +386,8 @@ def _to_anthropic_request(
       ``tool_choice`` is mapped: ``auto``->``{type:auto}``, ``required``->``{type:any}``,
       ``none``->drop tools, forced function->``{type:tool,name}``.
     * ``max_tokens`` is required by Anthropic; we substitute
-      :data:`DEFAULT_MAX_TOKENS` if the caller omits it.
+      ``default_max_tokens`` (the provider's configured default, falling
+      back to :data:`DEFAULT_MAX_TOKENS`) if the caller omits it.
     * ``temperature`` and ``top_p`` are forwarded if set; otherwise
       Anthropic uses its defaults.
     * ``stop`` (OpenAI) becomes ``stop_sequences`` (Anthropic, list-only).
@@ -414,7 +445,7 @@ def _to_anthropic_request(
     body: dict[str, Any] = {
         "model": model,
         "messages": chat_messages,
-        "max_tokens": request.max_tokens or DEFAULT_MAX_TOKENS,
+        "max_tokens": request.max_tokens or default_max_tokens,
         "stream": stream,
     }
     if system_chunks:
