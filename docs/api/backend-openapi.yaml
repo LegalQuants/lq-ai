@@ -3865,7 +3865,10 @@ paths:
         '404':
           description: Chat or pending tool-call not found (id-probing-safe)
         '409':
-          description: Tool-call already resolved or confirmation expired
+          description: >-
+            Tool-call already resolved or confirmation expired, or the
+            encrypted resume payload could not be decrypted (DE-358 item 5 —
+            the row is consumed and the resume is denied; never replayable)
 
   # ============================================================
   # M3-D1 — slack-bridge persistence surface
