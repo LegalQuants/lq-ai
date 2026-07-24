@@ -2119,6 +2119,8 @@ Entries are tagged with priority (P1 = should be addressed in v1.5; P2 = good fo
 
 #### DE-265 — In-app "unverified citation" badging until Citation Engine ships
 
+**Status:** ✅ RESOLVED (M2). Superseded by the shipped Citation Engine (§3.3, "M2 status: SHIPPED") — verified spans render with per-stage verification metadata and unverified citations render greyed with an explicit `[unverified]` marker, so the interim M1 badge is no longer needed.
+
 **Priority:** P1 · **Effort:** S · **Target milestone:** M1 polish or M2 with Citation Engine
 
 **Context:** M1 ships the Citation Engine architectural slot but not the byte-level verification pipeline (`docs/HONEST-STATE.md` §3.1). Without an explicit in-app indicator, users may see model-generated text resembling a citation and assume it has been verified against source material when it has not. The HONEST-STATE doc is upfront about the gap; the chat UI is not.
@@ -2128,6 +2130,8 @@ Entries are tagged with priority (P1 = should be addressed in v1.5; P2 = good fo
 **Acceptance criteria:** Citation-like spans show the badge in M1 chat output; the badge is keyboard-focusable and screen-reader-accessible (`role="status"` or `aria-label` + tooltip pattern); Cypress E2E exercises the badge on at least one starter-skill output that historically produces citation-like text.
 
 #### DE-272 — Admin AliasForm: model dropdown autocomplete population
+
+**Status:** ✅ RESOLVED. `web/src/routes/lq-ai/admin/models/+page.svelte` builds the `providerModels` map from live per-provider model discovery (`listModels`) and passes it to `AliasForm`, whose `<datalist>` autocomplete now surfaces real per-provider choices; the field stays free-text-editable.
 
 **Priority:** P2 · **Effort:** S
 
@@ -2855,6 +2859,8 @@ The failure mode is structurally bad: a deployment misconfiguration (missing env
 
 #### DE-277 — Citation extractor: fallback to document scan on chunk-boundary miss
 
+**Status:** ✅ RESOLVED (M3-0.2, pre-M3 hardening). `extract_citations` (`api/app/citation/extraction.py`) falls back to a full-document scan when the chunk-local search misses, with the option-(b) `citation_chunk_mismatch` warning for observability; the pinned chunk-boundary test flipped (`api/tests/citation/test_chunk_boundary.py`).
+
 **Priority:** P3 · **Effort:** S
 
 **Context:** Surfaced during the M2-D4 edge-case sweep. The Citation Engine's extractor (`app/citation/extraction.py::extract_citations`) locates each quote by calling `_locate_in_chunk(quote, chunk.content)` against the single chunk the model cited via `(Source: [N])`. If the quote spans the boundary between two adjacent retrieved chunks — i.e., the quote is present in `documents.normalized_content` but in neither chunk's individual content — the locator returns `None` and the candidate is dropped silently. No row is persisted; the M2-C2 UI renders the marker as "unverified" (red) even though the underlying document text matches.
@@ -3558,6 +3564,8 @@ This subsection operationalizes the §1.9 engineering-discipline posture and the
 
 #### DE-254 — Cypress shared helpers extracted to `support/`
 
+**Status:** ✅ RESOLVED (2026-05-14, `fa06929`). Shared helpers extracted to `web/cypress/support/lq-ai-helpers.ts` (plain function exports; the file header documents the DE) and the three specs import from it.
+
 **Priority:** P2 · **Effort:** S
 
 **Context:** Wave 8 cleanup. The Cypress LQ.AI specs (`wave-d1-power-features`, `wave-d2-skill-creator`, `wave-m1-final-surfaces`) currently duplicate setup helpers (login, KB create, skill fork, etc.) inline. As specs accumulate, the duplication accumulates with them; the next spec should be able to import helpers rather than reproduce them.
@@ -3568,6 +3576,8 @@ This subsection operationalizes the §1.9 engineering-discipline posture and the
 
 #### DE-255 — Add `responseTimeout: 90000` to `cypress.config.ts`
 
+**Status:** ✅ RESOLVED (2026-05-14, `5b8deab`). `responseTimeout: 90000` set in `web/cypress.config.ts` with an inline comment naming the failure mode (KB-attach / ingest round-trips exceeding the 5s default).
+
 **Priority:** P2 · **Effort:** S
 
 **Context:** Wave 8 cleanup. KB-attach interactions and document ingestion can exceed the Cypress default response timeout under realistic conditions; intermittent flakes have surfaced. The fix is a one-line config change with a documented rationale.
@@ -3577,6 +3587,8 @@ This subsection operationalizes the §1.9 engineering-discipline posture and the
 **Acceptance criteria:** Configuration committed; intermittent timeout-related Cypress flakes are eliminated across three consecutive nightly runs.
 
 #### DE-256 — KB attach interceptor added to `wave-m1-final-surfaces.cy.ts` Test 2
+
+**Status:** ✅ RESOLVED (2026-05-14, `d444722` + `e4822a2`). `web/cypress/e2e/wave-m1-final-surfaces.cy.ts` intercepts the KB-attach POST (`**/knowledge-bases/**/files` as `kbAttach`) and asserts the 204 No Content response.
 
 **Priority:** P2 · **Effort:** S
 
@@ -3627,6 +3639,8 @@ This subsection operationalizes the §1.9 engineering-discipline posture and the
 **Acceptance criteria:** Duplicates do not render; existing single-event behavior is unchanged; unit test passes.
 
 #### DE-261 — `api/client.ts` `errorFor` swallows string-shaped FastAPI detail bodies
+
+**Status:** ✅ RESOLVED (2026-05-14, `1f99fd8`). `errorFor` now surfaces the string-shaped `{ "detail": "string" }` body; all three FastAPI detail shapes are covered by a DE-261-named unit test in `web/src/lib/lq-ai/__tests__/api-client.test.ts`.
 
 **Priority:** P1 · **Effort:** S
 
@@ -4190,6 +4204,8 @@ Two bulk operations as originally written in the M3-C4 spec:
 **When to ship:** Before or alongside any M4 bridge work; low-risk, improves first-run UX for the majority of operators (who don't use the chat bridges).
 
 #### DE-306 — Fresh-install host-port collision needs prominent quickstart callout (M3-E1 finding F2)
+
+**Status:** ✅ RESOLVED. `docs/quickstart.md` carries the port-collision callout beside the `docker compose up` step (with the `POSTGRES_HOST_PORT=15432` remap example) plus a dedicated "address already in use" troubleshooting section.
 
 **Priority:** P3 (documentation; `.env.example` already documents the remap) · **Effort:** S (~30 min, folds into M3-E2 docs)
 
