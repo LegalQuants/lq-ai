@@ -367,12 +367,13 @@ async def test_chat_get_authority_verbatim_quote_verifies_and_gates(
 
 
 # ---------------------------------------------------------------------------
-# Test 2 — fabricated quote (not in the fetched body) -> 0 rows, gate unaffected
+# Test 2 — fabricated quote attributed to the fetched statute -> FAIL row ->
+# gate flagged (DE-370 attributed-authority FAIL tier)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_chat_fabricated_authority_quote_dropped(
+async def test_chat_attributed_fabricated_authority_quote_fails_gate(
     db_session: AsyncSession,
     seeded,
     fake_authority_storage: dict[str, bytes],
@@ -398,11 +399,77 @@ async def test_chat_fabricated_authority_quote_dropped(
         gateway=gw,
         judge_model="fast",
     )
-    assert n == 0, f"expected 0 authority citation rows for a fabricated quote, got {n}"
-    # The paraphrase-judge Pass B was consulted (and rejected) — it does not
-    # write a FAIL row for authority (unattributed drop-on-miss, DE-370 defers
-    # attributed-authority FAIL).
+    # The paraphrase-judge Pass B was consulted (and rejected); the passage is
+    # attributed to the fetched statute via the nearby "17 U.S.C. 107" cite,
+    # so Pass C (DE-370) writes an unverified FAIL row.
+    assert n == 1, f"expected 1 FAIL authority citation row, got {n}"
     assert gw.chat_calls >= 3  # 2 loop rounds + >=1 judge call
+
+    rows = (
+        (
+            await db_session.execute(
+                select(MessageAuthorityCitation).where(
+                    MessageAuthorityCitation.message_id == message_id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0].verified is False
+    assert rows[0].verification_method is None
+    assert rows[0].external_ref == _PACKAGE_ID
+    assert rows[0].source_text == _FABRICATED_PASSAGE
+
+    await assemble_ledger_entries(db_session, message_id=message_id)
+    await compute_and_record_gate(db_session, message_id=message_id)
+
+    gate = (
+        await db_session.execute(
+            select(WorkProductFiduciaryGate).where(
+                WorkProductFiduciaryGate.message_id == message_id
+            )
+        )
+    ).scalar_one()
+    # The FAIL entry buckets FAIL -> the fiduciary gate flags the turn.
+    assert gate.gate_status == "flagged"
+
+
+# ---------------------------------------------------------------------------
+# Test 3 — fabricated quote with NO nearby citation -> unattributed ->
+# dropped (0 rows), gate unaffected (the DE-370 false-positive guard)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_chat_unattributed_fabricated_authority_quote_dropped(
+    db_session: AsyncSession,
+    seeded,
+    fake_authority_storage: dict[str, bytes],
+) -> None:
+    user, chat, message_id = seeded
+
+    gw = _FakeGateway(
+        chat_responses=[
+            _resp_tool_call("get_authority", {"package_id": _PACKAGE_ID}),
+            _resp_final(f"The statute provides:\n\n> {_FABRICATED_PASSAGE}\n"),
+        ],
+        authority_payload=_AUTHORITY_PAYLOAD,
+        judge_verdict_json=json.dumps({"verdict": "no"}),
+    )
+
+    outcome = await _run_loop(db_session, user, chat.id, message_id, gw)
+
+    n = await verify_and_persist_authority_citations(
+        db_session,
+        message_id=message_id,
+        assistant_text=outcome.text,
+        tool_sources=outcome.tool_sources,
+        gateway=gw,
+        judge_model="fast",
+    )
+    assert n == 0, f"expected 0 rows for an unattributed fabricated quote, got {n}"
 
     rows = (
         (
