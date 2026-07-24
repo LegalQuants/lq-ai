@@ -61,7 +61,7 @@
 	 * surfaced per-message.
 	 */
 	import { get } from 'svelte/store';
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 
 	import {
@@ -84,6 +84,7 @@
 	} from '$lib/lq-ai/stores';
 	import { consumeMessageStream } from '$lib/lq-ai/sse/parser';
 	import { buildAuthorizeUrl, type PendingGate } from '$lib/lq-ai/chat/toolGate';
+	import { canAttachChatFile, selectFileIdsForSend } from '$lib/lq-ai/chat/attachedFiles';
 	import type { Chat, FileMeta, Message, Project, Skill } from '$lib/lq-ai/types';
 
 	import ChatSidebar from '$lib/lq-ai/components/ChatSidebar.svelte';
@@ -169,6 +170,20 @@
 	let chatFiles: FileMeta[] = [];
 	let projectFiles: FileMeta[] = [];
 	let uploading = false;
+
+	// In-flight ingestion-status polls, keyed by file id, so detach, chat
+	// switch, and teardown can stop them (files attached in chat A must not
+	// keep polling — or get sent — after switching to chat B).
+	let filePollAborts: Record<string, AbortController> = {};
+
+	function abortFilePolls(): void {
+		for (const controller of Object.values(filePollAborts)) controller.abort();
+		filePollAborts = {};
+	}
+
+	onDestroy(abortFilePolls);
+
+	$: attachLimitReached = !canAttachChatFile(chatFiles.length);
 
 	let streamingMessageId: string | null = null;
 	let streamAbort: AbortController | null = null;
@@ -330,6 +345,10 @@
 		attachedSkillNames = [];
 		attachmentSources = {};
 		skillInputs = {};
+		// Attached files are per-chat draft state too — reset them (and stop
+		// their status polls) so chat A's files are never sent from chat B.
+		abortFilePolls();
+		chatFiles = [];
 		// Load messages.
 		try {
 			const page = await messagesApi.listMessages(chat.id, { limit: 100 });
@@ -436,12 +455,19 @@
 
 	// ---- file panel handlers ----
 	async function uploadAttached(file: File) {
+		// The backend 422s the whole send when file_ids exceeds the cap
+		// (MESSAGE_FILE_IDS_MAX_LEN), so block the attach up front; the panel
+		// shows the limit notice + disables the upload button in parallel.
+		if (!canAttachChatFile(chatFiles.length)) return;
 		uploading = true;
 		try {
 			const uploaded = await filesApi.uploadFile(file, {
 				project_id: $activeChatStore?.project_id ?? undefined
 			});
 			chatFiles = [...chatFiles, uploaded];
+			// Ingestion is async; poll so the chip flips pending -> ready (or
+			// failed) instead of showing a stale "pending" forever.
+			void pollAttachedStatus(uploaded.id);
 		} catch (e) {
 			console.error('lq-ai: upload failed', e);
 		} finally {
@@ -449,9 +475,37 @@
 		}
 	}
 
+	// Poll a chat-attached file's ingestion status until it reaches a terminal
+	// state, patching the matching chatFiles entry so the panel chip updates.
+	// The per-file AbortController stops the loop on detach, chat switch, and
+	// component teardown (abortFilePolls / onDestroy).
+	async function pollAttachedStatus(id: string): Promise<void> {
+		const controller = new AbortController();
+		filePollAborts[id]?.abort();
+		filePollAborts = { ...filePollAborts, [id]: controller };
+		const result = await filesApi.pollFileStatus(id, {
+			signal: controller.signal,
+			onStatus: (latest) => {
+				chatFiles = chatFiles.map((f) =>
+					f.id === id ? { ...f, ingestion_status: latest.ingestion_status } : f
+				);
+			}
+		});
+		if (filePollAborts[id] === controller) {
+			const next = { ...filePollAborts };
+			delete next[id];
+			filePollAborts = next;
+		}
+		if (result.outcome === 'timeout') {
+			// Leave the last known status in place — don't fabricate 'failed'.
+			console.warn('lq-ai: file ingestion status poll timed out', id);
+		}
+	}
+
 	async function detachFile(file: FileMeta) {
 		// Per the spec the M1 attached-files panel manages chat-local state;
 		// the full file-row is left in place and can be re-attached later.
+		filePollAborts[file.id]?.abort();
 		chatFiles = chatFiles.filter((f) => f.id !== file.id);
 	}
 
@@ -641,6 +695,11 @@
 					// Issue #207 finding 4 — only send set_sticky on a real toggle
 					// change; otherwise leave the chat's sticky set unchanged.
 					set_sticky: stickyDirty ? stickyEnabled : undefined,
+					// Chat-scoped attached files — the backend injects each ready
+					// file's canonical text as a system block (chats.py). Ownership
+					// is validated server-side; files with no text are skipped.
+					// selectFileIdsForSend drops 'failed' files and caps at 16.
+					file_ids: selectFileIdsForSend(chatFiles),
 					stream: true
 				},
 				streamAbort.signal
@@ -1164,6 +1223,7 @@
 			{chatFiles}
 			{projectFiles}
 			{uploading}
+			{attachLimitReached}
 			onUpload={uploadAttached}
 			onDetach={detachFile}
 		/>
