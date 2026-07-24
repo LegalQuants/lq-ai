@@ -40,6 +40,13 @@ from app.models.chat_pending_tool_call import ChatPendingToolCall
 from app.models.tool_call_log import ToolCallLog
 from app.models.user import User
 from app.security import create_access_token, hash_password
+from app.security.encryption import (
+    MCP_MASTER_KEY_ENV,
+    PAYLOAD_ENVELOPE_MARKER,
+    MCPTokenEncryptor,
+    encrypt_payload_envelope,
+    generate_master_key,
+)
 
 GATEWAY_BASE = "http://test-gateway"
 GATEWAY_KEY = "test-gw-key"
@@ -50,6 +57,18 @@ _DUMMY_UUID = uuid.UUID("00000000-0000-4000-8000-000000000000")
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def mcp_master_key(monkeypatch: pytest.MonkeyPatch) -> str:
+    """Bind a fresh MCP master key for every test in this module.
+
+    DE-358 item 5: pending-tool-call payload columns are envelope-encrypted
+    under ``LQ_AI_MCP_MASTER_KEY``; the resume path decrypts them.
+    """
+    key = generate_master_key()
+    monkeypatch.setenv(MCP_MASTER_KEY_ENV, key)
+    return key
 
 
 def _override_get_db(db_session: AsyncSession):
@@ -155,8 +174,15 @@ async def _create_chat_and_pending(
     client: AsyncClient,
     status: str = "pending",
     expires_delta: timedelta = timedelta(minutes=15),
+    encrypted: bool = True,
 ) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
-    """Create a chat and a ChatPendingToolCall row. Returns (chat_id, pending_id, assistant_msg_id)."""
+    """Create a chat and a ChatPendingToolCall row. Returns (chat_id, pending_id, assistant_msg_id).
+
+    ``encrypted=True`` (the write-path default since DE-358 item 5) stores the
+    payload columns as encrypted envelopes under the module's master key;
+    ``encrypted=False`` simulates a legacy plaintext row from before the
+    envelope shipped.
+    """
     headers = _h(user)
     chat_resp = await client.post("/api/v1/chats", headers=headers, json={"title": "resume-test"})
     assert chat_resp.status_code == 201, chat_resp.text
@@ -183,6 +209,19 @@ async def _create_chat_and_pending(
     db_session.add(tcl_row)
     await db_session.flush()
 
+    args_payload = {"doc_id": "abc123"}
+    state_payload = {
+        "messages": [{"role": "user", "content": "delete the file"}],
+        "calls_used": 0,
+        "model": "smart",
+    }
+    if encrypted:
+        stored_args = encrypt_payload_envelope(args_payload)
+        stored_state = encrypt_payload_envelope(state_payload)
+    else:
+        stored_args = args_payload
+        stored_state = state_payload
+
     pending_row = ChatPendingToolCall(
         chat_id=chat_id,
         user_id=user.id,
@@ -193,12 +232,8 @@ async def _create_chat_and_pending(
         tool=spec.tool,
         destructive=spec.destructive,
         tier=2,
-        tool_call_args={"doc_id": "abc123"},
-        resume_state={
-            "messages": [{"role": "user", "content": "delete the file"}],
-            "calls_used": 0,
-            "model": "smart",
-        },
+        tool_call_args=stored_args,
+        resume_state=stored_state,
         status=status,
         expires_at=datetime.now(UTC) + expires_delta,
         tool_call_log_id=tcl_row.id,
@@ -995,3 +1030,134 @@ async def test_deny_gateway_receives_assistant_turn_before_denial_message(
     assert tool_msg is not None, (
         "No role='tool' denial message found in conversation — denial message was not appended"
     )
+
+
+# ---------------------------------------------------------------------------
+# (l) DE-358 item 5: legacy plaintext row (pre-envelope) still resumes
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_legacy_plaintext_row_still_resumes(
+    client: AsyncClient,
+    db_user: User,
+    db_session: AsyncSession,
+) -> None:
+    """A row persisted BEFORE the envelope shipped (raw plaintext JSONB) must
+    still resume — TTL-bounded transition fallback, removable after one
+    release."""
+    chat_id, pending_id, _assistant_message_id = await _create_chat_and_pending(
+        db_session, user=db_user, client=client, encrypted=False
+    )
+
+    # Sanity: the stored columns really are plaintext (no envelope marker).
+    row = await db_session.get(ChatPendingToolCall, pending_id)
+    assert row is not None
+    assert PAYLOAD_ENVELOPE_MARKER not in row.tool_call_args
+    assert PAYLOAD_ENVELOPE_MARKER not in row.resume_state
+
+    spec = _make_tool_spec()
+    loop_final = LoopFinal(
+        text="Done — legacy row resumed.",
+        usage_prompt=10,
+        usage_completion=5,
+        tier=2,
+        provider="anthropic-prod",
+        model="claude-sonnet-4-6",
+        applied_skills=[],
+        calls_used=1,
+    )
+    tool_result = ToolResult(cost_usd=Decimal("0"), data={"deleted": "abc123"}, outcome="success")
+    non_empty_allowlist = ChatToolAllowlist(specs={spec.function_name: spec})
+
+    with (
+        patch(
+            "app.api.chats.assemble_allowlist",
+            new=AsyncMock(return_value=non_empty_allowlist),
+        ),
+        patch(
+            "app.chat.tool_loop.execute_tool",
+            new=AsyncMock(return_value=tool_result),
+        ),
+        patch(
+            "app.api.chats.run_chat_tool_loop",
+            new=AsyncMock(return_value=loop_final),
+        ),
+    ):
+        resp = await client.post(
+            f"/api/v1/chats/{chat_id}/tool-calls/{pending_id}",
+            headers=_h(db_user),
+            json={"decision": "approve"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    frames = _parse_sse_frames(resp.content)
+    types = [f.get("type") for f in frames]
+    assert "start" in types and "complete" in types, f"Unexpected frame types: {types}"
+
+    await db_session.refresh(row)
+    assert row.status == "resolved"
+
+
+# ---------------------------------------------------------------------------
+# (m) DE-358 item 5: tampered / wrong-key envelope → resume denied, fail
+# closed, no replay, no payload leak
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_tampered_envelope_denies_resume_with_structured_error(
+    client: AsyncClient,
+    db_user: User,
+    db_session: AsyncSession,
+) -> None:
+    """A pending row whose ciphertext does not decrypt under the active key
+    (tampered, or written under a different key) must:
+    - deny the resume with the structured 409 conflict error
+    - never execute the tool
+    - leave the row resolved (single-use claim already committed → no replay)
+    - never leak ciphertext or payload contents in the response
+    """
+    headers = _h(db_user)
+    chat_id, pending_id, _ = await _create_chat_and_pending(db_session, user=db_user, client=client)
+
+    # Overwrite the stored envelope with one written under a DIFFERENT key —
+    # indistinguishable from tampering by Fernet design.
+    wrong_key_enc = MCPTokenEncryptor(master_key=generate_master_key())
+    row = await db_session.get(ChatPendingToolCall, pending_id)
+    assert row is not None
+    row.tool_call_args = encrypt_payload_envelope({"doc_id": "abc123"}, encryptor=wrong_key_enc)
+    await db_session.commit()
+
+    execute_tool_mock = AsyncMock()
+    with patch("app.chat.tool_loop.execute_tool", new=execute_tool_mock):
+        resp = await client.post(
+            f"/api/v1/chats/{chat_id}/tool-calls/{pending_id}",
+            headers=headers,
+            json={"decision": "approve"},
+        )
+
+    assert resp.status_code == 409, resp.text
+    body = resp.json()
+    assert body["detail"]["code"] == "conflict"
+    assert "decrypt" in body["detail"]["message"], body["detail"]["message"]
+    # No payload contents or ciphertext in the error body.
+    assert "abc123" not in resp.text
+    assert "token" not in body["detail"].get("details", {})
+    execute_tool_mock.assert_not_called()
+
+    # Fail closed: the claim was committed before the decrypt, so the row is
+    # resolved and a replay attempt loses the claim (409 again).
+    db_session.expire_all()
+    row2 = await db_session.get(ChatPendingToolCall, pending_id)
+    assert row2 is not None
+    assert row2.status == "resolved", f"Row replayable after decrypt failure: {row2.status!r}"
+
+    replay = await client.post(
+        f"/api/v1/chats/{chat_id}/tool-calls/{pending_id}",
+        headers=headers,
+        json={"decision": "approve"},
+    )
+    assert replay.status_code == 409, replay.text

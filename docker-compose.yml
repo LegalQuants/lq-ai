@@ -220,6 +220,11 @@ services:
       # bridge traffic with 500 when either is unset.
       LQ_AI_BRIDGE_TOKEN: ${LQ_AI_BRIDGE_TOKEN:-}
       LQ_AI_BRIDGE_MASTER_KEY: ${LQ_AI_BRIDGE_MASTER_KEY:-}
+      # Fernet master key for per-user MCP OAuth tokens AND the
+      # chat pending-tool-call resume payload (DE-358 item 5). Required
+      # when MCP OAuth or the chat tool-confirmation gate is used; the
+      # persist paths fail closed (no plaintext writes) when unset.
+      LQ_AI_MCP_MASTER_KEY: ${LQ_AI_MCP_MASTER_KEY:-}
     volumes:
       - ./skills:/skills:ro
     ports:
@@ -354,6 +359,10 @@ services:
       # not mutate it (skill authoring is a host-side / human-attestation
       # workflow per CLAUDE.md "Working with skills").
       LQ_AI_SKILLS_DIR: ${LQ_AI_SKILLS_DIR:-/skills}
+      # Same key as the api service — worker code paths that touch
+      # envelope-encrypted payloads (DE-358 item 5) or per-user MCP
+      # OAuth tokens need it to decrypt/encrypt.
+      LQ_AI_MCP_MASTER_KEY: ${LQ_AI_MCP_MASTER_KEY:-}
     volumes:
       - ./skills:/skills:ro
     command: ["arq", "app.workers.arq_setup.WorkerSettings"]
