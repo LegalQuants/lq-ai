@@ -51,6 +51,12 @@ from app.schemas.gateway import (
     ChatCompletionDelta,
 )
 from app.security import create_access_token, hash_password
+from app.security.encryption import (
+    MCP_MASTER_KEY_ENV,
+    PAYLOAD_ENVELOPE_MARKER,
+    decrypt_payload_envelope,
+    generate_master_key,
+)
 from app.skills import load_registry
 from app.skills.registry import MutableSkillRegistry
 
@@ -63,6 +69,19 @@ GATEWAY_KEY = "test-gw-key"
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def mcp_master_key(monkeypatch: pytest.MonkeyPatch) -> str:
+    """Bind a fresh MCP master key for every test in this module.
+
+    DE-358 item 5: the confirmation-gate persist path envelope-encrypts
+    ``tool_call_args`` / ``resume_state`` under ``LQ_AI_MCP_MASTER_KEY``
+    and fails closed without it.
+    """
+    key = generate_master_key()
+    monkeypatch.setenv(MCP_MASTER_KEY_ENV, key)
+    return key
 
 
 def _override_get_db(db_session: AsyncSession):
@@ -420,6 +439,22 @@ async def test_loop_confirmation_emits_gate_event_and_persists_rows(
     assert pending_row.tool == spec.tool
     assert pending_row.destructive is True
 
+    # DE-358 item 5: the raw JSONB columns hold the encrypted envelope —
+    # marker present, no plaintext arg values or conversation content.
+    raw_args = pending_row.tool_call_args
+    raw_state = pending_row.resume_state
+    assert PAYLOAD_ENVELOPE_MARKER in raw_args, f"tool_call_args not enveloped: {raw_args.keys()}"
+    assert PAYLOAD_ENVELOPE_MARKER in raw_state, f"resume_state not enveloped: {raw_state.keys()}"
+    assert "abc123" not in _json.dumps(raw_args), "plaintext arg value leaked into tool_call_args"
+    assert "delete the file" not in _json.dumps(raw_state), (
+        "plaintext conversation content leaked into resume_state"
+    )
+    # ... and decrypts back to the original payloads.
+    assert decrypt_payload_envelope(raw_args) == {"doc_id": "abc123", "reason": "remove outdated"}
+    decrypted_state = decrypt_payload_envelope(raw_state)
+    assert decrypted_state["messages"] == [{"role": "user", "content": "delete the file"}]
+    assert decrypted_state["calls_used"] == 0
+
     # Assert ToolCallLog row with pending_confirmation.
     assert pending_row.tool_call_log_id is not None, "tool_call_log_id not linked"
     tcl_row = await db_session.get(ToolCallLog, pending_row.tool_call_log_id)
@@ -612,3 +647,83 @@ async def test_gate_persist_failure_emits_error_frame(
     stmt = select(Message).where(Message.chat_id == uuid.UUID(chat_id), Message.role == "assistant")
     msg_rows = (await db_session.execute(stmt)).scalars().all()
     assert not msg_rows, f"Unexpected assistant Message row after gate persist failure: {msg_rows}"
+
+
+# ---------------------------------------------------------------------------
+# DE-358 item 5: missing master key at gate persist → fail closed, no
+# plaintext write
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_gate_persist_without_master_key_fails_closed(
+    client: AsyncClient,
+    db_user: User,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Streaming LoopConfirmation with LQ_AI_MCP_MASTER_KEY unset.
+
+    The persist path must raise the structured missing-key error (surfaced
+    to the client as an error frame) and NOTHING may be persisted — in
+    particular no plaintext ChatPendingToolCall row.
+    """
+    monkeypatch.delenv(MCP_MASTER_KEY_ENV, raising=False)
+
+    headers = _h(db_user)
+    chat_resp = await client.post("/api/v1/chats", headers=headers, json={"title": "no-key-gate"})
+    assert chat_resp.status_code == 201, chat_resp.text
+    chat_id = chat_resp.json()["id"]
+
+    spec = _make_tool_spec()
+    loop_outcome = LoopConfirmation(
+        spec=spec,
+        args={"doc_id": "abc123", "reason": "no key set"},
+        tier=2,
+        args_summary="digest-placeholder",
+        messages=[{"role": "user", "content": "delete the file"}],
+        calls_used=0,
+    )
+
+    non_empty_allowlist = _make_non_empty_allowlist()
+
+    with (
+        patch(
+            "app.api.chats.assemble_allowlist",
+            new=AsyncMock(return_value=non_empty_allowlist),
+        ),
+        patch(
+            "app.api.chats.run_chat_tool_loop",
+            new=AsyncMock(return_value=loop_outcome),
+        ),
+    ):
+        resp = await client.post(
+            f"/api/v1/chats/{chat_id}/messages",
+            headers=headers,
+            json={"content": "delete doc abc123", "stream": True},
+        )
+
+    assert resp.status_code == 200, resp.text
+    body_text = resp.content.decode("utf-8")
+    assert "[DONE]" in body_text, f"No [DONE] in stream: {body_text!r}"
+
+    frames = _parse_sse_frames(resp.content)
+    types = [f.get("type") for f in frames]
+
+    # No gate frame — the persist failed closed before it could be emitted.
+    assert "tool_confirmation_required" not in types, (
+        f"tool_confirmation_required emitted despite missing master key: {types}"
+    )
+
+    # A structured error frame must be present, without payload contents.
+    error_frames = [f for f in frames if "detail" in f]
+    assert error_frames, f"No error frame emitted with the master key unset; frames: {frames}"
+    err_detail = error_frames[0]["detail"]
+    assert err_detail["code"] == "internal_error", f"Unexpected error code: {err_detail['code']!r}"
+    assert "abc123" not in _json.dumps(error_frames), "arg value leaked into the error frame"
+
+    # Nothing persisted — especially not a plaintext pending row.
+    stmt = select(ChatPendingToolCall).where(ChatPendingToolCall.chat_id == uuid.UUID(chat_id))
+    rows = (await db_session.execute(stmt)).scalars().all()
+    assert not rows, f"ChatPendingToolCall row persisted despite missing master key: {rows}"
