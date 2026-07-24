@@ -370,6 +370,13 @@ export interface MessageCreate {
 	 * `false` clears the set; omitted leaves it unchanged. Off by default.
 	 */
 	set_sticky?: boolean | null;
+	/**
+	 * Chat-scoped attached file ids (owner's file UUIDs). The backend
+	 * (chats.py `_load_attached_file_contexts`) loads each file's
+	 * `Document.normalized_content` and injects it as a system message so
+	 * the model can review the full document. Capped at 16 server-side.
+	 */
+	file_ids?: string[];
 }
 
 export interface MessagePostResponse {
