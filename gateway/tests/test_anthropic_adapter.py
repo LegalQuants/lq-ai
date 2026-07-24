@@ -745,3 +745,141 @@ async def test_anthropic_round_trips_assistant_tool_use_for_follow_up() -> None:
     assert resp2.choices[0].finish_reason == "stop"
     assert resp2.choices[0].message.content == "Confirmed."
     assert call_count == 2
+
+
+# --- DE-358 item 1: streaming tool_use accumulation ---------------------------
+
+
+SSE_TOOL_USE_FIXTURE_BODY = (
+    "event: message_start\n"
+    'data: {"type":"message_start","message":{"id":"msg_tool_stream","model":"claude-sonnet-4-6",'
+    '"usage":{"input_tokens":11,"output_tokens":0}}}\n\n'
+    "event: content_block_start\n"
+    'data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n'
+    "event: content_block_delta\n"
+    'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Checking."}}\n\n'
+    "event: content_block_stop\n"
+    'data: {"type":"content_block_stop","index":0}\n\n'
+    "event: content_block_start\n"
+    'data: {"type":"content_block_start","index":1,"content_block":'
+    '{"type":"tool_use","id":"toolu_s1","name":"verify_citations","input":{}}}\n\n'
+    "event: content_block_delta\n"
+    'data: {"type":"content_block_delta","index":1,"delta":'
+    '{"type":"input_json_delta","partial_json":"{\\"text\\": \\"Brown"}}\n\n'
+    "event: content_block_delta\n"
+    'data: {"type":"content_block_delta","index":1,"delta":'
+    '{"type":"input_json_delta","partial_json":" v. Board\\"}"}}\n\n'
+    "event: content_block_stop\n"
+    'data: {"type":"content_block_stop","index":1}\n\n'
+    "event: message_delta\n"
+    'data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":9}}\n\n'
+    "event: message_stop\n"
+    'data: {"type":"message_stop"}\n\n'
+)
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_streaming_accumulates_tool_use_into_tool_calls_delta() -> None:
+    """DE-358 item 1: a streamed ``tool_use`` block (``content_block_start``
+    + ``input_json_delta`` fragments) is accumulated and emitted as one
+    OpenAI ``tool_calls`` delta at ``content_block_stop``, with
+    ``finish_reason="tool_calls"`` on the final chunk. Before this change
+    the streaming adapter silently dropped tool calls (latent — the chat
+    tool-loop is non-streaming — but a future streaming-with-tools
+    consumer would have lost them)."""
+
+    respx.post(f"{ANTHROPIC_BASE}/v1/messages").mock(
+        return_value=httpx.Response(
+            200,
+            text=SSE_TOOL_USE_FIXTURE_BODY,
+            headers={"content-type": "text/event-stream"},
+        )
+    )
+
+    adapter = _make_adapter()
+    try:
+        result = await adapter.chat_completion(
+            _basic_request(stream=True),
+            model="claude-sonnet-4-6",
+            stream=True,
+        )
+        assert not isinstance(result, ChatCompletionResponse)
+        chunks: list[ChatCompletionChunk] = []
+        async for chunk in result:
+            chunks.append(chunk)
+    finally:
+        await adapter.aclose()
+
+    # role chunk + text delta + tool_calls delta + final chunk.
+    assert len(chunks) == 4
+    assert chunks[0].choices[0].delta.role == "assistant"
+    assert chunks[1].choices[0].delta.content == "Checking."
+
+    tool_delta = chunks[2].choices[0].delta
+    assert tool_delta.tool_calls is not None and len(tool_delta.tool_calls) == 1
+    call = tool_delta.tool_calls[0]
+    assert call["index"] == 0
+    assert call["id"] == "toolu_s1"
+    assert call["type"] == "function"
+    assert call["function"]["name"] == "verify_citations"
+    # Fragments join into the exact arguments JSON string.
+    assert json.loads(call["function"]["arguments"]) == {"text": "Brown v. Board"}
+
+    final = chunks[-1]
+    assert final.choices[0].finish_reason == "tool_calls"
+    assert final.usage is not None
+    assert final.usage.prompt_tokens == 11
+    assert final.usage.completion_tokens == 9
+
+
+SSE_TOOL_USE_EMPTY_INPUT_FIXTURE_BODY = (
+    "event: message_start\n"
+    'data: {"type":"message_start","message":{"id":"msg_tool_empty","model":"claude-sonnet-4-6",'
+    '"usage":{"input_tokens":4,"output_tokens":0}}}\n\n'
+    "event: content_block_start\n"
+    'data: {"type":"content_block_start","index":0,"content_block":'
+    '{"type":"tool_use","id":"toolu_e1","name":"list_sources","input":{}}}\n\n'
+    "event: content_block_stop\n"
+    'data: {"type":"content_block_stop","index":0}\n\n'
+    "event: message_delta\n"
+    'data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":3}}\n\n'
+    "event: message_stop\n"
+    'data: {"type":"message_stop"}\n\n'
+)
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_streaming_tool_use_with_no_input_deltas_emits_empty_args() -> None:
+    """DE-358 item 1: a no-argument tool call (no ``input_json_delta``
+    events at all) emits ``arguments="{}"``, mirroring the non-streaming
+    bridge's ``json.dumps(input or {})``. A plain-text ``content_block_stop``
+    (no tool state) emits nothing — unchanged behavior."""
+
+    respx.post(f"{ANTHROPIC_BASE}/v1/messages").mock(
+        return_value=httpx.Response(
+            200,
+            text=SSE_TOOL_USE_EMPTY_INPUT_FIXTURE_BODY,
+            headers={"content-type": "text/event-stream"},
+        )
+    )
+
+    adapter = _make_adapter()
+    try:
+        result = await adapter.chat_completion(
+            _basic_request(stream=True),
+            model="claude-sonnet-4-6",
+            stream=True,
+        )
+        assert not isinstance(result, ChatCompletionResponse)
+        chunks = [chunk async for chunk in result]
+    finally:
+        await adapter.aclose()
+
+    # role chunk + tool_calls delta + final chunk (no text deltas).
+    assert len(chunks) == 3
+    tool_delta = chunks[1].choices[0].delta
+    assert tool_delta.tool_calls is not None
+    assert tool_delta.tool_calls[0]["function"]["arguments"] == "{}"
+    assert chunks[-1].choices[0].finish_reason == "tool_calls"
