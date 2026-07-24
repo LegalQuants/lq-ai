@@ -221,9 +221,40 @@ def test_eurlex_get_authority_maps_to_fetched_authority():
     assert "CELEX:32016R0679" in fa.url
 
 
+def test_eurlex_search_authority_first_result_no_body():
+    """DE-374: search results carry no document body — citable_text is the
+    title only (same fail-closed contract as GovInfo/EDGAR search)."""
+    payload = {
+        "results": [
+            {
+                "external_ref": "32016R0679",
+                "title": "General Data Protection Regulation",
+                "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32016R0679",
+            },
+            {
+                "external_ref": "32011L0083",
+                "title": "Consumer Rights Directive",
+                "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32011L0083",
+            },
+        ],
+        "count": 2,
+    }
+    fa = EurLexAdapter().from_response("search_authority", payload)
+    assert fa.external_ref == "32016R0679"  # first result
+    assert fa.citable_text == "General Data Protection Regulation"  # title only, NOT body text
+    assert fa.label == "General Data Protection Regulation"
+    assert "CELEX:32016R0679" in fa.url
+    assert fa.content_kind == "eu_legislation"
+
+
+def test_eurlex_search_authority_empty_results_raises():
+    with pytest.raises(ValueError):
+        EurLexAdapter().from_response("search_authority", {"results": [], "count": 0})
+
+
 def test_eurlex_unsupported_op_raises() -> None:
     with pytest.raises(ValueError):
-        EurLexAdapter().from_response("search_authority", {})
+        EurLexAdapter().from_response("bogus_op", {})
 
 
 # ---------------------------------------------------------------------------
@@ -231,9 +262,9 @@ def test_eurlex_unsupported_op_raises() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_eurlex_registered_get_only():
+def test_eurlex_registered_with_search_and_get():
     spec = SOURCE_REGISTRY["eurlex"]
     assert spec.type == "eurlex"
-    assert spec.ops == ("get_authority",)
+    assert spec.ops == ("search_authority", "get_authority")
     assert "eu_regulation" in spec.content_kinds
     assert spec.adapter is not None
