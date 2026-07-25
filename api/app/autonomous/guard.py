@@ -82,6 +82,7 @@ from decimal import Decimal
 from typing import Any
 
 import sqlalchemy as sa
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -98,6 +99,8 @@ from app.models.autonomous import (
     AutonomousSession,
     PrecedentEntry,
 )
+from app.models.file import File as FileModel
+from app.models.knowledge import KnowledgeBase
 from app.models.user import User
 from app.observability_helpers import get_tracer, record_attributes
 
@@ -1159,16 +1162,19 @@ async def _assert_kb_owned(db: AsyncSession, kb_id: uuid.UUID, owner_id: uuid.UU
     happen here or an injected document could steer retrieval at another
     tenant's KB (#288, AG-01). 404-shaped (not-found) message so cross-user
     probing can't tell "exists, not yours" from "doesn't exist".
+
+    Predicates mirror :func:`app.api.knowledge_bases._load_visible_kb` — owner
+    scope **and** ``archived_at IS NULL`` — so the autonomous path cannot reach
+    a KB the HTTP surface would treat as gone. ``ValueError`` rather than that
+    helper's HTTP ``NotFound``: a chokepoint failure becomes ``session.error``
+    text, not a response.
     """
-    from sqlalchemy import select
-
-    from app.models.knowledge import KnowledgeBase
-
     owned = (
         await db.execute(
             select(KnowledgeBase.id).where(
                 KnowledgeBase.id == kb_id,
                 KnowledgeBase.owner_id == owner_id,
+                KnowledgeBase.archived_at.is_(None),
             )
         )
     ).scalar_one_or_none()
@@ -1178,16 +1184,18 @@ async def _assert_kb_owned(db: AsyncSession, kb_id: uuid.UUID, owner_id: uuid.UU
 
 async def _assert_file_owned(db: AsyncSession, file_id: uuid.UUID, owner_id: uuid.UUID) -> None:
     """Reject a model-supplied ``file_id`` the session owner does not own
-    (#288, AG-01). See :func:`_assert_kb_owned` for the rationale."""
-    from sqlalchemy import select
+    (#288, AG-01). See :func:`_assert_kb_owned` for the rationale.
 
-    from app.models.file import File as FileModel
-
+    Predicates mirror :func:`app.api.files._load_visible_file` — owner scope
+    **and** ``deleted_at IS NULL``, so a soft-deleted (tombstoned) file is
+    unreachable here just as it is over HTTP.
+    """
     owned = (
         await db.execute(
             select(FileModel.id).where(
                 FileModel.id == file_id,
                 FileModel.owner_id == owner_id,
+                FileModel.deleted_at.is_(None),
             )
         )
     ).scalar_one_or_none()
@@ -1270,10 +1278,17 @@ async def _handle_retrieve_chunks(
             "`file_id` (file-scoped fetch), or `since` + `kb_id` "
             "(KB-scoped fetch of files attached after a cutoff)."
         )
-    # Mode 1 requires kb_id; verify ownership before searching. If kb_id is
-    # absent the downstream handler raises as before (malformed request).
-    if kb_id_raw is not None:
-        await _assert_kb_owned(db, uuid.UUID(str(kb_id_raw)), owner_id)
+    # Mode 1 requires kb_id. Fail CLOSED on a missing one rather than falling
+    # through to the downstream handler: a model-supplied params dict that
+    # omits kb_id must never reach retrieval with no ownership check applied
+    # (#288, AG-01). The downstream handler would also reject it, but the
+    # ownership gate has to be the thing that refuses, not a later accident.
+    if kb_id_raw is None:
+        raise ValueError(
+            "_handle_retrieve_chunks: `query` mode requires `kb_id` so the "
+            "search can be scoped to a knowledge base this session owns."
+        )
+    await _assert_kb_owned(db, uuid.UUID(str(kb_id_raw)), owner_id)
     return await _handle_retrieve_chunks_query(params, db=db)
 
 

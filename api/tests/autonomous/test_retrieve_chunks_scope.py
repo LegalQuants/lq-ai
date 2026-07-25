@@ -235,3 +235,80 @@ async def test_retrieve_chunks_rejects_foreign_kb_id(
             db=db_session,
             owner_id=intruder,
         )
+
+
+async def test_query_mode_without_kb_id_fails_closed(
+    db_session: AsyncSession,
+) -> None:
+    """A ``query``-mode call with no ``kb_id`` is refused BY THE OWNERSHIP GATE.
+
+    Regression pin (#288, AG-01): the first cut skipped ``_assert_kb_owned``
+    when ``kb_id`` was absent and let the downstream handler complain instead.
+    That made the ownership check conditional on the model supplying the very
+    field being checked. The gate must be the thing that refuses.
+    """
+    with pytest.raises(ValueError, match="requires `kb_id`"):
+        await _handle_retrieve_chunks(
+            {"query": "confidential", "alpha": 1.0},
+            db=db_session,
+            owner_id=uuid.uuid4(),
+        )
+
+
+async def test_retrieve_chunks_rejects_soft_deleted_file(
+    db_session: AsyncSession, kb_with_one_indexed_file: KbOneFile
+) -> None:
+    """A tombstoned file is unreachable even for its own owner.
+
+    Mirrors ``app.api.files._load_visible_file``, which filters
+    ``deleted_at IS NULL``: the autonomous path must not resurrect content the
+    HTTP surface treats as deleted.
+    """
+    from sqlalchemy import update
+
+    from app.models.file import File as FileModel
+
+    await db_session.execute(
+        update(FileModel)
+        .where(FileModel.id == kb_with_one_indexed_file.file_id)
+        .values(deleted_at=datetime.now(UTC))
+    )
+    await db_session.flush()
+
+    with pytest.raises(ValueError, match="not accessible"):
+        await _handle_retrieve_chunks(
+            {"file_id": str(kb_with_one_indexed_file.file_id)},
+            db=db_session,
+            owner_id=kb_with_one_indexed_file.owner_id,
+        )
+
+
+async def test_retrieve_chunks_rejects_archived_kb(
+    db_session: AsyncSession, kb_with_one_indexed_file: KbOneFile
+) -> None:
+    """An archived KB is unreachable even for its owner.
+
+    Mirrors ``app.api.knowledge_bases._load_visible_kb``, which filters
+    ``archived_at IS NULL`` unless archived rows are explicitly requested.
+    """
+    from sqlalchemy import update
+
+    from app.models.knowledge import KnowledgeBase
+
+    await db_session.execute(
+        update(KnowledgeBase)
+        .where(KnowledgeBase.id == kb_with_one_indexed_file.kb_id)
+        .values(archived_at=datetime.now(UTC))
+    )
+    await db_session.flush()
+
+    with pytest.raises(ValueError, match="not accessible"):
+        await _handle_retrieve_chunks(
+            {
+                "kb_id": str(kb_with_one_indexed_file.kb_id),
+                "query": "confidential",
+                "alpha": 1.0,
+            },
+            db=db_session,
+            owner_id=kb_with_one_indexed_file.owner_id,
+        )
