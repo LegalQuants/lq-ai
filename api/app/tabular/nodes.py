@@ -43,10 +43,11 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.citation.caselaw import locate_passage
 from app.citation.verification import verify
 from app.models.document import Document, DocumentChunk
 from app.models.file import File
-from app.models.tabular import TabularExecution
+from app.models.tabular import TabularCellCitation, TabularExecution
 from app.observability_helpers import get_tracer, record_attributes
 from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
 from app.schemas.tabular import ColumnSpec
@@ -386,6 +387,19 @@ async def extract_cell(
             ensemble_config=verify_ensemble_config,
         )
 
+    # DE-309: deterministic offset-bearing provenance. Locate the
+    # extracted value verbatim inside each cited chunk's canonical text;
+    # every hit becomes a ``cell_citations`` entry the aggregate node
+    # persists as a ``tabular_cell_citations`` row. Fail-closed: a miss
+    # mints nothing (the cell renders unverified read-side) — never a
+    # fake offset row. In-flight only; ``_strip_state_keys`` drops it
+    # from the persisted results JSONB.
+    cell_citations = await _locate_cell_citations(
+        value=value,
+        chunks=chunks,
+        cited_chunk_ids=cited_chunk_ids,
+    )
+
     return {
         "value": value,
         "cited_chunk_ids": cited_chunk_ids,
@@ -398,6 +412,7 @@ async def extract_cell(
         "cost_usd": "0",
         "error": None,
         "verification_method": verification_method,
+        "cell_citations": cell_citations,
     }
 
 
@@ -452,6 +467,89 @@ async def _verify_cell_ensemble(
         return None
 
 
+async def _locate_cell_citations(
+    *,
+    value: str,
+    chunks: list[dict[str, Any]],
+    cited_chunk_ids: list[str],
+) -> list[dict[str, Any]]:
+    """Deterministically locate ``value`` in each cited chunk's text (DE-309).
+
+    Verbatim-only, mirroring the fetched-authority pass in
+    :mod:`app.citation.authority`: :func:`locate_passage` finds the exact
+    substring span, then the located span is confirmed through the
+    verification cascade with ``gateway=None`` (Stages 1-2 only — no LLM
+    judge for cells in this item). A hit yields one in-flight citation
+    dict per cited chunk with chunk-local char offsets + the cascade's
+    method/confidence; a miss yields nothing for that chunk (fail-closed
+    — an unlocatable value must render unverified, never carry a fake
+    offset row).
+
+    Duplicate cited chunk ids are deduplicated (first occurrence wins)
+    so a model emitting ``[0, 0]`` can't mint the same provenance row
+    twice. Any unexpected exception degrades to "no citations located"
+    for the remaining chunks — provenance minting must never fail the
+    cell.
+    """
+
+    if not value or not cited_chunk_ids:
+        return []
+
+    content_by_id = {chunk["id"]: chunk["content"] for chunk in chunks}
+    located: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for chunk_id in cited_chunk_ids:
+        if chunk_id in seen:
+            continue
+        seen.add(chunk_id)
+        try:
+            content = content_by_id.get(chunk_id)
+            if not content:
+                continue
+            span = locate_passage(value, content)
+            if span is None:
+                continue
+            start, end = span
+            candidate = _CellVerifyCandidate(
+                source_offset_start=start,
+                source_offset_end=end,
+                # locate_passage strips the needle before searching, so
+                # the located slice is the stripped value — use exactly
+                # what was located so Stage 1 compares byte-for-byte.
+                source_text=content[start:end],
+                source_document_id=uuid.UUID(chunk_id),
+            )
+            document = _CellVerifyDocument(id=uuid.UUID(chunk_id), normalized_content=content)
+            # gateway=None: the cascade runs Stages 1-2 only and MISSes
+            # rather than escalating to a judge. With byte-exact offsets
+            # from locate_passage this confirms as ``exact_match``; the
+            # defensive re-check keeps the row's method/confidence
+            # anchored in the canonical cascade rather than asserted here.
+            result = await verify(candidate, document, gateway=None)
+            if not result.verified or result.method is None:
+                continue
+            located.append(
+                {
+                    "chunk_id": chunk_id,
+                    "source_offset_start": start,
+                    "source_offset_end": end,
+                    "verification_method": result.method,
+                    "verification_confidence": result.confidence,
+                }
+            )
+        except Exception as exc:
+            logger.warning(
+                "tabular cell citation locate error: %s",
+                exc,
+                extra={
+                    "event": "tabular_cell_citation_locate_error",
+                    "error_type": type(exc).__name__,
+                },
+            )
+            continue
+    return located
+
+
 def _failed_cell(reason: str) -> dict[str, Any]:
     return {
         "value": None,
@@ -461,6 +559,7 @@ def _failed_cell(reason: str) -> dict[str, Any]:
         "cost_usd": "0",
         "error": reason,
         "verification_method": None,
+        "cell_citations": [],
     }
 
 
@@ -599,6 +698,12 @@ def make_aggregate_node(
         else:
             values["status"] = "completed"
 
+        # DE-309: batch-insert the offset-bearing provenance rows the
+        # extract node located, in the SAME transaction as the results
+        # write — the grid and its provenance land (or roll back)
+        # together.
+        db.add_all(_mint_cell_citation_rows(execution_id, per_cell_results))
+
         await db.execute(
             update(TabularExecution).where(TabularExecution.id == execution_id).values(**values)
         )
@@ -606,6 +711,58 @@ def make_aggregate_node(
         return {}
 
     return aggregate_node
+
+
+def _mint_cell_citation_rows(
+    execution_id: uuid.UUID,
+    per_cell_results: list[Any],
+) -> list[TabularCellCitation]:
+    """Project in-flight ``cell_citations`` into :class:`TabularCellCitation` rows.
+
+    One row per located (cell, chunk) pair, keyed the way cells are keyed
+    in the results payload: ``document_id`` (the grid row) +
+    ``column_name`` (the grid column). Cells without located citations
+    contribute nothing — the absence of rows IS the unverified signal
+    (fail-closed). Malformed in-flight entries are skipped rather than
+    sinking the aggregate write.
+    """
+
+    rows: list[TabularCellCitation] = []
+    for cell in per_cell_results:
+        doc_id = cell.get("document_id")
+        col_name = cell.get("column_name")
+        if not doc_id or not col_name:
+            continue
+        for citation in cell.get("cell_citations") or []:
+            try:
+                confidence = citation.get("verification_confidence")
+                rows.append(
+                    TabularCellCitation(
+                        execution_id=execution_id,
+                        document_id=uuid.UUID(str(doc_id)),
+                        column_name=col_name,
+                        chunk_id=uuid.UUID(str(citation["chunk_id"])),
+                        source_offset_start=int(citation["source_offset_start"]),
+                        source_offset_end=int(citation["source_offset_end"]),
+                        verification_method=str(citation["verification_method"]),
+                        verification_confidence=(
+                            Decimal(str(round(float(confidence), 2)))
+                            if confidence is not None
+                            else None
+                        ),
+                    )
+                )
+            except (KeyError, TypeError, ValueError) as exc:
+                logger.warning(
+                    "tabular aggregate: malformed cell citation skipped: %s",
+                    exc,
+                    extra={
+                        "event": "tabular_cell_citation_malformed",
+                        "error_type": type(exc).__name__,
+                    },
+                )
+                continue
+    return rows
 
 
 def _assemble_rows(
@@ -642,7 +799,13 @@ def _assemble_rows(
 
 
 def _strip_state_keys(cell: dict[str, Any]) -> dict[str, Any]:
-    """Project the in-flight cell shape down to the persisted shape."""
+    """Project the in-flight cell shape down to the persisted shape.
+
+    ``document_id`` / ``column_name`` move to the row / cell-map key;
+    ``cell_citations`` (DE-309) is persisted as ``tabular_cell_citations``
+    rows by the aggregate node, not in the results JSONB — the payload
+    shape (schema_version m3-c2-v1) is unchanged.
+    """
     keys = (
         "value",
         "cited_chunk_ids",
