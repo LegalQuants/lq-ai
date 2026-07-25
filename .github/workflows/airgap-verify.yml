@@ -139,10 +139,25 @@ jobs:
       - name: Drive login -> chat -> Tier-1 response
         run: ./scripts/airgap/drive-smoke.sh
 
-      - name: Assert zero egress
+      - name: Assert zero successful egress (inventory blocked attempts)
+        # Hard-fails only on BREACH packets (replies from non-private
+        # sources = egress got past the seal). Blocked outbound attempts
+        # — upstream phone-home behavior that would simply fail in a
+        # true air gap — are inventoried with container attribution into
+        # sealed.attempts.txt in the evidence artifact, and surfaced in
+        # the job summary. First live run (2026-07-25) showed 24 such
+        # blocked attempts from three containers; the seal held.
         run: |
           ./scripts/airgap/capture-egress.sh stop sealed
           ./scripts/airgap/capture-egress.sh assert-clean sealed
+          if [ -f airgap-artifacts/sealed.attempts.txt ]; then
+            {
+              echo '### Attempted (blocked) egress inventory'
+              echo '```'
+              cat airgap-artifacts/sealed.attempts.txt
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Negative control — prove the seal and canary actually work
         # From inside the sealed gateway container (the one component
