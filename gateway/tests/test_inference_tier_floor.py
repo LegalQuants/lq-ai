@@ -93,7 +93,14 @@ async def http_client(
 ) -> AsyncIterator[tuple[AsyncClient, RecordingRoutingLogWriter]]:
     app, recorder, _backend = gateway_with_backend
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    # This module sets LQ_AI_GATEWAY_KEY (the backend client needs it), which
+    # also arms the /v1 router's require_gateway_key dependency — so the inbound
+    # requests have to carry the header too.
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-LQ-AI-Gateway-Key": GATEWAY_KEY},
+    ) as ac:
         yield ac, recorder
 
 
