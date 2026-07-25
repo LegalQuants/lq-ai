@@ -15,10 +15,12 @@ Surface (M3 scope — plumbing only):
 * ``DELETE /api/v1/admin/intake-bridges/teams/{tenant_id}``
   — soft-delete a Teams tenant.
 
-The "configure quick-ask skill" dropdown UI and the ``/lq``
-invocation audit-log surface land with DE-288's slash-command work;
-no API endpoints for those are needed at v0.3.0 because there's no
-slash-command behavior to configure yet.
+DE-288's slash-command surface shipped with the quick-ask skill
+configured via the ``LQ_AI_BRIDGE_QUICK_ASK_SKILL`` env var on the
+api service (see :mod:`app.api.integrations_quick_ask`). The
+"configure quick-ask skill" dropdown UI backed by a DB setting is a
+documented follow-up; ``/lq`` invocations surface in the audit log
+as ``bridge.quick_ask`` rows meanwhile.
 
 Auth posture: every endpoint here stacks on ``ActiveUser`` (bearer +
 must-change-password gate, mounted at the router level in

@@ -21,18 +21,20 @@ verified *in isolation* during M3-E1. The end-to-end install flow — a
 real OAuth round-trip against a public-URL tunnel back into a live Slack
 workspace / M365 tenant — has **never** been exercised. The bridges'
 status is "plumbing shipped, real-OAuth integration **unverified**,"
-tracked as [DE-312](#references) (P1). The `/lq` slash-command surface
-(the user-facing reason to install a bridge) is descoped to M4 /
-community contribution, tracked as [DE-288](#references). Do not read
-this document as a claim that the bridges work end-to-end.
+tracked as [DE-312](#references) (P1). The `/lq` quick-ask
+slash-command surface ([DE-288](#references)) has since shipped —
+`/lq help` + `/lq ask` on both bridges with fail-closed email identity
+mapping — but carries the same caveat: unit-tested in isolation, never
+exercised against a live tenant. Do not read this document as a claim
+that the bridges work end-to-end.
 
 ---
 
 ## Scope
 
-"Connect Slack / Teams to LQ.AI" can mean three things. M3 ships the
-first as plumbing; the second is descoped to M4; the third is out of
-scope entirely.
+"Connect Slack / Teams to LQ.AI" can mean three things. M3 shipped the
+first as plumbing; the second's quick-ask half shipped with DE-288; the
+third is out of scope entirely.
 
 1. **Install + OAuth + identity binding** *(this plumbing, shipped in M3
    Phase D)* — an operator can stand up the `slack-bridge` /
@@ -40,15 +42,21 @@ scope entirely.
    workspace / tenant row surface in the admin UI. This is install
    substrate, not a user-facing feature.
 
-2. **The `/lq` slash-command surface** *(descoped to M4 / community;
-   tracked at [DE-288](#references))* — `/lq` on a thread forwards the
-   thread as the seed of an LQ.AI chat; `/lq ask "<question>"` runs a
-   configured quick-ask skill and replies in-thread. This is the reason
-   an operator would install a bridge. It does **not** exist at v0.3.0:
-   no slash-command handler, no per-user identity mapping, no
-   in-thread reply. The admin UI carries visible-but-disabled
-   quick-ask-skill pickers and an empty `/lq` audit-log shell as
-   forward hooks for this work.
+2. **The `/lq` slash-command surface** *(quick-ask half shipped;
+   tracked at [DE-288](#references))* — `/lq ask "<question>"` runs the
+   operator-configured quick-ask skill (`LQ_AI_BRIDGE_QUICK_ASK_SKILL`
+   on the api; empty = plain chat turn) as the resolved user and
+   replies ephemerally / in-conversation with the answer + a chat
+   link; `/lq` / `/lq help` renders usage. Identity is fail-closed
+   email matching: Slack resolves the invoker's profile email
+   api-side via `users.info` with the stored workspace token (needs
+   the `users:read` + `users:read.email` scopes — pre-DE-288 installs
+   must re-install); Teams resolves email from the Bot Connector
+   member record. Unmatched users get an "account isn't linked"
+   refusal. **Still open:** the `/lq` no-arg thread-forward flow, the
+   admin-UI quick-ask dropdown (env-var only today), and teams-bridge
+   inbound Connector JWT validation (interim posture documented in
+   `teams-bridge/app/commands.py`).
 
 3. **Full intake / triage / matter management** *(out of scope
    entirely; PRD §1.6)* — the explicit boundary with Streamline AI's
@@ -184,20 +192,25 @@ not filed formally yet.)
 
 ### Scopes — narrow on purpose
 
-The bridge requests exactly two bot scopes:
-[`SCOPES = ["commands", "chat:write"]`](../slack-bridge/app/oauth.py) —
-matching the `oauth_config.scopes.bot` block in
+The bridge requests exactly four bot scopes:
+[`SCOPES = ["commands", "chat:write", "users:read", "users:read.email"]`](../slack-bridge/app/oauth.py)
+— matching the `oauth_config.scopes.bot` block in
 [`slack-bridge/manifest.yml`](../slack-bridge/manifest.yml):
 
-- `commands` — for the future `/lq` slash-command surface (DE-288).
+- `commands` — the `/lq` slash-command surface (DE-288).
 - `chat:write` — so the bot can post replies in channels it is invited
   to.
+- `users:read` + `users:read.email` — so the api can resolve a
+  command invoker's profile email via `users.info` with the stored
+  workspace token (DE-288 identity binding, fail-closed). Workspaces
+  installed before DE-288 lack these; `/lq ask` fails closed there
+  until re-install.
 
 There is no `channels:read` / `groups:read` / `im:read`. **The bot does
 not read silent channels** — it only acts on explicit user invocations
-(PRD §3.15 permission model). The manifest declares no `slash_commands`
-block at v0.3.0 because the slash-command surface is deferred; a
-community contributor adding `/lq` extends the manifest via PR.
+(PRD §3.15 permission model). The manifest declares the `/lq`
+`slash_commands` block pointing at
+`${LQ_AI_BRIDGE_PUBLIC_URL}/slack/commands`.
 
 ### Inbound webhook + signature verification
 
@@ -207,9 +220,10 @@ verified-but-inert stub. It verifies the Slack request signature
 (HMAC-SHA256 over `v0:{timestamp}:{body}` with a 5-minute replay window,
 [`slack-bridge/app/signing.py`](../slack-bridge/app/signing.py)) on
 every request, handles Slack's one-off `url_verification` challenge, and
-otherwise returns 200. The signature check is shipped now so M3-D2's
-slash-command handler (DE-288) lands on a verified substrate; no event
-type does anything observable at v0.3.0.
+otherwise returns 200; non-command events remain a no-op. The `/lq`
+slash-command handler lives on the separate `POST /slack/commands`
+endpoint ([`slack-bridge/app/commands.py`](../slack-bridge/app/commands.py)),
+gated by the same signature primitive.
 
 ### Manifest
 
@@ -289,9 +303,10 @@ alive for future M4 on-behalf-of flows.
 app manifest v1.16. It carries `${MICROSOFT_APP_ID}` and
 `${LQ_AI_TEAMS_BRIDGE_PUBLIC_HOST}` (bare host, no scheme/path)
 placeholders the operator substitutes before uploading to the Teams
-Admin Center. The `bots[].commandLists` array is intentionally **empty**
-until DE-288 ships; the bot is registered so the install flow +
-identity binding work, but it exposes no commands. `webApplicationInfo`
+Admin Center. The `bots[].commandLists` array declares `/lq help` +
+`/lq ask` (DE-288); the Azure Bot resource's messaging endpoint must
+point at `${LQ_AI_TEAMS_BRIDGE_PUBLIC_URL}/teams/messages`.
+`webApplicationInfo`
 is present for future Azure AD SSO (task-pane / message-extension
 surfaces) but is M4 scope.
 
@@ -412,13 +427,17 @@ shared bearer.
 The page surfaces the install + uninstall surface and a "Linked users"
 column, but several elements are deliberately inert at v0.3.0:
 
-- **Quick-ask skill picker** — a disabled `<select>` per row with a
-  tooltip pointing at DE-288. No API backs it; there's nothing to
-  configure until the slash-command surface exists.
-- **Linked users** — renders `— (DE-288)`; per-user Slack/Teams ↔ LQ.AI
-  identity mapping is DE-288 work.
-- **Recent `/lq` invocations** — an empty audit-log shell with copy
-  pointing at DE-288.
+- **Quick-ask skill picker** — a disabled `<select>` per row. The
+  quick-ask skill is configured today via the
+  `LQ_AI_BRIDGE_QUICK_ASK_SKILL` env var on the api service; a
+  DB-backed setting + live dropdown is the documented DE-288
+  follow-up.
+- **Linked users** — renders `— (DE-288)`; identity binding is
+  fail-closed email matching at invocation time (no stored link
+  table); an explicit link-management surface is future scope.
+- **Recent `/lq` invocations** — an empty audit-log shell; `/lq`
+  invocations are recorded as `bridge.quick_ask` audit rows, and
+  wiring them into this panel is the follow-up.
 - **Install buttons** — open the bridge's `/…/oauth/install` URL in a
   new tab. The page takes the bridge public URL as a free-text hint
   (the real value is whatever the operator configured as

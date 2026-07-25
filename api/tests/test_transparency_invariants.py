@@ -197,7 +197,17 @@ def test_governance_and_audit_helpers_do_not_commit() -> None:
 # broker connection: operator-selected origin, token-authenticated typed helper
 # requests, no caller URL or redirect/proxy forwarding. Its jobs have no network.
 # Both chat and background calls retain their governance/audit wrappers.
-_EGRESS_ALLOWLIST: frozenset[str] = frozenset({"clients/gateway.py", "skills/tools.py"})
+_EGRESS_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        "clients/gateway.py",
+        "skills/tools.py",
+        # DE-288 / ADR 0039: Slack identity resolution (users.info with the
+        # api-custodied workspace bot token). One fixed URL, GET, no
+        # user-controlled host — the alternative (handing decrypted bot
+        # tokens back to the bridge per request) has a larger blast radius.
+        "api/integrations_quick_ask.py",
+    }
+)
 
 # Import forms that pull in a general-purpose outbound HTTP client. Targeted at
 # import statements (not prose) to avoid false positives on words like

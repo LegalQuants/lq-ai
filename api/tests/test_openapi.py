@@ -160,6 +160,8 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/integrations/slack/workspaces",
         # M3-D3 — teams-bridge persistence surface (bearer-token, no user)
         "/api/v1/integrations/teams/tenants",
+        # DE-288 — bridge quick-ask surface (bearer-token, no user)
+        "/api/v1/integrations/quick-ask",
         # M3-D4 — admin intake-bridges surface (admin-only)
         "/api/v1/admin/intake-bridges",
         "/api/v1/admin/intake-bridges/slack/{workspace_id}",
@@ -355,7 +357,9 @@ async def test_openapi_paths_match_sketch() -> None:
     # /api/v1/admin/tool-providers/{provider_type}
     # ADR 0035 adds seven demonstration/consent/tree/file paths (139 -> 146).
     # Optional persistent skill workspaces add three owner paths (146 -> 149).
-    assert len(actual) == 150
+    # DE-288 adds one new path (150 -> 151):
+    # /api/v1/integrations/quick-ask
+    assert len(actual) == 151
 
 
 @pytest.mark.unit
