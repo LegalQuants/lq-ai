@@ -281,7 +281,7 @@ Engineering rigor is measurable, not asserted. Test **file** counts below are ve
 | Ruff lint + format (Python) | M1–M4 | `.github/workflows/ci.yml`: `ruff check api scripts` + `ruff format --check` |
 | mypy (api standard, gateway strict) | M1–M4 | CI `mypy app` per subsystem |
 | svelte-check (LQ.AI-owned code) | M1–M4 | `cd web && npm run check:lq-ai` (0 errors on `src/{lib,routes}/lq-ai/**`); inherited OpenWebUI debt tracked as DE-262 (§8.1) |
-| Coverage gate (target 80% api / 90% gateway) | not enforced | CI runs pytest but does not fail below threshold |
+| Coverage gate (target 80% api / 90% gateway) | enforced — api at the 80% target; gateway as a no-decrease ratchet at 88% (target not yet met; delta = DE-387) | CI pytest runs with `--cov-fail-under` (`.github/workflows/ci.yml`). Measured 2026-07-25: api 81.49% (12242/15023 stmts) → gated at the 80% target; gateway 88.94% (4464/5019 stmts) → gated at the measured floor of 88%, not the 90% target |
 | Mutation / property-based testing, eval harness, Cypress-in-CI | not yet | On the engineering-discipline roadmap |
 | OpenSSF Scorecard / Best Practices Badge | not yet (community-friendly) | mini-PRDs at `docs/contribute/mini-prds/` |
 | SLSA-3 provenance / Sigstore-signed images / SBOM per release | committed | `docs/security/releases/README.md` |
