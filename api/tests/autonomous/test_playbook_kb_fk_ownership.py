@@ -43,6 +43,7 @@ from app.main import app
 from app.models.autonomous import AutonomousSchedule, AutonomousSession, AutonomousWatch
 from app.models.knowledge import KnowledgeBase
 from app.models.playbook import Playbook
+from app.models.project import Project
 from app.models.user import User
 from app.security import create_access_token, hash_password
 
@@ -689,6 +690,108 @@ async def test_run_now_foreign_kb_returns_404_no_session(
         (
             await db_session.execute(
                 select(AutonomousSession).where(AutonomousSession.user_id == user_a.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert rows == []
+
+
+# ---------------------------------------------------------------------------
+# Archive predicate (DE-322 follow-up): a soft-deleted KB / project must not be
+# re-attachable as an autonomous target. `_load_owned_kb` and `_load_owned_project`
+# scoped by owner but not by `archived_at`, diverging from the house helpers
+# `_load_visible_kb` / `_load_visible_project`. Invisible to CI until now because
+# no fixture ever built an archived row.
+# ---------------------------------------------------------------------------
+
+
+async def _make_archived_kb(db: AsyncSession, *, owner: User) -> KnowledgeBase:
+    """An owned KB that the owner has since deleted (DELETE /kb sets archived_at)."""
+    kb = await _make_kb(db, owner=owner)
+    kb.archived_at = datetime.now(UTC)
+    await db.flush()
+    return kb
+
+
+async def _make_archived_project(db: AsyncSession, *, owner: User) -> Project:
+    project = Project(owner_id=owner.id, name="archived matter", slug=f"m-{uuid.uuid4().hex[:8]}")
+    db.add(project)
+    await db.flush()
+    project.archived_at = datetime.now(UTC)
+    await db.flush()
+    return project
+
+
+@pytest.mark.integration
+async def test_create_schedule_archived_kb_returns_404(
+    client: AsyncClient, db_session: AsyncSession, user_a: User
+) -> None:
+    """The owner's OWN archived KB is not a valid target — 404, no row.
+
+    Without `archived_at IS NULL` the row still matches on id+owner, so a KB the
+    user deleted would be silently resurrected as a recurring retrieval source.
+    """
+    archived = await _make_archived_kb(db_session, owner=user_a)
+    resp = await client.post(
+        "/api/v1/autonomous/schedules",
+        headers=_bearer(user_a),
+        json={"cron_expr": "*/5 * * * *", "target_kb_id": str(archived.id)},
+    )
+    assert resp.status_code == 404, resp.text
+    rows = (
+        (
+            await db_session.execute(
+                select(AutonomousSchedule).where(AutonomousSchedule.user_id == user_a.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert rows == []
+
+
+@pytest.mark.integration
+async def test_create_watch_archived_kb_returns_404(
+    client: AsyncClient, db_session: AsyncSession, user_a: User
+) -> None:
+    """Same on the watch surface — the highest-frequency trigger path."""
+    archived = await _make_archived_kb(db_session, owner=user_a)
+    resp = await client.post(
+        "/api/v1/autonomous/watches",
+        headers=_bearer(user_a),
+        json={"knowledge_base_id": str(archived.id)},
+    )
+    assert resp.status_code == 404, resp.text
+    rows = (
+        (
+            await db_session.execute(
+                select(AutonomousWatch).where(AutonomousWatch.user_id == user_a.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert rows == []
+
+
+@pytest.mark.integration
+async def test_create_schedule_archived_project_returns_404(
+    client: AsyncClient, db_session: AsyncSession, user_a: User
+) -> None:
+    """`_load_owned_project` had the same omission — an archived matter must 404."""
+    archived = await _make_archived_project(db_session, owner=user_a)
+    resp = await client.post(
+        "/api/v1/autonomous/schedules",
+        headers=_bearer(user_a),
+        json={"cron_expr": "*/5 * * * *", "project_id": str(archived.id)},
+    )
+    assert resp.status_code == 404, resp.text
+    rows = (
+        (
+            await db_session.execute(
+                select(AutonomousSchedule).where(AutonomousSchedule.user_id == user_a.id)
             )
         )
         .scalars()

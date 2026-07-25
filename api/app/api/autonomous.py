@@ -198,12 +198,18 @@ async def _load_owned_project(
     existence disclosure — same idiom as the autonomous loaders. The
     autonomous layer never reveals another user's Projects.
 
+    ``archived_at IS NULL`` matches :func:`app.api.projects._load_visible_project`,
+    which excludes archived rows by default: a matter the caller has deleted is
+    gone from their UI and must not be re-attachable as an autonomous target.
+
     Raises:
-        HTTPException: 404 if the row is absent or owned by a different user.
+        HTTPException: 404 if the row is absent, archived, or owned by a
+        different user.
     """
     stmt = select(Project).where(
         Project.id == project_id,
         Project.owner_id == user_id,
+        Project.archived_at.is_(None),
     )
     row = (await db.execute(stmt)).scalar_one_or_none()
     if row is None:
@@ -227,12 +233,20 @@ async def _load_owned_kb(
     Conservative per-user isolation: KB-sharing is out of scope for the
     autonomous layer, so only the KB's owner may target it.
 
+    ``archived_at IS NULL`` matches :func:`app.api.knowledge_bases._load_visible_kb`.
+    ``DELETE /kb/{id}`` sets ``archived_at``, after which the KB 404s on its own
+    endpoint and disappears from the owner's UI; without this predicate it could
+    still be attached as a schedule/watch/run-now target and silently resurrected
+    as a live recurring retrieval source.
+
     Raises:
-        HTTPException: 404 if the row is absent or owned by a different user.
+        HTTPException: 404 if the row is absent, archived, or owned by a
+        different user.
     """
     stmt = select(KnowledgeBase).where(
         KnowledgeBase.id == kb_id,
         KnowledgeBase.owner_id == user_id,
+        KnowledgeBase.archived_at.is_(None),
     )
     row = (await db.execute(stmt)).scalar_one_or_none()
     if row is None:
