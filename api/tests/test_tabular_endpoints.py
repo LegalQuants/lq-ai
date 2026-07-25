@@ -128,12 +128,15 @@ async def _insert_execution(
     owner: User,
     document_ids: list[uuid.UUID],
     rows: list[dict[str, Any]],
+    schema_version: str = "m3-c2-v1",
 ) -> TabularExecution:
     """Insert a completed execution row directly in the pre-change shape.
 
     ``results.rows[*].cells[*]`` carry only the persisted keys (notably
     ``cited_chunk_ids``) — no navigation fields — so the test proves
-    enrichment happens at read time, not via stored data.
+    enrichment happens at read time, not via stored data. The default
+    ``schema_version`` is the pre-0066 stamp (``"m3-c2-v1"``); tests
+    simulating a DE-309 minting-vintage execution pass ``"m3-c2-v2"``.
     """
 
     execution = TabularExecution(
@@ -142,7 +145,7 @@ async def _insert_execution(
         status="completed",
         document_ids=document_ids,
         columns=[{"name": "Term", "query": "What is the term?"}],
-        results={"schema_version": "m3-c2-v1", "rows": rows},
+        results={"schema_version": schema_version, "rows": rows},
     )
     db.add(execution)
     await db.flush()
@@ -362,6 +365,7 @@ async def test_get_execution_serves_minted_citations_with_offsets(
                 },
             }
         ],
+        schema_version="m3-c2-v2",
     )
     minted = TabularCellCitation(
         execution_id=execution.id,
@@ -435,6 +439,7 @@ async def test_get_execution_minted_run_ungrounded_cell_renders_unverified(
                 },
             }
         ],
+        schema_version="m3-c2-v2",
     )
     start = content.index("Delaware")
     db_session.add(
@@ -500,6 +505,48 @@ async def test_get_execution_without_minted_rows_falls_back_to_bridge(
     assert cit["verification_confidence"] is None
     # Navigation enrichment still fires for bridge citations.
     assert cit["source_text"] == content
+
+
+@pytest.mark.integration
+async def test_get_execution_minting_vintage_zero_minted_rows_fails_closed(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Fail-closed keys off execution VINTAGE, not minted-row count
+    (DE-309): an execution produced by the minting aggregate node
+    (``schema_version == "m3-c2-v2"``) where the locator grounded
+    NOTHING — zero ``tabular_cell_citations`` rows anywhere — must
+    serve an empty citations list for the cell: no uuid5-bridge
+    citation, no ``source_text`` leak, no verification badge."""
+
+    user = await _make_user(db_session)
+    content = "Termination requires ninety (90) days prior written notice."
+    doc, chunk = await _make_doc_with_chunk(db_session, owner=user, content=content, page_start=1)
+    execution = await _insert_execution(
+        db_session,
+        owner=user,
+        document_ids=[doc.id],
+        rows=[
+            {
+                "document_id": str(doc.id),
+                "document_name": "nda.pdf",
+                "cells": {
+                    # Paraphrased value — never located; the execution
+                    # minted zero rows in total.
+                    "Term": {
+                        "value": "90 days",
+                        "cited_chunk_ids": [str(chunk.id)],
+                        "confidence": "medium",
+                    }
+                },
+            }
+        ],
+        schema_version="m3-c2-v2",
+    )
+
+    resp = await client.get(f"/api/v1/tabular/executions/{execution.id}", headers=_bearer(user))
+    assert resp.status_code == 200, resp.text
+    cell = resp.json()["results"]["rows"][0]["cells"]["Term"]
+    assert cell["citations"] == []
 
 
 # --- preview-cost: ensemble premium surface (Donna #6) ----------------------

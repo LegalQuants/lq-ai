@@ -104,8 +104,12 @@ EXTRACT_MAX_TOKENS = 500
 
 # Schema-version stamp on the persisted ``results`` JSONB. Bumped on
 # any shape-breaking change so the result-view renderer can refuse to
-# render unknown versions instead of crashing.
-RESULTS_SCHEMA_VERSION = "m3-c2-v1"
+# render unknown versions instead of crashing. ``m3-c2-v2`` marks
+# executions produced by the DE-309-aware aggregate node, which mints
+# ``tabular_cell_citations`` rows (possibly zero of them) — the read
+# side keys its fail-closed citation rewrite off this vintage, not
+# off minted-row presence.
+RESULTS_SCHEMA_VERSION = "m3-c2-v2"
 
 _VALID_CONFIDENCES: frozenset[str] = frozenset({"high", "medium", "low", "failed"})
 
@@ -804,7 +808,8 @@ def _strip_state_keys(cell: dict[str, Any]) -> dict[str, Any]:
     ``document_id`` / ``column_name`` move to the row / cell-map key;
     ``cell_citations`` (DE-309) is persisted as ``tabular_cell_citations``
     rows by the aggregate node, not in the results JSONB — the payload
-    shape (schema_version m3-c2-v1) is unchanged.
+    shape is unchanged from m3-c2-v1 (the m3-c2-v2 stamp marks minting
+    vintage, not a shape change).
     """
     keys = (
         "value",

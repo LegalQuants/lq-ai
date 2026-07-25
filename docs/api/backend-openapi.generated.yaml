@@ -12957,21 +12957,29 @@ paths:
         Cross-user / missing / soft-deleted rows collapse into 404.
 
 
-        Citations (DE-309): when the execution has minted
+        Citations (DE-309): when the execution was produced by the minting
 
-        ``tabular_cell_citations`` rows, every cell''s ``citations`` list is
+        aggregate node (``results.schema_version`` is a minting vintage,
 
-        rebuilt from those rows — real ``citation_id``s plus chunk-local
+        ``m3-c2-v2`` or later), every cell''s ``citations`` list is rebuilt
 
-        char offsets; cells the locator could not ground get an EMPTY list
+        from the execution''s minted ``tabular_cell_citations`` rows — real
 
-        (fail-closed: they render unverified). Executions predating
+        ``citation_id``s plus chunk-local char offsets; cells the locator
 
-        migration 0066 have no minted rows and keep the legacy uuid5-bridge
+        could not ground get an EMPTY list (fail-closed: they render
 
-        citations synthesized by the schema validator. The presence check is
+        unverified), including the case where the execution minted zero
 
-        per execution (one indexed query), not per cell.'
+        rows in total. Executions predating migration 0066 (``m3-c2-v1``)
+
+        keep the legacy uuid5-bridge citations synthesized by the schema
+
+        validator. The discriminator is the persisted schema-version stamp,
+
+        not minted-row presence — row count cannot distinguish a pre-0066
+
+        execution from a post-0066 one where nothing located.'
       operationId: get_tabular_execution_api_v1_tabular_executions__execution_id__get
       parameters:
       - in: path
