@@ -8807,7 +8807,7 @@ paths:
         '403':
           description: Autonomous layer not enabled for this user
         '404':
-          description: Referenced project not found
+          description: Referenced project, playbook, or knowledge base not found
         '422':
           description: Invalid target (need exactly one of playbook_id/skill_ref)
       security:
@@ -8881,7 +8881,13 @@ paths:
 
         ``next_run_at = next_run_after(cron_expr, now(UTC))`` so the
 
-        dispatcher''s first eligible tick can pick it up.  Returns the created
+        dispatcher''s first eligible tick can pick it up.  Non-null FK targets
+
+        are validated (DE-322): ``project_id`` and ``target_kb_id`` must be
+
+        owned by the caller; ``playbook_id`` must be visible to the caller
+
+        (own or built-in) — otherwise 404.  Returns the created
 
         :class:`~app.schemas.autonomous.AutonomousScheduleRead` (201).
 
@@ -8904,7 +8910,7 @@ paths:
         '401':
           description: Not authenticated
         '404':
-          description: Referenced project not found
+          description: Referenced project, playbook, or knowledge base not found
         '422':
           description: Invalid cron expression
       security:
@@ -9004,7 +9010,8 @@ paths:
         '401':
           description: Not authenticated
         '404':
-          description: Schedule or referenced project not found
+          description: Schedule, referenced project, playbook, or knowledge base not
+            found
         '422':
           description: Invalid cron expression
       security:
@@ -9476,7 +9483,11 @@ paths:
 
         returns 404 (conservative per-user isolation; KB-sharing is out of
 
-        scope). Creates the watch row. Returns the created
+        scope). A non-null ``playbook_id`` must be visible to the caller
+
+        (own or built-in; DE-322) — otherwise 404. Creates the watch row.
+
+        Returns the created
 
         :class:`~app.schemas.autonomous.AutonomousWatchRead` (201).
 
@@ -9499,7 +9510,8 @@ paths:
         '401':
           description: Not authenticated
         '404':
-          description: Target knowledge base or referenced project not found
+          description: Target knowledge base, referenced project, or playbook not
+            found
         '422':
           content:
             application/json:
@@ -9605,7 +9617,7 @@ paths:
         '401':
           description: Not authenticated
         '404':
-          description: Watch or referenced project not found
+          description: Watch, referenced project, or playbook not found
         '422':
           content:
             application/json:
