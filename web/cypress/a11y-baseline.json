@@ -1,0 +1,115 @@
+{
+	"comment": [
+		"DE-232 a11y baseline — pre-existing SERIOUS axe violations accepted at gate introduction.",
+		"Matching is by (route, rule). This file may only shrink: fixing a violation means deleting its entry.",
+		"Critical violations are never baselined. Regeneration process: docs/compliance/accessibility-audit.md.",
+		"Entries below recorded 2026-07-25 from a run against the local dev stack (axe-core 4.12.1, wcag2a/wcag2aa/wcag21a/wcag21aa)."
+	],
+	"entries": [
+		{
+			"route": "/lq-ai/login",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"nodes": 12,
+			"note": "Low-contrast text: form labels (.lq-text-label), helper paragraph, footer spans. Pre-existing at gate introduction (2026-07-25)."
+		},
+		{
+			"route": "/lq-ai/login",
+			"rule": "list",
+			"impact": "serious",
+			"nodes": 1,
+			"note": "Shared shell <ol> contains non-<li> children. Pre-existing at gate introduction (2026-07-25)."
+		},
+		{
+			"route": "/lq-ai",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"nodes": 14,
+			"note": "Low-contrast text on dashboard sections (.lq-text-caption, .lq-text-label, .strikethrough). Pre-existing at gate introduction (2026-07-25)."
+		},
+		{
+			"route": "/lq-ai",
+			"rule": "link-in-text-block",
+			"impact": "serious",
+			"nodes": 1,
+			"note": "Chats link inside body text distinguished by color alone (.lq-text-body-sm > a[href$=\"chats\"]). Pre-existing at gate introduction (2026-07-25)."
+		},
+		{
+			"route": "/lq-ai",
+			"rule": "list",
+			"impact": "serious",
+			"nodes": 1,
+			"note": "Shared shell <ol> contains non-<li> children. Pre-existing at gate introduction (2026-07-25)."
+		},
+		{
+			"route": "/lq-ai/matters",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"nodes": 5,
+			"note": "Low-contrast footer spans / underline link / tooltip container. Pre-existing at gate introduction (2026-07-25)."
+		},
+		{
+			"route": "/lq-ai/matters",
+			"rule": "list",
+			"impact": "serious",
+			"nodes": 1,
+			"note": "Shared shell <ol> contains non-<li> children. Pre-existing at gate introduction (2026-07-25)."
+		},
+		{
+			"route": "/lq-ai/matters [new-matter modal]",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"nodes": 7,
+			"note": "Low-contrast keyboard-hint (.lq-kbd) and optional-field label (.nmm-optional) in NewMatterModal, plus the shared footer spans. Pre-existing at gate introduction (2026-07-25)."
+		},
+		{
+			"route": "/lq-ai/matters [new-matter modal]",
+			"rule": "list",
+			"impact": "serious",
+			"nodes": 1,
+			"note": "Shared shell <ol> contains non-<li> children. Pre-existing at gate introduction (2026-07-25)."
+		},
+		{
+			"route": "/lq-ai/knowledge",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"nodes": 5,
+			"note": "Low-contrast footer spans / underline link / tooltip container. Pre-existing at gate introduction (2026-07-25)."
+		},
+		{
+			"route": "/lq-ai/knowledge",
+			"rule": "list",
+			"impact": "serious",
+			"nodes": 1,
+			"note": "Shared shell <ol> contains non-<li> children. Pre-existing at gate introduction (2026-07-25)."
+		},
+		{
+			"route": "/lq-ai/skills",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"nodes": 6,
+			"note": "Low-contrast caption + footer spans / underline link. Pre-existing at gate introduction (2026-07-25)."
+		},
+		{
+			"route": "/lq-ai/skills",
+			"rule": "list",
+			"impact": "serious",
+			"nodes": 1,
+			"note": "Shared shell <ol> contains non-<li> children. Pre-existing at gate introduction (2026-07-25)."
+		},
+		{
+			"route": "/lq-ai/settings/appearance",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"nodes": 5,
+			"note": "Low-contrast footer spans / underline link / tooltip container. Pre-existing at gate introduction (2026-07-25)."
+		},
+		{
+			"route": "/lq-ai/settings/appearance",
+			"rule": "list",
+			"impact": "serious",
+			"nodes": 1,
+			"note": "Shared shell <ol> contains non-<li> children. Pre-existing at gate introduction (2026-07-25)."
+		}
+	]
+}

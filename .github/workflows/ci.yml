@@ -9,7 +9,8 @@ name: CI
 #   - gateway/: ruff + mypy --strict + pytest
 #
 # Out of scope (deferred to future waves):
-#   - Cypress E2E (heavier; needs a stack-up step + LLM provider keys)
+#   - Cypress E2E: the deterministic track runs nightly in e2e.yml (no
+#     provider keys needed); per-PR promotion waits on buildx caching (#283)
 #   - Coverage gates (no-decrease enforcement)
 #   - Dependency-license check (likely Wave F polish)
 #
