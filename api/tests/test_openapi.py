@@ -164,6 +164,10 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/admin/intake-bridges",
         "/api/v1/admin/intake-bridges/slack/{workspace_id}",
         "/api/v1/admin/intake-bridges/teams/{tenant_id}",
+        # 3.8 / DE-263 — admin community-skill installer (ADR 0041)
+        "/api/v1/admin/community-skills",
+        "/api/v1/admin/community-skills/{slug}",
+        "/api/v1/admin/community-skills/{slug}/install",
         # M4-A4-i — Autonomous sessions read/halt API (per-user)
         "/api/v1/autonomous/sessions",
         "/api/v1/autonomous/sessions/{session_id}",
@@ -355,7 +359,11 @@ async def test_openapi_paths_match_sketch() -> None:
     # /api/v1/admin/tool-providers/{provider_type}
     # ADR 0035 adds seven demonstration/consent/tree/file paths (139 -> 146).
     # Optional persistent skill workspaces add three owner paths (146 -> 149).
-    assert len(actual) == 150
+    # 3.8 / DE-263 adds three new paths (150 -> 153):
+    # /api/v1/admin/community-skills
+    # /api/v1/admin/community-skills/{slug}
+    # /api/v1/admin/community-skills/{slug}/install
+    assert len(actual) == 153
 
 
 @pytest.mark.unit
