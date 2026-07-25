@@ -229,6 +229,10 @@
 		scope?: 'user' | 'team';
 		ownerTeamId?: string;
 		forkedFrom?: string | null;
+		/** DE-298 — fork-seeded output mode (table forks open in table mode). */
+		outputMode?: SkillOutputMode;
+		/** DE-298 — fork-seeded column rows for a table-mode source. */
+		columns?: EditableColumn[];
 	} = {};
 	export let draftKey: string | null = null;
 	export let onSave: (payload: UserSkillCreate) => Promise<string>;
@@ -248,9 +252,11 @@
 	let scope: 'user' | 'team' = initial.scope ?? 'user';
 	let ownerTeamId = initial.ownerTeamId ?? '';
 	// DE-297 — output mode + table columns. New drafts start in prose;
-	// choosing 'table' swaps the body editor for the column list.
-	let outputMode: SkillOutputMode = 'prose';
-	let columns: EditableColumn[] = [newEditableColumn()];
+	// choosing 'table' swaps the body editor for the column list. A fork
+	// of a table-mode source seeds both via `initial` (DE-298).
+	let outputMode: SkillOutputMode = initial.outputMode ?? 'prose';
+	let columns: EditableColumn[] =
+		initial.columns && initial.columns.length > 0 ? initial.columns : [newEditableColumn()];
 	// `forked_from` is write-once at create time per ADR 0012; we capture
 	// it from `initial` and pass it through buildPayload verbatim.
 	const forkedFrom: string | null = initial.forkedFrom ?? null;
