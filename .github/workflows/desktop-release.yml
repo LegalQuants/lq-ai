@@ -17,13 +17,17 @@ on:
   push:
     tags: ['desktop-v*']
 
-# Least privilege: only enough to publish the .dmg asset to a Release.
+# Default-deny at the top level; the build job alone gets the write scope
+# (Scorecard Token-Permissions posture: read-only default, job-scoped writes).
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
     runs-on: macos-14
+    # Least privilege: only enough to publish the .dmg asset to a Release.
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: desktop

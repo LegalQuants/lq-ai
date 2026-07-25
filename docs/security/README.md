@@ -17,6 +17,7 @@ This folder is the home for LQ.AI's security artifacts. The PRD documents the pr
 | **Network access controls** (`network-access-controls.md`) | M2 (or earlier with [DE-103 IP allowlisting](../PRD.md#de-103--ip-allowlisting-and-geo-restriction)) | IP allowlisting, geo-restriction, outbound proxy configuration. |
 | **Audit logging** (`audit-logging.md`) | Landed | What is logged, retention, integrity protection. |
 | **Encrypted-at-rest provider keys** ([`encrypted-keys.md`](encrypted-keys.md)) | Landed (ADR 0011) | Operator workflow for the master-key + Fernet-wrapped `api_key_encrypted` path in `gateway.yaml`. Bootstrap, rotation, recovery. |
+| **OpenSSF Scorecard + Best Practices criteria** (`best-practices-criteria.md`) | Drafted (AI-drafted, pending review; DE-222/DE-223) | Check-by-check Scorecard expected state and the bestpractices.dev Passing-tier walk-through, split into in-repo evidence vs maintainer actions. |
 | **Past advisories** (`advisories/`) | As advisories are published | Historical security advisories with reporter credit. |
 
 ## Reporting a vulnerability
