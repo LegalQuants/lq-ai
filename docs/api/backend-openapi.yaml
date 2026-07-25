@@ -6274,72 +6274,16 @@ components:
           type: array
           items: {$ref: '#/components/schemas/ColumnSpec'}
         results:
-          type: object
           nullable: true
-          additionalProperties: true
+          allOf:
+            - $ref: '#/components/schemas/TabularResults'
           description: |
-            Assembled grid shape with rows + per-cell results. Shape is
-            versioned via ``schema_version`` (currently ``m3-c2-v1``).
-
-            Each cell result also carries ``verification_method``
-            (string, nullable) — the per-cell ensemble Citation-Engine
-            verification outcome (``ensemble_strict`` /
-            ``ensemble_majority``), or ``null`` when the cell's column is
-            not ensemble-verified or verification did not confirm support.
-
-            Each cell carries a ``citations`` array. A tabular cell
-            ``Citation`` is distinct from the chat ``Citation`` schema; it
-            has: ``citation_id`` (uuid), ``document_id`` (uuid; the source
-            ``documents.id``), ``chunk_id`` (uuid, nullable; the cited
-            ``document_chunks.id``), and ``confidence`` (one of
-            ``high|medium|low|failed``). Each citation additionally
-            carries ``verification_method`` (string, nullable).
-
-            Since DE-309 the executor mints real offset-bearing
-            provenance rows (``tabular_cell_citations``): for each
-            grounded cell whose extracted value was deterministically
-            located in a cited chunk's canonical text, one row per
-            (cell, chunk) hit. On ``GET /api/v1/tabular/executions/{id}``
-            an execution with minted rows serves those as the cell's
-            citations — ``citation_id`` is the real row id, plus:
-
-            - ``source_offset_start`` / ``source_offset_end`` (integer,
-              nullable): char offsets of the located value inside the
-              cited chunk's content (= the citation's ``source_text``),
-              so ``source_text[start:end]`` re-derives the value;
-            - ``verification_method``: the cascade method that
-              established the offsets (e.g. ``exact_match``);
-            - ``verification_confidence`` (number, nullable): the
-              cascade's confidence in ``[0, 1]``.
-
-            Fail-closed: a cell whose value could not be located has NO
-            minted rows and serves an EMPTY ``citations`` array (renders
-            unverified) — never a fabricated offset. Executions predating
-            migration 0066 (no minted rows; per-execution presence check)
-            fall back to the legacy bridge: a deterministic display-only
-            ``citation_id = uuid5(NS, chunk_id)`` with ``null`` offset
-            fields and ``verification_method`` mirrored from the
-            cell-level ensemble value (``ensemble_strict`` /
-            ``ensemble_majority``, or ``null``). The export path always
-            renders bridge ids (export shape unchanged by DE-309).
-
-            On ``GET /api/v1/tabular/executions/{id}`` (only) each citation
-            is additionally enriched at read time so the frontend can open
-            the cited source in its doc panel (same UX as chat citations):
-
-            - ``source_file_id`` (uuid, nullable): the source document's
-              ``documents.file_id`` — the ``files.id`` the doc panel keys
-              off. ``null`` when the backing chunk row is missing/stale.
-            - ``source_page`` (integer, nullable): the cited chunk's
-              ``document_chunks.page_start`` (nullable — best-effort page
-              assignment).
-            - ``source_text`` (string, nullable): the cited chunk's full
-              ``document_chunks.content`` (the frontend locates/highlights
-              the cited span within it).
-
-            These three fields are resolved via two batched ``IN`` queries
-            (chunks, then documents) — no N+1 — and are ``null`` on the
-            list/export paths, which do not enrich.
+            Assembled grid (rows + per-cell results), populated by the
+            aggregate node once status reaches ``completed``; ``null``
+            before then. Typed shape (DE-330): see ``TabularResults`` /
+            ``TabularRow`` / ``TabularCellResult`` / ``TabularCitation``,
+            including DE-309's offset-bearing provenance fields and
+            DE-310's per-cell ``tier_used`` / ``cost_usd``.
         cost_estimate_usd:
           type: string
           nullable: true
@@ -6352,6 +6296,206 @@ components:
         created_at: {type: string, format: date-time}
         started_at: {type: string, format: date-time, nullable: true}
         completed_at: {type: string, format: date-time, nullable: true}
+
+    # DE-330 — typed tabular-results shapes, mirroring
+    # ``api/app/schemas/tabular.py`` (TabularResults / TabularRow /
+    # CellResult / Citation). These replace the former
+    # ``additionalProperties: true`` blob on ``TabularExecution.results``.
+    TabularResults:
+      type: object
+      required: [rows]
+      description: |
+        Aggregated grid shape for a completed tabular execution — the
+        typed wire projection of ``tabular_executions.results``. The
+        persisted JSONB is versioned via a ``schema_version`` key
+        (currently ``m3-c2-v1``); that key stays in the JSONB and is
+        NOT serialized on responses — the wire shape is rows-only.
+      properties:
+        rows:
+          type: array
+          items: {$ref: '#/components/schemas/TabularRow'}
+          description: |
+            One row per source document, in the order of the execution's
+            ``document_ids`` array (the operator's selection order — NOT
+            sorted by document name).
+
+    TabularRow:
+      type: object
+      required: [document_id, document_name, cells]
+      description: >-
+        One row in the tabular grid — all cells for a single document.
+      properties:
+        document_id: {type: string, format: uuid}
+        document_name:
+          type: string
+          description: >-
+            Display name for the row label (the leftmost sticky column).
+        cells:
+          type: object
+          additionalProperties: {$ref: '#/components/schemas/TabularCellResult'}
+          description: >-
+            Map of column name → cell result. Keys match the column
+            names declared in the execution's column spec.
+
+    TabularCellResult:
+      type: object
+      required: [confidence]
+      description: |
+        One cell in the tabular grid. Failed extraction renders as
+        ``confidence='failed'`` + ``error`` populated (Decision C-10);
+        successful extractions carry the extracted ``value`` plus the
+        citations the Citation Engine grounded it against.
+      properties:
+        value:
+          type: string
+          nullable: true
+          description: >-
+            The extracted value. ``null`` when ``confidence='failed'``.
+        citations:
+          type: array
+          items: {$ref: '#/components/schemas/TabularCitation'}
+          description: |
+            Citations backing the cell value. Empty for failed cells or
+            cells the Citation Engine couldn't ground. Fail-closed
+            (DE-309): a cell whose value could not be deterministically
+            located in a cited chunk serves an EMPTY array (renders
+            unverified) — never a fabricated offset.
+        confidence:
+          type: string
+          enum: [high, medium, low, failed]
+          description: |
+            Per-cell confidence from the Citation Engine cascade.
+            ``failed`` is the Decision C-10 state for cells where
+            extraction itself errored (distinct from the Citation
+            Engine's red ``unverified`` state).
+        tier_used:
+          type: integer
+          nullable: true
+          description: |
+            Inference tier actually routed for this cell (DE-310). Set
+            on success; ``null`` on failure before a tier was selected.
+        cost_usd:
+          type: string
+          nullable: true
+          description: |
+            Per-cell cost (DE-310), serialized as a JSON string to
+            preserve decimal precision. Sums across cells to the parent
+            execution's ``cost_actual_usd``.
+        error:
+          type: string
+          nullable: true
+          description: |
+            Error message when ``confidence='failed'`` (model error, no
+            citation found, Citation Engine rejection).
+        verification_method:
+          type: string
+          nullable: true
+          description: |
+            Per-cell ensemble Citation-Engine verification outcome
+            (Donna #6): ``ensemble_strict`` / ``ensemble_majority``, or
+            ``null`` when the cell's column is not ensemble-verified or
+            verification did not confirm support (a verification miss
+            never fails the cell).
+
+    TabularCitation:
+      type: object
+      required: [citation_id, document_id, confidence]
+      description: |
+        A single citation backing a tabular cell value — distinct from
+        the chat ``Citation`` schema.
+
+        Since DE-309 the executor mints real offset-bearing provenance
+        rows (``tabular_cell_citations``): for each grounded cell whose
+        extracted value was deterministically located in a cited chunk's
+        canonical text, one row per (cell, chunk) hit. On
+        ``GET /api/v1/tabular/executions/{id}`` an execution with minted
+        rows serves those as the cell's citations — ``citation_id`` is
+        the real row id and the offset fields are populated. Executions
+        predating migration 0066 (no minted rows; per-execution presence
+        check) fall back to the legacy bridge: a deterministic
+        display-only ``citation_id = uuid5(NS, chunk_id)`` with ``null``
+        offset fields. The export path always renders bridge ids
+        (export shape unchanged by DE-309).
+
+        The ``source_file_id`` / ``source_page`` / ``source_text``
+        navigation fields are enriched at read time on
+        ``GET /api/v1/tabular/executions/{id}`` ONLY — via two batched
+        ``IN`` queries (chunks, then documents; no N+1) — so the
+        frontend can open the cited source in its doc panel (same UX as
+        chat citations). They are ``null`` on the list/export paths,
+        which do not enrich.
+      properties:
+        citation_id:
+          type: string
+          format: uuid
+          description: |
+            Minted ``tabular_cell_citations.id`` (DE-309) when offset
+            rows exist for the execution; otherwise the deterministic
+            uuid5 bridge id (display-only, never resolvable against the
+            Citation Engine).
+        document_id:
+          type: string
+          format: uuid
+          description: The source ``documents.id`` this citation lands in.
+        chunk_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            The cited ``document_chunks.id``, when the cascade resolved
+            one. ``null`` for chunk-boundary-spanning citations.
+        confidence:
+          type: string
+          enum: [high, medium, low, failed]
+        source_file_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            The source document's ``documents.file_id`` — the
+            ``files.id`` the frontend's doc panel keys off. ``null``
+            outside read-time enrichment, or when the backing chunk row
+            is missing/stale.
+        source_page:
+          type: integer
+          nullable: true
+          description: |
+            The cited chunk's ``document_chunks.page_start`` (nullable —
+            best-effort page assignment).
+        source_text:
+          type: string
+          nullable: true
+          description: |
+            The cited chunk's full ``document_chunks.content``; the
+            frontend locates/highlights the cited span within it.
+        verification_method:
+          type: string
+          nullable: true
+          description: |
+            For minted DE-309 rows: the cascade method that established
+            the offsets (e.g. ``exact_match``). For bridge citations:
+            mirrored from the parent cell's ensemble
+            ``verification_method`` (``ensemble_strict`` /
+            ``ensemble_majority``), or ``null``.
+        source_offset_start:
+          type: integer
+          nullable: true
+          description: |
+            Char offset (inclusive) of the located cell value inside the
+            cited chunk's content (= this citation's ``source_text``).
+            ``null`` on bridge citations.
+        source_offset_end:
+          type: integer
+          nullable: true
+          description: |
+            Char offset (exclusive) — ``source_text[start:end]``
+            re-derives the located value. ``null`` on bridge citations.
+        verification_confidence:
+          type: number
+          nullable: true
+          description: |
+            The locating cascade's confidence in ``[0, 1]`` (``1.0`` for
+            ``exact_match``). ``null`` on bridge citations.
 
     TabularExecutionSummary:
       type: object
