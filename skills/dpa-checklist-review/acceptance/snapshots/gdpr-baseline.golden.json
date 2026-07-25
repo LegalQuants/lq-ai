@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "skill": "dpa-checklist-review",
+  "fixture": "gdpr-baseline",
+  "status": "provisional",
+  "provenance": "Ranges derived from skills/dpa-checklist-review/SKILL.md (structured_checklist output: Overall posture, Compliance checklist table with Present/Partial/Missing/Unclear/N/A statuses, Detailed findings only for non-Present items) and test-plan.md Scenario 1 (GDPR C2P: 0-2 critical-equivalent i.e. Missing mandatory Art. 28(3) terms — this fixture covers them all, so Missing rows should be rare). NOT observed from a live run; first live run calibrates.",
+  "assertions": {
+    "required_sections": [
+      "DPA Checklist Review",
+      "Overall posture",
+      "Compliance checklist",
+      "Items requiring human judgment",
+      "Recommended next steps"
+    ],
+    "metrics": [
+      {
+        "id": "checklist_rows",
+        "kind": "table_rows",
+        "min": 8,
+        "max": null
+      },
+      {
+        "id": "missing_status_rows",
+        "kind": "regex_count",
+        "pattern": "\\|\\s*missing\\s*\\|",
+        "min": 0,
+        "max": 3
+      },
+      {
+        "id": "article_28_cited",
+        "kind": "regex_count",
+        "pattern": "art(?:icle)?\\.?\\s*28",
+        "min": 1,
+        "max": null
+      },
+      {
+        "id": "clause_citations",
+        "kind": "citation_count",
+        "min": 4,
+        "max": null
+      }
+    ],
+    "min_chars": 1200,
+    "max_chars": 35000
+  }
+}

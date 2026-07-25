@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "skill": "msa-review-commercial-purchase",
+  "fixture": "supplier-perspective",
+  "status": "provisional",
+  "provenance": "Ranges derived from skills/msa-review-commercial-purchase/SKILL.md (Output template) and test-plan.md Scenario 3 (vendor/supplier perspective: 0-1 critical typically only on outsized exposure such as unlimited indemnification or broad MFN — both present in this fixture, so the ceiling is raised; 3-6 material; floors relaxed for a ~2-page fixture). NOT observed from a live run; first live run calibrates.",
+  "assertions": {
+    "required_sections": [
+      "MSA Review",
+      "Bottom line",
+      "Recommended next steps",
+      "Items requiring human judgment"
+    ],
+    "metrics": [
+      {
+        "id": "critical_issues",
+        "kind": "section_items",
+        "section": "Critical issues",
+        "min": 0,
+        "max": 4
+      },
+      {
+        "id": "material_issues",
+        "kind": "section_items",
+        "section": "Material issues",
+        "min": 1,
+        "max": 8
+      },
+      {
+        "id": "indemnity_or_mfn_flagged",
+        "kind": "regex_count",
+        "pattern": "indemn|most.favored",
+        "min": 1,
+        "max": null
+      },
+      {
+        "id": "clause_citations",
+        "kind": "citation_count",
+        "min": 4,
+        "max": null
+      }
+    ],
+    "min_chars": 1200,
+    "max_chars": 35000
+  }
+}
