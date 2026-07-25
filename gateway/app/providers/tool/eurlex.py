@@ -1,4 +1,4 @@
-"""``eurlex`` tool provider — EU legal document retrieval by CELEX id (WS-E PR2b).
+"""``eurlex`` tool provider — EU legal document search + retrieval (WS-E PR2b, DE-374).
 
 Auth model mirrors EDGAR: the EU Publications Office's Cellar service has no
 API-key scheme, so a descriptive ``User-Agent`` header is the only auth
@@ -20,14 +20,32 @@ EUR-Lex document text is public, so results are marked
 ``skip_anonymization=True`` for verbatim verifier delivery (ADR 0014 D5),
 mirroring the GovInfo/EDGAR adapters.
 
-``get_authority`` only — there is no keyword search endpoint wired up yet
-(DE-374). CELEX ids containing ``/`` or ``()`` (treaty texts, corrigenda) are
-rejected before any egress is attempted (DE-375)."""
+``search_authority`` (DE-374) queries the Cellar SPARQL endpoint
+(``/webapi/rdf/sparql`` on the same host, so the allowlist is unchanged) for
+English expression titles containing the keyword string, returning CELEX ids
+with title and EUR-Lex page URL but NO document body — same fail-closed
+contract as the GovInfo/EDGAR search ops: a search hit is never verified
+content until ``get_authority`` fetches it. The user keyword is escaped as a
+SPARQL string literal (never interpolated raw) so it cannot break out of the
+``FILTER`` clause.
+
+``get_authority`` validates the CELEX id against a full-CELEX shape regex
+(``_VALID_CELEX_RE``) before any egress is attempted (DE-375): sector digit +
+4-digit year + document-type letters, then either a treaty full-text suffix
+(``12016E/TXT``), or a document number with optional consolidation date
+(``02016R0679-20160504``) and optional corrigendum suffix (``32016R0679R(01)``).
+Anything else — traversal sequences, lowercase, stray specials — is rejected
+fail-closed with a 400. The id is URL-quoted (``quote(..., safe="")``) when
+building the Cellar path so ``/`` and ``()`` never reach the URL raw; the
+user-visible ``external_ref``/page URL keep the raw CELEX form. Search hits
+whose CELEX the same regex rejects are dropped rather than surfaced with an
+unfetchable ref (mirrors EDGAR's drop invariant)."""
 
 from __future__ import annotations
 
 import re
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -47,8 +65,30 @@ from app.providers.tool.egress import EgressRefused, validate_egress_target
 
 DEFAULT_TIMEOUT_SECONDS = 30.0
 MAX_REDIRECTS = 5
+DEFAULT_SEARCH_PAGE_SIZE = 10
 
-_SAFE_CELEX_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+_SPARQL_ACCEPT = "application/sparql-results+json"
+# SPARQL string-literal escapes (SPARQL 1.1 grammar ECHAR) — the user keyword
+# is only ever embedded through _sparql_string_literal, never raw.
+_SPARQL_ESCAPES = {
+    "\\": "\\\\",
+    '"': '\\"',
+    "'": "\\'",
+    "\n": "\\n",
+    "\r": "\\r",
+    "\t": "\\t",
+    "\b": "\\b",
+    "\f": "\\f",
+}
+
+# Full-CELEX validation (DE-375): sector digit, 4-digit year, 1-2 letter
+# document-type descriptor, then EITHER a treaty full-text suffix (/TXT, e.g.
+# 12016E/TXT, 12012P/TXT) OR a document number ([0-9A-Z]*, possibly empty for
+# bare treaty ids like 12016E) with an optional consolidation-date suffix
+# (-YYYYMMDD, e.g. 02016R0679-20160504) and an optional corrigendum suffix
+# (R(NN), e.g. 32016R0679R(01)). Anchored and conservative: no lowercase, no
+# whitespace, no '..', no path segments beyond the single literal '/TXT'.
+_VALID_CELEX_RE = re.compile(r"^\d\d{4}[A-Z]{1,2}(?:/TXT|[0-9A-Z]*(?:-\d{8})?(?:R\(\d{2}\))?)$")
 _CELEX_RE = re.compile(r"^(?P<sector>\d)(?P<year>\d{4})(?P<type>[A-Z]{1,2})")
 _TAG_RE = re.compile(r"<[^>]+>")
 _WHITESPACE_RE = re.compile(r"\s+")
@@ -77,6 +117,20 @@ def _content_kind_from_celex(celex: str) -> str:
     return "eu_legislation"
 
 
+def _sparql_string_literal(value: str) -> str:
+    """Render ``value`` as a double-quoted SPARQL string literal.
+
+    Escapes every SPARQL ECHAR (backslash, both quote kinds, control
+    characters) so a user keyword can never terminate the literal and inject
+    SPARQL syntax into the query."""
+    return '"' + "".join(_SPARQL_ESCAPES.get(ch, ch) for ch in value) + '"'
+
+
+def _eurlex_page_url(celex: str) -> str:
+    """Canonical EUR-Lex page URL for a CELEX id (same form get_authority emits)."""
+    return f"https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:{celex}"
+
+
 def _force_https(url: str) -> str:
     """Upgrade an ``http`` URL to ``https``; leave other schemes untouched.
 
@@ -93,9 +147,11 @@ def _force_https(url: str) -> str:
 class EurLexToolAdapter(ToolProviderAdapter):
     """Tool adapter for the EU Publications Office Cellar service.
 
-    Auth: a descriptive ``User-Agent`` header (no API key). Supports one
-    read-only operation: ``get_authority`` for fetching an EU legal
-    document's plaintext by CELEX id.
+    Auth: a descriptive ``User-Agent`` header (no API key). Supports two
+    read-only operations: ``search_authority`` for keyword search of EU
+    legal document titles via the Cellar SPARQL endpoint (DE-374), and
+    ``get_authority`` for fetching an EU legal document's plaintext by
+    CELEX id.
     """
 
     def __init__(
@@ -146,12 +202,36 @@ class EurLexToolAdapter(ToolProviderAdapter):
     async def list_tools(self, *, user_token: str | None = None) -> list[ToolSpec]:
         return [
             ToolSpec(
+                name="search_authority",
+                description=(
+                    "Keyword search of EU legal documents (regulations, "
+                    "directives, decisions, CJEU judgments) by title via the "
+                    "EUR-Lex/Cellar SPARQL endpoint. Returns matching CELEX "
+                    "ids usable by get_authority; results carry no document "
+                    "body."
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Keyword(s) to match against document titles.",
+                        },
+                        "page_size": {
+                            "type": "integer",
+                            "description": "Maximum results to return (default 10).",
+                        },
+                    },
+                    "required": ["query"],
+                },
+                read_only=True,
+            ),
+            ToolSpec(
                 name="get_authority",
                 description=(
                     "Retrieve the full text of an EU legal document (regulation, "
                     "directive, decision, or CJEU judgment) from EUR-Lex by its "
-                    "CELEX id (e.g. 32016R0679 = GDPR). No keyword search — "
-                    "provide a CELEX id."
+                    "CELEX id (e.g. 32016R0679 = GDPR)."
                 ),
                 parameters={
                     "type": "object",
@@ -164,35 +244,105 @@ class EurLexToolAdapter(ToolProviderAdapter):
                     "required": ["external_ref"],
                 },
                 read_only=True,
-            )
+            ),
         ]
 
     async def invoke_tool(
         self, tool: str, args: dict[str, Any], *, request_id: str, user_token: str | None = None
     ) -> ToolResult:
+        if tool == "search_authority":
+            return await self._search_authority(args)
         if tool == "get_authority":
             return await self._get_authority(args)
         raise ToolProviderError(f"unknown tool {tool!r} for eurlex provider")
 
+    async def _search_authority(self, args: dict[str, Any]) -> ToolResult:
+        """GET the Cellar SPARQL endpoint for title/keyword matches (DE-374).
+
+        Selects distinct CELEX id + English expression title for works whose
+        title contains the keyword string (case-insensitive). The keyword is
+        embedded only as an escaped SPARQL string literal — no injection path
+        out of the ``FILTER`` clause. Hits whose CELEX id would be rejected by
+        ``get_authority``'s full-CELEX validation (``_VALID_CELEX_RE``,
+        DE-375) are dropped rather than surfaced with an unfetchable ref;
+        treaty (``12016E/TXT``) and corrigendum (``32016R0679R(01)``) shapes
+        are valid and survive. Results carry NO body — same fail-closed
+        contract as the GovInfo/EDGAR search ops."""
+        query = args.get("query")
+        if not isinstance(query, str) or not query.strip():
+            raise ToolProviderInvalidRequestError(
+                "search_authority requires non-empty 'query'", upstream_status=400
+            )
+        raw_page_size = args.get("page_size", DEFAULT_SEARCH_PAGE_SIZE)
+        page_size: int = (
+            raw_page_size
+            if isinstance(raw_page_size, int)
+            and not isinstance(raw_page_size, bool)
+            and raw_page_size >= 1
+            else DEFAULT_SEARCH_PAGE_SIZE
+        )
+
+        literal = _sparql_string_literal(query.strip())
+        sparql = (
+            "PREFIX cdm: <http://publications.europa.eu/ontology/cdm#>\n"
+            "SELECT DISTINCT ?celex ?title\n"
+            "WHERE {\n"
+            "  ?work cdm:resource_legal_id_celex ?celex .\n"
+            "  ?expression cdm:expression_belongs_to_work ?work .\n"
+            "  ?expression cdm:expression_uses_language "
+            "<http://publications.europa.eu/resource/authority/language/ENG> .\n"
+            "  ?expression cdm:expression_title ?title .\n"
+            f"  FILTER(CONTAINS(LCASE(STR(?title)), LCASE({literal})))\n"
+            "}\n"
+            f"LIMIT {page_size}"
+        )
+        url = str(httpx.URL(f"{self._base_url}/webapi/rdf/sparql", params={"query": sparql}))
+        resp = await self._fetch_following_redirects(url, accept=_SPARQL_ACCEPT)
+
+        data: dict[str, Any] = resp.json()
+        bindings: list[dict[str, Any]] = data.get("results", {}).get("bindings", [])
+        results: list[dict[str, Any]] = []
+        for binding in bindings:
+            celex = str((binding.get("celex") or {}).get("value") or "").strip()
+            title = str((binding.get("title") or {}).get("value") or "").strip()
+            if not celex or not _VALID_CELEX_RE.fullmatch(celex):
+                # get_authority would refuse this ref (DE-375) — drop the hit
+                # rather than hand back an unfetchable external_ref.
+                continue
+            results.append(
+                {
+                    "external_ref": celex,
+                    "title": title or celex,
+                    "url": _eurlex_page_url(celex),
+                }
+            )
+
+        payload = {"results": results, "count": len(results)}
+        return self._result("search_authority", payload, resp)
+
     async def _get_authority(self, args: dict[str, Any]) -> ToolResult:
         """GET the Cellar manifestation for a CELEX id; strip HTML to plaintext.
 
-        Rejects CELEX ids containing ``/`` or ``()`` (treaty texts,
-        corrigenda — DE-375) before any egress is attempted."""
+        Validates the id against the full-CELEX shape (``_VALID_CELEX_RE`` —
+        including treaty ``12016E/TXT`` and corrigendum ``32016R0679R(01)``
+        forms, DE-375) before any egress is attempted; an id that fails is
+        rejected with a 400, never mangled. The validated id is URL-quoted
+        into the Cellar path (``/`` and ``()`` never reach the URL raw);
+        the payload's ``external_ref``/``url`` keep the raw CELEX form."""
         celex = args.get("external_ref")
         if not isinstance(celex, str) or not celex.strip():
             raise ToolProviderInvalidRequestError(
                 "get_authority requires non-empty 'external_ref' (a CELEX id)",
                 upstream_status=400,
             )
-        if not _SAFE_CELEX_RE.match(celex):
+        if not _VALID_CELEX_RE.fullmatch(celex):
             raise ToolProviderInvalidRequestError(
-                f"unsupported CELEX {celex!r}: treaty/corrigendum ids with '/' or "
-                "'()' are not yet supported (DE-375)",
+                f"invalid CELEX {celex!r}: expected sector+year+type(+number) with "
+                "optional /TXT (treaty) or R(NN) (corrigendum) suffix (DE-375)",
                 upstream_status=400,
             )
 
-        start_url = f"{self._base_url}/resource/celex/{celex}"
+        start_url = f"{self._base_url}/resource/celex/{quote(celex, safe='')}"
         resp = await self._fetch_following_redirects(start_url)
         text = _TAG_RE.sub(" ", resp.text)
         text = _WHITESPACE_RE.sub(" ", text).strip()
@@ -200,13 +350,15 @@ class EurLexToolAdapter(ToolProviderAdapter):
         payload = {
             "external_ref": celex,
             "title": celex,
-            "url": f"https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:{celex}",
+            "url": _eurlex_page_url(celex),
             "text": text,
             "content_kind": _content_kind_from_celex(celex),
         }
         return self._result("get_authority", payload, resp)
 
-    async def _fetch_following_redirects(self, url: str) -> httpx.Response:
+    async def _fetch_following_redirects(
+        self, url: str, *, accept: str = "application/xhtml+xml"
+    ) -> httpx.Response:
         """Fetch ``url``, following redirects manually.
 
         Each hop is https-upgraded (Cellar's 303 ``Location`` is plain http)
@@ -215,7 +367,7 @@ class EurLexToolAdapter(ToolProviderAdapter):
         unvalidated hop can never be dispatched."""
         headers = {
             "User-Agent": self._user_agent,
-            "Accept": "application/xhtml+xml",
+            "Accept": accept,
             "Accept-Language": "eng",
         }
         current = url
