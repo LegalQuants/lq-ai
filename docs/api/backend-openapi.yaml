@@ -3954,6 +3954,74 @@ paths:
           description: Operator has not configured `LQ_AI_BRIDGE_TOKEN` on the api
 
   # ============================================================
+  # DE-288 — bridge quick-ask surface (/lq slash command)
+  # ============================================================
+
+  /api/v1/integrations/quick-ask:
+    post:
+      tags: [integrations-quick-ask]
+      summary: Run a bridge-initiated quick-ask turn as the resolved user (DE-288)
+      description: |
+        Service-to-service endpoint backing the `/lq ask "<question>"`
+        slash command on Slack and Microsoft Teams. Authenticated by
+        the shared `Authorization: Bearer ${LQ_AI_BRIDGE_TOKEN}`
+        bearer — the bearer authenticates *the bridge*, never the
+        user. The handler re-derives the acting user from the
+        bridge-supplied platform identity, fail-closed:
+
+        * `platform=slack` — requires `platform_user_id` +
+          `team_ref` (Slack `team_id`); the api resolves the
+          invoker's profile email via Slack `users.info` with the
+          workspace's stored bot token (needs the `users:read` +
+          `users:read.email` scopes; pre-DE-288 installs fail closed
+          until re-installed).
+        * `platform=teams` — requires `email` (resolved bridge-side
+          from the Bot Connector conversation-member record) +
+          `team_ref` (AAD tenant id); the tenant must be a live
+          registered install.
+
+        The resolved email is matched case-insensitively against
+        live LQ.AI accounts. EVERY resolution failure — unknown
+        workspace/tenant, missing scope, unmatched email — returns a
+        uniform 404 `user_not_linked` (the bridge renders one
+        "account isn't linked" refusal; which step failed is logged
+        server-side only). A matched account still behind the
+        password-change / mandatory-MFA gate returns 403.
+
+        On success the question runs through the NORMAL chat-send
+        path as the resolved user (fresh chat, auto-titled;
+        non-streaming; the operator-configured
+        `LQ_AI_BRIDGE_QUICK_ASK_SKILL` attached when set), with a
+        `bridge.quick_ask` audit row tagging `details.source` =
+        slack/teams and a `bridge-{platform}-…` request id flowing
+        into the gateway's routing/cost log.
+      security:
+        - bridgeBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuickAskRequest'
+      responses:
+        '200':
+          description: Answer produced as the resolved user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuickAskResponse'
+        '401':
+          description: Missing, malformed, or non-matching bridge bearer token
+        '403':
+          description: Matched account has not cleared the password-change / mandatory-MFA gate
+        '404':
+          description: Platform identity could not be bound to an LQ.AI account (`user_not_linked`)
+        '422':
+          description: Body fails schema validation (e.g. slack without platform_user_id)
+        '500':
+          description: Operator has not configured `LQ_AI_BRIDGE_TOKEN` on the api
+
+  # ============================================================
   # M3-D4 — admin intake-bridges surface
   # ============================================================
 
@@ -5761,6 +5829,70 @@ components:
           type: string
           format: date-time
           description: Original install timestamp. NOT moved by upsert.
+
+    QuickAskRequest:
+      type: object
+      description: |
+        Request body for `POST /api/v1/integrations/quick-ask`
+        (DE-288). Identity coordinates differ per platform:
+        `platform=slack` requires `platform_user_id` (the api
+        resolves the email itself via `users.info`); `platform=teams`
+        requires `email` (resolved bridge-side from the Bot Connector
+        conversation-member record).
+      required:
+        - platform
+        - team_ref
+        - question
+      additionalProperties: false
+      properties:
+        platform:
+          type: string
+          enum: [slack, teams]
+        platform_user_id:
+          type: string
+          maxLength: 200
+          description: Stable Slack user id. Required when platform=slack.
+          example: 'U0123456789'
+        email:
+          type: string
+          maxLength: 320
+          description: Invoker email. Required when platform=teams.
+          example: 'lawyer@acme.example'
+        team_ref:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Slack `team_id` or AAD `tenant_id` of the install.
+          example: 'T0123456789'
+        question:
+          type: string
+          minLength: 1
+          maxLength: 4000
+          description: The user's question, exactly as parsed from `/lq ask`.
+
+    QuickAskResponse:
+      type: object
+      description: |
+        Success body for `POST /api/v1/integrations/quick-ask`. The
+        bridge posts `answer_text` (plus the `chat_url` link when
+        present) as ONE final ephemeral message.
+      required:
+        - answer_text
+        - chat_id
+      properties:
+        answer_text:
+          type: string
+          description: The assistant's answer for this turn.
+        chat_id:
+          type: string
+          format: uuid
+          description: The freshly created chat holding both turns.
+        chat_url:
+          type: string
+          nullable: true
+          description: |
+            Web deep link (`{LQ_AI_WEB_PUBLIC_URL}/lq-ai/chats?id=…`).
+            Null when the operator has not set `LQ_AI_WEB_PUBLIC_URL`.
 
     SlackWorkspaceSummary:
       type: object

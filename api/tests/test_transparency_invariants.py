@@ -196,7 +196,16 @@ def test_governance_and_audit_helpers_do_not_commit() -> None:
 # Only this module may construct an outbound HTTP client: it is the backend's
 # single door to the gateway, which is itself the only egress boundary (ADR
 # 0014). Paths are relative to the ``app`` package root.
-_EGRESS_ALLOWLIST: frozenset[str] = frozenset({"clients/gateway.py"})
+_EGRESS_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        "clients/gateway.py",
+        # DE-288 / ADR 0025: Slack identity resolution (users.info with the
+        # api-custodied workspace bot token). One fixed URL, GET, no
+        # user-controlled host — the alternative (handing decrypted bot
+        # tokens back to the bridge per request) has a larger blast radius.
+        "api/integrations_quick_ask.py",
+    }
+)
 
 # Import forms that pull in a general-purpose outbound HTTP client. Targeted at
 # import statements (not prose) to avoid false positives on words like

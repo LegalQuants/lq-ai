@@ -220,6 +220,11 @@ services:
       # bridge traffic with 500 when either is unset.
       LQ_AI_BRIDGE_TOKEN: ${LQ_AI_BRIDGE_TOKEN:-}
       LQ_AI_BRIDGE_MASTER_KEY: ${LQ_AI_BRIDGE_MASTER_KEY:-}
+      # DE-288 — /lq quick-ask: which skill the bridge quick-ask turn
+      # attaches (empty = plain chat) + the web base URL for the
+      # "continue in LQ.AI" link (empty = link omitted).
+      LQ_AI_BRIDGE_QUICK_ASK_SKILL: ${LQ_AI_BRIDGE_QUICK_ASK_SKILL:-}
+      LQ_AI_WEB_PUBLIC_URL: ${LQ_AI_WEB_PUBLIC_URL:-}
     volumes:
       - ./skills:/skills:ro
     ports:
