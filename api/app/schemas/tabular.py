@@ -249,6 +249,18 @@ class TabularResults(BaseModel):
 
     rows: list[TabularRow]
 
+    ensemble_halted_at_ceiling: bool = False
+    """DE-331: true when the mid-run ensemble cost ceiling halted
+    Stage-4 ensemble verification partway through the run. Extraction
+    itself still completed for every cell (degrade-only); the halted
+    cells simply carry ``verification_method=None``. Defaults false so
+    payloads persisted before DE-331 validate unchanged."""
+
+    ensemble_halted_cells: int = 0
+    """DE-331: number of ensemble-eligible cells whose Stage-4 pass was
+    skipped because the ceiling was reached. Zero when no halt occurred
+    (including all pre-DE-331 payloads)."""
+
 
 # --- Wire shapes for endpoints --------------------------------------------
 

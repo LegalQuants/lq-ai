@@ -5212,6 +5212,14 @@ components:
 
         once status is ``completed``.'
       properties:
+        ensemble_halted_at_ceiling:
+          default: false
+          title: Ensemble Halted At Ceiling
+          type: boolean
+        ensemble_halted_cells:
+          default: 0
+          title: Ensemble Halted Cells
+          type: integer
         rows:
           items:
             $ref: '#/components/schemas/TabularRow'

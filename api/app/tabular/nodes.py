@@ -52,7 +52,7 @@ from app.models.tabular import TabularCellCitation, TabularExecution
 from app.observability_helpers import get_tracer, record_attributes
 from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
 from app.schemas.tabular import ColumnSpec
-from app.tabular.cost import TABULAR_EXTRACTION_PURPOSE
+from app.tabular.cost import TABULAR_EXTRACTION_PURPOSE, estimate_ensemble_pass_cost_usd
 from app.tabular.state import TabularExecutionState
 
 if TYPE_CHECKING:
@@ -232,16 +232,38 @@ def make_extract_cells_node(
         # is the gateway config when this column should actually run
         # ensemble AND the gateway has ensemble configured — else None.
         #
-        # Cost posture (intentional): tabular ensemble verification runs one
-        # ensemble pass per cell and is NOT bounded by a mid-run per-message
-        # cost cap the way the chat path is (``_resolve_ensemble_config`` in
-        # ``api/app/api/chats.py`` falls back to a single judge once an
-        # estimate exceeds ``max_cost_per_message_usd``). Instead, tabular
-        # gates cost up-front: ``POST /api/v1/tabular/preview-cost`` surfaces
-        # the ensemble premium and the operator confirms ``confirmed_cost_usd``
-        # before the run starts (Decision C-5 cost-confirmation gate). A future
-        # mid-run / per-cell ensemble cost ceiling is deferred as DE-331.
+        # Cost posture: tabular gates cost up-front —
+        # ``POST /api/v1/tabular/preview-cost`` surfaces the ensemble premium
+        # and the operator confirms ``confirmed_cost_usd`` before the run
+        # starts (Decision C-5 cost-confirmation gate). DE-331 adds the
+        # mid-run backstop: before each cell's ensemble pass the projected
+        # spend (actual extraction spend so far + estimated ensemble spend so
+        # far + one more estimated pass) is checked against the confirmed
+        # ceiling; once it would be exceeded, ensemble is SKIPPED for all
+        # remaining cells. Degrade-only — extraction itself always continues;
+        # the halt is recorded in the results payload
+        # (``ensemble_halted_at_ceiling`` + ``ensemble_halted_cells``) so the
+        # UI can state honestly which cells skipped verification.
         ensemble_config = await gateway.get_citation_engine_ensemble_config()
+
+        # DE-331 ceiling bookkeeping. The ceiling is the operator-confirmed
+        # cost (``tabular_executions.cost_estimate_usd``, threaded through
+        # state as a Decimal string); ``None`` (nothing confirmed, e.g. a
+        # pre-confirmation-gate row) means no ceiling — never halt. The
+        # per-pass ensemble cost is an ESTIMATE (the shared rolling-average
+        # judge-cost primitive — the same math the confirmed preview used;
+        # ``VerificationResult`` carries no actual cost to accumulate),
+        # computed once per run.
+        ceiling = _parse_ceiling(state.get("confirmed_cost_usd"))
+        per_pass_estimate = (
+            await estimate_ensemble_pass_cost_usd(db, ensemble_config)
+            if (ensemble_config is not None and ceiling is not None)
+            else Decimal("0")
+        )
+        extraction_spend = Decimal("0")
+        ensemble_spend_estimate = Decimal("0")
+        ensemble_halted = False
+        ensemble_halted_cells = 0
 
         tracer = get_tracer()
         for document in documents:
@@ -255,6 +277,38 @@ def make_extract_cells_node(
                 verify_ensemble_config = (
                     ensemble_config if (effective and ensemble_config is not None) else None
                 )
+                # DE-331: mid-run ensemble ceiling check, BEFORE the cell's
+                # (extraction + ensemble) dispatch. Sticky once tripped —
+                # spend only grows, so re-checking later cells would churn
+                # without ever re-enabling. A granted pass accrues its
+                # estimate even if ``extract_cell`` ends up not running
+                # ensemble (extraction failed / no cited chunks) — a
+                # conservative over-estimate that only ever halts sooner.
+                if verify_ensemble_config is not None and ceiling is not None:
+                    if ensemble_halted or _would_exceed_ceiling(
+                        ceiling=ceiling,
+                        extraction_spend=extraction_spend,
+                        ensemble_spend_estimate=ensemble_spend_estimate,
+                        per_pass_estimate=per_pass_estimate,
+                    ):
+                        if not ensemble_halted:
+                            ensemble_halted = True
+                            logger.info(
+                                "tabular ensemble halted at cost ceiling",
+                                extra={
+                                    "event": "tabular_ensemble_halted_at_ceiling",
+                                    "execution_id": state.get("execution_id"),
+                                    "ceiling_usd": format(ceiling, "f"),
+                                    "extraction_spend_usd": format(extraction_spend, "f"),
+                                    "ensemble_spend_estimate_usd": format(
+                                        ensemble_spend_estimate, "f"
+                                    ),
+                                },
+                            )
+                        ensemble_halted_cells += 1
+                        verify_ensemble_config = None
+                    else:
+                        ensemble_spend_estimate += per_pass_estimate
                 with tracer.start_as_current_span("tabular.cell") as cell_span:
                     record_attributes(
                         cell_span,
@@ -280,10 +334,74 @@ def make_extract_cells_node(
                     cell["document_id"] = str(document_id)
                     cell["column_name"] = column.name
                     per_cell_results.append(cell)
+                    extraction_spend += _cell_cost_decimal(cell)
 
-        return {"per_cell_results": per_cell_results}
+        return {
+            "per_cell_results": per_cell_results,
+            "ensemble_halted_at_ceiling": ensemble_halted,
+            "ensemble_halted_cells": ensemble_halted_cells,
+        }
 
     return extract_cells_node
+
+
+def _parse_ceiling(raw: Any) -> Decimal | None:
+    """Parse the state-threaded ``confirmed_cost_usd`` string (DE-331).
+
+    ``None`` / empty / unparseable degrade to ``None`` (no ceiling) —
+    a malformed ceiling must never fail the run or spuriously halt
+    verification.
+    """
+
+    if raw is None:
+        return None
+    try:
+        return Decimal(str(raw))
+    except Exception:
+        logger.warning(
+            "tabular ensemble ceiling unparseable; ignoring",
+            extra={"event": "tabular_ensemble_ceiling_unparseable"},
+        )
+        return None
+
+
+def _would_exceed_ceiling(
+    *,
+    ceiling: Decimal,
+    extraction_spend: Decimal,
+    ensemble_spend_estimate: Decimal,
+    per_pass_estimate: Decimal,
+) -> bool:
+    """DE-331 pre-pass check: would ONE more ensemble pass break the ceiling?
+
+    Compares ``extraction_spend + ensemble_spend_estimate +
+    per_pass_estimate`` (projected total if this pass runs) against the
+    operator-confirmed ceiling. Estimate semantics:
+
+    * ``extraction_spend`` — ACTUAL gateway spend (DE-310 per-cell
+      ``cost_estimate`` annotations) of the cells completed so far; the
+      current cell's own extraction cost is not yet known at decision
+      time, so it is not included.
+    * ``ensemble_spend_estimate`` — ESTIMATED spend of the ensemble
+      passes granted so far (``per_pass_estimate`` x passes granted);
+      the verification cascade reports no actual judge cost.
+    * ``per_pass_estimate`` — the rolling-average per-pass estimate
+      (:func:`app.tabular.cost.estimate_ensemble_pass_cost_usd`).
+    """
+
+    return extraction_spend + ensemble_spend_estimate + per_pass_estimate > ceiling
+
+
+def _cell_cost_decimal(cell: dict[str, Any]) -> Decimal:
+    """A cell's recorded ``cost_usd`` as a Decimal; unknown/unparseable → 0."""
+
+    raw = cell.get("cost_usd")
+    if raw is None:
+        return Decimal("0")
+    try:
+        return Decimal(str(raw))
+    except Exception:
+        return Decimal("0")
 
 
 async def extract_cell(
@@ -710,7 +828,12 @@ def make_aggregate_node(
         per_cell_results = state.get("per_cell_results", []) or []
         error = state.get("error")
 
-        results_payload = _shape_results_payload(per_cell_results, documents)
+        results_payload = _shape_results_payload(
+            per_cell_results,
+            documents,
+            ensemble_halted_at_ceiling=bool(state.get("ensemble_halted_at_ceiling", False)),
+            ensemble_halted_cells=int(state.get("ensemble_halted_cells", 0) or 0),
+        )
         cost_actual = _sum_cell_costs(per_cell_results)
 
         values: dict[str, Any] = {
@@ -847,8 +970,18 @@ def _strip_state_keys(cell: dict[str, Any]) -> dict[str, Any]:
 def _shape_results_payload(
     per_cell_results: list[Any],
     documents: list[Any],
+    *,
+    ensemble_halted_at_ceiling: bool = False,
+    ensemble_halted_cells: int = 0,
 ) -> dict[str, Any]:
-    """Render the per-cell results into the JSONB payload shape."""
+    """Render the per-cell results into the JSONB payload shape.
+
+    The DE-331 ceiling fields are ADDITIVE (top-level keys with falsy
+    defaults, mirrored as defaulted fields on
+    :class:`app.schemas.tabular.TabularResults`), so pre-existing
+    payloads without them validate unchanged and the schema version
+    stays ``m3-c2-v1``.
+    """
 
     rows = _assemble_rows(per_cell_results, documents)
     total = len(per_cell_results)
@@ -860,6 +993,8 @@ def _shape_results_payload(
             "total_cells": total,
             "failed_cells": failed,
         },
+        "ensemble_halted_at_ceiling": ensemble_halted_at_ceiling,
+        "ensemble_halted_cells": ensemble_halted_cells,
     }
 
 
