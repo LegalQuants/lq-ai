@@ -11,8 +11,8 @@
 # cannot: server boot (uvicorn), real Redis connections (arq workers),
 # lazily-imported heavy deps (docling), and the OpenWebUI-core build that
 # the scoped svelte-check never touches. It proves "builds, migrates,
-# boots, and holds" — NOT "features work"; E2E remains a future wave
-# (see ci.yml scope comment).
+# boots, and holds" — NOT "features work"; feature-level E2E is the
+# nightly Cypress run in e2e.yml (which reuses this smoke's boot script).
 #
 # Cold builds are expensive (~20-30 min; the ingest image pulls
 # docling/easyocr/torch), so this runs only where it earns its keep:
