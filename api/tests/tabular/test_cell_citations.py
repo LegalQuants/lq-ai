@@ -27,12 +27,16 @@ from decimal import Decimal
 from typing import Any
 
 import pytest
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.tabular import TabularCellCitation, TabularExecution
 from app.schemas.tabular import ColumnSpec
 from app.tabular.nodes import (
     _mint_cell_citation_rows,
     _shape_results_payload,
     extract_cell,
+    make_aggregate_node,
 )
 
 from .test_nodes import _chunk, _StubGateway
@@ -275,3 +279,102 @@ def test_results_payload_does_not_persist_cell_citations() -> None:
         "error",
         "verification_method",
     }
+
+
+# ---------------------------------------------------------------------------
+# make_aggregate_node — extract → aggregate minting wiring (real DB)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+async def test_aggregate_node_persists_located_cell_citations_end_to_end(
+    db_session: AsyncSession,
+) -> None:
+    """The aggregate node's ``db.add_all(_mint_cell_citation_rows(...))``
+    wiring persists real :class:`TabularCellCitation` rows.
+
+    Drives ``make_aggregate_node`` exactly as the executor builds it
+    (``make_aggregate_node(db)``) against the real session — no DB
+    mocks — with in-flight cells produced by the real ``extract_cell``
+    (keyed with ``document_id`` / ``column_name`` the way the
+    extract-cells map node keys them). One cell locates its value
+    (carries ``cell_citations``); one does not. Exactly one row must
+    land, bound to the located cell's ``(document_id, column_name)``,
+    with the cited chunk's real id, offsets that re-derive the value,
+    and a CHECK-allowed ``verification_method``. The results JSONB
+    must land stamped with the post-F1 minting-vintage
+    ``schema_version`` — guarding the read side's fail-closed
+    discriminator end to end.
+    """
+
+    doc_id = uuid.uuid4()
+    execution = TabularExecution(
+        user_id=None,
+        skill_name=None,
+        status="running",
+        document_ids=[doc_id],
+        columns=[
+            {"name": "Term", "query": "What is the term?"},
+            {"name": "Survival", "query": "What survives termination?"},
+        ],
+    )
+    db_session.add(execution)
+    await db_session.flush()
+
+    content = "The term of this Agreement is five (5) years from the Effective Date."
+    located_chunks = [_chunk(0, content)]
+    located = await _run_extract(
+        located_chunks,
+        {"value": "five (5) years", "cited_chunk_indices": [0], "confidence": "high"},
+    )
+    # Paraphrased value absent from the cited chunk → no cell_citations.
+    unlocated = await _run_extract(
+        [_chunk(0, "The term of this Agreement is five (5) years.")],
+        {"value": "5 years", "cited_chunk_indices": [0], "confidence": "medium"},
+    )
+    assert located["cell_citations"] and unlocated["cell_citations"] == []
+    # The extract-cells map node keys each cell for the aggregate node.
+    located["document_id"] = str(doc_id)
+    located["column_name"] = "Term"
+    unlocated["document_id"] = str(doc_id)
+    unlocated["column_name"] = "Survival"
+
+    aggregate_node = make_aggregate_node(db_session)
+    await aggregate_node(
+        {
+            "execution_id": str(execution.id),
+            "columns": list(execution.columns),
+            "judge_model": "smart",
+            "documents": [{"id": str(doc_id), "name": "Sample NDA"}],
+            "per_cell_results": [located, unlocated],
+            "error": None,
+        }
+    )
+
+    persisted = (
+        (
+            await db_session.execute(
+                select(TabularCellCitation).where(TabularCellCitation.execution_id == execution.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(persisted) == 1
+    row = persisted[0]
+    assert row.document_id == doc_id
+    assert row.column_name == "Term"
+    assert row.chunk_id == uuid.UUID(located_chunks[0]["id"])
+    assert content[row.source_offset_start : row.source_offset_end] == "five (5) years"
+    assert row.verification_method in {
+        "exact_match",
+        "tolerant_match",
+        "paraphrase_judge",
+        "ensemble_strict",
+        "ensemble_majority",
+    }
+
+    await db_session.refresh(execution)
+    assert execution.status == "completed"
+    assert execution.results is not None
+    assert execution.results["schema_version"] == "m3-c2-v2"
