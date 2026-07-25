@@ -165,6 +165,11 @@ dev = [
     # types-PyYAML — mypy stubs for the C1 skill loader's pyyaml import.
     # Same pin family the gateway already uses.
     "types-PyYAML>=6.0",
+    # DE-230 — property-based testing of citation normalization/locator
+    # invariants (tests/property/). MPL-2.0, test-only: never ships in
+    # the product image. Profiles (dev/ci/thorough) are registered in
+    # tests/property/conftest.py; same pin family as gateway/.
+    "hypothesis>=6.161",
 ]
 
 # Note: a `[project.scripts]` console-script entry was considered for

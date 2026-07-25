@@ -92,6 +92,12 @@ dev = [
     "ruff==0.15.18",
     "mypy>=1.11",
     "types-PyYAML>=6.0",
+    # DE-230 — property-based testing of the anonymization round-trip,
+    # streaming rehydrator, and tier-floor invariants (tests/property/).
+    # MPL-2.0, test-only: never ships in the product image, so the
+    # file-level copyleft has no distribution consequence. Profiles
+    # (dev/ci/thorough) are registered in tests/property/conftest.py.
+    "hypothesis>=6.161",
 ]
 
 [tool.hatch.build.targets.wheel]
