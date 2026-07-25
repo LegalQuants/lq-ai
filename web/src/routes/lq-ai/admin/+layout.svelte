@@ -10,6 +10,7 @@
 		{ href: '/lq-ai/admin/research-sources', label: 'Research sources' },
 		{ href: '/lq-ai/admin/word-addin', label: 'Word add-in' },
 		{ href: '/lq-ai/admin/intake-bridges', label: 'Intake bridges' },
+		{ href: '/lq-ai/admin/community-skills', label: 'Community skills' },
 		{ href: '/lq-ai/admin/developer', label: 'Developer Support' }
 	];
 </script>

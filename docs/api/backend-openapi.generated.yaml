@@ -1822,6 +1822,171 @@ components:
       - query
       title: ColumnSpec
       type: object
+    CommunityCatalogResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/CommunitySkillSummary'
+          title: Items
+          type: array
+        load_errors:
+          items:
+            type: string
+          title: Load Errors
+          type: array
+        source:
+          $ref: '#/components/schemas/CommunityCatalogSource'
+      required:
+      - items
+      - source
+      title: CommunityCatalogResponse
+      type: object
+    CommunityCatalogSource:
+      description: Where the catalog came from — stated so staleness is visible.
+      properties:
+        operator_hint:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Operator Hint
+        path:
+          title: Path
+          type: string
+        sha:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sha
+        submodule_present:
+          title: Submodule Present
+          type: boolean
+      required:
+      - path
+      - submodule_present
+      title: CommunityCatalogSource
+      type: object
+    CommunitySkillDetail:
+      description: Full SKILL.md view — the install-confirm surface.
+      properties:
+        attested_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Attested By
+        author:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Author
+        body_preview:
+          title: Body Preview
+          type: string
+        content_md:
+          title: Content Md
+          type: string
+        content_yaml:
+          title: Content Yaml
+          type: string
+        description:
+          title: Description
+          type: string
+        install_ref:
+          title: Install Ref
+          type: string
+        installed:
+          title: Installed
+          type: boolean
+        jurisdiction:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Jurisdiction
+        minimum_inference_tier:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Minimum Inference Tier
+        output_format:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Output Format
+        slug:
+          title: Slug
+          type: string
+        tags:
+          items:
+            type: string
+          title: Tags
+          type: array
+        title:
+          title: Title
+          type: string
+        version:
+          title: Version
+          type: string
+      required:
+      - slug
+      - title
+      - description
+      - version
+      - installed
+      - body_preview
+      - content_yaml
+      - content_md
+      - install_ref
+      title: CommunitySkillDetail
+      type: object
+    CommunitySkillSummary:
+      description: One catalog entry — the list view.
+      properties:
+        attested_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Attested By
+        author:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Author
+        body_preview:
+          title: Body Preview
+          type: string
+        description:
+          title: Description
+          type: string
+        installed:
+          title: Installed
+          type: boolean
+        jurisdiction:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Jurisdiction
+        slug:
+          title: Slug
+          type: string
+        tags:
+          items:
+            type: string
+          title: Tags
+          type: array
+        title:
+          title: Title
+          type: string
+        version:
+          title: Version
+          type: string
+      required:
+      - slug
+      - title
+      - description
+      - version
+      - installed
+      - body_preview
+      title: CommunitySkillSummary
+      type: object
     CurrentTierResponse:
       description: '``GET /inference/current-tier`` response.
 
@@ -6771,6 +6936,115 @@ paths:
       summary: Report whether the first-run bootstrap admin password is still active.
       tags:
       - admin
+  /api/v1/admin/community-skills:
+    get:
+      description: 'GET /api/v1/admin/community-skills — the catalog list.
+
+
+        An absent submodule is 200-with-hint, not an error: fresh clones
+
+        without ``--recurse-submodules`` must not break the admin UI.'
+      operationId: list_community_skills_api_v1_admin_community_skills_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommunityCatalogResponse'
+          description: Successful Response
+        '403':
+          description: Authenticated but not an admin
+      security:
+      - OAuth2PasswordBearer: []
+      summary: List the community skill catalog from the local submodule (DE-263)
+      tags:
+      - admin-community-skills
+  /api/v1/admin/community-skills/{slug}:
+    get:
+      description: 'GET /api/v1/admin/community-skills/{slug} — the install-confirm
+        view.
+
+
+        Returns the full body + raw frontmatter so the operator reviews the
+
+        actual work product before installing (transparency principle).'
+      operationId: get_community_skill_api_v1_admin_community_skills__slug__get
+      parameters:
+      - in: path
+        name: slug
+        required: true
+        schema:
+          title: Slug
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommunitySkillDetail'
+          description: Successful Response
+        '403':
+          description: Authenticated but not an admin
+        '404':
+          description: Unknown community skill slug
+        '422':
+          description: SKILL.md exists but is malformed
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Full SKILL.md detail for one community skill (DE-263)
+      tags:
+      - admin-community-skills
+  /api/v1/admin/community-skills/{slug}/install:
+    post:
+      description: 'POST /api/v1/admin/community-skills/{slug}/install.
+
+
+        The installed copy is a fork (ADR 0012): a user-scope row owned by
+
+        the INSTALLING ADMIN, editable and archivable like any user skill;
+
+        it does not auto-update when the submodule moves. Provenance lives
+
+        in ``forked_from`` + the audit row.
+
+
+        409 semantics: ``user_skills`` uniqueness is per-owner among
+
+        non-archived rows, so "already installed" is exactly "the caller
+
+        has a live user-scope row at this slug" — including a hand-authored
+
+        one, which install must not clobber. Archiving the row frees the
+
+        slug for re-install (that is the honest re-install path).'
+      operationId: install_community_skill_api_v1_admin_community_skills__slug__install_post
+      parameters:
+      - in: path
+        name: slug
+        required: true
+        schema:
+          title: Slug
+          type: string
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSkillResponse'
+          description: Successful Response
+        '403':
+          description: Authenticated but not an admin
+        '404':
+          description: Unknown community skill slug
+        '409':
+          description: Caller already has a live user skill at this slug
+        '422':
+          description: SKILL.md malformed or violates user-skill bounds
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Install a community skill as an editable user-scope copy (DE-263)
+      tags:
+      - admin-community-skills
   /api/v1/admin/config:
     get:
       description: Return the gateway's sanitized current config (D0.5).
