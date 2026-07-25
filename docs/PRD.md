@@ -5092,6 +5092,11 @@ Scope when picked up:
 - **(e) A guard.** A test or visual check so coverage does not quietly regress through quarterly OpenWebUI refreshes.
 
 Pure `web/` work with no API, DB or gateway surface. The only structural wrinkle is (c): the theme resolution lives in upstream files, so the change is a carried patch under ADR 0001 and the rebase runbook.
+#### DE-387 — Raise the gateway coverage ratchet from 88% to the documented 90% target
+
+**Priority:** P3 · **Effort:** S · **Status (2026-07-25): filed (roadmap 4.3 — coverage gate).**
+
+Roadmap 4.3 wired `--cov-fail-under` coverage gates into CI (`.github/workflows/ci.yml`), set — per the ratchet-don't-aspire pattern in the engineering-discipline testing survey — at *measured* coverage, not the documented targets. Measured 2026-07-25: **api 81.49%** (12242/15023 statements) — clears the documented 80% target, so the api gate enforces the target itself (`--cov-fail-under=80`), no delta. **Gateway 88.94%** (4464/5019 statements) — below the documented 90% target, so the gateway gate is a no-decrease ratchet at the measured floor (`--cov-fail-under=88`; floored to the integer because coverage.py compares the exact value, so a gate of 89 would fail today's 88.94%). DE-387 closes the gateway 88→90 gap. The uncovered mass is concentrated (per-module, same run): `app/cli.py` 0%, `app/db.py` 71%, `app/config_writer.py` 75%, `app/providers/tool/mcp.py` 75%, `app/observability.py` 76%, `app/main.py` 80%, `app/providers/tool/govinfo.py` 84%, `app/tool_egress_log.py` 84%. Plan: test the untested `cli.py` entry points and the `config_writer` error branches first (those two alone are ~105 of the 555 missed statements), re-measure, and bump the ci.yml floor to each newly measured integer (88 → 89 → 90) rather than jumping; when 90 is measured, flip the gateway row in HONEST-STATE §8 from "ratchet" to "at target" and close this DE. Raising the *targets* themselves (e.g. api beyond 80) is out of scope here.
 
 ---
 
