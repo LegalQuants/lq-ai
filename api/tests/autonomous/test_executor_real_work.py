@@ -563,6 +563,49 @@ async def test_drafting_storage_error_emits_warn_and_continues(
     assert "RuntimeError" in finding["summary"]
 
 
+@pytest.mark.integration
+async def test_drafting_multiple_storage_errors_emit_one_aggregated_warn(
+    db_session: AsyncSession,
+    mock_gateway: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Storage failures on BOTH artifacts → exactly ONE aggregated warn
+    finding naming both artifacts (DE-333), while every emit_artifact
+    attempt is still audited so receipts show each attempt."""
+    _stub_embed(monkeypatch)
+
+    async def _down_upload(*, storage_path: str, body: bytes, content_type: str) -> None:
+        raise RuntimeError("minio is down")
+
+    monkeypatch.setattr("app.storage.upload_bytes", _down_upload)
+    session = await _make_drafting_session_with_kb(db_session, emit_artifacts=True)
+
+    state: AutonomousSessionState = {
+        "session_id": str(session.id),
+        "analysis_content": _structured_content(_TWO_ARTIFACTS),
+        "analysis_outcome": "success",
+    }
+    node = make_drafting_node(db_session, mock_gateway)
+    result = await node(state)
+
+    rows = await _autonomous_audit_rows(db_session, str(session.id))
+    # BOTH artifacts were still attempted — the audit trail is unchanged
+    # by the aggregation (one started tool_call row per attempt).
+    assert _tool_started_calls(rows, "emit_artifact") == 2
+    assert result["artifacts_count"] == 0
+    # Exactly ONE warn finding total, dispatched through ONE emit_finding —
+    # not one finding per failed artifact.
+    assert _tool_started_calls(rows, "emit_finding") == 1
+    assert result["findings_count"] == 1
+    finding = result["findings"][0]
+    assert finding["title"] == "Artifact persistence failed at storage"
+    assert finding["severity"] == "warn"
+    assert "2 artifacts could not be stored" in finding["summary"]
+    assert "object storage unavailable" in finding["summary"]
+    assert "review-memo.md" in finding["summary"]
+    assert "summary.md" in finding["summary"]
+
+
 # ---------------------------------------------------------------------------
 # Donna ask #8 — delivery_node artifact_count in notify payload + audit
 # ---------------------------------------------------------------------------
