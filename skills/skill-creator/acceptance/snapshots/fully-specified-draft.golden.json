@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "skill": "skill-creator",
+  "fixture": "fully-specified-draft",
+  "status": "provisional",
+  "provenance": "Ranges derived from skills/skill-creator/SKILL.md (drafting requires a worked example and user confirmation — both supplied by this fixture; the produced SKILL.md artifact must carry frontmatter with name/description/lq_ai block and the mandated body headings, and end with a use suggestion and refinement offer). A residual clarifying question instead of an artifact is a range miss to review at calibration. NOT observed from a live run; first live run calibrates.",
+  "assertions": {
+    "required_sections": [],
+    "metrics": [
+      {
+        "id": "artifact_frontmatter_name",
+        "kind": "regex_count",
+        "pattern": "name:\\s*force-majeure",
+        "min": 1,
+        "max": null
+      },
+      {
+        "id": "artifact_body_headings",
+        "kind": "regex_count",
+        "pattern": "when this skill applies|## workflow|## output|edge cases and refusals",
+        "min": 2,
+        "max": null
+      },
+      {
+        "id": "code_block_artifact",
+        "kind": "regex_count",
+        "pattern": "^```",
+        "min": 1,
+        "max": null
+      }
+    ],
+    "min_chars": 1500,
+    "max_chars": null
+  }
+}

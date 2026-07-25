@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "skill": "enhance-prompt",
+  "fixture": "multi-task-prompt",
+  "status": "provisional",
+  "provenance": "Ranges derived from skills/enhance-prompt/SKILL.md (structured YAML output keys) and test-plan.md Scenario 3 (multi-task prompt: identify the review -> rewrite sequence or ask which task is primary; never silently collapse). The sequence check asserts both tasks survive into the output. NOT observed from a live run; first live run calibrates.",
+  "assertions": {
+    "required_sections": [],
+    "metrics": [
+      {
+        "id": "key_expansion_applied",
+        "kind": "regex_count",
+        "pattern": "expansion_applied",
+        "min": 1,
+        "max": null
+      },
+      {
+        "id": "key_preview",
+        "kind": "regex_count",
+        "pattern": "preview_to_user",
+        "min": 1,
+        "max": null
+      },
+      {
+        "id": "review_task_survives",
+        "kind": "regex_count",
+        "pattern": "review",
+        "min": 1,
+        "max": null
+      },
+      {
+        "id": "rewrite_task_survives",
+        "kind": "regex_count",
+        "pattern": "rewrit|redraft|indemnif",
+        "min": 1,
+        "max": null
+      }
+    ],
+    "min_chars": 300,
+    "max_chars": 12000
+  }
+}
