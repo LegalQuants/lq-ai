@@ -1198,6 +1198,12 @@ export interface TabularExecution {
 	created_at: string;
 	started_at: string | null;
 	completed_at: string | null;
+	/**
+	 * Bulk operations run over this execution, recent-first (DE-304 /
+	 * ADR 0026). Optional so responses predating the field parse
+	 * unchanged.
+	 */
+	bulk_ops?: TabularBulkOp[];
 }
 
 /**
@@ -1259,6 +1265,96 @@ export interface TabularPreviewCostResponse {
 	estimated_tokens: number;
 	estimated_cost_usd: string;
 	per_tier_breakdown: Record<string, number>;
+}
+
+// ----- Tabular bulk operations (DE-304 / ADR 0026) -----
+
+/**
+ * The two v1 bulk operations over a completed execution:
+ * `redline_rows` (one redline-style review memo per grid row,
+ * combined into a redline report) and `summarize_column` (one memo
+ * synthesizing a chosen column across all rows).
+ */
+export type TabularBulkOpKind = 'redline_rows' | 'summarize_column';
+
+/**
+ * Lifecycle of a bulk op. `completed` includes batches with per-item
+ * failures (ADR 0026 D4) — failed items live inside `results.items`
+ * and MUST render as failures; `failed` is whole-batch crashes only
+ * (`error_text` populated).
+ */
+export type TabularBulkOpStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+/**
+ * One item of a bulk op's results. `document_id`/`document_name` are
+ * null on the summarize-column memo (it spans the whole grid).
+ * Decimal-typed `cost_usd` comes over the wire as a JSON string.
+ */
+export interface TabularBulkOpItem {
+	document_id: string | null;
+	document_name: string | null;
+	status: 'completed' | 'failed';
+	output_text: string | null;
+	error: string | null;
+	cost_usd: string | null;
+}
+
+export interface TabularBulkOpResults {
+	schema_version: string;
+	items: TabularBulkOpItem[];
+	summary: {
+		total_items: number;
+		failed_items: number;
+	};
+}
+
+/**
+ * One row from `tabular_bulk_ops`, embedded in
+ * `TabularExecution.bulk_ops` (the detail endpoint the page already
+ * polls is the read-side — ADR 0026 D2).
+ */
+export interface TabularBulkOp {
+	id: string;
+	execution_id: string;
+	user_id: string | null;
+	kind: TabularBulkOpKind;
+	status: TabularBulkOpStatus;
+	params: Record<string, string | null>;
+	results: TabularBulkOpResults | null;
+	confirmed_cost_usd: string | null;
+	cost_actual_usd: string | null;
+	error_text: string | null;
+	created_at: string;
+	started_at: string | null;
+	completed_at: string | null;
+}
+
+/**
+ * Request body for
+ * `POST /api/v1/tabular/executions/{id}/bulk-ops/preview-cost`.
+ * `column_name` is required for `summarize_column`.
+ */
+export interface TabularBulkOpPreviewRequest {
+	kind: TabularBulkOpKind;
+	column_name?: string | null;
+}
+
+export interface TabularBulkOpPreviewResponse {
+	kind: TabularBulkOpKind;
+	calls_count: number;
+	per_call_cost_usd: string;
+	estimated_cost_usd: string;
+}
+
+/**
+ * Request body for `POST /api/v1/tabular/executions/{id}/bulk-ops`.
+ * `confirmed_cost_usd` echoes the preview value (audit trail; the
+ * $1.00 confirmation gate is UI-side, per Decision C-5).
+ */
+export interface TabularBulkOpCreateRequest {
+	kind: TabularBulkOpKind;
+	column_name?: string | null;
+	confirmed_cost_usd?: string | null;
 }
 
 // ----- Citation Ledger (P1-A3 / P1-C1) -----

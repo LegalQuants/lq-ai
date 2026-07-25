@@ -4875,6 +4875,293 @@ components:
       - sources
       title: SourcesResponse
       type: object
+    TabularBulkOpItem:
+      description: 'One item in a bulk op''s results.
+
+
+        ``redline_rows`` produces one item per parent grid row (in grid-row
+
+        order); ``summarize_column`` produces a single item with
+
+        ``document_id = None`` (the memo spans the whole grid). Failed
+
+        items carry ``status=''failed''`` + ``error`` and are rendered as
+
+        failures — the report never silently omits failed rows (C-10).'
+      properties:
+        cost_usd:
+          anyOf:
+          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+            type: string
+          - type: 'null'
+          title: Cost Usd
+        document_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Document Id
+        document_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Document Name
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+        output_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Output Text
+        status:
+          enum:
+          - completed
+          - failed
+          title: Status
+          type: string
+      required:
+      - status
+      title: TabularBulkOpItem
+      type: object
+    TabularBulkOpPreviewRequest:
+      description: 'Request body for
+
+        ``POST /api/v1/tabular/executions/{id}/bulk-ops/preview-cost``.
+
+
+        Same shape as :class:`TabularBulkOpRequest` minus the
+
+        ``confirmed_cost_usd`` echo — preview produces the cost;
+
+        confirmation echoes it back on the subsequent create call.'
+      properties:
+        column_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Column Name
+        kind:
+          enum:
+          - redline_rows
+          - summarize_column
+          title: Kind
+          type: string
+      required:
+      - kind
+      title: TabularBulkOpPreviewRequest
+      type: object
+    TabularBulkOpPreviewResponse:
+      description: 'Response from the bulk-op cost preview.
+
+
+        ``calls_count`` is the number of gateway calls the op will make
+
+        (one per grid row for ``redline_rows``; one for
+
+        ``summarize_column``). ``estimated_cost_usd`` = ``calls_count`` x
+
+        the rolling-average per-call cost over recent
+
+        ``purpose=''tabular_bulk_op''`` routing-log rows (conservative
+
+        cold-start default before calibration; ADR 0026 D3).'
+      properties:
+        calls_count:
+          title: Calls Count
+          type: integer
+        estimated_cost_usd:
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Estimated Cost Usd
+          type: string
+        kind:
+          enum:
+          - redline_rows
+          - summarize_column
+          title: Kind
+          type: string
+        per_call_cost_usd:
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Per Call Cost Usd
+          type: string
+      required:
+      - kind
+      - calls_count
+      - per_call_cost_usd
+      - estimated_cost_usd
+      title: TabularBulkOpPreviewResponse
+      type: object
+    TabularBulkOpRequest:
+      description: 'Request body for
+
+        ``POST /api/v1/tabular/executions/{id}/bulk-ops`` (DE-304 / ADR 0026).
+
+
+        Replaces the never-wired M3-C4 stub of the same name (which
+
+        anticipated Decision C-9 sibling rows; ADR 0026 D1 stores bulk-op
+
+        output in a dedicated ``tabular_bulk_ops`` table instead because
+
+        the outputs are not grids).
+
+
+        ``column_name`` is required for ``summarize_column`` (validated
+
+        against the execution''s snapshotted column spec) and ignored for
+
+        ``redline_rows``. ``confirmed_cost_usd`` is the echo of the
+
+        ``.../bulk-ops/preview-cost`` response value — persisted for audit,
+
+        same idiom as :class:`TabularExecutionCreate.confirmed_cost_usd`.'
+      properties:
+        column_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Column Name
+        confirmed_cost_usd:
+          anyOf:
+          - type: number
+          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+            type: string
+          - type: 'null'
+          title: Confirmed Cost Usd
+        kind:
+          enum:
+          - redline_rows
+          - summarize_column
+          title: Kind
+          type: string
+      required:
+      - kind
+      title: TabularBulkOpRequest
+      type: object
+    TabularBulkOpResponse:
+      description: 'Wire shape for one bulk op — embedded in
+
+        :class:`TabularExecutionResponse.bulk_ops` (ADR 0026 D2: the detail
+
+        endpoint the UI already polls is the read-side; no dedicated GET).'
+      properties:
+        completed_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Completed At
+        confirmed_cost_usd:
+          anyOf:
+          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+            type: string
+          - type: 'null'
+          title: Confirmed Cost Usd
+        cost_actual_usd:
+          anyOf:
+          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+            type: string
+          - type: 'null'
+          title: Cost Actual Usd
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+        error_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error Text
+        execution_id:
+          format: uuid
+          title: Execution Id
+          type: string
+        id:
+          format: uuid
+          title: Id
+          type: string
+        kind:
+          enum:
+          - redline_rows
+          - summarize_column
+          title: Kind
+          type: string
+        params:
+          additionalProperties:
+            anyOf:
+            - type: string
+            - type: 'null'
+          title: Params
+          type: object
+        results:
+          anyOf:
+          - $ref: '#/components/schemas/TabularBulkOpResults'
+          - type: 'null'
+        started_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Started At
+        status:
+          enum:
+          - pending
+          - running
+          - completed
+          - failed
+          title: Status
+          type: string
+        user_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: User Id
+      required:
+      - id
+      - execution_id
+      - user_id
+      - kind
+      - status
+      - params
+      - created_at
+      title: TabularBulkOpResponse
+      type: object
+    TabularBulkOpResults:
+      description: Shape persisted in ``tabular_bulk_ops.results`` once terminal.
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/TabularBulkOpItem'
+          title: Items
+          type: array
+        schema_version:
+          title: Schema Version
+          type: string
+        summary:
+          $ref: '#/components/schemas/TabularBulkOpSummary'
+      required:
+      - schema_version
+      - items
+      - summary
+      title: TabularBulkOpResults
+      type: object
+    TabularBulkOpSummary:
+      description: Honesty counters for a bulk op's results panel.
+      properties:
+        failed_items:
+          title: Failed Items
+          type: integer
+        total_items:
+          title: Total Items
+          type: integer
+      required:
+      - total_items
+      - failed_items
+      title: TabularBulkOpSummary
+      type: object
     TabularExecutionCreate:
       description: 'Request body for ``POST /api/v1/tabular/execute``.
 
@@ -4931,6 +5218,11 @@ components:
 
         (``POST /execute``, ``GET /executions/{id}``, etc.).'
       properties:
+        bulk_ops:
+          items:
+            $ref: '#/components/schemas/TabularBulkOpResponse'
+          title: Bulk Ops
+          type: array
         columns:
           items:
             $ref: '#/components/schemas/ColumnSpec'
@@ -12965,6 +13257,111 @@ paths:
       security:
       - OAuth2PasswordBearer: []
       summary: Get a tabular execution by id.
+      tags:
+      - tabular
+  /api/v1/tabular/executions/{execution_id}/bulk-ops:
+    post:
+      description: 'Create a ``tabular_bulk_ops`` row at ``pending`` and enqueue the
+
+        ARQ job on the shared playbook queue (Decision C-3). Returns 202;
+
+        the detail view polls ``GET /tabular/executions/{id}`` — the
+
+        ``bulk_ops`` array embedded there is the read-side (ADR 0026 D2).
+
+
+        ``confirmed_cost_usd`` is the echo of the preview response —
+
+        persisted for audit; the $1.00 confirmation gate stays UI-side,
+
+        exactly like ``POST /tabular/execute`` (Decision C-5).
+
+
+        Per ADR 0026 D4, batch "completed" does NOT mean every item
+
+        succeeded — failed items are persisted per-row and rendered as
+
+        failures in the report.'
+      operationId: create_tabular_bulk_op_api_v1_tabular_executions__execution_id__bulk_ops_post
+      parameters:
+      - in: path
+        name: execution_id
+        required: true
+        schema:
+          format: uuid
+          title: Execution Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TabularBulkOpRequest'
+        required: true
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TabularBulkOpResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Start a bulk operation over a completed tabular execution.
+      tags:
+      - tabular
+  /api/v1/tabular/executions/{execution_id}/bulk-ops/preview-cost:
+    post:
+      description: 'Synchronous cost preview — no bulk-op row is created.
+
+
+        Mirrors ``POST /tabular/preview-cost`` (Decision C-5): the UI calls
+
+        this before arming the confirmation gate. Calls count is one per
+
+        grid row for ``redline_rows``, one total for ``summarize_column``;
+
+        per-call cost is the rolling average over recent
+
+        ``purpose=''tabular_bulk_op''`` routing-log rows (conservative
+
+        cold-start default before calibration; ADR 0026 D3).'
+      operationId: preview_tabular_bulk_op_cost_api_v1_tabular_executions__execution_id__bulk_ops_preview_cost_post
+      parameters:
+      - in: path
+        name: execution_id
+        required: true
+        schema:
+          format: uuid
+          title: Execution Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TabularBulkOpPreviewRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TabularBulkOpPreviewResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Preview the cost of a proposed bulk operation.
       tags:
       - tabular
   /api/v1/tabular/executions/{execution_id}/cancel:
