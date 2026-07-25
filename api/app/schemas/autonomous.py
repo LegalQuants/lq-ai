@@ -23,9 +23,9 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
 
 
 class TriggerKind(StrEnum):
@@ -214,6 +214,14 @@ class AutonomousManualRunRequest(BaseModel):
     (Donna ask #8) — a manual run has no schedule/watch row to inherit the
     flag from, so the request body IS the opt-in source; defaults off,
     matching the schedule/watch column default.
+
+    ``query`` (item 1.6 — matter intake) is an optional free-text matter
+    description. When present it lands in ``session.params["query"]`` and
+    the executor routes the session through the ADR-0020 matter loop
+    (planner goal = the description); when omitted the session stays on
+    the existing query-less path — no behavior change for current
+    callers. Length bounds mirror ``KnowledgeSearchRequest.query``
+    (1 to 10,000 chars).
     """
 
     playbook_id: uuid.UUID | None = None
@@ -222,6 +230,7 @@ class AutonomousManualRunRequest(BaseModel):
     project_id: uuid.UUID | None = None
     max_cost_usd: Decimal | None = None
     emit_artifacts: bool = False
+    query: Annotated[str, StringConstraints(min_length=1, max_length=10_000)] | None = None
 
     @model_validator(mode="after")
     def _exactly_one_target(self) -> AutonomousManualRunRequest:

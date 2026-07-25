@@ -6703,7 +6703,11 @@ components:
         / ``project_id`` are optional scope.  ``max_cost_usd`` is the
         per-run cap (NULL → fall back to the config default).  A manual
         run has no schedule/watch row to inherit ``emit_artifacts`` from,
-        so this body IS the opt-in source.
+        so this body IS the opt-in source.  ``query`` (item 1.6 — matter
+        intake) is an optional free-text matter description; when present
+        it lands in ``session.params["query"]`` and the executor routes
+        the run through the ADR-0020 matter loop, when omitted the
+        query-less path is unchanged.
       properties:
         playbook_id: {type: string, format: uuid, nullable: true}
         skill_ref: {type: string, nullable: true}
@@ -6716,6 +6720,16 @@ components:
           description: |
             Opt-in document-grade artifact emission (Donna #8) for this
             one-off run; default off so existing callers are unchanged.
+        query:
+          type: string
+          nullable: true
+          minLength: 1
+          maxLength: 10000
+          description: |
+            Optional free-text matter description (item 1.6). Copied into
+            ``session.params["query"]`` so the executor runs the ADR-0020
+            matter loop with this as the goal. Omitted → key absent →
+            existing query-less behavior.
 
     AutonomousScheduleListResponse:
       type: object

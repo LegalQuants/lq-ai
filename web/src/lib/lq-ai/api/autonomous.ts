@@ -296,6 +296,9 @@ export interface PromotePrecedentRequest {
  * POST /autonomous/run-now — manual-trigger body. All fields optional.
  * Mirrors app/schemas/autonomous.py ManualRunRequest. `max_cost_usd` is a
  * Decimal serialized as a string, matching AutonomousScheduleCreate.
+ * `query` (item 1.6 — matter intake) is a free-text matter description
+ * (1–10,000 chars); when present the session runs the matter loop with
+ * it as the goal, when omitted behavior is unchanged.
  */
 export interface ManualRunRequest {
 	playbook_id?: string;
@@ -303,6 +306,7 @@ export interface ManualRunRequest {
 	target_kb_id?: string;
 	project_id?: string;
 	max_cost_usd?: string;
+	query?: string;
 }
 
 // ---------------------------------------------------------------------------
