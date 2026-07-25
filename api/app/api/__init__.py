@@ -35,6 +35,7 @@ from app.api import (
     files,
     inference,
     inference_override,
+    integrations_quick_ask,
     integrations_slack,
     integrations_teams,
     internal,
@@ -82,6 +83,12 @@ api_router.include_router(integrations_slack.router)
 # per-tenant secrets persisted because Teams uses app-level bot
 # credentials (one MICROSOFT_APP_ID per deployment).
 api_router.include_router(integrations_teams.router)
+
+# DE-288: bridge quick-ask surface (/lq slash command on Slack + Teams).
+# Same bridge-bearer auth posture as the persistence endpoints above;
+# the handler re-derives the acting user from the platform identity
+# (fail-closed) before running the turn through the normal send path.
+api_router.include_router(integrations_quick_ask.router)
 
 # M3-B8 — Word add-in version handshake. Unauthenticated: the task pane
 # calls this on mount BEFORE the user has signed in, so an out-of-date

@@ -5,24 +5,37 @@ OAuth / Events APIs and the LQ.AI backend. It ships with the M3 release as
 **plumbing-only**: the `/lq` slash command surface (M3-D2) is descoped to M4 /
 community contribution per [PRD §9 DE-288](../docs/PRD.md#de-288--slackteams-lq-slash-command--quick-skill-flow--deferred-to-m4--community-contribution).
 
-## What it does today (v0.3.0)
+## What it does today
 
 - Hosts the OAuth install flow at `/slack/oauth/install` → Slack consent →
   `/slack/oauth/callback` → workspace persistence in the LQ.AI api.
 - Verifies inbound Slack request signatures (`X-Slack-Signature` /
-  `X-Slack-Request-Timestamp`) on every webhook so M3-D2's slash-command
-  handler lands on a verified substrate.
+  `X-Slack-Request-Timestamp`) on every webhook.
+- **`/lq` slash command** (DE-288) at `POST /slack/commands`:
+  `/lq help` renders usage; `/lq ask "<question>"` acks ephemerally within
+  Slack's 3-second window, calls the api's bridge-bearer quick-ask endpoint,
+  and delivers ONE final ephemeral message (answer + chat link) via the
+  payload's `response_url`. Identity is fail-closed: the api resolves the
+  invoker's profile email via `users.info` with the stored workspace token
+  and maps it to an LQ.AI account — an unmatched user gets an "account
+  isn't linked" refusal, never an answer under a shared identity. The
+  operator picks the quick-ask skill via `LQ_AI_BRIDGE_QUICK_ASK_SKILL`
+  on the api service (unset = plain chat turn).
 - Health surface: `/healthz` (liveness) + `/readyz` (readiness — checks the
   LQ.AI api is reachable on the configured `LQ_AI_BACKEND_URL`).
 
 ## What it does NOT do today
 
-- **Slash commands** — `/lq` and `/lq ask`, per DE-288, are deferred.
 - **Inbound message handling** — the bot does not read silent channels; it
-  only acts on user-invoked commands (when those land in M3-D2 / community).
-- **Per-user identity binding** — Slack user ↔ LQ.AI user mapping is in
-  M3-D4's admin UI scope. The bridge persists the workspace record; the
-  admin UI binds Slack identities to LQ.AI accounts.
+  only acts on user-invoked commands.
+- **Explicit per-user link management** — the Slack ↔ LQ.AI binding is
+  email-match only (fail-closed); an admin UI for explicit links/overrides
+  is future scope.
+
+> **Re-install note (DE-288):** the `/lq` identity binding needs the
+> `users:read` + `users:read.email` bot scopes. Workspaces installed before
+> DE-288 lack them — `/lq ask` fails closed ("account isn't linked") there
+> until the operator re-installs via the OAuth flow.
 
 ## Configuration
 

@@ -71,11 +71,19 @@ def _gc_state_store() -> None:
 
 
 # Scopes the bridge requests during OAuth install. Kept narrow on
-# purpose: ``commands`` for the future slash-command surface and
-# ``chat:write`` so the bot can post replies in channels it's invited
-# to. No ``channels:read`` / ``groups:read`` / ``im:read`` — the bot
-# does NOT read silent channels.
-SCOPES = ["commands", "chat:write"]
+# purpose: ``commands`` for the slash-command surface, ``chat:write``
+# so the bot can post replies in channels it's invited to, and
+# ``users:read`` + ``users:read.email`` so the api can resolve a
+# slash-command invoker's Slack profile email via ``users.info`` with
+# the stored workspace token (DE-288 identity binding — the email is
+# matched against LQ.AI accounts, fail-closed). No ``channels:read`` /
+# ``groups:read`` / ``im:read`` — the bot does NOT read silent
+# channels.
+#
+# NOTE: workspaces installed before DE-288 lack the two ``users:read*``
+# scopes; ``/lq ask`` fails closed ("account isn't linked") there until
+# the operator re-installs via the OAuth flow.
+SCOPES = ["commands", "chat:write", "users:read", "users:read.email"]
 
 
 @router.get("/oauth/install")

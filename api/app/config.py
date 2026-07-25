@@ -369,6 +369,27 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ----- DE-288 bridge quick-ask (/lq slash command) -----
+    lq_ai_bridge_quick_ask_skill: str = Field(
+        default="",
+        description=(
+            "Skill slug attached to every bridge quick-ask turn "
+            "(POST /api/v1/integrations/quick-ask). Empty (default) runs "
+            "the quick-ask as a plain chat turn with no skill attached. "
+            "Operator-set env var for now; a DB-backed admin dropdown on "
+            "the intake-bridges page is a documented follow-up."
+        ),
+    )
+    lq_ai_web_public_url: str = Field(
+        default="",
+        description=(
+            "Externally reachable base URL of the LQ.AI web UI (e.g. "
+            "https://lqai.example.com). Used to build the 'continue in "
+            "LQ.AI' chat link returned to bridge quick-asks. Empty "
+            "(default) omits the link — the answer still delivers."
+        ),
+    )
+
     # ----- Chat tool-loop (PR5b / L4) -----
     # Hard cap on tool-call rounds per chat turn. Once calls_used reaches this
     # limit the loop issues one final gateway round WITHOUT tools (tool_choice

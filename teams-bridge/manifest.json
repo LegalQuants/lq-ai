@@ -24,7 +24,7 @@
     "full": "LQ.AI is a self-hosted, transparency-first AI platform for in-house legal teams. This Microsoft Teams bridge connects a tenant to one LQ.AI deployment so that future slash-command and bot surfaces can be wired up by operator and community contributors. The bot does not read silent channels — it only responds to explicit user invocations."
   },
   "accentColor": "#0B3A53",
-  "_comment_bots": "The slash-command surface lands with DE-288 (M4 / community). At v0.3.0 the bot is registered so the tenant install flow + identity binding work; commandLists is intentionally empty until DE-288 ships.",
+  "_comment_bots": "DE-288: the bot serves the /lq command via POST /teams/messages on the bridge. Point the Azure Bot resource messaging endpoint at ${LQ_AI_TEAMS_BRIDGE_PUBLIC_URL}/teams/messages.",
   "bots": [
     {
       "botId": "${MICROSOFT_APP_ID}",
@@ -33,7 +33,21 @@
       "supportsCalling": false,
       "supportsVideo": false,
       "supportsFiles": false,
-      "commandLists": []
+      "commandLists": [
+        {
+          "scopes": ["personal", "team", "groupchat"],
+          "commands": [
+            {
+              "title": "/lq help",
+              "description": "Show LQ.AI quick-ask usage"
+            },
+            {
+              "title": "/lq ask",
+              "description": "Ask the configured LQ.AI quick-ask skill a question"
+            }
+          ]
+        }
+      ]
     }
   ],
   "validDomains": [

@@ -238,6 +238,8 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("POST", "/api/v1/integrations/slack/workspaces"),
     # M3-D3 — teams-bridge persistence surface (bridge-token bearer auth)
     ("POST", "/api/v1/integrations/teams/tenants"),
+    # DE-288 — bridge quick-ask surface (bridge-token bearer auth)
+    ("POST", "/api/v1/integrations/quick-ask"),
     # M3-D4 — admin intake-bridges surface
     ("GET", "/api/v1/admin/intake-bridges"),
     ("DELETE", "/api/v1/admin/intake-bridges/slack/{workspace_id}"),

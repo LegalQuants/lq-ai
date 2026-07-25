@@ -84,7 +84,7 @@ def test_install_redirects_to_slack_consent_with_required_params(
 
     params = parse_qs(parsed.query)
     assert params["client_id"] == [settings.slack_client_id]
-    assert params["scope"] == ["commands,chat:write"]
+    assert params["scope"] == ["commands,chat:write,users:read,users:read.email"]
     assert params["redirect_uri"] == [
         f"{settings.lq_ai_bridge_public_url.rstrip('/')}/slack/oauth/callback"
     ]
@@ -132,7 +132,7 @@ class _StubAsyncWebClient:
             "ok": True,
             "access_token": "xoxb-fake-bot-token",
             "bot_user_id": "U99BOT",
-            "scope": "commands,chat:write",
+            "scope": "commands,chat:write,users:read,users:read.email",
             "team": {"id": "T0123456", "name": "Acme Legal"},
             "authed_user": {"id": "U11INSTALLER"},
         }
@@ -169,7 +169,7 @@ def test_callback_happy_path_persists_to_api_and_returns_success(
             "team_name": "Acme Legal",
             "bot_user_id": "U99BOT",
             "installer_slack_user_id": "U11INSTALLER",
-            "scope": "commands,chat:write",
+            "scope": "commands,chat:write,users:read,users:read.email",
             "installed_at": "2026-05-22T12:00:00Z",
         },
     )
@@ -202,7 +202,7 @@ def test_callback_happy_path_persists_to_api_and_returns_success(
         "bot_token": "xoxb-fake-bot-token",
         "bot_user_id": "U99BOT",
         "installer_slack_user_id": "U11INSTALLER",
-        "scope": "commands,chat:write",
+        "scope": "commands,chat:write,users:read,users:read.email",
     }
 
 
