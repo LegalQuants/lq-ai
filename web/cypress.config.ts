@@ -33,6 +33,7 @@ import { defineConfig } from 'cypress';
 
 const DETERMINISTIC_SPECS = [
 	// Fully cy.intercept-mocked — no real backend writes, no seeded admin needed.
+	'cypress/e2e/a11y.cy.ts',
 	'cypress/e2e/m3-0-fresh-install-login.cy.ts',
 	'cypress/e2e/m3-a4-playbook-execution.cy.ts',
 	'cypress/e2e/m3-a6-easy-playbook-wizard.cy.ts',
