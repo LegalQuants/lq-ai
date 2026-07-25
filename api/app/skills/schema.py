@@ -56,12 +56,17 @@ class ColumnSpec(BaseModel):
     walkthrough surfaces the need.
     """
 
-    name: str
-    """The grid column header. Required."""
+    name: str = Field(min_length=1)
+    """The grid column header. Required and non-empty (DE-297: the
+    table-mode authoring UI rejects blank names inline; the schema
+    enforces the same floor so no authoring surface can persist a
+    column the Tabular workflow cannot label)."""
 
-    query: str
+    query: str = Field(min_length=1)
     """The per-row extraction prompt instantiated against each document.
-    Required."""
+    Required and non-empty (DE-297: a blank query would dispatch an
+    empty extraction prompt per cell — rejected at the schema layer for
+    parity with the authoring UI's inline validation)."""
 
     ensemble_verification: bool | None = None
     """When ``True``, this column's cells route through Stage 4 of the

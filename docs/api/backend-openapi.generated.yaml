@@ -13112,7 +13112,11 @@ paths:
 
         selection. The document-ownership check is enforced at execute
 
-        time; preview doesn''t load the documents.'
+        time; preview doesn''t load the documents. ``user`` also drives the
+
+        DE-297 skill-name resolution (the caller''s user/team shadows take
+
+        precedence over a built-in at the same slug).'
       operationId: preview_tabular_cost_api_v1_tabular_preview_cost_post
       requestBody:
         content:

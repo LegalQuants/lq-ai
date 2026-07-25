@@ -3983,7 +3983,9 @@ Rationale for scoping down: (a) the existing `PlaybookExecuteModal` already prov
 
 **When to ship:** Bundle into the v0.3.1 quickstart-corpus-expansion patch alongside the DPA / MSA-Commercial-Purchase sample corpora (already DE-tracked per [`project_lq_ai_status.md`](#) memory). Project source on its own is a 30-min lift and may justify its own micro-PR if a Tabular operator surfaces the need before v0.3.1.
 
-#### DE-297 — Table-mode skill authoring UI in `/skills/new` (column editor) (deferred from M3-C3)
+#### DE-297 — Table-mode skill authoring UI in `/skills/new` (column editor) (deferred from M3-C3) — ✓ Shipped
+
+**Shipped (v0.4 cycle):** mode selector (`Prose | Table`) in the Skill Creator wizard and on `/skills/[id]/edit`; `ColumnEditor.svelte` column list (name, query textarea, `ensemble_verification` as an Inherit/On/Off select — tri-state rather than the sketched checkbox, to preserve the backend's `None` = inherit semantics — `minimum_inference_tier` 1–5 dropdown, up/down reorder buttons in place of the sketched drag-handle, add/remove, min-one-column + inline empty-query validation). Persisted as `frontmatter_extra.output_format='table'` + `columns`; `POST/PATCH /user-skills` now validates that subset through the same `LQAIFrontmatter` schema built-ins parse with, and the tabular resolver (`/tabular/preview-cost`, `/tabular/execute`) resolves `skill_name` through the D8.1b stack (user shadow > team shadow > built-in) so user-authored table skills run with their own columns. Cypress walkthrough added to `wave-d2-skill-creator.cy.ts`.
 
 **Priority:** P2 (operators can fork built-in reference skills via filesystem; in-app authoring is convenience, not capability) · **Effort:** M (a structured column editor with per-column query / `ensemble_verification` / `minimum_inference_tier` fields, save-back-to-user-scope flow)
 
