@@ -42,7 +42,7 @@ from app.models.project_knowledge_base import ProjectKnowledgeBase
 from app.models.research import ResearchClusterMetadata, ResearchOpinionMetadata
 from app.models.saved_prompt import SavedPrompt
 from app.models.slack_workspace import SlackWorkspace
-from app.models.tabular import TabularExecution
+from app.models.tabular import TabularCellCitation, TabularExecution
 from app.models.team import Team, TeamMember
 from app.models.teams_tenant import TeamsTenant
 from app.models.tool_call_log import ToolCallLog
@@ -93,6 +93,7 @@ __all__ = [
     "ResearchOpinionMetadata",
     "SavedPrompt",
     "SlackWorkspace",
+    "TabularCellCitation",
     "TabularExecution",
     "Team",
     "TeamMember",
