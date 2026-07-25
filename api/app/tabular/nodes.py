@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -400,20 +401,45 @@ async def extract_cell(
         cited_chunk_ids=cited_chunk_ids,
     )
 
+    # DE-310: real per-cell tier + cost from the gateway's response
+    # annotations (``_annotate_response`` stamps ``routed_inference_tier``
+    # + ``cost_estimate`` on every non-streaming completion). ``getattr``
+    # because the annotations are gateway extensions a minimal
+    # OpenAI-shaped response may lack; a missing annotation degrades to
+    # ``None`` (schema-nullable) rather than claiming the column's tier
+    # floor as the routed tier or ``"0"`` as a cost that was never
+    # reported. Ensemble judge spend (``_verify_cell_ensemble``) is NOT
+    # included: the shared verification cascade
+    # (:func:`app.citation.verification.verify`) discards the judge
+    # responses' cost annotations before returning, and threading cost
+    # through :class:`VerificationResult` reshapes the chat Citation
+    # Engine's surface — out of scope here; the routing log still
+    # records those judge calls.
     return {
         "value": value,
         "cited_chunk_ids": cited_chunk_ids,
         "confidence": confidence,
-        "tier_used": column.minimum_inference_tier,
-        # cost_usd is best filled by the gateway response surface; for
-        # v0.3.0 we leave it at 0 here and reconcile from the routing
-        # log post-hoc in the aggregate node. The cost-estimator's
-        # rolling-average converges off the routing log either way.
-        "cost_usd": "0",
+        "tier_used": getattr(response, "routed_inference_tier", None),
+        "cost_usd": _cost_usd_str(getattr(response, "cost_estimate", None)),
         "error": None,
         "verification_method": verification_method,
         "cell_citations": cell_citations,
     }
+
+
+def _cost_usd_str(cost_estimate: Any) -> str | None:
+    """Decimal-stringify the gateway's float ``cost_estimate`` annotation.
+
+    Fixed-point notation (never scientific — ``format(..., 'f')``) per
+    the Decimal-as-string wire rule; ``None`` (or a non-numeric value)
+    stays ``None`` — an unreported cost is unknown, not zero.
+    """
+
+    if not isinstance(cost_estimate, (int, float)) or isinstance(cost_estimate, bool):
+        return None
+    if not math.isfinite(cost_estimate):
+        return None
+    return format(Decimal(str(cost_estimate)), "f")
 
 
 async def _verify_cell_ensemble(
@@ -840,11 +866,12 @@ def _shape_results_payload(
 def _sum_cell_costs(per_cell_results: list[Any]) -> Decimal:
     """Sum per-cell costs to derive ``cost_actual_usd``.
 
-    Cells without a recorded cost contribute 0 — the v0.3.0 cell node
-    does not yet propagate per-call cost back from the gateway
-    response surface, so this defaults to 0 across all cells until
-    the gateway returns cost in its response shape. Once it does,
-    this sum becomes the authoritative actual."""
+    ``cost_usd`` carries the gateway's per-call ``cost_estimate``
+    annotation as a decimal string (DE-310), so this sum is the actual
+    extraction spend. Cells without a recorded cost (failed before the
+    gateway call, or the gateway had no rate configured for the routed
+    model) contribute 0. Ensemble judge spend is not included — see
+    the DE-310 note in :func:`extract_cell`."""
 
     total = Decimal("0")
     for cell in per_cell_results:
