@@ -428,10 +428,28 @@ async def build_authority_citations(
                 judged: VerificationResult | None = None
                 if gateway is not None:
                     body_text = target.normalized_content
-                    est = await estimate_authority_content_cost_usd(
-                        db, judge_model=judge_model, authority_text=body_text
-                    )
-                    if judge_spent + est > AUTHORITY_CONTENT_JUDGE_BUDGET_USD:
+                    est: Decimal | None
+                    try:
+                        est = await estimate_authority_content_cost_usd(
+                            db, judge_model=judge_model, authority_text=body_text
+                        )
+                    except Exception:
+                        # The pre-flight estimate queries inference_routing_log;
+                        # a transient failure there must degrade to "no judge,
+                        # keep the FAIL row" — never skip the item (zero rows
+                        # would read as fiduciary_grade at the gate).
+                        log.warning(
+                            "authority citation build: cost estimate failed — keeping FAIL",
+                            extra={
+                                "event": "autonomous_authority_citation_judge_miss",
+                                "external_ref": item.external_ref,
+                            },
+                            exc_info=True,
+                        )
+                        est = None
+                    if est is None:
+                        pass  # estimate failed → no judge; fall through to FAIL row.
+                    elif judge_spent + est > AUTHORITY_CONTENT_JUDGE_BUDGET_USD:
                         log.info(
                             "authority citation build: judge budget exhausted — keeping FAIL",
                             extra={

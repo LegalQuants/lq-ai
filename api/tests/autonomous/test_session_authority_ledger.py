@@ -664,3 +664,50 @@ async def test_gateway_none_keeps_fail_rows_without_judge(
     assert len(rows) == 1
     assert rows[0].verified is False
     assert rows[0].verification_method is None
+
+
+async def test_cost_estimate_error_keeps_fail_row(
+    db_session: AsyncSession,
+    fake_storage: dict[str, bytes],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """DE-371 regression: a raising pre-flight cost estimate must degrade to
+    "no judge, keep the FAIL row" — not skip the item entirely (zero rows would
+    read as fiduciary_grade at the gate)."""
+
+    async def _raising_estimate(db: object, *, judge_model: str, authority_text: str) -> Decimal:
+        raise RuntimeError("routing-log query exploded")
+
+    async def _must_not_run(**kwargs: object) -> VerificationResult:
+        raise AssertionError("judge must not be called when the cost estimate fails")
+
+    monkeypatch.setattr(ledger_bridge, "estimate_authority_content_cost_usd", _raising_estimate)
+    monkeypatch.setattr(ledger_bridge, "judge_authority_content", _must_not_run)
+
+    sess = await _make_session(db_session)
+    await store_authority_text(
+        db_session,
+        source_type="govinfo",
+        external_ref="USCODE-2022-title15",
+        text=_BODY,
+    )
+    findings = [
+        {
+            "text": "bogus",
+            "citations": [{"quote": _FABRICATED_QUOTE, "source": 1}],
+        }
+    ]
+    out = await build_session_ledger(
+        db_session,
+        session=sess,
+        work_product_text="…",
+        findings=findings,
+        evidence=_evidence(),
+        gateway=object(),
+    )
+    assert out is not None and out["fail_count"] >= 1 and out["gate_status"] == "flagged"
+
+    rows = await _fetch_rows(db_session)
+    assert len(rows) == 1
+    assert rows[0].verified is False
+    assert rows[0].verification_method is None
