@@ -172,6 +172,21 @@ def test_service_url_allowlist(url: str, allowed: bool) -> None:
     assert service_url_allowed(url) is allowed
 
 
+def test_service_url_rejects_registered_trafficmanager_sibling() -> None:
+    # `trafficmanager.net` is a shared Azure namespace: any customer can
+    # register `<name>.trafficmanager.net`. Only the Microsoft-operated
+    # Connector host `smba.trafficmanager.net` may pass.
+    assert service_url_allowed("https://lqai-evil.trafficmanager.net") is False
+
+
+def test_service_url_accepts_exact_connector_host() -> None:
+    # Regression guard against over-tightening: the real Teams
+    # serviceUrl uses the exact host `smba.trafficmanager.net`, which
+    # does not end with the `.smba.trafficmanager.net` suffix. Passes
+    # both before and after the allowlist tightening.
+    assert service_url_allowed("https://smba.trafficmanager.net/amer/") is True
+
+
 # ---------------------------------------------------------------------------
 # Dispatch
 # ---------------------------------------------------------------------------
