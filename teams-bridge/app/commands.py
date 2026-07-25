@@ -37,7 +37,7 @@ isn't linked" refusal.
      when absent — blocks casual unauthenticated pokes only; it is
      NOT cryptographic validation);
    * a strict host allowlist on ``serviceUrl`` (``*.botframework.com``
-     / ``*.trafficmanager.net``) so a forged activity cannot steer our
+     / ``*.smba.trafficmanager.net``) so a forged activity cannot steer our
      authenticated outbound calls to an attacker host;
    * identity derived from the authenticated member-info call plus the
      api's own fail-closed email → account mapping — a forged inbound
@@ -89,7 +89,17 @@ USAGE_TEXT = (
 # serviceUrl is https://smba.trafficmanager.net/<region>/; emulators /
 # other channels use *.botframework.com. Anything else is treated as a
 # forged activity and dropped (see the module-level auth note).
-_ALLOWED_SERVICE_URL_SUFFIXES = (".botframework.com", ".trafficmanager.net")
+# NOTE: the bare `.trafficmanager.net` apex is deliberately NOT
+# allowed — Azure Traffic Manager is a shared, customer-registrable
+# namespace, so only the Microsoft-operated Connector host
+# `smba.trafficmanager.net` (and subdomains) qualifies. Once inbound
+# JWT validation lands, the validated token's `serviceUrl` claim
+# supersedes this list entirely.
+_ALLOWED_SERVICE_URL_SUFFIXES = (".botframework.com", ".smba.trafficmanager.net")
+# The suffixes above match subdomains only; real serviceUrls use the
+# exact Connector host (e.g. https://smba.trafficmanager.net/amer/),
+# so the bare hosts are allowed explicitly as well.
+_ALLOWED_SERVICE_URL_HOSTS = tuple(s.removeprefix(".") for s in _ALLOWED_SERVICE_URL_SUFFIXES)
 
 _MENTION_RE = re.compile(r"<at>.*?</at>", re.DOTALL)
 
@@ -169,7 +179,9 @@ def service_url_allowed(service_url: str) -> bool:
     if parts.scheme != "https" or not parts.hostname:
         return False
     hostname = parts.hostname.lower()
-    return hostname.endswith(_ALLOWED_SERVICE_URL_SUFFIXES)
+    return hostname in _ALLOWED_SERVICE_URL_HOSTS or hostname.endswith(
+        _ALLOWED_SERVICE_URL_SUFFIXES
+    )
 
 
 async def _get_connector_token(settings: Settings, correlation_id: str) -> str | None:
