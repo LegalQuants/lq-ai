@@ -94,6 +94,20 @@ jobs:
         # execute the identical list.
         run: npm run cy:run
 
+      - name: Upload a11y report
+        # DE-232: the a11y spec writes its full violation inventory (all
+        # impact levels, including the log-only moderate/minor ones) to
+        # cypress/results/a11y-report.json. Upload on success too — the
+        # report is the phase-1 "log-all" half of the severity ratchet and
+        # the input for any baseline edit.
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: a11y-report
+          path: web/cypress/results/a11y-report.json
+          if-no-files-found: ignore
+          retention-days: 30
+
       - name: Upload Cypress artifacts
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
