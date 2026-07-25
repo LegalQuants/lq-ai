@@ -102,7 +102,9 @@ def _caselaw_source(cluster_id: int) -> ToolSourceRecord:
 
 
 @pytest.mark.asyncio
-async def test_verbatim_quote_persists_verified_row(db_session, seeded_chat_message):
+async def test_verbatim_quote_persists_verified_row(
+    db_session: AsyncSession, seeded_chat_message: uuid.UUID
+) -> None:
     message_id = seeded_chat_message
     db_session.add(
         ResearchOpinionMetadata(
@@ -115,7 +117,7 @@ async def test_verbatim_quote_persists_verified_row(db_session, seeded_chat_mess
     )
     await db_session.flush()
 
-    async def fake_loader(db, opinion_id):
+    async def fake_loader(db: AsyncSession, opinion_id: int) -> str:
         return _OPINION_TEXT
 
     answer = "**Relevant passage:**\n> The covenant of good faith is implied in every contract.\n"
@@ -146,7 +148,9 @@ async def test_verbatim_quote_persists_verified_row(db_session, seeded_chat_mess
 
 
 @pytest.mark.asyncio
-async def test_invented_quote_persists_nothing(db_session, seeded_chat_message):
+async def test_invented_quote_persists_nothing(
+    db_session: AsyncSession, seeded_chat_message: uuid.UUID
+) -> None:
     message_id = seeded_chat_message
     db_session.add(
         ResearchOpinionMetadata(
@@ -159,7 +163,7 @@ async def test_invented_quote_persists_nothing(db_session, seeded_chat_message):
     )
     await db_session.flush()
 
-    async def fake_loader(db, opinion_id):
+    async def fake_loader(db: AsyncSession, opinion_id: int) -> str:
         return _OPINION_TEXT
 
     answer = "> The court invented a rule that appears in no opinion whatsoever.\n"
@@ -174,7 +178,9 @@ async def test_invented_quote_persists_nothing(db_session, seeded_chat_message):
 
 
 @pytest.mark.asyncio
-async def test_storage_miss_is_skipped_not_fatal(db_session, seeded_chat_message):
+async def test_storage_miss_is_skipped_not_fatal(
+    db_session: AsyncSession, seeded_chat_message: uuid.UUID
+) -> None:
     message_id = seeded_chat_message
     db_session.add(
         ResearchOpinionMetadata(
@@ -183,7 +189,7 @@ async def test_storage_miss_is_skipped_not_fatal(db_session, seeded_chat_message
     )
     await db_session.flush()
 
-    async def boom_loader(db, opinion_id):
+    async def boom_loader(db: AsyncSession, opinion_id: int) -> str:
         raise RuntimeError("object storage unavailable")
 
     answer = "> The covenant of good faith is implied in every contract.\n"

@@ -93,6 +93,7 @@ class _StubGateway:
     async def chat_completion(
         self, request: Any, *, request_id: str | None = None
     ) -> _StubResponse:
+        payload: dict[str, Any]
         if getattr(request, "lq_ai_purpose", None) == "judge_paraphrase":
             self.judge_calls += 1
             payload = _JUDGE_PAYLOAD

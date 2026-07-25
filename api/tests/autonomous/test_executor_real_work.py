@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -142,7 +143,7 @@ async def test_intake_no_target_returns_empty_chunks(
 async def test_analysis_calls_run_skill_through_chokepoint(
     db_session: AsyncSession,
     running_watch_session_at_analysis: AutonomousSession,
-    mock_gateway_structured_response: object,
+    mock_gateway_structured_response: MagicMock,
 ) -> None:
     """analysis_node assembles messages and makes one guarded run_skill call;
     the structured-output content is stored in state."""
@@ -174,7 +175,7 @@ async def test_analysis_calls_run_skill_through_chokepoint(
 async def test_analysis_first_tick_skips_gateway(
     db_session: AsyncSession,
     running_schedule_session_first_tick: AutonomousSession,
-    mock_gateway: object,
+    mock_gateway: MagicMock,
 ) -> None:
     """If state carries first_tick_no_baseline, analysis_node returns early
     without calling the gateway."""
@@ -194,7 +195,7 @@ async def test_analysis_first_tick_skips_gateway(
 async def test_analysis_no_target_skips_gateway(
     db_session: AsyncSession,
     running_session_without_target: AutonomousSession,
-    mock_gateway: object,
+    mock_gateway: MagicMock,
 ) -> None:
     """A session with no skill_ref + no playbook_id returns early with
     analysis_content=None (no gateway call)."""

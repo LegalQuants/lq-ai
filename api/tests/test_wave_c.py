@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import uuid
 import zipfile
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from io import BytesIO
 
 import pytest
@@ -35,7 +35,7 @@ from app.security import create_access_token, hash_password
 from app.workers.user_export import build_export_zip_for_test
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -179,6 +179,7 @@ async def test_update_user_role_admin_to_member_writes_audit(
     )
     # Two updates (promote + demote) → two audit rows.
     assert len(audit) == 2
+    assert audit[-1].details is not None
     assert audit[-1].details["after"]["role"] == "member"
     assert audit[-1].details["before"]["role"] == "admin"
 

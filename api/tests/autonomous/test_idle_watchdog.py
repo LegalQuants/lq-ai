@@ -389,7 +389,9 @@ async def test_two_sweeps_takes_running_to_halted(db_session: AsyncSession) -> N
         .all()
     )
     assert len(halted_audit) == 1
-    assert halted_audit[0].details["reason"] == "idle_timeout"
+    details = halted_audit[0].details
+    assert details is not None
+    assert details["reason"] == "idle_timeout"
 
 
 @pytest.mark.integration
@@ -439,8 +441,8 @@ def test_cron_registered_in_worker_settings() -> None:
     from app.workers.arq_setup import WorkerSettings
 
     assert hasattr(WorkerSettings, "cron_jobs"), "WorkerSettings must have cron_jobs"
-    cron_jobs: list[CronJob] = WorkerSettings.cron_jobs  # type: ignore[attr-defined]
-    cron_names = [cj.coroutine.__name__ for cj in cron_jobs]
+    cron_jobs: list[CronJob] = WorkerSettings.cron_jobs
+    cron_names = [cj.coroutine.__qualname__ for cj in cron_jobs]
     assert "autonomous_idle_watchdog" in cron_names, (
         f"autonomous_idle_watchdog not in cron_jobs; found: {cron_names}"
     )
@@ -448,7 +450,7 @@ def test_cron_registered_in_worker_settings() -> None:
     # arq stores the scalar value as-is (int 0) when a single value is passed;
     # the cron runner normalises it to a set internally. Check for 0 (int) here.
     watchdog_cron = next(
-        cj for cj in cron_jobs if cj.coroutine.__name__ == "autonomous_idle_watchdog"
+        cj for cj in cron_jobs if cj.coroutine.__qualname__ == "autonomous_idle_watchdog"
     )
     assert watchdog_cron.second in (0, {0}), (
         f"expected second=0 (every-minute schedule), got {watchdog_cron.second!r}"

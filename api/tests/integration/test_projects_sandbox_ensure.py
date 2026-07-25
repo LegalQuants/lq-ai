@@ -14,7 +14,7 @@ Bearer-token helper.
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 
 import pytest
@@ -32,7 +32,7 @@ from app.skills.registry import MutableSkillRegistry
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "skills"
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 

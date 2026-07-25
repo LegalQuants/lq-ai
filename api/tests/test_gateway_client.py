@@ -173,7 +173,7 @@ async def test_chat_completion_overrides_stream_flag_to_false(client: GatewayCli
         return_value=httpx.Response(200, json=_success_payload())
     )
     req = _request()
-    req.stream = True  # type: ignore[misc]
+    req.stream = True
 
     await client.chat_completion(req)
 

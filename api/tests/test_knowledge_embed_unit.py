@@ -7,7 +7,7 @@ functions against a respx-mocked GatewayClient.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -24,6 +24,7 @@ from app.knowledge.embed import (
     request_embedding_vector,
     request_embedding_vectors,
 )
+from app.models.document import DocumentChunk
 
 GATEWAY_BASE = "http://test-gateway"
 GATEWAY_KEY = "test-gw-key"
@@ -99,7 +100,7 @@ def test_batched_groups_within_size_limit() -> None:
 
     # 200 small chunks should batch into multiple groups (default 64
     # per batch).
-    chunks = [_FakeChunk(f"chunk{idx}") for idx in range(200)]
+    chunks = cast("list[DocumentChunk]", [_FakeChunk(f"chunk{idx}") for idx in range(200)])
     batches = list(batched(chunks))
     assert all(len(batch) <= 64 for batch in batches)
     assert sum(len(b) for b in batches) == 200
@@ -110,7 +111,7 @@ def test_batched_respects_char_cap() -> None:
     """C6: a single very-large chunk forces a tighter batch."""
 
     huge_content = "x" * 50_000  # well into the cap
-    chunks = [_FakeChunk(huge_content) for _ in range(3)]
+    chunks = cast("list[DocumentChunk]", [_FakeChunk(huge_content) for _ in range(3)])
     batches = list(batched(chunks))
     # Each big chunk roughly fills its own batch (60K cap).
     assert len(batches) >= 2

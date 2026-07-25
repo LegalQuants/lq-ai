@@ -13,7 +13,7 @@ Covers ``POST /api/v1/integrations/teams/tenants``:
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime
 
 import pytest
@@ -30,7 +30,7 @@ from app.models.teams_tenant import TeamsTenant
 BRIDGE_TOKEN = "bridge-token-fixture-value"
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -38,7 +38,7 @@ def _override_get_db(db_session: AsyncSession):
 
 
 @pytest_asyncio.fixture
-async def configured_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+async def configured_settings(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[None]:
     monkeypatch.setenv("LQ_AI_BRIDGE_TOKEN", BRIDGE_TOKEN)
     get_settings.cache_clear()
     yield

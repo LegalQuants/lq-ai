@@ -22,6 +22,7 @@ from typing import get_args
 
 import pytest
 from pydantic import ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.research import ResearchClusterMetadata, ResearchOpinionMetadata
 from app.schemas.research import (
@@ -35,7 +36,7 @@ from app.schemas.research import (
 )
 
 
-async def test_research_metadata_roundtrips(db_session) -> None:
+async def test_research_metadata_roundtrips(db_session: AsyncSession) -> None:
     cluster = ResearchClusterMetadata(
         cluster_id=2812209,
         case_name="Obergefell v. Hodges",
@@ -78,7 +79,7 @@ def test_verified_citation_roundtrips_adapter_shape() -> None:
             }
         ],
     }
-    resp = VerifyCitationsResponse(citations=[adapter_item])
+    resp = VerifyCitationsResponse.model_validate({"citations": [adapter_item]})
     assert len(resp.citations) == 1
     vc = resp.citations[0]
     assert isinstance(vc, VerifiedCitation)
@@ -103,7 +104,7 @@ def test_verified_citation_not_found_item() -> None:
         "error_message": "not found",
         "clusters": [],
     }
-    resp = VerifyCitationsResponse(citations=[adapter_item])
+    resp = VerifyCitationsResponse.model_validate({"citations": [adapter_item]})
     vc = resp.citations[0]
     assert vc.status == 404
     assert vc.error_message == "not found"
@@ -119,7 +120,7 @@ def test_verified_citation_none_fields_accepted() -> None:
         "error_message": None,
         "clusters": [{"id": None, "case_name": None, "absolute_url": None}],
     }
-    resp = VerifyCitationsResponse(citations=[adapter_item])
+    resp = VerifyCitationsResponse.model_validate({"citations": [adapter_item]})
     vc = resp.citations[0]
     assert vc.citation is None
     assert vc.status is None
@@ -140,14 +141,14 @@ _ALL_TEXT_FIELDS = list(get_args(OpinionTextField))
 
 
 @pytest.mark.parametrize("field", _ALL_TEXT_FIELDS)
-def test_opinion_meta_accepts_all_text_fields(field: str) -> None:
+def test_opinion_meta_accepts_all_text_fields(field: OpinionTextField) -> None:
     """OpinionMeta validates all 7 OpinionTextField values incl xml_harvard."""
     meta = OpinionMeta(opinion_id=1, char_length=100, text_field_used=field)
     assert meta.text_field_used == field
 
 
 @pytest.mark.parametrize("field", _ALL_TEXT_FIELDS)
-def test_opinion_text_accepts_all_text_fields(field: str) -> None:
+def test_opinion_text_accepts_all_text_fields(field: OpinionTextField) -> None:
     """OpinionText validates all 7 OpinionTextField values incl xml_harvard."""
     ot = OpinionText(opinion_id=1, cluster_id=2, text_field_used=field, text="Sample text.")
     assert ot.text_field_used == field
@@ -168,13 +169,13 @@ def test_opinion_text_text_field_used_none() -> None:
 def test_opinion_meta_rejects_invalid_text_field() -> None:
     """OpinionMeta rejects values outside the closed Literal set."""
     with pytest.raises(ValidationError):
-        OpinionMeta(opinion_id=1, char_length=0, text_field_used="raw_text")
+        OpinionMeta(opinion_id=1, char_length=0, text_field_used="raw_text")  # type: ignore[arg-type]  # intentionally invalid
 
 
 def test_opinion_text_rejects_invalid_text_field() -> None:
     """OpinionText rejects values outside the closed Literal set."""
     with pytest.raises(ValidationError):
-        OpinionText(opinion_id=1, cluster_id=2, text_field_used="raw_text", text="x")
+        OpinionText(opinion_id=1, cluster_id=2, text_field_used="raw_text", text="x")  # type: ignore[arg-type]  # intentionally invalid
 
 
 # ---------------------------------------------------------------------------
@@ -212,4 +213,4 @@ def test_search_request_cursor_default_none() -> None:
 def test_search_request_rejects_extra_field() -> None:
     """extra='forbid' is preserved — unknown fields still raise."""
     with pytest.raises(ValidationError):
-        SearchRequest(q="x", unknown_field="y")
+        SearchRequest(q="x", unknown_field="y")  # type: ignore[call-arg]  # intentionally invalid

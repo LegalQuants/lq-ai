@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -895,11 +896,11 @@ def _authority_spec(op: str) -> ToolSpec:
 
 
 class _FakeGateway:
-    def __init__(self, payload):
+    def __init__(self, payload: dict[str, Any]) -> None:
         self._payload = payload
-        self.calls = []
+        self.calls: list[tuple[str, str, dict[str, Any]]] = []
 
-    async def call_tool(self, provider, op, args):
+    async def call_tool(self, provider: str, op: str, args: dict[str, Any]) -> dict[str, Any]:
         self.calls.append((provider, op, args))
         return {"payload": self._payload}
 
@@ -941,8 +942,8 @@ def fake_authority_storage(monkeypatch: pytest.MonkeyPatch) -> dict[str, bytes]:
 
 @pytest.mark.asyncio
 async def test_dispatch_get_authority_writes_cache_and_returns_data(
-    db, fake_authority_storage: dict[str, bytes]
-):
+    db: AsyncSession, fake_authority_storage: dict[str, bytes]
+) -> None:
     payload = {
         "package_id": "USCODE-2022-title17",
         "citation": "17 U.S.C. 107",
@@ -972,7 +973,7 @@ async def test_dispatch_get_authority_writes_cache_and_returns_data(
 
 
 @pytest.mark.asyncio
-async def test_dispatch_search_authority_does_not_write_cache(db):
+async def test_dispatch_search_authority_does_not_write_cache(db: AsyncSession) -> None:
     payload = {
         "results": [
             {"package_id": "USCODE-2022-title17", "title": "Fair use", "dateIssued": "2022-01-01"}
@@ -997,8 +998,10 @@ async def test_dispatch_search_authority_does_not_write_cache(db):
 
 
 @pytest.mark.asyncio
-async def test_dispatch_authority_cache_failure_is_non_fatal(db, monkeypatch):
-    async def _boom(db, *, source_type, external_ref, text):
+async def test_dispatch_authority_cache_failure_is_non_fatal(
+    db: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _boom(db: AsyncSession, *, source_type: str, external_ref: str, text: str) -> None:
         raise RuntimeError("storage down")
 
     monkeypatch.setattr("app.citation.authority.store_authority_text", _boom)
@@ -1026,7 +1029,7 @@ async def test_dispatch_authority_cache_failure_is_non_fatal(db, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_collect_tool_sources_authority_branch():
+def test_collect_tool_sources_authority_branch() -> None:
     spec = _authority_spec("get_authority")
     data = {
         "authority": {
@@ -1049,7 +1052,7 @@ def test_collect_tool_sources_authority_branch():
     assert rec.tool == "get_authority"
 
 
-def test_collect_tool_sources_authority_search_also_emits():
+def test_collect_tool_sources_authority_search_also_emits() -> None:
     spec = _authority_spec("search_authority")
     data = {
         "authority": {
@@ -1095,8 +1098,8 @@ def _shared_authority_spec(op: str) -> ToolSpec:
 
 @pytest.mark.asyncio
 async def test_dispatch_authority_uses_registry_adapter_for_edgar(
-    db, fake_authority_storage: dict[str, bytes]
-):
+    db: AsyncSession, fake_authority_storage: dict[str, bytes]
+) -> None:
     """Task 2 review requirement 1: a get_authority call with source='edgar'
     must resolve SOURCE_REGISTRY['edgar'].adapter (EdgarAdapter) — NOT a
     hardcoded GovInfoAdapter(). content_kind must stay 'sec_filing', not be
@@ -1130,7 +1133,7 @@ async def test_dispatch_authority_uses_registry_adapter_for_edgar(
 
 
 @pytest.mark.asyncio
-async def test_dispatch_search_authority_empty_results_does_not_raise(db):
+async def test_dispatch_search_authority_empty_results_does_not_raise(db: AsyncSession) -> None:
     """Task 2 review requirement 2 (empty-search resilience): EdgarAdapter
     (like GovInfoAdapter) raises ValueError on a zero-result search_authority
     payload. execute_tool only catches MCPAuthorizationRequired/
@@ -1156,7 +1159,9 @@ async def test_dispatch_search_authority_empty_results_does_not_raise(db):
 
 
 @pytest.mark.asyncio
-async def test_dispatch_search_authority_empty_results_does_not_raise_govinfo(db):
+async def test_dispatch_search_authority_empty_results_does_not_raise_govinfo(
+    db: AsyncSession,
+) -> None:
     """Same empty-results resilience for the pre-existing GovInfo path (the
     bug pre-dates EDGAR; EDGAR just made it reachable more often given
     full-text search commonly returns zero hits)."""
@@ -1174,7 +1179,7 @@ async def test_dispatch_search_authority_empty_results_does_not_raise_govinfo(db
 
 
 @pytest.mark.asyncio
-async def test_dispatch_authority_unknown_source_does_not_raise(db):
+async def test_dispatch_authority_unknown_source_does_not_raise(db: AsyncSession) -> None:
     """A source not in SOURCE_REGISTRY (or without a registered adapter,
     e.g. courtlistener) must degrade to a failed-but-non-raising observation
     rather than crash the dispatch — defensive belt-and-suspenders mirroring
