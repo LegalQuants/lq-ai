@@ -221,6 +221,61 @@ def test_eurlex_get_authority_maps_to_fetched_authority():
     assert "CELEX:32016R0679" in fa.url
 
 
+def test_eurlex_get_authority_subtitle_is_human_readable():
+    """DE-376: subtitle is a display heading — machine kinds map to labels,
+    content_kind itself stays machine-form."""
+    for kind, label in [
+        ("eu_regulation", "EU Regulation"),
+        ("eu_directive", "EU Directive"),
+        ("eu_decision", "EU Decision"),
+        ("eu_caselaw", "CJEU Case Law"),
+        ("eu_legislation", "EU Legislation"),
+    ]:
+        fa = EurLexAdapter().from_response(
+            "get_authority",
+            {
+                "external_ref": "32016R0679",
+                "title": "t",
+                "url": "u",
+                "text": "x",
+                "content_kind": kind,
+            },
+        )
+        assert fa.subtitle == label
+        assert fa.content_kind == kind
+    # An unknown future kind passes through unchanged rather than erroring.
+    fa = EurLexAdapter().from_response(
+        "get_authority",
+        {
+            "external_ref": "32016R0679",
+            "title": "t",
+            "url": "u",
+            "text": "x",
+            "content_kind": "eu_other",
+        },
+    )
+    assert fa.subtitle == "eu_other"
+
+
+def test_eurlex_get_authority_partial_payload_fallbacks():
+    """DE-376: every field the adapter reads via payload.get(...) falls back
+    safely on a partial payload — empty strings and the eu_legislation kind."""
+    fa = EurLexAdapter().from_response("get_authority", {})
+    assert fa.citable_text == ""
+    assert fa.label == ""
+    assert fa.url == ""
+    assert fa.external_ref == ""
+    assert fa.content_kind == "eu_legislation"
+    assert fa.subtitle == "EU Legislation"
+    # Explicit None values fall back the same way as missing keys.
+    fa = EurLexAdapter().from_response(
+        "get_authority",
+        {"external_ref": None, "title": None, "url": None, "text": None, "content_kind": None},
+    )
+    assert fa.content_kind == "eu_legislation"
+    assert fa.subtitle == "EU Legislation"
+
+
 def test_eurlex_search_authority_first_result_no_body():
     """DE-374: search results carry no document body — citable_text is the
     title only (same fail-closed contract as GovInfo/EDGAR search)."""

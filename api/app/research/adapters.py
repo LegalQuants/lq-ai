@@ -12,7 +12,7 @@ because the gateway payloads are already structured for direct use.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, ClassVar, Protocol, runtime_checkable
 
 
 @dataclass
@@ -235,6 +235,17 @@ class EurLexAdapter:
             return self._from_search_authority(payload)
         raise ValueError(f"EurLexAdapter: unsupported op {op!r}")
 
+    # Human-readable subtitle labels per machine content_kind (DE-376).
+    # subtitle is a display heading, never load-bearing for verification;
+    # content_kind itself stays machine-form everywhere.
+    _KIND_LABELS: ClassVar[dict[str, str]] = {
+        "eu_regulation": "EU Regulation",
+        "eu_directive": "EU Directive",
+        "eu_decision": "EU Decision",
+        "eu_caselaw": "CJEU Case Law",
+        "eu_legislation": "EU Legislation",
+    }
+
     def _from_get_authority(self, payload: dict[str, Any]) -> FetchedAuthority:
         title: str = payload.get("title") or ""
         url: str = payload.get("url") or ""
@@ -244,7 +255,7 @@ class EurLexAdapter:
         return FetchedAuthority(
             citable_text=text,
             label=title,
-            subtitle=content_kind,
+            subtitle=self._KIND_LABELS.get(content_kind, content_kind),
             url=url,
             external_ref=external_ref,
             content_kind=content_kind,
