@@ -17,7 +17,7 @@ the database fixture but don't rely on the gateway being live.
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 
 import httpx
 import pytest
@@ -36,7 +36,7 @@ GATEWAY_BASE = "http://test-gateway"
 GATEWAY_KEY = "test-gw-key"
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 

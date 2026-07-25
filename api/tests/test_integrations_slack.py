@@ -13,7 +13,7 @@ Covers ``POST /api/v1/integrations/slack/workspaces``:
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime
 
 import pytest
@@ -31,7 +31,7 @@ from app.security.encryption import BridgeTokenEncryptor, generate_master_key
 BRIDGE_TOKEN = "bridge-token-fixture-value"
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -39,7 +39,7 @@ def _override_get_db(db_session: AsyncSession):
 
 
 @pytest_asyncio.fixture
-async def configured_settings(monkeypatch: pytest.MonkeyPatch) -> str:
+async def configured_settings(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[str]:
     """Set both bridge env vars + clear the Settings cache for the test."""
     master_key = generate_master_key()
     monkeypatch.setenv("LQ_AI_BRIDGE_TOKEN", BRIDGE_TOKEN)

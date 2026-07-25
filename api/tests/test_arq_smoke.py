@@ -97,7 +97,8 @@ async def test_on_startup_installs_skill_registry_and_returns_none() -> None:
         patch("app.workers.arq_setup.get_settings", return_value=settings),
     ):
         # No exception, no return value.
-        assert await arq_setup.on_startup(ctx) is None
+        # The return-is-None contract is part of the pinned wiring.
+        assert await arq_setup.on_startup(ctx) is None  # type: ignore[func-returns-value]
 
     mock_install.assert_called_once()
     assert "orchestration_runtime" not in ctx

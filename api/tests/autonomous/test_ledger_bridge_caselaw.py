@@ -63,7 +63,7 @@ async def test_build_caselaw_citations_verifies(db_session: AsyncSession) -> Non
     await db_session.flush()
     msg = await _msg(db_session)
 
-    async def fake_load(db: AsyncSession, *, opinion_id: int) -> dict:  # type: ignore[type-arg]
+    async def fake_load(db: AsyncSession, *, opinion_id: int) -> dict:
         return {"text": OPINION_TEXT}
 
     n = await build_caselaw_citations(
@@ -93,7 +93,7 @@ async def test_build_caselaw_citations_unknown_cluster_skipped(
 
     msg = await _msg(db_session)
 
-    async def fake_load(db: AsyncSession, *, opinion_id: int) -> dict:  # type: ignore[type-arg]
+    async def fake_load(db: AsyncSession, *, opinion_id: int) -> dict:
         return {"text": OPINION_TEXT}
 
     n = await build_caselaw_citations(
@@ -120,7 +120,7 @@ async def test_build_caselaw_citations_locate_miss_skipped(
     await db_session.flush()
     msg = await _msg(db_session)
 
-    async def fake_load(db: AsyncSession, *, opinion_id: int) -> dict:  # type: ignore[type-arg]
+    async def fake_load(db: AsyncSession, *, opinion_id: int) -> dict:
         return {"text": OPINION_TEXT}
 
     n = await build_caselaw_citations(
@@ -147,7 +147,7 @@ async def test_build_caselaw_citations_empty_quote_skipped(
     await db_session.flush()
     msg = await _msg(db_session)
 
-    async def fake_load(db: AsyncSession, *, opinion_id: int) -> dict:  # type: ignore[type-arg]
+    async def fake_load(db: AsyncSession, *, opinion_id: int) -> dict:
         return {"text": OPINION_TEXT}
 
     n = await build_caselaw_citations(

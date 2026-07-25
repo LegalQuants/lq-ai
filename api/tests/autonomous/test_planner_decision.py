@@ -12,7 +12,7 @@ from app.autonomous.planner import (
 )
 
 
-def test_allowlist_is_observe_intents_only():
+def test_allowlist_is_observe_intents_only() -> None:
     # WS-E PR1a added retrieve_authority to the closed allowlist.
     assert (
         frozenset(
@@ -27,7 +27,7 @@ def test_allowlist_is_observe_intents_only():
     )
 
 
-def test_prompt_carries_goal_observations_and_allowlist():
+def test_prompt_carries_goal_observations_and_allowlist() -> None:
     msgs = build_planner_messages(
         goal="Is the assignment clause enforceable?",
         observations=["retrieve_caselaw → 2 results: [Smith (9th 2021); Doe (2d 2019)]"],
@@ -41,7 +41,7 @@ def test_prompt_carries_goal_observations_and_allowlist():
         assert intent.value in body  # the allowlist is shown to the planner
 
 
-def test_parse_action_decision():
+def test_parse_action_decision() -> None:
     out = parse_planner_decision(
         json.dumps(
             {
@@ -59,7 +59,7 @@ def test_parse_action_decision():
     )
 
 
-def test_parse_done_decision():
+def test_parse_done_decision() -> None:
     out = parse_planner_decision(
         json.dumps({"done": True, "rationale": "Enough authority gathered."})
     )
@@ -82,7 +82,7 @@ def test_parse_done_decision():
         json.dumps({"args": {}, "rationale": "x"}),  # no next_intent, no done
     ],
 )
-def test_parse_returns_none_on_garbage_or_out_of_set(bad):
+def test_parse_returns_none_on_garbage_or_out_of_set(bad: str | None) -> None:
     assert parse_planner_decision(bad) is None
 
 
@@ -91,12 +91,12 @@ def test_parse_returns_none_on_garbage_or_out_of_set(bad):
 # ---------------------------------------------------------------------------
 
 
-def test_validate_action_args_valid_top_k_passes():
+def test_validate_action_args_valid_top_k_passes() -> None:
     """A positive integer top_k is accepted."""
     validate_action_args(ToolIntent.retrieve_chunks, {"top_k": 5, "query": "x", "kb_id": "k"})
 
 
-def test_validate_action_args_absent_top_k_passes():
+def test_validate_action_args_absent_top_k_passes() -> None:
     """Omitted top_k (None default) is accepted — the handler supplies its own default."""
     validate_action_args(ToolIntent.retrieve_chunks, {"query": "x", "kb_id": "k"})
 
@@ -105,13 +105,13 @@ def test_validate_action_args_absent_top_k_passes():
     "bad_top_k",
     [-1, 0, True, "5"],
 )
-def test_validate_action_args_bad_top_k_raises(bad_top_k):
+def test_validate_action_args_bad_top_k_raises(bad_top_k: int | str) -> None:
     """top_k=-1, 0, bool(True), or str('5') all raise ValueError."""
     with pytest.raises(ValueError, match="top_k"):
         validate_action_args(ToolIntent.retrieve_chunks, {"top_k": bad_top_k, "query": "x"})
 
 
-def test_validate_action_args_valid_embedding_passes():
+def test_validate_action_args_valid_embedding_passes() -> None:
     """A list of floats is accepted."""
     validate_action_args(
         ToolIntent.retrieve_chunks,
@@ -119,7 +119,7 @@ def test_validate_action_args_valid_embedding_passes():
     )
 
 
-def test_validate_action_args_none_embedding_passes():
+def test_validate_action_args_none_embedding_passes() -> None:
     """Explicit None query_embedding is accepted (handler treats it as absent)."""
     validate_action_args(
         ToolIntent.retrieve_chunks,
@@ -131,13 +131,13 @@ def test_validate_action_args_none_embedding_passes():
     "bad_emb",
     ["x", [("a",)]],
 )
-def test_validate_action_args_bad_embedding_raises(bad_emb):
+def test_validate_action_args_bad_embedding_raises(bad_emb: str | list[tuple[str]]) -> None:
     """A string or a list of tuples for query_embedding raises ValueError."""
     with pytest.raises(ValueError, match="query_embedding"):
         validate_action_args(ToolIntent.retrieve_chunks, {"query_embedding": bad_emb, "query": "x"})
 
 
-def test_validate_action_args_non_retrieve_chunks_is_noop():
+def test_validate_action_args_non_retrieve_chunks_is_noop() -> None:
     """Non-retrieve_chunks intents pass unconditionally (no SQL reach)."""
     validate_action_args(ToolIntent.retrieve_caselaw, {"top_k": -999, "query_embedding": "bad"})
     validate_action_args(ToolIntent.call_mcp_tool, {"top_k": -1})

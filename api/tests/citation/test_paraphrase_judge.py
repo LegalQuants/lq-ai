@@ -24,7 +24,6 @@ from dataclasses import dataclass
 import pytest
 
 from app.citation.verification import (
-    VerificationResult,
     verify_paraphrase,
 )
 from app.errors import GatewayUnreachable
@@ -151,12 +150,11 @@ async def test_yes_high_returns_verified_with_confidence_0_90() -> None:
 
     result = await verify_paraphrase(cand, doc, gateway=gw, judge_model="fast")
 
-    assert result == VerificationResult(
-        verified=True,
-        method="paraphrase_judge",
-        confidence=pytest.approx(0.90),
-        partial=False,
-    )
+    assert result.verified is True
+    assert result.method == "paraphrase_judge"
+    assert result.confidence == pytest.approx(0.90)
+    assert result.partial is False
+    assert result.tier_envelope is None
 
 
 @pytest.mark.unit

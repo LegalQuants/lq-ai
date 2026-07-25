@@ -100,7 +100,9 @@ async def client() -> AsyncIterator[GatewayClient]:
 @pytest.mark.parametrize("kind", ["inference", "tool"])
 @pytest.mark.parametrize("ack", ["a" * 64, "b" * 64, None])
 @respx.mock
-async def test_checked_calls_require_revision_acknowledgement(client, kind, ack):
+async def test_checked_calls_require_revision_acknowledgement(
+    client: GatewayClient, kind: str, ack: str | None
+) -> None:
     revision = "a" * 64
     path = "/v1/chat/completions" if kind == "inference" else "/v1/tools/source/search"
     payload = (
@@ -114,7 +116,7 @@ async def test_checked_calls_require_revision_acknowledgement(client, kind, ack)
         )
     )
 
-    async def call():
+    async def call() -> object:
         if kind == "inference":
             return await client.chat_completion(_request(), configuration_revision=revision)
         return await client.call_tool(
@@ -210,7 +212,7 @@ async def test_chat_completion_overrides_stream_flag_to_false(client: GatewayCli
         return_value=httpx.Response(200, json=_success_payload())
     )
     req = _request()
-    req.stream = True  # type: ignore[misc]
+    req.stream = True
 
     await client.chat_completion(req)
 

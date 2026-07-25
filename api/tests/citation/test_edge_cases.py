@@ -30,7 +30,7 @@ chat-send pipeline; pure-cascade tests live alongside
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -40,7 +40,7 @@ import pytest
 import pytest_asyncio
 import respx
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.citation.verification import (
@@ -188,7 +188,7 @@ def test_verify_exact_match_offsets_span_chunk_boundary_within_document() -> Non
 pytestmark = pytest.mark.integration
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -600,9 +600,9 @@ async def test_deleted_source_file_handled_gracefully_no_row_written(
         # Mimic the race: doc gets deleted between retrieval and
         # citation persistence.
         await db_session.execute(
-            DocumentChunk.__table__.delete().where(DocumentChunk.document_id == deleted_doc_id)
+            delete(DocumentChunk).where(DocumentChunk.document_id == deleted_doc_id)
         )
-        await db_session.execute(Document.__table__.delete().where(Document.id == deleted_doc_id))
+        await db_session.execute(delete(Document).where(Document.id == deleted_doc_id))
         await db_session.flush()
         return [captured_chunk_data]
 
