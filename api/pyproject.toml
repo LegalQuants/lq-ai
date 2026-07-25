@@ -196,6 +196,62 @@ markers = [
     "e2e: end-to-end tests via Playwright",
 ]
 
+# DE-229 — mutation testing (mutmut 3.x reads this section from pyproject.toml).
+#
+# Scope is a deliberate critical-module allowlist, not the whole package:
+# full-package mutation over a 237-file suite is hours-to-days, and the
+# value concentrates in the security/citation code whose test suites must
+# catch real defects, not just execute lines. Rationale, the score history,
+# and the local-run recipe live in docs/quality/mutation-scores.md.
+#
+# The allowlist is further restricted to modules whose covering tests are
+# DB-free. mutmut executes tests from a mutants/ sandbox copy, and the
+# Alembic seed migrations (0032/0033) resolve skills/ four parents above
+# the migration file — a layout that doesn't hold inside the sandbox, so
+# any Postgres-backed suite fails at session setup there. Consequence:
+# app/audit.py and the DB-tested citation modules (treatment*, cost,
+# ledger, authority) are OUT of scope for now; see the doc for the
+# follow-up. Do not add DB-bound suites to the test selection below.
+#
+# Runs nightly in .github/workflows/mutation.yml (never as a PR gate).
+# Local run: `mutmut run` from api/ — no DATABASE_URL needed.
+[tool.mutmut]
+source_paths = ["app"]
+only_mutate = [
+    # Fernet encryption helpers for provider keys / MCP tokens (ADR 0011).
+    "app/security/encryption.py",
+    # Citation Engine deterministic core (PRD §3.3): extraction →
+    # verification cascade (exact/tolerant/ensemble) + normalization,
+    # caselaw matching, and the judge prompt assembly.
+    "app/citation/normalization.py",
+    "app/citation/extraction.py",
+    "app/citation/verification.py",
+    "app/citation/caselaw.py",
+    "app/citation/judge_prompts.py",
+    "app/citation/authority_content_judge.py",
+]
+# Restrict the stats/clean runs to the DB-free suites that exercise the
+# allowlist — collecting all 237 test files per run would dominate the
+# runtime, and DB-bound suites break inside the sandbox (see above).
+pytest_add_cli_args_test_selection = [
+    "tests/citation/test_normalization.py",
+    "tests/citation/test_extraction.py",
+    "tests/citation/test_exact_match.py",
+    "tests/citation/test_tolerant_match.py",
+    "tests/citation/test_verify_cascade.py",
+    "tests/citation/test_verification_spans.py",
+    "tests/citation/test_ensemble.py",
+    "tests/citation/test_chunk_boundary.py",
+    "tests/citation/test_paraphrase_judge.py",
+    "tests/citation/test_caselaw_extraction.py",
+    "tests/citation/test_caselaw_matching.py",
+    "tests/citation/test_caselaw_verify.py",
+    "tests/citation/test_judge_prompts.py",
+    "tests/citation/test_authority_content_judge.py",
+    "tests/test_encryption.py",
+    "tests/test_mcp_encryption.py",
+]
+
 [tool.mypy]
 strict_optional = true
 warn_unused_ignores = true

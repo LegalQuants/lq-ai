@@ -5014,6 +5014,14 @@ The gateway `Router`'s `_tool_rate_limiter` (`gateway/app/router.py`) is a singl
 
 ## 10. Appendices
 
+#### DE-388 — Seed migrations resolve `skills/` relative to file layout, breaking sandboxed test runs
+
+**Priority:** P3 · **Effort:** S · **Status (2026-07-25): filed (found during DE-229 mutation-testing rollout).**
+
+Seed migrations `0032`/`0033` locate the built-in skills corpus by walking four parents up from the migration file — a layout assumption that holds in the repo but breaks in any sandboxed copy (mutmut's `mutants/` copy resolves it to a nonexistent `api/skills/`), which makes every Postgres-backed api suite fail at session setup under mutation testing and forced the DE-229 api allowlist down to DB-free-tested modules (excluding `app/audit.py`, `app/security/{passwords,jwt,totp}.py`, and the DB-tested citation modules from wave 1). Fix: resolve the corpus via an env override (e.g. `LQ_AI_SKILLS_DIR`) falling back to the current walk, set it in conftest; then widen the mutation allowlist to the excluded modules and re-baseline. Cheap, unblocks meaningful mutation coverage of the auth/audit surface.
+
+---
+
 ### Appendix A — Glossary
 
 - **agentskills.io format** — open standard for portable AI skills, compatible with Anthropic Claude Skills and Hermes Agent.

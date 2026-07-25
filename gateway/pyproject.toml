@@ -107,6 +107,37 @@ markers = [
     "slow: tests that take longer than 5s",
 ]
 
+# DE-229 — mutation testing (mutmut 3.x reads this section from pyproject.toml).
+#
+# Scope is a deliberate critical-module allowlist: the routing/policy
+# choke points and the Anonymization Layer — the gateway code whose test
+# suites must catch real defects (PRD §5.8). Rationale and score history:
+# docs/quality/mutation-scores.md.
+#
+# Runs nightly in .github/workflows/mutation.yml (never as a PR gate).
+# Local run: `mutmut run` from gateway/. The test selection below excludes
+# suites that resolve gateway.yaml.example via the repo root (e.g.
+# tests/test_inference_tier_floor.py): mutmut executes tests from its
+# mutants/ sandbox copy, where that repo-root-relative path breaks.
+[tool.mutmut]
+source_paths = ["app"]
+only_mutate = [
+    # Tier-Derivation + routing policy enforcement (PRD §3.13 / §4.4).
+    "app/router.py",
+    "app/tier_floor.py",
+    # Routing-log writer — the per-request audit choke point (PRD §1.5.2).
+    "app/routing_log.py",
+    # Anonymization Layer (PRD §4.7), incl. recognizers/.
+    "app/anonymization/*",
+]
+pytest_add_cli_args_test_selection = [
+    "tests/test_tier_floor.py",
+    "tests/test_router.py",
+    "tests/test_route_tool_call.py",
+    "tests/test_routing_log.py",
+    "tests/anonymization",
+]
+
 [tool.mypy]
 strict = true
 warn_unused_ignores = true
