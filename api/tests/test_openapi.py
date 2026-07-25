@@ -156,6 +156,9 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/tabular/executions/{execution_id}/cancel",
         # M3-C4a — XLSX/CSV export.
         "/api/v1/tabular/executions/{execution_id}/export",
+        # DE-304 / ADR 0026 — bulk operations (preview + create).
+        "/api/v1/tabular/executions/{execution_id}/bulk-ops/preview-cost",
+        "/api/v1/tabular/executions/{execution_id}/bulk-ops",
         # M3-D1 — slack-bridge persistence surface (bearer-token, no user)
         "/api/v1/integrations/slack/workspaces",
         # M3-D3 — teams-bridge persistence surface (bearer-token, no user)
@@ -342,7 +345,10 @@ async def test_openapi_paths_match_sketch() -> None:
     # Donna #3 adds two new paths (137 -> 139):
     # /api/v1/admin/tool-providers
     # /api/v1/admin/tool-providers/{provider_type}
-    assert len(actual) == 139
+    # DE-304 / ADR 0026 adds two new paths (139 -> 141):
+    # /api/v1/tabular/executions/{execution_id}/bulk-ops/preview-cost
+    # /api/v1/tabular/executions/{execution_id}/bulk-ops
+    assert len(actual) == 141
 
 
 @pytest.mark.unit

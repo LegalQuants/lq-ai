@@ -1518,11 +1518,15 @@ Substrate for the Tabular / Multi-Document Review surface
 execution walks a `documents × columns` grid and produces a
 row-per-document by column-per-spec result, run as a LangGraph workflow
 on the existing `arq:m3a6` queue (Decision C-3 from the Phase C prep
-doc: reuse the queue rather than add a second worker container). One
-table, introduced by migration `0036_tabular_executions.py`:
+doc: reuse the queue rather than add a second worker container). Two
+tables (migrations `0036_tabular_executions.py` and
+`0066_tabular_bulk_ops.py`):
 
 * `tabular_executions` — one row per execution; persists the inputs +
   status + assembled grid so the result view can re-render a week later.
+* `tabular_bulk_ops` — one row per bulk operation over a completed
+  execution (DE-304 / ADR 0026); persists the op params + per-item
+  results causally linked to the parent execution.
 
 ### `tabular_executions` (M3)
 
@@ -1600,6 +1604,66 @@ populated once status is `completed` (may carry partial output on
 
 Soft delete via `deleted_at` matches the `playbooks.deleted_at` posture
 from M3-A6's migration 0034.
+
+### `tabular_bulk_ops` (DE-304 / [ADR 0026](adr/0026-tabular-bulk-operations.md))
+
+One row per bulk operation over a *completed* tabular execution —
+`redline_rows` (one redline-style review memo per grid row, combined
+into a redline report) or `summarize_column` (one memo synthesizing a
+chosen column across all rows). Introduced by migration
+`0066_tabular_bulk_ops.py`. Per ADR 0026 D1 these land in a dedicated
+table rather than Decision C-9's sibling-execution rows: the outputs
+are not grids, so they don't fit `tabular_executions.results`
+(`parent_execution_id` is retained unchanged for future grid-shaped
+bulk ops).
+
+```sql
+CREATE TABLE tabular_bulk_ops (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    execution_id        UUID NOT NULL REFERENCES tabular_executions(id) ON DELETE CASCADE,
+    user_id             UUID REFERENCES users(id) ON DELETE SET NULL,
+    kind                TEXT NOT NULL,                       -- 'redline_rows' | 'summarize_column'
+    status              TEXT NOT NULL DEFAULT 'pending',
+    params              JSONB NOT NULL DEFAULT '{}'::jsonb,  -- op params snapshotted at request time (e.g. column_name)
+    results             JSONB,                               -- {schema_version, items, summary} once terminal
+    confirmed_cost_usd  NUMERIC(10,4),                       -- operator-confirmed preview echo (Decision C-5 idiom)
+    cost_actual_usd     NUMERIC(10,4),
+    error_text          TEXT,                                -- populated when status='failed'
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    started_at          TIMESTAMPTZ,
+    completed_at        TIMESTAMPTZ,
+
+    CONSTRAINT chk_tabular_bulk_ops_kind
+        CHECK (kind IN ('redline_rows','summarize_column')),
+    CONSTRAINT chk_tabular_bulk_ops_status
+        CHECK (status IN ('pending','running','completed','failed')),
+    CONSTRAINT fk_tabular_bulk_ops_execution_id
+        FOREIGN KEY (execution_id) REFERENCES tabular_executions(id) ON DELETE CASCADE,
+    CONSTRAINT fk_tabular_bulk_ops_user_id
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+-- The execution detail read-side lists an execution's ops recent-first.
+CREATE INDEX idx_tabular_bulk_ops_execution_recent
+    ON tabular_bulk_ops (execution_id, created_at DESC);
+```
+
+`execution_id` is the causal-linkage column (ADR 0026 D1): an op
+cannot exist without its parent execution, so the FK cascades on
+delete. No soft delete of its own — ops live and die with their
+parent, which itself soft-deletes.
+
+Status lifecycle: `pending → running → completed | failed`. Per ADR
+0026 D4, `completed` includes batches with per-item failures — failed
+items are persisted inside `results.items[*]` (`status='failed'` +
+`error`) and rendered as failures; `failed` is reserved for
+whole-batch orchestration crashes.
+
+`results` shape (`schema_version` currently `de304-v1`):
+`{items: [{document_id, document_name, status, output_text, error,
+cost_usd}], summary: {total_items, failed_items}}`. `redline_rows`
+yields one item per parent grid row in grid-row order;
+`summarize_column` yields a single item with `document_id = NULL`.
 
 ---
 

@@ -40,6 +40,9 @@ Registered functions:
   (M3-A6) — Easy Playbook generation pipeline.
 * :func:`app.workers.tabular_worker.tabular_execution_job`
   (M3-C2) — Tabular Review execution pipeline.
+* :func:`app.tabular.bulk_ops.tabular_bulk_op_job`
+  (DE-304 / ADR 0026) — Tabular bulk operations (redline report /
+  column memo) over a completed execution.
 * :func:`app.workers.autonomous_worker.autonomous_session_job`
   (M4-A2) — Autonomous Session execution pipeline.
 
@@ -70,6 +73,7 @@ from typing import Any, ClassVar
 
 from app.config import get_settings
 from app.db.session import dispose_engine
+from app.tabular.bulk_ops import tabular_bulk_op_job
 from app.workers.autonomous_worker import (
     autonomous_idle_watchdog,
     autonomous_schedule_dispatcher,
@@ -233,6 +237,7 @@ class WorkerSettings:
         noop_job,
         easy_playbook_generation_job,
         tabular_execution_job,
+        tabular_bulk_op_job,
         autonomous_session_job,
     ]
     queue_name: ClassVar[str] = M3_PLAYBOOK_QUEUE_NAME
