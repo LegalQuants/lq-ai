@@ -263,7 +263,7 @@ The Compliance Alignment Pack at [`docs/compliance/`](compliance/) is a document
 | Threat model (STRIDE) / Architecture / Cryptography / Audit-logging / Encrypted-keys / Dependencies | M1 | `docs/security/*.md`, `docs/architecture.md` |
 | Security policy + coordinated disclosure | M1 | [`SECURITY.md`](../SECURITY.md) |
 | SOC2 / ISO 27001 / ISO 42001 / GDPR / HIPAA / FedRAMP alignment | stub | `docs/compliance/README.md` describes the format; per-framework docs land incrementally |
-| OWASP LLM Top 10 / NIST AI RMF profiles | not yet (community-friendly) | mini-PRDs at `docs/contribute/mini-prds/` |
+| OWASP LLM Top 10 / NIST AI RMF profiles | OWASP mapping drafted (AI-drafted, pending professional review); NIST AI RMF not yet | `docs/compliance/owasp-llm-top10.md`; NIST mini-PRD at `docs/contribute/mini-prds/` |
 | Procurement Pack (SIG Lite + CAIQ) | starter | `docs/procurement/sig-lite.md`; full pack [DE-086](PRD.md#9-deferred-enhancements-and-identified-future-work) |
 
 ---
