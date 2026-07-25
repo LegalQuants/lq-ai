@@ -298,6 +298,98 @@ async def test_unattributed_fabricated_quote_still_dropped(
     assert await _rows_for(db_session, mid) == []
 
 
+_CFR_BODY = (
+    "Environmental documents shall concentrate on the issues that are truly "
+    "significant to the action in question, rather than amassing needless detail."
+)
+_CFR_PACKAGE_ID = "CFR-2023-title40"
+
+
+def _cfr_rec(ref: str = _CFR_PACKAGE_ID) -> ToolSourceRecord:
+    return ToolSourceRecord(
+        source_kind="regulation",
+        label="40 CFR 1500.1",
+        subtitle="Purpose",
+        url="u",
+        external_ref=ref,
+        provider="govinfo",
+        tool="get_authority",
+    )
+
+
+@pytest.mark.asyncio
+async def test_misattributed_verbatim_quote_fails_and_flags_gate(
+    db_session: AsyncSession, fake_storage: dict[str, bytes]
+) -> None:
+    """F6: a quote verbatim-present in fetched authority B (the CFR body) but
+    attributed by its nearby cite to fetched authority A (title 17) persists a
+    FAIL row against A — verification is scoped to the ATTRIBUTED authority,
+    so a match in a different fetched body no longer exempts the passage."""
+    mid, _cid = await _message_and_chat(db_session)
+    await _seed_body(db_session)  # fetched: title 17 (_BODY)
+    await store_authority_text(
+        db_session, source_type="govinfo", external_ref=_CFR_PACKAGE_ID, text=_CFR_BODY
+    )
+    text = f"Under 17 U.S.C. § 107:\n\n> {_CFR_BODY}\n"
+    n = await verify_and_persist_authority_citations(
+        db_session,
+        message_id=mid,
+        assistant_text=text,
+        tool_sources=[_govinfo_rec(), _cfr_rec()],
+        gateway=None,
+    )
+    # One PASS row against the CFR body it actually matched, plus one FAIL
+    # row against the Copyright Act it is attributed to.
+    assert n == 2
+    rows = await _rows_for(db_session, mid)
+    fails = [r for r in rows if r.verified is False]
+    assert len(fails) == 1
+    assert fails[0].external_ref == _PACKAGE_ID  # the attributed authority
+    assert fails[0].verification_method is None
+    assert fails[0].source_text == _CFR_BODY
+    passes = [r for r in rows if r.verified is True]
+    assert len(passes) == 1
+    assert passes[0].external_ref == _CFR_PACKAGE_ID
+
+    await assemble_ledger_entries(db_session, message_id=mid)
+    gate = await compute_and_record_gate(db_session, message_id=mid)
+    assert gate is not None
+    assert gate.gate_status == "flagged"
+
+
+@pytest.mark.asyncio
+async def test_body_load_failure_attributed_quote_fails_and_flags_gate(
+    db_session: AsyncSession, fake_storage: dict[str, bytes]
+) -> None:
+    """F7: when the fetched authority's body fails to load (object storage
+    error on download), an attributed fabricated quote persists a FAIL row
+    instead of vanishing — "couldn't check" never becomes "passed"."""
+    mid, _cid = await _message_and_chat(db_session)
+    await _seed_body(db_session)
+    fake_storage.clear()  # object storage errors on the cached-body download
+    text = f"Under 17 U.S.C. § 107:\n\n> {_FABRICATED}\n"
+    n = await verify_and_persist_authority_citations(
+        db_session,
+        message_id=mid,
+        assistant_text=text,
+        tool_sources=[_govinfo_rec()],
+        gateway=None,
+    )
+    assert n == 1
+    rows = await _rows_for(db_session, mid)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.verified is False
+    assert row.verification_method is None
+    assert row.external_ref == _PACKAGE_ID
+    assert row.source_text == _FABRICATED
+
+    await assemble_ledger_entries(db_session, message_id=mid)
+    gate = await compute_and_record_gate(db_session, message_id=mid)
+    assert gate is not None
+    assert gate.gate_status == "flagged"
+
+
 @pytest.mark.asyncio
 async def test_attribution_to_non_fetched_authority_dropped(
     db_session: AsyncSession, fake_storage: dict[str, bytes]
