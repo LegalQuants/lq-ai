@@ -5014,6 +5014,14 @@ The gateway `Router`'s `_tool_rate_limiter` (`gateway/app/router.py`) is a singl
 
 ## 10. Appendices
 
+#### DE-389 — OCR normalization layer violates its documented idempotence contract
+
+**Priority:** P2 · **Effort:** S · **Status (2026-07-25): filed (found by the DE-230 property suite; pinned as strict xfail).**
+
+`api/app/citation/normalization.py`'s OCR confusion layer (`was_ocrd=True`) documents idempotence "for every input", and the Stage-2 tolerant verifier relies on it — but the `l→1`/`O→0` substitutions run as single passes, and a substitution can create a new digit adjacency that only a second pass would rewrite: `normalize("Ol5") == "O15"` while `normalize("O15") == "015"` (likewise `ll5→l15→115`, `5lO→51O→510`). Both comparison sides get the same single pass today, so per-run verification outcomes stay internally consistent; the risk is cross-run canonical-form drift for chained-confusion sequences in OCR'd documents. Pinned by `api/tests/property/test_normalization_properties.py::test_ocr_layer_idempotence_violation_is_pinned` (strict xfail, 4 cases). Fix requires a maintainer semantics call — fixed-point iteration or rule reordering both change verifier-visible canonical forms for OCR'd documents, so the pinned cases must be re-baselined deliberately, not silently.
+
+---
+
 ### Appendix A — Glossary
 
 - **agentskills.io format** — open standard for portable AI skills, compatible with Anthropic Claude Skills and Hermes Agent.
