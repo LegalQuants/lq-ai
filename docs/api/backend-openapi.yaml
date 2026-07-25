@@ -6289,15 +6289,39 @@ components:
 
             Each cell carries a ``citations`` array. A tabular cell
             ``Citation`` is distinct from the chat ``Citation`` schema; it
-            has: ``citation_id`` (uuid; deterministic display-only id —
-            DE-309), ``document_id`` (uuid; the source ``documents.id``),
-            ``chunk_id`` (uuid, nullable; the cited ``document_chunks.id``),
-            and ``confidence`` (one of ``high|medium|low|failed``). Each
-            citation additionally carries ``verification_method`` (string,
-            nullable) — the Citation-Engine verification method
-            (``ensemble_strict`` / ``ensemble_majority``), or ``null`` when
-            the cell's column is not ensemble-verified or verification did
-            not confirm support. It is mirrored from the cell-level value.
+            has: ``citation_id`` (uuid), ``document_id`` (uuid; the source
+            ``documents.id``), ``chunk_id`` (uuid, nullable; the cited
+            ``document_chunks.id``), and ``confidence`` (one of
+            ``high|medium|low|failed``). Each citation additionally
+            carries ``verification_method`` (string, nullable).
+
+            Since DE-309 the executor mints real offset-bearing
+            provenance rows (``tabular_cell_citations``): for each
+            grounded cell whose extracted value was deterministically
+            located in a cited chunk's canonical text, one row per
+            (cell, chunk) hit. On ``GET /api/v1/tabular/executions/{id}``
+            an execution with minted rows serves those as the cell's
+            citations — ``citation_id`` is the real row id, plus:
+
+            - ``source_offset_start`` / ``source_offset_end`` (integer,
+              nullable): char offsets of the located value inside the
+              cited chunk's content (= the citation's ``source_text``),
+              so ``source_text[start:end]`` re-derives the value;
+            - ``verification_method``: the cascade method that
+              established the offsets (e.g. ``exact_match``);
+            - ``verification_confidence`` (number, nullable): the
+              cascade's confidence in ``[0, 1]``.
+
+            Fail-closed: a cell whose value could not be located has NO
+            minted rows and serves an EMPTY ``citations`` array (renders
+            unverified) — never a fabricated offset. Executions predating
+            migration 0066 (no minted rows; per-execution presence check)
+            fall back to the legacy bridge: a deterministic display-only
+            ``citation_id = uuid5(NS, chunk_id)`` with ``null`` offset
+            fields and ``verification_method`` mirrored from the
+            cell-level ensemble value (``ensemble_strict`` /
+            ``ensemble_majority``, or ``null``). The export path always
+            renders bridge ids (export shape unchanged by DE-309).
 
             On ``GET /api/v1/tabular/executions/{id}`` (only) each citation
             is additionally enriched at read time so the frontend can open

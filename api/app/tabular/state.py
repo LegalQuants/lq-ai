@@ -83,6 +83,10 @@ class TabularExecutionState(TypedDict, total=False):
       request time).
     * ``judge_model`` — alias the gateway resolves for cell-extraction
       calls (typically ``"smart"``).
+    * ``confirmed_cost_usd`` — the cost ceiling the operator confirmed
+      at kickoff (``tabular_executions.cost_estimate_usd``), as a
+      Decimal string for state serializability. ``None`` when no cost
+      was confirmed (no mid-run ensemble ceiling applies — DE-331).
 
     Fields populated by intermediate nodes:
 
@@ -91,6 +95,13 @@ class TabularExecutionState(TypedDict, total=False):
     * ``per_cell_results`` — accumulated by :func:`extract_cells_node`;
       grouped by document_id by :func:`aggregate_node` into the final
       ``tabular_executions.results`` JSONB payload.
+    * ``ensemble_halted_at_ceiling`` / ``ensemble_halted_cells`` —
+      set by :func:`extract_cells_node` when the mid-run ensemble cost
+      ceiling (DE-331) halted Stage-4 verification for the run's
+      remaining ensemble-eligible cells; surfaced by
+      :func:`aggregate_node` in the results payload so the UI can state
+      honestly which cells skipped verification. Degrade-only:
+      extraction itself always continues.
 
     Failure state:
 
@@ -102,9 +113,12 @@ class TabularExecutionState(TypedDict, total=False):
     execution_id: str
     columns: list[_ColumnSpecState]
     judge_model: str
+    confirmed_cost_usd: str | None
 
     documents: list[_DocumentSnapshot]
     per_cell_results: list[_CellResultState]
+    ensemble_halted_at_ceiling: bool
+    ensemble_halted_cells: int
     error: str | None
 
 
