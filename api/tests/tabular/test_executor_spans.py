@@ -218,6 +218,7 @@ async def test_executor_emits_tabular_execute_and_cell_spans(
     )
     exec_span = execute_spans[0]
 
+    assert exec_span.attributes is not None
     assert exec_span.attributes.get("tabular.document_count") == 1, (
         f"tabular.document_count mismatch: {exec_span.attributes.get('tabular.document_count')!r}"
     )
@@ -232,6 +233,7 @@ async def test_executor_emits_tabular_execute_and_cell_spans(
         f"All span names: {span_names}"
     )
     for cell_span in cell_spans:
+        assert cell_span.attributes is not None
         assert cell_span.attributes.get("tabular.document.id") is not None, (
             "tabular.document.id attribute missing from cell span"
         )

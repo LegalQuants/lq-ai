@@ -19,9 +19,10 @@ from __future__ import annotations
 import contextlib
 import json as _json
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from typing import Literal
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -52,7 +53,7 @@ _DUMMY_UUID = uuid.UUID("00000000-0000-4000-8000-000000000000")
 # ---------------------------------------------------------------------------
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -129,7 +130,7 @@ def _parse_sse_frames(body: bytes) -> list[dict]:
 def _make_tool_spec(
     *,
     function_name: str = "mcp__files__delete_doc",
-    kind: str = "mcp",
+    kind: Literal["research", "mcp", "authority"] = "mcp",
     provider: str = "files",
     tool: str = "delete_doc",
     destructive: bool = True,
@@ -288,9 +289,7 @@ async def test_approve_executes_tool_and_streams_loop_final(
     )
 
     # Assert pending row is resolved.
-    await db_session.refresh(
-        await db_session.get(ChatPendingToolCall, pending_id)  # type: ignore[arg-type]
-    )
+    await db_session.refresh(await db_session.get(ChatPendingToolCall, pending_id))
     pending_row = await db_session.get(ChatPendingToolCall, pending_id)
     assert pending_row is not None
     assert pending_row.status == "resolved", f"Expected resolved, got {pending_row.status!r}"

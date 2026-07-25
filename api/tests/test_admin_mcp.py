@@ -15,7 +15,7 @@ Covers:
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from typing import Any
 
 import pytest
@@ -37,7 +37,7 @@ from app.security import create_access_token, hash_password
 # ---------------------------------------------------------------------------
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -231,6 +231,7 @@ async def test_refresh_returns_tools_and_writes_audit(
     )
     assert len(audit_rows) == 1
     assert audit_rows[0].resource_type == "mcp_server"
+    assert audit_rows[0].details is not None
     assert audit_rows[0].details["tool_count"] == 1
 
 
@@ -320,6 +321,7 @@ async def test_patch_tool_enabled_flips_and_audits(
     )
     assert len(audit_rows) == 1
     assert audit_rows[0].resource_type == "mcp_tool"
+    assert audit_rows[0].details is not None
     assert audit_rows[0].details["enabled"] is False
 
 
@@ -357,6 +359,7 @@ async def test_patch_tool_enable_writes_enabled_audit(
     )
     assert len(audit_rows) == 1
     assert audit_rows[0].resource_type == "mcp_tool"
+    assert audit_rows[0].details is not None
     assert audit_rows[0].details["enabled"] is True
 
 

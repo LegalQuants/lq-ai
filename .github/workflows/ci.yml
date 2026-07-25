@@ -116,7 +116,8 @@ jobs:
         run: ruff format --check api scripts
 
       - name: mypy (standard mode)
-        run: mypy app
+        # DE-284 — tests/ are type-checked alongside app/.
+        run: mypy app tests
 
       - name: pytest
         run: pytest -q

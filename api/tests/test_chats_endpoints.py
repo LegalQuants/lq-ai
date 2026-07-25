@@ -12,7 +12,8 @@ from __future__ import annotations
 
 import json as _json
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
+from typing import Any
 
 import httpx
 import pytest
@@ -33,7 +34,7 @@ GATEWAY_BASE = "http://test-gateway"
 GATEWAY_KEY = "test-gw-key"
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -705,7 +706,7 @@ async def test_streaming_mid_stream_failure_persists_partial_row_with_error_code
         headers={"Authorization": f"Bearer {token}"},
     ) as resp:
         assert resp.status_code == 200
-        events: list[dict[str, object]] = []
+        events: list[dict[str, Any]] = []
         async for line in resp.aiter_lines():
             line = line.strip()
             if not line:

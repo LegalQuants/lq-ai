@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import AsyncIterator, Callable
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.citation.gate import compute_and_record_gate
 from app.citation.ledger import assemble_ledger_entries
@@ -20,15 +22,15 @@ from app.security import create_access_token, hash_password
 pytestmark = pytest.mark.integration
 
 
-def _override_get_db(session):
-    async def _dep():
+def _override_get_db(session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
+    async def _dep() -> AsyncIterator[AsyncSession]:
         yield session
 
     return _dep
 
 
 @pytest_asyncio.fixture
-async def seeded(db_session):
+async def seeded(db_session: AsyncSession) -> tuple[User, Chat, Message]:
     user = User(
         email=f"led-{uuid.uuid4().hex[:8]}@example.com",
         hashed_password=hash_password("pw"),
@@ -71,7 +73,7 @@ async def seeded(db_session):
 
 
 @pytest_asyncio.fixture
-async def client(db_session):
+async def client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
     app.dependency_overrides[get_db] = _override_get_db(db_session)
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
@@ -79,13 +81,15 @@ async def client(db_session):
     app.dependency_overrides.pop(get_db, None)
 
 
-def _auth(user):
+def _auth(user: User) -> dict[str, str]:
     token = create_access_token(user.id, user.email, is_admin=user.is_admin)
     return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.mark.asyncio
-async def test_ledger_returns_resolved_entries(client, seeded):
+async def test_ledger_returns_resolved_entries(
+    client: AsyncClient, seeded: tuple[User, Chat, Message]
+) -> None:
     user, chat, _msg = seeded
     r = await client.get(f"/api/v1/chats/{chat.id}/ledger", headers=_auth(user))
     assert r.status_code == 200
@@ -99,7 +103,9 @@ async def test_ledger_returns_resolved_entries(client, seeded):
 
 
 @pytest.mark.asyncio
-async def test_ledger_message_id_filter(client, seeded):
+async def test_ledger_message_id_filter(
+    client: AsyncClient, seeded: tuple[User, Chat, Message]
+) -> None:
     user, chat, msg = seeded
     r = await client.get(f"/api/v1/chats/{chat.id}/ledger?message_id={msg.id}", headers=_auth(user))
     assert r.status_code == 200
@@ -111,7 +117,9 @@ async def test_ledger_message_id_filter(client, seeded):
 
 
 @pytest.mark.asyncio
-async def test_ledger_cross_user_404(client, db_session, seeded):
+async def test_ledger_cross_user_404(
+    client: AsyncClient, db_session: AsyncSession, seeded: tuple[User, Chat, Message]
+) -> None:
     _, chat, _ = seeded
     other = User(
         email=f"other-{uuid.uuid4().hex[:8]}@example.com",
@@ -125,7 +133,9 @@ async def test_ledger_cross_user_404(client, db_session, seeded):
 
 
 @pytest.mark.asyncio
-async def test_ledger_auditor_can_read_cross_user_and_is_audited(client, db_session, seeded):
+async def test_ledger_auditor_can_read_cross_user_and_is_audited(
+    client: AsyncClient, db_session: AsyncSession, seeded: tuple[User, Chat, Message]
+) -> None:
     owner, chat, _msg = seeded
     auditor = User(
         email=f"aud-{uuid.uuid4().hex[:8]}@example.com",
@@ -153,11 +163,14 @@ async def test_ledger_auditor_can_read_cross_user_and_is_audited(client, db_sess
         .one()
     )
     assert row.user_id == auditor.id
+    assert row.details is not None
     assert row.details["viewed_user_id"] == str(owner.id)
 
 
 @pytest.mark.asyncio
-async def test_ledger_member_cross_user_still_404_and_not_audited(client, db_session, seeded):
+async def test_ledger_member_cross_user_still_404_and_not_audited(
+    client: AsyncClient, db_session: AsyncSession, seeded: tuple[User, Chat, Message]
+) -> None:
     _owner, chat, _msg = seeded
     other = User(
         email=f"other2-{uuid.uuid4().hex[:8]}@example.com",
@@ -185,7 +198,9 @@ async def test_ledger_member_cross_user_still_404_and_not_audited(client, db_ses
 
 
 @pytest.mark.asyncio
-async def test_ledger_owner_read_not_audited(client, db_session, seeded):
+async def test_ledger_owner_read_not_audited(
+    client: AsyncClient, db_session: AsyncSession, seeded: tuple[User, Chat, Message]
+) -> None:
     owner, chat, _msg = seeded
     r = await client.get(f"/api/v1/chats/{chat.id}/ledger", headers=_auth(owner))
     assert r.status_code == 200
@@ -205,7 +220,7 @@ async def test_ledger_owner_read_not_audited(client, db_session, seeded):
 
 
 @pytest.mark.asyncio
-async def test_ledger_non_uuid_400(client, seeded):
+async def test_ledger_non_uuid_400(client: AsyncClient, seeded: tuple[User, Chat, Message]) -> None:
     # _validate_chat_id raises ValidationError (HTTP 400), matching the pattern
     # used by all other chat endpoints (e.g. send_message, get_citations).
     user, _, _ = seeded
@@ -214,7 +229,9 @@ async def test_ledger_non_uuid_400(client, seeded):
 
 
 @pytest.mark.asyncio
-async def test_ledger_includes_gate(client, db_session, seeded):
+async def test_ledger_includes_gate(
+    client: AsyncClient, db_session: AsyncSession, seeded: tuple[User, Chat, Message]
+) -> None:
     user, chat, msg = seeded
     await compute_and_record_gate(db_session, message_id=msg.id)
     await db_session.flush()

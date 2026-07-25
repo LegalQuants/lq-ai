@@ -22,7 +22,7 @@ What's covered here:
 from __future__ import annotations
 
 import hashlib
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
 from unittest.mock import patch
 
@@ -194,7 +194,7 @@ def fake_s3() -> FakeS3Client:
 
 
 @pytest.fixture(autouse=True)
-def _patch_s3_client(fake_s3: FakeS3Client):
+def _patch_s3_client(fake_s3: FakeS3Client) -> Iterator[None]:
     """Monkey-patch ``app.storage.s3_client`` to yield the fake."""
 
     from contextlib import asynccontextmanager

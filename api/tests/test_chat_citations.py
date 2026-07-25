@@ -23,7 +23,7 @@ Negative cases:
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -58,7 +58,7 @@ GATEWAY_KEY = "test-gw-key"
 # ---------------------------------------------------------------------------
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -1174,6 +1174,7 @@ async def test_get_citations_auditor_can_read_cross_user_and_is_audited(
         .one()
     )
     assert row.user_id == auditor.id
+    assert row.details is not None
     assert row.details["viewed_user_id"] == str(owner_user.id)
 
 

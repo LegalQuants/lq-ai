@@ -15,7 +15,7 @@ from app.autonomous.enums import PHASE_GRANTS, Phase, ToolIntent
 pytestmark = pytest.mark.asyncio
 
 
-def test_plan_is_a_tool_intent_granted_in_analysis():
+def test_plan_is_a_tool_intent_granted_in_analysis() -> None:
     assert ToolIntent.plan == "plan"
     assert ToolIntent.plan in PHASE_GRANTS[Phase.analysis]
     # not granted elsewhere
@@ -23,11 +23,11 @@ def test_plan_is_a_tool_intent_granted_in_analysis():
     assert ToolIntent.plan not in PHASE_GRANTS[Phase.intake]
 
 
-def test_plan_is_an_inference_intent():
+def test_plan_is_an_inference_intent() -> None:
     assert ToolIntent.plan in _INFERENCE_INTENTS
 
 
-async def test_estimate_tool_cost_treats_plan_as_inference():
+async def test_estimate_tool_cost_treats_plan_as_inference() -> None:
     # db=None → estimator returns its conservative default (non-None Decimal), not 0
     cost = await estimate_tool_cost(ToolIntent.plan, {"model": "fast"}, None)
     from decimal import Decimal

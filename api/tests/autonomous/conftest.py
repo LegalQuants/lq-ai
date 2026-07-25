@@ -373,7 +373,7 @@ async def session_without_target(
     return await _make_session(db_session, user=user, params={})
 
 
-@pytest_asyncio.fixture
+@pytest.fixture
 def sample_chunks() -> list[dict[str, Any]]:
     """A small chunks list shaped like ``_handle_retrieve_chunks`` output.
 
