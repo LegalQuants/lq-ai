@@ -26,9 +26,21 @@ import {
 	buildPayload,
 	serializeDraft,
 	loadDraft,
+	DEFAULT_TABLE_BODY,
 	type WizardFormState
 } from '../components/SkillWizard.svelte';
+import type { EditableColumn } from '../skills/tableColumns';
 import { kebab } from '../util/slug';
+
+function makeColumn(overrides: Partial<EditableColumn> = {}): EditableColumn {
+	return {
+		name: 'Term',
+		query: 'What is the term of this agreement?',
+		ensemble_verification: null,
+		minimum_inference_tier: null,
+		...overrides
+	};
+}
 
 function makeState(overrides: Partial<WizardFormState> = {}): WizardFormState {
 	return {
@@ -41,6 +53,8 @@ function makeState(overrides: Partial<WizardFormState> = {}): WizardFormState {
 		version: '1.0.0',
 		scope: 'user',
 		ownerTeamId: '',
+		outputMode: 'prose',
+		columns: [makeColumn()],
 		saving: false,
 		...overrides
 	};
@@ -204,6 +218,37 @@ describe('SkillWizard.canSave', () => {
 	it('is false while saving is in flight', () => {
 		expect(canSave(makeState({ saving: true }))).toBe(false);
 	});
+
+	// --- DE-297 table mode -------------------------------------------------
+
+	it('table mode: valid columns satisfy the gate even with an empty body', () => {
+		expect(canSave(makeState({ outputMode: 'table', body: '' }))).toBe(true);
+	});
+
+	it('table mode: false with zero columns (backend min-one-column parity)', () => {
+		expect(canSave(makeState({ outputMode: 'table', columns: [] }))).toBe(false);
+	});
+
+	it('table mode: false when a column query is empty', () => {
+		expect(
+			canSave(makeState({ outputMode: 'table', columns: [makeColumn({ query: '  ' })] }))
+		).toBe(false);
+	});
+
+	it('table mode: false when a column tier is out of range', () => {
+		expect(
+			canSave(
+				makeState({
+					outputMode: 'table',
+					columns: [makeColumn({ minimum_inference_tier: 6 })]
+				})
+			)
+		).toBe(false);
+	});
+
+	it('prose mode ignores invalid columns state entirely', () => {
+		expect(canSave(makeState({ outputMode: 'prose', columns: [] }))).toBe(true);
+	});
 });
 
 describe('SkillWizard.buildPayload', () => {
@@ -288,6 +333,55 @@ describe('SkillWizard.buildPayload', () => {
 		const payload = buildPayload(makeState({ version: '2.1.0' }), null);
 		expect(payload.version).toBe('2.1.0');
 	});
+
+	// --- DE-297 table mode -------------------------------------------------
+
+	it('prose mode sends no frontmatter_extra', () => {
+		expect(buildPayload(makeState(), null).frontmatter_extra).toBeUndefined();
+	});
+
+	it('table mode persists frontmatter_extra.output_format=table + serialized columns', () => {
+		const payload = buildPayload(
+			makeState({
+				outputMode: 'table',
+				columns: [
+					makeColumn(),
+					makeColumn({
+						name: 'Governing law',
+						query: 'Which law governs?',
+						ensemble_verification: true,
+						minimum_inference_tier: 4
+					})
+				]
+			}),
+			null
+		);
+		expect(payload.frontmatter_extra).toEqual({
+			output_format: 'table',
+			columns: [
+				{ name: 'Term', query: 'What is the term of this agreement?' },
+				{
+					name: 'Governing law',
+					query: 'Which law governs?',
+					ensemble_verification: true,
+					minimum_inference_tier: 4
+				}
+			]
+		});
+	});
+
+	it('table mode falls back to the documented placeholder body when body is blank', () => {
+		const payload = buildPayload(makeState({ outputMode: 'table', body: '   ' }), null);
+		expect(payload.body).toBe(DEFAULT_TABLE_BODY);
+	});
+
+	it('table mode keeps an author-written body verbatim', () => {
+		const payload = buildPayload(
+			makeState({ outputMode: 'table', body: '# My grid notes' }),
+			null
+		);
+		expect(payload.body).toBe('# My grid notes');
+	});
 });
 
 describe('SkillWizard.serializeDraft / loadDraft (round-trip)', () => {
@@ -323,6 +417,18 @@ describe('SkillWizard.serializeDraft / loadDraft (round-trip)', () => {
 			version: '1.0.0',
 			scope: 'user',
 			ownerTeamId: ''
+		});
+	});
+
+	it('round-trips the DE-297 table-mode state (outputMode + columns)', () => {
+		const state = makeState({
+			outputMode: 'table',
+			columns: [makeColumn({ minimum_inference_tier: 3 })]
+		});
+		const restored = loadDraft(JSON.stringify(serializeDraft(state)));
+		expect(restored).toMatchObject({
+			outputMode: 'table',
+			columns: [makeColumn({ minimum_inference_tier: 3 })]
 		});
 	});
 

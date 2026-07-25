@@ -17,6 +17,16 @@
 
 	import { userSkillsApi, skillsApi, teamsApi } from '$lib/lq-ai/api';
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
+	import ColumnEditor from '$lib/lq-ai/components/ColumnEditor.svelte';
+	import {
+		buildFrontmatterExtra,
+		columnsFromRaw,
+		modeFromExtra,
+		newEditableColumn,
+		validateColumns,
+		type EditableColumn,
+		type SkillOutputMode
+	} from '$lib/lq-ai/skills/tableColumns';
 	import type { UserSkill, SkillSummary, TeamSummary } from '$lib/lq-ai/types';
 
 	let row: UserSkill | null = null;
@@ -30,6 +40,10 @@
 	let version = '';
 	let tagsInput = '';
 	let body = '';
+	// DE-297 — table-mode authoring state, seeded from frontmatter_extra.
+	let outputMode: SkillOutputMode = 'prose';
+	let columns: EditableColumn[] = [newEditableColumn()];
+	let showColumnErrors = false;
 
 	let submitting = false;
 	let submitError: string | null = null;
@@ -59,6 +73,11 @@
 			version = skill.version;
 			tagsInput = (skill.tags ?? []).join(', ');
 			body = skill.body;
+			outputMode = modeFromExtra(skill.frontmatter_extra);
+			const loadedColumns = columnsFromRaw(skill.frontmatter_extra?.['columns']);
+			columns =
+				loadedColumns && loadedColumns.length > 0 ? loadedColumns : [newEditableColumn()];
+			showColumnErrors = false;
 		} catch (e) {
 			console.error('user-skills/edit: load failed', e);
 			if (e instanceof LQAIApiError && e.status === 404) {
@@ -84,6 +103,7 @@
 		body: string;
 		version: string;
 		tags: string[];
+		frontmatter_extra: Record<string, unknown>;
 	}> {
 		if (!row) return {};
 		const diff: ReturnType<typeof changeSet> = {};
@@ -102,11 +122,26 @@
 		) {
 			diff.tags = newTags;
 		}
+		// DE-297 — table-mode: rebuild the extra block (preserving
+		// unrelated keys) and send it only when it actually moved, so an
+		// idempotent re-save still writes no audit row.
+		const prevExtra = row.frontmatter_extra ?? {};
+		const newExtra = buildFrontmatterExtra(prevExtra, outputMode, columns);
+		if (JSON.stringify(newExtra) !== JSON.stringify(prevExtra)) {
+			diff.frontmatter_extra = newExtra;
+		}
 		return diff;
 	}
 
 	async function save(): Promise<void> {
 		if (!row) return;
+		// Mirror — never widen — the backend's table-mode validation: a
+		// spec the server would 422 never leaves the page (DE-297).
+		if (outputMode === 'table' && !validateColumns(columns).valid) {
+			showColumnErrors = true;
+			submitError = 'Fix the column errors before saving.';
+			return;
+		}
 		const diff = changeSet();
 		if (Object.keys(diff).length === 0) {
 			saveOk = 'Nothing to save — no changes.';
@@ -123,6 +158,10 @@
 			version = updated.version;
 			body = updated.body;
 			tagsInput = (updated.tags ?? []).join(', ');
+			outputMode = modeFromExtra(updated.frontmatter_extra);
+			const savedColumns = columnsFromRaw(updated.frontmatter_extra?.['columns']);
+			columns = savedColumns && savedColumns.length > 0 ? savedColumns : [newEditableColumn()];
+			showColumnErrors = false;
 			saveOk = 'Saved.';
 		} catch (e) {
 			console.error('user-skills/edit: save failed', e);
@@ -307,16 +346,54 @@
 				</label>
 			</div>
 
-			<label class="block">
-				<span class="lq-text-label">Body (Markdown system prompt)</span>
-				<textarea
-					bind:value={body}
-					rows="16"
-					required
-					maxlength="200000"
-					class="mt-1 w-full rounded border-gray-300 dark:border-gray-700 dark:bg-gray-900 text-sm font-mono"
-				></textarea>
-			</label>
+			<div class="block">
+				<span class="lq-text-label">Output</span>
+				<div
+					class="mt-1 flex items-center gap-4"
+					role="radiogroup"
+					aria-label="output mode"
+				>
+					<label class="flex items-center gap-1.5 text-sm cursor-pointer">
+						<input
+							type="radio"
+							name="lq-ai-user-skill-edit-output-mode"
+							value="prose"
+							bind:group={outputMode}
+							data-testid="lq-ai-user-skill-edit-mode-prose"
+						/>
+						Prose (default)
+					</label>
+					<label class="flex items-center gap-1.5 text-sm cursor-pointer">
+						<input
+							type="radio"
+							name="lq-ai-user-skill-edit-output-mode"
+							value="table"
+							bind:group={outputMode}
+							data-testid="lq-ai-user-skill-edit-mode-table"
+						/>
+						Table
+					</label>
+				</div>
+				<p class="lq-text-caption mt-1" style="color: var(--lq-text-tertiary);">
+					Table-mode skills produce a row-per-document grid in the Tabular Review
+					wizard; each column defines one extraction query.
+				</p>
+			</div>
+
+			{#if outputMode === 'table'}
+				<ColumnEditor bind:columns showErrors={showColumnErrors} />
+			{:else}
+				<label class="block">
+					<span class="lq-text-label">Body (Markdown system prompt)</span>
+					<textarea
+						bind:value={body}
+						rows="16"
+						required
+						maxlength="200000"
+						class="mt-1 w-full rounded border-gray-300 dark:border-gray-700 dark:bg-gray-900 text-sm font-mono"
+					></textarea>
+				</label>
+			{/if}
 
 			<div class="flex items-center justify-between pt-2">
 				<button
