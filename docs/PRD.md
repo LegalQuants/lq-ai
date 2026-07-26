@@ -1715,10 +1715,10 @@ PyMuPDF (AGPL) is used server-side only and not redistributed as a library; the 
 
 ### 7.4 Governance
 
-- **Initial model: BDFL.** Kevin Keller is the initial maintainer.
+- **Model: committee-carried.** The committee steers the project between releases; `GOVERNANCE.md` at the repository root is the living record of the roles, the decision workflow, and the amendment process. Kevin Keller, the project's founder and initial maintainer, authored the guiding principles, initial architecture, and roadmap; those documents remain canonical unless amended through the process in `GOVERNANCE.md`.
 - LegalQuants stewards the project (owns the GitHub org, controls trademark, employs maintainer).
 - Documented commitment to community contribution: "LQ.AI welcomes contributions from any lawyer, legal-ops practitioner, or engineer who wants to advance open legal AI."
-- Path to broader governance documented but not implemented in v1: as the project matures, consider transition to a maintainer team and formal governance (see CNCF or Apache Software Foundation models).
+- The transition to a maintainer team and formal governance, deferred at v1, was taken up by the committee over the calls of 2026-06-28 through 2026-07-19 and is recorded in `GOVERNANCE.md` and ADR 0022.
 
 ### 7.5 Contribution Model
 
