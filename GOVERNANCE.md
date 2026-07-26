@@ -28,8 +28,10 @@ product.
 - **Maintainers.** Hold write access to the repository; ack claims, triage issues,
   review and merge PRs, and keep CI healthy.
 - **Review committee.** Maintainers and appointed members responsible for PR merge
-  decisions, established at the committee call of 2026-06-28. Volunteers apply
-  through an existing member.
+  decisions, established at the committee call of 2026-06-28.
+  [CONTRIBUTING.md](CONTRIBUTING.md) sets the merge threshold
+  (one maintainer approval; two preferred for multi-subsystem changes).
+  Volunteers apply through an existing member.
 - **Contributors.** Anyone who opens an issue or PR. The contribution path is in
   [CONTRIBUTING.md](CONTRIBUTING.md); the skill-specific path (including
   practicing-attorney attestation) is in [skills/CONTRIBUTING.md](skills/CONTRIBUTING.md).
