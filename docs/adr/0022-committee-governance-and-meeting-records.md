@@ -28,20 +28,20 @@ No prior ADR, PRD section, or DE entry decides either question.
 
 ## Decision
 
-1. **Governance rules live in `GOVERNANCE.md` at the repo root** — the
-   conventional, discoverable location (surfaced by GitHub's community
-   profile). It is a living document amended by PR with committee
+1. **Governance rules live in `GOVERNANCE.md` at the repo root** — the conventional
+   root-level location alongside the community health files.
+   It is a living document amended by PR with committee
    approval. The ADR series stays reserved for architectural and
    product decisions, keeping the ADR-first review gate legible.
-2. **Meeting minutes are published in a separate `LegalQuants/lq-ai-community`
+3. **Meeting minutes are published in a separate `LegalQuants/lq-ai-community`
    repository** (to be created), linked from `GOVERNANCE.md`. One folder
    per meeting: `meetings/YYYY-MM-DD-<topic>/` containing `notes.md`
    (attendees, decisions, action items) and any shareable artifacts.
-3. **Raw transcripts and recordings are not published.** They contain
+4. **Raw transcripts and recordings are not published.** They contain
    candid, unpolished discussion not spoken for the public record. The
    published minutes are the record; transcripts remain with the
    participants.
-4. **Async ratification is the approval mechanism for minutes and
+5. **Async ratification is the approval mechanism for minutes and
    governance changes:** committee members absent from a call may
    object on the posted record within 7 days; silence is assent.
 
