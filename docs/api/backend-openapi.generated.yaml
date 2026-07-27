@@ -1872,6 +1872,93 @@ components:
       - grace_period_days
       title: DeleteScheduledResponse
       type: object
+    DocumentChatCitation:
+      description: 'Points an answer back at a specific paragraph of the request''s
+
+        snapshot — resolved client-side via ``docxHelper.paragraph.search()``
+
+        against the live Word document, not verified server-side (there''s
+
+        no persisted copy of an open Word document to verify against, unlike
+
+        the KB Citation Engine''s ``documents.normalized_content``). Serialized
+
+        on the wire as ``paragraphId`` — FastAPI''s ``response_model_by_alias``
+
+        defaults to ``True``, so this alias applies on the way out the same
+
+        way ``DocumentChatParagraph``''s applies on the way in.'
+      properties:
+        paragraphId:
+          title: Paragraphid
+          type: integer
+        quote:
+          title: Quote
+          type: string
+      required:
+      - paragraphId
+      - quote
+      title: DocumentChatCitation
+      type: object
+    DocumentChatCreate:
+      description: 'POST body for ``/api/v1/word-addin/document-chat``. Accepted on
+
+        the wire as ``userInstruction`` (the frontend''s own camelCase
+
+        choice). ``user_instruction`` is a client-built JSON string (see
+
+        ``documentChatClient.ts``''s ``toDocumentChatInstruction``) carrying
+
+        the document paragraphs, the user''s question, and input/output/
+
+        citation schema documentation together — this handler passes it
+
+        through verbatim as the user message content; it does not parse it
+
+        server-side.'
+      properties:
+        model:
+          anyOf:
+          - maxLength: 200
+            type: string
+          - type: 'null'
+          title: Model
+        skills:
+          anyOf:
+          - items:
+              type: string
+            maxItems: 16
+            type: array
+          - type: 'null'
+          title: Skills
+        stream:
+          default: false
+          title: Stream
+          type: boolean
+        userInstruction:
+          maxLength: 300000
+          minLength: 1
+          title: Userinstruction
+          type: string
+      required:
+      - userInstruction
+      title: DocumentChatCreate
+      type: object
+    DocumentChatResponse:
+      description: Non-streaming response for ``POST /word-addin/document-chat``.
+      properties:
+        citations:
+          items:
+            $ref: '#/components/schemas/DocumentChatCitation'
+          title: Citations
+          type: array
+        content:
+          title: Content
+          type: string
+      required:
+      - content
+      title: DocumentChatResponse
+      type: object
     EasyPlaybookGeneration:
       description: 'One Easy Playbook generation row.
 
@@ -13736,6 +13823,39 @@ paths:
       summary: Update the calling user's preferences (partial)
       tags:
       - users
+  /api/v1/word-addin/document-chat:
+    post:
+      description: Takes the user's question plus a snapshot of the open document's
+        paragraphs, and returns a single model answer grounded in that snapshot, via
+        a forced emit_answer tool call for structured citations. No persistence —
+        every call is independent and nothing is written to chats/messages, unlike
+        POST /chats/{chat_id}/messages. Non-streaming.
+      operationId: document_chat_api_v1_word_addin_document_chat_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentChatCreate'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentChatResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: One-shot, document-grounded chat turn for the Word add-in's Chat tab
+        (M3-B3).
+      tags:
+      - word-addin
   /api/v1/word-addin/version:
     get:
       description: Unauthenticated endpoint the task pane consults on mount. Returns

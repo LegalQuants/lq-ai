@@ -3639,6 +3639,55 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/WordAddinVersionResponse'}
 
+  /api/v1/word-addin/document-chat:
+    post:
+      tags: [word-addin]
+      summary: One-shot, document-grounded chat turn for the task pane's Chat tab (M3-B3)
+      description: |
+        Deliberately stateless — no `chat_id`, nothing written to
+        `chats`/`messages`. The open Word document is the state; every
+        turn resends a fresh snapshot of the document's paragraphs plus
+        the user's question, both embedded inside `user_instruction`'s
+        JSON string (built client-side; see
+        `word-addin/src/services/documentChatClient.ts`'s
+        `toDocumentChatInstruction`). This handler forwards that string
+        verbatim as the user message content — it does not parse it.
+
+        Structured output (`content` + `citations`) comes back via a
+        forced `emit_answer` tool call — provider-enforced schema
+        conformance, not prompt-based JSON. `citations[].quote` is a
+        verbatim substring the client resolves against the live
+        document via Office.js range search to select/scroll to it;
+        there is no server-side citation verification (unlike the KB
+        Citation Engine, §3.3) since a live, unpersisted Word document
+        has no equivalent to `documents.normalized_content` to verify
+        against.
+
+        Landed narrower than PRD §9 DE-287's original M3-B3 scope:
+        non-streaming, and no selection-only context mode (whole
+        document only) — see that DE entry for the full delta.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DocumentChatCreate'}
+      responses:
+        '200':
+          description: Structured chat answer
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DocumentChatResponse'}
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '422':
+          description: Validation error (e.g. `user_instruction` exceeds the size cap)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
   # ----------- INFERENCE (PRD §3.13 — Wave B) -----------
   /api/v1/inference/current-tier:
     get:
@@ -5905,6 +5954,78 @@ components:
             Optional SHA-256 hash of the deployed task pane bundle JS.
             M3-B8 ships nullable; M3-B7 signing CI populates the value.
             Null means "don't enforce" — not an error.
+
+    DocumentChatCreate:
+      type: object
+      description: |
+        POST body for `/api/v1/word-addin/document-chat` (M3-B3).
+        `user_instruction` is built client-side (see
+        `documentChatClient.ts`'s `toDocumentChatInstruction`) as a JSON
+        string carrying `input_schema`/`citations_schema`/`output_schema`
+        documentation plus `input: {paragraphs, instruction}` — the
+        document's paragraphs and the user's actual question. The
+        backend forwards it verbatim; it is not a typed nested object
+        on the wire, just a string.
+      required: [userInstruction]
+      properties:
+        userInstruction:
+          type: string
+          maxLength: 300000
+          description: Client-built JSON envelope (see description above).
+        model:
+          type: string
+          maxLength: 200
+          nullable: true
+          description: Model alias or raw `provider/model` passthrough. Defaults to `smart`.
+        stream:
+          type: boolean
+          default: false
+          description: |
+            Accepted for forward-compatibility with the frontend's
+            request shape; always treated as `false` — this endpoint
+            doesn't support streaming yet.
+        skills:
+          type: array
+          items: {type: string}
+          maxItems: 16
+          nullable: true
+          description: Skill names to assemble into the system message (same mechanism as regular chat).
+
+    DocumentChatCitation:
+      type: object
+      description: |
+        Points an answer back at a specific paragraph of the request's
+        document snapshot. Resolved client-side via Office.js range
+        search against the live document — not verified server-side.
+      required: [paragraphId, quote]
+      properties:
+        paragraphId:
+          type: integer
+          description: 0-based paragraph index, matching the snapshot the client sent.
+        quote:
+          type: string
+          description: |
+            Verbatim quoted text from that paragraph. The client
+            searches for this exact substring to select/highlight it;
+            an inexact quote falls back to selecting the whole paragraph.
+
+    DocumentChatResponse:
+      type: object
+      description: |
+        Non-streaming response for `POST /word-addin/document-chat`.
+        Populated from a forced `emit_answer` tool call; falls back to
+        raw, uncited text if the model's tool-call arguments fail to
+        parse (never a 500 for that case).
+      required: [content, citations]
+      properties:
+        content:
+          type: string
+          description: |
+            The answer, in Markdown. Citations render inline as
+            `citation:<n>` links (an index into `citations` below).
+        citations:
+          type: array
+          items: {$ref: '#/components/schemas/DocumentChatCitation'}
 
     FallbackTier:
       type: object

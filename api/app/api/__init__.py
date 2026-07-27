@@ -131,6 +131,11 @@ api_router.include_router(tabular.router, dependencies=_active)
 # lives in the same module but on a separate ``public_router`` mounted
 # above without the ``_active`` gate.
 api_router.include_router(word_addin.admin_router, dependencies=_active)
+# M3-B3: Word add-in document-chat (one-shot, stateless, document-grounded
+# chat turn for the task pane's Chat tab). Same ``/word-addin`` URL prefix
+# as ``public_router`` but a separate router instance so this one gets the
+# ``_active`` bearer-token gate the version handshake must not have.
+api_router.include_router(word_addin.authenticated_router, dependencies=_active)
 # WS3b — case-law research surface (verify-citations, search, clusters,
 # opinions, find-in-case). All five endpoints require an authenticated,
 # password-changed user; auth enforced via the _active dependency group.

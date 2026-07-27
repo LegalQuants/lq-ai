@@ -121,6 +121,8 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/admin/word-addin/manifest",
         # M3-B8 — Word add-in version handshake (unauthenticated)
         "/api/v1/word-addin/version",
+        # M3-B3 — Word add-in document-chat (stateless, forced-tool-call citations)
+        "/api/v1/word-addin/document-chat",
         # M3-A2 — Playbook executor surface
         "/api/v1/playbooks/{playbook_id}/execute",
         "/api/v1/playbook-executions/{execution_id}",
@@ -342,7 +344,9 @@ async def test_openapi_paths_match_sketch() -> None:
     # Donna #3 adds two new paths (137 -> 139):
     # /api/v1/admin/tool-providers
     # /api/v1/admin/tool-providers/{provider_type}
-    assert len(actual) == 139
+    # M3-B3 adds one new path (139 -> 140):
+    # /api/v1/word-addin/document-chat
+    assert len(actual) == 140
 
 
 @pytest.mark.unit
