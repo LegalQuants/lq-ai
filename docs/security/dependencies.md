@@ -11,11 +11,22 @@ For dependencies touching:
 - **LLM-provider SDKs** — Inference Gateway boundary (PRD §4); same auto-routing.
 - **Web frontend** — must not introduce React or other framework runtimes alongside SvelteKit; the boundary lives in [ADR 0009](../adr/0009-web-lq-ai-shell-coexistence.md).
 
+## Lockfiles (gateway/, api/)
+
+Per [ADR 0023](../adr/0023-uv-lockfiles-gateway-api.md), `gateway/` and `api/` are locked with [uv](https://docs.astral.sh/uv/). Two layers, deliberately separated:
+
+- **Policy** — `pyproject.toml` keeps the tight range windows with rationale comments (intent: which versions we accept, and why).
+- **Fact** — the committed `uv.lock` pins the exact resolved tree, transitives included (what actually ships).
+
+This makes the shipped dependency tree a **reviewed artifact**: container images install with `uv sync --frozen`, so the tree in the image is exactly the tree in the lockfile diff a reviewer approved — the build fails rather than silently re-resolving. CI gates lock freshness with `uv lock --check`, which is the "lockfiles enforced in CI" commitment in the PRD's supply-chain posture (Appendix C risk 10, Appendix E). Dependency PRs therefore carry concrete name+version pairs that mechanical vetting (OSV advisory lookup, release-age cooldown, new-package detection in lockfile churn) can check.
+
+The `web/` subsystem is out of scope here: its Python side still installs from the fork's `requirements.txt`, and consuming the fork's upstream-maintained `web/uv.lock` is a tracked follow-up (see ADR 0023's consequences).
+
 ## Automated scanning
 
 Two layers of automated dependency-vulnerability scanning:
 
-1. **GitHub Advisory Database / Dependabot.** [`.github/dependabot.yml`](../../.github/dependabot.yml) configures weekly scans for `api/` (pip), `gateway/` (pip), `web/` (npm), and `.github/workflows/` (actions). High and critical advisories open PRs automatically.
+1. **GitHub Advisory Database / Dependabot.** [`.github/dependabot.yml`](../../.github/dependabot.yml) configures weekly scans for `api/` (uv), `gateway/` (uv), `web/` (npm), and `.github/workflows/` (actions). High and critical advisories open PRs automatically. For the uv ecosystems, updates arrive as lock-pinned bumps against `uv.lock` with a 7-day release-age cooldown, not range widenings.
 2. **SBOM scanning.** The SBOM produced by the release workflow (per [docs/security/releases/README.md](releases/README.md)) is in SPDX JSON format and is parseable by any SCA tool. Operators evaluating a specific release can run `grype sbom:./api.spdx.json` (or equivalent) to check the dependency snapshot.
 
 ## Update cadence

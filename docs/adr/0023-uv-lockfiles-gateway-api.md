@@ -1,6 +1,6 @@
 # ADR 0023 — uv-managed lockfiles for gateway/ and api/
 
-**Status:** Proposed
+**Status:** Accepted (2026-07-27)
 **Date:** 2026-07-19
 **Owner:** Issue #310 (dependency locking); arising from the PR #308 security review
 

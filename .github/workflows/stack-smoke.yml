@@ -26,6 +26,10 @@ on:
     paths:
       - api/pyproject.toml
       - gateway/pyproject.toml
+      # ADR 0023 — the images install from these locks (uv sync --frozen),
+      # so a lock bump changes what the stack boots just like a manifest bump.
+      - api/uv.lock
+      - gateway/uv.lock
       # The web image installs its Python backend from these (web/Dockerfile);
       # a bump here can break the web build just like the JS manifests below.
       - web/pyproject.toml
