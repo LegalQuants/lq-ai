@@ -10,6 +10,7 @@
  *   5. /lq-ai/admin/developer renders the four developer-support cards
  *   6. ✨ Enhance Prompt button opens the expansion panel (or error state)
  *   7. /lq-ai/skills/[id] detail page renders SkillDetailTabs; tab switching works
+ *   8. Source tab does not execute a hostile skill body (D-01 XSS regression)
  *
  * Run requires a live stack:
  *   docker compose up -d
@@ -17,6 +18,12 @@
  *   (note the printed password; export LQAI_ADMIN_PASSWORD or update env)
  *   cd web && npx cypress run --spec 'cypress/e2e/wave-b-surfaces.cy.ts'
  */
+
+import { getBearerToken } from '../support/lq-ai-helpers';
+
+/** Direct API base — the SvelteKit web container has no POST proxy for user-skills routes. */
+const API_BASE = () => Cypress.env('LQAI_API_BASE') ?? 'http://localhost:8000';
+
 describe('Wave B v2 — new surfaces', () => {
   beforeEach(() => {
     cy.visit('/lq-ai/login');
@@ -173,5 +180,84 @@ describe('Wave B v2 — new surfaces', () => {
 
     // SkillSourceView renders a "Frontmatter" section heading (h2.lq-text-label)
     cy.contains('h2', 'Frontmatter').should('be.visible');
+  });
+
+  // ── Test 8 ───────────────────────────────────────────────────────────────────
+  // D-01 regression: SkillSourceView renders the skill body through {@html}, so a
+  // crafted body used to run script in the viewer's authenticated session (and the
+  // auth token lives in localStorage, so that is session takeover). The fix wraps
+  // the marked() output in DOMPurify.sanitize.
+  //
+  // The skill is seeded through the real API rather than stubbed, because the
+  // server deliberately stores the body verbatim (api/app/api/skills.py returns
+  // row.body unchanged) — so this exercises the whole path, and would still catch
+  // the bug if the storage layer changed underneath the component.
+  it('source tab does not execute a hostile skill body', () => {
+    const ts = Date.now();
+    const skillSlug = `d-01-xss-regression-${ts}`;
+
+    // Three payload shapes DOMPurify's default profile must neutralise: an event
+    // handler on a tag that loads eagerly, a raw script element, and a
+    // javascript: URL. marked() passes raw HTML through untouched, so each one
+    // reaches the {@html} sink exactly as written here.
+    const hostileBody = [
+      '# Benign heading',
+      '',
+      'Ordinary prose so the render is visibly non-empty.',
+      '',
+      '<img src=x onerror="window.__xssFired = true">',
+      '<script>window.__xssFired = true;</script>',
+      '',
+      '[click me](javascript:window.__xssFired=true)'
+    ].join('\n');
+
+    getBearerToken((token) => {
+      cy.request({
+        method: 'POST',
+        url: `${API_BASE()}/api/v1/user-skills`,
+        headers: { Authorization: `Bearer ${token}` },
+        body: {
+          scope: 'user',
+          slug: skillSlug,
+          display_name: `D-01 XSS regression ${ts}`,
+          description: 'Cypress fixture: hostile body must render inert',
+          body: hostileBody,
+          version: '1.0.0'
+        }
+      })
+        .its('status')
+        .should('eq', 201);
+    });
+
+    // ?tab=source deep-links straight to SkillSourceView (VALID tabs are
+    // use|source|try|versions on the [id] route).
+    cy.visit(`/lq-ai/skills/${skillSlug}?tab=source`);
+
+    // Assert the body actually rendered BEFORE asserting on absences — otherwise
+    // a page that failed to load would satisfy every "should not exist" below and
+    // the test would pass while proving nothing.
+    cy.contains('h2', 'Body').should('be.visible');
+    cy.get('.lq-prose').should('contain.text', 'Benign heading');
+
+    // The payloads survived storage but must not survive sanitization. Assert on
+    // the rendered markup rather than on element presence: DOMPurify keeps the
+    // <img> and drops only its handler, so a `cy.get('.lq-prose img')` chain
+    // would report a confusing failure if the tag were ever stripped entirely.
+    cy.get('.lq-prose script').should('not.exist');
+    cy.get('.lq-prose').then(($prose) => {
+      const html = $prose.html();
+      expect(html, 'script element stripped').to.not.include('<script');
+      expect(html, 'event handler stripped').to.not.include('onerror');
+      expect(html, 'javascript: URL stripped').to.not.include('javascript:');
+    });
+
+    // And the point of all of it: nothing ran. Every payload assigns this flag,
+    // so it is defined only if one of them executed.
+    cy.window().then((win) => {
+      expect(
+        (win as unknown as Record<string, unknown>).__xssFired,
+        'no payload executed'
+      ).to.equal(undefined);
+    });
   });
 });
