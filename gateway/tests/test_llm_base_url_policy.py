@@ -2,7 +2,8 @@
 
 The prompt-carrying LLM path must not send cleartext to a public host or use
 a non-http(s) scheme, mirroring the hardened tool-egress path. `https` is
-always allowed; `http` only to a local host (Ollama/vLLM).
+always allowed; `http` only to an explicitly allowlisted local host
+(`_LOCAL_HOSTS`) or an IP inside `_LOCAL_NETWORKS`.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from app.providers.base_url_policy import ProviderEgressRefused, validate_llm_ba
         "https://us-central1-aiplatform.googleapis.com",
         "http://ollama:11434",  # compose service name
         "http://vllm:8000/v1",
+        "http://host.docker.internal:11434",  # .env.example's default OLLAMA_BASE_URL
         "http://localhost:11434",
         "http://127.0.0.1:11434",
         "http://[::1]:11434",
@@ -40,6 +42,8 @@ def test_accepts_valid_targets(url: str) -> None:
         "http://api.openai.com/v1",  # plaintext to a public host
         "http://attacker.example/v1",
         "http://8.8.8.8/v1",  # plaintext to a public IP
+        "http://169.254.169.254/latest/meta-data/",  # link-local cloud metadata
+        "http://nginx:8080",  # single-label name that is not an allowlisted local provider
         "ftp://api.openai.com",  # unsupported scheme
         "file:///etc/passwd",
         "https://",  # no host
