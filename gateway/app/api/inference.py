@@ -57,7 +57,7 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Any, Final
 
-from fastapi import APIRouter, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import ValidationError
 
@@ -68,6 +68,7 @@ from app.anonymization.middleware import (
     post_anonymize_response,
     pre_anonymize_request,
 )
+from app.api.dependencies import make_require_gateway_key
 from app.clients.backend import BackendClient, Skill, get_backend_client
 from app.config import GatewayConfig
 from app.errors import LQAIError
@@ -111,7 +112,9 @@ from app.tier_floor import TierFloor, is_refused, resolve_tier_floor
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/v1", tags=["inference"])
+require_gateway_key = make_require_gateway_key()
+
+router = APIRouter(prefix="/v1", tags=["inference"], dependencies=[Depends(require_gateway_key)])
 
 
 TIER_HEADER: Final[str] = "X-LQ-AI-Routed-Inference-Tier"
