@@ -107,7 +107,7 @@ jobs:
         # Exact pin so local == CI lockfile semantics; keep in step with the
         # ghcr.io/astral-sh/uv tag in the Dockerfiles (ADR 0023) and bump
         # deliberately.
-        run: pip install uv==0.8.17
+        run: pip install uv==0.12.0
 
       - name: uv lock --check (lockfile freshness gate — ADR 0023)
         # Fails when pyproject.toml has drifted from the committed uv.lock,
@@ -159,7 +159,7 @@ jobs:
         # Exact pin so local == CI lockfile semantics; keep in step with the
         # ghcr.io/astral-sh/uv tag in the Dockerfiles (ADR 0023) and bump
         # deliberately.
-        run: pip install uv==0.8.17
+        run: pip install uv==0.12.0
 
       - name: uv lock --check (lockfile freshness gate — ADR 0023)
         # Fails when pyproject.toml has drifted from the committed uv.lock,
