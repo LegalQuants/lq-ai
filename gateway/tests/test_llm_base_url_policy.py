@@ -11,8 +11,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from fastapi import status
 
 from app.config import ProviderConfig
+from app.errors import CODE_PROVIDER_UNAVAILABLE, LQAIError
 from app.main import build_adapter
 from app.providers.base_url_policy import ProviderEgressRefused, validate_llm_base_url
 
@@ -116,3 +118,20 @@ async def test_lifespan_refuses_to_start_on_refused_base_url(
     with pytest.raises(ProviderEgressRefused):
         async with app.router.lifespan_context(app):
             pass  # pragma: no cover — startup must raise before entry
+
+
+@pytest.mark.unit
+def test_provider_egress_refused_is_typed_lqai_error() -> None:
+    """Regression guard for the LQAIError derivation (CONTRIBUTING: subsystem
+    errors are typed, never bare ``Exception``). A refusal that reaches a
+    request path must render the canonical envelope with the existing
+    ``provider_unavailable`` code and a 503 — not an unhandled 500. Narrowing
+    the class back to bare ``Exception`` fails here before it 500s live.
+    """
+
+    exc = ProviderEgressRefused("cleartext egress to attacker.example")
+    assert isinstance(exc, LQAIError)
+    assert exc.reason == "cleartext egress to attacker.example"
+    assert exc.effective_code == CODE_PROVIDER_UNAVAILABLE
+    assert exc.effective_http_status == status.HTTP_503_SERVICE_UNAVAILABLE
+    assert exc.to_envelope()["error"]["code"] == CODE_PROVIDER_UNAVAILABLE
