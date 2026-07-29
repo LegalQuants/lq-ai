@@ -41,7 +41,7 @@ dependencies = [
     # The [crypto] extra ships the PyCA cryptography backend that pyjwt
     # uses for signing — keeps a future move from HS256 to RS256/EdDSA
     # to a config change rather than a dep change.
-    "pyjwt[crypto]>=2.9,<3",
+    "pyjwt[crypto]>=2.13.0,<3",
     # email-validator: Pydantic's EmailStr requires this at validation time.
     # Used by LoginRequest to reject obviously-malformed addresses before
     # we hit the database. Tiny dep; pulls dnspython transitively.
