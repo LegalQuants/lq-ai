@@ -29,20 +29,24 @@ The production image (`api/Dockerfile`) does **not** install dev extras to keep
 the runtime surface area minimal. Use `Dockerfile.dev` for any work that requires
 running the test suite inside a container.
 
-For backend development without Docker:
+For backend development without Docker, dependencies are managed with
+[uv](https://docs.astral.sh/uv/) (per [ADR 0023](docs/adr/0023-uv-lockfiles-gateway-api.md)):
+`uv sync` creates `.venv/` and installs exactly the committed `uv.lock`. If you
+change dependencies in `pyproject.toml`, run `uv lock` in that directory and
+commit the updated lockfile — CI gates on `uv lock --check`.
 
 ```bash
 # Backend
 cd api
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+uv sync --extra dev               # creates .venv from the committed uv.lock
+source .venv/bin/activate
 alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 
 # Inference Gateway (separate service)
 cd gateway
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+uv sync --extra dev
+source .venv/bin/activate
 uvicorn app.main:app --reload --port 8001
 
 # Web (OpenWebUI fork)

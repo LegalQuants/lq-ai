@@ -9,24 +9,32 @@
 # Or via docker compose override (see docs/dev-compose-override.example.yml):
 #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up api
 #
-# Production image (api/Dockerfile) installs only runtime deps (pip install .)
-# to keep the surface area small.  This dev image adds [dev] extras on top of
-# the same base so the two images stay byte-compatible at the application layer.
+# Production image (api/Dockerfile) installs only runtime deps from the
+# lockfile to keep the surface area small.  This dev image adds [dev] extras
+# on top of the same base so the two images stay byte-compatible at the
+# application layer.
 
 FROM python:3.12-slim AS base
 
+# ADR 0023 — same locked install as the production image; see api/Dockerfile.
+COPY --from=ghcr.io/astral-sh/uv:0.12.0 /uv /uvx /usr/local/bin/
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    UV_NO_CACHE=1 \
+    UV_PYTHON_DOWNLOADS=never
 
 WORKDIR /app
 
-# Install runtime + dev deps from pyproject.toml in a single pip invocation.
-# The [dev] extra adds pytest, pytest-asyncio, pytest-cov, respx, and
-# factory-boy (see pyproject.toml [project.optional-dependencies]).
-COPY pyproject.toml README.md ./
-RUN pip install --no-cache-dir ".[dev]"
+# Install runtime + dev deps from the lockfile in a single uv invocation.
+# The [dev] extra adds pytest, pytest-asyncio, respx, ruff, mypy, etc.
+# (see pyproject.toml [project.optional-dependencies]).
+COPY pyproject.toml README.md uv.lock ./
+RUN uv sync --frozen --no-install-project --extra dev
+
+# Put the locked venv first on PATH so pytest below resolves to the synced
+# environment.
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Copy application code and migration files
 COPY app/ ./app/

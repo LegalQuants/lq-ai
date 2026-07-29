@@ -1,16 +1,25 @@
 version: 2
 updates:
-  - package-ecosystem: pip
+  # ADR 0023 — api/ and gateway/ run the uv ecosystem (pyproject.toml +
+  # uv.lock), so updates arrive as lock-pinned version bumps with concrete
+  # name+version diffs rather than range widenings. The cooldown holds a
+  # bump until the release is at least 7 days old — the release-age posture
+  # dependency review already applies by hand at the security boundary.
+  - package-ecosystem: uv
     directory: /api
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     labels: ["dependencies", "api"]
 
-  - package-ecosystem: pip
+  - package-ecosystem: uv
     directory: /gateway
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     labels: ["dependencies", "gateway"]
 
