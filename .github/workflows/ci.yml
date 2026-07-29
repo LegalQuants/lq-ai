@@ -50,6 +50,13 @@ jobs:
           cache-dependency-path: web/package-lock.json
 
       - name: Install dependencies
+        # Cypress ships a large binary fetched from download.cypress.io on
+        # postinstall. This job runs svelte-check and Vitest only, and no
+        # workflow in the repo invokes Cypress, so the download is pure
+        # risk: a CDN blip reds a PR that never touched web/. Scoped to
+        # this step so a future Cypress job installs the binary normally.
+        env:
+          CYPRESS_INSTALL_BINARY: "0"
         run: npm ci
 
       - name: svelte-check (typecheck — LQ.AI-owned code)

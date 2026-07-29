@@ -5,6 +5,17 @@ updates:
   # name+version diffs rather than range widenings. The cooldown holds a
   # bump until the release is at least 7 days old — the release-age posture
   # dependency review already applies by hand at the security boundary.
+  #
+  # Grouping is a merge-throughput measure, not a review shortcut. CI gates
+  # lock freshness with `uv lock --check` (ADR 0023), so a lockfile admits
+  # one write at a time: N separate PRs against the same lock must merge
+  # strictly serially, each waiting a full CI cycle after a rebase. One
+  # grouped PR is one lock write.
+  #
+  # Two things stay deliberately ungrouped:
+  #   - security updates — `applies-to: version-updates` scopes the group,
+  #     so an advisory fix is never queued behind routine hygiene;
+  #   - majors — omitted from `update-types`, since each needs its own read.
   - package-ecosystem: uv
     directory: /api
     schedule:
@@ -13,6 +24,11 @@ updates:
       default-days: 7
     open-pull-requests-limit: 5
     labels: ["dependencies", "api"]
+    groups:
+      api-minor-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: uv
     directory: /gateway
@@ -22,16 +38,39 @@ updates:
       default-days: 7
     open-pull-requests-limit: 5
     labels: ["dependencies", "gateway"]
+    groups:
+      gateway-minor-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
+  # web/ shares one package-lock.json, so it serialises exactly as the uv
+  # locks do. The cooldown was previously uv-only; npm now carries the same
+  # 7-day window, which is the posture docs/security/dependencies.md already
+  # describes for the locked ecosystems.
   - package-ecosystem: npm
     directory: /web
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     labels: ["dependencies", "web"]
+    groups:
+      web-minor-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     labels: ["dependencies", "ci"]
+    groups:
+      actions-minor-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
