@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { marked } from 'marked';
+	import DOMPurify from 'dompurify';
 	import { skillsApi } from '$lib/lq-ai/api';
 	import type { SkillInputs, SkillInputDef } from '$lib/lq-ai/types';
 
@@ -45,7 +46,13 @@
 		return def.type ?? 'string';
 	}
 
-	$: renderedMd = marked(contentMd ?? '', { breaks: true }) as string;
+	// Skill bodies are authored content — team-scope skills and, for built-in
+	// skills, the `skills/community` git submodule — so the raw HTML that marked
+	// passes through MUST be DOMPurify-sanitized before {@html} below, or a
+	// crafted body runs script in the viewer's session (stored XSS). Mirrors
+	// the DOMPurify pattern used for assistant markdown in MessageBubble.
+	// #288 (D-01).
+	$: renderedMd = DOMPurify.sanitize(marked(contentMd ?? '', { breaks: true }) as string);
 
 	onMount(() => {
 		loadInputs();
