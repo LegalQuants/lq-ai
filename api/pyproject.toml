@@ -11,12 +11,27 @@ requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
 authors = [{ name = "LegalQuants" }]
 dependencies = [
-    "fastapi>=0.115,<0.117",
+    "fastapi>=0.139.2,<0.140",
     "uvicorn[standard]>=0.32,<0.48",
     "pydantic>=2.7,<3",
     "pydantic-settings>=2.4,<3",
     "sqlalchemy[asyncio]>=2.0.30,<2.1",
-    "asyncpg>=0.29,<0.31",
+    # The asyncpg window is a CROSS-SERVICE INVARIANT, not a local choice: it
+    # must move in lockstep with gateway/pyproject.toml's, whose comment
+    # records why (one asyncpg ABI per container image in a multi-service
+    # deployment). This bump is paired with the identical bump in gateway/.
+    "asyncpg>=0.31.0,<0.32",
+    # starlette is fastapi's ASGI layer and is imported nowhere in api/app
+    # directly — it is pinned explicitly because 0.48.0 carries 10 known
+    # advisories with no in-range fix (GHSA-7f5h-v6xp-fcq8,
+    # GHSA-82w8-qh3p-5jfq, GHSA-86qp-5c8j-p5mr, GHSA-jp82-jpqv-5vv3,
+    # GHSA-wqp7-x3pw-xc5r, GHSA-x746-7m8f-x49c, PYSEC-2026-161,
+    # PYSEC-2026-1942, PYSEC-2026-2280, PYSEC-2026-2281). Without an explicit
+    # floor the resolver is free to sit on the vulnerable build for as long as
+    # fastapi's own range allows, which is exactly what happened here: the
+    # advisory sat unremediated in this lock while fastapi stayed on 0.116.
+    # Mirrors the same explicit pin in gateway/pyproject.toml.
+    "starlette>=1.3.1,<1.4",
     "alembic>=1.13,<2",
     "psycopg2-binary>=2.9,<3",
     "greenlet>=3.0,<4",
@@ -41,7 +56,7 @@ dependencies = [
     # The [crypto] extra ships the PyCA cryptography backend that pyjwt
     # uses for signing — keeps a future move from HS256 to RS256/EdDSA
     # to a config change rather than a dep change.
-    "pyjwt[crypto]>=2.9,<3",
+    "pyjwt[crypto]>=2.13.0,<3",
     # email-validator: Pydantic's EmailStr requires this at validation time.
     # Used by LoginRequest to reject obviously-malformed addresses before
     # we hit the database. Tiny dep; pulls dnspython transitively.
@@ -79,7 +94,7 @@ dependencies = [
     # worker. MIT-licensed; small dep footprint (just redis-py which
     # we already have, plus click). Avoids Celery's complexity at
     # M1 scale; ADR 0006 §2 records the call.
-    "arq>=0.25,<0.27",
+    "arq>=0.28.0,<0.29",
     # C6 — tiktoken: BPE tokenizer for OpenAI's text-embedding-3-* family.
     # Used by app.knowledge.embed.count_tokens to populate
     # document_chunks.tokens during the embed-on-write path. ADR 0008
@@ -152,7 +167,7 @@ dev = [
     # unpinned floor let CI (which resolves latest) drift ahead of dev venvs
     # and fail `ruff format --check` on code that was clean locally. Pin so
     # local == CI. Bump deliberately (and reformat) when upgrading.
-    "ruff==0.15.17",
+    "ruff==0.15.22",
     "mypy>=1.11",
     # PyYAML type stubs — pyyaml has no inline typings, so mypy needs the
     # types-PyYAML package to type-check `app.skills.loader` etc.

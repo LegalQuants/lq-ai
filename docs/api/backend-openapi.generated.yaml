@@ -1362,8 +1362,8 @@ components:
     Body_upload_file_api_v1_files_post:
       properties:
         file:
+          contentMediaType: application/octet-stream
           description: The file to upload.
-          format: binary
           title: File
           type: string
         project_id:
@@ -6317,6 +6317,11 @@ components:
       type: object
     ValidationError:
       properties:
+        ctx:
+          title: Context
+          type: object
+        input:
+          title: Input
         loc:
           items:
             anyOf:
