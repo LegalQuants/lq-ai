@@ -28,7 +28,7 @@ dependencies = [
     # transitive that pip resolves automatically; pinned here so the
     # SBOM is honest about it.
     "sqlalchemy[asyncio]>=2.0.30,<2.1",
-    "asyncpg>=0.29,<0.31",
+    "asyncpg>=0.31.0,<0.32",
     "greenlet>=3.0,<4",
     # ADR 0011: encrypted-at-rest provider keys via Fernet (AES-128-CBC +
     # HMAC-SHA256). The cryptography library is the standard Python AEAD
@@ -65,7 +65,7 @@ dependencies = [
     # to M2-B3 middleware integration.
     "presidio-analyzer~=2.2",
     "presidio-anonymizer~=2.2",
-    "spacy~=3.7",
+    "spacy~=3.8",
     # WS2/PR4a — Model Context Protocol client. The gateway is the sole egress
     # and the only MCP-protocol speaker (ADR 0014 + spec D1): streamable_http
     # sessions are stateful, so the connection holder must speak MCP. This is
@@ -89,7 +89,7 @@ dev = [
     # unpinned floor let CI (which resolves latest) drift ahead of dev venvs
     # and fail `ruff format --check` on code that was clean locally. Pin so
     # local == CI. Bump deliberately (and reformat) when upgrading.
-    "ruff==0.15.18",
+    "ruff==0.15.22",
     "mypy>=1.11",
     "types-PyYAML>=6.0",
 ]
