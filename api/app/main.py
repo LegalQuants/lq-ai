@@ -29,7 +29,7 @@ from app.admin_bootstrap import ensure_first_run_admin
 from app.api import api_router
 from app.cache import check_redis, close_redis
 from app.clients.gateway import close_gateway_client, get_gateway_client
-from app.config import get_settings
+from app.config import assert_production_secrets, get_settings
 from app.db.session import check_db, dispose_engine, get_session_factory
 from app.errors import LQAIError
 from app.skills import install_sighup_reload, install_skill_registry, resolve_skill_dirs
@@ -51,6 +51,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     logging.basicConfig(level=settings.log_level.upper())
     log.info("Starting %s v%s", SERVICE_NAME, __version__)
+
+    # Fail closed before serving if a published dev default (e.g. the JWT
+    # signing secret) is still in place outside dev mode. Unlike the
+    # best-effort startup steps below, this deliberately raises. #288 (API-04).
+    assert_production_secrets(settings)
 
     try:
         await ensure_bucket()
