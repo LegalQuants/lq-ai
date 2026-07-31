@@ -49,7 +49,7 @@ maintainer into one of four shapes and routed accordingly:
 4. **Practice areas excluded by PRD §1.6 (S4) require a mini-PRD and a
    committee-decided PRD amendment first**; the proposal's S1/S2/S3 parts
    route normally once the amendment lands. *(Restates the PRD-amendment
-   reality and the governance process proposed in PR #311.)*
+   reality and the governance process adopted in GOVERNANCE.md.)*
 
 And one recording rule:
 
@@ -93,12 +93,19 @@ This ADR routes; it does not gate.
 
 - skills/CONTRIBUTING.md gains a short "Where does my contribution go?"
   section (the four routes + the coverage-map check).
-- `docs/contribute/coverage-map.md` is created (whether it back-fills merged
-  lq-skills coverage or starts from the first routed proposal is an
-  acceptance-time detail).
+- `docs/contribute/coverage-map.md` is created and **back-filled on day one**
+  with merged coverage across both repos, rather than starting from the first
+  routed proposal. The duplication this rule exists to prevent (lq-skills#18
+  against merged #6) was a collision with *merged* coverage; a map that starts
+  empty cannot catch it. The direction paper's §The live docket is the initial
+  content.
 - The open docket is answered by routing responses citing this ADR.
-- The S4 route's committee path takes effect against the governance text
-  adopted in PR #311 (filing precondition).
+- The S4 route's committee path runs on the process in
+  [GOVERNANCE.md](../../GOVERNANCE.md), adopted via ADR
+  [0022](0022-committee-governance-and-meeting-records.md). That process gates
+  the S4 **decision** — the PRD amendment — and nothing else: not this ADR's
+  acceptance, not ADR 0025's filing. An S4 mini-PRD may be filed and queued at
+  any time; it waits for a committee slot, never for a governance PR.
 
 ## Cross-references
 
@@ -110,5 +117,8 @@ This ADR routes; it does not gate.
   [skills/CONTRIBUTING.md](../../skills/CONTRIBUTING.md) (claim step);
   [docs/security/external-contribution-vetting.md](../security/external-contribution-vetting.md)
   (S1 external-author read).
-- Companion: ADR [0025](0025-jurisdictional-skill-trust-tiers-and-maintainer-of-record.md) (trust tiers & maintainer of record).
-- GOVERNANCE.md + ADR 0022 — pending in PR #311.
+- Companion: ADR 0025 (trust tiers & maintainer of record) — files after 0024
+  lands.
+- [GOVERNANCE.md](../../GOVERNANCE.md) + ADR
+  [0022](0022-committee-governance-and-meeting-records.md) — committee decision
+  path for S4.

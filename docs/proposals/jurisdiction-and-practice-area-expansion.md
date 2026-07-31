@@ -59,7 +59,7 @@ Four operating principles follow, and run through every extraction:
 3. **Attestation capacity is the binding constraint, and it varies by proposer** — some claim they can self-attest (#287, #271), some bring an attester (#174), some bring none (#22's is nonconforming). The path must use the attestation that exists rather than demand attestation the project cannot supply; that is the companion trust-tiers ADR's whole design.
 4. **Demand recruits maintainers.** A jurisdiction generating proposals is exactly where a licensed maintainer-of-record can be recruited (#18's Spain-qualified author is the live example). The response practice converts proposers into maintainers instead of filtering them out.
 
-## Decisions (forks resolved with the maintainer, 2026-07-20)
+## Decisions (forks resolved with the maintainer, 2026-07-20; item 8 added 2026-07-31 on review of PR #313)
 
 1. **Direction-paper-first; ADRs extracted one at a time.** This document replaces a first-draft omnibus ADR that decided routing, gates, security posture, a vocabulary, a coverage map, a playbook, and enforcement in one text. Each precept now promotes to its own small ADR when its trigger fires, exactly as ADRs 0018–0021 were extracted from the fiduciary-grade paper. *(Rejected: the omnibus ADR — consensus-by-bundle; a stack of micro-ADRs filed all at once — same problem in more files.)*
 
@@ -74,6 +74,8 @@ Four operating principles follow, and run through every extraction:
 6. **Maintainer tooling is referenced function-first.** The playbook practice (lane triage, per-item receipt, salvage, human-gated responses) is specified tool-agnostically; [houfu/lq-maintainer-agent](https://github.com/houfu/lq-maintainer-agent) is the current reference implementation. Automated assistants draft and report; **a human maintainer decides and sends every response** — the same floor the vetting playbook sets. *(Rejected: formally adopting the tool — couples project process to an external v0.2 repo.)*
 
 7. **Claims are recorded, then verified — never pre-accepted.** A contributor's statement that their spec "follows ADR 0021," that they hold a bar admission, or that a self-run QA pass was clean is contributor narrative. Responses record it; gates verify it. This posture runs through every precept below and is why the docket descriptions in this paper say "self-described." *(Grounded in the vetting playbook §4's human-only judgments and the attestation process.)*
+
+8. **The coverage map back-fills merged coverage on day one.** Not "starts from the first routed proposal." The realized collision (lq-skills#18 against merged #6) was against *merged* coverage, so a map that starts empty is blind to exactly the failure it exists to prevent; §The live docket is most of the initial table already. *(Rejected: the empty start — cheaper to create, catches nothing already on the books.)*
 
 ## The demand, decomposed (the four shapes)
 
@@ -157,7 +159,6 @@ Extraction order is by trigger, not by numbering. Each is one simple decision.
 
 - The chassis/plugin architectural direction (a live committee question awaiting founder input — see §Committee views). If adopted, the D1 homes become plugin-distribution channels for the same coverage units; the shapes, gates, and claim recording survive, and the packaging mechanics get their own ADRs under that program.
 - `skills/community/` and DE-264 Phase A: retire the empty in-repo path and land `pq-*` in lq-skills, or keep it — a committee scope decision with a PRD amendment (surfaces when DE-264 Phase A is claimed).
-- Whether the claims table back-fills merged lq-skills coverage at creation or starts from the first routed proposal (ADR 0024 acceptance detail).
 - IP provenance / authority to contribute employer-copyrighted material (live in lq-skills#22) — a gate cell no document owns yet; likely a vetting-playbook or CONTRIBUTING addition rather than an ADR.
 - S2 naming and library shape (`lq-dpa-art28-review` vs `dpa-art28`; coexist / rename / consolidate) — resolves with the #18 disposition and becomes playbook material.
 
@@ -170,9 +171,9 @@ Extraction order is by trigger, not by numbering. Each is one simple decision.
 
 ## Cross-references
 
-- First extraction: [ADR 0024](../adr/0024-jurisdiction-and-practice-area-expansion.md). Companion: [ADR 0025](../adr/0025-jurisdictional-skill-trust-tiers-and-maintainer-of-record.md) (trust tiers & maintainer of record).
+- First extraction: [ADR 0024](../adr/0024-jurisdiction-and-practice-area-expansion.md). Companion: ADR 0025 (trust tiers & maintainer of record) — files after 0024 lands.
 - Canon this program restates: ADR [0021](../adr/0021-content-source-registry-and-free-source-expansion.md), [0016](../adr/0016-transparency-and-governance-invariants.md), [0019](../adr/0019-transparent-validity-treatment-layer.md) D8, [0014](../adr/0014-gateway-egress-boundary-for-tool-providers.md)/[0015](../adr/0015-governed-tool-calling-model.md); [skills/CONTRIBUTING.md](../../skills/CONTRIBUTING.md); [docs/security/external-contribution-vetting.md](../security/external-contribution-vetting.md); PRD §1.6, §9 (DE-001/DE-002/DE-264).
-- Governance dependency: GOVERNANCE.md + ADR 0022 — **pending in PR #311**; the S4 committee path and response-window norms are defined against the adopted text.
+- Governance dependency: GOVERNANCE.md + ADR 0022 — **adopted** (PR #311, merged 2026-07-27); the S4 committee path and response-window norms are defined against that text.
 - Style precedent: [fiduciary-grade-agentic-legal-work.md](fiduciary-grade-agentic-legal-work.md) (direction paper → extracted ADRs 0018–0021).
 - Community discussion (LegalQuants WhatsApp corpus, member-access required; cited by channel + line so it is checkable): `LQ AI#L551`, `#L609` (jurisdiction-version question and the French/UAE fork intent, 2026-06-12/14); `#L614`, `#L617` (the founder's build-it-into-the-backend rule, 2026-06-14); `#L627`, `#L652` (the practice-area Deep Agents hard fork, 2026-06-14); `#L1271`–`#L1290` (chassis/plugin thread, incl. the disputes-vs-NDA modularity argument, 2026-06-24); `#L1301` (practice-fork contemplation).
 - Committee discussion (workspace-access required): the maintenance/tiering thread ([#lqai, 2026-07-17/18](https://legalquants.slack.com/archives/C0BDS8RR7JM/p1784329089914559?thread_ts=1784250520.174489&cid=C0BDS8RR7JM)), the litigation questions-for-the-founder thread ([#lqai, 2026-07-17](https://legalquants.slack.com/archives/C0BDS8RR7JM/p1784240944094989?thread_ts=1784240944.094989&cid=C0BDS8RR7JM)), and the post-call chassis/plugin note ([#lqai, 2026-07-12](https://legalquants.slack.com/archives/C0BDS8RR7JM/p1783869266972389)). Quoted in §Committee views because Slack is not a durable public record; the durable record moves to the meeting-minutes repo when ADR 0022 (PR #311) lands.
