@@ -167,7 +167,7 @@ dev = [
     # unpinned floor let CI (which resolves latest) drift ahead of dev venvs
     # and fail `ruff format --check` on code that was clean locally. Pin so
     # local == CI. Bump deliberately (and reformat) when upgrading.
-    "ruff==0.15.22",
+    "ruff==0.16.0",
     "mypy>=1.11",
     # PyYAML type stubs — pyyaml has no inline typings, so mypy needs the
     # types-PyYAML package to type-check `app.skills.loader` etc.
