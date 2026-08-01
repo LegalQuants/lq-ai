@@ -919,6 +919,11 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Chat'}
+        '404':
+          description: Project (if `project_id` was provided) not found.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
 
   /api/v1/chats/{chat_id}:
     parameters:

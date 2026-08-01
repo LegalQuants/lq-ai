@@ -26,6 +26,7 @@ from app.clients.gateway import GatewayClient, set_gateway_client
 from app.db.session import get_db
 from app.main import app
 from app.models.chat import Chat, Message
+from app.models.project import Project
 from app.models.user import User
 from app.security import create_access_token, hash_password
 
@@ -176,6 +177,67 @@ async def test_create_chat_with_explicit_title_and_project_id(
     assert body["project_id"] is None
     # Confirm we can omit project_id without 422.
     _ = project_id
+
+
+@pytest.mark.integration
+async def test_create_chat_with_own_project_id_201(
+    client: AsyncClient,
+    db_user: User,
+    db_session: AsyncSession,
+) -> None:
+    """A caller may bind a new chat to a project they own."""
+    project = Project(
+        owner_id=db_user.id,
+        name="My Matter",
+        slug=f"mine-{uuid.uuid4().hex[:6]}",
+    )
+    db_session.add(project)
+    await db_session.flush()
+    token = _bearer_for(db_user)
+
+    response = await client.post(
+        "/api/v1/chats",
+        json={"project_id": str(project.id)},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["project_id"] == str(project.id)
+
+
+@pytest.mark.integration
+async def test_create_chat_with_foreign_project_id_404(
+    client: AsyncClient,
+    db_user: User,
+    other_user: User,
+    db_session: AsyncSession,
+) -> None:
+    """IDOR regression (GW/API-01, #288): a caller cannot bind a chat to
+    another user's project. Without the ownership guard the foreign
+    project's attached KB content would be pulled into the chat's
+    responses and forwarded to the LLM provider.
+    """
+    foreign_project = Project(
+        owner_id=other_user.id,
+        name="Someone Else's Matter",
+        slug=f"theirs-{uuid.uuid4().hex[:6]}",
+    )
+    db_session.add(foreign_project)
+    await db_session.flush()
+    token = _bearer_for(db_user)
+
+    response = await client.post(
+        "/api/v1/chats",
+        json={"project_id": str(foreign_project.id)},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+    # No chat row should have been created for the caller.
+    rows = (
+        (await db_session.execute(select(Chat).where(Chat.owner_id == db_user.id))).scalars().all()
+    )
+    assert rows == []
 
 
 @pytest.mark.integration
