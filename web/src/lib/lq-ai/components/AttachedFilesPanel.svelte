@@ -10,11 +10,12 @@
 	 * The file's `ingestion_status` is surfaced (pending / processing /
 	 * ready / failed) so the user can see when a file is parseable.
 	 *
-	 * The citation engine is a future-release item; this panel deliberately
-	 * does not surface citation links yet (and the message bubble renders
-	 * nothing for empty citation arrays — see MessageBubble's docstring).
+	 * Citation evidence is rendered on the resulting assistant message via the
+	 * relational citation endpoint. This panel remains focused on attachment
+	 * selection/readiness and does not duplicate those evidence links.
 	 */
 	import type { FileMeta } from '../types';
+	import { canAttachChatFile, MAX_DIRECT_CHAT_ATTACHMENTS } from '../chat/messageCreate';
 
 	export let chatFiles: FileMeta[] = [];
 	export let projectFiles: FileMeta[] = [];
@@ -23,13 +24,14 @@
 	export let onDetach: (file: FileMeta) => void = () => undefined;
 
 	let fileInput: HTMLInputElement;
+	$: attachmentLimitReached = !canAttachChatFile(chatFiles.length);
 
 	function handlePicked(event: Event) {
 		const input = event.target as HTMLInputElement;
-		if (input.files && input.files.length > 0) {
+		if (!attachmentLimitReached && input.files && input.files.length > 0) {
 			onUpload(input.files[0]);
-			input.value = '';
 		}
+		input.value = '';
 	}
 
 	function statusBadge(status: string | undefined): string {
@@ -53,24 +55,24 @@
 >
 	<div>
 		<h3 class="text-sm font-semibold lq-heading">Attached files</h3>
-		<p class="text-xs lq-subtext mt-0.5">
-			Upload documents the skill should review.
-		</p>
+		<p class="text-xs lq-subtext mt-0.5">Upload documents to ground this chat.</p>
 	</div>
 
 	<button
 		type="button"
 		class="lq-btn-secondary text-sm font-medium disabled:opacity-50"
 		on:click={() => fileInput?.click()}
-		disabled={uploading}
+		disabled={uploading || attachmentLimitReached}
 		data-testid="lq-ai-upload-btn"
 	>
-		{uploading ? 'Uploading…' : '+ Files'}
+		{uploading ? 'Uploading…' : attachmentLimitReached ? '4-file limit reached' : '+ Files'}
 	</button>
+	<p class="text-xs lq-subtext">Up to {MAX_DIRECT_CHAT_ATTACHMENTS} files per chat.</p>
 	<input
 		bind:this={fileInput}
 		type="file"
 		class="hidden"
+		disabled={uploading || attachmentLimitReached}
 		on:change={handlePicked}
 		data-testid="lq-ai-file-input"
 	/>

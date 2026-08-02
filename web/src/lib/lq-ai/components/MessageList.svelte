@@ -1,3 +1,9 @@
+<script context="module" lang="ts">
+	export function messageBubbleInstanceKey(messageId: string, isStreaming: boolean): string {
+		return `${messageId}:${isStreaming ? 'streaming' : 'settled'}`;
+	}
+</script>
+
 <script lang="ts">
 	import { afterUpdate } from 'svelte';
 
@@ -50,7 +56,7 @@
 	class="flex-1 overflow-y-auto px-4 py-4 flex flex-col"
 	data-testid="lq-ai-message-list"
 >
-	{#each messages as msg (msg.id)}
+	{#each messages as msg (messageBubbleInstanceKey(msg.id, streamingMessageId === msg.id))}
 		<MessageBubble
 			message={msg}
 			isStreaming={streamingMessageId === msg.id}

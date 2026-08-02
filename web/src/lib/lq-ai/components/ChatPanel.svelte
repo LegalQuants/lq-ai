@@ -84,6 +84,16 @@
 	} from '$lib/lq-ai/stores';
 	import { consumeMessageStream } from '$lib/lq-ai/sse/parser';
 	import { buildAuthorizeUrl, type PendingGate } from '$lib/lq-ai/chat/toolGate';
+	import {
+		buildChatMessageCreate,
+		canAttachChatFile,
+		canSendChatMessage,
+		chatAttachmentStateAfterSelection,
+		initializeChatFilesChatId,
+		isCurrentChatFileUpload,
+		MAX_DIRECT_CHAT_ATTACHMENTS,
+		reconcileChatSendFailure
+	} from '$lib/lq-ai/chat/messageCreate';
 	import type { Chat, FileMeta, Message, Project, Skill } from '$lib/lq-ai/types';
 
 	import ChatSidebar from '$lib/lq-ai/components/ChatSidebar.svelte';
@@ -169,6 +179,8 @@
 	let chatFiles: FileMeta[] = [];
 	let projectFiles: FileMeta[] = [];
 	let uploading = false;
+	let chatFilesChatId: string | null = null;
+	let chatFileUploadGeneration = 0;
 
 	let streamingMessageId: string | null = null;
 	let streamAbort: AbortController | null = null;
@@ -322,13 +334,31 @@
 	}
 
 	async function selectChat(chat: Chat) {
+		const changedChat = chatFilesChatId !== chat.id;
+		const nextAttachmentState = chatAttachmentStateAfterSelection(
+			{
+				chatId: chatFilesChatId,
+				files: chatFiles,
+				attachmentSources
+			},
+			chat.id
+		);
+		chatFiles = nextAttachmentState.files;
+		chatFilesChatId = nextAttachmentState.chatId;
+		attachmentSources = nextAttachmentState.attachmentSources;
+		if (changedChat) {
+			// Invalidate an upload started for the prior chat. Its eventual
+			// completion must not attach that file to this newly-selected chat.
+			chatFileUploadGeneration += 1;
+			uploading = false;
+			projectFiles = [];
+		}
 		activeChatStore.set(chat);
 		streamingMessageId = null;
 		sendError = null;
 		// Reset draft state.
 		composerText = '';
 		attachedSkillNames = [];
-		attachmentSources = {};
 		skillInputs = {};
 		// Load messages.
 		try {
@@ -343,19 +373,24 @@
 	}
 
 	async function refreshProjectContext(chat: Chat) {
+		if ($activeChatStore?.id !== chat.id) return;
 		projectFiles = [];
 		if (!chat.project_id) return;
 		try {
 			const project = await projectsApi.getProject(chat.project_id);
+			if ($activeChatStore?.id !== chat.id) return;
 			// Update the projects-store entry too.
 			projectsStore.update(($projects) =>
 				$projects.map((p) => (p.id === project.id ? project : p))
 			);
 			// Project-attached files are surfaced read-only per Project context inheritance.
 			if (project.attached_file_ids && project.attached_file_ids.length > 0) {
-				projectFiles = await Promise.all(
+				const loadedProjectFiles = await Promise.all(
 					project.attached_file_ids.map((id) => filesApi.getFile(id).catch(() => null))
 				).then((items) => items.filter((x): x is FileMeta => x !== null));
+				if ($activeChatStore?.id === chat.id) {
+					projectFiles = loadedProjectFiles;
+				}
 			}
 		} catch (e) {
 			console.error('lq-ai: failed to load project context', e);
@@ -436,16 +471,33 @@
 
 	// ---- file panel handlers ----
 	async function uploadAttached(file: File) {
+		if (!canAttachChatFile(chatFiles.length)) {
+			sendError = `You can attach up to ${MAX_DIRECT_CHAT_ATTACHMENTS} files to a chat.`;
+			return;
+		}
+		const uploadChatId = chatFilesChatId;
+		const uploadGeneration = ++chatFileUploadGeneration;
 		uploading = true;
 		try {
 			const uploaded = await filesApi.uploadFile(file, {
 				project_id: $activeChatStore?.project_id ?? undefined
 			});
-			chatFiles = [...chatFiles, uploaded];
+			if (
+				isCurrentChatFileUpload(
+					uploadChatId,
+					uploadGeneration,
+					chatFilesChatId,
+					chatFileUploadGeneration
+				)
+			) {
+				chatFiles = [...chatFiles, uploaded];
+			}
 		} catch (e) {
 			console.error('lq-ai: upload failed', e);
 		} finally {
-			uploading = false;
+			if (uploadGeneration === chatFileUploadGeneration) {
+				uploading = false;
+			}
 		}
 	}
 
@@ -467,11 +519,13 @@
 	 */
 	async function consumeIntoMessage(
 		body: ReadableStream<Uint8Array>,
-		assistantId0: string
+		assistantId0: string,
+		onStarted?: () => void
 	): Promise<void> {
 		let assistantId = assistantId0;
 		await consumeMessageStream(body, {
 			onStart: (frame) => {
+				onStarted?.();
 				// Reconcile the optimistic draft id with the persisted id on the
 				// initial send; on resume the id is already persisted so this is a
 				// no-op remap.
@@ -538,7 +592,12 @@
 	async function sendMessage() {
 		const chat = $activeChatStore;
 		if (!chat) return;
-		if (!composerText.trim()) return;
+		if (!canSendChatMessage(composerText, uploading)) {
+			if (uploading) {
+				sendError = 'Wait for the attached file to finish uploading before sending.';
+			}
+			return;
+		}
 
 		// Validate required skill inputs.
 		for (const name of attachedSkillNames) {
@@ -626,25 +685,23 @@
 			slug,
 			source: attachmentSources[slug] ?? 'picker'
 		}));
+		// Build the complete request through one typed boundary. In particular,
+		// chat-local files must travel as `file_ids`; merely rendering them in
+		// AttachedFilesPanel does not make them available to the backend.
+		const messageCreate = buildChatMessageCreate({
+			content: composerText,
+			model: currentModelId,
+			attachedSkills: attachedSkillsPayload,
+			files: chatFiles,
+			skillInputs,
+			// Issue #207 finding 4 — only send set_sticky on a real toggle
+			// change; otherwise leave the chat's sticky set unchanged.
+			setSticky: stickyDirty ? stickyEnabled : undefined
+		});
+		let streamStarted = false;
 
 		try {
-			const res = await messagesApi.sendMessageStream(
-				chat.id,
-				{
-					content: composerText,
-					model: currentModelId ?? undefined,
-					attached_skills: attachedSkillsPayload.length > 0 ? attachedSkillsPayload : undefined,
-					skill_inputs:
-						Object.keys(skillInputs).length > 0
-							? (skillInputs as Record<string, Record<string, unknown>>)
-							: undefined,
-					// Issue #207 finding 4 — only send set_sticky on a real toggle
-					// change; otherwise leave the chat's sticky set unchanged.
-					set_sticky: stickyDirty ? stickyEnabled : undefined,
-					stream: true
-				},
-				streamAbort.signal
-			);
+			const res = await messagesApi.sendMessageStream(chat.id, messageCreate, streamAbort.signal);
 			composerText = '';
 			// The toggle change has now been applied server-side for this turn.
 			stickyDirty = false;
@@ -658,11 +715,23 @@
 				throw new Error('Empty stream body');
 			}
 
-			await consumeIntoMessage(res.body, draftAssistantId);
+			await consumeIntoMessage(res.body, draftAssistantId, () => {
+				streamStarted = true;
+			});
 		} catch (e: unknown) {
 			streamingMessageId = null;
+			const failure = reconcileChatSendFailure(
+				get(messagesStore),
+				{
+					optimisticUserId,
+					draftAssistantId,
+					streamStarted
+				},
+				e
+			);
+			messagesStore.set(failure.messages);
 			console.error('lq-ai: stream failed', e);
-			sendError = e instanceof Error ? e.message : 'Stream failed';
+			sendError = failure.errorMessage;
 		} finally {
 			streamAbort = null;
 		}
@@ -846,6 +915,13 @@
 	}
 
 	onMount(async () => {
+		// A route remount can retain the selected chat in the shared store while
+		// this component's draft attachment state starts fresh. Bind that empty
+		// state immediately so the next completed upload belongs to the active chat.
+		chatFilesChatId = initializeChatFilesChatId(
+			chatFilesChatId,
+			get(activeChatStore)?.id ?? null
+		);
 		await loadShell();
 		if (initialChatId) {
 			const found = get(chatsStore).find((c) => c.id === initialChatId);
@@ -1137,7 +1213,7 @@
 							type="button"
 							class="lq-btn-send text-sm font-medium disabled:opacity-50"
 							on:click={sendMessage}
-							disabled={!composerText.trim()}
+							disabled={!canSendChatMessage(composerText, uploading)}
 							data-testid="lq-ai-send-btn"
 						>
 							Send

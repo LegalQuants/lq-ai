@@ -14,6 +14,7 @@ from fastapi import FastAPI, status
 from httpx import ASGITransport, AsyncClient
 
 from app.errors import (
+    CODE_ATTACHMENTS_NOT_READY,
     CODE_CONFLICT,
     CODE_GATEWAY_INVALID_RESPONSE,
     CODE_GATEWAY_TIMEOUT,
@@ -27,6 +28,7 @@ from app.errors import (
     CODE_TIER_BELOW_MINIMUM,
     CODE_UNAUTHORIZED,
     CODE_VALIDATION_ERROR,
+    AttachmentsNotReady,
     Conflict,
     Forbidden,
     GatewayInvalidResponse,
@@ -108,6 +110,11 @@ def test_details_dict_is_copied_so_mutation_doesnt_leak_back() -> None:
         (PasswordChangeRequired, status.HTTP_403_FORBIDDEN, CODE_PASSWORD_CHANGE_REQUIRED),
         (PayloadTooLarge, status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, CODE_PAYLOAD_TOO_LARGE),
         (Conflict, status.HTTP_409_CONFLICT, CODE_CONFLICT),
+        (
+            AttachmentsNotReady,
+            status.HTTP_409_CONFLICT,
+            CODE_ATTACHMENTS_NOT_READY,
+        ),
         (GatewayUnreachable, status.HTTP_503_SERVICE_UNAVAILABLE, CODE_GATEWAY_UNREACHABLE),
         (GatewayTimeout, status.HTTP_504_GATEWAY_TIMEOUT, CODE_GATEWAY_TIMEOUT),
         (GatewayInvalidResponse, status.HTTP_502_BAD_GATEWAY, CODE_GATEWAY_INVALID_RESPONSE),

@@ -65,6 +65,7 @@ CODE_INTERNAL_ERROR = "internal_error"
 CODE_PASSWORD_CHANGE_REQUIRED = "password_change_required"
 CODE_PAYLOAD_TOO_LARGE = "payload_too_large"
 CODE_CONFLICT = "conflict"
+CODE_ATTACHMENTS_NOT_READY = "attachments_not_ready"
 CODE_MFA_ENROLLMENT_REQUIRED = "mfa_enrollment_required"
 CODE_RESEARCH_NOT_CONFIGURED = "research_not_configured"
 CODE_MCP_OAUTH_NOT_CONFIGURED = "mcp_oauth_not_configured"
@@ -284,6 +285,18 @@ class Conflict(LQAIError):
 
     code = CODE_CONFLICT
     http_status = status.HTTP_409_CONFLICT
+
+
+class AttachmentsNotReady(Conflict):
+    """One or more message attachments lack usable parsed source chunks — 409.
+
+    ``details`` distinguishes processing files that can be retried after a
+    wait from failed/unextractable files that need OCR or replacement. The
+    stable code lets clients present the appropriate attachment remediation
+    instead of a generic conflict banner.
+    """
+
+    code = CODE_ATTACHMENTS_NOT_READY
 
 
 # --- M4 autonomous-layer brake exceptions ------------------------------------

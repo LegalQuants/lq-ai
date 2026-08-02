@@ -1026,16 +1026,39 @@ paths:
                envelope (mid-stream failure) precedes the OpenAI-style
                `data: [DONE]` line.
 
-        **C3 persistence.** The backend writes the user message row
-        first (unconditionally), generates the assistant message UUID,
+        **C3 persistence.** After attachment-readiness validation, the
+        backend writes the user message row, generates the assistant message UUID,
         forwards it to the gateway as `lq_ai_message_id` so the
         gateway's `inference_routing_log` row carries the same id, and
         persists the assistant row at end-of-stream (or end of the
         non-streaming response). On streaming failure the assistant
         row is persisted with whatever content was received and
-        `error_code` populated for audit.
+        `error_code` populated for audit, except that a direct-file partial
+        draft is withheld and replaced by the canonical source-only fallback.
 
-        Citations are an empty array until M2's citation engine ships.
+        **Attached-file readiness.** Readiness is determined by canonical
+        parsed content, not by `ingestion_status`: every `file_ids` entry must
+        have at least one nonblank document chunk that still matches the
+        canonical document text before the turn is persisted or dispatched.
+        A stale pending/processing status does not block a file that already
+        has usable canonical chunks. Only when those chunks are absent does
+        status affect the error: pending/processing files return a retryable
+        `409 attachments_not_ready`; failed, nominally ready, image-only, or
+        otherwise textless files return the same stable code with
+        `retryable: false` and OCR/replacement guidance in `details`.
+
+        Source quotations emitted as `"..." (Source: [N])` are verified
+        against the retrieved chunks and persisted for the citation endpoint.
+        Direct-file streaming output is held until this check completes. If
+        the model draft contains no quotation that verifies against one of
+        that turn's attached files, the draft is withheld and replaced with a
+        deterministic exact source excerpt plus a visible grounding notice.
+        The excerpt is re-read from canonical document text, must pass the
+        unchanged exact-match verifier, and becomes the replacement's sole
+        citation. SSE comment keepalives are emitted throughout buffered model
+        generation and the subsequent direct-citation verification or fallback
+        phase. A single verified excerpt is not proposition-level verification
+        of broader legal analysis.
 
         The response also surfaces the routed Inference Tier in the
         `X-LQ-AI-Routed-Inference-Tier` HTTP header (header-only
@@ -1075,6 +1098,23 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
+        '409':
+          description: >-
+            One or more attached files lack usable canonical chunks
+            (`attachments_not_ready`). Ingestion status affects retryability,
+            not readiness: details distinguish files still being processed
+            from failed, nominally ready, or unextractable files that require
+            OCR or replacement.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '422':
+          description: >-
+            More than four direct file attachments were supplied. Returns
+            `validation_error` with `max_file_ids` and `received_file_ids`.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
         '502':
           description: Gateway returned an upstream error (provider_unavailable, etc.)
           content:
@@ -1104,9 +1144,13 @@ paths:
     get:
       tags: [messages]
       summary: Get citations for a message (resolves to source documents)
+      description: >-
+        Returns the verified citations persisted relationally for the specified
+        assistant message. Inline `citations` arrays on message and send/stream
+        response objects remain empty for backward compatibility.
       responses:
         '200':
-          description: Citations
+          description: Verified citations resolved from relational citation rows
           content:
             application/json:
               schema:
@@ -7391,7 +7435,10 @@ components:
         citations:
           type: array
           items: {$ref: '#/components/schemas/Citation'}
-          description: "M2 populates this; M1 stores []."
+          description: >-
+            Inline compatibility field; currently returned as an empty array.
+            Retrieve verified citations from
+            `GET /api/v1/chats/{chat_id}/messages/{message_id}/citations`.
         created_at: {type: string, format: date-time}
 
     MessageCreate:
@@ -7447,7 +7494,7 @@ components:
             NOT bindable to a skill file-input via `skill_inputs`.
         file_ids:
           type: array
-          maxItems: 16
+          maxItems: 4
           items: {type: string, format: uuid}
           description: |
             Donna: caller-owned file UUIDs supplying ephemeral,
@@ -7460,7 +7507,8 @@ components:
             (id-probing-safe — indistinguishable from "not found").
             Validated ids are forwarded to the gateway as `lq_ai_file_ids`
             alongside `lq_ai_skills` and echoed back as `applied_file_ids`
-            on the response / SSE `complete` frame. Capped at 16 entries.
+            on the response / SSE `complete` frame. Capped at 4 entries so
+            every file retains at least one excerpt in the bounded context.
             Omitted / empty is back-compatible.
 
     MessagePostResponse:
@@ -7479,7 +7527,10 @@ components:
         citations:
           type: array
           items: {$ref: '#/components/schemas/Citation'}
-          description: "Empty until M2 (citation engine)."
+          description: >-
+            Inline compatibility field; currently returned as an empty array.
+            Retrieve verified citations from
+            `GET /api/v1/chats/{chat_id}/messages/{message_id}/citations`.
         routed_inference_tier:
           type: integer
           enum: [1,2,3,4,5]
@@ -7571,6 +7622,10 @@ components:
         citations:
           type: array
           items: {$ref: '#/components/schemas/Citation'}
+          description: >-
+            Inline compatibility field; currently returned as an empty array.
+            Retrieve verified citations from
+            `GET /api/v1/chats/{chat_id}/messages/{message_id}/citations`.
         applied_skills:
           type: array
           items: {type: string}
@@ -8596,7 +8651,8 @@ components:
               description: |
                 Stable error code. Backend-only codes:
                 `password_change_required`, `payload_too_large`,
-                `conflict`, `unauthorized`, `forbidden`, `not_found`,
+                `conflict`, `attachments_not_ready`, `unauthorized`,
+                `forbidden`, `not_found`,
                 `validation_error`, `rate_limited`, `internal_error`.
                 Backend↔gateway crossing codes (propagated from gateway
                 responses):
@@ -8609,6 +8665,7 @@ components:
                 - password_change_required
                 - payload_too_large
                 - conflict
+                - attachments_not_ready
                 - unauthorized
                 - forbidden
                 - not_found

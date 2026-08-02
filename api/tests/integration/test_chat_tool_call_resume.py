@@ -16,7 +16,9 @@ from internals; use real DB for row-state assertions.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
+import hashlib
 import json as _json
 import uuid
 from collections.abc import AsyncIterator
@@ -27,18 +29,31 @@ from unittest.mock import AsyncMock, patch
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
+from app.api.chats import (
+    DIRECT_ATTACHMENT_GROUNDING_FAILURE_NOTICE,
+    DIRECT_ATTACHMENT_GROUNDING_PENDING_NOTICE,
+    DIRECT_ATTACHMENT_GROUNDING_WARNING,
+    _build_tool_resume_state,
+    _retrieve_attached_file_chunks,
+    resume_tool_call,
+)
 from app.autonomous.guard import ToolResult
 from app.chat.tool_loop import LoopFinal
 from app.chat.tool_schemas import ChatToolAllowlist, ToolSpec
 from app.clients.gateway import GatewayClient, set_gateway_client
 from app.db.session import get_db
 from app.main import app
-from app.models.chat import Message
+from app.models.chat import Message, MessageCitation
 from app.models.chat_pending_tool_call import ChatPendingToolCall
+from app.models.document import Document, DocumentChunk
+from app.models.file import File
 from app.models.tool_call_log import ToolCallLog
 from app.models.user import User
+from app.models.work_product import WorkProductAttribution
 from app.security import create_access_token, hash_password
 
 GATEWAY_BASE = "http://test-gateway"
@@ -158,7 +173,9 @@ async def _create_chat_and_pending(
 ) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
     """Create a chat and a ChatPendingToolCall row. Returns (chat_id, pending_id, assistant_msg_id)."""
     headers = _h(user)
-    chat_resp = await client.post("/api/v1/chats", headers=headers, json={"title": "resume-test"})
+    chat_resp = await client.post(
+        "/api/v1/chats", headers=headers, json={"title": "resume-test"}
+    )
     assert chat_resp.status_code == 201, chat_resp.text
     chat_id = uuid.UUID(chat_resp.json()["id"])
 
@@ -208,6 +225,47 @@ async def _create_chat_and_pending(
     await db_session.commit()
 
     return chat_id, pending_row.id, assistant_message_id
+
+
+async def _create_direct_attachment_source(
+    db_session: AsyncSession,
+    *,
+    owner: User,
+    filename: str,
+    content: str,
+) -> tuple[File, DocumentChunk]:
+    """Create one canonical, citation-verifiable direct attachment."""
+
+    file_row = File(
+        owner_id=owner.id,
+        filename=filename,
+        mime_type="application/pdf",
+        size_bytes=len(content.encode("utf-8")),
+        hash_sha256=uuid.uuid4().hex * 2,
+        storage_path=str(uuid.uuid4()),
+        ingestion_status="ready",
+    )
+    db_session.add(file_row)
+    await db_session.flush()
+    document = Document(
+        file_id=file_row.id,
+        parser="pymupdf",
+        normalized_content=content,
+    )
+    db_session.add(document)
+    await db_session.flush()
+    chunk = DocumentChunk(
+        document_id=document.id,
+        chunk_index=0,
+        content=content,
+        page_start=1,
+        page_end=1,
+        char_offset_start=0,
+        char_offset_end=len(content),
+    )
+    db_session.add(chunk)
+    await db_session.flush()
+    return file_row, chunk
 
 
 # ---------------------------------------------------------------------------
@@ -293,7 +351,9 @@ async def test_approve_executes_tool_and_streams_loop_final(
     )
     pending_row = await db_session.get(ChatPendingToolCall, pending_id)
     assert pending_row is not None
-    assert pending_row.status == "resolved", f"Expected resolved, got {pending_row.status!r}"
+    assert pending_row.status == "resolved", (
+        f"Expected resolved, got {pending_row.status!r}"
+    )
 
     # Assert assistant Message row was persisted.
     from sqlalchemy import select
@@ -476,7 +536,9 @@ async def test_non_owner_gets_404(
     db_session: AsyncSession,
 ) -> None:
     """A different user cannot see the pending row — 404 (id-probing-safe)."""
-    chat_id, pending_id, _ = await _create_chat_and_pending(db_session, user=db_user, client=client)
+    chat_id, pending_id, _ = await _create_chat_and_pending(
+        db_session, user=db_user, client=client
+    )
 
     # other_user tries to resume the pending call owned by db_user.
     resp = await client.post(
@@ -503,7 +565,9 @@ async def test_unknown_pending_call_id_returns_404(
 ) -> None:
     """A completely unknown pending_call_id (UUID that exists nowhere) → 404."""
     headers = _h(db_user)
-    chat_resp = await client.post("/api/v1/chats", headers=headers, json={"title": "unknown-test"})
+    chat_resp = await client.post(
+        "/api/v1/chats", headers=headers, json={"title": "unknown-test"}
+    )
     assert chat_resp.status_code == 201, chat_resp.text
     chat_id = chat_resp.json()["id"]
 
@@ -592,7 +656,9 @@ async def test_claim_committed_before_execute_tool(
     # We capture the db argument passed to execute_tool (the handler's session).
     # After db.commit() the session's identity map is updated, so db.get() returns
     # the committed state.
-    async def _capture_and_succeed(db: AsyncSession, *args: object, **kwargs: object) -> ToolResult:
+    async def _capture_and_succeed(
+        db: AsyncSession, *args: object, **kwargs: object
+    ) -> ToolResult:
         row = await db.get(ChatPendingToolCall, pending_id)
         if row is not None:
             status_at_execute.append(row.status)
@@ -691,7 +757,9 @@ async def test_approve_executing_audit_row_has_approved_confirmation_state(
     # actual tool dispatch) so the confirmation_state param flows through correctly.
     from app.autonomous.guard import ToolResult as _ToolResult
 
-    execute_result = _ToolResult(cost_usd=Decimal("0"), data={"ok": True}, outcome="success")
+    execute_result = _ToolResult(
+        cost_usd=Decimal("0"), data={"ok": True}, outcome="success"
+    )
 
     captured_kwargs: list[dict] = []
 
@@ -994,4 +1062,338 @@ async def test_deny_gateway_receives_assistant_turn_before_denial_message(
 
     assert tool_msg is not None, (
         "No role='tool' denial message found in conversation — denial message was not appended"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_direct_attachment_resume_buffers_uncited_final_and_emits_exact_fallback(
+    client: AsyncClient,
+    db_user: User,
+    db_session: AsyncSession,
+) -> None:
+    """Confirmation resume retains direct grounding and never releases an uncited final."""
+
+    source_text = "The indemnity survives termination."
+    file_row, source_chunk = await _create_direct_attachment_source(
+        db_session,
+        owner=db_user,
+        filename="indemnity.pdf",
+        content=source_text,
+    )
+    retrieved_chunks = await _retrieve_attached_file_chunks(
+        db_session,
+        [str(file_row.id)],
+        db_user.id,
+        "Does the indemnity survive termination?",
+    )
+    chat_id, pending_id, assistant_message_id = await _create_chat_and_pending(
+        db_session,
+        user=db_user,
+        client=client,
+    )
+    pending_row = await db_session.get(ChatPendingToolCall, pending_id)
+    assert pending_row is not None
+    pending_row.resume_state = _build_tool_resume_state(
+        messages=[
+            {
+                "role": "user",
+                "content": "Does the indemnity survive termination, then delete the file?",
+            }
+        ],
+        calls_used=0,
+        model="smart",
+        direct_file_ids=[str(file_row.id)],
+        retrieved_chunks=retrieved_chunks,
+        project_ensemble_verification=False,
+    )
+    await db_session.commit()
+
+    # Gate metadata carries stable identifiers and excerpt lengths, not a second
+    # copy of the source body. The resume route re-reads canonical text from DB.
+    assert pending_row.resume_state["direct_file_ids"] == [str(file_row.id)]
+    assert pending_row.resume_state["grounding_chunk_refs"] == [
+        {"chunk_id": str(source_chunk.id), "content_length": len(source_text)}
+    ]
+    assert source_text not in _json.dumps(pending_row.resume_state)
+
+    spec = _make_tool_spec()
+    uncited_final = "UNVERIFIED RESUMED MODEL DRAFT MUST NOT REACH THE CLIENT"
+    loop_final = LoopFinal(
+        text=uncited_final,
+        usage_prompt=80,
+        usage_completion=30,
+        tier=2,
+        provider="anthropic-prod",
+        model="claude-sonnet-4-6",
+        applied_skills=["source-review"],
+        calls_used=1,
+    )
+    tool_result = ToolResult(
+        cost_usd=Decimal("0"),
+        data={"deleted": "abc123"},
+        outcome="success",
+    )
+    non_empty_allowlist = ChatToolAllowlist(specs={spec.function_name: spec})
+
+    with (
+        patch(
+            "app.api.chats.assemble_allowlist",
+            new=AsyncMock(return_value=non_empty_allowlist),
+        ),
+        patch(
+            "app.chat.tool_loop.execute_tool",
+            new=AsyncMock(return_value=tool_result),
+        ),
+        patch(
+            "app.mcp.service.list_servers",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch(
+            "app.api.chats.run_chat_tool_loop",
+            new=AsyncMock(return_value=loop_final),
+        ),
+    ):
+        response = await client.post(
+            f"/api/v1/chats/{chat_id}/tool-calls/{pending_id}",
+            headers=_h(db_user),
+            json={"decision": "approve"},
+        )
+
+    assert response.status_code == 200, response.text
+    assert uncited_final.encode() not in response.content
+    frames = _parse_sse_frames(response.content)
+    delta_frames = [frame for frame in frames if frame.get("type") == "delta"]
+    assert len(delta_frames) == 1
+    fallback = delta_frames[0]["delta"]
+    assert fallback.startswith(DIRECT_ATTACHMENT_GROUNDING_WARNING)
+    assert source_text in fallback
+    assert f"“{source_text}” (Source: [1])" in fallback
+    complete = [frame for frame in frames if frame.get("type") == "complete"]
+    assert len(complete) == 1
+    assert complete[0]["message"]["content"] == fallback
+    assert complete[0]["applied_file_ids"] == [str(file_row.id)]
+    assert complete[0]["applied_skills"] == ["source-review"]
+
+    persisted = await db_session.get(Message, assistant_message_id)
+    assert persisted is not None
+    assert persisted.content == fallback
+    assert uncited_final not in persisted.content
+    citation = (
+        await db_session.execute(
+            select(MessageCitation).where(
+                MessageCitation.message_id == assistant_message_id
+            )
+        )
+    ).scalar_one()
+    assert citation.source_file_id == file_row.id
+    assert citation.source_text == source_text
+    assert citation.verified is True
+    assert citation.verification_method == "exact_match"
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_direct_attachment_resume_cancellation_replaces_pending_notice(
+    client: AsyncClient,
+    db_user: User,
+    db_session: AsyncSession,
+) -> None:
+    """Canceling the response during grounding leaves only the fixed safe notice."""
+
+    source_text = "The indemnity survives termination."
+    file_row, _source_chunk = await _create_direct_attachment_source(
+        db_session,
+        owner=db_user,
+        filename="indemnity.pdf",
+        content=source_text,
+    )
+    retrieved_chunks = await _retrieve_attached_file_chunks(
+        db_session,
+        [str(file_row.id)],
+        db_user.id,
+        "Does the indemnity survive termination?",
+    )
+    chat_id, pending_id, assistant_message_id = await _create_chat_and_pending(
+        db_session,
+        user=db_user,
+        client=client,
+    )
+    pending_row = await db_session.get(ChatPendingToolCall, pending_id)
+    assert pending_row is not None
+    pending_row.resume_state = _build_tool_resume_state(
+        messages=[
+            {
+                "role": "user",
+                "content": "Does the indemnity survive termination, then delete the file?",
+            }
+        ],
+        calls_used=0,
+        model="smart",
+        direct_file_ids=[str(file_row.id)],
+        retrieved_chunks=retrieved_chunks,
+        project_ensemble_verification=False,
+    )
+    await db_session.commit()
+
+    spec = _make_tool_spec()
+    raw_draft = "UNVERIFIED CANCELED RESUME DRAFT MUST NEVER BE RELEASED"
+    loop_final = LoopFinal(
+        text=raw_draft,
+        usage_prompt=80,
+        usage_completion=30,
+        tier=2,
+        provider="anthropic-prod",
+        model="claude-sonnet-4-6",
+        applied_skills=[],
+        calls_used=1,
+    )
+    tool_result = ToolResult(
+        cost_usd=Decimal("0"),
+        data={"deleted": "abc123"},
+        outcome="success",
+    )
+    non_empty_allowlist = ChatToolAllowlist(specs={spec.function_name: spec})
+    guard_started = asyncio.Event()
+    never_release_guard = asyncio.Event()
+    observed_pre_guard_content: list[str] = []
+
+    async def _blocking_grounding_guard(
+        session: AsyncSession,
+        *,
+        message: Message,
+        assistant_text: str,
+        **_kwargs: object,
+    ) -> None:
+        await session.refresh(message)
+        observed_pre_guard_content.append(message.content)
+        assert message.content == DIRECT_ATTACHMENT_GROUNDING_PENDING_NOTICE
+        assert assistant_text == raw_draft
+        guard_started.set()
+        await never_release_guard.wait()
+
+    request_body = b'{"decision":"approve"}'
+    body_delivered = False
+
+    async def _receive() -> dict[str, object]:
+        nonlocal body_delivered
+        if not body_delivered:
+            body_delivered = True
+            return {
+                "type": "http.request",
+                "body": request_body,
+                "more_body": False,
+            }
+        return {"type": "http.disconnect"}
+
+    request = Request(
+        {
+            "type": "http",
+            "asgi": {"version": "3.0"},
+            "http_version": "1.1",
+            "method": "POST",
+            "scheme": "http",
+            "path": f"/api/v1/chats/{chat_id}/tool-calls/{pending_id}",
+            "raw_path": (f"/api/v1/chats/{chat_id}/tool-calls/{pending_id}".encode()),
+            "query_string": b"",
+            "headers": [],
+            "client": ("test", 123),
+            "server": ("test", 80),
+            "app": app,
+        },
+        _receive,
+    )
+    gateway = GatewayClient(base_url=GATEWAY_BASE, gateway_key=GATEWAY_KEY)
+    next_body_task: asyncio.Task[bytes] | None = None
+
+    try:
+        with (
+            patch(
+                "app.api.chats.assemble_allowlist",
+                new=AsyncMock(return_value=non_empty_allowlist),
+            ),
+            patch(
+                "app.chat.tool_loop.execute_tool",
+                new=AsyncMock(return_value=tool_result),
+            ),
+            patch(
+                "app.mcp.service.list_servers",
+                new=AsyncMock(return_value=[]),
+            ),
+            patch(
+                "app.api.chats.run_chat_tool_loop",
+                new=AsyncMock(return_value=loop_final),
+            ),
+            patch(
+                "app.api.chats._persist_citations_with_direct_grounding_guard",
+                new=_blocking_grounding_guard,
+            ),
+        ):
+            response = await resume_tool_call(
+                str(chat_id),
+                str(pending_id),
+                request,
+                db_user,
+                db_session,
+                gateway,
+            )
+            body_iterator = response.body_iterator
+            emitted = [await anext(body_iterator), await anext(body_iterator)]
+            next_body_task = asyncio.create_task(anext(body_iterator))
+            await asyncio.wait_for(guard_started.wait(), timeout=3.0)
+
+            assert observed_pre_guard_content == [
+                DIRECT_ATTACHMENT_GROUNDING_PENDING_NOTICE
+            ]
+            body_before_cancel = b"".join(emitted)
+            assert raw_draft.encode() not in body_before_cancel
+            assert b'"type":"delta"' not in body_before_cancel
+            assert b'"type":"complete"' not in body_before_cancel
+
+            next_body_task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await next_body_task
+            with contextlib.suppress(RuntimeError):
+                await body_iterator.aclose()
+    finally:
+        if next_body_task is not None and not next_body_task.done():
+            next_body_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await next_body_task
+        await gateway.aclose()
+
+    persisted = (
+        await db_session.execute(
+            select(Message)
+            .where(Message.id == assistant_message_id)
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
+    assert persisted.content == DIRECT_ATTACHMENT_GROUNDING_FAILURE_NOTICE
+    assert persisted.error_code == "internal_error"
+    assert raw_draft not in persisted.content
+    citations = (
+        (
+            await db_session.execute(
+                select(MessageCitation).where(
+                    MessageCitation.message_id == assistant_message_id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert citations == []
+    attribution = (
+        await db_session.execute(
+            select(WorkProductAttribution)
+            .where(WorkProductAttribution.message_id == assistant_message_id)
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
+    assert (
+        attribution.content_hash
+        == hashlib.sha256(
+            DIRECT_ATTACHMENT_GROUNDING_FAILURE_NOTICE.encode("utf-8")
+        ).hexdigest()
     )

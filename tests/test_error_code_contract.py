@@ -217,6 +217,27 @@ def test_no_unexpected_codes_on_either_side(
     assert len(gw_codes) >= 8, "gateway/app/errors.py CODE_* set is unexpectedly small"
 
 
+@pytest.mark.unit
+def test_attachments_not_ready_is_a_typed_documented_backend_contract(
+    api_errors: ModuleType,
+) -> None:
+    """Direct-file readiness has a stable class, code, and POST 409 response."""
+
+    assert api_errors.CODE_ATTACHMENTS_NOT_READY == "attachments_not_ready"
+    err = api_errors.AttachmentsNotReady("not ready")
+    assert err.effective_code == "attachments_not_ready"
+    assert err.effective_http_status == 409
+
+    contract_path = REPO_ROOT / "docs/api/backend-openapi.yaml"
+    contract = contract_path.read_text(encoding="utf-8")
+    error_schema = contract.split("\n    Error:\n", 1)[1].split("\n    LedgerEntry:\n", 1)[0]
+    message_endpoint = contract.split("\n  /api/v1/chats/{chat_id}/messages:\n", 1)[1].split(
+        "\n  /api/v1/chats/{chat_id}/messages/{message_id}/citations:\n", 1
+    )[0]
+    assert "- attachments_not_ready" in error_schema
+    assert "'409':" in message_endpoint
+
+
 # --- D1: tier_below_minimum status + class symmetry ------------------------
 
 

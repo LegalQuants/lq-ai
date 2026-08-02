@@ -166,7 +166,9 @@ def test_single_chunk_citation_uses_chunk_local_path_no_warning(
     response = f'The agreement says "{quote}" (Source: [2]).'
 
     with caplog.at_level(logging.WARNING, logger="app.citation.extraction"):
-        candidates = extract_citations(response, chunks, document_contents={doc_id: full})
+        candidates = extract_citations(
+            response, chunks, document_contents={doc_id: full}
+        )
 
     assert len(candidates) == 1
     cite = candidates[0]
@@ -178,7 +180,9 @@ def test_single_chunk_citation_uses_chunk_local_path_no_warning(
     # The chunk-mismatch warning is reserved for the fallback path. A
     # successful chunk-local hit must NOT emit it.
     mismatch_records = [
-        r for r in caplog.records if r.__dict__.get("event") == "citation_chunk_mismatch"
+        r
+        for r in caplog.records
+        if r.__dict__.get("event") == "citation_chunk_mismatch"
     ]
     assert mismatch_records == []
 
@@ -200,17 +204,22 @@ def test_spanning_fallback_emits_chunk_mismatch_warning(
     response = f'The agreement says "{quote}" (Source: [1]).'
 
     with caplog.at_level(logging.WARNING, logger="app.citation.extraction"):
-        candidates = extract_citations(response, chunks, document_contents={doc_id: full})
+        candidates = extract_citations(
+            response, chunks, document_contents={doc_id: full}
+        )
 
     assert len(candidates) == 1
     mismatch_records = [
-        r for r in caplog.records if r.__dict__.get("event") == "citation_chunk_mismatch"
+        r
+        for r in caplog.records
+        if r.__dict__.get("event") == "citation_chunk_mismatch"
     ]
     assert len(mismatch_records) == 1
     record = mismatch_records[0]
     assert record.__dict__["document_id"] == str(doc_id)
     assert record.__dict__["cited_chunk_index"] == 1
-    assert record.__dict__["quote_prefix"] == quote[:40]
+    assert record.__dict__["quote_length"] == len(quote)
+    assert "quote_prefix" not in record.__dict__
 
 
 @pytest.mark.unit
@@ -268,9 +277,13 @@ def test_document_contents_map_missing_doc_id_drops_safely() -> None:
 
     # Empty map (or map keyed by some unrelated id) — extractor must
     # not raise.
-    candidates = extract_citations(response, chunks, document_contents={uuid.uuid4(): "unrelated"})
+    candidates = extract_citations(
+        response, chunks, document_contents={uuid.uuid4(): "unrelated"}
+    )
     assert candidates == []
 
     # Confirm the success path still works when the right id is present.
-    candidates_ok = extract_citations(response, chunks, document_contents={doc_id: full})
+    candidates_ok = extract_citations(
+        response, chunks, document_contents={doc_id: full}
+    )
     assert len(candidates_ok) == 1

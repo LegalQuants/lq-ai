@@ -334,7 +334,7 @@ This section specifies each major capability. Every capability section follows t
 - `POST /api/v1/chats` — create chat.
 - `GET /api/v1/chats` — list user's chats.
 - `GET /api/v1/chats/{id}` — get chat with messages.
-- `POST /api/v1/chats/{id}/messages` — post message, stream response. Accepts a per-message `file_ids` list that attaches files for that turn only (passed to the gateway as `lq_ai_file_ids`, injected as document-context per Decision M2-1) and echoes the applied set back as `applied_file_ids`; this is a **separate channel from** `skill_inputs` (post-v0.4.0, #116/#117).
+- `POST /api/v1/chats/{id}/messages` — post message, stream response. Accepts up to four per-message `file_ids` that attach files for that turn only and echoes the applied set back as `applied_file_ids`; this is a **separate channel from** `skill_inputs` (post-v0.4.0, #116/#117). The API retrieves a bounded local excerpt set directly from parsed document chunks (maximum six excerpts / 6,000 source characters), so direct attachments do not require a Project, Knowledge Base, embedding provider, or external API key. A send fails before inference with typed `attachments_not_ready` (409) when any selected file lacks extractable chunks. Direct-file answers must contain a quotation verified against the attached source; an unverifiable draft is withheld in favor of a fail-closed source excerpt rather than being presented as grounded analysis.
 - `PATCH /api/v1/chats/{id}` — update chat (rename, archive, pin, share).
 - `DELETE /api/v1/chats/{id}` — delete chat.
 - `GET /api/v1/chats/search?q=...` — search chats.

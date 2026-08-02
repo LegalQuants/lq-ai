@@ -7,9 +7,9 @@
 	 * - Applied-skills chips on assistant messages.
 	 * - Tier badge on assistant messages.
 	 * - error_code surfaces as a red-line banner (per Task C8 spec).
-	 * - Citations: when the array is non-empty, render a count summary;
-	 *   when empty, render nothing (the citation engine lands in a future
-	 *   release — until then we don't telegraph a roadmap to users).
+	 * - Citations: lazy-load relational evidence after streaming completes,
+	 *   decorate matching source markers, and render the citation sidecar. A
+	 *   message with no citation rows keeps the sidecar empty.
 	 * - Wave D.1 T15: when `message.kind === 'refusal'` the bubble dispatches
 	 *   to `RefusalMessageBubble` and forwards the rerun / override /
 	 *   explainer callbacks; the default rendering below is skipped.

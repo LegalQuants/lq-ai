@@ -83,15 +83,16 @@ path attaches exactly one skill, the wizard tryout attaches exactly
 one, and even an "attach multiple skills to a chat" UX rarely exceeds
 a handful. Requests with more than 16 attachments 422 at schema time."""
 
-MESSAGE_FILE_IDS_MAX_LEN: int = 16
+MESSAGE_FILE_IDS_MAX_LEN: int = 4
 """Donna — hard cap on ``MessageCreateRequest.file_ids``.
 
 Each id triggers an ownership-validation SELECT and forwards document
 context to the gateway for one turn. Without a cap, a single message
 could attach thousands of file ids — workload-multiplication DoS
-available to any authenticated user. 16 matches
-:data:`ATTACHED_SKILLS_MAX_LEN`; realistic per-turn document context is
-a handful of files. Requests over the cap 422 at schema time."""
+available to any authenticated user. Four matches the direct-file retrieval
+contract: each file is guaranteed at least one source excerpt while two
+additional excerpt slots remain available for the strongest clauses. Requests
+over the cap are rejected before ownership checks or persistence."""
 
 KNOWN_ATTACHED_SKILL_SOURCES: frozenset[str] = frozenset(
     {"slash", "wizard-tryout", "tryit-tab", "capture", "manual"}

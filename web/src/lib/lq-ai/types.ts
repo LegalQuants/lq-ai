@@ -351,6 +351,12 @@ export interface MessageCreate {
 	skills?: string[];
 	skill_inputs?: Record<string, Record<string, unknown>>;
 	/**
+	 * Chat-local files to use as document context for this turn. Readiness is
+	 * resolved by the backend because upload metadata in the composer can lag
+	 * behind the asynchronous ingestion pipeline.
+	 */
+	file_ids?: string[];
+	/**
 	 * Wave D.2 Task 3.0 — per-turn skill attachment for slash invocation
 	 * and try-it sandboxing. Each entry carries EITHER ``slug`` (saved
 	 * skill — built-in or user / team) OR ``inline_body`` (wizard draft).
