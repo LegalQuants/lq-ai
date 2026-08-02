@@ -1754,10 +1754,10 @@ PyMuPDF (AGPL) is used server-side only and not redistributed as a library; the 
 
 ### 7.8 Release Cadence and Supply-Chain Transparency
 
-- Semantic versioning (semver).
+- Semantic versioning (semver). The versioning unit and pre-1.0 semantics are defined in [ADR 0025](adr/0025-release-versioning-and-pipeline-ordering.md): `api`, `gateway`, `web`, and `proxy` share one release version; the desktop launcher versions independently and records the image set it ships against. Pre-1.0 the project promises more than semver requires: **a patch release never requires operator action** — no new environment variable, config change, migration step or client change — and anything that does require it bumps the minor instead. A patch is safe to take unread; a minor means read the release notes.
 - Releases tagged on GitHub with full changelog.
-- Targeted cadence: minor release every 6–8 weeks, patch releases as needed.
-- Long-term-support (LTS) designation for one minor version per year, with security backports for 12 months.
+- Targeted cadence: minor release **every 8–12 weeks**, patch releases as needed. Cadence is **best-effort and capacity-dependent** while the project operates with its current maintainer and signing-identity concentration; revisit once desktop signing moves to an org-owned Apple Developer account and/or a second maintainer holds release authority (see ADR 0025, *Cadence*).
+- Long-term-support (LTS) designation for one minor version per year, with security backports for **6 months**, reflecting current capacity to staff backport work; extend once the bottlenecks above are resolved.
 
 **Supply-chain transparency commitments (M1, per §1.8 and Appendix E).**
 

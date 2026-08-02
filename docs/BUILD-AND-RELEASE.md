@@ -98,6 +98,71 @@ done
 
 ### 3. Cut the release
 
+> **Versioning policy: [ADR 0025](adr/0025-release-versioning-and-pipeline-ordering.md).**
+> `api`, `gateway`, `web`, and `proxy` share one release version — the `vX.Y.Z` image
+> tag — and are bumped together on every release, including patch releases where only
+> one component substantively changed. Before tagging, set **both**
+> `api/app/__init__.py` and `gateway/app/__init__.py` to `X.Y.Z`; the
+> `version-consistency` job in `release.yml` fails the tag push if they disagree with
+> each other or with the tag. `web/package.json` tracks the OpenWebUI fork upstream and
+> is **not** bumped to match.
+>
+> The desktop launcher versions independently (`desktop-vX.Y.Z`) and records which
+> `vX.Y.Z` image set it ships against — see *Image ↔ launcher relationship* below.
+
+#### 3a. Decide the number first
+
+The number is **computed from what is on `main`**, not chosen from a milestone.
+Milestones are planning tools; they do not decide the version.
+
+```bash
+# What has landed since the last release?
+git log "$(git tag --sort=-v:refname | grep -v desktop | head -1)"..main --no-merges --oneline
+```
+
+Read that list and ask one question of each entry: **does a working install need a
+human to touch it after this upgrade?** A new environment variable, a changed
+config key, a manual migration step, a required header, a removed endpoint — all
+yes. Bug fixes, dependency bumps and output-side hardening — no.
+
+- **Any "yes" in the list → the next release is a minor bump** (`0.6.x` → `0.7.0`).
+- **All "no" → patch** (`0.6.2` → `0.6.3`).
+
+A breaking PR does **not** wait for a `0.7.0` milestone to exist before merging.
+Merging it is what makes the next release `0.7.0`.
+
+Apply the **`breaking-change`** label at review time, so this is a lookup rather
+than an act of memory:
+
+```bash
+gh pr list -R LegalQuants/lq-ai --label breaking-change --state merged --limit 100 \
+  --json number,title,mergedAt
+```
+
+`release.yml`'s `version-consistency` job enforces this on tag push: it walks the
+commit range back to the previous release tag, intersects the PR numbers it finds
+with the `breaking-change` label, and **fails a patch tag** when any turn up. The
+override is `[allow-breaking-in-patch]` in the tagged commit message — justify it
+in the release PR.
+
+> The gate is only as good as the labelling. An unlabelled breaking PR is
+> invisible to it, so the label goes on at review time, not at release time.
+
+> ⚠️ **Once a breaking change is on `main`, you can no longer cut a patch from
+> `main`.** If an urgent fix has to ship *without* also shipping that change,
+> branch from the last release tag, cherry-pick the fix, and cut from there:
+>
+> ```bash
+> git checkout -b release/0.6.x v0.6.1
+> git cherry-pick <fix-sha>
+> # bump api + gateway __version__ to 0.6.2, commit, then tag from this branch
+> ```
+>
+> This is deliberately manual — see ADR 0025 *Cadence* on why a standing
+> release-branch discipline isn't worth its overhead at current capacity.
+
+#### 3b. Tag
+
 ```bash
 # (a) Images first — tag from a ref that CONTAINS the release Dockerfiles + release.yml (main):
 git tag vX.Y.Z && git push origin vX.Y.Z
@@ -121,7 +186,10 @@ git tag desktop-vX.Y.Z && git push origin desktop-vX.Y.Z
 - The launcher renders an `.env` at runtime and runs `docker-compose.release.yml` under its own compose
   project (`lq-ai-desktop`), pulling `ghcr.io/${LQ_AI_IMAGE_NAMESPACE:-legalquants}/lq-ai-<svc>:${LQ_AI_IMAGE_TAG}`.
 - **`LQ_AI_IMAGE_TAG`** pins the image version the launcher runs. The launcher config persists a tag
-  (default the version we ship the app at); a hand-run stack pins it in `.env`
+  — **today the shipped default is `latest`** (`desktop/src/main/index.ts`), so a fresh install floats
+  to the newest published images rather than the set the `.dmg` was verified against. ADR 0025
+  decides that each `desktop-vX.Y.Z` should instead record the `vX.Y.Z` it ships against; changing
+  the default is tracked with that work. A hand-run stack pins it in `.env`
   ([`.env.release.example`](../.env.release.example)). Pin to a released `vX.Y.Z` for reproducibility;
   `latest` follows the newest published images.
 - **`LQ_AI_IMAGE_NAMESPACE`** (default `legalquants`) overrides the GHCR namespace for forks/mirrors
