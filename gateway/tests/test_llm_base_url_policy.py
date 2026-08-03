@@ -8,11 +8,16 @@ always allowed; `http` only to an explicitly allowlisted local host
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from app.config import ProviderConfig
 from app.main import build_adapter
 from app.providers.base_url_policy import ProviderEgressRefused, validate_llm_base_url
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+EXAMPLE_CONFIG = REPO_ROOT / "gateway.yaml.example"
 
 
 @pytest.mark.unit
@@ -83,3 +88,31 @@ def test_build_adapter_allows_local_ollama() -> None:
     )
     adapter = build_adapter(provider)
     assert adapter is not None
+
+
+@pytest.mark.unit
+async def test_lifespan_refuses_to_start_on_refused_base_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An egress-policy violation is FATAL at startup, never a silent skip.
+
+    Regression guard for the deliberate design call on this PR: if
+    ``ProviderEgressRefused`` were ever swallowed by the lifespan's
+    ``except ValueError`` skip path (e.g. by a refactor re-basing the
+    exception), the router would fall through to the next candidate in the
+    chain and silently send prompts somewhere the operator did not choose.
+    This reproduces the operator story: a mistyped ``OLLAMA_BASE_URL``.
+    """
+
+    monkeypatch.setenv("GCP_PROJECT_ID", "test-project")
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    monkeypatch.setenv("AZURE_OPENAI_RESOURCE", "test-openai")
+    monkeypatch.setenv("LQ_AI_VERSION", "0.1.0-test")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://attacker.example/v1")
+    monkeypatch.setenv("GATEWAY_CONFIG_PATH", str(EXAMPLE_CONFIG))
+
+    from app.main import app
+
+    with pytest.raises(ProviderEgressRefused):
+        async with app.router.lifespan_context(app):
+            pass  # pragma: no cover — startup must raise before entry

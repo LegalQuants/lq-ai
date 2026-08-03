@@ -74,7 +74,7 @@ from app.providers import (
     OpenAIAdapter,
     ProviderAdapter,
 )
-from app.providers.base_url_policy import validate_llm_base_url
+from app.providers.base_url_policy import ProviderEgressRefused, validate_llm_base_url
 from app.providers.tool.base import ToolProviderAdapter
 from app.providers.tool.courtlistener import CourtListenerToolAdapter
 from app.providers.tool.echo import EchoToolAdapter
@@ -267,6 +267,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     for provider in config.providers:
         try:
             adapter = build_adapter(provider)
+        except ProviderEgressRefused as exc:
+            # Deliberate: an egress-policy violation is fatal at startup.
+            # Skipping the provider would let the router fall through to the
+            # next candidate in the chain, silently sending prompts somewhere
+            # the operator did not choose.
+            logger.error(
+                "refusing to start: provider %r (type=%s) has a base_url that "
+                "violates LLM egress policy: %s",
+                provider.name,
+                provider.type,
+                exc.reason,
+            )
+            raise
         except ValueError as exc:
             # Missing/unresolvable key for a supported provider — non-fatal
             # at startup; the provider is skipped and chat requests routing
