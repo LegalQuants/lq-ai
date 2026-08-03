@@ -502,3 +502,50 @@ async def test_revoke_retires_live_adapter(
     )
     assert KEYLESS_PROVIDER not in state.adapters
     assert state.retired_adapters == [live]
+
+
+@pytest.mark.unit
+async def test_apply_maps_egress_refusal_to_409(
+    monkeypatch: pytest.MonkeyPatch, writable_config: Path
+) -> None:
+    """An egress-refused base_url on the BYOK path is a structured 409.
+
+    Regression guard (GW-04 follow-up): ``apply_provider_key`` writes the
+    encrypted key BEFORE building the adapter, so an unhandled
+    ``ProviderEgressRefused`` here used to surface as a 500 after a
+    successful write. The explicit arm maps it to
+    ``ProviderKeyMutationError`` with ``http_status=409`` — and the arm must
+    sit ahead of the ``except ValueError`` skip, because
+    ``ProviderKeyMutationError`` itself subclasses ``ValueError``.
+    """
+
+    from app.config_writer import ProviderKeyMutationError
+    from app.providers.base_url_policy import ProviderEgressRefused
+
+    _set_example_env(monkeypatch, writable_config)
+    master_key = Fernet.generate_key().decode()
+    monkeypatch.setenv("LQ_AI_GATEWAY_MASTER_KEY", master_key)
+
+    from app.config_holder import MutableConfigHolder
+    from app.config_loader import load_config
+
+    holder = MutableConfigHolder(load_config(writable_config), config_path=writable_config)
+    state = _FakeState()
+
+    def _refusing_build(provider: ProviderConfig) -> _FakeAdapter:
+        raise ProviderEgressRefused("plaintext http to a public host")
+
+    monkeypatch.setattr("app.main.build_adapter", _refusing_build)
+
+    with pytest.raises(ProviderKeyMutationError) as excinfo:
+        await apply_provider_key(
+            holder=holder,
+            app_state=state,  # type: ignore[arg-type]
+            provider_name=KEYLESS_PROVIDER,
+            plaintext=FAKE_KEY,
+            master_key=master_key,
+        )
+    assert excinfo.value.http_status == 409
+    assert "egress policy" in str(excinfo.value)
+    # The refusal must not have swapped any adapter into the live registry.
+    assert KEYLESS_PROVIDER not in state.adapters
