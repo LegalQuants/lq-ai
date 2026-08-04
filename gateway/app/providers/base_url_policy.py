@@ -24,11 +24,31 @@ fails fast at startup.
 from __future__ import annotations
 
 import ipaddress
+from typing import ClassVar
 from urllib.parse import urlparse
 
+from fastapi import status
 
-class ProviderEgressRefused(Exception):
-    """Raised when a provider ``base_url`` violates LLM egress policy."""
+from app.errors import CODE_PROVIDER_UNAVAILABLE, LQAIError
+
+
+class ProviderEgressRefused(LQAIError):
+    """Raised when a provider ``base_url`` violates LLM egress policy.
+
+    Typed per CONTRIBUTING (subsystem errors derive from :class:`LQAIError`,
+    not bare ``Exception``) so a refusal reaching a request path renders the
+    canonical envelope instead of an unhandled 500. It reuses the existing
+    ``provider_unavailable`` code rather than introducing a new wire code:
+    from a caller's point of view a provider whose ``base_url`` is refused has
+    no usable adapter, which is exactly what that code already means.
+
+    Startup behaviour is unchanged — ``lifespan`` runs outside the exception
+    handler, so a refusal there still aborts the gateway, which is the
+    intended fail-closed posture.
+    """
+
+    code: ClassVar[str] = CODE_PROVIDER_UNAVAILABLE
+    http_status: ClassVar[int] = status.HTTP_503_SERVICE_UNAVAILABLE
 
     def __init__(self, reason: str) -> None:
         super().__init__(reason)
