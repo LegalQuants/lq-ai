@@ -77,6 +77,7 @@ class KbOneFile:
     file_id: uuid.UUID
     document_id: uuid.UUID
     chunk_id: uuid.UUID
+    owner_id: uuid.UUID
 
 
 @dataclass
@@ -91,6 +92,7 @@ class KbTwoFiles:
     kb_id: uuid.UUID
     old_file_id: uuid.UUID
     new_file_id: uuid.UUID
+    owner_id: uuid.UUID
 
 
 _CHUNK_TEXT_DEFAULT = (
@@ -199,7 +201,9 @@ async def kb_with_one_indexed_file(db_session: AsyncSession) -> KbOneFile:
     # Force Postgres to compute the generated content_tsv column so FTS works.
     await db_session.execute(text("UPDATE document_chunks SET chunk_index = chunk_index"))
     await db_session.flush()
-    return KbOneFile(kb_id=kb.id, file_id=f.id, document_id=doc.id, chunk_id=chunk.id)
+    return KbOneFile(
+        kb_id=kb.id, file_id=f.id, document_id=doc.id, chunk_id=chunk.id, owner_id=owner.id
+    )
 
 
 @pytest_asyncio.fixture
@@ -231,7 +235,7 @@ async def kb_with_old_and_new_files(db_session: AsyncSession) -> KbTwoFiles:
     await db_session.execute(text("UPDATE document_chunks SET chunk_index = chunk_index"))
     await db_session.flush()
 
-    return KbTwoFiles(kb_id=kb.id, old_file_id=old_f.id, new_file_id=new_f.id)
+    return KbTwoFiles(kb_id=kb.id, old_file_id=old_f.id, new_file_id=new_f.id, owner_id=owner.id)
 
 
 # ---------------------------------------------------------------------------
