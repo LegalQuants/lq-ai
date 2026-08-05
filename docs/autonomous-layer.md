@@ -209,6 +209,11 @@ a Project's context is a separate, user-authorized proposal lifecycle).
 `run_skill` / `run_playbook` route through the gateway with
 `anonymize=True` by default (the autonomous flow may carry privileged
 context).
+retrieve_chunks additionally verifies target ownership before dispatch:
+every model-supplied `kb_id`/`file_id` must belong to the session's
+owner (archived and soft-deleted targets excluded), and query mode
+requires `kb_id`; foreign or unknown ids fail closed with a
+not-found-shaped error.
 
 ---
 
