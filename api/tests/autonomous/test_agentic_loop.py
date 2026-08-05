@@ -20,6 +20,7 @@ from app.autonomous.nodes import make_analysis_node
 from app.autonomous.state import AutonomousSessionState
 from app.models.audit import AuditLog
 from app.models.autonomous import AutonomousSession
+from tests.autonomous.conftest import _CHUNK_TEXT_DEFAULT, KbOneFile
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
@@ -59,12 +60,14 @@ class _ScriptedGateway:
 
     def __init__(self, planner_script: list[Any]) -> None:
         self.planner_script = list(planner_script)
+        self.captured_requests: list[Any] = []
 
     async def list_tool_providers(self) -> list[dict[str, Any]]:
         """No providers configured in the agentic-loop unit tests."""
         return []
 
     async def chat_completion(self, request: Any, *, request_id: object = None) -> SimpleNamespace:
+        self.captured_requests.append(request)
         system = request.messages[0].content
         if "research planner" in system:
             return _resp(json.dumps(self.planner_script.pop(0)))
@@ -329,6 +332,76 @@ async def test_action_error_is_nonfatal_observation(
     assert len(action_decisions) == 1
 
     # The ``started`` audit row for the action was written before the error
+    rows = await _audit_rows(db_session, str(seeded_matter_session.id))
+    assert _tool_started_calls(rows, "retrieve_chunks") >= 1
+
+
+# ---------------------------------------------------------------------------
+# AG-01 — ownership denial through the loop is a non-fatal observation
+# ---------------------------------------------------------------------------
+
+
+async def test_foreign_kb_denial_is_nonfatal_loop_observation(
+    db_session: AsyncSession,
+    seeded_matter_session: AutonomousSession,
+    kb_with_one_indexed_file: KbOneFile,
+) -> None:
+    """AG-01 through the executor loop: a foreign-KB denial degrades, not crashes.
+
+    The scope tests in ``test_retrieve_chunks_scope.py`` call the handler
+    directly; this test pins the run-level behaviour on the planner path.
+    The session user and the fixture KB's owner are different users, so the
+    ownership gate raises ``ValueError`` inside ``guarded_tool_call``.  The
+    loop must catch it as a non-fatal failed observation (nodes.py, invariant
+    #5): the run continues, the observation reads
+    ``retrieve_chunks → failed (ValueError)``, and no chunk data reaches
+    state or any model prompt.
+    """
+    kb = kb_with_one_indexed_file
+    assert seeded_matter_session.user_id != kb.owner_id  # the premise: cross-owner
+
+    gw = _ScriptedGateway(
+        [
+            {
+                "next_intent": "retrieve_chunks",
+                "args": {"kb_id": str(kb.kb_id), "query": "confidential"},
+                "rationale": "x",
+            },
+            {"done": True, "rationale": "enough evidence"},
+        ]
+    )
+    node = make_analysis_node(db_session, gw)
+    state: AutonomousSessionState = {
+        "session_id": str(seeded_matter_session.id),
+        "query": "Is the assignment clause enforceable?",
+        "retrieved_chunks": [],
+    }
+    # Must not raise — the denial is non-fatal on the loop path
+    result = await node(state)
+
+    # 1. The run continues: synthesis ran, the failed step is counted, planner finished
+    assert result.get("analysis_content") is not None
+    trace = result.get("analysis_plan_trace")
+    assert trace is not None
+    assert trace["steps"] == 1
+    assert trace["halt_reason"] == "planner_done"
+
+    # 2. The observation is the exact non-fatal failure line (observations live
+    #    only in the prompts, not in returned state — hence the captured requests)
+    all_prompt_text = "\n".join(
+        m.content
+        for req in gw.captured_requests
+        for m in req.messages
+        if isinstance(m.content, str)
+    )
+    assert "retrieve_chunks → failed (ValueError)" in all_prompt_text
+
+    # 3. No chunk data escaped the denial: nothing in evidence, and the foreign
+    #    chunk's text never reached any model prompt
+    assert not result.get("analysis_evidence")
+    assert _CHUNK_TEXT_DEFAULT not in all_prompt_text
+
+    # The ``started`` audit row was written before the gate refused
     rows = await _audit_rows(db_session, str(seeded_matter_session.id))
     assert _tool_started_calls(rows, "retrieve_chunks") >= 1
 

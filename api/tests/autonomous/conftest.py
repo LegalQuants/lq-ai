@@ -77,6 +77,7 @@ class KbOneFile:
     file_id: uuid.UUID
     document_id: uuid.UUID
     chunk_id: uuid.UUID
+    owner_id: uuid.UUID
 
 
 @dataclass
@@ -91,6 +92,7 @@ class KbTwoFiles:
     kb_id: uuid.UUID
     old_file_id: uuid.UUID
     new_file_id: uuid.UUID
+    owner_id: uuid.UUID
 
 
 _CHUNK_TEXT_DEFAULT = (
@@ -100,6 +102,15 @@ _CHUNK_TEXT_DEFAULT = (
 
 
 async def _make_owner(db: AsyncSession) -> User:
+    """Create the owner of a KB/file fixture.
+
+    ``autonomous_enabled=True`` because the session fixtures below run their
+    autonomous session **as this owner** — retrieve_chunks is scoped to the
+    session owner (#288, AG-01), so a session whose user differs from the
+    KB/file owner is a state production cannot produce (``create_watch``
+    requires ``KnowledgeBase.owner_id == user.id``). ``fire_watches_for_kb``
+    additionally joins on ``User.autonomous_enabled``.
+    """
     user = User(
         email=f"u-retr-{uuid.uuid4().hex[:8]}@example.com",
         hashed_password=hash_password("pw"),
@@ -107,9 +118,17 @@ async def _make_owner(db: AsyncSession) -> User:
         role="member",
         mfa_enabled=False,
         must_change_password=False,
+        autonomous_enabled=True,
     )
     db.add(user)
     await db.flush()
+    return user
+
+
+async def _owner_of(db: AsyncSession, owner_id: uuid.UUID) -> User:
+    """Load the ``User`` that owns a KB/file fixture, to run a session as them."""
+    user = await db.get(User, owner_id)
+    assert user is not None, f"fixture owner {owner_id} not found"
     return user
 
 
@@ -199,7 +218,9 @@ async def kb_with_one_indexed_file(db_session: AsyncSession) -> KbOneFile:
     # Force Postgres to compute the generated content_tsv column so FTS works.
     await db_session.execute(text("UPDATE document_chunks SET chunk_index = chunk_index"))
     await db_session.flush()
-    return KbOneFile(kb_id=kb.id, file_id=f.id, document_id=doc.id, chunk_id=chunk.id)
+    return KbOneFile(
+        kb_id=kb.id, file_id=f.id, document_id=doc.id, chunk_id=chunk.id, owner_id=owner.id
+    )
 
 
 @pytest_asyncio.fixture
@@ -231,7 +252,7 @@ async def kb_with_old_and_new_files(db_session: AsyncSession) -> KbTwoFiles:
     await db_session.execute(text("UPDATE document_chunks SET chunk_index = chunk_index"))
     await db_session.flush()
 
-    return KbTwoFiles(kb_id=kb.id, old_file_id=old_f.id, new_file_id=new_f.id)
+    return KbTwoFiles(kb_id=kb.id, old_file_id=old_f.id, new_file_id=new_f.id, owner_id=owner.id)
 
 
 # ---------------------------------------------------------------------------
@@ -485,7 +506,7 @@ async def running_watch_session(
     the mode 2 path end-to-end through the chokepoint rather than
     asserting against an empty list.
     """
-    user = await _make_optedin_user(db_session)
+    user = await _owner_of(db_session, kb_with_one_indexed_file.owner_id)
     return await _make_running_session(
         db_session,
         user=user,
@@ -509,7 +530,7 @@ async def running_schedule_session_with_since(
     therefore exercises the mode-3 cutoff: only ``new_file``'s chunks
     should come back.
     """
-    user = await _make_optedin_user(db_session)
+    user = await _owner_of(db_session, kb_with_old_and_new_files.owner_id)
     since_iso = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
     return await _make_running_session(
         db_session,
@@ -583,7 +604,7 @@ async def running_watch_session_at_analysis(
     ``alpha-test-skill`` is loaded into ``app.state.skill_registry`` and
     the prompt assembly path resolves without an explicit ``registry=``.
     """
-    user = await _make_optedin_user(db_session)
+    user = await _owner_of(db_session, kb_with_one_indexed_file.owner_id)
     return await _make_running_session(
         db_session,
         user=user,
