@@ -57,6 +57,7 @@ from app.models.document import Document, DocumentChunk
 from app.models.file import File as FileModel
 from app.models.knowledge import KnowledgeBase, KnowledgeBaseFile
 from app.models.project import Project
+from app.models.project_knowledge_base import ProjectKnowledgeBase
 from app.schemas.knowledge import (
     AttachFileRequest,
     KBFileResponse,
@@ -315,7 +316,22 @@ async def list_kbs(
     else:
         stmt = stmt.where(KnowledgeBase.archived_at.is_(None))
     if project_id is not None:
-        stmt = stmt.where(KnowledgeBase.project_id == project_id)
+        # A KB is "in project X" iff a ``project_knowledge_bases`` join row
+        # links them. Attach/detach (POST/DELETE /projects/{id}/knowledge-bases)
+        # and chat retrieval both key off this junction table; filtering here
+        # on the legacy ``knowledge_bases.project_id`` column instead made every
+        # KB linked via the current endpoints invisible on the matter page even
+        # though retrieval used it. The legacy column is intentionally left in
+        # place (dropping it is a separate migration) but is no longer read by
+        # this filter.
+        stmt = stmt.where(
+            select(ProjectKnowledgeBase.knowledge_base_id)
+            .where(
+                ProjectKnowledgeBase.project_id == project_id,
+                ProjectKnowledgeBase.knowledge_base_id == KnowledgeBase.id,
+            )
+            .exists()
+        )
     stmt = stmt.order_by(KnowledgeBase.created_at.desc())
 
     result = await db.execute(stmt)
