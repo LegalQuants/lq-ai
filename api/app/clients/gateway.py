@@ -92,10 +92,15 @@ REQUEST_ID_HEADER = "X-Request-Id"
 TIER_RESPONSE_HEADER = "X-LQ-AI-Routed-Inference-Tier"
 """Response header set by the gateway (B4) carrying the routed Inference Tier."""
 
-DEFAULT_TIMEOUT_SECONDS = 60.0
+DEFAULT_TIMEOUT_SECONDS = 900.0
 """Default per-request timeout. Streaming overrides this (the stream is
 expected to take longer than a single API call). Health check overrides
-to a tight value separately."""
+to a tight value separately.
+
+Raised from 60s (issue #503). This ceiling sits *outside* the gateway's
+own, so it has to be the loosest of the three or it truncates first and
+the gateway's more specific timeout never gets to fire. 900s against the
+gateway's 600s leaves that headroom."""
 
 
 def _structured_log_extra(**fields: Any) -> dict[str, Any]:

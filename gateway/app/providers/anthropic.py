@@ -73,15 +73,33 @@ ANTHROPIC_API_VERSION = "2023-06-01"
 """Pinned Anthropic API version. Update deliberately; bump in lockstep
 with changes to the request/response translation below."""
 
-DEFAULT_TIMEOUT_SECONDS = 60.0
+DEFAULT_TIMEOUT_SECONDS = 600.0
 """Default per-request timeout. PRD §4.4 / gateway.yaml.example exposes
-``timeout_s`` on each provider; if absent we use this default."""
+``timeout_s`` on each provider; if absent we use this default.
 
-DEFAULT_MAX_TOKENS = 4096
+Raised from 60s (issue #503). Sixty seconds is a chat-turn budget, and
+LQ.AI is pointed at long privileged documents: a single measured turn
+drafting objections over a ~47k-token arbitration case file took 370
+seconds. At the old default those requests were killed mid-generation,
+and — before the fix in the same issue — the client saw the truncation
+as an empty answer rather than a timeout."""
+
+DEFAULT_MAX_TOKENS = 32000
 """Anthropic Messages requires ``max_tokens``. When the OpenAI-format
-request omits it, the gateway sends this default. Keeping it modest
-(rather than the per-model ceiling) avoids accidentally enormous
-responses on requests that didn't specify a budget."""
+request omits it, the gateway sends this default.
+
+Raised from 4096 (issue #503). On a model with adaptive thinking enabled
+by default, the entire 4096 budget can be consumed by reasoning tokens,
+leaving nothing visible: the request succeeds, and the response body is
+empty. Measured on identical prompts at the identical budget —
+``claude-opus-4-7`` spent 0 thinking tokens and returned 11,518
+characters; ``claude-opus-5`` spent all 4,096 on thinking and returned
+none. Swapping in a newer model, changing no code, broke it silently.
+
+``max_tokens`` is a ceiling, not a spend: raising it costs nothing on
+requests that don't use it. A caller wanting the old behaviour sets
+``max_tokens`` explicitly, and an operator can cap the whole deployment
+via ``request_validation.max_max_tokens`` in the gateway config."""
 
 STOP_REASON_MAP: dict[str, FinishReason] = {
     "end_turn": "stop",

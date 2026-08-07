@@ -118,6 +118,27 @@ class ProviderNetworkError(ProviderAdapterError):
     code = "provider_unavailable"
 
 
+class ProviderEmptyResponseError(ProviderAdapterError):
+    """The provider accepted the request and returned no usable content.
+
+    Distinct from :class:`ProviderNetworkError` — we *did* reach the
+    provider and it *did* respond; it simply produced nothing. Issue #503:
+    on the streaming path this used to fall through to the success tail,
+    so an upstream that emitted zero content bytes was indistinguishable
+    from a model that had nothing to say. Callers reading an empty answer
+    blamed the model.
+
+    Carries the existing ``provider_unavailable`` wire code deliberately:
+    the cross-subsystem error-code enum (ADR 0003, verified by
+    ``tests/test_error_code_contract.py``) is a contract, and this failure
+    is already covered by that code's documented meaning ("upstream
+    provider is not reachable, returned 5xx, or has no adapter"). A new
+    class gives the internal precision without changing the wire surface.
+    """
+
+    code = "provider_unavailable"
+
+
 class ProviderUnsupportedError(ProviderAdapterError):
     """The adapter does not support this operation.
 
