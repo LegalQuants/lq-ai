@@ -5010,6 +5010,12 @@ The gateway `Router`'s `_tool_rate_limiter` (`gateway/app/router.py`) is a singl
 
 `desktop/package.json` is bumped by hand each release (0.6.0 → 0.6.1 at v0.6.1), but `desktop/package-lock.json` still carries `"version": "0.5.2"` at its top level (and in `packages[""].version`) — it was never regenerated when `package.json` moved to 0.6.0 at the v0.6.0 cut, and the v0.6.1 bump left it untouched (hand-editing the lockfile version risks desyncing the resolved dependency tree, so it was deliberately not patched inline). npm keeps the lockfile version in sync only on `npm install`. The desktop app itself versions on its own `desktop-vX.Y.Z` tag track (independent of the lock's stale field), so this is cosmetic/hygiene, not a build correctness bug — but it makes the lockfile a misleading provenance artifact. Fix: run `npm install` in `desktop/` (no dependency changes intended — just let npm rewrite the version field), verify the diff is version-only, and commit; then fold a "regenerate the lockfile" step into the release checklist so `package.json` and the lock never drift again.
 
+#### DE-386 — Offline install bundle as a release asset (`docker save` image bundle)
+
+**Priority:** P3 · **Effort:** S · **Status (2026-07-25): filed (roadmap 3.5 follow-up).**
+
+The air-gap verification CI (roadmap 3.5, `.github/workflows/airgap-verify.yml`) proves the compose local profile installs and answers Tier-1 chat with zero egress — but an air-gapped operator still has to assemble the image set by hand from the per-component BOM in `docs/security/air-gap-verification.md`. The k3s pattern from the air-gap OSS survey closes the gap: publish a per-release `docker save` bundle (all compose images at their pinned digests + the Ollama model directory contract documented alongside) as a release asset, generated in `release.yml` so the *shipped* artifact is the *certified* one. Scope: a release-job step producing `lq-ai-airgap-bundle-<version>.tar.zst` + a checksum/cosign attestation, and a runbook section ("load the bundle" replaces the pre-fetch checklist). Depends on the air-gap CI landing first so the bundle contents track the verified profile.
+
 ---
 
 ## 10. Appendices
