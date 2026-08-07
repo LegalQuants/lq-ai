@@ -5,12 +5,21 @@ name: CI
 #
 # Scope (per docs/SESSION-HANDOFF-2026-05-12-wave-d1-close.md §4 item 2):
 #   - web/    : svelte-check + Vitest
-#   - api/    : ruff + mypy (standard mode) + pytest (with Postgres)
-#   - gateway/: ruff + mypy --strict + pytest
+#   - api/    : ruff + mypy (standard mode) + pytest (with Postgres) + coverage gate
+#   - gateway/: ruff + mypy --strict + pytest + coverage gate
+#
+# Coverage gates (roadmap 4.3), measured 2026-07-25:
+#   - api/    : measured 81.49% — clears the documented 80% target, so the
+#               gate enforces the target itself (--cov-fail-under=80).
+#   - gateway/: measured 88.94% — below the documented 90% target, so the
+#               gate is a no-decrease ratchet at the measured floor (88,
+#               floored to the integer). Closing the 88→90 gap is tracked
+#               as PRD §9 DE-387.
+# When coverage rises, bump --cov-fail-under (always at or below a number
+# actually measured — never an aspirational one).
 #
 # Out of scope (deferred to future waves):
 #   - Cypress E2E (heavier; needs a stack-up step + LLM provider keys)
-#   - Coverage gates (no-decrease enforcement)
 #   - Dependency-license check (likely Wave F polish)
 #
 # Runtime boot validation (full compose build + up --wait + soak) lives in
@@ -141,8 +150,11 @@ jobs:
       - name: mypy (standard mode)
         run: mypy app
 
-      - name: pytest
-        run: pytest -q
+      # Coverage gate (roadmap 4.3): measured 81.49% on 2026-07-25
+      # (12242/15023 statements) — clears the documented 80% target, so
+      # the gate enforces the target itself.
+      - name: pytest (coverage gate ≥80%)
+        run: pytest -q --cov=app --cov-report=term --cov-fail-under=80
 
   gateway-checks:
     name: Gateway (ruff + mypy --strict + pytest)
@@ -191,5 +203,9 @@ jobs:
       - name: mypy --strict (per CLAUDE.md)
         run: mypy app
 
-      - name: pytest
-        run: pytest -q
+      # Coverage ratchet (roadmap 4.3): measured 88.94% on 2026-07-25
+      # (4464/5019 statements) — below the documented 90% target, so the
+      # gate holds the measured floor (88) rather than claiming the target.
+      # Delta tracked as PRD §9 DE-387.
+      - name: pytest (coverage gate ≥88%)
+        run: pytest -q --cov=app --cov-report=term --cov-fail-under=88

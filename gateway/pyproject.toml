@@ -84,6 +84,10 @@ dependencies = [
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
+    # Coverage gate (roadmap 4.3). Enforced in CI via --cov-fail-under=88, a
+    # no-decrease ratchet at measured coverage (88.94% on 2026-07-25; the
+    # documented 90% target is not yet met — delta tracked as PRD §9 DE-387).
+    "pytest-cov>=7.1",
     "respx>=0.21",
     # Pinned exactly: ruff's formatter output changes across releases, so an
     # unpinned floor let CI (which resolves latest) drift ahead of dev venvs
