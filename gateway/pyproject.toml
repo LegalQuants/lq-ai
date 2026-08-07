@@ -11,7 +11,7 @@ requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
 authors = [{ name = "LegalQuants" }]
 dependencies = [
-    "fastapi>=0.139.2,<0.140",
+    "fastapi>=0.141.1,<0.142",
     "uvicorn[standard]>=0.51.0,<0.52",
     "pydantic>=2.7,<3",
     "pydantic-settings>=2.4,<3",
@@ -89,7 +89,7 @@ dev = [
     # unpinned floor let CI (which resolves latest) drift ahead of dev venvs
     # and fail `ruff format --check` on code that was clean locally. Pin so
     # local == CI. Bump deliberately (and reformat) when upgrading.
-    "ruff==0.15.22",
+    "ruff==0.16.1",
     "mypy>=1.11",
     "types-PyYAML>=6.0",
 ]
