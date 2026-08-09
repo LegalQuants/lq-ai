@@ -182,7 +182,9 @@ Run this for every non-trivial change — it is battle-tested across M1–M4 and
 2. **Surface the forks** — if the task hides an architectural / product / authz decision, a scope expansion, or a deferral, stop and put the options (with a recommendation) to the maintainer. Don't decide unilaterally.
 3. **Build in reviewed increments** — independent tasks, each: implement → spec-compliance review → code-quality review → fix → re-review. (The `superpowers:subagent-driven-development` skill encodes this.)
 4. **Run the gates yourself** — evidence before claims (see Testing + the collision guards below).
-5. **Ship** — `git commit -s` + the co-author trailer, push **both** remotes (`origin` + `tucuxi`, kept identical on `main`), open the PR, watch CI, merge per the gating rule, report the squash SHA.
+5. **Ship** — external contributors commit with DCO, push the branch only to their own fork,
+   open a PR, and respond to CI and review; they never self-merge. Authorized maintainers
+   handle merges and any upstream/mirror synchronization.
 
 The full step-by-step, including merge-gating and dev-environment rules, is in the [cold-start guide](docs/contribute/coding-agent-onboarding.md).
 

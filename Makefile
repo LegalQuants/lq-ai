@@ -2,9 +2,9 @@
 #
 # Conventional targets per CONTRIBUTING.md and M1-IMPLEMENTATION-ORDER A1:
 #   install   — install Python and Node dev dependencies
-#   test      — run unit + integration tests (skips provider-marked)
-#   lint      — ruff check + mypy on Python; eslint on web
-#   format    — ruff format + prettier
+#   test      — run Python tests (skips provider/slow) + Web unit tests
+#   lint      — ruff check + mypy on Python; scoped static checks on web
+#   format    — apply ruff formatting to Python subsystems
 #   migrate   — run Alembic migrations against the configured DB
 #   run-dev   — bring up the dev stack via docker compose
 #   clean     — tear down dev stack and remove caches
@@ -33,10 +33,10 @@ help:
 install: install-api install-gateway install-web ## Install all subsystem dependencies
 
 .PHONY: test
-test: api-test gateway-test ## Run unit + integration tests (skip provider-marked)
+test: api-test gateway-test web-test ## Run Python tests (skip provider/slow) + Web unit tests
 
 .PHONY: lint
-lint: api-lint gateway-lint ## Run ruff + mypy on Python subsystems
+lint: api-lint gateway-lint web-check ## Run Python lint/type checks + Web static checks
 
 .PHONY: format
 format: api-format gateway-format ## Apply ruff format to Python subsystems
@@ -58,8 +58,8 @@ stop-dev: ## Stop the dev stack (preserves volumes)
 	docker compose down
 
 .PHONY: clean
-clean: ## Tear down dev stack, volumes, and caches
-	docker compose down -v
+clean: ## Tear down dev stack and caches (preserves volumes)
+	docker compose down
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
 	find . -type d -name .pytest_cache -prune -exec rm -rf {} +
 	find . -type d -name .ruff_cache -prune -exec rm -rf {} +
@@ -90,9 +90,7 @@ psql: ## Open a psql shell against the dev database
 
 .PHONY: install-api
 install-api:
-	cd api && python -m venv .venv && \
-		.venv/bin/pip install --upgrade pip && \
-		.venv/bin/pip install -e ".[dev]"
+	cd api && uv sync --frozen --extra dev
 
 .PHONY: api-test
 api-test:
@@ -104,15 +102,16 @@ api-test-all:
 
 .PHONY: api-lint
 api-lint:
-	cd api && .venv/bin/ruff check . && .venv/bin/mypy app
+	api/.venv/bin/ruff check api scripts
+	cd api && .venv/bin/mypy app
 
 .PHONY: api-format
 api-format:
-	cd api && .venv/bin/ruff format .
+	api/.venv/bin/ruff format api scripts
 
 .PHONY: api-format-check
 api-format-check:
-	cd api && .venv/bin/ruff format --check .
+	api/.venv/bin/ruff format --check api scripts
 
 .PHONY: openapi
 openapi: ## Regenerate docs/api/backend-openapi.generated.yaml from the live app (DE-373)
@@ -122,9 +121,7 @@ openapi: ## Regenerate docs/api/backend-openapi.generated.yaml from the live app
 
 .PHONY: install-gateway
 install-gateway:
-	cd gateway && python -m venv .venv && \
-		.venv/bin/pip install --upgrade pip && \
-		.venv/bin/pip install -e ".[dev]"
+	cd gateway && uv sync --frozen --extra dev
 
 .PHONY: gateway-test
 gateway-test:
@@ -136,42 +133,30 @@ gateway-test-all:
 
 .PHONY: gateway-lint
 gateway-lint:
-	cd gateway && .venv/bin/ruff check . && .venv/bin/mypy app
+	gateway/.venv/bin/ruff check gateway
+	cd gateway && .venv/bin/mypy app
 
 .PHONY: gateway-format
 gateway-format:
-	cd gateway && .venv/bin/ruff format .
+	gateway/.venv/bin/ruff format gateway
 
 .PHONY: gateway-format-check
 gateway-format-check:
-	cd gateway && .venv/bin/ruff format --check .
+	gateway/.venv/bin/ruff format --check gateway
 
 # ---------- web/ ----------
-# Lands when OpenWebUI fork is imported in A1.d.
 
 .PHONY: install-web
 install-web:
-	@if [ -f web/package.json ]; then \
-		cd web && npm install; \
-	else \
-		echo "web/ not yet imported (Task A1.d)."; \
-	fi
+	cd web && npm ci
 
 .PHONY: web-test
 web-test:
-	@if [ -f web/package.json ]; then \
-		cd web && npm test; \
-	else \
-		echo "web/ not yet imported (Task A1.d)."; \
-	fi
+	cd web && npm run test:frontend -- --run
 
-.PHONY: web-lint
-web-lint:
-	@if [ -f web/package.json ]; then \
-		cd web && npm run lint; \
-	else \
-		echo "web/ not yet imported (Task A1.d)."; \
-	fi
+.PHONY: web-check
+web-check:
+	cd web && npm run check:lq-ai
 
 # ----------------------------------------------------------------------
 # Release-readiness (Phase E)
