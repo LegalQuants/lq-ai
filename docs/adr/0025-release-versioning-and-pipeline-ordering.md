@@ -1,6 +1,6 @@
 # ADR 0025 — Release versioning policy and release-pipeline ordering
 
-**Status:** Proposed
+**Status:** Accepted (2026-08-09) — committee-accepted at the weekly call.
 **Date:** 2026-08-02
 **Owner:** Maintainer team (houfu)
 
@@ -271,8 +271,9 @@ supply-chain commitments below them are unchanged):
 ---
 
 *Drafted from the issue decision ledger; every factual claim re-verified against
-`legalquants/main` at `b060ae2f`. Proposed for committee comment by houfu
-(Ang Hou Fu).*
+`legalquants/main` at `b060ae2f`. Filed for committee comment by houfu
+(Ang Hou Fu); accepted at the weekly call of 2026-08-09 and merged as PR #487
+on 2026-08-10. `v0.7.0` is the first release cut under it.*
 
 *Numbering note: `0024` is taken by the jurisdiction-and-practice-area expansion
 ADR, merged as PR #313 on 2026-08-09; this ADR takes `0025`. It cites ADR 0022,
