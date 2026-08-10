@@ -2,7 +2,7 @@
 
 **Status:** Proposed
 **Date:** 2026-08-02
-**Owner:** Issue #TBD (release pipeline ordering and versioning policy)
+**Owner:** Maintainer team (houfu)
 
 ## Context
 
@@ -274,6 +274,6 @@ supply-chain commitments below them are unchanged):
 `legalquants/main` at `b060ae2f`. Proposed for committee comment by houfu
 (Ang Hou Fu).*
 
-*Numbering note: `0024` is claimed by the in-flight jurisdiction-and-practice-area
-expansion ADR on `docs/expansion-program`; this ADR takes `0025`. It cites
-ADR 0022, which is likewise not yet on `main`.*
+*Numbering note: `0024` is taken by the jurisdiction-and-practice-area expansion
+ADR, merged as PR #313 on 2026-08-09; this ADR takes `0025`. It cites ADR 0022,
+merged as PR #311 on 2026-07-27.*
