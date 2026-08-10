@@ -1,6 +1,6 @@
 # ADR 0024 — Routing expansion contributions (new jurisdictions and practice areas)
 
-**Status:** Proposed
+**Status:** Accepted (2026-08-09) — committee-accepted at the weekly call.
 **Date:** 2026-07-20
 **Owner:** Maintainer team (houfu)
 **Origin:** Committee call of 2026-07-19 (expansion ADR assigned); extracted from the

@@ -1,6 +1,6 @@
 # Mini-PRD: Jurisdiction & practice-area expansion — clearing the acceptance path for community coverage
 
-> **Status:** Proposed — direction paper for the expansion program. Forks resolved with the maintainer 2026-07-20 (see §Decisions). Inventory **reconciled against both repos and a live-docket dry run 2026-07-20** (see §Reconciliation). The first extraction is [ADR 0024 — Routing expansion contributions](../adr/0024-jurisdiction-and-practice-area-expansion.md) (**Proposed**, filed with this paper); remaining **(ADR needed)** pieces are promoted one at a time as their triggers fire (see §New ADRs this program needs). This paper follows the precedent of [fiduciary-grade-agentic-legal-work.md](fiduciary-grade-agentic-legal-work.md): the big picture lives here; each ADR extracted from it decides one simple thing.
+> **Status:** Proposed — direction paper for the expansion program. Forks resolved with the maintainer 2026-07-20 (see §Decisions). Inventory **reconciled against both repos and a live-docket dry run 2026-07-20** (see §Reconciliation). The first extraction is [ADR 0024 — Routing expansion contributions](../adr/0024-jurisdiction-and-practice-area-expansion.md) (**Accepted** 2026-08-09 by the committee; filed with this paper); remaining **(ADR needed)** pieces are promoted one at a time as their triggers fire (see §New ADRs this program needs). This paper follows the precedent of [fiduciary-grade-agentic-legal-work.md](fiduciary-grade-agentic-legal-work.md): the big picture lives here; each ADR extracted from it decides one simple thing.
 > **Effort:** L for the program's process work (docs + small ADRs, no code beyond CI lints); the coverage itself is community-contributed and open-ended.
 > **Contributor profile:** Maintainers and committee for the ADRs; practicing attorneys per jurisdiction for the coverage; no specific engineering profile.
 > **Mentor:** Maintainer team; security review wherever a gate touches `gateway/**` or the vetting playbook.
@@ -128,7 +128,7 @@ All docket items, gate texts, and repo structures were verified directly against
 ## Roadmap (phased, trigger-driven)
 
 **Phase 1 — now:**
-1. **ADR 0024 (routing + claim recording)** — the four routing sentences + the claims table. Files immediately; unblocks the docket.
+1. **ADR 0024 (routing + claim recording)** — the four routing sentences + the claims table. **Accepted 2026-08-09**; unblocks the docket.
 2. **Vetting-playbook amendment** — skill-content threat class + a note that expansion PRs from unknown authors in sensitive classes get the full read. Security-routed docs PR.
 3. **The companion trust-tiers / maintainer-of-record ADR** — **not yet written; in progress.** Written and filed once 0024 lands, taking the next free number then.
 
@@ -145,7 +145,7 @@ Extraction order is by trigger, not by numbering. Each is one simple decision.
 
 | ADR | Decides | Trigger |
 |---|---|---|
-| **0024 Routing** (drafted) | The four routing sentences + claim recording | Now — the docket is waiting |
+| **0024 Routing** (accepted 2026-08-09) | The four routing sentences + claim recording | Now — the docket is waiting |
 | **Trust tiers** (in progress — not yet written) | trusted/experimental tiers, maintainer of record, demotion-not-deletion | After 0024 |
 | **lq-skills tier semantics** | Whether lq-skills merges can be `trusted` (requiring verified attestation there) or stay `experimental` until adopted into lq-ai | First S2 PR with a claimed qualified attester (#18/#22 live) |
 | **Licensure verification** | How a claimed bar admission is verified; self-attestation independence; pseudonymous contributors | First trusted-tier request from an attester not personally known |
