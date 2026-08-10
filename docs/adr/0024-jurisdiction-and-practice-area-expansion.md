@@ -68,7 +68,8 @@ routing gets a second maintainer's review.
 
 ## Out of scope (deliberately)
 
-Substantive gates (trust tiers, attestation — companion ADR 0025), the
+Substantive gates (trust tiers, attestation — the companion trust-tiers ADR,
+not yet written), the
 jurisdiction vocabulary, the response
 playbook's templates, lq-skills' own gate, security threat-class additions,
 and everything in the direction paper's "New ADRs this program needs" table.
@@ -104,7 +105,8 @@ This ADR routes; it does not gate.
   [GOVERNANCE.md](../../GOVERNANCE.md), adopted via ADR
   [0022](0022-committee-governance-and-meeting-records.md). That process gates
   the S4 **decision** — the PRD amendment — and nothing else: not this ADR's
-  acceptance, not ADR 0025's filing. An S4 mini-PRD may be filed and queued at
+  acceptance, not the companion trust-tiers ADR's filing. An S4 mini-PRD may be
+  filed and queued at
   any time; it waits for a committee slot, never for a governance PR.
 
 ## Cross-references
@@ -117,8 +119,9 @@ This ADR routes; it does not gate.
   [skills/CONTRIBUTING.md](../../skills/CONTRIBUTING.md) (claim step);
   [docs/security/external-contribution-vetting.md](../security/external-contribution-vetting.md)
   (S1 external-author read).
-- Companion: ADR 0025 (trust tiers & maintainer of record) — files after 0024
-  lands.
+- Companion: the trust-tiers & maintainer-of-record ADR — **not yet written**;
+  it is written and filed after 0024 lands, and takes the next free ADR number
+  at that point.
 - [GOVERNANCE.md](../../GOVERNANCE.md) + ADR
   [0022](0022-committee-governance-and-meeting-records.md) — committee decision
   path for S4.

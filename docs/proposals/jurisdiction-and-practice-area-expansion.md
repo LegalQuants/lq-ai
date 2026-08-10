@@ -67,7 +67,7 @@ Four operating principles follow, and run through every extraction:
 
 3. **Security hardening goes through the vetting playbook, not an ADR.** The playbook's own closing rule invites new threat classes; contributed skill content (a SKILL.md is instructions an LLM executes over privileged client documents) becomes a threat-class row via a normal security-routed docs PR. *(Rejected: deciding security posture inside the expansion ADR — wrong review routing, wrong owners.)*
 
-4. **Trust tiers stay in the companion ADR.** The drafted trust-tiers/maintainer-of-record ADR (0025) is the substantive-gate half of this program and files separately, after routing lands. *(Rejected: merging it into this program's ADRs — it is already a self-contained, well-scoped decision.)*
+4. **Trust tiers stay in the companion ADR.** The trust-tiers/maintainer-of-record ADR — **not yet written; in progress** — is the substantive-gate half of this program and files separately, after routing lands. It takes the next free ADR number when it is filed, not one reserved now. *(Rejected: merging it into this program's ADRs — it is already a self-contained, well-scoped decision.)*
 
 5. **Accountability artifacts ride ADR 0022's satellite repo, when it lands.** Per-item explainer decks / routing receipts would extend the `LegalQuants/lq-ai-community` repo that ADR 0022 (PR #311) creates for meeting records, filed under issue/PR number — contingent on 0022's acceptance, not decided here. *(Rejected: deciding the records home in this program — it is 0022's decision to make.)*
 
@@ -106,7 +106,7 @@ The PRD **already invites** much of this: DE-001 (practice-area skill candidates
 |---|---|---|
 | **Routing** | Folklore: four possible homes (lq-ai `skills/`, lq-skills, empty `skills/community/`, sibling repos); the one precedent is a PR comment (#190) | **ADR 0024**: four routing sentences, each restating canon |
 | **Claim registry** | skills/CONTRIBUTING requires "claim first" but records claims nowhere visible; #18-vs-#6 collision realized | One plain markdown claims table (rides ADR 0024); a structured jurisdiction vocabulary is **later** (ADR needed) |
-| **Substantive gate** | lq-ai: attorney attestation + dual review. lq-skills: quality gate, **no attestation**. Bars diverge silently | Companion ADR 0025 (trust tiers, maintainer of record); lq-skills adoption is that repo's own PR (ADR needed for tier semantics — see §New ADRs) |
+| **Substantive gate** | lq-ai: attorney attestation + dual review. lq-skills: quality gate, **no attestation**. Bars diverge silently | The companion trust-tiers ADR (trust tiers, maintainer of record) — not yet written; lq-skills adoption is that repo's own PR (ADR needed for tier semantics — see §New ADRs) |
 | **Security gate** | Vetting playbook covers gateway/deps/CI/deploy for unknown authors; **no row for skill content**; lq-skills gate has no adversarial content read | Playbook amendment PR (Decision 3); S1 proposals from external authors get the full playbook read (already the playbook's own §1 rule — needs only a pointer from the routing response) |
 | **Scope amendment** | PRD §1.6 changes only by PRD amendment; no documented path | S4 route: mini-PRD in `docs/proposals/` (this paper's own format) → committee → amendment. #287 is the live test case |
 | **Maintainer response practice** | Ad hoc; response quality varies by maintainer | Playbook doc `docs/contribute/expansion-playbook.md`, written **after** the first few real routings (drafting it from experience beats drafting it from theory) |
@@ -130,7 +130,7 @@ All docket items, gate texts, and repo structures were verified directly against
 **Phase 1 — now:**
 1. **ADR 0024 (routing + claim recording)** — the four routing sentences + the claims table. Files immediately; unblocks the docket.
 2. **Vetting-playbook amendment** — skill-content threat class + a note that expansion PRs from unknown authors in sensitive classes get the full read. Security-routed docs PR.
-3. **Companion ADR 0025 (trust tiers / maintainer of record)** — drafted; files once 0024 lands.
+3. **The companion trust-tiers / maintainer-of-record ADR** — **not yet written; in progress.** Written and filed once 0024 lands, taking the next free number then.
 
 **Phase 2 — after the first real routings:**
 4. `docs/contribute/expansion-playbook.md` — response templates distilled from actual D-step responses (classify → check claims → route → state gate → recruit → record; dispositions: routed / duplicate / preserved-as-DE crediting the proposer / declined-with-cited-reason; disputes get a second reviewer and pause, never waive).
@@ -146,7 +146,7 @@ Extraction order is by trigger, not by numbering. Each is one simple decision.
 | ADR | Decides | Trigger |
 |---|---|---|
 | **0024 Routing** (drafted) | The four routing sentences + claim recording | Now — the docket is waiting |
-| **0025 Trust tiers** (drafted) | trusted/experimental tiers, maintainer of record, demotion-not-deletion | After 0024 |
+| **Trust tiers** (in progress — not yet written) | trusted/experimental tiers, maintainer of record, demotion-not-deletion | After 0024 |
 | **lq-skills tier semantics** | Whether lq-skills merges can be `trusted` (requiring verified attestation there) or stay `experimental` until adopted into lq-ai | First S2 PR with a claimed qualified attester (#18/#22 live) |
 | **Licensure verification** | How a claimed bar admission is verified; self-attestation independence; pseudonymous contributors | First trusted-tier request from an attester not personally known |
 | **Jurisdiction vocabulary** | The controlled code list, multi-code declarations, coverage-cell resolution, grandfathering | First D5-style lint work, or the claims table's free-text cells becoming ambiguous |
@@ -164,14 +164,14 @@ Extraction order is by trigger, not by numbering. Each is one simple decision.
 
 ## Out of scope (file as DE-XXX if they surface)
 
-- Any first-party corpus ownership or per-jurisdiction content curation by the maintainer team (contradicts driver economics; coverage scales with the attorney network per ADR 0025's thesis).
+- Any first-party corpus ownership or per-jurisdiction content curation by the maintainer team (contradicts driver economics; coverage scales with the attorney network per the companion trust-tiers ADR's thesis).
 - Per-jurisdiction repos for skills (`lq-skills-eu`, …) — fragments discovery; the claims table gives the by-jurisdiction view without the split.
 - An intake form/bot before the manual process has run (see the automation ADR's strain trigger).
 - Changes to lq-skills' gate imposed from this repo — everything lq-skills-facing is proposed to that repo under its own process.
 
 ## Cross-references
 
-- First extraction: [ADR 0024](../adr/0024-jurisdiction-and-practice-area-expansion.md). Companion: ADR 0025 (trust tiers & maintainer of record) — files after 0024 lands.
+- First extraction: [ADR 0024](../adr/0024-jurisdiction-and-practice-area-expansion.md). Companion: the trust-tiers & maintainer-of-record ADR — **not yet written**; written and filed after 0024 lands, taking the next free ADR number then.
 - Canon this program restates: ADR [0021](../adr/0021-content-source-registry-and-free-source-expansion.md), [0016](../adr/0016-transparency-and-governance-invariants.md), [0019](../adr/0019-transparent-validity-treatment-layer.md) D8, [0014](../adr/0014-gateway-egress-boundary-for-tool-providers.md)/[0015](../adr/0015-governed-tool-calling-model.md); [skills/CONTRIBUTING.md](../../skills/CONTRIBUTING.md); [docs/security/external-contribution-vetting.md](../security/external-contribution-vetting.md); PRD §1.6, §9 (DE-001/DE-002/DE-264).
 - Governance dependency: GOVERNANCE.md + ADR 0022 — **adopted** (PR #311, merged 2026-07-27); the S4 committee path and response-window norms are defined against that text.
 - Style precedent: [fiduciary-grade-agentic-legal-work.md](fiduciary-grade-agentic-legal-work.md) (direction paper → extracted ADRs 0018–0021).
