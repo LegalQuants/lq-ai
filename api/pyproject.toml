@@ -15,7 +15,7 @@ dependencies = [
     "uvicorn[standard]>=0.32,<0.48",
     "pydantic>=2.7,<3",
     "pydantic-settings>=2.4,<3",
-    "sqlalchemy[asyncio]>=2.0.30,<2.1",
+    "sqlalchemy[asyncio]>=2.0.51,<2.1",
     # The asyncpg window is a CROSS-SERVICE INVARIANT, not a local choice: it
     # must move in lockstep with gateway/pyproject.toml's, whose comment
     # records why (one asyncpg ABI per container image in a multi-service
