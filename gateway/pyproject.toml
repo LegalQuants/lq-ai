@@ -72,12 +72,15 @@ dependencies = [
     # the official MCP SDK — not reasonably hand-rollable (it implements the
     # full JSON-RPC-over-SSE session + auth handshake). Client-only use here.
     "mcp>=1.28,<2",
-    # mcp pulls sse-starlette, whose latest (3.4.x) requires starlette 1.x —
-    # which conflicts with fastapi 0.116's starlette<0.49 pin. We use only the
-    # MCP *client* (ClientSession + streamablehttp_client), not the server, so
-    # pin starlette to fastapi's supported range; pip then resolves sse-starlette
-    # to a compatible (3.0.x) build. Lift when fastapi supports starlette 1.x.
-    "starlette>=1.3.1,<1.4",
+    # starlette is pinned explicitly rather than left to fastapi's resolver.
+    # History: this cap was originally <1.4 because mcp pulls sse-starlette,
+    # whose 3.4.x line requires starlette 1.x, which conflicted with the
+    # starlette<0.49 pin fastapi carried at 0.116. That conflict is gone —
+    # fastapi 0.141.1 declares starlette with no version specifier, and we
+    # have been running starlette 1.x since 1.3.1. We use only the MCP
+    # *client* (ClientSession + streamablehttp_client), never the server.
+    # Moves in lockstep with api/pyproject.toml's pin — bump both together.
+    "starlette>=1.4.1,<1.5",
 ]
 
 [project.optional-dependencies]
