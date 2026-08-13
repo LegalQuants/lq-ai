@@ -148,7 +148,7 @@ gateway-format-check:
 
 .PHONY: install-web
 install-web:
-	cd web && npm ci
+	cd web && CYPRESS_INSTALL_BINARY=0 npm ci
 
 .PHONY: web-test
 web-test:

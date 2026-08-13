@@ -103,11 +103,14 @@ For features not on the deferred-enhancements list, please file an issue describ
 5. **Sign your commits** per the DCO requirement (see [Sign-off](#sign-off-developer-certificate-of-origin) below). PRs without DCO sign-off cannot be merged.
 6. **Open the PR** with a description that explains what changed, why, and how to verify. Link to any relevant issue or DE-### entry in the PRD.
 7. **Respond to review** — maintainers will review within ~5 business days for most PRs, faster for security or bug fixes. Substantive review feedback usually requires changes; small style nits can be deferred to follow-ups.
-8. **Current PR CI must pass** — API runs `ruff check` and `ruff format --check`
-   for `api/` and `scripts/`, `mypy app`, and `pytest -q` with pgvector Postgres;
-   Gateway runs ruff check/format, `mypy app`, and `pytest -q`; Web runs
-   `npm run check:lq-ai` and `npm run test:frontend -- --run`. PRs with failing
-   CI are not merged.
+8. **Current PR CI must pass** — API runs `uv lock --check`, `ruff check`, and
+   `ruff format --check` for `api/` and `scripts/`, `mypy app`, and `pytest -q`
+   with pgvector Postgres; Gateway runs `uv lock --check`, ruff check/format,
+   `mypy app`, and `pytest -q`; Web runs `npm run check:lq-ai` and `npm run
+   test:frontend -- --run`. The path-triggered Stack smoke workflow also runs on
+   PRs that change the specified API/Gateway/Web dependency manifests and locks,
+   Dockerfiles, compose, API migrations, its script, or its workflow. PRs with
+   failing CI are not merged.
 9. **At least one maintainer approval** is required to merge. For changes affecting multiple subsystems, two approvals are preferred.
 
 Squash-and-merge is the default; merge commits are reserved for cases where the per-commit history meaningfully aids future debugging.

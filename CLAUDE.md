@@ -96,11 +96,11 @@ Full conventions in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Testing
 
-Coverage target is 80% across `api/` and `gateway/`. CI enforces no-decrease.
+Coverage target is 80% across `api/` and `gateway/`. Current PR CI does not enforce a coverage threshold or no-decrease rule.
 
 - **Unit tests** — fast, no external deps. `pytest` in each subsystem's `tests/` folder.
 - **Integration tests** — run against real Postgres in Docker. Provider integration gated behind `pytest -m provider`.
-- **End-to-end tests** — Playwright against a deployed stack. Runs on every PR.
+- **End-to-end tests** — browser end-to-end coverage is not part of the current PR workflow.
 
 Bug fixes include a regression test. New API endpoints include unit tests for handler logic, integration tests for the endpoint, and OpenAPI schema-conformance tests.
 

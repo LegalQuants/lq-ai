@@ -113,11 +113,14 @@ make web-test
 Run API tests that need Postgres against the throwaway pgvector database from
 §3; do not claim integration coverage from a run without it.
 
-Current PR CI runs three jobs: **API** (`ruff check api scripts`,
-`ruff format --check api scripts`, `mypy app`, and `pytest -q` with pgvector
-Postgres), **Gateway** (ruff check/format, `mypy app`, and `pytest -q`), and
-**Web** (`npm run check:lq-ai` and `npm run test:frontend -- --run`). It does not
-currently enforce coverage no-decrease or run browser end-to-end tests. A new
+Current PR CI runs three jobs: **API** (`uv lock --check`, `ruff check api
+scripts`, `ruff format --check api scripts`, `mypy app`, and `pytest -q` with
+pgvector Postgres), **Gateway** (`uv lock --check`, ruff check/format, `mypy
+app`, and `pytest -q`), and **Web** (`npm run check:lq-ai` and `npm run
+test:frontend -- --run`). The path-triggered Stack smoke workflow also runs on
+PRs that change the specified API/Gateway/Web dependency manifests and locks,
+Dockerfiles, compose, API migrations, its script, or its workflow. Current PR CI
+does not enforce coverage no-decrease or run browser end-to-end tests. A new
 endpoint needs unit + integration + OpenAPI-conformance tests; a bug fix needs a
 regression test.
 
@@ -141,8 +144,8 @@ These are non-obvious and have each taken down CI at least once:
   open a PR against `LegalQuants/lq-ai`, and respond to CI and maintainer review.
   Do not push maintainer remotes or merge the PR yourself.
 - **Maintainers only:** after merging, an authorized maintainer may synchronize
-  the upstream and `tucuxi` mirror remotes and apply the project's
-  branch-retention policy. These are not contributor steps.
+  upstream and configured mirror remotes and apply the project's branch-retention
+  policy. These are not contributor steps.
 
 ---
 
@@ -156,8 +159,6 @@ receive adversarial vetting per
 Changes to `gateway/**`, authentication, authorization, audit, or cryptography
 require the applicable security review under
 [.github/CODEOWNERS](../../.github/CODEOWNERS) before a maintainer merges them.
-Maintainer-authored internal branches follow the maintainers' own merge policy;
-that is not an external-contributor workflow.
 
 When in doubt, treat it as the stricter row and ask.
 
