@@ -38,6 +38,14 @@ def example_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AWS_REGION", "us-east-1")
     monkeypatch.setenv("AZURE_OPENAI_RESOURCE", "test-openai")
     monkeypatch.setenv("LQ_AI_VERSION", "0.1.0-test")
+    monkeypatch.setenv("LOCAL_INFERENCE_ENABLED", "true")
+    monkeypatch.setenv("VLLM_ENABLED", "false")
+    monkeypatch.setenv("BUDGET_ALERT_EMAIL", "admin@example.com")
+    monkeypatch.setenv("OTEL_ENABLED", "false")
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel-collector:4318")
+    monkeypatch.setenv("LANGFUSE_ENABLED", "false")
+    monkeypatch.setenv("LANGFUSE_HOST", "http://langfuse:3000")
+    monkeypatch.setenv("LQ_AI_DEV_MODE", "false")
     # Pin the placeholders that have a `:-default` in gateway.yaml.example too,
     # or the suite silently inherits the developer's shell. `.env.example` tells
     # operators to export OLLAMA_BASE_URL=http://host.docker.internal:11434, and
