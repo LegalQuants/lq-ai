@@ -1,6 +1,8 @@
 # ADR 0022 — Committee governance document and public meeting records
 
-**Status:** Proposed
+**Status:** Accepted (2026-07-26) — committee-accepted at the weekly call
+([minutes](https://github.com/LegalQuants/lq-ai-community/blob/main/meetings/2026-07-26-weekly/notes.md),
+decision 1, adopting this ADR alongside 0023 and 0024); merged as PR #311 on 2026-07-27.
 **Date:** 2026-07-20
 **Owner:** Committee (action item from the 2026-07-19 weekly call)
 
@@ -82,19 +84,21 @@ No prior ADR, PRD section, or DE entry decides either question.
 - `GOVERNANCE.md` lands at the repo root (this PR) and becomes the
   entry point for how the project is run; README gains a pointer in a
   follow-up.
-- A `LegalQuants/lq-ai-community` repo needs creating (org-owner action),
-  seeded with minutes from the four committee calls held to date
-  (2026-06-28, 07-05, 07-12, 07-19) and the meeting-folder convention.
-  Until it exists, minutes continue to be posted to the committee
-  channel.
+- `LegalQuants/lq-ai-community` exists (public) and carries the
+  meeting-folder convention with a `_template`; the 2026-07-19 and
+  2026-07-26 calls are published there. Seeding the earlier calls
+  (2026-06-28, 07-05, 07-12) is outstanding, and until those land the
+  record for them remains the committee channel.
 - The claims process, review-committee mandate, and async-ratification
   rule stop being oral tradition; new contributors can read how
   decisions are made without joining a call.
 - The ADR series keeps a single governance entry (this ADR) rather
   than absorbing process documents, so ADR review remains an
   architecture gate.
-- This ADR is Proposed until the committee approves the PR under the
-  async-ratification rule it introduces.
+- This ADR was Proposed until the committee approved it. The 2026-07-26
+  weekly call resolved to merge it together with ADRs 0023 and 0024, and
+  PR #311 merged the following day — the first decision taken under the
+  ADR-first workflow this ADR records.
 
 ---
 

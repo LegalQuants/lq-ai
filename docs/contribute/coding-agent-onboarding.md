@@ -63,8 +63,8 @@ This is how work actually gets shipped here. It is battle-tested across the M1�
    Never report "done" without the command output. See §4.
 
 5. SHIP.
-   Commit with DCO + trailer (§5) → push BOTH remotes → open PR → watch CI
-   → merge per the gating rule (§6) → report the squash SHA.
+   Commit with DCO (§5) → push the branch to your own fork → open a PR
+   → respond to CI and review. A maintainer performs the merge (§6).
 ```
 
 Two honesty rules that sit on top of the loop:
@@ -100,15 +100,29 @@ These have each bitten this codebase. Violating them corrupts the running dev st
 Before claiming a change is complete, run and read the output of:
 
 ```bash
-cd api   # or gateway/
-.venv/bin/ruff format --check app tests
-.venv/bin/ruff check app tests
-.venv/bin/mypy app          # gateway is mypy --strict; api is standard
-# targeted tests for what you touched, then the relevant suites, on a throwaway DB:
-DATABASE_URL=postgresql+asyncpg://test:test@127.0.0.1:55432/lqai_test .venv/bin/pytest <paths> -q
+# From the repository root after `make install`
+make lint          # Python ruff/mypy + Web npm run check:lq-ai
+make format-check  # Python ruff format --check
+make test          # Python local-loop suites + Web Vitest
+
+# Run Web gates independently when iterating on web/
+make web-check
+make web-test
 ```
 
-CI runs three jobs: **API** (ruff + mypy + pytest — the long pole, ~11 min), **Gateway** (ruff + mypy --strict + pytest), **Web** (svelte-check + Vitest). Coverage target is 80% across `api/` and `gateway/`; CI enforces no-decrease. A new endpoint needs unit + integration + OpenAPI-conformance tests; a bug fix needs a regression test.
+Run API tests that need Postgres against the throwaway pgvector database from
+§3; do not claim integration coverage from a run without it.
+
+Current PR CI runs three jobs: **API** (`uv lock --check`, `ruff check api
+scripts`, `ruff format --check api scripts`, `mypy app`, and `pytest -q` with
+pgvector Postgres), **Gateway** (`uv lock --check`, ruff check/format, `mypy
+app`, and `pytest -q`), and **Web** (`npm run check:lq-ai` and `npm run
+test:frontend -- --run`). The path-triggered Stack smoke workflow also runs on
+PRs that change the specified API/Gateway/Web dependency manifests and locks,
+Dockerfiles, compose, API migrations, its script, or its workflow. Current PR CI
+does not enforce coverage no-decrease or run browser end-to-end tests. A new
+endpoint needs unit + integration + OpenAPI-conformance tests; a bug fix needs a
+regression test.
 
 ### Test-suite collision guards (miss these and the **whole** api suite crashes at collection)
 
@@ -124,20 +138,27 @@ These are non-obvious and have each taken down CI at least once:
 ## 5. Commit & PR mechanics
 
 - **DCO sign-off on every commit:** `git commit -s`. Imperative mood ("Add X", not "Added X"). Reference issues in the body (`Closes #123`, `Refs DE-103`).
-- **Stage files explicitly** — never `git add -A`. There are intentionally-untracked files in the tree (e.g. `docs/lq-ai-skill-inputs-corpus.md`); a blanket add sweeps them in.
-- **Push BOTH remotes** after a merge: `origin` (LegalQuants/lq-ai) and `tucuxi` (Tucuxi-Inc mirror) are kept byte-identical on `main`.
-- **Branch preservation:** merged feature branches are kept on the remotes as a historical record for future contributors — don't delete them.
-- **Co-author trailer:** the project tags AI-assisted commits with a `Co-Authored-By:` trailer. Match the convention already in `git log` rather than inventing one.
+- **Stage files explicitly** — never `git add -A`. Inspect `git status` and add
+  only the paths intended for the contribution.
+- **External contributors:** push the contribution branch only to your own fork,
+  open a PR against `LegalQuants/lq-ai`, and respond to CI and maintainer review.
+  Do not push maintainer remotes or merge the PR yourself.
+- **Maintainers only:** after merging, an authorized maintainer may synchronize
+  upstream and configured mirror remotes and apply the project's branch-retention
+  policy. These are not contributor steps.
 
 ---
 
 ## 6. Merge gating (who merges what)
 
-| Change touches… | Who merges |
-|---|---|
-| `gateway/**`, or **authentication / authorization / audit / crypto** | Maintainer reviews **and** merges (security boundary — see [.github/CODEOWNERS](../../.github/CODEOWNERS)). Offer review-vs-self-merge. |
-| `api/` (non-authz) or docs | Self-merge after CI is green. |
-| **External / community PR** (unknown contributor or fork) | **NEVER** auto- or self-merge. CI green ≠ vetted. Vet adversarially per [docs/security/external-contribution-vetting.md](../security/external-contribution-vetting.md), report, leave the merge to a maintainer. |
+External contributors never auto- or self-merge. CI green is necessary but not
+sufficient: a maintainer reviews and merges the PR. External/community PRs also
+receive adversarial vetting per
+[docs/security/external-contribution-vetting.md](../security/external-contribution-vetting.md).
+
+Changes to `gateway/**`, authentication, authorization, audit, or cryptography
+require the applicable security review under
+[.github/CODEOWNERS](../../.github/CODEOWNERS) before a maintainer merges them.
 
 When in doubt, treat it as the stricter row and ask.
 
@@ -154,7 +175,7 @@ A worked shape for taking an item from [ROADMAP.md](../ROADMAP.md) / a [mini-PRD
 5. **Build in reviewed increments** (§2 step 3).
 6. **Gates** (§4), including the collision guards and a throwaway-DB migration check if you added one.
 7. **Docs are part of the change** — update the PRD section, OpenAPI yaml, and DB schema doc that your change touches, in the same PR. Reconcile the narrative docs (README, HONEST-STATE, the feature guide) if behavior changed. File new deferrals as **DE-XXX in PRD §9** rather than expanding scope.
-8. **Ship** (§5–§6) and report the squash SHA.
+8. **Ship** (§5–§6): push only to your own fork, open the PR, and respond to CI and review; a maintainer merges it.
 
 ### Special case: skills with legal substance
 

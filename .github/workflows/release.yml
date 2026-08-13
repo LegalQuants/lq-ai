@@ -1,5 +1,21 @@
 name: Release
 
+# Staged per ADR 0025 (release versioning policy and pipeline ordering):
+#
+#   setup → version-consistency → build-backend → build-frontend → sbom → sign
+#
+# The ordering matters. Before ADR 0025 all four services built as one unordered
+# matrix with fail-fast: false, so a failed `api` build did not stop `web` from
+# publishing — and tagging :latest — under the same tag. `build-frontend` now
+# carries `needs: build-backend`, so a backend failure structurally blocks the
+# frontend from publishing.
+#
+# Known limitation (honest scope, see ADR 0025 Consequences): the guarantee is
+# *between* stages, not within one. fail-fast cancels sibling builds in a stage
+# but cannot un-push an image that already pushed. Eliminating intra-stage
+# partial publishes needs a build-then-push-in-a-second-pass design, which
+# ADR 0025 does not decide.
+
 on:
   push:
     tags:
@@ -22,27 +38,233 @@ env:
   IMAGE_OWNER: legalquants
 
 jobs:
-  build-and-push:
+  # Resolve the image tag and the push/dry-run decision once, rather than
+  # repeating the same shell in every downstream job.
+  setup:
+    name: Resolve release parameters
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.cfg.outputs.tag }}
+      push: ${{ steps.cfg.outputs.push }}
+    steps:
+      - name: Resolve tag and push decision
+        id: cfg
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=dryrun-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+          if [[ "${{ github.event_name }}" == "push" || "${{ inputs.dry_run }}" == "false" ]]; then
+            echo "push=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "push=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ADR 0025 decision 1: api, gateway, web and proxy share one release version.
+  # Only api and gateway carry a project-owned version string, so those are what
+  # this compares. web/package.json tracks the OpenWebUI fork upstream and is
+  # deliberately NOT checked; proxy has no version string.
+  version-consistency:
+    name: Version consistency
+    needs: setup
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read   # the breaking-change gate below lists merged PRs
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history and tags: the breaking-change gate walks the commit
+          # range back to the previous release tag.
+          fetch-depth: 0
+
+      - name: Check api and gateway versions agree with each other and the tag
+        env:
+          RELEASE_TAG: ${{ needs.setup.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          extract() {
+            sed -n 's/^__version__ = "\(.*\)"$/\1/p' "$1"
+          }
+
+          api_v="$(extract api/app/__init__.py)"
+          gw_v="$(extract gateway/app/__init__.py)"
+
+          if [[ -z "$api_v" || -z "$gw_v" ]]; then
+            echo "::error::Could not read __version__ from api/app/__init__.py and/or gateway/app/__init__.py."
+            exit 1
+          fi
+
+          echo "api     = $api_v"
+          echo "gateway = $gw_v"
+          echo "tag     = $RELEASE_TAG"
+
+          # Escape hatch required by ADR 0025 decision 5: a release may ship with
+          # divergent versions only with justification recorded in the release PR.
+          # Put [allow-version-drift] in the tagged commit's message to take it;
+          # the reason belongs in the PR body, where reviewers will see it.
+          if git log -1 --pretty=%B | grep -qF '[allow-version-drift]'; then
+            echo "::warning::[allow-version-drift] present — version checks downgraded to warnings."
+            allow=1
+          else
+            allow=0
+          fi
+
+          rc=0
+          fail() {
+            if [[ "$allow" == "1" ]]; then
+              echo "::warning::$1"
+            else
+              echo "::error::$1"
+              rc=1
+            fi
+          }
+
+          if [[ "$api_v" != "$gw_v" ]]; then
+            fail "Version drift: api is $api_v but gateway is $gw_v. ADR 0025 requires them to move together."
+          fi
+
+          # Only enforce tag agreement on a real vX.Y.Z tag push; dry runs
+          # resolve to dryrun-<sha> and have nothing to compare against.
+          if [[ "$RELEASE_TAG" == v* ]]; then
+            want="${RELEASE_TAG#v}"
+            if [[ "$api_v" != "$want" ]]; then
+              fail "Tag $RELEASE_TAG does not match api version $api_v (expected $want)."
+            fi
+            if [[ "$gw_v" != "$want" ]]; then
+              fail "Tag $RELEASE_TAG does not match gateway version $gw_v (expected $want)."
+            fi
+          else
+            echo "Not a vX.Y.Z tag push — skipping tag agreement check."
+          fi
+
+          exit "$rc"
+
+      # ADR 0025 decision 3: a patch release never requires operator action.
+      # Changes that do are labelled `breaking-change` on their PR, and force the
+      # next release to a minor bump. This turns that runbook step into a gate.
+      #
+      # The gate is only as good as the labelling: an unlabelled breaking PR is
+      # invisible here. It catches the case where someone remembered at review
+      # time and forgot at release time, which is the common one.
+      - name: Check breaking changes force a minor bump
+        if: startsWith(needs.setup.outputs.tag, 'v')
+        env:
+          RELEASE_TAG: ${{ needs.setup.outputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          # `|| true`: with pipefail, grep exits non-zero when this is the first
+          # release and the filtered list is empty, which would abort under `set -e`
+          # before the emptiness check below could report it.
+          prev_tag="$(git tag --list 'v*.*.*' --sort=-v:refname \
+                        | grep -v '^desktop-' | grep -vx "$RELEASE_TAG" | head -1 || true)"
+
+          if [[ -z "$prev_tag" ]]; then
+            echo "No previous release tag to compare against — skipping."
+            exit 0
+          fi
+          echo "Comparing $prev_tag..$RELEASE_TAG"
+
+          # PR numbers referenced by squash-merge subjects in the range, e.g.
+          # "Require gateway key on inference endpoints (GW-01, Refs #288) (#396)".
+          merged_prs="$(git log "${prev_tag}..HEAD" --no-merges --pretty=%s \
+                          | grep -oE '\(#[0-9]+\)$' | tr -d '(#)' | sort -u || true)"
+
+          labelled="$(gh pr list --repo "$GITHUB_REPOSITORY" \
+                        --label breaking-change --state merged \
+                        --limit 200 --json number -q '.[].number' \
+                        | sort -u || true)"
+
+          breaking="$(comm -12 <(printf '%s\n' "$merged_prs") <(printf '%s\n' "$labelled") || true)"
+
+          if [[ -z "${breaking//[[:space:]]/}" ]]; then
+            echo "No breaking-change PRs in range — a patch release is allowed."
+            exit 0
+          fi
+
+          echo "Breaking-change PRs merged since ${prev_tag}:"
+          for n in $breaking; do echo "  #$n"; done
+
+          IFS=. read -r pmaj pmin _ <<< "${prev_tag#v}"
+          IFS=. read -r cmaj cmin _ <<< "${RELEASE_TAG#v}"
+
+          if (( cmaj > pmaj || cmin > pmin )); then
+            echo "$RELEASE_TAG is a minor-or-greater bump over $prev_tag. OK."
+            exit 0
+          fi
+
+          # Escape hatch, mirroring [allow-version-drift] above. The reason
+          # belongs in the release PR, where reviewers will see it.
+          if git log -1 --pretty=%B | grep -qF '[allow-breaking-in-patch]'; then
+            echo "::warning::[allow-breaking-in-patch] present — downgrading to a warning."
+            exit 0
+          fi
+
+          echo "::error::$RELEASE_TAG is a patch bump over $prev_tag, but breaking-change PRs merged in that range. ADR 0025 requires a minor bump — use v${pmaj}.$((pmin + 1)).0. To override, put [allow-breaking-in-patch] in the tagged commit message and justify it in the release PR."
+          exit 1
+
+  # Stage 1 — backend. api + gateway release images bake repo-root assets (skills
+  # corpus, gateway.yaml.example) so they build from the repo root with a
+  # dedicated *.release Dockerfile.
+  build-backend:
     name: Build ${{ matrix.service }}
+    needs: [setup, version-consistency]
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      # A failed api build should stop the in-flight gateway build rather than
+      # let half a backend publish under the tag. See the limitation note above.
+      fail-fast: true
       matrix:
         include:
-          # api + gateway release images bake repo-root assets (skills corpus,
-          # gateway.yaml.example) so they build from the repo root with a
-          # dedicated *.release Dockerfile. web is self-contained → own subdir
-          # context + default Dockerfile.
           - service: api
-            context: .
             file: api/Dockerfile.release
           - service: gateway
-            context: .
             file: gateway/Dockerfile.release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build and push ${{ matrix.service }}
+        uses: ./.github/actions/build-push-image
+        with:
+          service: ${{ matrix.service }}
+          context: .
+          file: ${{ matrix.file }}
+          tag: ${{ needs.setup.outputs.tag }}
+          push: ${{ needs.setup.outputs.push }}
+          registry: ${{ env.REGISTRY }}
+          image_owner: ${{ env.IMAGE_OWNER }}
+
+  # TODO (ADR 0025 decision 4, deliberately not implemented here): a backend
+  # verification gate between build-backend and build-frontend — migrations plus
+  # admin/RBAC/inference checks run against the *published* images. stack-smoke.yml
+  # is the nearest existing check but builds the compose stack from local sources
+  # and scopes itself to "builds, migrates, boots, and holds", explicitly not
+  # "features work". Extending it to pull published tags is follow-up work; until
+  # it exists, the ordering below gates on build success only.
+
+  # Stage 2 — frontend. Blocked by the backend stage: `needs: build-backend` is
+  # the whole point of this file's structure.
+  build-frontend:
+    name: Build ${{ matrix.service }}
+    needs: [setup, build-backend]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
           # web bakes PUBLIC_LQ_AI_API_BASE_URL=/lq/api/v1 so the LQ.AI client
           # addresses its own /lq-prefixed origin behind the proxy (never
-          # colliding with OpenWebUI's same-origin /api). Other services pass no
-          # build-arg (build_args defaults empty below).
+          # colliding with OpenWebUI's same-origin /api). web is self-contained →
+          # own subdir context + default Dockerfile.
           - service: web
             context: ./web
             file: web/Dockerfile
@@ -57,60 +279,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Resolve image tag
-        id: tag
-        run: |
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=dryrun-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Set up QEMU
-        # Enables cross-platform (linux/arm64) builds on the amd64 runner.
-        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
-
-      - name: Login to GHCR
-        if: ${{ github.event_name == 'push' || !inputs.dry_run }}
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+      - name: Build and push ${{ matrix.service }}
+        uses: ./.github/actions/build-push-image
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push
-        id: build
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
-        with:
+          service: ${{ matrix.service }}
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
-          # Only the web matrix entry sets build_args; for api/gateway/proxy this
-          # resolves to empty (no stray build-arg). docker/build-push-action
-          # accepts a multi-line build-args input (KEY=VALUE per line).
-          build-args: ${{ matrix.build_args }}
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name == 'push' || !inputs.dry_run }}
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/lq-ai-${{ matrix.service }}:${{ steps.tag.outputs.tag }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/lq-ai-${{ matrix.service }}:latest
-          provenance: false   # we attach SLSA provenance via actions/attest-build-provenance in T2
-          sbom: false         # we attach SBOM via anchore/sbom-action in T1
-
-      - name: Generate SLSA build provenance
-        if: ${{ github.event_name == 'push' || !inputs.dry_run }}
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
-        with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/lq-ai-${{ matrix.service }}
-          subject-digest: ${{ steps.build.outputs.digest }}
-          push-to-registry: true
+          build_args: ${{ matrix.build_args }}
+          tag: ${{ needs.setup.outputs.tag }}
+          push: ${{ needs.setup.outputs.push }}
+          registry: ${{ env.REGISTRY }}
+          image_owner: ${{ env.IMAGE_OWNER }}
 
   sbom:
     name: SBOM ${{ matrix.service }}
-    needs: build-and-push
-    if: ${{ github.event_name == 'push' || !inputs.dry_run }}
+    needs: [setup, build-backend, build-frontend]
+    if: ${{ needs.setup.outputs.push == 'true' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -123,20 +307,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Resolve image tag
-        id: tag
-        run: |
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=dryrun-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-          fi
-
       # syft pulls the just-pushed image from GHCR, which is private — without
       # an authenticated docker login the pull fails with `UNAUTHORIZED` and the
-      # SBOM step errors out (the build-and-push and sign jobs already log in;
-      # this job was missing the equivalent step). packages:read on this job is
-      # sufficient for the pull.
+      # SBOM step errors out (the build and sign jobs already log in; this job
+      # was missing the equivalent step). packages:read here suffices for the pull.
       - name: Login to GHCR
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
         with:
@@ -147,7 +321,7 @@ jobs:
       - name: Generate SBOM (SPDX JSON)
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
-          image: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/lq-ai-${{ matrix.service }}:${{ steps.tag.outputs.tag }}
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/lq-ai-${{ matrix.service }}:${{ needs.setup.outputs.tag }}
           format: spdx-json
           output-file: ${{ matrix.service }}.spdx.json
           artifact-name: ${{ matrix.service }}.spdx.json
@@ -168,9 +342,9 @@ jobs:
 
   sign:
     name: Cosign ${{ matrix.service }}
-    needs: [build-and-push, sbom]
+    needs: [setup, build-backend, build-frontend, sbom]
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'push' || !inputs.dry_run }}
+    if: ${{ needs.setup.outputs.push == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -182,15 +356,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Resolve image tag
-        id: tag
-        run: |
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=dryrun-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
@@ -213,11 +378,11 @@ jobs:
       - name: Sign container image (keyless)
         run: |
           cosign sign --yes \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/lq-ai-${{ matrix.service }}:${{ steps.tag.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/lq-ai-${{ matrix.service }}:${{ needs.setup.outputs.tag }}
 
       - name: Sign SBOM and attach as attestation
         run: |
           cosign attest --yes \
             --predicate ./sbom/${{ matrix.service }}.spdx.json \
             --type spdxjson \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/lq-ai-${{ matrix.service }}:${{ steps.tag.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/lq-ai-${{ matrix.service }}:${{ needs.setup.outputs.tag }}

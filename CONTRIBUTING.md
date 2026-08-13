@@ -31,44 +31,46 @@ running the test suite inside a container.
 
 For backend development without Docker, dependencies are managed with
 [uv](https://docs.astral.sh/uv/) (per [ADR 0023](docs/adr/0023-uv-lockfiles-gateway-api.md)):
-`uv sync` creates `.venv/` and installs exactly the committed `uv.lock`. If you
-change dependencies in `pyproject.toml`, run `uv lock` in that directory and
-commit the updated lockfile — CI gates on `uv lock --check`.
+For ordinary reproducible setup, use `uv sync --frozen --extra dev`. It creates
+`.venv/` from the committed `uv.lock` without changing the lockfile. If you
+intentionally change dependencies in `pyproject.toml`, run `uv lock` in that
+subsystem and commit the updated lockfile — CI gates on `uv lock --check`.
+
+Run each subsystem example from the repository root in its own terminal:
 
 ```bash
 # Backend
-cd api
-uv sync --extra dev               # creates .venv from the committed uv.lock
-source .venv/bin/activate
-alembic upgrade head
-uvicorn app.main:app --reload --port 8000
-
-# Inference Gateway (separate service)
-cd gateway
-uv sync --extra dev
-source .venv/bin/activate
-uvicorn app.main:app --reload --port 8001
-
-# Web (OpenWebUI fork)
-cd web
-npm install
-npm run dev
+make install-api
+cd api && .venv/bin/uvicorn app.main:app --reload --port 8000
 ```
+
+```bash
+# Inference Gateway
+make install-gateway
+cd gateway && .venv/bin/uvicorn app.main:app --reload --port 8001
+```
+
+```bash
+# Web (OpenWebUI fork)
+make install-web                    # installs the committed package-lock.json
+cd web && npm run dev
+```
+
+When deliberately changing Web dependencies, use `npm install <package>` (or
+`npm uninstall <package>`) and commit both `web/package.json` and
+`web/package-lock.json`. Use `npm ci` for ordinary setup and verification.
 
 Run the test suite before submitting:
 
 ```bash
-# Python (api/, gateway/)
-pytest                    # unit + integration
-pytest -m "not provider"  # skip provider-integration tests (require API keys)
-ruff check .
-ruff format --check .
-mypy .
+# From the repository root
+make lint          # Python ruff/mypy + Web scoped Svelte check
+make format-check  # Python formatting check
+make test          # Python local-loop suites + Web Vitest
 
-# JavaScript (web/)
-npm test
-npm run lint
-npm run typecheck
+# Web checks can also be run independently
+make web-check     # npm run check:lq-ai
+make web-test      # npm run test:frontend -- --run
 ```
 
 ---
@@ -95,12 +97,20 @@ For features not on the deferred-enhancements list, please file an issue describ
 
 1. **Fork the repository** and create a branch from `main`. Branch names should describe the work: `feat/saved-prompts`, `fix/citation-engine-empty-result`, `docs/clarify-tier-config`.
 2. **Make your changes** following the code style and testing requirements below.
-3. **Add or update tests** covering the change. Pytest coverage target is 80%; PRs that drop coverage materially will be flagged.
+3. **Add or update tests** covering the change. Pytest coverage target is 80%, but
+   current PR CI does not enforce a coverage threshold or no-decrease rule.
 4. **Update documentation** — the PRD, README, skill-authoring guide, or capability docs as relevant. If your change affects user-facing behavior, the docs need to reflect it.
 5. **Sign your commits** per the DCO requirement (see [Sign-off](#sign-off-developer-certificate-of-origin) below). PRs without DCO sign-off cannot be merged.
 6. **Open the PR** with a description that explains what changed, why, and how to verify. Link to any relevant issue or DE-### entry in the PRD.
 7. **Respond to review** — maintainers will review within ~5 business days for most PRs, faster for security or bug fixes. Substantive review feedback usually requires changes; small style nits can be deferred to follow-ups.
-8. **CI must pass** — tests, linting, type checks, container builds, security scans (Trivy, CodeQL). PRs with failing CI are not merged.
+8. **Current PR CI must pass** — API runs `uv lock --check`, `ruff check`, and
+   `ruff format --check` for `api/` and `scripts/`, `mypy app`, and `pytest -q`
+   with pgvector Postgres; Gateway runs `uv lock --check`, ruff check/format,
+   `mypy app`, and `pytest -q`; Web runs `npm run check:lq-ai` and `npm run
+   test:frontend -- --run`. The path-triggered Stack smoke workflow also runs on
+   PRs that change the specified API/Gateway/Web dependency manifests and locks,
+   Dockerfiles, compose, API migrations, its script, or its workflow. PRs with
+   failing CI are not merged.
 9. **At least one maintainer approval** is required to merge. For changes affecting multiple subsystems, two approvals are preferred.
 
 Squash-and-merge is the default; merge commits are reserved for cases where the per-commit history meaningfully aids future debugging.
@@ -123,7 +133,9 @@ This adds a trailer to your commit message:
 Signed-off-by: Your Name <your.email@example.com>
 ```
 
-The `git config user.email` you sign off as must match the email associated with your GitHub account or be in your verified emails list. CI validates DCO sign-off on every commit; PRs with unsigned commits cannot be merged.
+The `git config user.email` you sign off as must match the email associated with
+your GitHub account or be in your verified emails list. Project policy requires
+DCO sign-off on every commit; PRs with unsigned commits cannot be merged.
 
 If you forget to sign off, amend your commits before pushing:
 
@@ -149,8 +161,11 @@ git rebase --signoff main                 # all commits since main diverged
 
 ### JavaScript / TypeScript (`web/`)
 
-- **Formatter:** Prettier with the project's `.prettierrc`. CI rejects unformatted code.
-- **Linter:** ESLint with the project's `.eslintrc`. TypeScript-specific rules enforced for `.ts` files; Svelte rules for `.svelte` files.
+- **Formatter:** Prettier with the project's `.prettierrc`. Run it deliberately on
+  files you change; the current PR workflow does not run a Web formatting gate.
+- **Static check:** `npm run check:lq-ai` runs the scoped Svelte/TypeScript check
+  used by current PR CI. The inherited full-fork `npm run lint` script mutates
+  files and is not the PR static-check contract.
 - **TypeScript:** required for new files; gradual migration of legacy `.js` files welcome but not required for unrelated changes.
 - **Framework:** SvelteKit. The `web/` codebase is a fork of OpenWebUI, which is a SvelteKit app — extensions and customizations stay in Svelte. Do **not** introduce React into `web/`. The Word add-in (`word-addin/`, M3) uses Office.js with React; the `web/` codebase does not.
 - **Component conventions:** match the OpenWebUI conventions for shared components; use the project's design system primitives rather than ad-hoc Tailwind.
@@ -176,15 +191,21 @@ The project takes testing seriously because the substantive correctness of the l
 
 ### Coverage target
 
-Pytest coverage target is **80%** across `api/` and `gateway/`. The CI configuration enforces no-decrease coverage on PRs — your PR cannot drop overall coverage. New code should be covered by tests; bug fixes should include a regression test that fails before the fix and passes after.
+Pytest coverage target is **80%** across `api/` and `gateway/`. Current PR CI does
+not enforce a coverage threshold or no-decrease rule. New code should be covered
+by tests; bug fixes should include a regression test that fails before the fix
+and passes after.
 
 ### Test categories
 
-- **Unit tests** — fast, no external dependencies. Run on every commit. Mock the Inference Gateway, the database, and any provider APIs.
-- **Integration tests** — run against a real Postgres instance (Docker-launched in CI) and the actual Inference Gateway against a mocked provider. These exercise multi-component flows.
-- **Provider-integration tests** — gated behind `pytest -m provider` and require provider API keys configured. CI runs these nightly against a small subset; contributors are not expected to run them locally unless their changes specifically affect provider integration.
-- **End-to-end tests** — Playwright tests covering happy paths in the web UI. Run on every PR.
-- **Fuzzing** — the Inference Gateway's OpenAI compatibility surface is fuzzed continuously in CI against the OpenAI API spec.
+- **Unit tests** — fast, no external dependencies. Mock the Inference Gateway, the database, and any provider APIs.
+- **Integration tests** — API PR tests run with a real pgvector Postgres service.
+  These exercise flows that need database behavior rather than mocks alone.
+- **Provider-integration tests** — marked `provider` and require provider API
+  keys. They are not a separate current PR CI job; run them locally when a change
+  specifically affects provider integration and credentials are available.
+- **End-to-end tests** — browser end-to-end coverage is not part of the current PR workflow.
+- **Fuzzing** — continuous fuzzing is not part of the current PR workflow.
 
 ### Stack smoke test (build + boot the whole stack)
 
@@ -221,24 +242,27 @@ Locked-in choices so new tests don't drift across `api/` and `gateway/`. Changes
 
 ### Test markers
 
-Standard markers — declared in each subsystem's `pyproject.toml` so `pytest --strict-markers` will reject typos:
+Standard markers are declared in each subsystem's `pyproject.toml` where
+applicable, so `pytest --strict-markers` rejects typos:
 
 | Marker | Purpose | Default behavior |
 |---|---|---|
-| `unit` | Pure unit, no I/O | Always run |
-| `integration` | Hits Postgres, Redis, MinIO, or the Gateway | Run on every PR |
-| `provider` | Hits a real LLM provider; requires API key | Skipped unless `-m provider` |
-| `slow` | Takes > 5s; usually integration with realistic data | Run nightly, optional locally |
-| `e2e` | Playwright end-to-end | Run on every PR via the Playwright job |
+| `unit` | Pure unit, no I/O | Included in current PR pytest jobs |
+| `integration` | Hits Postgres, Redis, MinIO, or the Gateway | Included in current PR pytest jobs; API CI supplies pgvector Postgres |
+| `provider` | Hits a real LLM provider; requires API key | Run intentionally with credentials; no dedicated current PR job |
+| `slow` | Takes > 5s; usually integration with realistic data | Skipped by `make test`; current PR pytest has no marker filter |
+| `e2e` | Browser end-to-end (currently declared for API only) | Not run by the current PR workflow |
 
 `pytest -m "not provider and not slow"` is the local-loop default; `make test` runs this.
 
 ### JavaScript/TypeScript tests (`web/`)
 
-The OpenWebUI fork is SvelteKit. New tests use **Vitest** (Svelte's standard) for unit and component tests; Playwright for end-to-end. Don't introduce Jest unless there's a concrete reason — Vitest is closer to SvelteKit's tooling and has fewer ESM-vs-CJS pitfalls.
+The OpenWebUI fork is SvelteKit. New unit and component tests use **Vitest**
+(Svelte's standard). Don't introduce Jest unless there's a concrete reason —
+Vitest is closer to SvelteKit's tooling and has fewer ESM-vs-CJS pitfalls.
 
 - **Component tests:** `@testing-library/svelte` with Vitest.
-- **Type checking in tests:** test files are `.ts` / `.svelte` and pass `npm run typecheck`.
+- **Type checking in tests:** test files are `.ts` / `.svelte` and pass `npm run check:lq-ai`.
 - **Snapshot testing:** discouraged for component output; preferred for stable structured data (e.g., backend-returned shapes).
 
 ### When to write what kind of test
@@ -250,7 +274,7 @@ The OpenWebUI fork is SvelteKit. New tests use **Vitest** (Svelte's standard) fo
 | New provider adapter | Provider-integration tests (gated behind `-m provider`); unit tests with mocked provider responses for the request/response shape |
 | New skill (engineering side; the skill content itself goes through the skills/CONTRIBUTING.md path) | A worked-example test verifying the skill renders and produces structured output of the expected shape |
 | New deployment recipe | Documented steps + a CI verification job that runs the recipe in a clean environment |
-| Documentation only | No new tests; CI lints markdown |
+| Documentation only | No new tests; no current Markdown CI gate |
 
 ---
 
