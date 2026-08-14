@@ -14,7 +14,7 @@ dependencies = [
     "fastapi>=0.141.1,<0.142",
     "uvicorn[standard]>=0.51.0,<0.52",
     "pydantic>=2.7,<3",
-    "pydantic-settings>=2.4,<3",
+    "pydantic-settings>=2.15.0,<3",
     "pyyaml>=6.0",
     # B3: provider adapters use httpx.AsyncClient for outbound calls.
     # No `anthropic` SDK — PRD §4 calls for hand-rolled gateway code in
