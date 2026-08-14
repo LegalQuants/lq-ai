@@ -14,7 +14,7 @@ dependencies = [
     "fastapi>=0.141.1,<0.142",
     "uvicorn[standard]>=0.32,<0.48",
     "pydantic>=2.7,<3",
-    "pydantic-settings>=2.4,<3",
+    "pydantic-settings>=2.15.0,<3",
     "sqlalchemy[asyncio]>=2.0.51,<2.1",
     # The asyncpg window is a CROSS-SERVICE INVARIANT, not a local choice: it
     # must move in lockstep with gateway/pyproject.toml's, whose comment
@@ -82,7 +82,7 @@ dependencies = [
     # offsets being preserved from the first ingestion (see ADR 0006).
     # AGPL-3.0 — server-side use only; not redistributed as a library.
     # Boundary documented in PRD §1519 and §7.2.
-    "pymupdf>=1.24,<2",
+    "pymupdf>=1.28.2,<2",
     # Docling: structure-aware parsing (titles, tables, paragraphs).
     # MIT-licensed; produces a structured representation we stash in
     # `documents.structured_content` for M2 consumption. M1 chunker
