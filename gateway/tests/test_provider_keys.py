@@ -54,16 +54,6 @@ async def _run_lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
 
 
-def _set_example_env(monkeypatch: pytest.MonkeyPatch, tmp_config: Path) -> None:
-    """Set the ``${VAR}`` placeholders the example config references."""
-
-    monkeypatch.setenv("GCP_PROJECT_ID", "test-project")
-    monkeypatch.setenv("AWS_REGION", "us-east-1")
-    monkeypatch.setenv("AZURE_OPENAI_RESOURCE", "test-openai")
-    monkeypatch.setenv("LQ_AI_VERSION", "0.1.0-test")
-    monkeypatch.setenv("GATEWAY_CONFIG_PATH", str(tmp_config))
-
-
 @pytest_asyncio.fixture
 async def writable_config(tmp_path: Path) -> Path:
     """Copy the committed example config to a writable temp path."""
@@ -79,7 +69,7 @@ async def keyed_app(
 ) -> AsyncIterator[FastAPI]:
     """Gateway app with a fresh master key + writable temp config."""
 
-    _set_example_env(monkeypatch, writable_config)
+    monkeypatch.setenv("GATEWAY_CONFIG_PATH", str(writable_config))
     monkeypatch.setenv("LQ_AI_GATEWAY_MASTER_KEY", Fernet.generate_key().decode())
 
     from app.main import app
@@ -96,12 +86,12 @@ async def keyed_client(keyed_app: FastAPI) -> AsyncIterator[AsyncClient]:
 
 
 @pytest_asyncio.fixture
-async def no_master_key_app(
+async def no_master_key_app(example_env,
     monkeypatch: pytest.MonkeyPatch, writable_config: Path
 ) -> AsyncIterator[FastAPI]:
     """Gateway app WITHOUT a master key — POST/PATCH must 400."""
 
-    _set_example_env(monkeypatch, writable_config)
+    monkeypatch.setenv("GATEWAY_CONFIG_PATH", str(writable_config))
     monkeypatch.delenv("LQ_AI_GATEWAY_MASTER_KEY", raising=False)
 
     from app.main import app
@@ -404,8 +394,7 @@ class _FakeState:
 
 
 @pytest.mark.unit
-async def test_rotation_retires_displaced_adapter(
-    monkeypatch: pytest.MonkeyPatch, writable_config: Path
+async def test_rotation_retires_displaced_adapter(example_env, monkeypatch: pytest.MonkeyPatch, writable_config: Path
 ) -> None:
     """Rotating an already-keyed provider MOVES the old adapter to retired.
 
@@ -414,12 +403,6 @@ async def test_rotation_retires_displaced_adapter(
     provider credentials. Asserts the displaced adapter ends up in
     ``retired_adapters`` exactly once and is not double-held.
     """
-
-    monkeypatch.setenv("LQ_AI_GATEWAY_MASTER_KEY", Fernet.generate_key().decode())
-    monkeypatch.setenv("AWS_REGION", "us-east-1")
-    monkeypatch.setenv("GCP_PROJECT_ID", "test-project")
-    monkeypatch.setenv("AZURE_OPENAI_RESOURCE", "test-openai")
-    monkeypatch.setenv("LQ_AI_VERSION", "0.1.0-test")
 
     from app.config_holder import MutableConfigHolder
     from app.config_loader import load_config
@@ -467,8 +450,7 @@ async def test_rotation_retires_displaced_adapter(
 
 
 @pytest.mark.unit
-async def test_revoke_retires_live_adapter(
-    monkeypatch: pytest.MonkeyPatch, writable_config: Path
+async def test_revoke_retires_live_adapter(example_env, monkeypatch: pytest.MonkeyPatch, writable_config: Path
 ) -> None:
     """revoke_provider_key pops the live adapter into retired_adapters."""
 
@@ -505,8 +487,7 @@ async def test_revoke_retires_live_adapter(
 
 
 @pytest.mark.unit
-async def test_apply_maps_egress_refusal_to_409(
-    monkeypatch: pytest.MonkeyPatch, writable_config: Path
+async def test_apply_maps_egress_refusal_to_409(example_env,monkeypatch: pytest.MonkeyPatch, writable_config: Path
 ) -> None:
     """An egress-refused base_url on the BYOK path is a structured 409.
 
@@ -522,7 +503,7 @@ async def test_apply_maps_egress_refusal_to_409(
     from app.config_writer import ProviderKeyMutationError
     from app.providers.base_url_policy import ProviderEgressRefused
 
-    _set_example_env(monkeypatch, writable_config)
+    monkeypatch.setenv("GATEWAY_CONFIG_PATH", str(writable_config))
     master_key = Fernet.generate_key().decode()
     monkeypatch.setenv("LQ_AI_GATEWAY_MASTER_KEY", master_key)
 

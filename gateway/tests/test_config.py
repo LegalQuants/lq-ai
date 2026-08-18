@@ -92,6 +92,7 @@ def example_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AWS_REGION", "us-east-1")
     monkeypatch.setenv("AZURE_OPENAI_RESOURCE", "test-openai")
     monkeypatch.setenv("LQ_AI_VERSION", "0.1.0-test")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
 
 
 @pytest.mark.unit

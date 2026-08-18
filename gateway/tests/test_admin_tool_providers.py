@@ -54,15 +54,6 @@ async def _run_lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
 
 
-def _set_example_env(monkeypatch: pytest.MonkeyPatch, tmp_config: Path) -> None:
-    """Set the ``${VAR}`` placeholders the example config references."""
-
-    monkeypatch.setenv("GCP_PROJECT_ID", "test-project")
-    monkeypatch.setenv("AWS_REGION", "us-east-1")
-    monkeypatch.setenv("AZURE_OPENAI_RESOURCE", "test-openai")
-    monkeypatch.setenv("LQ_AI_VERSION", "0.1.0-test")
-    monkeypatch.setenv("GATEWAY_CONFIG_PATH", str(tmp_config))
-
 
 @pytest_asyncio.fixture
 async def writable_config(tmp_path: Path) -> Path:
@@ -93,7 +84,7 @@ async def keyed_app(
 ) -> AsyncIterator[FastAPI]:
     """Gateway app with a fresh master key + writable temp config."""
 
-    _set_example_env(monkeypatch, writable_config)
+    monkeypatch.setenv("GATEWAY_CONFIG_PATH", str(writable_config))
     monkeypatch.setenv("LQ_AI_GATEWAY_MASTER_KEY", Fernet.generate_key().decode())
     _stub_build_tool_adapter(monkeypatch)
 
@@ -116,7 +107,7 @@ async def no_master_key_app(
 ) -> AsyncIterator[FastAPI]:
     """Gateway app WITHOUT a master key — POST/PATCH with an api_key must 400."""
 
-    _set_example_env(monkeypatch, writable_config)
+    monkeypatch.setenv("GATEWAY_CONFIG_PATH", str(writable_config))
     monkeypatch.delenv("LQ_AI_GATEWAY_MASTER_KEY", raising=False)
     _stub_build_tool_adapter(monkeypatch)
 
