@@ -1,0 +1,339 @@
+{
+  "q1": {
+    "findings": [
+      {
+        "claim": "The only NAMED specified consumer of Docling structure is PRD \u00a73.3 Citation Engine's ingestion design contract: 'Documents are parsed by Docling for structural understanding and PyMuPDF for character offsets' producing a CitableChunk schema with bbox ('for rendering overlay'), structural_role ('heading|paragraph|clause|footnote|table_cell'), and hierarchy fields, plus 'structural-role filtering' in retrieval and a bbox-highlight viewer endpoint.",
+        "evidence": "docs/PRD.md:449 ('Documents are parsed by Docling for structural understanding and PyMuPDF for character offsets'); PRD.md:458 ('bbox: List[float] # [x0, y0, x1, y1] for rendering overlay'); PRD.md:460 ('structural_role: str # \"heading\"|\"paragraph\"|\"clause\"|\"footnote\"|\"table_cell\"|...'); PRD.md:461 (hierarchy); PRD.md:463 ('soft boundaries on structural breaks'); PRD.md:467 ('Hybrid retrieval: vector similarity + BM25 full-text + structural-role filtering'); PRD.md:503 ('GET /api/v1/documents/{id}/render?page={n}&highlight={bbox}')",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "That named consumer was never built, even though \u00a73.3 is marked SHIPPED: the as-shipped M2 cascade verifies against documents.normalized_content substring slices, document_chunks carries no structural_role/bbox/hierarchy columns, no render/highlight endpoint exists, and the entire M2 implementation plan contains zero mentions of Docling or structured_content.",
+        "evidence": "docs/PRD.md:423-425 ('M2 status: SHIPPED... Stage 1 \u2014 exact_match: byte-for-byte equality against documents.normalized_content[offset_start:offset_end]'); grep 'structural_role|bbox' over docs/db-schema.md, api/app/models/document.py, docs/M2-IMPLEMENTATION-PLAN.md \u2192 zero hits; grep -i 'docling|structured_content' over docs/M2-IMPLEMENTATION-PLAN.md and docs/ROADMAP.md \u2192 zero hits; grep 'highlight|/render' over api/app/api/*.py \u2192 zero hits",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "'M2 consumption' was a hedged forward-compatibility placeholder, not a committed dependency: ADR 0006 says structured_content is stashed 'for M2 to consume' but its own Consequences section demotes that to 'M1 doesn't read it back; M2's Citation Engine work (or M2's RAG retrieval) MAY use it. Storing it now means we don't have to re-run Docling later' \u2014 the stated benefit is avoiding a re-parse, not enabling a specified feature.",
+        "evidence": "docs/adr/0006-document-pipeline-architecture.md:56-59 ('For M1 we run Docling for forward compatibility... Docling's structured representation is stashed in documents.structured_content (JSONB) for M2 to consume'); adr/0006:87-88 ('M2's Citation Engine work may upgrade this to use Docling's structure for finer-grained chunk boundaries'); adr/0006:254-257 ('M1 doesn't read it back; M2's Citation Engine work (or M2's RAG retrieval) may use it. Storing it now means we don't have to re-run Docling later.'); db-schema.md:889 ('structured_content JSONB, -- Docling's structured representation; M2 reads'); api/app/pipeline/parsers.py:114-117 ('M1 stashes this in documents.structured_content for M2 consumption; the chunker does not consume it')",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "TABLES (Q2, the key sub-question): the shipped M3-C Tabular Review does NOT touch structured_content or Docling output at all. Its retrieval is lexical Postgres FTS over document_chunks (the PyMuPDF-stream chunks), its cell grounding is concatenated cited-chunk text, and its document loader joins Document\u2192File only to get filenames for row labels. Grep for structured_content across api/app/tabular/ returns zero hits.",
+        "evidence": "api/app/tabular/nodes.py:490-503 ('_fts_over_document ... Lexical FTS over document_chunks scoped to one document ... websearch_to_tsquery'); nodes.py:264-269 (chunks = await _fts_over_document(...)); nodes.py:69-72 ('source is the concatenated cited-chunk text... the cell's grounding evidence is the chunk text'); nodes.py:126-133 (load_documents_node selects Document.id + File.filename only); nodes.py:424 (concat of chunk['content']); grep structured_content api/app/tabular/*.py \u2192 no hits; docs/PRD.md:1079 (\u00a73.14 Dependencies: 'Citation Engine (\u00a73.3), Skill Service (\u00a73.4), Files / Knowledge Bases (\u00a73.5), Inference Gateway (\u00a74), LangGraph runtime' \u2014 no document-structure dependency)",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Tabular Review's 'table' is an OUTPUT format (grid of extracted cells), not a consumer of parsed table structure from source documents \u2014 PRD \u00a73.14 defines it as 'mostly a new Skill output type plus a UI surface' with per-cell extraction over retrieved chunks.",
+        "evidence": "docs/PRD.md:1053-1075 (\u00a73.14: 'row-per-document, column-per-question grid... This is mostly a new Skill output type plus a UI surface'); docs/M3-IMPLEMENTATION-PLAN.md:58 ('The Tabular LangGraph workflow walks documents \u00d7 columns, runs each cell as a Citation-Engine-verified extraction, and produces a grid')",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "No starter skill consumes or assumes parser-derived structure: grep for docling/structured_content across skills/ returns zero hits. nda-review and msa-review-saas instruct the LLM itself to observe structure from the text ('Note the document structure: does it have clean section/article numbering...') and to 'Cite specific section/clause numbers' \u2014 the structure work is prompted LLM reading, not a machine-readable heading/table/reading-order input from parsing.",
+        "evidence": "grep -rn -i 'structured_content|docling' skills/ \u2192 empty; skills/msa-review-saas/SKILL.md:92 ('Note the document structure: does it have clean section/article numbering, defined-terms section...'); msa-review-saas/SKILL.md:170 ('Cite specific section/clause numbers for every finding'); skills/nda-review/SKILL.md:136 ('Cite specific section/clause numbers for every finding so the user can navigate the document')",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "The structured payload was aimed at all three of retrieval quality (structural-role filtering, chunk soft boundaries), citation precision/display (bbox overlay viewer, structural_role on citable chunks), and chunk-boundary heuristics \u2014 but every one of those uses is written as future/'may' language, and the one that shipped (citation verification) was built on normalized_content substrings instead. quickstart.md still defers the bbox viewer to 'v0.3+ when the docling-side citable-chunk schema is fully wired through the UI' \u2014 stale at v0.7.0, with no roadmap item behind it (ROADMAP.md has zero Docling mentions).",
+        "evidence": "docs/PRD.md:463,467,458,490,503 (uses listed above); adr/0006:81-88 ('The chunker can use this for sentence-boundary respect... M2's Citation Engine work may upgrade this'); docs/quickstart.md:211 ('the viewer surface is a follow-on for v0.3+ when the docling-side citable-chunk schema is fully wired through the UI'); grep -i docling docs/ROADMAP.md \u2192 empty",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "The docling-payload-versioning DE draft (commit b7c426f6 on unmerged branch docs/de-386-docling-payload-versioning, never on main; number collides with canon DE-386 = tool-provider OAuth2 at PRD.md:5014) treated M2 readers as hypothetical-but-inevitable ('every M2 reader that deserialises them must tolerate both \u2014 or mis-read the older half') and its load-bearing premise was 'today the corpus is uniformly v1, which is the cheapest moment to add the marker.' Per the given context (Docling has never once succeeded; structured_content has zero readers and zero rows), both the premise and the reader assumption are false \u2014 the author reasoned from the docs' 'M2 reads' promise, not from the database.",
+        "evidence": "git show b7c426f6 (docs/PRD.md diff: 'every M2 reader that deserialises them must tolerate both \u2014 or mis-read the older half... Worth deciding before, not after, the first mixed-version row exists \u2014 today the corpus is uniformly v1'; commit message: 'Filed rather than fixed because the corpus is uniformly v1 today'); docs/PRD.md:5014 (canon DE-386 is 'Tool providers have no OAuth2 client-credentials auth'); .maintainer/triage/2026-08-15-major-version-bumps.md:38 ('The docling DE is not in canon at all... never reached main'); .maintainer/pr-drafts/docling-dead-integration-bug.md:11 ('Its stated premise (\"the corpus is uniformly v1 today\") is contradicted by this issue')",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "The pyproject justification for Docling's heavy footprint cites a dangling PRD anchor: 'Heavy install footprint (transformers, sentencepiece) \u2014 accepted for M1 per PRD \u00a73 and \u00a77.6', but PRD \u00a77.6 is 'Security Disclosure' and says nothing about Docling or install footprint \u2014 so the written acceptance of the 2.91 GB cost rests partly on a reference that resolves to the wrong section.",
+        "evidence": "api/pyproject.toml:86-92 ('Docling: structure-aware parsing... stash in documents.structured_content for M2 consumption... Heavy install footprint (transformers, sentencepiece) \u2014 accepted for M1 per PRD \u00a73 and \u00a77.6' followed by 'docling>=1.16,<2'); docs/PRD.md:1736 ('### 7.6 Security Disclosure' \u2014 SECURITY.md contents, GPG keys, disclosure policy)",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "The only other canon anchors keeping Docling on the books are component listings and a risk register, not consumers: PRD's tech-stack rationale ('Docling for structure-aware parsing'), the architecture diagram labeling the Docling pipeline 'M2', and DE-271's dependency-criticality matrix which already contemplates replacement ('if Docling is abandoned, fall back to Apache Tika + custom parser layer'). ADR 0017 (DOCX ingest) rejects Docling for the same non-char-precise reason and reuses structured_content for a different payload (DOCX revisions/comments), showing the column's future is not Docling-specific.",
+        "evidence": "docs/PRD.md:234 ('Docling for structure-aware parsing, PyMuPDF for character-precise byte offsets'); docs/architecture.md:36 ('Document Pipeline Docling + PyMuPDF + Citation Engine... M2'); docs/PRD.md:2778,2784 (DE-271: 'if Docling is abandoned, fall back to Apache Tika + custom parser layer'); docs/adr/0017-docx-ingest-via-pandoc.md:46,57 ('the same logic rejects Docling as the DOCX canonical source'; 'revision layer \u2192 documents.structured_content (JSONB, reused \u2014 no migration)'); docs/contribute/mini-prds/docx-ingest-support.md:13,49 (structured_content reused for revision layer)",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Starter skills would not benefit from Docling structure even if it worked, because their citation and navigation model runs on clause numbers the LLM reads from the canonical text stream, and the shipped verification path (normalized_content substring) is the only structure the skills' citations depend on.",
+        "evidence": "Inference from skills/nda-review/SKILL.md:136 and msa-review-saas/SKILL.md:92,170 (LLM-read structure) combined with PRD.md:425 (verification against normalized_content) and ADR 0006:57-58 (chunker drives off PyMuPDF stream)",
+        "basis": "inferred",
+        "confidence": "medium"
+      }
+    ],
+    "bottom_line": "\"M2 consumption\" was a placeholder, not a specified consumer: the only named design that would have read documents.structured_content \u2014 PRD \u00a73.3's CitableChunk schema (bbox overlays, structural_role filtering, hierarchy) \u2014 shipped in M2 without any of it, built instead on normalized_content substring verification, and the M2 implementation plan never mentions Docling at all; ADR 0006's own language is \"may use it,\" with the stated benefit being merely avoiding a future re-parse. M3-C Tabular Review, the most plausible-sounding \"tables\" consumer, provably consumes lexical FTS over PyMuPDF-derived document_chunks and never touches structured_content; its \"table\" is an output grid, not parsed table structure. None of the starter skills reference parser structure \u2014 they prompt the LLM to read clause numbers from text. The orphan DE draft's author believed in future M2 readers and a \"uniformly v1 corpus,\" both premises now known false; DE-271 already documents an Apache Tika fallback path, meaning canon itself treats Docling as replaceable."
+  },
+  "q2": {
+    "findings": [
+      {
+        "claim": "Q1 (what PyMuPDF gives): the canonical text is plain `page.get_text()` per page joined by a single newline \u2014 no headings, tables, lists, or column metadata survive as structure. Heading TEXT survives inline as plain numbered lines.",
+        "evidence": "api/app/pipeline/parsers.py:383 (`text = page.get_text()`), parsers.py:403 (`canonical_text = \"\\n\".join(page_texts)`). Executed extraction on msa-1-acme-northstar.pdf shows headings flatten to plain lines: `...withheld).\\n6. Limitation of Liability\\nEXCEPT FOR (A)...`",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Q1 (would any shipped capability notice?): chunk boundaries key ONLY on regex sentence terminators `[.!?]\\s` and paragraph breaks `\\n\\s*\\n` \u2014 never on headings, tables, lists, or columns. Loss of heading levels and list structure is invisible to the chunker by construction.",
+        "evidence": "api/app/pipeline/chunker.py:64-66 (_SENTENCE_TERMINATOR, _PARAGRAPH_BREAK), chunker.py:166-171 and 222-275 (_snap_to_sentence_boundary is the only boundary logic). Docstring chunker.py:28-38 states Docling-aware boundaries were deliberately not used (ADR 0006).",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Q1 (paragraph-break snapping is near-inert for PDFs): in real extracted output paragraph breaks barely exist, so snapping is effectively sentence-driven \u2014 executed run on msa-1 PDF: 9,163 chars, 3 paragraph-break matches vs 54 sentence-terminator matches.",
+        "evidence": "Measured by running api/.venv python + fitz against docs/quickstart/sample-msas/msa-1-acme-northstar.pdf using the exact regexes from chunker.py:64-66.",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Q1 (table structure IS demonstrably lost): the only tables in the sample corpus (2-column signature blocks) extract row-interleaved \u2014 `ACME CORPORATION\\nBETA INDUSTRIES, INC.\\nBy: _______\\nBy: _______\\nName: Sarah Chen\\nName: David Park` \u2014 column identity gone. Content is intact and pairwise readable; no shipped capability parses table cells, so nothing notices today.",
+        "evidence": "Executed PyMuPDF extraction on nda-1-acme-beta.pdf and msa-1-acme-northstar.pdf (tails shown above); table sources at docs/quickstart/sample-ndas/nda-1-acme-beta.md:51-55 and sample-msas/msa-1-acme-northstar.md:75-79. No code reads table structure (structured_content grep below).",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Q1 (multi-column reading order is UNVERIFIED, not proven safe): a committed two-column fixture exists but its test asserts only offset fidelity (slice == content), never that the columns came out in correct reading order. The docstring's claim 'PyMuPDF flattens it to reading order' is asserted, not tested.",
+        "evidence": "api/tests/test_pipeline_parsers.py:96 (docstring), :212 (fixture in parametrize), :218-231 (test_offset_fidelity_against_fixture_pdfs asserts only canonical_slice == chunk.content); api/tests/fixtures/pdfs/_make_fixtures.py:18-20 same claim.",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Q1/Q4 (every downstream consumer operates on the flat character stream, none on structure): citation verification slices documents.normalized_content byte-for-byte then fuzzy-matches; citation extraction computes offsets as chunk.char_offset_start + in-chunk find; playbook wizard extractor reads normalized_content flat; embeddings embed chunk.content strings via the gateway; retrieval is pgvector cosine + Postgres FTS over chunk content. Zero structure dependence in any shipped path.",
+        "evidence": "api/app/citation/verification.py:170-215 (exact + tolerant match against normalized_content slices), :336; api/app/citation/extraction.py:196-197 (offset arithmetic); api/app/playbooks/easy/extractor.py:207 (`text = document.normalized_content or \"\"`); api/app/knowledge/embed.py:1-25 (module docstring: batches chunk text to gateway /v1/embeddings); api/app/knowledge/retrieval.py:1-17 (hybrid vector+FTS docstring), :278-279 (SQL selects char_offsets).",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Q4 (structured_content has zero readers): the only non-pipeline references are the ORM column declaration and a pass-through in autonomous/guard.py; no retrieval, citation, playbook, or tabular code reads it. Confirms the GIVEN 'nothing reads structured_content' independently.",
+        "evidence": "grep for structured_content across api/app: only api/app/models/document.py:7,60,83 (column) and api/app/autonomous/guard.py:1070,1084 (constructs/passes ParsedDocument.structured_content) besides the pipeline writers.",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Q2 (no recorded complaints anywhere): grep of docs/ and .github/ for chunk-quality/citation-precision/reading-order/multi-column/scramble terms returned zero hits; gh issue search (state all) for 'chunk', 'citation precision', 'docling' surfaced no parsing-quality complaint \u2014 the closest, issue #503, is about gateway defaults/timeouts/history-trimming, explicitly not parser or chunk quality. Test comments contain no known-issue notes. Per instruction: this absence is WEAK evidence of sufficiency \u2014 the corpus exercised is synthetic single-column and the user base small.",
+        "evidence": "grep -rniE 'chunk.quality|citation.precision|reading order|multi-column|scrambl' docs/ .github/ \u2192 empty; gh issue list --state all --search results (#503 body: gateway 200-on-failure, DEFAULT_MAX_TOKENS, three 60s timeouts, history token budget \u2014 no parsing item); docling issue hits are CI stack-smoke items #298/#302/#303 only.",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Q3 (the 10 sample contracts are structurally trivial for PyMuPDF): all rendered from Markdown via Chrome headless with single-column body CSS; each contains exactly one table (the signature block) and no multi-column layout anywhere. Executed PyMuPDF extraction on 2 of the 10 confirms clean single-column reading order with numbered plain-text headings. The NDA README itself flags that the corpus uses 'clean section structure' and doesn't test extraction edge cases.",
+        "evidence": "docs/quickstart/sample-msas/render.py:18-35 (single-column CSS, table style only for signature block), :51-62 (Chrome --print-to-pdf); grep '^|' shows exactly 5 table rows per file across all 10 .md sources; executed fitz extraction of nda-1 (3 pages) and msa-1 (4 pages); sample-ndas/README.md 'What this corpus does NOT test' section ('Edge cases in extraction... The synthetic corpus uses clean section structure').",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Q1/Q2 (design intent confirms sufficiency-by-architecture): ADR 0006 deliberately drives the chunker off the PyMuPDF stream because Docling offsets are not character-precise, states chunk boundaries are 'an indexing optimisation... not a verification artifact', and stashes Docling output only for M2 'forward compatibility'. The citation invariant is self-consistent under scrambling: verification checks the quote against the SAME flat stream the model was shown, so table interleaving cannot break citation verification \u2014 it can only degrade what an LLM reads inside a chunk.",
+        "evidence": "docs/adr/0006-document-pipeline-architecture.md \u00a7Decision 1 (lines 44-89, esp. 'drive the chunker off the PyMuPDF character stream', 'stashed in documents.structured_content... for M2 to consume') and \u00a7Neutral (line 254-257 'M1 doesn't read it back'); chunker.py:33-36 ('chunk boundaries are an indexing optimisation... not a verification artifact'); verification.py:170-215. The 'can only degrade LLM comprehension, never citation verification' consequence is inferred from the observed mechanism.",
+        "basis": "inferred",
+        "confidence": "high"
+      },
+      {
+        "claim": "Q1 (where loss WOULD eventually be noticed): real-world contract PDFs with genuine multi-column layouts, pricing/SLA tables, or rate cards would produce interleaved chunk content, degrading what the model quotes in playbook extraction, tabular review, and chat-over-KB \u2014 but there is no committed test, corpus document, or issue demonstrating this today, and the shipped Easy Playbook wizard's own acceptance corpus avoids it by design.",
+        "evidence": "Inferred from: extractor.py:207 feeding flat normalized_content to the LLM; observed signature-block interleaving as the mechanism; sample-ndas/README.md 'does NOT test' caveats; absence of any table-bearing test fixture (api/tests/fixtures/pdfs/_make_fixtures.py builds simple/multipage/two-column prose only).",
+        "basis": "inferred",
+        "confidence": "medium"
+      }
+    ],
+    "bottom_line": "The PyMuPDF-only pipeline is demonstrably sufficient for every capability shipped today: the entire consumer chain \u2014 chunker (sentence-regex boundaries, chunker.py:64-66), embeddings (embed.py), hybrid retrieval (retrieval.py:1-17), citation verification (verification.py:170-215), and playbook extraction (extractor.py:207) \u2014 operates exclusively on the flat canonical character stream, nothing reads documents.structured_content (only writers plus the ORM column exist), and the citation invariant is immune to layout scrambling because it verifies against the same stream the model saw. What is demonstrably lost is table cell structure (observed: the corpus's only tables, 2-column signature blocks, extract row-interleaved \u2014 benign) and a latent, untested multi-column reading-order risk (the two-column fixture asserts only offset fidelity, never column order). There is zero recorded evidence of chunk-quality or citation-precision problems in docs, .github, tests, or GitHub issues \u2014 but this is weak evidence of sufficiency, since the 10 sample contracts are Chrome-rendered single-column Markdown that the NDA README itself admits uses \"clean section structure\" and does not test extraction edge cases; real-world table-heavy or multi-column contracts have simply never been exercised on record."
+  },
+  "q4a": {
+    "findings": [
+      {
+        "claim": "The CUDA payload arrives via one chain only: docling 1.20.0 -> {torch, torchvision, easyocr, docling-ibm-models}, each of which requires torch; torch 2.2.2 (from pypi.org/simple) then pulls 12 nvidia-* packages behind marker \"platform_machine == 'x86_64' and sys_platform == 'linux'\". No other api dependency touches torch.",
+        "evidence": "api/uv.lock:816-839 (docling 1.20.0 deps incl. easyocr, docling-ibm-models, torch, torchvision); api/uv.lock:863-880 (docling-ibm-models -> torch, torchvision); easyocr 1.7.2 block deps incl. torch/torchvision (api/uv.lock, easyocr block); api/uv.lock:4139-4160 (torch 2.2.2 block, source pypi.org/simple, nvidia-* deps with the linux x86_64 marker). Reverse-dep scan of the whole lock found only docling, docling-ibm-models, easyocr, torchvision depending on torch.",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Measured from api/uv.lock wheel sizes: the 12 nvidia-* packages total ~1.885 GB (largest: nvidia-cudnn-cu12 731.7 MB, nvidia-cublas-cu12 410.6 MB) and the torch 2.2.2 manylinux1_x86_64 wheel itself is 755.5 MB (it is the CUDA-linked build) \u2014 so ~2.64 GB of the 2.91 GB Docling-exclusive payload is torch+CUDA; only ~270 MB is docling proper (docling-parse 22.6 MB, opencv-python-headless 50 MB, easyocr, scipy, etc.).",
+        "evidence": "api/uv.lock:2287-2392 (nvidia-* blocks; sizes summed by script over `size =` fields, e.g. nvidia_cudnn_cu12-8.9.2.26 size = 731,7xx,xxx); api/uv.lock:4162 (torch-2.2.2-cp312-cp312-manylinux1_x86_64.whl size = 755466713).",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "api/Dockerfile sets no extra package index and no torch constraint \u2014 it copies uv 0.12.0 and runs `uv sync --frozen --no-install-project` straight off the committed lock \u2014 and api/pyproject.toml has no [tool.uv] section at all, so nothing steers torch away from the default CUDA-linked PyPI wheels.",
+        "evidence": "api/Dockerfile:9 (COPY --from=ghcr.io/astral-sh/uv:0.12.0), api/Dockerfile:24-25 (uv sync --frozen); grep of api/pyproject.toml shows only tool.hatch/tool.pytest/tool.mypy sections (lines 195-253), no tool.uv; docling pin at api/pyproject.toml:92 with its rationale comment at lines 86-91.",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "uv fully supports forcing CPU-only torch in project mode at the pinned uv 0.12.0: [[tool.uv.index]] name=pytorch-cpu url=https://download.pytorch.org/whl/cpu explicit=true, plus [tool.uv.sources] torch/torchvision = [{ index = \"pytorch-cpu\", marker = \"sys_platform == 'linux'\" }]. The uv PyTorch guide states features need uv >= 0.5.3; the --torch-backend=cpu shortcut exists but only in the `uv pip` interface, not `uv sync`.",
+        "evidence": "docs.astral.sh/uv/guides/integration/pytorch/ (fetched 2026-08-15): explicit-index config, tool.uv.sources pinning, marker example, \"require uv version 0.5.3 or later\", \"--torch-backend ... only available in the uv pip interface\". Dockerfile's uv is 0.12.0 (api/Dockerfile:9); local `uv --version` = 0.12.0.",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "CRITICAL GOTCHA (verified by dry-run): tool.uv.sources index pinning does NOT apply to transitive dependencies. A scratch project with only `docling>=1.16,<2` plus the pytorch-cpu index/sources config still resolved torch from pypi.org/simple with all nvidia-* packages (0 occurrences of download.pytorch.org in the lock). Declaring torch and torchvision as direct project dependencies makes the pin bite (13 occurrences, torch resolved as 2.13.0+cpu from the CPU index). So api/pyproject.toml must add torch+torchvision as direct deps (or equivalent) for this to work.",
+        "evidence": "Dry-runs in /private/tmp/claude-501/-Users-houfu-Projects-lq-ai/22828586-1248-4cb7-a11e-f1768e34f54d/scratchpad/q4a/case-a-docling1-cpu/: first uv lock (docling only) -> grep -c download.pytorch.org = 0, torch 2.2.2 from pypi with 12 nvidia packages; after adding torch/torchvision to [project].dependencies -> grep -c = 13, lock line ~329: { name = \"torch\", version = \"2.13.0+cpu\", source = { registry = \"https://download.pytorch.org/whl/cpu\" }, marker = \"sys_platform == 'linux'\" }.",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Measured result, Option A (keep docling 1.x pin exactly as-is, add CPU index pin): full resolution drops from 99 packages/2.904 GB to 90 packages/~452 MB of linux x86_64 wheels (258 MB PyPI wheels + torch 2.13.0+cpu at 191.8 MB + torchvision 0.28.0+cpu at 1.8 MB), with 0 nvidia packages. Applied to the api image: 2.91 GB Docling-exclusive -> ~0.45-0.46 GB, a ~2.45 GB (~84%) reduction, and roughly -12 SBOM entries (195 -> ~183).",
+        "evidence": "scratchpad q4a/case-a-docling1-cpu/uv.lock size report: \"packages resolved: 90 ... TOTAL linux x86_64 wheel bytes: 0.258 GB ... nvidia packages present: 0\" (CPU-index wheels carry no size field in uv.lock, so torch/torchvision sizes came from curl -sI Content-Length: torch 2.13.0+cpu cp312 manylinux_2_28_x86_64 = 191,817,609 bytes; torchvision 0.28.0+cpu = 1,847,450 bytes; for reference torch 2.2.2+cpu cp312 = 186,709,791 bytes).",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Measured result, Option B (upgrade to docling 2.x, which the 2.x-idiom call site in parsers.py actually expects): docling 2.120.1's default install is docling-slim[standard] \u2014 OCR engines (easyocr/tesserocr/rapidocr/ocrmac), VLM, and ASR are now opt-in extras \u2014 and with the same CPU pin it resolves to 110 packages/~444 MB linux wheels (250 MB PyPI + 194 MB torch+torchvision cpu). torch is still transitively required by the standard install (via docling-ibm-models): the no-pin control run pulled torch 2.13.0 plus 15 nvidia/triton packages (~2.97 GB), so CPU pinning is needed in BOTH options.",
+        "evidence": "PyPI JSON for docling 2.120.1 (depends on docling-slim[standard]==2.120.1; extras list asr/easyocr/ocrmac/rapidocr/tesserocr/vlm/...) and docling-slim 2.120.1 (torch only under model extras, but standard includes docling-ibm-models); scratch case-b lock runs: without direct torch -> \"Resolved 126 packages\", 2.969 GB, 15 nvidia packages; with CPU pin -> 110 packages, 0.250 GB PyPI + CPU wheels. parsers.py Docling import site at api/app/pipeline/parsers.py:446-461.",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Residual cost after CPU pinning: ~0.45 GB wheels either way; ~78-98 non-app packages still in the SBOM for a feature nothing reads (docling tree is 90-110 packages standalone); the ~696 MB HuggingFace model download at first use is untouched by any of this (models are fetched at runtime, not install time); and install/pull time shrinks roughly proportionally to the 2.45 GB wheel reduction. The GIVEN facts that nothing reads documents.structured_content and 6/6 docs show docling=fallback are unchanged by this option \u2014 CPU pinning makes Docling cheap, not useful.",
+        "evidence": "Scratch lock package counts (90 and 110); HF model figure is GIVEN in the task brief; parsers.py fallback labels at api/app/pipeline/parsers.py:313-315 (\"docling=fallback\").",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Gotcha \u2014 no blast radius on other api deps: with explicit=true the pytorch-cpu index is consulted only for packages explicitly pinned to it via tool.uv.sources, so the rest of the dependency tree keeps resolving from PyPI; the scratch locks confirm only torch and torchvision came from download.pytorch.org. The sys_platform=='linux' marker keeps macOS dev machines (houfu's aarch64 darwin) on normal PyPI wheels, which are CPU-only on macOS anyway.",
+        "evidence": "uv PyTorch guide (explicit=true \"restricts the index to PyTorch packages only\"); scratch case-a uv.lock: every non-torch package shows source = registry \"https://pypi.org/simple\"; marker-forked entries at case-a lock lines 328-329 (darwin fork -> pypi torch 2.2.2, linux fork -> 2.13.0+cpu).",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Gotcha \u2014 re-locking floats torch upward on the linux fork: the current api/uv.lock's torch 2.2.2 is most plausibly held down by the darwin-x86_64 resolution fork (torch >2.2.2 ships no macOS x86_64 wheels, and the lock's resolution-markers include x86_64 darwin), and once the linux fork is split off to the CPU index it independently resolved to 2.13.0+cpu in the dry-run. If the maintainers want reproducible behavior they should add an explicit torch version constraint when introducing the pin.",
+        "evidence": "api/uv.lock:1-14 (resolution-markers include \"platform_machine == 'x86_64' and sys_platform == 'darwin'\"); api/uv.lock torch block wheels list has torch-2.2.2 macosx_10_9_x86_64 wheel; scratch case-a lock forked to 2.2.2 (darwin) / 2.13.0+cpu (linux). The 'macOS cap is why 2.2.2 was chosen' causal link is inferred, not stated anywhere.",
+        "basis": "inferred",
+        "confidence": "medium"
+      },
+      {
+        "claim": "Gotcha \u2014 docling 2.x default engine swap and system libs: the docling 2.120.1 default resolution replaced easyocr with rapidocr and pulled opencv-python (full build, 71.1 MB) rather than opencv-python-headless \u2014 the full build typically needs libGL/libglib system packages that python:3.12-slim does not ship, so the Dockerfile would need apt additions or a headless override. Docling 1.x kept opencv-python-headless (50 MB).",
+        "evidence": "Scratch case-b size report: \"opencv-python 5.0.0.93 ... 71.1 MB\", \"rapidocr 3.9.2 ... 27.3 MB\", no easyocr in the 110-package lock; case-a report shows opencv-python-headless 4.11.0.86. The libGL-on-slim consequence is inferred from standard opencv-python packaging, not tested in this run.",
+        "basis": "inferred",
+        "confidence": "medium"
+      },
+      {
+        "claim": "Gotcha \u2014 CPU inference speed is a real but bounded concern: upstream reports put OCR+table-structure conversion at ~18 minutes per 100 pages on CPU (issue #2120), with 3-4 GB RAM spikes and 100% CPU during conversion (issue #2877, discussion #245); layout-only conversion (no OCR) is much faster (~seconds/page). Since lq-ai's Docling pass is a background second pass whose output nothing reads, slow-but-completing is tolerable, but worker timeout and memory limits on the arq/ingest workers should be checked before enabling it for real.",
+        "evidence": "WebSearch results: github.com/docling-project/docling issues #2120 (\"1080 seconds ... for just 100 pages\" with OCR+tables), #2877 and discussion #245 (3-4 GB RAM spikes, CPU 100%), discussion #2259. The worker-timeout implication for lq-ai is inferred.",
+        "basis": "inferred",
+        "confidence": "medium"
+      },
+      {
+        "claim": "The change surface for Option A is small and lock-only in effect: edit api/pyproject.toml (add [[tool.uv.index]] + [tool.uv.sources] + torch/torchvision direct deps), regenerate api/uv.lock, no Dockerfile change needed \u2014 `uv sync --frozen --no-install-project` (api/Dockerfile:25) consumes the index pins recorded in the lock as-is. The uv.lock format in the repo (version = 1, revision = 3) matches what uv 0.12.0 writes, so the toolchain is already current.",
+        "evidence": "api/Dockerfile:24-25; api/uv.lock:1-2 (\"version = 1\", \"revision = 3\"); scratch locks written by uv 0.12.0 use the same format and embed the CPU-index sources; local uv --version = 0.12.0 matches the Dockerfile's pinned copy (api/Dockerfile:9).",
+        "basis": "observed",
+        "confidence": "high"
+      }
+    ],
+    "bottom_line": "Yes \u2014 Docling's cost can be almost entirely removed without removing Docling, and it was measured, not estimated: pinning torch/torchvision to the pytorch-cpu index (supported by the repo's exact uv 0.12.0 toolchain) shrinks the Docling-exclusive wheel payload from 2.91 GB to ~0.45 GB (a ~2.45 GB, ~84% cut, dropping all 12 nvidia-* SBOM entries) while keeping the current docling 1.x pin byte-for-byte unchanged. The one non-obvious trap is that uv's tool.uv.sources pinning ignores transitive deps \u2014 the dry-run proved the CPU index is silently ignored unless torch and torchvision are also declared as direct dependencies of the api project. The same CPU pin is equally necessary and equally effective under a docling 2.x upgrade (2.120.1 defaults to the slim/standard install, ~444 MB with CPU torch, OCR/VLM now extras), so CPU-pinning is orthogonal to \u2014 and cheaper than \u2014 the upgrade decision. Residuals that no pinning fixes: ~0.45 GB wheels and ~80-100 SBOM packages for a feature nothing reads, the ~696 MB runtime HF model download, and CPU conversion at up to ~18 min/100 pages with OCR \u2014 Docling becomes cheap, not useful."
+  },
+  "q4b": {
+    "findings": [
+      {
+        "claim": "Option 1 \u2014 pymupdf4llm: gives markdown with heading hierarchy, table detection (Markdown/HTML), and multi-column reading-order reconstruction; the wheel is 176.4 KB; latest release 1.28.2 (2026-08-06, active cadence, backed by Artifex \u2014 the same vendor as PyMuPDF we already carry); dual-licensed AGPL-3.0 / Artifex commercial, identical to our existing PyMuPDF posture so zero new license exposure; no GPU; no OCR of its own (scanned docs stay with the Mistral-OCR/PaddleOCR path PRD line 234 already defines). Caveat: recent versions pull in pymupdf-layout (~43 MB binary wheel, GNN layout model, also AGPL/commercial dual) as a dependency for improved results \u2014 that is the entire marginal SBOM cost (~2 packages, ~45 MB vs Docling's 80 packages / 2.91 GB). Without the layout package, heading detection falls back to the font-size heuristic (inferred from pre-layout pymupdf4llm behavior).",
+        "evidence": "PyPI pymupdf4llm page: v1.28.2 2026-08-06, 'GNU AGPL v3 or Artifex Commercial', wheel 176.4 KB, 'Markdown with heading hierarchy... tables to Markdown or HTML... reconstructs natural reading order across single and multi-column pages'; PyPI pymupdf-layout page: 'GNU AFFERO GPL 3.0 or Artifex Commercial License', ~42.9 MB wheels, 'used by PyMuPDF4LLM'. Repo baseline: PyMuPDF already carried per api/app/pipeline/parsers.py (given) and PRD.md:234 ('PyMuPDF for character-precise byte offsets ... AGPL is not contagious through HTTP API boundaries').",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Option 2 \u2014 unstructured (OSS library): Apache-2.0, v0.25.2 (2026-08-03, active, backed by Unstructured.io). But its PDF structure story splits by strategy: 'fast' uses pdfminer only \u2014 no layout analysis, no heading/table detection; only 'hi_res' does real layout via detectron2_onnx model inference (onnxruntime + unstructured-inference + model weights), and hi_res is the only strategy that extracts PDF tables. So to get structure you buy a model-inference stack again (system deps poppler-utils, tesseract-ocr, libmagic plus a large Python extra tree) \u2014 a smaller Docling, not an escape from the pattern. Estimated [pdf]+hi_res footprint several hundred MB plus model downloads (inferred; not published as a single number). OCR available via tesseract (ocr_only/hi_res). No GPU required (ONNX CPU) but CPU inference cost per page is real.",
+        "evidence": "PyPI unstructured page: v0.25.2 2026-08-03, Apache-2.0, [pdf] extra needs poppler-utils/tesseract-ocr/libmagic; docs.unstructured.io partitioning page: '\"fast\" ... uses pdfminer ... does not perform layout analysis'; '\"hi_res\" employs detectron2_onnx ... the only strategy that currently extracts tables for PDFs'; 'ocr_only ... Tesseract ... no layout analysis'.",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Option 3 \u2014 marker (Datalab): output quality is excellent (markdown + JSON block tree with headings, tables, equations) but it is eliminated on license and stack: code is Apache-2.0 while the model weights are a modified AI Pubs OpenRAIL-M \u2014 'free for research, personal use, and startups under $5M funding/revenue', commercial license required beyond that. LQ.AI is a self-hosted product whose operators include enterprises over that cap, so we cannot ship marker weights as a default parser without imposing a per-operator licensing question \u2014 directly contrary to the project's open-source self-hosted posture. Stack is PyTorch + Surya VLM with an inference server (vLLM on NVIDIA GPU, llama.cpp for CPU); footprint is Docling-class or larger (inferred). GPU strongly preferred; OCR built in via Surya.",
+        "evidence": "github.com/datalab-to/marker README: 'Code: Apache 2.0 ... Model Weights: Modified AI Pubs Open Rail-M ... free for research, personal use, and startups under $5M funding/revenue'; dependencies 'PyTorch, Surya ... vLLM (NVIDIA GPU) or llama.cpp (CPU)'.",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Option 4 \u2014 pdfplumber + camelot: both MIT, both tables-only for our purposes. pdfplumber (v0.11.10, 2026-06-15) extracts text with layout options, tables via lines/text/explicit strategies, and precise object coordinates \u2014 but no heading semantics, no reading-order model, and explicitly no OCR ('works best on machine-generated, rather than scanned, PDFs'). camelot-py (v2.0.0, 2026-06-04, MIT) is tables-only by design, default backend pdfium with no system deps; scanned-table support requires [ml,ocr] extras (Table Transformer + OCR), which reintroduces model inference. Neither answers the actual gap \u2014 headings/clause hierarchy for contracts \u2014 so they are complements at best, not a Docling replacement.",
+        "evidence": "PyPI pdfplumber: MIT, v0.11.10, 'OCR is not supported', tables via '\"lines\", \"text\", or \"explicit\"' strategies; PyPI camelot-py: MIT, v2.0.0, tables-only, 'pip install \"camelot-py[ml,ocr]\"' for image-only PDFs.",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Option 5 \u2014 Apache Tika (the PRD's own documented Docling fallback, PRD.md:2784): Apache-2.0, very healthy (ASF-governed, v3.3.2 released 2026-07-16), tika-server-standard jar ~78.1 MB plus a JRE (~200-300 MB container layer, inferred) \u2014 dramatically cheaper than Docling but a JVM sidecar in a Python stack. Capability ceiling: Tika's PDF path is PDFBox text extraction emitting XHTML with paragraph-level markup only \u2014 no layout model, so no genuine heading hierarchy, table structure, or reading-order reconstruction for born-digital PDFs (inferred from Tika/PDFBox architecture; the project site does not claim layout analysis). It gives robust text + metadata across many formats, i.e. roughly what PyMuPDF already gives us, not the structure Docling was supposed to add. As a *structure* option it is therefore weak; as a many-format text fallback it remains sensible, which is what DE-271's wording ('Apache Tika + custom parser layer') already implies.",
+        "evidence": "docs/PRD.md:2784 ('if Docling is abandoned, fall back to Apache Tika + custom parser layer'); tika.apache.org: v3.3.2 '16 July 2026', ASF project; mvnrepository tika-server-standard 3.3.0 = 78.1 MB. XHTML-paragraphs-only PDF output: inferred from Tika/PDFBox design, not verified on an official page.",
+        "basis": "inferred",
+        "confidence": "medium"
+      },
+      {
+        "claim": "Option 6 \u2014 Mistral OCR / PaddleOCR-VL as the structure source: Mistral OCR does emit real structure \u2014 markdown with heading hierarchy, tables as markdown or HTML (table_format param), block-level bounding boxes and confidence scores \u2014 so 'route every PDF through OCR' would technically consolidate parsing. But cost and posture kill it as the default path: $4 per 1,000 pages ($2 batch) on OCR 4, and it means shipping every legal document to an external API \u2014 acceptable as the PRD's *scanned-doc fallback* (PRD.md:234) but contrary to a self-hosted BYOK legal product as the mandatory path for born-digital documents PyMuPDF already reads locally; PRD DE-271 itself flags Mistral OCR as 'paid; not air-gappable' (PRD.md:2782). The air-gapped twin PaddleOCR-VL (PRD.md:283 already names it) is Apache-2.0 weights, 0.9B-param VLM emitting structured markdown + HTML tables, but official install guidance is paddlepaddle-gpu/CUDA; CPU inference of a 0.9B VLM per page is impractical at ingestion scale (inferred), and it would add a Paddle runtime rivaling the Docling footprint. Consolidation verdict: keep both exactly where the PRD put them \u2014 scanned-doc lane only.",
+        "evidence": "docs.mistral.ai basic_ocr: markdown output, table_format null/markdown/html, include_blocks bounding boxes, confidence scores; mistral.ai pricing via search: OCR 4 $4/1k pages, $2 batch; huggingface.co/PaddlePaddle/PaddleOCR-VL: apache-2.0 weights, markdown/JSON output, GPU/CUDA install examples; docs/PRD.md:234, :283, :2782, :5062.",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Option 7 \u2014 Docling 2.x CPU-only, for the comparison table: MIT code (models' licenses vary), IBM Research origin now LF AI & Data Foundation \u2014 governance is strong; cadence is extremely fast (v2.120.1 on 2026-08-14, multiple releases monthly, which is itself a churn cost against our '>=1.16,<2' style pinning, api/pyproject.toml:92). Capability is the fullest of any option: layout analysis, reading order, TableFormer table structure, code/formula detection, native+scanned PDFs with pluggable OCR engines. CPU-only is officially supported via the PyTorch CPU wheel index ('pip install docling --extra-index-url https://download.pytorch.org/whl/cpu'), which would eliminate the twelve nvidia-* packages (1.88 GB of our 2.91 GB, given); remaining footprint = CPU torch + torchvision + transformers + deps, estimated ~1-1.3 GB installed, plus the ~696 MB HF model downloads (estimate inferred; official docs publish no size number). So the honest CPU-Docling number is roughly 1.5-2 GB total and tens of packages \u2014 the cheapest way to keep Docling, but still ~30-40x pymupdf4llm's marginal cost.",
+        "evidence": "PyPI docling: v2.120.1 2026-08-14, MIT, LF AI & Data, layout/reading-order/TableFormer/OCR-engines; docling installation docs: '--extra-index-url https://download.pytorch.org/whl/cpu' for cpu-only Linux; repo givens: api/pyproject.toml:92 'docling>=1.16,<2', 80 Docling-exclusive packages / 2.91 GB / 1.88 GB nvidia-* / ~696 MB models (given). Size of CPU-only install: inferred estimate.",
+        "basis": "inferred",
+        "confidence": "medium"
+      },
+      {
+        "claim": "PRD engagement: the repo has already reasoned about this landscape in DE-271 (docs/PRD.md:2778-2784) \u2014 it tiers Docling as a structural-risk dep with 'alternatives exist but with different output shapes' and names 'Apache Tika + custom parser layer' as the abandonment fallback, and PRD.md:234/:283 already position Mistral OCR (paid, not air-gappable) with PaddleOCR-VL as the air-gapped substitute. What DE-271 does NOT contemplate is the actual observed state \u2014 Docling never having worked (given: 6/6 docling=fallback) and nothing reading structured_content \u2014 which converts the question from 'fallback if abandoned' to 'was the dependency ever load-bearing'; and its Tika fallback overstates Tika's PDF-structure capability (text, not layout). Any memo should amend DE-271 rather than silently diverge from it.",
+        "evidence": "docs/PRD.md:2778 (DE-271 header), :2782 ('Docling (parser correctness; alternatives exist...)', 'Mistral OCR API (paid; not air-gappable)'), :2784 (Tika fallback), :234, :283; givens re docling=fallback and unread structured_content.",
+        "basis": "observed",
+        "confidence": "high"
+      }
+    ],
+    "bottom_line": "For \"structure for legal contracts on CPU in a self-hosted image,\" only two options are credible: (1) pymupdf4llm \u2014 headings, tables, and reading order in markdown for ~45 MB marginal SBOM cost (pymupdf4llm 176 KB + pymupdf-layout ~43 MB), same Artifex AGPL/commercial license we already carry, no GPU, active releases \u2014 the clear default; and (2) Docling 2.x CPU-only as the high-capability runner-up if TableFormer-grade table structure ever becomes load-bearing, at an inferred ~1.5-2 GB / tens-of-packages cost and a fast-churn release cadence. Eliminated: marker (OpenRAIL-M weight license with a $5M revenue cap is incompatible with shipping in an open-source self-hosted product), unstructured (structure requires its hi_res model stack \u2014 a smaller Docling, worse licensed-capability ratio than pymupdf4llm), pdfplumber/camelot (tables only, no headings \u2014 complements not replacements), Tika (Apache-2.0 and cheap at ~78 MB + JVM, but PDFBox gives paragraphs of XHTML, not structure \u2014 it duplicates PyMuPDF, and DE-271's fallback claim should be softened accordingly), and routing everything through Mistral OCR/PaddleOCR-VL (real markdown structure, but $4/1k pages plus sending every contract to an external API \u2014 or a GPU-class Paddle stack \u2014 for documents PyMuPDF already reads locally; keep both confined to the scanned-doc lane the PRD already defines)."
+  },
+  "advisories": {
+    "findings": [
+      {
+        "claim": "The api service resolves docling to exactly 1.20.0, under the pin \"docling>=1.16,<2\".",
+        "evidence": "api/pyproject.toml:92 \u2014 \"docling>=1.16,<2\"; api/uv.lock:816-817 \u2014 name = \"docling\" / version = \"1.20.0\"",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "OSV's query API for PyPI docling==1.20.0 returns exactly 8 vulnerability records, which deduplicate to exactly 4 unique advisories (each GHSA record has a PYSEC alias record for the same CVE); all 4 are severity HIGH and every one has range introduced:0, so all 4 cover 1.20.0.",
+        "evidence": "POST https://api.osv.dev/v1/query {package: docling/PyPI, version: 1.20.0} \u2192 GHSA-9f4q-q82q-4359 (=CVE-2026-31248=PYSEC-2026-2454), GHSA-cr42-rg2m-mq4q (=CVE-2026-31247=PYSEC-2026-2455), GHSA-cjqg-rq2h-2fvj (=CVE-2026-44017=PYSEC-2026-2143), GHSA-q29v-xc37-wh5m (=CVE-2026-47214=PYSEC-2026-2146); database_specific.severity = HIGH on all four GHSA records; TOTAL: 8 records",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Advisory 1: GHSA-9f4q-q82q-4359 / CVE-2026-31248 \u2014 XML Entity Expansion (XXE / XML bomb DoS) in the METS GBS backend. HIGH, CVSS 3.1 = 7.5 (AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H). Range: introduced 0, last_affected 2.61.0 \u2014 covers 1.20.0. OSV lists no explicit \"fixed\" version (last_affected semantics), but versions after 2.61.0 are not flagged.",
+        "evidence": "OSV record GHSA-9f4q-q82q-4359: ranges [{introduced: 0},{last_affected: 2.61.0}]; versions list explicitly includes \"1.20.0\"; severity HIGH; details: \"vulnerable to XML Entity Expansion (XXE) attacks thru 2.61.0 ... etree.fromstring() without disabling entity resolution\"",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Advisory 2: GHSA-cr42-rg2m-mq4q / CVE-2026-31247 \u2014 same XXE class in the JATS XML backend. HIGH, CVSS 3.1 = 7.5 (AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H). Range: introduced 0, last_affected 2.61.0 \u2014 covers 1.20.0; no explicit fixed version listed in OSV.",
+        "evidence": "OSV record GHSA-cr42-rg2m-mq4q: ranges [{introduced: 0},{last_affected: 2.61.0}]; severity HIGH; summary \"Docling's JATS XML backend is vulnerable to XML Entity Expansion (XXE) attacks\"",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Advisory 3: GHSA-cjqg-rq2h-2fvj / CVE-2026-44017 \u2014 Zip Slip (unsafe zip extraction) in EasyOCR model download; potential arbitrary file write / RCE if the model download source is compromised. HIGH (CVSS 3.1 vector AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:H). Range: introduced 0, fixed 2.91.0 \u2014 covers 1.20.0, fixed in 2.x at 2.91.0.",
+        "evidence": "OSV record GHSA-cjqg-rq2h-2fvj: ranges [{introduced: 0},{fixed: 2.91.0}]; severity HIGH; details: \"In versions < 2.91.0, the EasyOCR model download functionality extracted ZIP archives without validating member paths ... Fixed in version 2.91.0\"",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Advisory 4: GHSA-q29v-xc37-wh5m / CVE-2026-47214 \u2014 Unsafe URI and Path Handling in HTML Backend. HIGH, CVSS 3.1 = 7.1 (AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:N/A:L). Range: introduced 0, fixed 2.94.0 \u2014 covers 1.20.0, fixed in 2.x at 2.94.0.",
+        "evidence": "OSV record GHSA-q29v-xc37-wh5m: ranges [{introduced: 0},{fixed: 2.94.0}]; severity HIGH; summary \"Docling: Unsafe URI and Path Handling in HTML Backend\"",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "No non-HIGH advisories cover 1.20.0. The medium-severity docling advisories that exist (e.g. GHSA-2j5p-7p5m-cvqr / PYSEC-2026-2145, 5.5 Medium LaTeX path traversal, and GHSA-pj2v-ggqh-cmq2 / CVE-2026-44016 Playwright HTML rendering, introduced 2.82.0) affect only 2.x ranges and are absent from the 1.20.0 query result.",
+        "evidence": "OSV query for version 1.20.0 returned only the 4 HIGH advisories (8 alias records); osv.dev/list?ecosystem=PyPI&q=docling shows the additional records (PYSEC-2026-2145 5.5 Medium, PYSEC-2026-2142 8.2, PYSEC-2026-240, PYSEC-2026-2144) which do not appear in the 1.20.0 result; GitLab advisory page for CVE-2026-44016 states affected 2.82.0 before 2.91.0",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Latest 2.x (docling 2.120.1, current on PyPI as of 2026-08-15) has ZERO known OSV advisories \u2014 all four HIGH advisories are resolved or not flagged there. Caveat: the two XXE advisories use last_affected:2.61.0 with no asserted fix version, so their closure in 2.120.1 is by absence-of-flag rather than an explicit \"fixed\" event.",
+        "evidence": "pypi.org/pypi/docling/json \u2192 info.version = 2.120.1; POST api.osv.dev/v1/query {docling, 2.120.1} \u2192 TOTAL: 0 vulns",
+        "basis": "observed",
+        "confidence": "high"
+      },
+      {
+        "claim": "Exploitability context for the memo: all four advisories require Docling to actually parse attacker-influenced input (XXE via METS/JATS XML backends, path handling via HTML backend) or download OCR models (Zip Slip). Since the Docling call site in api/app/pipeline/parsers.py has never succeeded (6/6 docling=fallback, per given context), the practical exposure at runtime today is minimal \u2014 the risk is latent dependency exposure plus the 2.91 GB attack/SBOM surface, not an actively exercised code path.",
+        "evidence": "Given context: 2.x-idiom call against 1.x pin, 6/6 dev-corpus docs docling=fallback; advisory mechanisms per OSV records above (METS .tar.gz XML parsing, JATS XML parsing, HTML backend URI handling, EasyOCR model download)",
+        "basis": "inferred",
+        "confidence": "medium"
+      }
+    ],
+    "bottom_line": "The claim \"four HIGH advisories cover Docling 1.20.0\" is TRUE \u2014 verified directly against the OSV API for docling==1.20.0. Exactly four unique advisories cover it, and all four are HIGH: CVE-2026-31248 (METS XXE, 7.5, no explicit fix version), CVE-2026-31247 (JATS XXE, 7.5, no explicit fix version), CVE-2026-44017 (EasyOCR Zip Slip, HIGH, fixed 2.91.0), CVE-2026-47214 (HTML backend URI/path handling, 7.1, fixed 2.94.0); a listing that counts the PYSEC aliases separately would misreport 8. Latest 2.x (2.120.1) has zero open OSV advisories, so upgrading clears all four, though the two XXE advisories close by absence-of-flag (last_affected 2.61.0) rather than an explicit fixed version. Note the two advisories fixed in 2.x require 2.91.0/2.94.0 \u2014 an upgrade merely into early 2.x would not clear them."
+  }
+}
