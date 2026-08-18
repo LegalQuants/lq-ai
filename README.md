@@ -60,7 +60,7 @@ The chat UI renders citations as four visual states: green (exact / tolerant mat
 
 **Audit log.** Append-only `audit_log` table records every state-changing action with first-class columns for `privilege_marked`, `privilege_basis`, `routed_inference_tier`, `routed_provider`, plus a JSONB `details` field for action-specific context. Admin-gated `GET /admin/audit-log` endpoint supports filtering by user, resource, action, privilege, tier, and timestamp range; paginated for large windows. Privileged-matter compliance evidence is one query: `?privilege_marked=true&from_timestamp=...&to_timestamp=...`. Cross-references to the gateway's `inference_routing_log` (which records `anonymization_applied`, latency, cost estimate, and request correlation id) via `request_id` for end-to-end pipeline audit. See [`docs/procurement/sig-lite.md`](docs/procurement/sig-lite.md) for the procurement-team-facing audit posture.
 
-**Files / Knowledge Bases.** Persistent collections of documents accessible across chats. Hybrid retrieval combining vector similarity (text-embedding-3-small or operator-configured embedding model via pgvector) with Postgres full-text search; the per-KB `hybrid_alpha` slider tunes the vector/FTS weight at retrieval time. Document ingestion uses Docling for layout-aware parsing of complex PDFs (multi-column, tables, footnotes) with PyMuPDF as the fast path for simpler documents. (Scanned-PDF OCR is not yet implemented — the pipeline parses text-bearing PDFs only and sets `was_ocrd=false`; OCR is tracked as DE-320.) Character-level offsets land in `documents.normalized_content` for the Citation Engine to verify against. KB-attached chats automatically retrieve before each turn, prepend a citation-formatted context block, and write a `📎 KB retrieval` audit row visible in Receipts.
+**Files / Knowledge Bases.** Persistent collections of documents accessible across chats. Hybrid retrieval combining vector similarity (text-embedding-3-small or operator-configured embedding model via pgvector) with Postgres full-text search; the per-KB `hybrid_alpha` slider tunes the vector/FTS weight at retrieval time. Document ingestion uses PyMuPDF to parse text-bearing PDFs into a character stream. (Scanned-PDF OCR is not yet implemented — the pipeline parses text-bearing PDFs only and sets `was_ocrd=false`; OCR is tracked as DE-320.) Character-level offsets land in `documents.normalized_content` for the Citation Engine to verify against. KB-attached chats automatically retrieve before each turn, prepend a citation-formatted context block, and write a `📎 KB retrieval` audit row visible in Receipts.
 
 **Enhance Prompt.** A prompt-rewriting skill that runs as an optional pre-step. You type a short, natural-language question; Enhance Prompt expands it into a structured legal prompt (role, jurisdiction, audience, scope, output format, constraints, citation expectations) and shows you the expanded version before submission. The skill itself is inspectable — you can read the SKILL.md driving the enhancement at any time.
 
@@ -318,7 +318,7 @@ The trust model for a self-hosted, open-source project is that every claim termi
 
 ## Architecture
 
-LQ.AI is a fork of [OpenWebUI](https://github.com/open-webui/open-webui) for the chat UI, plus a FastAPI backend, a custom-built Inference Gateway (~3,000 lines of Python that we own end-to-end for security reasons), [LangGraph](https://github.com/langchain-ai/langgraph) for stateful agent workflows, [Docling](https://github.com/DS4SD/docling) + [PyMuPDF](https://github.com/pymupdf/PyMuPDF) for document parsing with character-level offsets, and PostgreSQL with [pgvector](https://github.com/pgvector/pgvector) for unified storage of application data, vectors, and full-text indexes. Optional [Langfuse](https://github.com/langfuse/langfuse) for LLM-specific observability; OpenTelemetry throughout.
+LQ.AI is a fork of [OpenWebUI](https://github.com/open-webui/open-webui) for the chat UI, plus a FastAPI backend, a custom-built Inference Gateway (~3,000 lines of Python that we own end-to-end for security reasons), [LangGraph](https://github.com/langchain-ai/langgraph) for stateful agent workflows, [PyMuPDF](https://github.com/pymupdf/PyMuPDF) for document parsing with character-level offsets, and PostgreSQL with [pgvector](https://github.com/pgvector/pgvector) for unified storage of application data, vectors, and full-text indexes. Optional [Langfuse](https://github.com/langfuse/langfuse) for LLM-specific observability; OpenTelemetry throughout.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -336,10 +336,10 @@ LQ.AI is a fork of [OpenWebUI](https://github.com/open-webui/open-webui) for the
 ┌─────────────┐ ┌─────────────┐ ┌───────────┐ ┌────────────┐
 │ Inference   │ │   Skill     │ │  Document │ │ Knowledge  │
 │  Gateway    │ │  Service    │ │  Pipeline │ │  Service   │
-│ (multi-     │ │  (skills,   │ │ (Docling+ │ │  (pgvector │
-│  provider,  │ │  Org Profile│ │  PyMuPDF, │ │  + FTS)    │
-│  tier-aware,│ │  singleton) │ │  Citation │ │            │
-│  anonym.    │ │             │ │  Engine)  │ │            │
+│ (multi-     │ │  (skills,   │ │ (PyMuPDF, │ │  (pgvector │
+│  provider,  │ │  Org Profile│ │  Citation │ │  + FTS)    │
+│  tier-aware,│ │  singleton) │ │  Engine)  │ │            │
+│  anonym.    │ │             │ │           │ │            │
 │  middleware)│ │             │ │           │ │            │
 └──────┬──────┘ └──────┬──────┘ └─────┬─────┘ └────┬───────┘
        │               │              │            │
@@ -507,7 +507,7 @@ LQ.AI builds on substantial open-source work. The most consequential dependencie
 
 - [OpenWebUI](https://github.com/open-webui/open-webui) — chat UI shell.
 - [LangGraph](https://github.com/langchain-ai/langgraph) — agent runtime.
-- [Docling](https://github.com/DS4SD/docling) and [PyMuPDF](https://github.com/pymupdf/PyMuPDF) — document parsing.
+- [PyMuPDF](https://github.com/pymupdf/PyMuPDF) — document parsing.
 - [pgvector](https://github.com/pgvector/pgvector) — vector storage in PostgreSQL.
 - [Anthropic Claude Skills](https://github.com/anthropics/skills) — the agentskills.io format the project adopts as its skill substrate.
 - [OpenTelemetry](https://opentelemetry.io/) — observability.
