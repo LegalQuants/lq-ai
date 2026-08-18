@@ -54,7 +54,6 @@ async def _run_lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
 
 
-
 @pytest_asyncio.fixture
 async def writable_config(tmp_path: Path) -> Path:
     """Copy the committed example config to a writable temp path."""
