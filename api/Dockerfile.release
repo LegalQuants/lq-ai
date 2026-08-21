@@ -42,6 +42,14 @@ RUN chmod +x /usr/local/bin/lq-ai-entrypoint
 # Bake the skills corpus that the dev stack bind-mounts (./skills:/skills:ro),
 # so the published image is self-contained for the zero-checkout macOS launcher.
 COPY skills /skills
+# COPY of an empty directory succeeds silently, so a build from a checkout
+# without submodules produces an image that starts healthy and is simply
+# missing half the corpus. Fail the build instead.
+RUN test -n "$(ls -A /skills/community 2>/dev/null)" || { \
+      echo "ERROR: /skills/community is empty - the skills/community submodule was not checked out." >&2; \
+      echo "Run 'git submodule update --init --recursive' before building this image." >&2; \
+      exit 1; \
+    }
 ENV LQ_AI_SKILLS_DIR=/skills
 
 EXPOSE 8000
