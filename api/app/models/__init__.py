@@ -39,6 +39,7 @@ from app.models.organization_profile import OrganizationProfile
 from app.models.playbook import Playbook, PlaybookExecution, PlaybookPosition
 from app.models.project import Project, ProjectFile, ProjectSkill
 from app.models.project_knowledge_base import ProjectKnowledgeBase
+from app.models.project_member import ProjectMember
 from app.models.research import ResearchClusterMetadata, ResearchOpinionMetadata
 from app.models.saved_prompt import SavedPrompt
 from app.models.slack_workspace import SlackWorkspace
@@ -88,6 +89,7 @@ __all__ = [
     "Project",
     "ProjectFile",
     "ProjectKnowledgeBase",
+    "ProjectMember",
     "ProjectSkill",
     "ResearchClusterMetadata",
     "ResearchOpinionMetadata",
