@@ -3414,6 +3414,92 @@ paths:
           description: Invalid role filter
         '403':
           description: Caller is not admin
+    post:
+      tags: [admin]
+      summary: Create a user with a generated initial password
+      description: |
+        Admin-only. Provisions a user with a CSPRNG initial password,
+        stores only its bcrypt hash, and sets ``must_change_password``
+        so the new user is forced to rotate it on first login (the same
+        path the first-run bootstrap admin takes).
+
+        ``is_admin`` is derived from ``role`` (True iff role='admin'),
+        keeping the two admin signals in sync exactly as
+        ``PATCH /admin/users/{user_id}/role`` does.
+
+        The plaintext is returned **once** in the 201 body. It is never
+        persisted, logged, or written to the audit row; a lost password
+        is replaced via ``POST /admin/users/{user_id}/reset-password``.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: {type: string, format: email}
+                display_name: {type: string, maxLength: 200, nullable: true}
+                role:
+                  type: string
+                  enum: [admin, member, viewer, auditor]
+                  default: member
+      responses:
+        '201':
+          description: User created; carries the initial password once
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id: {type: string, format: uuid}
+                  email: {type: string}
+                  display_name: {type: string, nullable: true}
+                  role: {type: string}
+                  is_admin: {type: boolean}
+                  must_change_password: {type: boolean}
+                  initial_password: {type: string}
+        '403':
+          description: Caller is not admin
+        '409':
+          description: Email already in use (users.email is CITEXT, so case-insensitive)
+        '422':
+          description: Unknown role
+
+  /api/v1/admin/users/{user_id}/reset-password:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      tags: [admin]
+      summary: Reset a user's password to a generated value
+      description: |
+        Admin-only. Mints a fresh CSPRNG password, re-arms
+        ``must_change_password``, and revokes every active refresh
+        session for the target user — the same revocation the
+        self-service ``/auth/change-password`` path performs.
+
+        Access tokens are stateless JWTs and remain valid until they
+        expire; deployments that raise ``JWT_ACCESS_TOKEN_TTL_SECONDS``
+        above the default widen that window.
+      responses:
+        '200':
+          description: Password reset; carries the new password once
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id: {type: string, format: uuid}
+                  email: {type: string}
+                  initial_password: {type: string}
+                  sessions_revoked: {type: integer}
+        '403':
+          description: Caller is not admin
+        '404':
+          description: No such user
 
   /api/v1/admin/users/{user_id}/role:
     parameters:
