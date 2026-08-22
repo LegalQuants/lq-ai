@@ -69,6 +69,15 @@ now, defer the pluggable/stronger ingester as DE-387 — for committee ratificat
 6. **Security hygiene.** Docling 1.20.0 carries four HIGH OSV advisories (two XXE,
    EasyOCR Zip Slip, HTML-backend URI) — confirmed against the OSV API. CPU-pinning
    1.x keeps all four in the SBOM; only removal or a ≥2.94.0 upgrade clears them.
+7. **License posture is part of the dependency question** (Artur, 2026-08-19): the
+   parser we are left with, PyMuPDF, is AGPL-3.0 — carried inside an Apache-2.0
+   project on a server-side-only boundary (PRD Appendix B; the AGPL boundary is the
+   HTTP API). That boundary is sound, but enterprise operators read copyleft
+   anywhere in the dependency tree as a procurement flag, and the alternatives
+   survey behind this ADR ranked candidates on weight and capability while using
+   license only to *eliminate* — it never asked whether a permissively licensed
+   parser should be preferred on its own merits. The question is legitimate and
+   unanswered; it does not block the removal, and it should not be lost with it.
 
 ## The options
 
@@ -163,7 +172,24 @@ resurface as *candidate adapters under DE-387* when a consumer exists.
   (`structured_content … M2 reads` — nothing reads it; the impossible
   `parser_version` example), and a Revisions note on ADR 0006 recording that the
   fallback became the only path.
-- **DE-271 amended** to soften the Apache Tika fallback claim and name pymupdf4llm.
+- **DE-271 amended** to soften the Apache Tika fallback claim, name pymupdf4llm, and
+  record the ingestion-stack license posture — PyMuPDF's AGPL-3.0 boundary, the
+  withdrawal of the Docling-based PyMuPDF-free build (below), and the permissive
+  parser candidates DE-387 should evaluate.
+- **PRD Appendix C risk 3 loses its named mitigation.** That risk — PyMuPDF's AGPL
+  boundary — is mitigated in the record by "a PyMuPDF-free build configuration …
+  using only Docling for offsets," a fallback this ADR removes. Two things follow.
+  First, honesty: that fallback was never a capability, since Docling has produced
+  output zero times; the build configuration described was a plan, so removing it
+  corrects the record rather than deleting a working escape hatch. Second, the risk
+  is now unmitigated beyond the server-side boundary itself, so **Appendix C risk 3
+  is rewritten here to point at DE-387** — the adapter seam is the mechanism by
+  which a differently licensed parser becomes reachable — and DE-387 carries a
+  license preference so the seam is not rebuilt on AGPL by default (driver 7).
+- **Appendix B** keeps its Docling row until the removal PR lands (the dependency is
+  still in `api/pyproject.toml` today) but is corrected to state that the
+  integration is dead and its removal pending, rather than presenting it as a
+  working parser.
 - **A new small item** filed for the untested multi-column reading-order risk (a
   PyMuPDF-quality question, independent of Docling).
 - **DE-387 filed** ("pluggable parser / more powerful document ingestion") as the
@@ -200,6 +226,12 @@ resurface as *candidate adapters under DE-387* when a consumer exists.
    through)?
 2. Which consumer scopes it first — PRD §3.3's structured-chunk design is the
    natural candidate.
+3. Should a **permissively licensed** parser be preferred as the seam's default, and
+   is one capable of character-precise offsets (driver 7)? The alternatives survey
+   used license only to eliminate, so `pypdf` (BSD) and `pdfminer.six` (MIT) were
+   never evaluated, and the lightweight candidate named in DE-387 (pymupdf4llm) is
+   the same AGPL family as the incumbent. Byte-precision for the citation invariant
+   is the constraint; the license is the preference.
 
 ## Cross-references
 
@@ -210,7 +242,11 @@ resurface as *candidate adapters under DE-387* when a consumer exists.
   this ADR opens.
 - ADR [0006](0006-document-pipeline-architecture.md), [0017](0017-docx-ingest-via-pandoc.md);
   PRD §3.3 (Citation Engine ingestion contract), DE-351 (closed by the removal),
-  DE-271 (Tika claim amended per the research).
+  DE-271 (Tika claim amended per the research; license posture added).
+- **License record:** PRD Appendix B (license matrix — the Docling row is corrected
+  here, and drops out with the removal PR) and Appendix C risk 3 (the PyMuPDF AGPL
+  boundary — its Docling-based mitigation is withdrawn here and repointed at
+  DE-387). Raised by Artur, `#lqai`, 2026-08-19.
 - **Adjacent ingestion work (a small family, keep coherent):** the DOCX-ingest
   mini-PRD [`docs/contribute/mini-prds/docx-ingest-support.md`](../contribute/mini-prds/docx-ingest-support.md)
   (a Pandoc parser branch that *writes* `structured_content` — a concrete reason
