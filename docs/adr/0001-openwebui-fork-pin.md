@@ -33,6 +33,7 @@ Considerations:
 - Quarterly rebase against the latest upstream stable tag, or earlier if an upstream security fix lands that affects us.
 - Rebase work happens in a `vendor/openwebui-upstream` branch; the rebase result lands in `main` as a single PR titled `chore(web): rebase OpenWebUI fork to vX.Y.Z` with a body listing every upstream commit included and any of our patches that needed rework.
 - Rebase PRs require two maintainer approvals because the merge cost is real and the integration surface is large.
+- `web/`'s npm dependencies are upstream's, not ours, so their currency arrives with the rebase. `.github/dependabot.yml` runs the `/web` npm ecosystem at `open-pull-requests-limit: 0` — **security updates only**. Routine version bumps raised between refreshes are superseded by the next rebase before they can be reviewed; advisories are not, and still open PRs.
 
 **How customizations are organized:**
 

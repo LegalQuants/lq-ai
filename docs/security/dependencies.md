@@ -26,7 +26,7 @@ The `web/` subsystem is out of scope here: its Python side still installs from t
 
 Two layers of automated dependency-vulnerability scanning:
 
-1. **GitHub Advisory Database / Dependabot.** [`.github/dependabot.yml`](../../.github/dependabot.yml) configures weekly scans for `api/` (uv), `gateway/` (uv), `web/` (npm), and `.github/workflows/` (actions). High and critical advisories open PRs automatically. For the uv ecosystems, updates arrive as lock-pinned bumps against `uv.lock` with a 7-day release-age cooldown, not range widenings.
+1. **GitHub Advisory Database / Dependabot.** [`.github/dependabot.yml`](../../.github/dependabot.yml) configures weekly scans for `api/` (uv), `gateway/` (uv), `web/` (npm), and `.github/workflows/` (actions). High and critical advisories open PRs automatically. For the uv ecosystems, updates arrive as lock-pinned bumps against `uv.lock` with a 7-day release-age cooldown, not range widenings. `web/` is **security-updates only** (`open-pull-requests-limit: 0`): it is a vendored OpenWebUI fork pinned by [ADR 0001](../adr/0001-openwebui-fork-pin.md), so routine version currency arrives with the quarterly rebase rather than between refreshes. Advisories against `web/` packages still open PRs — that limit constrains version updates only.
 2. **SBOM scanning.** The SBOM produced by the release workflow (per [docs/security/releases/README.md](releases/README.md)) is in SPDX JSON format and is parseable by any SCA tool. Operators evaluating a specific release can run `grype sbom:./api.spdx.json` (or equivalent) to check the dependency snapshot.
 
 ## Update cadence
