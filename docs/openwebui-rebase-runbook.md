@@ -12,7 +12,7 @@
 
 1. **§3's merge command does not work at all.** The fork has no shared ancestry with upstream. `git merge v0.11.0` fails with `fatal: refusing to merge unrelated histories`, and the obvious workaround is *worse* than the error. §3 now carries a procedure that was actually executed.
 2. **The conflict set is 6 files, not 10** — and it is a different 6 than §5 predicted. §5 is rewritten from the real merge output.
-3. **Upstream deleted Cypress entirely at v0.11.0.** Two files §5 listed as content merges are modify/delete conflicts, and this is a live decision that touches #432 and #437. See §5.2.
+3. **Upstream deleted Cypress entirely at v0.11.0.** Two files §5 listed as content merges are modify/delete conflicts. We keep the harness, and #432/#437 need to hear that it is now fork-owned. See §5.2.
 4. **The "970 added files" figure was misleading** — 657 of them are upstream files, not ours. See the table below.
 5. **A six-conflict merge is not a six-risk merge.** New §5.5 covers what carries no conflict marker at all: the root layout our shell nests inside (+362/−123), 15 new database migrations, 61 bumped Python packages including a JWT library swap, and four inherited upstream Cypress specs pointed at a redesigned UI. It also records the measurement that makes the rest tractable — our LQ.AI code has **zero** imports into upstream's tree.
 
@@ -25,7 +25,7 @@ The whole procedure, in order. Each step links to the section that explains it �
 | # | Step | Section |
 | --- | --- | --- |
 | 1 | Add the `upstream` remote, fetch tags, confirm the target is still latest stable | [§0](#0-before-you-start) |
-| 2 | Park the conflicting PRs — post the comments *before* branching | [§1](#1-park-the-four-conflicting-prs--do-this-first) |
+| 2 | Decide: park in-flight PRs, or rebase first and ask them to rebase | [§1](#1-decide-how-to-handle-in-flight-prs--before-you-branch) |
 | 3 | `git checkout -b vendor/openwebui-upstream` off current `main` | [§2](#2-create-the-vendor-branch) |
 | 4 | Build the two synthetic `web/`-prefixed trees, graft, merge | [§3](#3-bring-upstream-in) |
 | 5 | Confirm nothing staged outside `web/` | [§3](#3-bring-upstream-in) |
@@ -37,7 +37,7 @@ The whole procedure, in order. Each step links to the section that explains it �
 | 11 | Re-verify the branding clause | [§8](#8-re-verify-the-branding-clause) |
 | 12 | Open one PR, stacked commits, reviewers get the deviation diff | [§9](#9-the-pr) |
 | 13 | Add the ADR 0001 Revisions entry, update version references | [§10](#10-update-adr-0001) |
-| 14 | Reopen the parked PRs, close superseded Dependabot PRs, fix this file | [§11](#11-after-it-merges) |
+| 14 | Tell the affected PRs to rebase, close superseded Dependabot PRs, fix this file | [§11](#11-after-it-merges) |
 
 **The two things most likely to cost you a day if skipped:** step 4's graft (the obvious `git merge` cannot work — [§3](#3-bring-upstream-in)) and step 9 (the highest-risk changes produce no conflict — [§5.5](#55-what-a-clean-merge-does-not-tell-you)).
 
@@ -102,30 +102,41 @@ That 313-file isolation is ADR 0001's "isolate customizations where possible" mi
 
 ---
 
-## 1. Park the four conflicting PRs — do this first
+## 1. Decide how to handle in-flight PRs — before you branch
 
-**Decision, 2026-08-15 (houfu): park all four, rebase clean, reopen against the new base.** The alternative — landing them first — was considered and rejected; #282 and #286 have never had CI run at all, so gating a due rebase behind them is open-ended.
+Some open PRs will touch files the rebase changes. You have two options, and **which one is right depends on how close those PRs are to merging** — not on how many there are.
 
-Four open PRs touch files in the conflict set. A rebase landing *underneath* them turns each into a silent rework, discovered at merge time.
+**Park first** if the PRs are in active review and might land during the rebase window. A rebase merging *underneath* a PR you were about to approve turns it into a silent rework, discovered at merge time.
 
-| PR | Author | Size | Conflict files | CI |
-| --- | --- | --- | --- | --- |
-| [#282](https://github.com/LegalQuants/lq-ai/pull/282) | @sgbooth | +1511/-569, 29 files | `package.json`, `package-lock.json` | **never run** |
-| [#286](https://github.com/LegalQuants/lq-ai/pull/286) | @sgbooth | +1958/-585, 33 files | `package.json`, `package-lock.json` | **never run** |
-| [#432](https://github.com/LegalQuants/lq-ai/pull/432) | @SaifAlYounan | +189/-4, 5 files | `cypress.config.ts`, `package.json` | green |
-| [#437](https://github.com/LegalQuants/lq-ai/pull/437) | @SaifAlYounan | +961/-5, 14 files | `cypress.config.ts`, `cypress/support/e2e.ts`, `package.json`, `package-lock.json` | green |
+**Rebase first, then ask them to rebase** if review has not started. The PRs sit in the queue either way, so parking buys nothing and costs a confusing interruption — a "we're parking you" notice makes a contributor think something is wrong when the honest answer is that we simply have not got to them yet.
 
-**[v0.11.0] #432 and #437 need more than a parking notice.** Upstream **deleted Cypress entirely** at v0.11.0 (§5.2). Both PRs build out the Cypress track, so they are not merely rebase-blocked — they are extending a harness upstream has dropped, which makes "does the fork keep Cypress?" a question that should be answered *before* either contributor reworks anything. Nothing about this rejects either PR, and the likely answer is that we keep it. But telling them only "we're parking you for a rebase" would be an incomplete account of what changed. Settle the Cypress question, then unpark with the answer.
+**Decision for this refresh, 2026-08-24 (houfu): rebase first.** Review had not started on any of the four, so the silence was not costing them much, and parking would have been ceremony. This supersedes the 2026-08-15 decision to park all four, which was made before the dry-run showed how small the real overlap was.
 
-**Be honest about what parking costs.** These are two contributors and roughly 4,600 added lines of work in flight. Parking pushes a rebase onto them that they did not create. The compensating argument — which is real, and worth stating to them — is that the rework happens **once, against a known-good base**, instead of arriving as merge conflicts in a PR they thought was finished. #432 and #437 are green and were only ever waiting on review, so those two deserve particular care.
+**Accept the tradeoff knowingly:** a contributor who pushes work during the rebase window redoes a little of it. That is minor, since they have to rebase either way.
 
-**Park, don't close.** Leave the branches alone and the PRs open where possible; if the workflow needs them closed, say explicitly in the comment that reopening is expected and that nothing is being rejected.
+**The PRs that will need a rebase afterwards** — real overlap only, verified against the dry-run on 2026-08-24:
 
-Drafted comments are in `.maintainer/pr-drafts/` (maintainer-local, not in this repo). Post them before creating the vendor branch, so nobody pushes into a PR that is about to be parked.
+| PR | Author | Files the merge actually changes | Rebase difficulty |
+| --- | --- | --- | --- |
+| [#282](https://github.com/LegalQuants/lq-ai/pull/282) | @sgbooth | `package.json`, `package-lock.json` | lockfile regenerates — re-run `npm install` |
+| [#286](https://github.com/LegalQuants/lq-ai/pull/286) | @sgbooth | `package.json`, `package-lock.json` | same |
+| [#432](https://github.com/LegalQuants/lq-ai/pull/432) | @SaifAlYounan | `package.json` only | small |
+| [#437](https://github.com/LegalQuants/lq-ai/pull/437) | @SaifAlYounan | `package-lock.json`, `package.json`, `.gitignore` | lockfile conflict is **certain** |
 
-**The other eleven web PRs need no parking.** #263, #264, #267, #280, #314, #315, #402, #416, #417, #418, #430 touch only files we added, so they carry no file-level conflict. They still need **a CI re-run after the rebase**, because the upstream code they integrate against will have moved.
+**Check the overlap yourself rather than inheriting this table.** The obvious candidates are often wrong: `cypress.config.ts` and `cypress/support/e2e.ts` look like conflicts because both sides changed them, but they resolve **keep-ours** (§5.2) and come out byte-identical — so PRs touching them are unaffected. Likewise all four PRs touch `.github/workflows/*`, which the rebase never goes near, since the merge is confined to `web/`.
+
+The reusable rule: **a file is only a rebase hazard for a contributor if the merge actually changes it.** Files we resolve keep-ours are not hazards, however conflicted they looked.
+
+**[v0.11.0] #432 and #437 need more than "please rebase".** Upstream **deleted Cypress entirely** at v0.11.0 (§5.2). Both build out the Cypress track, so both are extending a harness that is now fork-owned rather than upstream-shared — dependencies included. That is context they need in order to plan, not a reason to reject either PR. #437 additionally modifies `cypress/support/e2e.ts`, which §5.5 identifies as the single place our suite touches upstream's DOM; worth telling them while they are in there.
+
+**Be honest about what the rebase costs them.** These are two contributors and roughly 4,600 added lines of work in flight. The rebase lands work on them that they did not create. Say so plainly, and be specific about which files — a contributor told "please rebase" guesses at scope; one told "your lockfile will conflict, regenerate rather than hand-merge it" does not.
+
+Drafted comments live in `.maintainer/pr-drafts/` (maintainer-local, not in this repo).
+
+**The other eleven web PRs need nothing but a CI re-run.** #263, #264, #267, #280, #314, #315, #402, #416, #417, #418, #430 touch only files we added, so they carry no file-level conflict — but the upstream code they integrate against has moved, so re-run CI on each.
 
 ---
+
 
 ## 2. Create the vendor branch
 
@@ -532,7 +543,7 @@ Also update the pinned version wherever else it appears — grep for `v0.9.2` ac
 
 ## 11. After it merges
 
-1. **Reopen the four parked PRs** (§1) against the new base, and tell both contributors it is unblocked. They will need to rebase; #282 and #286 also still need CI to run for the first time. For #432 and #437, include the Cypress answer (§5.2) — they need it to know what they are building on.
+1. **Tell the four affected PRs to rebase** (§1), and be specific about which files rather than leaving them to guess: #282, #286 and #437 all need `package-lock.json` **regenerated with `npm install`, not hand-merged**; #432's overlap is `package.json` alone. #282 and #286 also still need CI to run for the first time. For #432 and #437, include the Cypress ownership change (§5.2) and, for #437, the `cy.session` coupling note (§5.5) — they are modifying that exact file.
 2. **Re-run CI on the eleven non-conflicting web PRs** — #263, #264, #267, #280, #314, #315, #402, #416, #417, #418, #430. No file conflicts, but the upstream code they integrate against has moved.
 3. **Close the superseded Dependabot PRs** (§9).
 4. **Fix this runbook** wherever it was wrong. §3–§6 were already corrected against a merge dry-run on 2026-08-24, but nothing downstream of the merge has been exercised — §7's gates especially. What the first real execution learns is worth more than anything written in advance.
