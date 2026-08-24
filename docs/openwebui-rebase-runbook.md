@@ -18,6 +18,30 @@
 
 ---
 
+## Scope — read this before §5
+
+**The job is to be running v0.11.0. Nothing else.**
+
+A rebase surfaces a lot of things worth doing. Almost none of them belong in this PR. The default resolution for every upstream file is **take upstream's version**, including files that got worse, files carrying dead code, and dependency choices we would not have made. Every deviation from upstream is a patch we re-resolve every quarter, which is why §0 tells you to protect the 313-file isolation.
+
+In scope:
+
+- Resolving the six conflicts so the tree builds and boots.
+- Re-asserting our existing ADR-mandated deviations (§6) — these already exist; we are preserving them, not adding to them.
+- Preserving existing LQ.AI capability that upstream's changes would otherwise remove (§5.2).
+- Verifying the result (§7, §8) and disclosing what changed (§9).
+
+Out of scope, however tempting:
+
+- Cleaning up dead or unreachable upstream code (§5.4).
+- Rewriting tests against the new UI (§5.2).
+- Second-guessing upstream's dependency choices (§5.5).
+- Refactoring our own code because the merge made it visible.
+
+When one of these surfaces, **file it as a DE-XXX in PRD §9 and move on** — the project's standing rule for out-of-scope ideas ([CLAUDE.md](../CLAUDE.md)). A rebase PR that also improves things is a rebase PR that cannot be reviewed against upstream's diff.
+
+---
+
 ## 0. Before you start
 
 **Confidence note.** §1–§5 were verified against the clone at `9f6f51c3` on 2026-08-24, and §3–§6 additionally against a real merge dry-run at that commit. Re-confirm the tag is still current before you begin — ADR 0001 says "latest upstream stable tag", and if a v0.11.x patch has landed since, that is your target instead. **As of 2026-08-24, v0.11.0 (published 2026-07-27) is still the latest upstream stable**, so the target is unchanged.
@@ -213,20 +237,22 @@ All three are our integration hooks meeting upstream's rewiring. v0.11.0 is a "r
 - **`backend/open_webui/utils/middleware.py`** — same posture. Also carries an ADR 0014 import strip; see §6.
 - **`backend/open_webui/routers/configs.py`** — same posture. Also carries an ADR 0014 import strip; see §6.
 
-### 5.2 Cypress — upstream deleted it, and this is a decision, not a merge
+### 5.2 Cypress — upstream deleted it; keep ours, drop theirs
 
 **Upstream removed Cypress wholesale at v0.11.0.** v0.9.2 shipped 9 Cypress files; v0.11.0 ships **zero**. We have 23, of which 14 are LQ.AI-original specs under `cypress/e2e/`.
 
-So `cypress.config.ts` and `cypress/support/e2e.ts` are **modify/delete** conflicts — ours modified, theirs deleted. There is no "upstream drift" to merge, contrary to the previous edition of this section. Git leaves our version in the tree; keeping it is a deliberate choice to carry a test harness upstream has abandoned.
+So `cypress.config.ts` and `cypress/support/e2e.ts` are **modify/delete** conflicts — ours modified, theirs deleted. There is no "upstream drift" to merge, contrary to the previous edition of this section.
+
+**The resolution is not a judgement call.** Our 14 specs are existing, passing coverage; deleting the harness would remove working LQ.AI capability to match an upstream decision about upstream's own tests. Preserving what we have is the minimal upgrade action:
 
 ```bash
 # Keep ours — our e2e suite depends on both files.
 git add web/cypress.config.ts web/cypress/support/e2e.ts
 ```
 
-Keeping them is almost certainly right — 14 of our own specs depend on the harness, and dropping it would delete LQ.AI test coverage to match an upstream decision that has nothing to do with us. But **flag it in the PR**, because it changes what the fork now owns: Cypress moves from "shared with upstream" to "ours to maintain", including its dependencies in `package.json`, which upstream will no longer be updating for us.
+**Flag it in the PR** — not as a question, as a fact: Cypress moves from "shared with upstream" to "ours to maintain", including its `package.json` dependencies, which upstream will no longer update for us. Whether to keep investing in Cypress long-term is a roadmap question for another day, not something this PR decides.
 
-**This also changes the §1 parking story for [#432](https://github.com/LegalQuants/lq-ai/pull/432) and [#437](https://github.com/LegalQuants/lq-ai/pull/437).** Both build out the Cypress track. They are not merely rebase-blocked — they are now building on a harness upstream has dropped. Neither PR is wrong, and this is not a reason to reject either, but both contributors deserve to hear it before they rework, and the "will the fork keep Cypress?" question should be settled *before* they are unparked. It is not settled by this runbook.
+**Tell [#432](https://github.com/LegalQuants/lq-ai/pull/432) and [#437](https://github.com/LegalQuants/lq-ai/pull/437) before they rework.** Both build out the Cypress track, and both should know the harness is now fork-owned rather than upstream-shared. That is information they need, not a reason to reject either PR — the answer for this rebase is simply "yes, the harness stays".
 
 ### 5.3 The ADR 0014 deletion
 
@@ -249,7 +275,11 @@ Six files changed on both sides yet resolve without conflict markers. Git is rig
 
 The merge **resolves this correctly**: the toggle stays removed, `type` cannot reach `'mcp'` from the UI, and the ADR 0014 posture holds. Verified on the dry-run — the merged file contains zero occurrences of the toggle, against one upstream.
 
-What it *does* pull in is roughly 277 lines of upstream change including a full set of unreachable `type === 'mcp'` branches, an MCP OAuth registration path, and an "MCP support is experimental" warning block. That code is dead as merged, because nothing can set `type` to `'mcp'`. It is still worth a decision: dead MCP code sitting in an ADR-0014-constrained component is latent — any future change that sets `type` from config, a URL parameter, or a later upstream refactor lights it up, and it will arrive with no conflict marker to prompt review. Either strip it while resolving, or note explicitly in the PR that it was left in place and why.
+What it *does* pull in is roughly 277 lines of upstream change including a full set of unreachable `type === 'mcp'` branches, an MCP OAuth registration path, and an "MCP support is experimental" warning block. That code is dead as merged, because nothing can set `type` to `'mcp'`.
+
+**Leave it. Do not strip it as part of the rebase.** Taking upstream's file wholesale *is* the upgrade; removing dead code from it is a separate change that would put us further from upstream and make next quarter's merge harder — the exact trade §0 warns against. Read it, confirm the toggle is still absent, move on.
+
+The latent risk is real but deferred, not ignored: dead MCP code in an ADR-0014-constrained component lights up if anything later sets `type` from config or a URL parameter, and it will arrive with no conflict marker. That is a **DE-XXX** for PRD §9, not merge work.
 
 The general lesson for future quarters: **the boundary-critical file was the one git waved through.** A clean auto-merge is not evidence that an architectural constraint survived.
 
@@ -279,7 +309,19 @@ git grep -c "chat-search" v0.11.0 -- src/
 git grep -c "Okay, Let" v0.11.0 -- src/lib/components/ChangelogModal.svelte
 ```
 
-Separately, four of our Cypress specs are **upstream's own, inherited at the vendor import** — `chat.cy.ts`, `documents.cy.ts`, `registration.cy.ts`, `settings.cy.ts` — plus `support/index.d.ts` and `cypress/tsconfig.json`. They select upstream markup (`#chat-input`, `.chat-user`, `#chat-share-button`, `#copy-and-share-chat-button`) and upstream deleted every one of them at v0.11.0. After the merge they are ours, unmaintained, and pointed at a redesigned UI. Expect them to fail and decide explicitly: adopt and fix, or delete. This is a different question from §5.2's "do we keep Cypress at all", and it is the one that will turn CI red.
+Separately, four of our Cypress specs are **upstream's own, inherited at the vendor import** — `chat.cy.ts`, `documents.cy.ts`, `registration.cy.ts`, `settings.cy.ts` — plus `support/index.d.ts` and `cypress/tsconfig.json`. They select upstream markup (`#chat-input`, `.chat-user`, `#chat-share-button`, `#copy-and-share-chat-button`) and upstream deleted every one of them at v0.11.0.
+
+**Take upstream's deletion.** They were never ours, they test upstream's UI, and that UI was redesigned — so they would fail. Deleting them is the default resolution, costs nothing, and is what "upgrade to v0.11.0" means for files upstream removed. Adopting and rewriting them against the new UI would be new test-authoring work, not an upgrade; if anyone wants that coverage back later it is a DE, not a merge task.
+
+```bash
+# The four upstream specs only. Verified: nothing of ours references them.
+git rm web/cypress/e2e/chat.cy.ts web/cypress/e2e/documents.cy.ts \
+       web/cypress/e2e/registration.cy.ts web/cypress/e2e/settings.cy.ts
+```
+
+**Keep `cypress/tsconfig.json` and `cypress/support/index.d.ts`, even though upstream deleted both.** They are infrastructure, not specs: `tsconfig.json` (`extends: ../tsconfig.json`) types every `.ts` file in `cypress/`, including our 14, and `index.d.ts` declares the `Chainable` custom commands that `support/e2e.ts` still defines. Deleting either breaks type-checking on our own suite. Carrying them is the same posture as `cypress.config.ts`.
+
+Our own 14 specs under `cypress/e2e/` are unaffected — they assert on our `lq-ai-*` test ids and, verified, none of them calls the custom commands (`cy.login`, `cy.registerAdmin`, `cy.uploadTestDocument`, …); only upstream's `chat.cy.ts` and `settings.cy.ts` did.
 
 **3. Fifteen new upstream database migrations.** The runbook has never mentioned migrations and it should. Upstream's `backend/open_webui/migrations/versions/` goes **44 → 59 revisions**: 15 new forward migrations (new tables, columns, indexes) plus 42 existing ones modified. The modifications are benign — idempotency guards and type-hint modernisation — and **the revision chain is intact**: no `down_revision` is re-pointed and `7e5b5dc7342b_init.py` is modified, not re-baselined, so this is not a history rewrite. Verified.
 
@@ -297,7 +339,7 @@ But it does mean the merge carries a schema change for the `web` backend, and **
 
 The npm side is by contrast almost static — 102 dependencies unchanged in number, **4 bumped**, our single added dep (`@fontsource-variable/inter`) untouched by upstream. One of those bumps is `pyodide ^0.28.2 → ^314.0.3`, which is why §4's `pyodide-lock.json` regeneration is load-bearing rather than ceremonial.
 
-**This is an SBOM and supply-chain delta, not just a merge.** [CLAUDE.md](../CLAUDE.md) treats new dependencies as reviewable surface, and a rebase that adds seven Python packages and swaps the JWT library should say so in the PR body rather than letting it ride in under "1402 upstream commits".
+**Disclose it; do not act on it.** These are upstream's choices arriving with the version we are adopting — not ours to relitigate, and not something to pin, patch around, or partially adopt. Taking them wholesale *is* the upgrade. [CLAUDE.md](../CLAUDE.md) treats new dependencies as reviewable surface, so the PR body should list this delta plainly rather than let it ride in under "1402 upstream commits", and the JWT swap is worth naming explicitly so a security reviewer sees it. That is a disclosure obligation, satisfied by writing it down.
 
 **5. One case-only rename, and we are on macOS.** Upstream renamed `src/lib/i18n/locales/uz-Latn-Uz/` → `uz-Latn-UZ/`. macOS is case-insensitive by default and git handles case-only renames badly there — you can end up with the old casing on disk, a phantom dirty file, or both spellings in the index, while the Linux container build is case-sensitive and sees something different. Check after checkout:
 
