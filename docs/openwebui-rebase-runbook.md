@@ -6,7 +6,7 @@
 
 **Written for the first refresh** (v0.9.2 → v0.11.0, tracked in [#498](https://github.com/LegalQuants/lq-ai/issues/498)), but written to be reusable: the version-specific parts are marked **[v0.11.0]** and the rest is the standing procedure. Update the marked parts each quarter and leave the rest alone.
 
-**This has now been executed once** (2026-08-24, v0.9.2 → v0.11.0). The merge, all six conflict resolutions, and the static gates are done; `docker compose build web`, the M1 quickstart, and §8's branding check are not. Everything below is written from that execution rather than from inference.
+**This has now been executed end to end** (2026-08-24/25, v0.9.2 → v0.11.0): the merge, all six conflict resolutions, every gate in §7, the §8 branding check, and the ADR 0001 Revisions entry. The stack was brought up on a fresh database, all 15 new upstream migrations applied, and the LQ.AI shell, delegated login and the ADR 0014 constraint were confirmed by hand in the browser. Everything below is written from that execution rather than from inference.
 
 **What execution changed that a dry-run could not.** Worth reading before you start, because each cost real time:
 
@@ -14,6 +14,7 @@
 - **§7 named commands CI does not run.** Bare `npx svelte-check` reports 8320 errors from upstream's tree and looks like catastrophe; the real gate is `npm run check:lq-ai` and it reports zero.
 - **Nothing in CI builds the bundle**, and v0.11.0 needs more build heap than v0.9.2 did — caught only by walking §7 by hand, and it would otherwise have surfaced as a broken Docker image.
 - **§5.2 contradicted itself**, telling you to `git rm` four files the merge had already removed.
+- **§10 pointed at the wrong files.** The one version string users actually see lives in `web/src/`, which it never mentioned — while its instruction to update the version "wherever it appears" would have rewritten ADR 0009 and the M1 progress records, which are history, not stale pins.
 
 **The earlier merge dry-run** (also 2026-08-24, throwaway branch, discarded) corrected this runbook in five material ways, all folded in below:
 
@@ -475,7 +476,19 @@ Note that ADR 0014 is enforced in **two** places, not one: this module, and the 
 
 ## 7. Verify before you open anything
 
-> **Status after the 2026-08-24 execution.** Run for real on the merged tree and passing: backend compiles, `check:lq-ai` clean (0 errors / 708 files), Vitest green (738 tests), host bundle builds at 6144, **Docker frontend stage builds, full 6.5 GB image builds clean**, and §8's static branding check passes. **Not yet done: the M1 quickstart walkthrough and the visual branding confirmation.** Both need a running stack and human eyes.
+> **Status after the 2026-08-24/25 execution — all gates run and passing.** Backend compiles; `check:lq-ai` clean (0 errors / 708 files); Vitest green (738 tests); host bundle builds at 6144; Docker frontend stage builds; full 6.5 GB image builds clean; §8's static branding check passes. **On a fresh stack:** all 8 services healthy, **all 15 new upstream migrations applied cleanly** (ending `f0bd01a18a3d`; the only log "error" is a benign SQLAlchemy warning inside an upstream migration), delegated login works, the `/lq-ai` shell renders correctly despite nesting in the rewritten root layout, dual branding renders, and **the ADR 0014 constraint holds** — the Add Connection modal's Type row is static `OpenAPI` with no MCP toggle.
+>
+> **Run the stack isolated, not in place.** `docker-compose.yml` pins `name: lq-ai`, so a `docker compose up` from a worktree targets your normal project and would upgrade your dev database's OpenWebUI schema one-way. Use a separate project instead — this also gives you the clean-migration check for free:
+>
+> ```bash
+> cd <main checkout> && docker compose stop        # NOT down -v
+> cd <worktree> && cp <main checkout>/.env .env
+> docker compose -p lqai-v11 up -d --build
+> docker compose -p lqai-v11 exec api python -m app.cli reset-admin-password \
+>   --email admin@lq.ai --password 'LQ-AI-smoke-test-Pw1!' --no-force-change
+> ```
+>
+> Deep links into the OpenWebUI admin bounce to `/lq-ai` on a cold session — load `/admin` first, then navigate. Integrations moved under **Services** in the redesigned settings panel.
 
 **Run the gates CI actually runs — not the bare tools.** This bit the first execution:
 
@@ -646,10 +659,34 @@ Add, in the same PR:
 ```markdown
 ## Revisions
 
-- **2026-XX-XX — v0.9.2 → v0.11.0.** First quarterly refresh under this ADR. Latest upstream stable at the time; 1402 upstream commits, 12 files changed on both sides of which 6 conflicted, one deletion re-asserted (ADR 0014), and Cypress carried forward after upstream dropped it.
+- **2026-08-25 — v0.9.2 → v0.11.0.** First quarterly refresh under this ADR. Latest upstream stable at the time (released 2026-07-27); 1402 upstream commits, 880 changed paths, 12 files changed on both sides of which 6 conflicted. The ADR 0014 deletion of `utils/mcp/client.py` was re-asserted, and Cypress was carried forward after upstream removed it entirely.
 ```
 
-Also update the pinned version wherever else it appears — grep for `v0.9.2` across `docs/` and `README.md` before opening the PR.
+### The version string that actually matters is not in `docs/`
+
+**Grep `web/src/` too, and do it first.** The dual-branding footer states the upstream version to every user on every LQ.AI route:
+
+```bash
+grep -rn "v0\.9\.2" web/src/
+# web/src/lib/lq-ai/components/DualBrandingFooter.svelte
+#   (forked at v0.9.2; see ADR 0001).
+```
+
+**[v0.11.0]** That was the only occurrence under `web/src/`, and the only *user-visible* one anywhere. It was caught by looking at the running stack, not by grep — the earlier edition of this section named only `docs/` and `README.md`. Fixed in the same PR.
+
+### Do not rewrite the historical references
+
+The instruction to "update the pinned version wherever it appears" is **too broad and will corrupt the record.** Of the nine occurrences outside this runbook at the v0.11.0 refresh, **none should have been rewritten**:
+
+| Location | Why it stays |
+| --- | --- |
+| ADR 0001 §Decision, §Consequences, §Mitigations | The position *when the ADR was accepted*. ADRs are historical records — amended by Revisions or superseded by a follow-on ADR, never edited in place. |
+| [ADR 0009](adr/0009-web-lq-ai-shell-coexistence.md) | Describes the fork as it stood when shell coexistence was decided; its rebase-cost reasoning is about *that* patch surface. |
+| `M1-PROGRESS.md`, `M1-IMPLEMENTATION-ORDER.md` | Statements about what landed during M1. "OpenWebUI v0.9.2 imported into `web/`" is true and stays true. |
+
+`README.md` had no occurrences at all.
+
+**The rule:** a `v0.9.2` reference is a stale pin only if it asserts *what we currently run*. If it records *what happened*, leave it. The Revisions entry added above carries a note saying so, to stop a future refresh mistaking those for stale pins.
 
 ---
 
