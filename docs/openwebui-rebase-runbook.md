@@ -6,9 +6,16 @@
 
 **Written for the first refresh** (v0.9.2 → v0.11.0, tracked in [#498](https://github.com/LegalQuants/lq-ai/issues/498)), but written to be reusable: the version-specific parts are marked **[v0.11.0]** and the rest is the standing procedure. Update the marked parts each quarter and leave the rest alone.
 
-**Nobody has executed this for real.** ADR 0001 has no Revisions section and there is no `chore(web): rebase OpenWebUI fork to …` commit in history.
+**This has now been executed once** (2026-08-24, v0.9.2 → v0.11.0). The merge, all six conflict resolutions, and the static gates are done; `docker compose build web`, the M1 quickstart, and §8's branding check are not. Everything below is written from that execution rather than from inference.
 
-**A merge dry-run has now been done** (2026-08-24, throwaway branch, discarded). It corrected this runbook in four material ways, all folded in below:
+**What execution changed that a dry-run could not.** Worth reading before you start, because each cost real time:
+
+- **§5.1 was the dangerous one.** Replaying our saved `middleware.py` patch would have silently deleted upstream's new plugin-tool handling — no conflict, no error, no failing test. §5.1 now treats a fork patch as a statement of intent to re-derive, not a diff to replay.
+- **§7 named commands CI does not run.** Bare `npx svelte-check` reports 8320 errors from upstream's tree and looks like catastrophe; the real gate is `npm run check:lq-ai` and it reports zero.
+- **Nothing in CI builds the bundle**, and v0.11.0 needs more build heap than v0.9.2 did — caught only by walking §7 by hand, and it would otherwise have surfaced as a broken Docker image.
+- **§5.2 contradicted itself**, telling you to `git rm` four files the merge had already removed.
+
+**The earlier merge dry-run** (also 2026-08-24, throwaway branch, discarded) corrected this runbook in five material ways, all folded in below:
 
 1. **§3's merge command does not work at all.** The fork has no shared ancestry with upstream. `git merge v0.11.0` fails with `fatal: refusing to merge unrelated histories`, and the obvious workaround is *worse* than the error. §3 now carries a procedure that was actually executed.
 2. **The conflict set is 6 files, not 10** — and it is a different 6 than §5 predicted. §5 is rewritten from the real merge output.
@@ -246,7 +253,15 @@ git checkout --theirs web/package-lock.json web/static/pyodide/pyodide-lock.json
 cd web && npm install    # regenerates package-lock.json
 ```
 
-Regenerate `pyodide-lock.json` by whatever upstream's build does at this version — check their Dockerfile and build scripts rather than assuming last quarter's method still applies.
+**`pyodide-lock.json` regenerates itself** — `npm run build` runs `pyodide:fetch` (`scripts/prepare-pyodide.js`) before `vite build`, so there is no separate step. Note that script resolves versions live from PyPI, so the file can drift for reasons unrelated to the rebase (observed: `black` 26.3.1 → 26.5.1 on an unrelated `npm ci`). Do not read a rebase signal into a diff there.
+
+**Expect the regeneration to change nothing, and treat that as a pass.** On the v0.11.0 refresh, `npm install` produced a `package-lock.json` byte-identical to the auto-merged one, and `pyodide-lock.json` came out identical to upstream's. That does not mean the step was skippable — it is how you learn the auto-merge was correct. Verify the result rather than the diff:
+
+```bash
+grep -m1 '"version"'                 web/package.json   # upstream's new version
+grep -m1 '"@fontsource-variable/inter"' web/package.json   # our added dep survived
+grep -A1 '"node_modules/pyodide"'    web/package-lock.json  # upstream's bump resolved
+```
 
 **`web/package.json` also auto-merges**, and that is precisely why it needs reading rather than trusting: it is where upstream's newer pins land, where our added dependencies have to survive, and where the superseded Dependabot PRs get resolved (§9). Watch for a dependency we added having been adopted upstream at a different version.
 
@@ -267,11 +282,52 @@ web/cypress/support/e2e.ts                      CONFLICT (modify/delete)
 
 ### 5.1 The three content conflicts
 
-All three are our integration hooks meeting upstream's rewiring. v0.11.0 is a "redesigned interface" release, so app wiring has moved. **Resolve by re-applying our hooks onto upstream's new structure, not by keeping our version of the file.**
+All three are ADR 0014 deviations meeting upstream's rewiring, and v0.11.0 is a "redesigned interface" release, so app wiring has moved. **Resolve by re-applying our intent onto upstream's new structure — never by keeping our version of the file, and never by replaying our old patch.**
 
-- **`backend/open_webui/main.py`** — our hooks into upstream's FastAPI app.
-- **`backend/open_webui/utils/middleware.py`** — same posture. Also carries an ADR 0014 import strip; see §6.
-- **`backend/open_webui/routers/configs.py`** — same posture. Also carries an ADR 0014 import strip; see §6.
+They are *not* the same kind of change, and treating them alike is how you break something. Establish what our deviation actually is before touching the conflict:
+
+```bash
+# The only reliable starting point: our delta from the OLD upstream tag.
+git show <pre-merge-main>:web/backend/open_webui/main.py > /tmp/ours.py
+git show v0.9.2:backend/open_webui/main.py > /tmp/base.py
+diff /tmp/base.py /tmp/ours.py
+```
+
+Then take upstream's file wholesale and re-apply that delta onto it:
+
+```bash
+git checkout --theirs web/backend/open_webui/<file>
+# ...re-apply our deviation...
+python3 -m py_compile web/backend/open_webui/<file>
+```
+
+**`main.py` — a pure deletion.** Our entire delta is a 21-line MCP cleanup block in the streaming `finally:` handler. At v0.11.0 upstream rewrote that block *and* added a task-deregistration / `chat:active` block immediately after it. Drop the MCP half, keep upstream's new task deregistration — it is unrelated to MCP and per §Scope we take upstream's.
+
+**`middleware.py` — a structural re-application, and the trap in this whole procedure.** Our v0.9.2 delta deleted the entire `for tool_id in tool_ids:` loop, because at v0.9.2 that loop existed *solely* to handle `server:mcp:`. **At v0.11.0 upstream gave the same loop a second, non-MCP job:**
+
+```python
+for tool_id in tool_ids:
+    if tool_id.startswith('server:mcp:'):
+        ...                              # ours to remove
+    elif ENABLE_PLUGINS:
+        db_tool_ids.append(tool_id)      # upstream's, and load-bearing
+```
+
+and `get_tools()` now takes `db_tool_ids` rather than `tool_ids`. **Replaying our old deletion would silently remove plugin-tool handling** — no conflict, no error, no test failure, just a feature quietly gone. Keep the loop, delete only the MCP branch, and **promote the `elif` to an `if`**. Also remove: the `MCPClient` import, the `mcp_clients`/`mcp_tools_dict` init, the `tools_dict` merge, `metadata['mcp_clients']`, and upstream's new `connect_mcp_server()` helper, which did not exist at v0.9.2 and is pure MCP.
+
+**`configs.py` — a replacement, not a deletion.** Our fork answers the tool-server verify endpoint's mcp branch with an explicit refusal, because MCP servers are operator-configured via the gateway:
+
+```python
+if form_data.type == 'mcp':
+    raise HTTPException(
+        status_code=400,
+        detail='MCP tool servers are configured by the operator via the gateway, not added here.',
+    )
+```
+
+Upstream's OAuth 2.1 discovery and `MCPClient` probe are dropped, the `else:  # openapi` branch de-indented out of the conditional, and three imports removed (`MCPClient`, `get_discovery_urls`, `OAuthMetadata`). Note this file has a *second* `== 'mcp'` block, in the connection-persistence path — we already carry that one unchanged. Leave it.
+
+**The general lesson, worth more than the specifics: a fork patch is a statement of intent, not a diff to replay.** Ours is "the gateway is the sole MCP speaker." Re-derive what that means against the new code each quarter. If you find yourself applying a saved patch, stop.
 
 ### 5.2 Cypress — upstream deleted it; keep ours, drop theirs
 
@@ -336,7 +392,7 @@ grep -rhoE "from '\\\$lib/[^']+'" web/src/lib/lq-ai web/src/routes/lq-ai | grep 
 
 **1. Our shell inherits upstream files we never touch.** `src/routes/+layout.svelte` changed **+362/−123** and `src/app.css` changed **+141**, and because we do not modify either, both are clean take-theirs with no conflict. Every `/lq-ai` route nests inside that root layout ([ADR 0009](adr/0009-web-lq-ai-shell-coexistence.md)), and our `practice.css`/`typography.css` layer onto that app CSS. A "redesigned interface" release rewriting the layout our shell hangs off is the single most likely source of post-merge visual and behavioural surprise, and git will say nothing about it. Read both diffs deliberately.
 
-**2. The e2e suite has an upstream-DOM dependency our own specs inherit.** Our 14 LQ.AI specs assert on our own `data-testid="lq-ai-*"` hooks and are decoupled — but they log in through the shared `cy.session` helper in `cypress/support/e2e.ts`, which drives *upstream's* auth form and waits on `#chat-search`, then dismisses upstream's changelog modal by its button text. So every spec is transitively coupled to upstream's markup through one file — and that file is one of the six conflicts.
+**2. The e2e suite has an upstream-DOM dependency our own specs inherit.** Our 13 LQ.AI specs assert on our own `data-testid="lq-ai-*"` hooks and are decoupled — but they log in through the shared `cy.session` helper in `cypress/support/e2e.ts`, which drives *upstream's* auth form and waits on `#chat-search`, then dismisses upstream's changelog modal by its button text. So every spec is transitively coupled to upstream's markup through one file — and that file is one of the six conflicts.
 
 Both anchors survive v0.11.0 (`#chat-search` is still in `Sidebar/SearchInput.svelte`; `"Okay, Let's Go!"` is still in `ChangelogModal.svelte`), so **this does not fire this quarter**. Re-check both before trusting the suite:
 
@@ -349,13 +405,13 @@ Separately, four of our Cypress specs are **upstream's own, inherited at the ven
 
 **Take upstream's deletion.** They were never ours, they test upstream's UI, and that UI was redesigned — so they would fail. Deleting them is the default resolution, costs nothing, and is what "upgrade to v0.11.0" means for files upstream removed. Adopting and rewriting them against the new UI would be new test-authoring work, not an upgrade; if anyone wants that coverage back later it is a DE, not a merge task.
 
+**No command needed — the merge already removed them.** We never modified those four, so they are clean deletions and drop out automatically; an explicit `git rm` fails with *pathspec did not match any files*. Just confirm:
+
 ```bash
-# The four upstream specs only. Verified: nothing of ours references them.
-git rm web/cypress/e2e/chat.cy.ts web/cypress/e2e/documents.cy.ts \
-       web/cypress/e2e/registration.cy.ts web/cypress/e2e/settings.cy.ts
+git ls-files web/cypress/e2e/ | wc -l    # expect 13 — ours only
 ```
 
-**Keep `cypress/tsconfig.json` and `cypress/support/index.d.ts`, even though upstream deleted both.** They are infrastructure, not specs: `tsconfig.json` (`extends: ../tsconfig.json`) types every `.ts` file in `cypress/`, including our 14, and `index.d.ts` declares the `Chainable` custom commands that `support/e2e.ts` still defines. Deleting either breaks type-checking on our own suite. Carrying them is the same posture as `cypress.config.ts`.
+**Keep `cypress/tsconfig.json` and `cypress/support/index.d.ts`, even though upstream deleted both.** They are infrastructure, not specs: `tsconfig.json` (`extends: ../tsconfig.json`) types every `.ts` file in `cypress/`, including our 13, and `index.d.ts` declares the `Chainable` custom commands that `support/e2e.ts` still defines. Deleting either breaks type-checking on our own suite. Carrying them is the same posture as `cypress.config.ts`.
 
 Our own 14 specs under `cypress/e2e/` are unaffected — they assert on our `lq-ai-*` test ids and, verified, none of them calls the custom commands (`cy.login`, `cy.registerAdmin`, `cy.uploadTestDocument`, …); only upstream's `chat.cy.ts` and `settings.cy.ts` did.
 
@@ -419,9 +475,31 @@ Note that ADR 0014 is enforced in **two** places, not one: this module, and the 
 
 ## 7. Verify before you open anything
 
-> **What the 2026-08-24 dry-run did not do.** It resolved nothing and built nothing — it established the merge mechanics (§3), the conflict inventory (§5), and the non-conflicting risk surface (§5.5), then was discarded. **Every gate in this section is still entirely unexercised.** Nobody has confirmed that the merged tree installs, builds, type-checks, migrates, or boots. Treat the effort estimate for §7 as unknown, not small: three hand-resolved backend files, a regenerated lockfile, 15 new migrations and 61 bumped Python packages across a 1402-commit jump is where the real work lives, and all of it is still ahead.
+> **Status after the 2026-08-24 execution.** The static gates below were run for real on the merged tree and pass: backend compiles, `check:lq-ai` clean, Vitest green, bundle builds. **Not yet done: `docker compose build web`, the M1 quickstart walkthrough, and §8's branding re-verification.** Those need a running stack and human eyes.
 
-**Before the build gates, two steps §5.5 added:**
+**Run the gates CI actually runs — not the bare tools.** This bit the first execution:
+
+```bash
+cd web
+npm run check:lq-ai              # THE typecheck gate (tsconfig.lq-ai.json)
+npm run test:frontend -- --run   # THE unit-test gate
+```
+
+**Do not run bare `npx svelte-check`.** It types upstream's entire tree and reports **8320 errors / 353 files** — all pre-existing upstream state, none of it ours, and it looks exactly like the rebase destroyed everything. The real gate is scoped by `tsconfig.lq-ai.json` and reported **0 errors across 708 files** on the merged v0.11.0 tree.
+
+**The bundle build needs more heap than the default, and CI does not run it at all.**
+
+```bash
+NODE_OPTIONS=--max-old-space-size=6144 npm run build
+```
+
+CI's web job runs `check:lq-ai` and Vitest only. **Nothing in CI builds the bundle** — the first thing to fail is the Docker image build, for whoever deploys next. So this step is not optional, and it is the reason §7 exists.
+
+**[v0.11.0]** Measured on the merged tree: **4096 fails** (OOM while rendering client chunks, exit 134), **6144 and 8192 succeed**. Pre-merge `main` builds fine at 4096, so this is a genuine regression from the upgrade — `web/Dockerfile`'s `NODE_OPTIONS` was raised 4096 → 6144 in the same PR. Upstream ships that line commented out; we set it because our tree needs it, and the requirement has now grown twice. **Re-measure each quarter** rather than assuming the current value still holds.
+
+`npm run build` also runs `pyodide:fetch` (`scripts/prepare-pyodide.js`) first, which is what regenerates `static/pyodide/pyodide-lock.json` — see §4. That script resolves package versions live from PyPI, so the file can drift for reasons unrelated to the rebase.
+
+**Then the migrations and the locale check (§5.5):**
 
 ```bash
 # 15 new upstream migrations must apply cleanly on a fresh DB.
@@ -437,12 +515,6 @@ git ls-files web/src/lib/i18n/locales/ | grep -i uz-latn   # expect one entry: u
 
 ADR 0001 §Mitigations requires **testing against the M1 quickstart end-to-end before merge**. That is the gate, not a suggestion.
 
-```bash
-cd web
-npm run build          # the bundle must build
-npx svelte-check       # matches the CI gate
-npx vitest run         # matches the CI gate
-```
 
 Then the stack:
 
