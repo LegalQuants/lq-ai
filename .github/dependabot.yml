@@ -44,23 +44,31 @@ updates:
         patterns: ["*"]
         update-types: ["minor", "patch"]
 
-  # web/ shares one package-lock.json, so it serialises exactly as the uv
-  # locks do. The cooldown was previously uv-only; npm now carries the same
-  # 7-day window, which is the posture docs/security/dependencies.md already
-  # describes for the locked ecosystems.
+  # web/ is a vendored OpenWebUI fork pinned by ADR 0001, so its npm pins are
+  # upstream's rather than ours. Routine currency arrives with the quarterly
+  # rebase (#498), which brings upstream's own newer pins with it — a version
+  # bump raised between refreshes is superseded before it can be reviewed.
+  # That is not hypothetical: #459, #460, #473, #474, #475 and #533 all closed
+  # unmerged for exactly this reason.
+  #
+  # `open-pull-requests-limit: 0` disables *version* updates for this ecosystem.
+  # Dependabot **security** updates are unaffected by that limit, so an advisory
+  # against a web/ package still opens a PR — which is the coverage we want, and
+  # matches ADR 0001's "or earlier if an upstream security fix lands that affects
+  # us" clause. The entry is kept rather than deleted so the manifest stays
+  # registered and security PRs keep carrying the `web` label.
+  #
+  # `cooldown` is omitted because it is documented as version-updates-only, and
+  # the `web-minor-patch` group because it was scoped `applies-to:
+  # version-updates`. Neither reached security updates, so dropping them changes
+  # nothing for the one update class this block still produces — and leaving
+  # security bumps ungrouped matches the posture the uv blocks above set out.
   - package-ecosystem: npm
     directory: /web
     schedule:
       interval: weekly
-    cooldown:
-      default-days: 7
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     labels: ["dependencies", "web"]
-    groups:
-      web-minor-patch:
-        applies-to: version-updates
-        patterns: ["*"]
-        update-types: ["minor", "patch"]
 
   - package-ecosystem: github-actions
     directory: /
