@@ -14,6 +14,7 @@
 2. **The conflict set is 6 files, not 10** — and it is a different 6 than §5 predicted. §5 is rewritten from the real merge output.
 3. **Upstream deleted Cypress entirely at v0.11.0.** Two files §5 listed as content merges are modify/delete conflicts, and this is a live decision that touches #432 and #437. See §5.2.
 4. **The "970 added files" figure was misleading** — 657 of them are upstream files, not ours. See the table below.
+5. **A six-conflict merge is not a six-risk merge.** New §5.5 covers what carries no conflict marker at all: the root layout our shell nests inside (+362/−123), 15 new database migrations, 61 bumped Python packages including a JWT library swap, and four inherited upstream Cypress specs pointed at a redesigned UI. It also records the measurement that makes the rest tractable — our LQ.AI code has **zero** imports into upstream's tree.
 
 ---
 
@@ -254,6 +255,59 @@ The general lesson for future quarters: **the boundary-critical file was the one
 
 ---
 
+### 5.5 What a clean merge does not tell you
+
+Everything above is about *textual* conflicts. A merge with six conflicts is not a merge with six risks. These were checked on 2026-08-24 and none of them produces a conflict marker.
+
+**The good news first, because it is load-bearing.** Our LQ.AI code is genuinely self-contained. Across the **269** TypeScript/Svelte files under `src/lib/lq-ai/` and `src/routes/lq-ai/` there are **277 `$lib` imports and every single one points into `$lib/lq-ai/`** — zero imports of upstream's `$lib/apis`, `$lib/components`, `$lib/stores`, or anything else in their tree. Zero of our files import anything upstream deleted at v0.11.0. This is why a 1402-commit jump is survivable, and it is worth re-measuring each quarter, because it is the property that makes everything else cheap:
+
+```bash
+grep -rhoE "from '\\\$lib/[^']+'" web/src/lib/lq-ai web/src/routes/lq-ai | grep -v '\$lib/lq-ai/' | sort -u
+# must print nothing
+```
+
+**Now the four things that are coupled anyway.**
+
+**1. Our shell inherits upstream files we never touch.** `src/routes/+layout.svelte` changed **+362/−123** and `src/app.css` changed **+141**, and because we do not modify either, both are clean take-theirs with no conflict. Every `/lq-ai` route nests inside that root layout ([ADR 0009](adr/0009-web-lq-ai-shell-coexistence.md)), and our `practice.css`/`typography.css` layer onto that app CSS. A "redesigned interface" release rewriting the layout our shell hangs off is the single most likely source of post-merge visual and behavioural surprise, and git will say nothing about it. Read both diffs deliberately.
+
+**2. The e2e suite has an upstream-DOM dependency our own specs inherit.** Our 14 LQ.AI specs assert on our own `data-testid="lq-ai-*"` hooks and are decoupled — but they log in through the shared `cy.session` helper in `cypress/support/e2e.ts`, which drives *upstream's* auth form and waits on `#chat-search`, then dismisses upstream's changelog modal by its button text. So every spec is transitively coupled to upstream's markup through one file — and that file is one of the six conflicts.
+
+Both anchors survive v0.11.0 (`#chat-search` is still in `Sidebar/SearchInput.svelte`; `"Okay, Let's Go!"` is still in `ChangelogModal.svelte`), so **this does not fire this quarter**. Re-check both before trusting the suite:
+
+```bash
+git grep -c "chat-search" v0.11.0 -- src/
+git grep -c "Okay, Let" v0.11.0 -- src/lib/components/ChangelogModal.svelte
+```
+
+Separately, four of our Cypress specs are **upstream's own, inherited at the vendor import** — `chat.cy.ts`, `documents.cy.ts`, `registration.cy.ts`, `settings.cy.ts` — plus `support/index.d.ts` and `cypress/tsconfig.json`. They select upstream markup (`#chat-input`, `.chat-user`, `#chat-share-button`, `#copy-and-share-chat-button`) and upstream deleted every one of them at v0.11.0. After the merge they are ours, unmaintained, and pointed at a redesigned UI. Expect them to fail and decide explicitly: adopt and fix, or delete. This is a different question from §5.2's "do we keep Cypress at all", and it is the one that will turn CI red.
+
+**3. Fifteen new upstream database migrations.** The runbook has never mentioned migrations and it should. Upstream's `backend/open_webui/migrations/versions/` goes **44 → 59 revisions**: 15 new forward migrations (new tables, columns, indexes) plus 42 existing ones modified. The modifications are benign — idempotency guards and type-hint modernisation — and **the revision chain is intact**: no `down_revision` is re-pointed and `7e5b5dc7342b_init.py` is modified, not re-baselined, so this is not a history rewrite. Verified.
+
+But it does mean the merge carries a schema change for the `web` backend, and **the project's dev-environment rules apply** ([CLAUDE.md](../CLAUDE.md)): never run host-side `alembic upgrade` against the live dev DB, and rebuild the affected services rather than migrating in place. Add a migration step to your §7 walk-through and confirm a fresh boot applies all 15 cleanly.
+
+**4. A substantial backend dependency change, including an auth library swap.** `backend/requirements.txt` is clean take-theirs — we do not modify it — so **61 bumped packages, 7 added and 4 removed land with zero conflict**. The ones worth naming:
+
+| Change | Note |
+| --- | --- |
+| `python-jose` **removed**, `joserfc` **added** | A JWT library swap in a service that authenticates users. Worth security-reviewer eyes given [ADR 0002](adr/0002-backend-owned-auth.md). |
+| `cryptography` 46.0.5 → **48.0.0** | Two majors. |
+| `peewee`, `peewee-migrate` **removed** | Upstream dropped the legacy ORM/migration path. |
+| `uvicorn` 0.41.0 → 0.51.0, `authlib` 1.6.10 → 1.7.2, `PyJWT` 2.11.0 → 2.13.0 | Auth/serving surface. |
+| added: `lxml`, `orjson`, `aiodns`, `hiredis`, `regex`, `rapidocr` | New SBOM entries. |
+
+The npm side is by contrast almost static — 102 dependencies unchanged in number, **4 bumped**, our single added dep (`@fontsource-variable/inter`) untouched by upstream. One of those bumps is `pyodide ^0.28.2 → ^314.0.3`, which is why §4's `pyodide-lock.json` regeneration is load-bearing rather than ceremonial.
+
+**This is an SBOM and supply-chain delta, not just a merge.** [CLAUDE.md](../CLAUDE.md) treats new dependencies as reviewable surface, and a rebase that adds seven Python packages and swaps the JWT library should say so in the PR body rather than letting it ride in under "1402 upstream commits".
+
+**5. One case-only rename, and we are on macOS.** Upstream renamed `src/lib/i18n/locales/uz-Latn-Uz/` → `uz-Latn-UZ/`. macOS is case-insensitive by default and git handles case-only renames badly there — you can end up with the old casing on disk, a phantom dirty file, or both spellings in the index, while the Linux container build is case-sensitive and sees something different. Check after checkout:
+
+```bash
+git ls-files web/src/lib/i18n/locales/ | grep -i uz-latn
+# expect exactly one entry, spelled uz-Latn-UZ
+```
+
+---
+
 ## 6. Re-assert the deletion
 
 We removed `web/backend/open_webui/utils/mcp/client.py` under [ADR 0014](adr/0014-gateway-egress-boundary-for-tool-providers.md) — the gateway is the sole MCP speaker. **Upstream still ships that file at v0.11.0 and has changed it**, so git raises a modify/delete conflict.
@@ -287,7 +341,21 @@ Note that ADR 0014 is enforced in **two** places, not one: this module, and the 
 
 ## 7. Verify before you open anything
 
-> **What the 2026-08-24 dry-run did not do.** It resolved nothing and built nothing — it established the merge mechanics (§3) and the conflict inventory (§5) and was then discarded. **Every gate in this section is still entirely unexercised.** In particular, nobody has yet confirmed that the merged tree installs, builds, type-checks, or boots. Treat the effort estimate for §7 as unknown, not small: three hand-resolved backend files plus a regenerated lockfile across a 1402-commit jump is where the real work lives, and it is all still ahead.
+> **What the 2026-08-24 dry-run did not do.** It resolved nothing and built nothing — it established the merge mechanics (§3), the conflict inventory (§5), and the non-conflicting risk surface (§5.5), then was discarded. **Every gate in this section is still entirely unexercised.** Nobody has confirmed that the merged tree installs, builds, type-checks, migrates, or boots. Treat the effort estimate for §7 as unknown, not small: three hand-resolved backend files, a regenerated lockfile, 15 new migrations and 61 bumped Python packages across a 1402-commit jump is where the real work lives, and all of it is still ahead.
+
+**Before the build gates, two steps §5.5 added:**
+
+```bash
+# 15 new upstream migrations must apply cleanly on a fresh DB.
+# NEVER host-side alembic against the live dev DB — see CLAUDE.md.
+docker compose build web && docker compose up -d web
+docker compose logs web | grep -i "alembic\|migration\|Running upgrade"
+```
+
+```bash
+# The case-only locale rename — macOS is case-insensitive, the container is not.
+git ls-files web/src/lib/i18n/locales/ | grep -i uz-latn   # expect one entry: uz-Latn-UZ
+```
 
 ADR 0001 §Mitigations requires **testing against the M1 quickstart end-to-end before merge**. That is the gate, not a suggestion.
 
