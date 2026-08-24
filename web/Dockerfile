@@ -33,8 +33,12 @@ ARG BUILD_HASH
 ARG PUBLIC_LQ_AI_API_BASE_URL=/api/v1
 
 # Set Node.js options (heap limit Allocation failed - JavaScript heap out of memory).
-# Required for OpenWebUI's large bundle build; 4 GiB has been adequate in practice.
-ENV NODE_OPTIONS="--max-old-space-size=4096"
+# Required for OpenWebUI's large bundle build. Raised 4 GiB -> 6 GiB for the
+# v0.11.0 fork refresh: the merged tree reproducibly OOMs at 4096 while
+# rendering the client chunks, where v0.9.2 built fine at the same limit.
+# Measured on the rebase (ADR 0001, #498): 4096 fails, 6144 and 8192 succeed.
+# Upstream ships this line commented out; we set it because our tree needs it.
+ENV NODE_OPTIONS="--max-old-space-size=6144"
 
 WORKDIR /app
 
