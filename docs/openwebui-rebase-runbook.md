@@ -18,6 +18,31 @@
 
 ---
 
+## At a glance
+
+The whole procedure, in order. Each step links to the section that explains it — read that section before running the step; this list is a map, not a substitute.
+
+| # | Step | Section |
+| --- | --- | --- |
+| 1 | Add the `upstream` remote, fetch tags, confirm the target is still latest stable | [§0](#0-before-you-start) |
+| 2 | Park the conflicting PRs — post the comments *before* branching | [§1](#1-park-the-four-conflicting-prs--do-this-first) |
+| 3 | `git checkout -b vendor/openwebui-upstream` off current `main` | [§2](#2-create-the-vendor-branch) |
+| 4 | Build the two synthetic `web/`-prefixed trees, graft, merge | [§3](#3-bring-upstream-in) |
+| 5 | Confirm nothing staged outside `web/` | [§3](#3-bring-upstream-in) |
+| 6 | Resolve the conflicts — 6 for v0.11.0 | [§5](#5-the-conflict-set--six-files) |
+| 7 | Re-assert the ADR 0014 deletion and strip its two importers | [§6](#6-re-assert-the-deletion) |
+| 8 | Regenerate both lockfiles | [§4](#4-regenerate-dont-hand-merge) |
+| 9 | Read the diffs that carry no conflict marker | [§5.5](#55-what-a-clean-merge-does-not-tell-you) |
+| 10 | Build, type-check, test, migrate, walk the M1 quickstart | [§7](#7-verify-before-you-open-anything) |
+| 11 | Re-verify the branding clause | [§8](#8-re-verify-the-branding-clause) |
+| 12 | Open one PR, stacked commits, reviewers get the deviation diff | [§9](#9-the-pr) |
+| 13 | Add the ADR 0001 Revisions entry, update version references | [§10](#10-update-adr-0001) |
+| 14 | Reopen the parked PRs, close superseded Dependabot PRs, fix this file | [§11](#11-after-it-merges) |
+
+**The two things most likely to cost you a day if skipped:** step 4's graft (the obvious `git merge` cannot work — [§3](#3-bring-upstream-in)) and step 9 (the highest-risk changes produce no conflict — [§5.5](#55-what-a-clean-merge-does-not-tell-you)).
+
+---
+
 ## Scope — read this before §5
 
 **The job is to be running v0.11.0. Nothing else.**
@@ -436,17 +461,49 @@ Not optional, and easy to forget. ADR 0001 §Risks records that OpenWebUI's **li
 
 ## 9. The PR
 
-ADR 0001 §Consequences, verbatim requirements:
+ADR 0001 **§Decision → Refresh cadence**, verbatim requirements:
 
 - **Title:** `chore(web): rebase OpenWebUI fork to v0.11.0`
 - **One PR into `main`** from `vendor/openwebui-upstream`
-- **Body lists every upstream commit included** and **every one of our patches that needed rework**
+- **Body lists every upstream commit included** and **any of our patches that needed rework**
 - **Two maintainer approvals** — "because the merge cost is real and the integration surface is large"
 
 For the commit list, generate rather than curate:
 
 ```bash
 git log --oneline v0.9.2..v0.11.0 > /tmp/upstream-commits.txt
+```
+
+### Stack the commits; do not stack the PRs
+
+The single-PR rule is ADR 0001's, so a stack of dependent PRs would need an ADR amendment — don't open that casually. Stacking *commits* inside the one branch is fully compatible and is what keeps the PR reviewable:
+
+```
+1. chore(web): rebase OpenWebUI fork to v0.11.0     the merge, all conflicts resolved
+2. chore(web): regenerate lockfiles for v0.11.0     package-lock + pyodide-lock (§4)
+3. docs: record the v0.11.0 refresh in ADR 0001     Revisions entry + version references (§10)
+```
+
+The merge itself cannot be split — git will not commit a conflicted tree, so every conflict resolution lands in commit 1. Files upstream deleted (including the four abandoned Cypress specs, §5.2) drop out of that merge automatically and need no commit of their own.
+
+Resist the temptation to make commit 1 "upstream-only" and re-apply our deviations in commit 2. It reads well but leaves an intermediate commit that crosses the [ADR 0014](adr/0014-gateway-egress-boundary-for-tool-providers.md) boundary and does not build, and the diff below gets the same review benefit without a broken tree in history.
+
+### Give reviewers the diff that actually matters
+
+Nobody can review 880 changed files, and the two mandated approvals are worthless if given against a diff nobody read. They do not have to: because §3 built upstream v0.11.0 as a `web/`-prefixed tree, a reviewer can see **only our deviations from pristine upstream**.
+
+```bash
+# $THEIRS_TREE is the v0.11.0 synthetic tree from §3 — for this refresh,
+# 8450ab69e6b5f8a46802bc56646647679560a2e3
+git diff $THEIRS_TREE HEAD -- web/
+```
+
+That output *is* "every one of our patches that needed rework" in reviewable form, and it is the same auditability ADR 0001 §Consequences already promises ("anyone can diff `web/` against the upstream tag and see exactly what we changed"). **Put this command in the PR body** and ask for the approvals against it rather than against the raw merge.
+
+Sanity-check it before you open the PR — the file count should be close to our known deviation set (313 LQ.AI-original files plus the dozen we patch), not thousands:
+
+```bash
+git diff --stat $THEIRS_TREE HEAD -- web/ | tail -1
 ```
 
 **[v0.11.0] Close these Dependabot PRs as superseded** once the rebase lands — `web/package.json` changes in the merge and upstream's own newer pins arrive with it. **List re-checked 2026-08-24:** [#533](https://github.com/LegalQuants/lq-ai/pull/533) (the current `web-minor-patch` group, 55 updates), [#459](https://github.com/LegalQuants/lq-ai/pull/459), [#460](https://github.com/LegalQuants/lq-ai/pull/460), [#474](https://github.com/LegalQuants/lq-ai/pull/474), [#475](https://github.com/LegalQuants/lq-ai/pull/475). (#461 and #473 are already closed — #473 was superseded by #533.)
