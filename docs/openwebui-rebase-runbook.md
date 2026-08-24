@@ -475,7 +475,7 @@ Note that ADR 0014 is enforced in **two** places, not one: this module, and the 
 
 ## 7. Verify before you open anything
 
-> **Status after the 2026-08-24 execution.** The static gates below were run for real on the merged tree and pass: backend compiles, `check:lq-ai` clean, Vitest green, bundle builds. **Not yet done: `docker compose build web`, the M1 quickstart walkthrough, and §8's branding re-verification.** Those need a running stack and human eyes.
+> **Status after the 2026-08-24 execution.** Run for real on the merged tree and passing: backend compiles, `check:lq-ai` clean (0 errors / 708 files), Vitest green (738 tests), host bundle builds at 6144, **Docker frontend stage builds, full 6.5 GB image builds clean**, and §8's static branding check passes. **Not yet done: the M1 quickstart walkthrough and the visual branding confirmation.** Both need a running stack and human eyes.
 
 **Run the gates CI actually runs — not the bare tools.** This bit the first execution:
 
@@ -499,11 +499,30 @@ CI's web job runs `check:lq-ai` and Vitest only. **Nothing in CI builds the bund
 
 `npm run build` also runs `pyodide:fetch` (`scripts/prepare-pyodide.js`) first, which is what regenerates `static/pyodide/pyodide-lock.json` — see §4. That script resolves package versions live from PyPI, so the file can drift for reasons unrelated to the rebase.
 
+### The Docker build — two things the one-liner hides
+
+**`docker compose` does not work from a git worktree.** There is no `.env` there (gitignored, it lives in the main checkout), so interpolation fails on `POSTGRES_PASSWORD` before any build starts. Either run the compose steps from the main checkout, or copy `.env` into the worktree. This bites immediately if you followed §2 into a worktree.
+
+**Verify the frontend stage on its own first.** It is where the heap risk lives, it needs no `.env`, and it finishes in a couple of minutes instead of the better part of an hour:
+
+```bash
+docker build --target build --build-arg PUBLIC_LQ_AI_API_BASE_URL=/api/v1 -t web-fe-check ./web
+```
+
+**Then the full image, which is much heavier than it looks.** `backend/requirements.txt` changes every refresh (61 packages this time, §5.5), so that layer fully invalidates and reinstalls torch, sentence-transformers and whisper — downloading models at build time. **[v0.11.0] measured: 6.5 GB image, clean build.**
+
+```bash
+docker build --build-arg PUBLIC_LQ_AI_API_BASE_URL=/api/v1 -t web-full-check ./web
+```
+
+Clean up the throwaway tags afterwards (`docker image rm web-fe-check web-full-check`).
+
 **Then the migrations and the locale check (§5.5):**
 
 ```bash
 # 15 new upstream migrations must apply cleanly on a fresh DB.
 # NEVER host-side alembic against the live dev DB — see CLAUDE.md.
+# Run these from the MAIN CHECKOUT, not a worktree — see above.
 docker compose build web && docker compose up -d web
 docker compose logs web | grep -i "alembic\|migration\|Running upgrade"
 ```
@@ -539,6 +558,27 @@ Walk the M1 quickstart end-to-end, then specifically exercise our customizations
 Not optional, and easy to forget. ADR 0001 §Risks records that OpenWebUI's **license clause 4** prohibits altering, removing, obscuring, or replacing "Open WebUI" branding — name, logo, visual/textual/symbolic identifiers — above **50 end users in any rolling 30-day period**, absent written permission or an enterprise license. Our posture is **dual-branding**: LQ.AI chrome added *alongside*, never replacing.
 
 **[v0.11.0] is a "redesigned interface" release**, which makes this the most likely quarter for upstream's identifiers to have moved. Re-verify placement after the merge rather than assuming the old arrangement survived. If upstream moved its branding into a component our shell overrides, that is a compliance issue and it blocks the merge.
+
+### The static check settles it in two commands
+
+Compliance turns on one question — **do we alter, remove, or obscure any upstream branding identifier?** — and that is answerable from the deviation diff without running anything:
+
+```bash
+# Which upstream UI files do we touch at all? (excluding our own namespace)
+git diff --name-only $THEIRS_TREE HEAD -- web/src/ \
+  | grep -v '^web/src/lib/lq-ai/\|^web/src/routes/lq-ai/'
+
+# Upstream's identifiers still present in the merged tree
+grep -rc "Open WebUI" web/src/ | awk -F: '{s+=$2} END {print s}'
+```
+
+**[v0.11.0] result, verified 2026-08-24:** exactly two files outside our namespace — `AddToolServerModal.svelte` (the ADR 0014 MCP toggle, not branding) and `src/routes/(app)/+page.ts` (a *new* file, the ADR 0009 `/` → `/lq-ai` redirect). **1626 "Open WebUI" occurrences intact.** We remove nothing. Clause 4 is satisfied.
+
+This works because of the isolation measured in §5.5: our code lives in its own namespace and overrides no upstream component, so upstream's branding cannot be displaced by our patches. **If that ever stops being true, this check is what tells you.**
+
+**What the static check does not cover:** whether the redesigned UI still *renders* those identifiers where a user sees them. That needs the stack and human eyes — do it during the M1 quickstart walk (§7), not from the diff.
+
+**A pre-existing inaccuracy, noted rather than fixed** (out of scope per §Scope, and not introduced by any rebase): `DualBrandingFooter.svelte`'s docstring claims it renders "in every LQ.AI shell route **and in the OpenWebUI shell's `+layout.svelte`**". It does not — on `main` and after the merge alike it is mounted only in `routes/lq-ai/+layout.svelte` and `routes/lq-ai/login/+page.svelte`. Compliance does not depend on it, because upstream's own shell carries upstream's own branding natively. But the comment overclaims. Worth a DE.
 
 ---
 
