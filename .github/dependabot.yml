@@ -12,10 +12,20 @@ updates:
   # strictly serially, each waiting a full CI cycle after a rebase. One
   # grouped PR is one lock write.
   #
-  # Two things stay deliberately ungrouped:
+  # Three things stay deliberately ungrouped:
   #   - security updates — `applies-to: version-updates` scopes the group,
   #     so an advisory fix is never queued behind routine hygiene;
   #   - majors — omitted from `update-types`, since each needs its own read.
+  #   - langgraph — excluded by name from api-minor-patch. The two above are
+  #     policy classes; this one is a package, and it is here because the
+  #     majors rule cannot reach it. langgraph is pre-1.0, so its breaking
+  #     releases ship as 0.x *minors*: within the group the highest version
+  #     an allowed "minor" reaches is 0.6.x, which re-types StateGraph and
+  #     fails mypy [call-overload] across all three executors. That bump has
+  #     been opened and closed unmerged five times (#68, #176, #482, #520,
+  #     #544) — the fix is in our code, not in the pin. docling and mcp get
+  #     their own read for free by being post-1.0; langgraph needs the
+  #     exclusion to get the same treatment. Lift at DE-319 (#524).
   - package-ecosystem: uv
     directory: /api
     schedule:
@@ -28,6 +38,7 @@ updates:
       api-minor-patch:
         applies-to: version-updates
         patterns: ["*"]
+        exclude-patterns: ["langgraph"]
         update-types: ["minor", "patch"]
 
   - package-ecosystem: uv
