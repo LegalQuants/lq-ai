@@ -31,7 +31,7 @@ dependencies = [
     # fastapi's own range allows, which is exactly what happened here: the
     # advisory sat unremediated in this lock while fastapi stayed on 0.116.
     # Mirrors the same explicit pin in gateway/pyproject.toml.
-    "starlette>=1.4.1,<1.5",
+    "starlette>=1.4.1,<1.7",
     "alembic>=1.19.0,<2",
     "psycopg2-binary>=2.9,<3",
     "greenlet>=3.0,<4",
@@ -141,7 +141,7 @@ dependencies = [
     # The break is type-only — every runtime API we use is unchanged — and
     # the autonomous executor needs no 1.x-only API. Migration of all three
     # executors deferred to DE-319. Floor pinned to the validated 0.2.76.
-    "langgraph>=0.2.76,<0.3",
+    "langgraph>=0.2.76,<0.7",
     # M3-C4 — openpyxl powers the Tabular Review XLSX export
     # (GET /tabular/executions/{id}/export?format=xlsx). Each grid cell
     # gets a Comment with its citation source so operators can pivot
@@ -167,7 +167,7 @@ dev = [
     # unpinned floor let CI (which resolves latest) drift ahead of dev venvs
     # and fail `ruff format --check` on code that was clean locally. Pin so
     # local == CI. Bump deliberately (and reformat) when upgrading.
-    "ruff==0.16.1",
+    "ruff==0.16.3",
     "mypy>=1.11",
     # PyYAML type stubs — pyyaml has no inline typings, so mypy needs the
     # types-PyYAML package to type-check `app.skills.loader` etc.
