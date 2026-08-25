@@ -31,7 +31,7 @@ dependencies = [
     # fastapi's own range allows, which is exactly what happened here: the
     # advisory sat unremediated in this lock while fastapi stayed on 0.116.
     # Mirrors the same explicit pin in gateway/pyproject.toml.
-    "starlette>=1.4.1,<1.5",
+    "starlette>=1.4.1,<1.7",
     "alembic>=1.19.0,<2",
     "psycopg2-binary>=2.9,<3",
     "greenlet>=3.0,<4",
@@ -167,7 +167,7 @@ dev = [
     # unpinned floor let CI (which resolves latest) drift ahead of dev venvs
     # and fail `ruff format --check` on code that was clean locally. Pin so
     # local == CI. Bump deliberately (and reformat) when upgrading.
-    "ruff==0.16.1",
+    "ruff==0.16.3",
     "mypy>=1.11",
     # PyYAML type stubs — pyyaml has no inline typings, so mypy needs the
     # types-PyYAML package to type-check `app.skills.loader` etc.
