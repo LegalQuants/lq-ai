@@ -208,7 +208,7 @@ A few things to notice about the output:
 
 Procurement reviews and document-review work both benefit from being able to quickly distinguish citations the system stands behind from ones it does not. The 5th `system-error` state (verification-pipeline errors surfaced as their own signal rather than collapsed into "unverified") is tracked at [DE-275](PRD.md#de-275--embed-m2-citations-in-chat-message-envelope) for a future release; the M2-C2 surface ships the four states above.
 
-Click-through-to-source-viewer (highlighting the cited span in the source document with PDF.js bbox overlay) is intentionally out of scope for M2 — the visual contract and the data plumbing are in place; the viewer surface is a follow-on for v0.3+ when the docling-side citable-chunk schema is fully wired through the UI.
+Click-through-to-source-viewer (highlighting the cited span in the source document with PDF.js bbox overlay) is intentionally out of scope for M2 — the visual contract and the data plumbing are in place; the viewer surface is a follow-on for v0.3+ when the citable-chunk schema (PRD §3.3 / DE-387) is fully wired through the UI.
 
 **Severity tags follow the rubric.** Critical / Material / Minor — the [Skill-Authoring Guide](skill-authoring-guide.md#severity-rubric-for-review-skills) documents the calibration. None of the issues in the sample NDA rise to "Critical" because the sample is calibrated to be *plausibly real, with material issues*, not catastrophic.
 
@@ -408,7 +408,7 @@ Verify your `.env` has at least one provider key set and matches the model alias
 
 ### Citation engine fails on the sample NDA
 
-The sample is markdown rather than PDF. The Citation Engine handles markdown with synthetic page boundaries; if you see verification errors, check the API logs. The ingestion pipeline is PyMuPDF + Docling and parses text-bearing documents only — there is no OCR step (scanned-PDF OCR is not implemented; DE-320), so a verification miss is not an OCR configuration issue. Confirm the document carries extractable text rather than being a scanned image.
+The sample is markdown rather than PDF. The Citation Engine handles markdown with synthetic page boundaries; if you see verification errors, check the API logs. The ingestion pipeline is PyMuPDF and parses text-bearing documents only — there is no OCR step (scanned-PDF OCR is not implemented; DE-320), so a verification miss is not an OCR configuration issue. Confirm the document carries extractable text rather than being a scanned image.
 
 ### "Tier 4 not allowed" message
 
