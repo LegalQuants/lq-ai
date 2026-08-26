@@ -1,6 +1,6 @@
 # ADR 0026 — Document-ingestion parsing: remove the dead Docling integration; defer pluggable ingestion (DE-387)
 
-**Status:** Proposed
+**Status:** Accepted (2026-08-23) — committee-accepted at the weekly call
 **Date:** 2026-08-16
 **Owner:** Maintainer team (houfu)
 **Origin:** Committee call 2026-08-16 action item — *"Draft ADR question on Docling:
@@ -37,6 +37,32 @@ image, of which **1.88 GB is a CUDA stack** (12 `nvidia-*` packages) for a parse
 that runs on no GPU and has parsed nothing. Meanwhile PDF ingestion works: the
 whole shipped pipeline (chunking, embedding, retrieval, citation verification,
 playbook extraction) operates on PyMuPDF's flat character stream.
+
+**One qualification, raised before ratification and recorded here rather than only
+in the DE.** "Never produced output" is true of the integration *as shipped
+upstream*, and of every deployment that took it as shipped — but it is not true of
+the whole ecosystem. The Flosters/lq-ai fork ("LegVolution", an Argentine
+production deployment, surveyed 2026-08-20) **repaired the integration and runs it
+in production**: it fixed the call site to the real Docling 1.20 API rather than
+the 2.x idiom, ran the converter in a thread so job timeouts still fire, baked the
+models into the image (removing the first-run download that is DE-351's root
+cause), added a post-ready enrichment job that actually populates
+`structured_content`, and chained OCR for scanned PDFs (`was_ocrd=True`). So
+"nobody uses Docling" is not strictly true: one operator does, chiefly for the
+scanned-PDF OCR lane — driver 3's foundational case, met by an operator who needed
+it rather than by us. The committee saw this fork at the ratifying call and, rather
+than treating it as an objection to the removal, took an action item to approach its
+author about upstreaming the useful components.
+
+That cuts against one of the removal case's rhetorical props, and it is stated
+here deliberately rather than left out. It does not change the decision: the
+integration in *this* repo is still dead, still feeds a column no consumer here
+reads, and still costs every operator 2.91 GB and four HIGH advisories for output
+they never receive. If anything it sharpens the case — that operator had to fork
+the parser call site to get what an adapter seam would have handed them by
+configuration. What it does change is DE-387's starting position: the opt-in
+adapter path now has a working reference implementation to study rather than a
+design sketch.
 
 The committee raised this on 2026-08-16 and framed the decision as **keep,
 replace, or make OCR pluggable**; the research, run in advance, independently
@@ -254,4 +280,13 @@ resurface as *candidate adapters under DE-387* when a consumer exists.
   (text/markdown ingest), and DE-387 (pluggable PDF parser / OCR). ADR 0006's
   "PyMuPDF canonical + Docling structured" cascade language goes stale on removal
   (the PDF path is PyMuPDF-only again) and its Revisions note should say so.
-- Committee minutes 2026-08-16 (lq-ai-community, once published) — the keep/replace/pluggable framing.
+- Committee minutes (lq-ai-community, once published) — [2026-08-16](https://github.com/LegalQuants/lq-ai-community/tree/main/meetings/2026-08-16-weekly)
+  for the keep/replace/pluggable framing, and **2026-08-23 for the ratification** —
+  recorded there as removal from near-term scope with the pluggable interface
+  deferred: anyone may build it, but it is not a current priority. The same call
+  flagged the PyMuPDF AGPL license as an enterprise-adoption risk with alternatives
+  to be researched
+  (driver 7, open question 3), and recorded the downstream fork above. Per the
+  minutes process adopted 2026-08-09, those minutes are ratified at the following
+  call; this ADR follows the ADR 0024/0025 precedent of merging on the call decision
+  rather than waiting for minute ratification.
