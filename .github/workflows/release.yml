@@ -164,7 +164,15 @@ jobs:
           # `|| true`: with pipefail, grep exits non-zero when this is the first
           # release and the filtered list is empty, which would abort under `set -e`
           # before the emptiness check below could report it.
-          prev_tag="$(git tag --list 'v*.*.*' --sort=-v:refname \
+          #
+          # --merged HEAD: consider only tags reachable from the commit being
+          # released. web/ is a fork of OpenWebUI, and rebasing it (#541) brought
+          # upstream's own vX.Y.Z tags into this repo (v0.9.2, v0.11.0). They sit
+          # on history that is not an ancestor of main, so without this filter
+          # -v:refname sorts v0.11.0 to the top: the range below would span ~737
+          # unrelated commits, sweep in every historical breaking-change PR, and
+          # fail an otherwise-legitimate patch tag.
+          prev_tag="$(git tag --list 'v*.*.*' --merged HEAD --sort=-v:refname \
                         | grep -v '^desktop-' | grep -vx "$RELEASE_TAG" | head -1 || true)"
 
           if [[ -z "$prev_tag" ]]; then
