@@ -65,7 +65,7 @@ async def writable_config(tmp_path: Path) -> Path:
 
 @pytest_asyncio.fixture
 async def keyed_app(
-    monkeypatch: pytest.MonkeyPatch, writable_config: Path
+    example_env: None, monkeypatch: pytest.MonkeyPatch, writable_config: Path
 ) -> AsyncIterator[FastAPI]:
     """Gateway app with a fresh master key + writable temp config."""
 
@@ -87,7 +87,7 @@ async def keyed_client(keyed_app: FastAPI) -> AsyncIterator[AsyncClient]:
 
 @pytest_asyncio.fixture
 async def no_master_key_app(
-    example_env, monkeypatch: pytest.MonkeyPatch, writable_config: Path
+    example_env: None, monkeypatch: pytest.MonkeyPatch, writable_config: Path
 ) -> AsyncIterator[FastAPI]:
     """Gateway app WITHOUT a master key — POST/PATCH must 400."""
 
@@ -395,7 +395,7 @@ class _FakeState:
 
 @pytest.mark.unit
 async def test_rotation_retires_displaced_adapter(
-    example_env, monkeypatch: pytest.MonkeyPatch, writable_config: Path
+    example_env: None, monkeypatch: pytest.MonkeyPatch, writable_config: Path
 ) -> None:
     """Rotating an already-keyed provider MOVES the old adapter to retired.
 
@@ -452,7 +452,7 @@ async def test_rotation_retires_displaced_adapter(
 
 @pytest.mark.unit
 async def test_revoke_retires_live_adapter(
-    example_env, monkeypatch: pytest.MonkeyPatch, writable_config: Path
+    example_env: None, monkeypatch: pytest.MonkeyPatch, writable_config: Path
 ) -> None:
     """revoke_provider_key pops the live adapter into retired_adapters."""
 
@@ -490,7 +490,7 @@ async def test_revoke_retires_live_adapter(
 
 @pytest.mark.unit
 async def test_apply_maps_egress_refusal_to_409(
-    example_env, monkeypatch: pytest.MonkeyPatch, writable_config: Path
+    example_env: None, monkeypatch: pytest.MonkeyPatch, writable_config: Path
 ) -> None:
     """An egress-refused base_url on the BYOK path is a structured 409.
 

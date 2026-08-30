@@ -32,17 +32,6 @@ EXAMPLE_CONFIG = REPO_ROOT / "gateway.yaml.example"
 
 
 @pytest.fixture
-def example_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Satisfy gateway.yaml.example placeholders for direct loads."""
-
-    monkeypatch.setenv("GCP_PROJECT_ID", "test-project")
-    monkeypatch.setenv("AWS_REGION", "us-east-1")
-    monkeypatch.setenv("AZURE_OPENAI_RESOURCE", "test-openai")
-    monkeypatch.setenv("LQ_AI_VERSION", "0.1.0-test")
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
-
-
-@pytest.fixture
 def tmp_config(tmp_path: Path) -> Path:
     """Copy gateway.yaml.example into a tmp dir for safe mutation."""
 

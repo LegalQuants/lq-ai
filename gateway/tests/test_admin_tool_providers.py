@@ -79,7 +79,7 @@ def _stub_build_tool_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest_asyncio.fixture
 async def keyed_app(
-    monkeypatch: pytest.MonkeyPatch, writable_config: Path
+    example_env: None, monkeypatch: pytest.MonkeyPatch, writable_config: Path
 ) -> AsyncIterator[FastAPI]:
     """Gateway app with a fresh master key + writable temp config."""
 
@@ -102,7 +102,7 @@ async def client(keyed_app: FastAPI) -> AsyncIterator[AsyncClient]:
 
 @pytest_asyncio.fixture
 async def no_master_key_app(
-    monkeypatch: pytest.MonkeyPatch, writable_config: Path
+    example_env: None, monkeypatch: pytest.MonkeyPatch, writable_config: Path
 ) -> AsyncIterator[FastAPI]:
     """Gateway app WITHOUT a master key — POST/PATCH with an api_key must 400."""
 

@@ -94,6 +94,7 @@ def test_build_adapter_allows_local_ollama() -> None:
 
 @pytest.mark.unit
 async def test_lifespan_refuses_to_start_on_refused_base_url(
+    example_env: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """An egress-policy violation is FATAL at startup, never a silent skip.
@@ -106,10 +107,6 @@ async def test_lifespan_refuses_to_start_on_refused_base_url(
     This reproduces the operator story: a mistyped ``OLLAMA_BASE_URL``.
     """
 
-    monkeypatch.setenv("GCP_PROJECT_ID", "test-project")
-    monkeypatch.setenv("AWS_REGION", "us-east-1")
-    monkeypatch.setenv("AZURE_OPENAI_RESOURCE", "test-openai")
-    monkeypatch.setenv("LQ_AI_VERSION", "0.1.0-test")
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://attacker.example/v1")
     monkeypatch.setenv("GATEWAY_CONFIG_PATH", str(EXAMPLE_CONFIG))
 
