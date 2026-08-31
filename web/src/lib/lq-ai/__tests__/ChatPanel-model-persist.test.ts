@@ -16,7 +16,8 @@ import { describe, it, expect } from 'vitest';
 import {
 	modelStorageKeyForChat,
 	readPersistedModel,
-	writePersistedModel
+	writePersistedModel,
+	readAvailablePersistedModel
 } from '../components/ChatPanel.svelte';
 
 class MockStorage implements Storage {
@@ -38,6 +39,32 @@ class MockStorage implements Storage {
 	}
 	clear(): void {
 		this.map.clear();
+	}
+}
+
+/**
+ * A Storage whose getItem/setItem throw, modelling Safari private mode, a
+ * disabled-storage policy, or a quota-exceeded write. The helpers must
+ * swallow the exception so chat selection keeps working.
+ */
+class ThrowingStorage implements Storage {
+	get length(): number {
+		return 0;
+	}
+	key(): string | null {
+		return null;
+	}
+	getItem(): string | null {
+		throw new DOMException('getItem blocked', 'SecurityError');
+	}
+	setItem(): void {
+		throw new DOMException('QuotaExceededError', 'QuotaExceededError');
+	}
+	removeItem(): void {
+		throw new DOMException('removeItem blocked', 'SecurityError');
+	}
+	clear(): void {
+		throw new DOMException('clear blocked', 'SecurityError');
 	}
 }
 
@@ -92,5 +119,39 @@ describe('write→read round-trip', () => {
 		// (localStorage itself survives a page refresh; only in-memory state
 		// like modelByChat does not).
 		expect(readPersistedModel('c1', s)).toBe('anthropic-prod/claude-opus-4-8');
+	});
+});
+
+describe('Storage failure is non-fatal', () => {
+	it('readPersistedModel returns null when getItem throws', () => {
+		expect(readPersistedModel('c1', new ThrowingStorage())).toBeNull();
+	});
+
+	it('writePersistedModel swallows a throwing setItem (no exception)', () => {
+		expect(() =>
+			writePersistedModel('c1', 'anthropic-prod/claude-opus-4-8', new ThrowingStorage())
+		).not.toThrow();
+	});
+});
+
+describe('readAvailablePersistedModel', () => {
+	it('returns the persisted id when it is still in the catalog', () => {
+		const s = new MockStorage();
+		s.setItem(modelStorageKeyForChat('c1'), 'anthropic-prod/claude-opus-4-8');
+		expect(
+			readAvailablePersistedModel(
+				'c1',
+				['smart', 'anthropic-prod/claude-opus-4-8', 'openai-prod/gpt-5'],
+				s
+			)
+		).toBe('anthropic-prod/claude-opus-4-8');
+	});
+
+	it('returns null when the persisted id is no longer in the catalog', () => {
+		const s = new MockStorage();
+		s.setItem(modelStorageKeyForChat('c1'), 'anthropic-prod/claude-opus-4-7');
+		expect(
+			readAvailablePersistedModel('c1', ['smart', 'anthropic-prod/claude-opus-4-8'], s)
+		).toBeNull();
 	});
 });
