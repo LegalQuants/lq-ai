@@ -6488,7 +6488,7 @@ info:
     until then, all endpoints under /api/v1 return 501 with a structured 'not implemented'
     body that names the implementing task.
   title: LQ.AI Backend API
-  version: 0.7.0
+  version: 0.7.1
 openapi: 3.1.0
 paths:
   /api/v1/admin/aliases:
