@@ -459,11 +459,18 @@
 		// (MESSAGE_FILE_IDS_MAX_LEN), so block the attach up front; the panel
 		// shows the limit notice + disables the upload button in parallel.
 		if (!canAttachChatFile(chatFiles.length)) return;
+		// The active chat can change while the upload is in flight; capture the
+		// target so chat A's file is never appended to (or sent from) chat B.
+		const targetChatId = $activeChatStore?.id ?? null;
 		uploading = true;
 		try {
 			const uploaded = await filesApi.uploadFile(file, {
 				project_id: $activeChatStore?.project_id ?? undefined
 			});
+			// Re-check after the await: the chat may have changed, and a
+			// parallel upload may have taken the last slot under the cap.
+			if (($activeChatStore?.id ?? null) !== targetChatId) return;
+			if (!canAttachChatFile(chatFiles.length)) return;
 			chatFiles = [...chatFiles, uploaded];
 			// Ingestion is async; poll so the chip flips pending -> ready (or
 			// failed) instead of showing a stale "pending" forever.
@@ -472,6 +479,8 @@
 			console.error('lq-ai: upload failed', e);
 		} finally {
 			uploading = false;
+		}
+	}
 		}
 	}
 
