@@ -481,8 +481,6 @@
 			uploading = false;
 		}
 	}
-		}
-	}
 
 	// Poll a chat-attached file's ingestion status until it reaches a terminal
 	// state, patching the matching chatFiles entry so the panel chip updates.
