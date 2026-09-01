@@ -143,6 +143,10 @@ jobs:
 
       - name: pytest
         run: pytest -q
+        env:
+          # DE-230: bounded, derandomized Hypothesis profile for the
+          # property suite (tests/property/conftest.py registers it).
+          HYPOTHESIS_PROFILE: ci
 
   gateway-checks:
     name: Gateway (ruff + mypy --strict + pytest)
@@ -193,3 +197,7 @@ jobs:
 
       - name: pytest
         run: pytest -q
+        env:
+          # DE-230: bounded, derandomized Hypothesis profile for the
+          # property suite (tests/property/conftest.py registers it).
+          HYPOTHESIS_PROFILE: ci
