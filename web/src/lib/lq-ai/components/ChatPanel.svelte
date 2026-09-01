@@ -40,6 +40,70 @@
 			slashIndex
 		};
 	}
+
+	/**
+	 * Per-chat model-selection persistence (bugfix: model-selection-persist-
+	 * refresh). `modelByChat` was a component-local `Record` with no
+	 * persistence, so a full page refresh remounted the component, reset
+	 * modelByChat to `{}`, and currentModelId's reactive fallback silently
+	 * picked the picker's default — discarding the user's choice. Mirrors
+	 * ReceiptsDrawer.svelte's storageKeyForChat/readPersistedOpen/
+	 * writePersistedOpen convention (same file also uses a per-chat
+	 * localStorage key prefix, same optional injectable Storage param for
+	 * testability).
+	 *
+	 * All three helpers treat persistence as best-effort: a `Storage`
+	 * that throws (Safari private mode, a disabled-storage policy, a
+	 * quota-exceeded write) must never break chat selection, so the
+	 * read/write helpers swallow the exception and fall through to the
+	 * existing default-selection behaviour.
+	 */
+	const MODEL_STORAGE_KEY_PREFIX = 'lq_ai_chat_model_';
+
+	export function modelStorageKeyForChat(chatId: string): string {
+		return `${MODEL_STORAGE_KEY_PREFIX}${chatId}`;
+	}
+
+	export function readPersistedModel(chatId: string, storage?: Storage): string | null {
+		const store = storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
+		if (!store) return null;
+		try {
+			return store.getItem(modelStorageKeyForChat(chatId));
+		} catch {
+			return null;
+		}
+	}
+
+	export function writePersistedModel(chatId: string, modelId: string, storage?: Storage): void {
+		const store = storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
+		if (!store) return;
+		try {
+			store.setItem(modelStorageKeyForChat(chatId), modelId);
+		} catch {
+			/* best-effort: private-mode / quota / disabled storage — skip */
+		}
+	}
+
+	/**
+	 * Pure resolver for a chat's remembered model choice: return the
+	 * persisted id only when it is still in the supplied catalog.
+	 *
+	 * A model the operator has since removed from the gateway must not be
+	 * shown by the picker — `selectModel()` never ran for this session, so
+	 * `currentModelId` would surface the stale id while the send path
+	 * (`MessageCreate.model`) falls back to the default alias. The picker
+	 * would then display one model and the request would use another.
+	 * Gating on `availableIds` keeps the two in lockstep.
+	 */
+	export function readAvailablePersistedModel(
+		chatId: string,
+		availableIds: readonly string[],
+		storage?: Storage
+	): string | null {
+		const persisted = readPersistedModel(chatId, storage);
+		if (persisted === null) return null;
+		return availableIds.includes(persisted) ? persisted : null;
+	}
 </script>
 
 <script lang="ts">
@@ -334,6 +398,7 @@
 		const chat = $activeChatStore;
 		if (!chat) return;
 		modelByChat = { ...modelByChat, [chat.id]: id };
+		writePersistedModel(chat.id, id);
 	}
 
 	async function selectChat(chat: Chat) {
@@ -349,6 +414,20 @@
 		// their status polls) so chat A's files are never sent from chat B.
 		abortFilePolls();
 		chatFiles = [];
+		// Hydrate this chat's remembered model choice from localStorage if we
+		// don't already have one in-memory (survives a page refresh; a
+		// same-session choice already in modelByChat always wins). Only accept
+		// a persisted id the current catalog still offers, so the picker can
+		// never show a model the send path would silently drop.
+		if (!(chat.id in modelByChat)) {
+			const persisted = readAvailablePersistedModel(
+				chat.id,
+				availableModels.data.map((m) => m.id)
+			);
+			if (persisted) {
+				modelByChat = { ...modelByChat, [chat.id]: persisted };
+			}
+		}
 		// Load messages.
 		try {
 			const page = await messagesApi.listMessages(chat.id, { limit: 100 });
