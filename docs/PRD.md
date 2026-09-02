@@ -5035,6 +5035,12 @@ The document-ingestion pipeline (ADR [0006](adr/0006-document-pipeline-architect
 
 **Acceptance criteria:** a parser adapter interface behind the ADR 0006 ingestion step, with PyMuPDF as the default adapter and at least one opt-in adapter wired end-to-end (parse → `structured_content` populated → a consumer reads it); the parser selectable by configuration; its cost (image weight, model downloads) incurred only when enabled; documented in ADR 0006's successor and in `docs/HONEST-STATE.md`; the design ADR resolves the core-vs-operator-adapter open question. Depends on a concrete structured-output consumer being scoped first (§3.3). Adjacent, keep coherent: the DOCX-ingest mini-PRD ([`docs/contribute/mini-prds/docx-ingest-support.md`](contribute/mini-prds/docx-ingest-support.md), a Pandoc branch that also writes `structured_content`) and DE-332 (text/markdown ingest). Related: ADR 0026 (the removal that opened this), DE-271 (amend the Apache Tika fallback claim per the research), DE-351 (first-run timeout — closed by the ADR 0026 removal).
 
+#### DE-389 — Run-now with a target KB never analyses (first-tick dead-end)
+
+**Priority:** P2 · **Effort:** S · **Status (2026-09-02): filed.**
+
+`_spawn_manual_session` (`api/app/api/autonomous.py`) always writes `params = {"since": None}`. The intake node reads a `kb_id` with no `since` and no `file_id` as a schedule's first tick — "no baseline yet" — records `first_tick_no_baseline`, and skips retrieval; analysis and drafting then short-circuit. So a manual run that names a `target_kb_id` can never retrieve, analyse, or emit an artifact today: it completes honestly with "First scheduled tick — baseline set" and nothing else. A run-now has no prior tick to baseline against, so the right semantics need deciding rather than assuming: either a manual run scopes retrieval to the whole KB (query mode against `params["query"]`, or a "since the KB was created" fetch), or the request must carry an explicit `since`. **Specific scope:** decide and document the manual-run retrieval scope; stop reusing the schedule first-tick marker for manual runs; add a test that a run-now with a target KB produces findings. Note for whoever picks this up: the target-KB ownership gate on `emit_artifact` and on run-now/schedule assignment already exists (see `docs/autonomous-layer.md` §"Target-KB binding") — this change must not bypass it. Related: DE-322 (FK ownership on schedule/watch create).
+
 ---
 
 ## 10. Appendices
