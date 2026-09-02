@@ -364,6 +364,13 @@ async def enhance_prompt(
         stream=False,
         lq_ai_user_id=str(user.id),
         lq_ai_skills=["enhance-prompt"],
+        # ADR 0007 §2: the gateway enforces the skill's declared required
+        # inputs, and ``raw_input`` is the one this skill declares. Bind it
+        # so the declaration stays true and enforcement is satisfied. The
+        # YAML user turn above remains the skill's working input; the
+        # gateway renders this binding into its data envelope (which
+        # channel carries it is DE-388).
+        lq_ai_skill_inputs={"enhance-prompt": {"raw_input": payload.raw_input}},
     )
 
     try:
