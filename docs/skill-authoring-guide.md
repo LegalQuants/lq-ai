@@ -579,6 +579,37 @@ For v1.0.0, skills are stable. Improvements happen through versioned releases, n
 
 ---
 
+## Untrusted content: what the assembler does, and does not, do
+
+Input values are caller-supplied at request time — pasted text, document
+content, parameters — and may contain text that reads as instructions. The
+gateway's assembler (ADR 0007) handles them two ways:
+
+- **Inputs your body never references** (the case for every built-in skill;
+  none uses `{{placeholders}}`) are appended after your body and reference
+  files as a `### Provided inputs` block: a one-line JSON envelope carrying
+  the source (`skill_input`), your skill's name, and the values, under a
+  policy line telling the model the values are data, not instructions. A
+  value cannot start a new line of the prompt, close the fence, or reproduce
+  the assembler's own section markers.
+- **Inputs consumed by a `{{placeholder}}`** are substituted into your body
+  as opaque strings. The only transformation is that the assembler's own
+  boundary headings (`# Skill:`, `## Reference:`, `### Provided inputs for`,
+  `## Operator system instructions`) at the start of a line inside a value
+  are backslash-escaped, so a value cannot impersonate a section. Anything
+  else in the value reaches the model verbatim, in-body, with the same
+  authority as your prose.
+
+Two consequences for authors. Prefer leaving **document-sized inputs
+unconsumed** so they land in the envelope rather than in-body. And write
+the skill so it treats input content as *material to analyse*: say so in
+the "Inputs" section, and never instruct the model to "follow" anything it
+finds in a document. This is envelope integrity, not isolation — the values
+still sit in the system message; relocating them into a data channel is
+tracked as DE-388 in PRD §9.
+
+---
+
 ## Skill chaining
 
 Multiple skills can be attached to a single chat. The application concatenates their `SKILL.md` instructions in attach order, with delimiters. The model is instructed to apply all skills.
