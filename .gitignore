@@ -254,3 +254,9 @@ LAUNCH-POST.md
 
 # stack smoke failure diagnostics (scripts/stack-smoke.sh)
 stack-smoke-logs/
+
+# skill golden harness per-fixture reports (tests/golden/, DE-231)
+golden-report/
+
+# prompt-injection harness per-attack + summary reports (tests/injection/, DE-239)
+injection-report/

@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "skill": "action-items-from-client-alert",
+  "fixture": "dated-deadlines",
+  "status": "provisional",
+  "provenance": "Ranges derived from skills/action-items-from-client-alert/SKILL.md (Output: Context summary, Mandatory action items with deadline-bucket subsections, Source references and follow-ups, Notes on this extraction; every item cites the alert section; no invented deadlines) and test-plan.md Scenario 1 (explicit deadlines preserved exactly). Section-item counts for Mandatory action items count the deadline-bucket child headings (1-5), not individual items. NOT observed from a live run; first live run calibrates.",
+  "assertions": {
+    "required_sections": [
+      "Action Items from Client Alert",
+      "Context summary",
+      "Mandatory action items",
+      "Notes on this extraction"
+    ],
+    "metrics": [
+      {
+        "id": "mandatory_buckets",
+        "kind": "section_items",
+        "section": "Mandatory action items",
+        "min": 1,
+        "max": 6
+      },
+      {
+        "id": "explicit_dates_preserved",
+        "kind": "regex_count",
+        "pattern": "october 1, 2026|november 15, 2026|january 1, 2027",
+        "min": 3,
+        "max": null
+      },
+      {
+        "id": "alert_section_citations",
+        "kind": "citation_count",
+        "min": 3,
+        "max": null
+      }
+    ],
+    "min_chars": 1200,
+    "max_chars": 30000
+  }
+}

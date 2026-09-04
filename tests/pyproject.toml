@@ -4,4 +4,6 @@ testpaths = ["."]
 markers = [
     "unit: pure unit tests, no I/O",
     "integration: tests that exercise contracts across subsystems",
+    "golden_live: skill golden tests that need a live compose stack + provider key (skipped unless LQ_GOLDEN_LIVE=1; see tests/golden/README.md)",
+    "injection_live: prompt-injection detection-rate tests that need a live compose stack + provider key (skipped unless LQ_INJECTION_LIVE=1; see docs/quality/prompt-injection-rates.md)",
 ]
