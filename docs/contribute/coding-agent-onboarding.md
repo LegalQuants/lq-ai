@@ -114,15 +114,16 @@ Run API tests that need Postgres against the throwaway pgvector database from
 §3; do not claim integration coverage from a run without it.
 
 Current PR CI runs three jobs: **API** (`uv lock --check`, `ruff check api
-scripts`, `ruff format --check api scripts`, `mypy app`, and `pytest -q` with
-pgvector Postgres), **Gateway** (`uv lock --check`, ruff check/format, `mypy
-app`, and `pytest -q`), and **Web** (`npm run check:lq-ai` and `npm run
-test:frontend -- --run`). The path-triggered Stack smoke workflow also runs on
-PRs that change the specified API/Gateway/Web dependency manifests and locks,
-Dockerfiles, compose, API migrations, its script, or its workflow. Current PR CI
-does not enforce coverage no-decrease or run browser end-to-end tests. A new
-endpoint needs unit + integration + OpenAPI-conformance tests; a bug fix needs a
-regression test.
+scripts`, `ruff format --check api scripts`, `mypy app`, and `pytest -n auto -q`
+with pgvector Postgres — each xdist worker gets its own session-scoped disposable
+database via the conftest fixture, so workers are fully isolated),
+**Gateway** (`uv lock --check`, ruff check/format, `mypy app`, and `pytest -q`),
+and **Web** (`npm run check:lq-ai` and `npm run test:frontend -- --run`). The
+path-triggered Stack smoke workflow also runs on PRs that change the specified
+API/Gateway/Web dependency manifests and locks, Dockerfiles, compose, API
+migrations, its script, or its workflow. Current PR CI does not enforce coverage
+no-decrease or run browser end-to-end tests. A new endpoint needs unit +
+integration + OpenAPI-conformance tests; a bug fix needs a regression test.
 
 ### Test-suite collision guards (miss these and the **whole** api suite crashes at collection)
 

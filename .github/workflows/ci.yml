@@ -103,18 +103,41 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Python
-        # No dependency cache: setup-python only caches pip's wheel cache,
-        # which the uv-managed install below never touches. A uv-cache step
-        # is a follow-up once the runner-cache action lands SHA-pinned.
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
+
+      - name: Cache uv download cache
+        # Keyed strictly on api/uv.lock so the cache only invalidates when
+        # dependencies change. The uv download cache (~/.cache/uv) holds
+        # pre-fetched wheel files; uv sync --frozen skips the network entirely
+        # on a cache hit, saving ~30s per run. restore-keys allows a partial
+        # hit when the lockfile changes (avoids a full cold download).
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/uv
+          key: uv-api-${{ runner.os }}-${{ hashFiles('api/uv.lock') }}
+          restore-keys: |
+            uv-api-${{ runner.os }}-
 
       - name: Install uv
         # Exact pin so local == CI lockfile semantics; keep in step with the
         # ghcr.io/astral-sh/uv tag in the Dockerfiles (ADR 0023) and bump
         # deliberately.
         run: pip install uv==0.12.0
+
+      - name: Configure Postgres (fsync=off for test speed)
+        # fsync=off is safe for throwaway test databases and eliminates
+        # disk-flush overhead on write-heavy fixtures. Applies to all
+        # connections including the per-worker databases created by xdist.
+        # ALTER SYSTEM writes to postgresql.auto.conf; pg_reload_conf()
+        # signals the postmaster to re-read it (fsync has PGC_SIGHUP context).
+        # POSTGRES_USER is a superuser in the postgres Docker image by default.
+        run: >-
+          docker exec "${{ job.services.postgres.id }}"
+          psql -U lq_ai -d postgres
+          -c "ALTER SYSTEM SET fsync = off;"
+          -c "SELECT pg_reload_conf();"
 
       - name: uv lock --check (lockfile freshness gate — ADR 0023)
         # Fails when pyproject.toml has drifted from the committed uv.lock,
@@ -142,7 +165,10 @@ jobs:
         run: mypy app
 
       - name: pytest
-        run: pytest -q
+        # -n auto: one worker per available CPU (4 on ubuntu-latest).
+        # Each worker gets its own session-scoped DB and Alembic migration run
+        # (see api/tests/conftest.py) — no shared mutable state between workers.
+        run: pytest -n auto -q
 
   gateway-checks:
     name: Gateway (ruff + mypy --strict + pytest)
@@ -156,8 +182,9 @@ jobs:
 
       - name: Set up Python
         # No dependency cache: setup-python only caches pip's wheel cache,
-        # which the uv-managed install below never touches. A uv-cache step
-        # is a follow-up once the runner-cache action lands SHA-pinned.
+        # which the uv-managed install below never touches. api-checks gained
+        # a SHA-pinned actions/cache step for ~/.cache/uv in issue #560;
+        # the equivalent for gateway is a follow-up.
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"

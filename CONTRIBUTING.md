@@ -104,9 +104,11 @@ For features not on the deferred-enhancements list, please file an issue describ
 6. **Open the PR** with a description that explains what changed, why, and how to verify. Link to any relevant issue or DE-### entry in the PRD.
 7. **Respond to review** — maintainers will review within ~5 business days for most PRs, faster for security or bug fixes. Substantive review feedback usually requires changes; small style nits can be deferred to follow-ups.
 8. **Current PR CI must pass** — API runs `uv lock --check`, `ruff check`, and
-   `ruff format --check` for `api/` and `scripts/`, `mypy app`, and `pytest -q`
-   with pgvector Postgres; Gateway runs `uv lock --check`, ruff check/format,
-   `mypy app`, and `pytest -q`; Web runs `npm run check:lq-ai` and `npm run
+   `ruff format --check` for `api/` and `scripts/`, `mypy app`, and
+   `pytest -n auto -q` with pgvector Postgres (each xdist worker gets its own
+   session-scoped disposable database via the conftest fixture, so workers are
+   fully isolated); Gateway runs `uv lock --check`, ruff check/format, `mypy
+   app`, and `pytest -q`; Web runs `npm run check:lq-ai` and `npm run
    test:frontend -- --run`. The path-triggered Stack smoke workflow also runs on
    PRs that change the specified API/Gateway/Web dependency manifests and locks,
    Dockerfiles, compose, API migrations, its script, or its workflow. PRs with
