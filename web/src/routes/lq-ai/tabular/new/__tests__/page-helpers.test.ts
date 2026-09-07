@@ -18,6 +18,7 @@ import {
 	isLastStep,
 	validateDocumentsStep,
 	validateColumnsStep,
+	resolvePreselectedSkill,
 	requiresCostConfirmation,
 	buildPreviewRequest,
 	buildExecuteRequest,
@@ -210,6 +211,24 @@ describe('tabular wizard page-helpers', () => {
 				columns: cols,
 				confirmed_cost_usd: '0.0100'
 			});
+		});
+	});
+
+	describe('resolvePreselectedSkill (DE-298 ?skill= deep link)', () => {
+		const skills = [{ name: 'contract-snapshot' }, { name: 'nda-snapshot' }];
+
+		it('returns the slug when it names a loaded table-mode skill', () => {
+			expect(resolvePreselectedSkill('nda-snapshot', skills)).toBe('nda-snapshot');
+		});
+
+		it('returns null for absent params', () => {
+			expect(resolvePreselectedSkill(null, skills)).toBeNull();
+			expect(resolvePreselectedSkill('', skills)).toBeNull();
+		});
+
+		it('returns null for slugs not in the loaded list (stale deep link)', () => {
+			expect(resolvePreselectedSkill('archived-skill', skills)).toBeNull();
+			expect(resolvePreselectedSkill('contract-snapshot', [])).toBeNull();
 		});
 	});
 });
