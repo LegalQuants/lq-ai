@@ -1704,6 +1704,16 @@ components:
             type: string
           - type: 'null'
           title: Source File Id
+        source_offset_end:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Source Offset End
+        source_offset_start:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Source Offset Start
         source_page:
           anyOf:
           - type: integer
@@ -1714,6 +1724,11 @@ components:
           - type: string
           - type: 'null'
           title: Source Text
+        verification_confidence:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Verification Confidence
         verification_method:
           anyOf:
           - type: string
@@ -12944,7 +12959,32 @@ paths:
 
         Authorization: caller must be the row''s ``user_id`` OR an admin.
 
-        Cross-user / missing / soft-deleted rows collapse into 404.'
+        Cross-user / missing / soft-deleted rows collapse into 404.
+
+
+        Citations (DE-309): when the execution was produced by the minting
+
+        aggregate node (``results.schema_version`` is a minting vintage,
+
+        ``m3-c2-v2`` or later), every cell''s ``citations`` list is rebuilt
+
+        from the execution''s minted ``tabular_cell_citations`` rows — real
+
+        ``citation_id``s plus chunk-local char offsets; cells the locator
+
+        could not ground get an EMPTY list (fail-closed: they render
+
+        unverified), including the case where the execution minted zero
+
+        rows in total. Executions predating migration 0066 (``m3-c2-v1``)
+
+        keep the legacy uuid5-bridge citations synthesized by the schema
+
+        validator. The discriminator is the persisted schema-version stamp,
+
+        not minted-row presence — row count cannot distinguish a pre-0066
+
+        execution from a post-0066 one where nothing located.'
       operationId: get_tabular_execution_api_v1_tabular_executions__execution_id__get
       parameters:
       - in: path

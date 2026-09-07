@@ -65,7 +65,7 @@ from app.audit import audit_action
 from app.clients.gateway import GatewayClient, get_gateway_client
 from app.db.session import get_db
 from app.models.document import Document, DocumentChunk
-from app.models.tabular import TabularExecution
+from app.models.tabular import TabularCellCitation, TabularExecution
 from app.schemas.tabular import (
     Citation,
     ColumnSpec,
@@ -402,10 +402,26 @@ async def get_tabular_execution(
 
     Authorization: caller must be the row's ``user_id`` OR an admin.
     Cross-user / missing / soft-deleted rows collapse into 404.
+
+    Citations (DE-309): when the execution was produced by the minting
+    aggregate node (``results.schema_version`` is a minting vintage,
+    ``m3-c2-v2`` or later), every cell's ``citations`` list is rebuilt
+    from the execution's minted ``tabular_cell_citations`` rows — real
+    ``citation_id``s plus chunk-local char offsets; cells the locator
+    could not ground get an EMPTY list (fail-closed: they render
+    unverified), including the case where the execution minted zero
+    rows in total. Executions predating migration 0066 (``m3-c2-v1``)
+    keep the legacy uuid5-bridge citations synthesized by the schema
+    validator. The discriminator is the persisted schema-version stamp,
+    not minted-row presence — row count cannot distinguish a pre-0066
+    execution from a post-0066 one where nothing located.
     """
 
     row = await _load_caller_execution(db, execution_id=execution_id, user=user)
     response = await _to_response(db, row)
+    minted = await _load_minted_citations(db, execution_id=execution_id)
+    if _mints_cell_citations(row):
+        _apply_minted_citations(response, minted)
     await _enrich_cell_citations(db, response)
     return response
 
@@ -477,7 +493,15 @@ async def cancel_tabular_execution(
     )
     await db.commit()
     await db.refresh(row)
-    return await _to_response(db, row)
+    # Same DE-309 citation treatment as the GET handler: a cancelled
+    # minting-vintage execution's partial grid must not serve
+    # uuid5-bridge citations for cells the locator never grounded.
+    response = await _to_response(db, row)
+    minted = await _load_minted_citations(db, execution_id=execution_id)
+    if _mints_cell_citations(row):
+        _apply_minted_citations(response, minted)
+    await _enrich_cell_citations(db, response)
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -772,6 +796,96 @@ async def _to_response(db: AsyncSession, row: TabularExecution) -> TabularExecut
             "completed_at": row.completed_at,
         }
     )
+
+
+# ``results.schema_version`` stamps that mark an execution as produced
+# by the DE-309-aware aggregate node — one that mints
+# ``tabular_cell_citations`` rows (possibly zero of them). Extend this
+# set when RESULTS_SCHEMA_VERSION bumps again; anything not listed is
+# treated as pre-0066 and keeps the uuid5-bridge citations.
+_MINTING_SCHEMA_VERSIONS: frozenset[str] = frozenset({"m3-c2-v2"})
+
+
+def _mints_cell_citations(row: TabularExecution) -> bool:
+    """True when the execution's vintage mints cell citations (DE-309).
+
+    Reads the raw ``results`` JSONB's ``schema_version`` stamp. This —
+    not minted-row presence — is the discriminator for the fail-closed
+    citation rewrite: an execution that minted ZERO rows (nothing
+    located anywhere) is indistinguishable from a pre-migration-0066
+    execution by row count alone, and must still fail closed.
+    """
+
+    results = row.results
+    if not isinstance(results, dict):
+        return False
+    return results.get("schema_version") in _MINTING_SCHEMA_VERSIONS
+
+
+async def _load_minted_citations(
+    db: AsyncSession,
+    *,
+    execution_id: uuid.UUID,
+) -> list[TabularCellCitation]:
+    """Load the execution's minted provenance rows (DE-309) — one query.
+
+    An empty list means either a pre-migration-0066 execution or a
+    minting-vintage execution where nothing located;
+    :func:`_mints_cell_citations` (the ``schema_version`` stamp), not
+    row presence, decides whether the rewrite applies.
+    """
+
+    stmt = (
+        select(TabularCellCitation)
+        .where(TabularCellCitation.execution_id == execution_id)
+        .order_by(TabularCellCitation.created_at, TabularCellCitation.id)
+    )
+    return list((await db.execute(stmt)).scalars().all())
+
+
+def _apply_minted_citations(
+    response: TabularExecutionResponse,
+    minted: list[TabularCellCitation],
+) -> None:
+    """Replace bridge citations with the execution's minted rows (DE-309).
+
+    Rows key to a cell by ``(document_id, column_name)`` — the same
+    keying as the results payload (rows by document, cells by column
+    name). Every cell in the grid is rewritten: cells with minted rows
+    get real ``citation_id``s + chunk-local offsets + the locating
+    method/confidence; cells without any get an empty list (fail-closed
+    — an unlocatable value renders unverified, never a synthetic
+    citation). The subsequent :func:`_enrich_cell_citations` pass fills
+    the navigation fields from ``chunk_id`` exactly as before.
+    """
+
+    if response.results is None:
+        return
+
+    by_cell: dict[tuple[uuid.UUID, str], list[TabularCellCitation]] = {}
+    for row in minted:
+        by_cell.setdefault((row.document_id, row.column_name), []).append(row)
+
+    for tab_row in response.results.rows:
+        for column_name, cell in tab_row.cells.items():
+            rows_for_cell = by_cell.get((tab_row.document_id, column_name), [])
+            cell.citations = [
+                Citation(
+                    citation_id=r.id,
+                    document_id=r.document_id,
+                    chunk_id=r.chunk_id,
+                    confidence=cell.confidence,
+                    verification_method=r.verification_method,
+                    source_offset_start=r.source_offset_start,
+                    source_offset_end=r.source_offset_end,
+                    verification_confidence=(
+                        float(r.verification_confidence)
+                        if r.verification_confidence is not None
+                        else None
+                    ),
+                )
+                for r in rows_for_cell
+            ]
 
 
 async def _enrich_cell_citations(db: AsyncSession, response: TabularExecutionResponse) -> None:
