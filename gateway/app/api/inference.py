@@ -86,6 +86,7 @@ from app.providers import (
     ProviderAdapter,
     ProviderAdapterError,
     ProviderAuthError,
+    ProviderEmptyResponseError,
     ProviderHTTPError,
     ProviderNetworkError,
     ProviderUnsupportedError,
@@ -1179,6 +1180,14 @@ async def _stream_openai_sse(
     """
 
     last_chunk: ChatCompletionChunk | None = None
+    # Issue #503: a stream can finish having emitted no text at all. That used
+    # to fall straight through to the success path below, so an upstream that
+    # accepted the request and produced nothing was indistinguishable from a
+    # genuinely empty answer — the client saw a clean [DONE] with no content,
+    # no error and no routing metadata. Track it so the tail can refuse to call
+    # that a success.
+    produced_content = False
+    finish_reason_seen: str | None = None
     rehydrator: StreamingRehydrator | None = None
     if anon_mapper is not None and anonymizer is not None:
         rehydrator = StreamingRehydrator(mapper=anon_mapper, anonymizer=anonymizer)
@@ -1195,6 +1204,11 @@ async def _stream_openai_sse(
                         continue
                     choice.delta.content = rehydrator.process(choice.delta.content)
             last_chunk = chunk
+            for choice in chunk.choices:
+                if choice.delta.content:
+                    produced_content = True
+                if choice.finish_reason:
+                    finish_reason_seen = choice.finish_reason
             payload = chunk.model_dump(mode="json", exclude_none=True)
             yield f"data: {json.dumps(payload, separators=(',', ':'))}\n\n".encode()
     except ProviderAdapterError as exc:
@@ -1232,6 +1246,53 @@ async def _stream_openai_sse(
             terminal.lq_ai_applied_skills = None
             payload = terminal.model_dump(mode="json", exclude_none=True)
             yield f"data: {json.dumps(payload, separators=(',', ':'))}\n\n".encode()
+
+    # Issue #503 — a stream that produced no visible text is a FAILURE, and the
+    # client must be told. Before this, control fell through to the success tail
+    # below: routing-log row with usage=None, clean [DONE], and a caller with no
+    # way to distinguish "the provider broke" from "the model had nothing to
+    # say". For a legal tool that ambiguity is the defect: an operator reading an
+    # empty answer will blame the model.
+    #
+    # Two shapes, one response. `length` with no text means the output budget was
+    # consumed by reasoning tokens, which needs naming explicitly because raising
+    # max_tokens is the fix and nothing else in the response hints at it.
+    if not produced_content:
+        if finish_reason_seen == "length":
+            message = (
+                "The provider stopped at the output-token limit before emitting any "
+                "text (finish_reason='length'). On a reasoning model the whole budget "
+                "can be spent on thinking tokens, leaving nothing visible. Raise "
+                "max_tokens on the request, or the provider's default output budget."
+            )
+        else:
+            message = (
+                "The provider completed the stream without emitting any content. "
+                "This is an upstream failure, not an empty answer — check the "
+                "provider's status and the gateway logs for this request id."
+            )
+        empty_stream_error = ProviderEmptyResponseError(
+            message,
+            details={
+                "provider": target.provider.name,
+                "model": target.native_model,
+                "finish_reason": finish_reason_seen,
+                "request_id": request_id,
+            },
+        )
+        empty_envelope = empty_stream_error.to_envelope()
+        yield f"data: {json.dumps(empty_envelope, separators=(',', ':'))}\n\n".encode()
+        await _write_failure(
+            log_writer,
+            chat_request=chat_request,
+            target=target,
+            request_id=request_id,
+            error=empty_stream_error,
+            latency_ms=None,
+            anonymization_applied=anon_mapper is not None,
+        )
+        yield b"data: [DONE]\n\n"
+        return
 
     # Persist the routing-log row using the final chunk's usage block.
     # This MUST precede the `[DONE]` yield: the api-side consumer stops

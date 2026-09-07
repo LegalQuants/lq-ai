@@ -96,7 +96,15 @@ from app.citation.ledger import (
 from app.clients.gateway import EnsembleConfig, GatewayClient, get_gateway_client
 from app.config import get_settings
 from app.db.session import get_db
-from app.errors import Conflict, InternalError, LQAIError, NotFound, ValidationError
+from app.errors import (
+    CODE_PROVIDER_UNAVAILABLE,
+    Conflict,
+    InternalError,
+    LQAIError,
+    NotFound,
+    ProviderUnavailable,
+    ValidationError,
+)
 from app.knowledge.embed import DEFAULT_EMBEDDING_MODEL, request_embedding_vector
 from app.knowledge.retrieval import HybridSearchResult, hybrid_search
 from app.models.chat import Chat, Message, MessageCitation
@@ -2393,6 +2401,29 @@ async def resume_tool_call(
                 extra={"error": repr(persist_exc)},
             )
 
+        # Issue #503 — never present an empty turn as a success. If the stream
+        # ended with no content and nothing raised, something upstream failed
+        # quietly: the client must be able to tell "the system broke" from "the
+        # model had little to say". The gateway now emits its own error frame
+        # for a contentless stream; this is the belt-and-braces layer for any
+        # path that still yields nothing without raising.
+        if error_envelope is None and not "".join(accumulated).strip():
+            error_code = CODE_PROVIDER_UNAVAILABLE
+            error_envelope = ProviderUnavailable(
+                "The turn completed without producing any content. This is an "
+                "upstream failure, not an empty answer — check the gateway logs "
+                "for this request id.",
+                details={"request_id": request_id},
+            ).to_envelope()
+            log.warning(
+                "chat send_message produced no content",
+                extra={
+                    "event": "chat_send_message_empty_completion",
+                    "assistant_message_id": str(assistant_message_id),
+                    "request_id": request_id,
+                },
+            )
+
         # Final frames.
         if error_envelope is not None:
             yield (f"data: {_json.dumps(error_envelope, separators=(',', ':'))}\n\n".encode())
@@ -3744,6 +3775,29 @@ async def _stream_response(
                     "chat_id": str(chat.id),
                     "assistant_message_id": str(assistant_message_id),
                     "error": repr(persist_exc),
+                },
+            )
+
+        # Issue #503 — never present an empty turn as a success. If the stream
+        # ended with no content and nothing raised, something upstream failed
+        # quietly: the client must be able to tell "the system broke" from "the
+        # model had little to say". The gateway now emits its own error frame
+        # for a contentless stream; this is the belt-and-braces layer for any
+        # path that still yields nothing without raising.
+        if error_envelope is None and not "".join(accumulated).strip():
+            error_code = CODE_PROVIDER_UNAVAILABLE
+            error_envelope = ProviderUnavailable(
+                "The turn completed without producing any content. This is an "
+                "upstream failure, not an empty answer — check the gateway logs "
+                "for this request id.",
+                details={"request_id": request_id},
+            ).to_envelope()
+            log.warning(
+                "chat send_message produced no content",
+                extra={
+                    "event": "chat_send_message_empty_completion",
+                    "assistant_message_id": str(assistant_message_id),
+                    "request_id": request_id,
                 },
             )
 

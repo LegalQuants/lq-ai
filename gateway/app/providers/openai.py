@@ -113,9 +113,15 @@ _LQ_AI_MESSAGE_EXTENSION_KEYS = frozenset({"lq_ai_skip_anonymization"})
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_TIMEOUT_SECONDS = 60.0
+DEFAULT_TIMEOUT_SECONDS = 600.0
 """Default per-request timeout. ``timeout_s`` on each provider entry
-overrides; if absent we use this default."""
+overrides; if absent we use this default.
+
+Raised from 60s (issue #503). This is the third of three independent
+60-second ceilings on the same request path — the other two are the api's
+gateway client and the Anthropic adapter — and it was killing calls to a
+reasoning model at exactly 60.3s. Long-document work runs in minutes, not
+seconds."""
 
 
 class OpenAIAdapter(ProviderAdapter):
