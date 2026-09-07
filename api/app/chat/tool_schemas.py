@@ -89,7 +89,8 @@ RESEARCH_OPS: frozenset[str] = frozenset(RESEARCH_TOOL_SCHEMAS)
 # authority source via a `source` argument — NOT one schema per source.
 # Property names are the union across the registered adapters' real gateway
 # contracts (GovInfo: collection/query, package_id; EDGAR: query/forms,
-# external_ref); each provider's gateway tool ignores properties it doesn't
+# external_ref; EUR-Lex: query, external_ref [CELEX id] — DE-374); each
+# provider's gateway tool ignores properties it doesn't
 # recognise, so the model picks the properties relevant to the `source` it
 # chose. These templates carry the *shared* description/parameters shape;
 # `build_authority_tool_schemas` injects the per-turn `source` enum (the
@@ -99,10 +100,12 @@ AUTHORITY_TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
     "search_authority": {
         "description": (
             "Full-text search an authoritative source: govinfo (U.S. Code / "
-            "CFR — set 'collection' to 'USCODE' or 'CFR') or edgar (SEC "
-            "company filings — optional 'forms' filter, e.g. '10-K,8-K'). "
-            "Returns matching items with an external_ref; call get_authority "
-            "to fetch an item's full text before quoting it."
+            "CFR — set 'collection' to 'USCODE' or 'CFR'), edgar (SEC "
+            "company filings — optional 'forms' filter, e.g. '10-K,8-K'), or "
+            "eurlex (EU legislation & CJEU case law — title keyword search; "
+            "returns CELEX ids). Returns matching items with an "
+            "external_ref; call get_authority to fetch an item's full text "
+            "before quoting it."
         ),
         "parameters": {
             "type": "object",
@@ -139,7 +142,11 @@ AUTHORITY_TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 },
                 "external_ref": {
                     "type": "string",
-                    "description": "EDGAR only: external_ref returned by search_authority.",
+                    "description": (
+                        "EDGAR or EUR-Lex: external_ref returned by "
+                        "search_authority (EDGAR filing ref, or EUR-Lex CELEX "
+                        "id, e.g. 32016R0679)."
+                    ),
                 },
             },
             "required": [],

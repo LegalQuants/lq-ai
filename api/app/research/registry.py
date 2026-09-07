@@ -83,7 +83,10 @@ SOURCE_REGISTRY: dict[str, SourceSpec] = {
     "eurlex": SourceSpec(
         type="eurlex",
         jurisdiction="eu",
-        coverage="EU legislation & CJEU case law via EUR-Lex/Cellar — retrieve by CELEX id",
+        coverage=(
+            "EU legislation & CJEU case law via EUR-Lex/Cellar — title keyword "
+            "search + retrieve by CELEX id"
+        ),
         content_kinds=(
             "eu_regulation",
             "eu_directive",
@@ -91,7 +94,7 @@ SOURCE_REGISTRY: dict[str, SourceSpec] = {
             "eu_caselaw",
             "eu_legislation",
         ),
-        ops=("get_authority",),
+        ops=("search_authority", "get_authority"),
         adapter=EurLexAdapter(),
     ),
 }
