@@ -25,7 +25,7 @@ Status markers reference the roadmap milestones (M1 → M4) documented in [READM
 **M3 — Playbooks · Tabular Review · Word add-in · Slack/Teams intake bridge (shipped, with two honest caveats).**
 - **Playbooks** and **Tabular / multi-document review** ship operational end-to-end (real execution against documents, with cost tracking and export).
 - The **Word add-in** ships as a **scaffold** — installable, authenticatable, version-safe — but its substantive in-Word feature surfaces (chat, skills with tracked changes, playbook execution) are deferred ([DE-287](PRD.md#9-deferred-enhancements-and-identified-future-work)); today its tabs deep-link to the web app.
-- The **Slack/Teams light intake bridge** ships **partial** — the bridge services, OAuth install flows, encrypted persistence, and admin management are wired and unit-tested, but the flows have **not been exercised end-to-end against live Slack/Microsoft endpoints** ([DE-312](PRD.md#9-deferred-enhancements-and-identified-future-work)), and the `/lq` slash-command surface is inert ([DE-288](PRD.md#9-deferred-enhancements-and-identified-future-work)).
+- The **Slack/Teams light intake bridge** ships **partial** — the bridge services, OAuth install flows, encrypted persistence, and admin management are wired and unit-tested, but the flows have **not been exercised end-to-end against live Slack/Microsoft endpoints** ([DE-312](PRD.md#9-deferred-enhancements-and-identified-future-work)). The `/lq` slash-command surface (`/lq help` + `/lq ask` on both bridges, [DE-288](PRD.md#9-deferred-enhancements-and-identified-future-work)) is implemented and unit-tested but carries the same not-live-verified caveat, and the teams-bridge messaging endpoint ships **without inbound Connector JWT validation** (documented interim posture in `teams-bridge/app/commands.py`; dependency fork is maintainer-held).
 
 **M4 — Autonomous Layer (shipped).** The background autonomous executor runs real in-loop work: a five-phase LangGraph state machine (intake → analysis → drafting → ethics_review → delivery) where every external action routes through a single `guarded_tool_call` chokepoint enforcing three brakes — R4 (per-session/per-trigger cost cap), R5 (external halt + idle watchdog), R6 (phase-gated tool grants). It ships the four primitives (watches, schedules, per-user memory, precedent board), honest per-session receipts, per-user opt-in, and a full web dashboard. The **Contract Repository auto-relationship graph** (a separate M4-roadmap capability) is **not** built.
 
@@ -154,7 +154,7 @@ Run a skill (or ad-hoc column spec) across a document corpus into a document × 
 | Slack bridge service + OAuth install + encrypted persistence | partial (M3) | `slack-bridge/` (compose `--profile slack`, port 8002); table `slack_workspaces` (migration `0037`, Fernet-encrypted bot token under a distinct master key); `api/app/api/integrations_slack.py` |
 | Teams bridge service + multi-tenant admin-consent OAuth | partial (M3) | `teams-bridge/` (compose `--profile teams`, port 8003); table `teams_tenants` (migration `0038`); `api/app/api/integrations_teams.py` |
 | Admin intake-bridges management (list + soft-delete) | M3 | `api/app/api/admin_intake_bridges.py`; `web/src/routes/lq-ai/admin/intake-bridges/+page.svelte` |
-| `/lq` slash-command intake surface | **deferred** | Webhook handler is signature-verified but inert — [DE-288](PRD.md#9-deferred-enhancements-and-identified-future-work) |
+| `/lq` slash-command intake surface | **shipped, not live-verified** | `/lq help` + `/lq ask` on both bridges + api quick-ask endpoint, unit-tested; no live-tenant round-trip yet ([DE-312](PRD.md#9-deferred-enhancements-and-identified-future-work)); Teams inbound JWT validation pending ([DE-288](PRD.md#9-deferred-enhancements-and-identified-future-work)) |
 | End-to-end OAuth against live Slack/Microsoft | **unverified** | Never exercised against a live tunnel — [DE-312](PRD.md#9-deferred-enhancements-and-identified-future-work); see [`docs/intake-bridges.md`](intake-bridges.md) "Honest state up front" |
 
 ---
@@ -250,7 +250,7 @@ Honest milestone deferrals — the subsystem does not yet exist (or only as plum
 | Capability | Status | Verification |
 |---|---|---|
 | In-Word feature surfaces (chat/skills/playbooks in the add-in) | deferred (M4 / community) | `word-addin/` tabs are deep-link cards; [DE-287](PRD.md#9-deferred-enhancements-and-identified-future-work) |
-| `/lq` Slack/Teams slash-command intake | deferred | Bridge webhook handlers inert; [DE-288](PRD.md#9-deferred-enhancements-and-identified-future-work) |
+| `/lq` Slack/Teams slash-command intake | shipped, not live-verified | `/lq ask` quick-skill flow on both bridges; live round-trip is maintainer-held ([DE-288](PRD.md#9-deferred-enhancements-and-identified-future-work) / [DE-312](PRD.md#9-deferred-enhancements-and-identified-future-work)) |
 | Contract Repository auto-relationship detection (PRD §3.16) | deferred-M4+ | No `contract_relationships` table in `api/alembic/versions/` |
 
 ---

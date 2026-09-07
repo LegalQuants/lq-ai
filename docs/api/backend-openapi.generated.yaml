@@ -4231,6 +4231,70 @@ components:
       - api_key
       title: ProviderKeySetRequest
       type: object
+    QuickAskRequest:
+      additionalProperties: false
+      description: "Body of ``POST /api/v1/integrations/quick-ask``.\n\nIdentity coordinates\
+        \ differ per platform:\n\n* ``platform=\"slack\"`` — requires ``platform_user_id``\
+        \ (the stable\n  Slack user id, e.g. ``U0…``) + ``team_ref`` (Slack ``team_id``).\n\
+        \  The api resolves the user's profile email itself via\n  ``users.info``\
+        \ with the workspace's stored bot token.\n* ``platform=\"teams\"`` — requires\
+        \ ``email`` (resolved bridge-side\n  from the Bot Connector conversation-member\
+        \ record) + ``team_ref``\n  (the AAD ``tenant_id``)."
+      properties:
+        email:
+          anyOf:
+          - maxLength: 320
+            type: string
+          - type: 'null'
+          title: Email
+        platform:
+          enum:
+          - slack
+          - teams
+          title: Platform
+          type: string
+        platform_user_id:
+          anyOf:
+          - maxLength: 200
+            type: string
+          - type: 'null'
+          title: Platform User Id
+        question:
+          maxLength: 4000
+          minLength: 1
+          title: Question
+          type: string
+        team_ref:
+          maxLength: 200
+          minLength: 1
+          title: Team Ref
+          type: string
+      required:
+      - platform
+      - team_ref
+      - question
+      title: QuickAskRequest
+      type: object
+    QuickAskResponse:
+      description: Body returned to the bridge on a successful quick-ask.
+      properties:
+        answer_text:
+          title: Answer Text
+          type: string
+        chat_id:
+          format: uuid
+          title: Chat Id
+          type: string
+        chat_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Chat Url
+      required:
+      - answer_text
+      - chat_id
+      title: QuickAskResponse
+      type: object
     ReceiptEvent:
       description: 'One row in the merged event stream.
 
@@ -10595,6 +10659,52 @@ paths:
       summary: Read the deployment's tier policy (allowed tiers + minima)
       tags:
       - inference
+  /api/v1/integrations/quick-ask:
+    post:
+      description: 'Run a bridge-initiated quick-ask turn as the resolved user.
+
+
+        Creates a fresh chat owned by the resolved user (auto-titled from
+
+        the question by the send path), attaches the operator-configured
+
+        quick-ask skill when set, and returns the assistant''s answer plus
+
+        a web deep link. Non-streaming by design: the bridge delivers one
+
+        final message, never chunks.'
+      operationId: quick_ask_api_v1_integrations_quick_ask_post
+      parameters:
+      - in: header
+        name: Authorization
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuickAskRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuickAskResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Quick Ask
+      tags:
+      - integrations-quick-ask
   /api/v1/integrations/slack/workspaces:
     post:
       description: "Persist (or upsert) the workspace record from the bridge.\n\n\

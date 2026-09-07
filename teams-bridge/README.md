@@ -6,7 +6,7 @@ ships with the M3 release as **plumbing-only**: the `/lq` slash-command
 surface (M3-D2's Teams parity) is descoped to M4 / community
 contribution per [PRD §9 DE-288](../docs/PRD.md#de-288--slackteams-lq-slash-command--quick-skill-flow--deferred-to-m4--community-contribution).
 
-## What it does today (v0.3.0)
+## What it does today
 
 - Hosts the OAuth admin-consent flow at `/teams/oauth/install` →
   Microsoft identity platform → `/teams/oauth/callback` → tenant
@@ -14,19 +14,36 @@ contribution per [PRD §9 DE-288](../docs/PRD.md#de-288--slackteams-lq-slash-com
 - Multi-tenant Azure AD app posture per [M3-D3 decision #4](../docs/M3-IMPLEMENTATION-PLAN.md#task-m3-d3--teams-bridge-service--teams-oauth--lq-flows)
   — one Azure AD app registration can host installs from any
   Microsoft 365 tenant.
+- **`/lq` command surface** (DE-288) at `POST /teams/messages` — the
+  Bot Framework messaging endpoint (point the Azure Bot resource at
+  `{LQ_AI_TEAMS_BRIDGE_PUBLIC_URL}/teams/messages`). ActivityHandler-
+  shaped dispatch: `message` activities containing `/lq …` (mention
+  stripped) parse into `help` / `ask "<question>"`; `conversationUpdate`
+  posts a welcome/usage message. `/lq ask` resolves the invoker's email
+  from the authenticated Connector conversation-member record, calls the
+  api's bridge-bearer quick-ask endpoint (which maps email → LQ.AI
+  account, fail-closed), and delivers ONE reply activity with the answer
+  + chat link. Unlinked users get a refusal, never an answer.
 - Health surface: `/healthz` (liveness) + `/readyz` (readiness —
   checks the LQ.AI api is reachable on the configured
   `LQ_AI_BACKEND_URL`).
 
 ## What it does NOT do today
 
-- **Slash commands** — `/lq` and `/lq ask` Teams parity, per DE-288,
-  are deferred.
-- **Bot framework message handling** — the bot does not respond to
-  channel messages; it only completes the OAuth install flow.
+- **Inbound Connector JWT validation** — the seven-point Bot Connector
+  JWT validation requires a JWT library; the PyJWT-vs-`botbuilder-core`
+  dependency choice is an open maintainer fork (DE-288 research memo
+  §4) and this bridge does not add a dependency unilaterally. Interim
+  posture (documented in `app/commands.py`): bearer-presence check +
+  strict `serviceUrl` host allowlist (`*.botframework.com` /
+  `*.trafficmanager.net`) + identity always derived from our own
+  authenticated Connector member-info call and re-checked by the api's
+  fail-closed email → account mapping. **Restrict network ingress to
+  this bridge**; full JWT validation is the highest-priority follow-up
+  and lands via the security-review path.
 - **Per-user Microsoft Graph access** — the on-behalf-of flow for
-  per-user Graph queries is M4 scope (when the slash-command surface
-  lands and `/lq` needs to read mail/files on the invoker's behalf).
+  per-user Graph queries is M4 scope (`/lq` reading mail/files on the
+  invoker's behalf).
 - **Per-tenant bot token encryption** — Teams uses operator-supplied
   APP-LEVEL bot credentials (one `MICROSOFT_APP_ID` +
   `MICROSOFT_APP_PASSWORD` per deployment) not per-tenant tokens, so
