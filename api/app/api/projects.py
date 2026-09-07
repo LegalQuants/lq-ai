@@ -64,12 +64,22 @@ from sqlalchemy.sql import ColumnElement
 
 from app.api.dependencies import ActiveUser
 from app.audit import audit_action
+from app.authz.matters import (
+    MatterAccess,
+    matter_access,
+    matter_access_map,
+    matter_scope_filter,
+    require_matter,
+)
+from app.config import get_settings
 from app.db.session import get_db
-from app.errors import Conflict, NotFound, ValidationError
+from app.errors import Conflict, Forbidden, NotFound, ValidationError
 from app.models.file import File as FileModel
 from app.models.knowledge import KnowledgeBase
 from app.models.project import Project, ProjectFile, ProjectSkill
 from app.models.project_knowledge_base import ProjectKnowledgeBase
+from app.models.project_member import ProjectMember
+from app.models.user import User
 from app.schemas.projects import (
     SLUG_RE,
     ProjectCreateRequest,
@@ -133,33 +143,34 @@ def _validate_project_id(project_id: str) -> uuid.UUID:
 async def _load_visible_project(
     db: AsyncSession,
     project_id: uuid.UUID,
-    owner_id: uuid.UUID,
+    user: User,
     *,
+    need: MatterAccess = "read",
     include_archived: bool = False,
 ) -> Project:
-    """Load a project row scoped to the caller; 404 on miss / cross-user / archived.
+    """Load a matter the caller may act on at ``need``; 404 on miss / no access.
 
-    The cross-user case collapses into 404 deliberately — same posture as
-    C4 (files). Archived projects are also invisible by default; pass
-    ``include_archived=True`` to surface them (used by the unarchive
-    PATCH path so a caller can see and act on their own archived rows).
+    Thin wrapper over :func:`app.authz.matters.require_matter`, kept so the
+    call sites in this module read the way they did when the rule was
+    ``owner_id == caller``. The rule itself now lives in one place, because
+    a matter reaches its members too (migration 0067) and a predicate
+    duplicated across nine handlers is a leak waiting for the one handler
+    that forgets it.
+
+    The no-access case still collapses into 404 deliberately — same posture
+    as C4 (files) — so an id probe cannot distinguish "no such matter" from
+    "not yours". Archived projects stay invisible by default; pass
+    ``include_archived=True`` to surface them (used by the unarchive PATCH
+    path so a caller can see and act on archived rows).
     """
 
-    stmt = select(Project).where(
-        Project.id == project_id,
-        Project.owner_id == owner_id,
+    return await require_matter(
+        db,
+        project_id,
+        user,
+        need=need,
+        include_archived=include_archived,
     )
-    if not include_archived:
-        stmt = stmt.where(Project.archived_at.is_(None))
-
-    result = await db.execute(stmt)
-    row = result.scalar_one_or_none()
-    if row is None:
-        raise NotFound(
-            f"Project {project_id} not found.",
-            details={"project_id": str(project_id)},
-        )
-    return row
 
 
 async def _load_visible_file(
@@ -224,18 +235,31 @@ async def _load_attached_kb_ids(db: AsyncSession, project_id: uuid.UUID) -> list
     return list(result.scalars().all())
 
 
-async def _serialize_project(db: AsyncSession, project: Project) -> ProjectResponse:
+async def _serialize_project(
+    db: AsyncSession,
+    project: Project,
+    user: User,
+    *,
+    access: tuple[MatterAccess, str] | None = None,
+) -> ProjectResponse:
     """Build the ``ProjectResponse`` shape for a row.
 
-    Two extra round-trips: one to fetch attached file ids, one to fetch
-    attached skill names. Cheap on the M1 footprint (a project has a
-    handful of attachments, not hundreds); a future optimisation could
-    JOIN them in if it shows up in production.
+    Extra round-trips: attached file ids, attached skill names, attached KB
+    ids, and the caller's effective access. Cheap on the M1 footprint (a
+    matter has a handful of attachments, not hundreds); a future
+    optimisation could JOIN them in if it shows up in production.
+
+    ``user`` is required rather than defaulted: ``caller_access`` is what
+    the UI gates its affordances on, so a default would be a value that
+    looks authoritative and is not. ``access`` lets a list endpoint hand in
+    a pre-resolved answer from :func:`matter_access_map` so the listing
+    costs one membership query rather than one per row.
     """
 
     file_ids = await _load_attached_file_ids(db, project.id)
     skill_names = await _load_attached_skill_names(db, project.id)
     kb_ids = await _load_attached_kb_ids(db, project.id)
+    resolved_access, basis = access or await matter_access(db, project, user)
     return ProjectResponse(
         id=project.id,
         owner_id=project.owner_id,
@@ -246,6 +270,9 @@ async def _serialize_project(db: AsyncSession, project: Project) -> ProjectRespo
         privileged=project.privileged,
         minimum_inference_tier=project.minimum_inference_tier,
         is_sandbox=project.is_sandbox,
+        share_scope=project.share_scope,
+        caller_access=resolved_access,
+        caller_access_basis=basis,
         attached_file_ids=file_ids,
         attached_skill_names=skill_names,
         attached_knowledge_base_ids=kb_ids,
@@ -363,6 +390,12 @@ async def create_project(
     desired_slug = payload.slug or slugify(payload.name)
     final_slug = await _resolve_unique_slug(db, owner_id=user.id, desired=desired_slug)
 
+    # An unset share_scope takes the deployment default. Upstream ships
+    # ``personal`` (fail-restrictive, ADR 0016 P4); a firm where ambient
+    # visibility is the working assumption sets ``org`` and treats an
+    # ethical screen as the exception.
+    share_scope = payload.share_scope or get_settings().lq_ai_matter_default_share_scope
+
     project = Project(
         owner_id=user.id,
         name=payload.name,
@@ -371,6 +404,7 @@ async def create_project(
         context_md=payload.context_md,
         privileged=payload.privileged,
         minimum_inference_tier=payload.minimum_inference_tier,
+        share_scope=share_scope,
     )
     db.add(project)
     try:
@@ -386,6 +420,19 @@ async def create_project(
             details={"slug": final_slug},
         ) from exc
 
+    # Seed the owner's lead row so the ownership path and the membership
+    # path are identical from row one — the same shape migration 0067's
+    # backfill gives every pre-existing matter.
+    db.add(
+        ProjectMember(
+            project_id=project.id,
+            user_id=user.id,
+            role="lead",
+            added_by_user_id=user.id,
+        )
+    )
+    await db.flush()
+
     await db.commit()
     await db.refresh(project)
 
@@ -400,7 +447,7 @@ async def create_project(
         },
     )
 
-    return await _serialize_project(db, project)
+    return await _serialize_project(db, project, user)
 
 
 @router.get(
@@ -433,7 +480,9 @@ async def list_projects(
         Query(description="Return only sandbox matters."),
     ] = False,
 ) -> list[ProjectResponse]:
-    conditions: list[ColumnElement[bool]] = [Project.owner_id == user.id]
+    # Ownership, explicit membership, and firm-wide scope — minus anything
+    # the caller is screened off. One filter, same rule as the fetch path.
+    conditions: list[ColumnElement[bool]] = [matter_scope_filter(user)]
     if archived is True:
         conditions.append(Project.archived_at.is_not(None))
     else:
@@ -451,7 +500,11 @@ async def list_projects(
 
     result = await db.execute(stmt)
     rows = list(result.scalars().all())
-    return [await _serialize_project(db, row) for row in rows]
+    # One membership query for the whole page rather than one per row.
+    access_by_id = await matter_access_map(db, rows, user)
+    return [
+        await _serialize_project(db, row, user, access=access_by_id.get(row.id)) for row in rows
+    ]
 
 
 @router.get(
@@ -468,8 +521,8 @@ async def get_project(
     # Archived projects are visible to their owner via direct GET so
     # the client can render an "archived" detail page; the list endpoint
     # excludes them by default.
-    project = await _load_visible_project(db, pid, user.id, include_archived=True)
-    return await _serialize_project(db, project)
+    project = await _load_visible_project(db, pid, user, include_archived=True)
+    return await _serialize_project(db, project, user)
 
 
 @router.patch(
@@ -484,9 +537,32 @@ async def update_project(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ProjectResponse:
     pid = _validate_project_id(project_id)
-    project = await _load_visible_project(db, pid, user.id, include_archived=True)
+    project = await _load_visible_project(db, pid, user, need="write", include_archived=True)
 
     update_fields = payload.model_dump(exclude_unset=True)
+
+    # Editing a matter and *governing* one are different acts. A contributor
+    # may rewrite the context and rename the matter; only a lead may change
+    # who can see it (``share_scope``), un-mark it privileged, lower the
+    # inference-tier floor, or archive it out from under the team. Those
+    # four decide where the matter's contents may travel and who may follow
+    # them there.
+    governance_fields = {"privileged", "minimum_inference_tier", "share_scope", "archived"}
+    requested_governance = governance_fields & update_fields.keys()
+    if requested_governance:
+        access, _basis = await matter_access(db, project, user)
+        if access != "lead":
+            raise Forbidden(
+                message=(
+                    "Changing a matter's privilege, tier floor, share scope, or "
+                    "archived state requires lead access to the matter."
+                ),
+                details={
+                    "project_id": str(project.id),
+                    "fields": sorted(requested_governance),
+                    "caller_access": access,
+                },
+            )
 
     if "name" in update_fields:
         project.name = update_fields["name"]
@@ -504,9 +580,12 @@ async def update_project(
                 details={"slug": new_slug},
             )
         if new_slug != project.slug:
+            # Slugs are unique per *owner*, so a contributor renaming a
+            # shared matter must be checked against the owner's namespace,
+            # not their own.
             project.slug = await _resolve_unique_slug(
                 db,
-                owner_id=user.id,
+                owner_id=project.owner_id,
                 desired=new_slug,
                 exclude_project_id=project.id,
             )
@@ -536,6 +615,22 @@ async def update_project(
     if tier_set:
         project.minimum_inference_tier = new_tier
 
+    if "share_scope" in update_fields:
+        new_scope = update_fields["share_scope"]
+        if new_scope is None:
+            raise ValidationError(
+                "share_scope cannot be cleared; supply a value or omit the field.",
+            )
+        # A sandbox matter is per-user scratch space; the DB CHECK refuses
+        # anything but ``personal``, so fail here with a legible message
+        # rather than as an opaque IntegrityError.
+        if project.is_sandbox and new_scope != "personal":
+            raise ValidationError(
+                "A sandbox matter cannot be shared; it is per-user scratch space.",
+                details={"project_id": str(project.id), "share_scope": new_scope},
+            )
+        project.share_scope = new_scope
+
     if "archived" in update_fields:
         # Map the boolean PATCH flag to ``archived_at`` semantics.
         from datetime import UTC, datetime
@@ -548,7 +643,7 @@ async def update_project(
             # already holds the slug. Re-resolve to a free variant.
             project.slug = await _resolve_unique_slug(
                 db,
-                owner_id=user.id,
+                owner_id=project.owner_id,
                 desired=project.slug,
                 exclude_project_id=project.id,
             )
@@ -576,7 +671,7 @@ async def update_project(
         },
     )
 
-    return await _serialize_project(db, project)
+    return await _serialize_project(db, project, user)
 
 
 @router.delete(
@@ -598,7 +693,7 @@ async def delete_project(
     pid = _validate_project_id(project_id)
     # NOT include_archived — already-archived returns 404 (idempotent
     # for clients that retry).
-    project = await _load_visible_project(db, pid, user.id, include_archived=False)
+    project = await _load_visible_project(db, pid, user, need="lead", include_archived=False)
 
     from datetime import UTC, datetime
 
@@ -658,7 +753,7 @@ async def ensure_sandbox(
     )
     if existing is not None:
         response.status_code = status.HTTP_200_OK
-        return await _serialize_project(db, existing)
+        return await _serialize_project(db, existing, user)
 
     # Insert with ON CONFLICT DO NOTHING in case of concurrent ensures.
     # The unique partial index ``idx_projects_slug_owner_active`` on
@@ -716,7 +811,7 @@ async def ensure_sandbox(
             "created": response.status_code == status.HTTP_201_CREATED,
         },
     )
-    return await _serialize_project(db, row)
+    return await _serialize_project(db, row, user)
 
 
 # ---------------------------------------------------------------------------
@@ -742,7 +837,7 @@ async def attach_file(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     pid = _validate_project_id(project_id)
-    project = await _load_visible_project(db, pid, user.id)
+    project = await _load_visible_project(db, pid, user, need="write")
     file_row = await _load_visible_file(db, payload.file_id, user.id)
 
     # Capture as plain UUIDs before the write — these are needed for
@@ -812,7 +907,7 @@ async def detach_file(
     # Verify the project is visible to the caller before peeking at the
     # join — otherwise a cross-user request could distinguish "file
     # exists but not attached" from "project exists but not yours."
-    await _load_visible_project(db, pid, user.id)
+    await _load_visible_project(db, pid, user, need="write")
 
     stmt = select(ProjectFile).where(
         ProjectFile.project_id == pid,
@@ -869,7 +964,7 @@ async def attach_skill(
     request: Request,
 ) -> Response:
     pid = _validate_project_id(project_id)
-    project = await _load_visible_project(db, pid, user.id)
+    project = await _load_visible_project(db, pid, user, need="write")
 
     holder = _registry(request)
     registry = holder.current()
@@ -924,7 +1019,7 @@ async def detach_skill(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     pid = _validate_project_id(project_id)
-    await _load_visible_project(db, pid, user.id)
+    await _load_visible_project(db, pid, user, need="write")
 
     stmt = select(ProjectSkill).where(
         ProjectSkill.project_id == pid,
@@ -1008,7 +1103,7 @@ async def attach_knowledge_base(
     request: Request,
 ) -> ProjectResponse:
     pid = _validate_project_id(project_id)
-    project = await _load_visible_project(db, pid, user.id)
+    project = await _load_visible_project(db, pid, user, need="write")
     kb = await _load_visible_kb(db, payload.knowledge_base_id, user.id)
 
     # Capture as plain UUIDs before any write — see ``attach_file`` for
@@ -1071,7 +1166,7 @@ async def attach_knowledge_base(
             },
         )
 
-    return await _serialize_project(db, project)
+    return await _serialize_project(db, project, user)
 
 
 @router.delete(
@@ -1106,7 +1201,7 @@ async def detach_knowledge_base(
     # Verify the project is visible to the caller before peeking at the
     # join — otherwise cross-user could distinguish "kb exists but not
     # attached" from "project exists but not yours."
-    project = await _load_visible_project(db, pid, user.id)
+    project = await _load_visible_project(db, pid, user, need="write")
 
     stmt = select(ProjectKnowledgeBase).where(
         ProjectKnowledgeBase.project_id == pid,

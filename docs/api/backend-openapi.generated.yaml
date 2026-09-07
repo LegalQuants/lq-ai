@@ -1872,6 +1872,26 @@ components:
       - grace_period_days
       title: DeleteScheduledResponse
       type: object
+    DirectoryEntry:
+      description: One colleague, as the people-pickers need them.
+      properties:
+        display_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Display Name
+        email:
+          title: Email
+          type: string
+        id:
+          format: uuid
+          title: Id
+          type: string
+      required:
+      - id
+      - email
+      title: DirectoryEntry
+      type: object
     EasyPlaybookGeneration:
       description: 'One Easy Playbook generation row.
 
@@ -2987,6 +3007,67 @@ components:
       - enabled
       title: MCPToolView
       type: object
+    MatterMemberAdd:
+      properties:
+        role:
+          default: contributor
+          title: Role
+          type: string
+        user_id:
+          format: uuid
+          title: User Id
+          type: string
+      required:
+      - user_id
+      title: MatterMemberAdd
+      type: object
+    MatterMemberResponse:
+      description: One row of a matter's roster.
+      properties:
+        added_by_user_id:
+          format: uuid
+          title: Added By User Id
+          type: string
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+        display_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Display Name
+        email:
+          title: Email
+          type: string
+        is_owner:
+          default: false
+          title: Is Owner
+          type: boolean
+        role:
+          title: Role
+          type: string
+        user_id:
+          format: uuid
+          title: User Id
+          type: string
+      required:
+      - user_id
+      - email
+      - role
+      - added_by_user_id
+      - created_at
+      title: MatterMemberResponse
+      type: object
+    MatterMemberRoleUpdate:
+      properties:
+        role:
+          title: Role
+          type: string
+      required:
+      - role
+      title: MatterMemberRoleUpdate
+      type: object
     MemoryKeepRequest:
       description: 'Optional request body for ``POST /autonomous/memory/{id}/keep``.
 
@@ -3999,6 +4080,15 @@ components:
           default: false
           title: Privileged
           type: boolean
+        share_scope:
+          anyOf:
+          - enum:
+            - personal
+            - members
+            - org
+            type: string
+          - type: 'null'
+          title: Share Scope
         slug:
           anyOf:
           - maxLength: 80
@@ -4046,6 +4136,14 @@ components:
             type: string
           title: Attached Skill Names
           type: array
+        caller_access:
+          default: read
+          title: Caller Access
+          type: string
+        caller_access_basis:
+          default: owner
+          title: Caller Access Basis
+          type: string
         context_md:
           anyOf:
           - type: string
@@ -4083,6 +4181,10 @@ components:
         privileged:
           title: Privileged
           type: boolean
+        share_scope:
+          default: personal
+          title: Share Scope
+          type: string
         slug:
           title: Slug
           type: string
@@ -4163,6 +4265,15 @@ components:
           - type: boolean
           - type: 'null'
           title: Privileged
+        share_scope:
+          anyOf:
+          - enum:
+            - personal
+            - members
+            - org
+            type: string
+          - type: 'null'
+          title: Share Scope
         slug:
           anyOf:
           - maxLength: 80
@@ -11996,6 +12107,50 @@ paths:
       summary: Partial update of a project
       tags:
       - projects
+  /api/v1/projects/{project_id}/access:
+    get:
+      description: 'Resolve the caller''s own access.
+
+
+        ``ProjectResponse`` already carries ``caller_access``, so the UI rarely
+
+        needs this; it exists for clients that hold only a matter id (a
+
+        deep-link, a bridge) and want to decide what to render before fetching
+
+        the matter itself.'
+      operationId: get_caller_access_api_v1_projects__project_id__access_get
+      parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema:
+          format: uuid
+          title: Project Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                title: Response Get Caller Access Api V1 Projects  Project Id  Access
+                  Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: What the caller may do on this matter, and why
+      tags:
+      - projects
+      - matters
   /api/v1/projects/{project_id}/files:
     post:
       description: 'Body: ``{file_id}``. The caller must own both the project and
@@ -12133,6 +12288,189 @@ paths:
       summary: Detach a knowledge base from a matter
       tags:
       - projects
+  /api/v1/projects/{project_id}/members:
+    get:
+      description: 'Anyone who can read the matter can see who else is on it.
+
+
+        Withholding the roster from readers would make the collaboration
+
+        surface unusable — you cannot see who authored the thread you are
+
+        reading — and it protects nothing, since those people''s work product
+
+        is already visible to the same caller.'
+      operationId: list_members_api_v1_projects__project_id__members_get
+      parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema:
+          format: uuid
+          title: Project Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/MatterMemberResponse'
+                title: Response List Members Api V1 Projects  Project Id  Members
+                  Get
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: List the people on a matter
+      tags:
+      - projects
+      - matters
+    post:
+      description: 'Add a roster row. ``role=''blocked''`` erects an ethical screen.
+
+
+        A screen is stored as an ordinary membership row so the roster answers
+
+        both halves of the question a conflicts check asks: who may see this
+
+        matter, and who explicitly may not.'
+      operationId: add_member_api_v1_projects__project_id__members_post
+      parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema:
+          format: uuid
+          title: Project Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatterMemberAdd'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatterMemberResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Add someone to a matter (or screen them off it)
+      tags:
+      - projects
+      - matters
+  /api/v1/projects/{project_id}/members/{user_id}:
+    delete:
+      description: 'Drop a roster row.
+
+
+        Removing a ``blocked`` row *lifts a screen* — it is the one deletion
+
+        here that widens access, so the audit row records the role the person
+
+        held at removal rather than just the fact of it.
+
+
+        The owner''s row cannot be removed: their access does not depend on it,
+
+        so deleting it would only make the roster lie.'
+      operationId: remove_member_api_v1_projects__project_id__members__user_id__delete
+      parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema:
+          format: uuid
+          title: Project Id
+          type: string
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          format: uuid
+          title: User Id
+          type: string
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Remove someone from a matter
+      tags:
+      - projects
+      - matters
+    patch:
+      description: 'Move a roster row between roles, including to and from ``blocked``.
+
+
+        The audit row carries before/after so "when was this person screened
+
+        off, and by whom" is answerable from the log alone — the same
+
+        before/after convention ``team.member_role_updated`` uses.'
+      operationId: update_member_role_api_v1_projects__project_id__members__user_id__patch
+      parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema:
+          format: uuid
+          title: Project Id
+          type: string
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          format: uuid
+          title: User Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatterMemberRoleUpdate'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatterMemberResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Change someone's role on a matter
+      tags:
+      - projects
+      - matters
   /api/v1/projects/{project_id}/skills:
     post:
       description: 'Body: ``{skill_name}``. The skill must exist in the in-memory
@@ -13492,6 +13830,74 @@ paths:
       summary: Audit-log view of edits for this user-skill (Wave D.2)
       tags:
       - user-skills
+  /api/v1/users/directory:
+    get:
+      description: 'GET /api/v1/users/directory — id, email, and display name only.
+
+
+        Any signed-in user may call this. Sharing a matter is impossible without
+
+        it: the roster endpoints take a ``user_id``, and a matter lead who is not
+
+        an operator-admin cannot reach ``GET /admin/users`` to find one. Asking a
+
+        lawyer to paste a colleague''s UUID is not a design.
+
+
+        Deliberately minimal — no role, no admin flag, no MFA or password state,
+
+        no last-login. Those stay behind ``GET /admin/users``. A deployment is a
+
+        single organisation (PRD §2.3), so who else works here is not a secret;
+
+        *what they can do* still is.
+
+
+        Soft-deleted users are excluded so a picker cannot re-add someone who has
+
+        exercised erasure.'
+      operationId: list_directory_api_v1_users_directory_get
+      parameters:
+      - description: Case-insensitive substring match on email or display name.
+        in: query
+        name: q
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Case-insensitive substring match on email or display name.
+          title: Q
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 50
+          maximum: 200
+          minimum: 1
+          title: Limit
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/DirectoryEntry'
+                title: Response List Directory Api V1 Users Directory Get
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: List the people in this deployment (for people-pickers)
+      tags:
+      - users
   /api/v1/users/me:
     get:
       description: 'GET /api/v1/users/me — return the calling user''s public profile.
