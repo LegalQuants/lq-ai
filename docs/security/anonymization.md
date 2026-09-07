@@ -155,7 +155,7 @@ If the deployment needs an entity type that isn't in Presidio's vocabulary (e.g.
 
 1. Create the recognizer with `supported_entity="CLIENT_CODE"`.
 2. Register it in `engine.py`.
-3. The new entity type flows through to `PseudonymMapper.assign("CLIENT_CODE", ...)` and gets pseudonyms like `CLIENT_CODE_0001`.
+3. The new entity type flows through to `PseudonymMapper.assign("CLIENT_CODE", ...)` and gets pseudonyms like `CLIENT_CODE_0001`, unless the type appears in the pseudonym-domain remap table (`PSEUDONYM_DOMAINS` in `engine.py`), which today remaps only `LOCATION` → `ADDRESS` and `US_BANK_NUMBER` → `ACCOUNT_NUMBER`.
 
 No further configuration is needed — the pseudonym format is generic per-entity-type.
 
@@ -270,7 +270,7 @@ Pinning tests:
 
 ## Pseudonym format
 
-Every assigned pseudonym follows `{ENTITY_TYPE}_{NNNN}` with a 4-digit zero-padded counter (`PERSON_0001`, `MATTER_NUMBER_0042`). Counters increment per entity type independently within a single request; mappings never persist across requests (the `PseudonymMapper` instance is dropped on response).
+Every assigned pseudonym follows `{ENTITY_TYPE}_{NNNN}` with a 4-digit zero-padded counter (`PERSON_0001`, `MATTER_NUMBER_0042`). The `{ENTITY_TYPE}` prefix is the entity's *pseudonym domain*: Presidio's `LOCATION` and `US_BANK_NUMBER` labels are remapped to `ADDRESS` and `ACCOUNT_NUMBER` at assign time (`PSEUDONYM_DOMAINS` in `engine.py`); every other type uses its recognizer label as-is. Counters increment per entity type independently within a single request; mappings never persist across requests (the `PseudonymMapper` instance is dropped on response).
 
 The format is locked by M2-A3. Operators who need a different format (longer counter, different separator) can fork the `PseudonymMapper.assign` implementation, but the existing format is what M2-B3 middleware + M2-C3 round-trip tests target.
 
