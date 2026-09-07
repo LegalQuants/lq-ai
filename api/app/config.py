@@ -176,6 +176,20 @@ class Settings(BaseSettings):
         ),
     )
 
+    lq_ai_gateway_timeout_seconds: float = Field(
+        default=60.0,
+        gt=0,
+        description=(
+            "Per-request timeout, in seconds, for backend to Inference Gateway "
+            "calls. 60s suits a hosted provider. A self-hosted deployment "
+            "running a local model on modest hardware needs far longer — a "
+            "single long generation on a fanless laptop can exceed ten minutes "
+            "— and without this the request dies at the wire and surfaces as a "
+            "fake 'upstream error' with no indication that a timeout caused it. "
+            "Operators previously had to patch the constant inside the image."
+        ),
+    )
+
     # ----- JWT (per ADR 0002 — backend owns auth) -----
     jwt_secret: str = Field(
         default=DEV_JWT_SECRET,
