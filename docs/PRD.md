@@ -4142,6 +4142,8 @@ Two paths; the contributor picks one as part of the PR:
 
 #### DE-304 — Tabular Review bulk operations: redline-per-row + summarize-column (deferred from M3-C4)
 
+> **Status: SHIPPED (pending ADR review).** Built per [ADR 0026](adr/0026-tabular-bulk-operations.md) (Status: Proposed — the committee can still reject the output pattern): `POST /tabular/executions/{id}/bulk-ops` (+ `/preview-cost`) with the confirmed-cost idiom, a dedicated `tabular_bulk_ops` table (migration `0066`, execution-CASCADE causal linkage), one ARQ job walking rows with non-blocking per-item failures, and the redline-report/memo results panel on the execution detail page.
+
 **Priority:** P2 (operators get most of M3-C4's value from export today; bulk operations is the "second step" beyond a static grid) · **Effort:** M (~3–4 hr code; ~1–2 hr design conversation upfront because the output pattern is architecturally novel)
 
 **Context:** The M3-C4 spec bundled two distinct deliverables — XLSX/CSV export, and bulk operations on the grid. The export half shipped at M3-C4a (PR #75); the bulk operations half is deferred here because it surfaces architectural decisions the substrate work does not anticipate. M3-C4's M3 scope is reduced to "export only" for v0.3.0; the M3 plan's effort estimate stays 8–10 hr because the M3-C4a work landed in that range.
