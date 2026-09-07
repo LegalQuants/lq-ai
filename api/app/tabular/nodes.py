@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -43,14 +44,15 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.citation.caselaw import locate_passage
 from app.citation.verification import verify
 from app.models.document import Document, DocumentChunk
 from app.models.file import File
-from app.models.tabular import TabularExecution
+from app.models.tabular import TabularCellCitation, TabularExecution
 from app.observability_helpers import get_tracer, record_attributes
 from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
 from app.schemas.tabular import ColumnSpec
-from app.tabular.cost import TABULAR_EXTRACTION_PURPOSE
+from app.tabular.cost import TABULAR_EXTRACTION_PURPOSE, estimate_ensemble_pass_cost_usd
 from app.tabular.state import TabularExecutionState
 
 if TYPE_CHECKING:
@@ -230,16 +232,38 @@ def make_extract_cells_node(
         # is the gateway config when this column should actually run
         # ensemble AND the gateway has ensemble configured — else None.
         #
-        # Cost posture (intentional): tabular ensemble verification runs one
-        # ensemble pass per cell and is NOT bounded by a mid-run per-message
-        # cost cap the way the chat path is (``_resolve_ensemble_config`` in
-        # ``api/app/api/chats.py`` falls back to a single judge once an
-        # estimate exceeds ``max_cost_per_message_usd``). Instead, tabular
-        # gates cost up-front: ``POST /api/v1/tabular/preview-cost`` surfaces
-        # the ensemble premium and the operator confirms ``confirmed_cost_usd``
-        # before the run starts (Decision C-5 cost-confirmation gate). A future
-        # mid-run / per-cell ensemble cost ceiling is deferred as DE-331.
+        # Cost posture: tabular gates cost up-front —
+        # ``POST /api/v1/tabular/preview-cost`` surfaces the ensemble premium
+        # and the operator confirms ``confirmed_cost_usd`` before the run
+        # starts (Decision C-5 cost-confirmation gate). DE-331 adds the
+        # mid-run backstop: before each cell's ensemble pass the projected
+        # spend (actual extraction spend so far + estimated ensemble spend so
+        # far + one more estimated pass) is checked against the confirmed
+        # ceiling; once it would be exceeded, ensemble is SKIPPED for all
+        # remaining cells. Degrade-only — extraction itself always continues;
+        # the halt is recorded in the results payload
+        # (``ensemble_halted_at_ceiling`` + ``ensemble_halted_cells``) so the
+        # UI can state honestly which cells skipped verification.
         ensemble_config = await gateway.get_citation_engine_ensemble_config()
+
+        # DE-331 ceiling bookkeeping. The ceiling is the operator-confirmed
+        # cost (``tabular_executions.cost_estimate_usd``, threaded through
+        # state as a Decimal string); ``None`` (nothing confirmed, e.g. a
+        # pre-confirmation-gate row) means no ceiling — never halt. The
+        # per-pass ensemble cost is an ESTIMATE (the shared rolling-average
+        # judge-cost primitive — the same math the confirmed preview used;
+        # ``VerificationResult`` carries no actual cost to accumulate),
+        # computed once per run.
+        ceiling = _parse_ceiling(state.get("confirmed_cost_usd"))
+        per_pass_estimate = (
+            await estimate_ensemble_pass_cost_usd(db, ensemble_config)
+            if (ensemble_config is not None and ceiling is not None)
+            else Decimal("0")
+        )
+        extraction_spend = Decimal("0")
+        ensemble_spend_estimate = Decimal("0")
+        ensemble_halted = False
+        ensemble_halted_cells = 0
 
         tracer = get_tracer()
         for document in documents:
@@ -253,6 +277,38 @@ def make_extract_cells_node(
                 verify_ensemble_config = (
                     ensemble_config if (effective and ensemble_config is not None) else None
                 )
+                # DE-331: mid-run ensemble ceiling check, BEFORE the cell's
+                # (extraction + ensemble) dispatch. Sticky once tripped —
+                # spend only grows, so re-checking later cells would churn
+                # without ever re-enabling. A granted pass accrues its
+                # estimate even if ``extract_cell`` ends up not running
+                # ensemble (extraction failed / no cited chunks) — a
+                # conservative over-estimate that only ever halts sooner.
+                if verify_ensemble_config is not None and ceiling is not None:
+                    if ensemble_halted or _would_exceed_ceiling(
+                        ceiling=ceiling,
+                        extraction_spend=extraction_spend,
+                        ensemble_spend_estimate=ensemble_spend_estimate,
+                        per_pass_estimate=per_pass_estimate,
+                    ):
+                        if not ensemble_halted:
+                            ensemble_halted = True
+                            logger.info(
+                                "tabular ensemble halted at cost ceiling",
+                                extra={
+                                    "event": "tabular_ensemble_halted_at_ceiling",
+                                    "execution_id": state.get("execution_id"),
+                                    "ceiling_usd": format(ceiling, "f"),
+                                    "extraction_spend_usd": format(extraction_spend, "f"),
+                                    "ensemble_spend_estimate_usd": format(
+                                        ensemble_spend_estimate, "f"
+                                    ),
+                                },
+                            )
+                        ensemble_halted_cells += 1
+                        verify_ensemble_config = None
+                    else:
+                        ensemble_spend_estimate += per_pass_estimate
                 with tracer.start_as_current_span("tabular.cell") as cell_span:
                     record_attributes(
                         cell_span,
@@ -278,10 +334,74 @@ def make_extract_cells_node(
                     cell["document_id"] = str(document_id)
                     cell["column_name"] = column.name
                     per_cell_results.append(cell)
+                    extraction_spend += _cell_cost_decimal(cell)
 
-        return {"per_cell_results": per_cell_results}
+        return {
+            "per_cell_results": per_cell_results,
+            "ensemble_halted_at_ceiling": ensemble_halted,
+            "ensemble_halted_cells": ensemble_halted_cells,
+        }
 
     return extract_cells_node
+
+
+def _parse_ceiling(raw: Any) -> Decimal | None:
+    """Parse the state-threaded ``confirmed_cost_usd`` string (DE-331).
+
+    ``None`` / empty / unparseable degrade to ``None`` (no ceiling) —
+    a malformed ceiling must never fail the run or spuriously halt
+    verification.
+    """
+
+    if raw is None:
+        return None
+    try:
+        return Decimal(str(raw))
+    except Exception:
+        logger.warning(
+            "tabular ensemble ceiling unparseable; ignoring",
+            extra={"event": "tabular_ensemble_ceiling_unparseable"},
+        )
+        return None
+
+
+def _would_exceed_ceiling(
+    *,
+    ceiling: Decimal,
+    extraction_spend: Decimal,
+    ensemble_spend_estimate: Decimal,
+    per_pass_estimate: Decimal,
+) -> bool:
+    """DE-331 pre-pass check: would ONE more ensemble pass break the ceiling?
+
+    Compares ``extraction_spend + ensemble_spend_estimate +
+    per_pass_estimate`` (projected total if this pass runs) against the
+    operator-confirmed ceiling. Estimate semantics:
+
+    * ``extraction_spend`` — ACTUAL gateway spend (DE-310 per-cell
+      ``cost_estimate`` annotations) of the cells completed so far; the
+      current cell's own extraction cost is not yet known at decision
+      time, so it is not included.
+    * ``ensemble_spend_estimate`` — ESTIMATED spend of the ensemble
+      passes granted so far (``per_pass_estimate`` x passes granted);
+      the verification cascade reports no actual judge cost.
+    * ``per_pass_estimate`` — the rolling-average per-pass estimate
+      (:func:`app.tabular.cost.estimate_ensemble_pass_cost_usd`).
+    """
+
+    return extraction_spend + ensemble_spend_estimate + per_pass_estimate > ceiling
+
+
+def _cell_cost_decimal(cell: dict[str, Any]) -> Decimal:
+    """A cell's recorded ``cost_usd`` as a Decimal; unknown/unparseable → 0."""
+
+    raw = cell.get("cost_usd")
+    if raw is None:
+        return Decimal("0")
+    try:
+        return Decimal(str(raw))
+    except Exception:
+        return Decimal("0")
 
 
 async def extract_cell(
@@ -386,19 +506,58 @@ async def extract_cell(
             ensemble_config=verify_ensemble_config,
         )
 
+    # DE-309: deterministic offset-bearing provenance. Locate the
+    # extracted value verbatim inside each cited chunk's canonical text;
+    # every hit becomes a ``cell_citations`` entry the aggregate node
+    # persists as a ``tabular_cell_citations`` row. Fail-closed: a miss
+    # mints nothing (the cell renders unverified read-side) — never a
+    # fake offset row. In-flight only; ``_strip_state_keys`` drops it
+    # from the persisted results JSONB.
+    cell_citations = await _locate_cell_citations(
+        value=value,
+        chunks=chunks,
+        cited_chunk_ids=cited_chunk_ids,
+    )
+
+    # DE-310: real per-cell tier + cost from the gateway's response
+    # annotations (``_annotate_response`` stamps ``routed_inference_tier``
+    # + ``cost_estimate`` on every non-streaming completion). ``getattr``
+    # because the annotations are gateway extensions a minimal
+    # OpenAI-shaped response may lack; a missing annotation degrades to
+    # ``None`` (schema-nullable) rather than claiming the column's tier
+    # floor as the routed tier or ``"0"`` as a cost that was never
+    # reported. Ensemble judge spend (``_verify_cell_ensemble``) is NOT
+    # included: the shared verification cascade
+    # (:func:`app.citation.verification.verify`) discards the judge
+    # responses' cost annotations before returning, and threading cost
+    # through :class:`VerificationResult` reshapes the chat Citation
+    # Engine's surface — out of scope here; the routing log still
+    # records those judge calls.
     return {
         "value": value,
         "cited_chunk_ids": cited_chunk_ids,
         "confidence": confidence,
-        "tier_used": column.minimum_inference_tier,
-        # cost_usd is best filled by the gateway response surface; for
-        # v0.3.0 we leave it at 0 here and reconcile from the routing
-        # log post-hoc in the aggregate node. The cost-estimator's
-        # rolling-average converges off the routing log either way.
-        "cost_usd": "0",
+        "tier_used": getattr(response, "routed_inference_tier", None),
+        "cost_usd": _cost_usd_str(getattr(response, "cost_estimate", None)),
         "error": None,
         "verification_method": verification_method,
+        "cell_citations": cell_citations,
     }
+
+
+def _cost_usd_str(cost_estimate: Any) -> str | None:
+    """Decimal-stringify the gateway's float ``cost_estimate`` annotation.
+
+    Fixed-point notation (never scientific — ``format(..., 'f')``) per
+    the Decimal-as-string wire rule; ``None`` (or a non-numeric value)
+    stays ``None`` — an unreported cost is unknown, not zero.
+    """
+
+    if not isinstance(cost_estimate, (int, float)) or isinstance(cost_estimate, bool):
+        return None
+    if not math.isfinite(cost_estimate):
+        return None
+    return format(Decimal(str(cost_estimate)), "f")
 
 
 async def _verify_cell_ensemble(
@@ -452,6 +611,89 @@ async def _verify_cell_ensemble(
         return None
 
 
+async def _locate_cell_citations(
+    *,
+    value: str,
+    chunks: list[dict[str, Any]],
+    cited_chunk_ids: list[str],
+) -> list[dict[str, Any]]:
+    """Deterministically locate ``value`` in each cited chunk's text (DE-309).
+
+    Verbatim-only, mirroring the fetched-authority pass in
+    :mod:`app.citation.authority`: :func:`locate_passage` finds the exact
+    substring span, then the located span is confirmed through the
+    verification cascade with ``gateway=None`` (Stages 1-2 only — no LLM
+    judge for cells in this item). A hit yields one in-flight citation
+    dict per cited chunk with chunk-local char offsets + the cascade's
+    method/confidence; a miss yields nothing for that chunk (fail-closed
+    — an unlocatable value must render unverified, never carry a fake
+    offset row).
+
+    Duplicate cited chunk ids are deduplicated (first occurrence wins)
+    so a model emitting ``[0, 0]`` can't mint the same provenance row
+    twice. Any unexpected exception degrades to "no citations located"
+    for the remaining chunks — provenance minting must never fail the
+    cell.
+    """
+
+    if not value or not cited_chunk_ids:
+        return []
+
+    content_by_id = {chunk["id"]: chunk["content"] for chunk in chunks}
+    located: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for chunk_id in cited_chunk_ids:
+        if chunk_id in seen:
+            continue
+        seen.add(chunk_id)
+        try:
+            content = content_by_id.get(chunk_id)
+            if not content:
+                continue
+            span = locate_passage(value, content)
+            if span is None:
+                continue
+            start, end = span
+            candidate = _CellVerifyCandidate(
+                source_offset_start=start,
+                source_offset_end=end,
+                # locate_passage strips the needle before searching, so
+                # the located slice is the stripped value — use exactly
+                # what was located so Stage 1 compares byte-for-byte.
+                source_text=content[start:end],
+                source_document_id=uuid.UUID(chunk_id),
+            )
+            document = _CellVerifyDocument(id=uuid.UUID(chunk_id), normalized_content=content)
+            # gateway=None: the cascade runs Stages 1-2 only and MISSes
+            # rather than escalating to a judge. With byte-exact offsets
+            # from locate_passage this confirms as ``exact_match``; the
+            # defensive re-check keeps the row's method/confidence
+            # anchored in the canonical cascade rather than asserted here.
+            result = await verify(candidate, document, gateway=None)
+            if not result.verified or result.method is None:
+                continue
+            located.append(
+                {
+                    "chunk_id": chunk_id,
+                    "source_offset_start": start,
+                    "source_offset_end": end,
+                    "verification_method": result.method,
+                    "verification_confidence": result.confidence,
+                }
+            )
+        except Exception as exc:
+            logger.warning(
+                "tabular cell citation locate error: %s",
+                exc,
+                extra={
+                    "event": "tabular_cell_citation_locate_error",
+                    "error_type": type(exc).__name__,
+                },
+            )
+            continue
+    return located
+
+
 def _failed_cell(reason: str) -> dict[str, Any]:
     return {
         "value": None,
@@ -461,6 +703,7 @@ def _failed_cell(reason: str) -> dict[str, Any]:
         "cost_usd": "0",
         "error": reason,
         "verification_method": None,
+        "cell_citations": [],
     }
 
 
@@ -585,7 +828,12 @@ def make_aggregate_node(
         per_cell_results = state.get("per_cell_results", []) or []
         error = state.get("error")
 
-        results_payload = _shape_results_payload(per_cell_results, documents)
+        results_payload = _shape_results_payload(
+            per_cell_results,
+            documents,
+            ensemble_halted_at_ceiling=bool(state.get("ensemble_halted_at_ceiling", False)),
+            ensemble_halted_cells=int(state.get("ensemble_halted_cells", 0) or 0),
+        )
         cost_actual = _sum_cell_costs(per_cell_results)
 
         values: dict[str, Any] = {
@@ -599,6 +847,12 @@ def make_aggregate_node(
         else:
             values["status"] = "completed"
 
+        # DE-309: batch-insert the offset-bearing provenance rows the
+        # extract node located, in the SAME transaction as the results
+        # write — the grid and its provenance land (or roll back)
+        # together.
+        db.add_all(_mint_cell_citation_rows(execution_id, per_cell_results))
+
         await db.execute(
             update(TabularExecution).where(TabularExecution.id == execution_id).values(**values)
         )
@@ -606,6 +860,58 @@ def make_aggregate_node(
         return {}
 
     return aggregate_node
+
+
+def _mint_cell_citation_rows(
+    execution_id: uuid.UUID,
+    per_cell_results: list[Any],
+) -> list[TabularCellCitation]:
+    """Project in-flight ``cell_citations`` into :class:`TabularCellCitation` rows.
+
+    One row per located (cell, chunk) pair, keyed the way cells are keyed
+    in the results payload: ``document_id`` (the grid row) +
+    ``column_name`` (the grid column). Cells without located citations
+    contribute nothing — the absence of rows IS the unverified signal
+    (fail-closed). Malformed in-flight entries are skipped rather than
+    sinking the aggregate write.
+    """
+
+    rows: list[TabularCellCitation] = []
+    for cell in per_cell_results:
+        doc_id = cell.get("document_id")
+        col_name = cell.get("column_name")
+        if not doc_id or not col_name:
+            continue
+        for citation in cell.get("cell_citations") or []:
+            try:
+                confidence = citation.get("verification_confidence")
+                rows.append(
+                    TabularCellCitation(
+                        execution_id=execution_id,
+                        document_id=uuid.UUID(str(doc_id)),
+                        column_name=col_name,
+                        chunk_id=uuid.UUID(str(citation["chunk_id"])),
+                        source_offset_start=int(citation["source_offset_start"]),
+                        source_offset_end=int(citation["source_offset_end"]),
+                        verification_method=str(citation["verification_method"]),
+                        verification_confidence=(
+                            Decimal(str(round(float(confidence), 2)))
+                            if confidence is not None
+                            else None
+                        ),
+                    )
+                )
+            except (KeyError, TypeError, ValueError) as exc:
+                logger.warning(
+                    "tabular aggregate: malformed cell citation skipped: %s",
+                    exc,
+                    extra={
+                        "event": "tabular_cell_citation_malformed",
+                        "error_type": type(exc).__name__,
+                    },
+                )
+                continue
+    return rows
 
 
 def _assemble_rows(
@@ -642,7 +948,13 @@ def _assemble_rows(
 
 
 def _strip_state_keys(cell: dict[str, Any]) -> dict[str, Any]:
-    """Project the in-flight cell shape down to the persisted shape."""
+    """Project the in-flight cell shape down to the persisted shape.
+
+    ``document_id`` / ``column_name`` move to the row / cell-map key;
+    ``cell_citations`` (DE-309) is persisted as ``tabular_cell_citations``
+    rows by the aggregate node, not in the results JSONB — the payload
+    shape (schema_version m3-c2-v1) is unchanged.
+    """
     keys = (
         "value",
         "cited_chunk_ids",
@@ -658,8 +970,18 @@ def _strip_state_keys(cell: dict[str, Any]) -> dict[str, Any]:
 def _shape_results_payload(
     per_cell_results: list[Any],
     documents: list[Any],
+    *,
+    ensemble_halted_at_ceiling: bool = False,
+    ensemble_halted_cells: int = 0,
 ) -> dict[str, Any]:
-    """Render the per-cell results into the JSONB payload shape."""
+    """Render the per-cell results into the JSONB payload shape.
+
+    The DE-331 ceiling fields are ADDITIVE (top-level keys with falsy
+    defaults, mirrored as defaulted fields on
+    :class:`app.schemas.tabular.TabularResults`), so pre-existing
+    payloads without them validate unchanged and the schema version
+    stays ``m3-c2-v1``.
+    """
 
     rows = _assemble_rows(per_cell_results, documents)
     total = len(per_cell_results)
@@ -671,17 +993,20 @@ def _shape_results_payload(
             "total_cells": total,
             "failed_cells": failed,
         },
+        "ensemble_halted_at_ceiling": ensemble_halted_at_ceiling,
+        "ensemble_halted_cells": ensemble_halted_cells,
     }
 
 
 def _sum_cell_costs(per_cell_results: list[Any]) -> Decimal:
     """Sum per-cell costs to derive ``cost_actual_usd``.
 
-    Cells without a recorded cost contribute 0 — the v0.3.0 cell node
-    does not yet propagate per-call cost back from the gateway
-    response surface, so this defaults to 0 across all cells until
-    the gateway returns cost in its response shape. Once it does,
-    this sum becomes the authoritative actual."""
+    ``cost_usd`` carries the gateway's per-call ``cost_estimate``
+    annotation as a decimal string (DE-310), so this sum is the actual
+    extraction spend. Cells without a recorded cost (failed before the
+    gateway call, or the gateway had no rate configured for the routed
+    model) contribute 0. Ensemble judge spend is not included — see
+    the DE-310 note in :func:`extract_cell`."""
 
     total = Decimal("0")
     for cell in per_cell_results:

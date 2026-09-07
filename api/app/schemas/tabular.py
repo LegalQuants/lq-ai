@@ -27,13 +27,15 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # Deterministic namespace for synthesizing a tabular cell's ``citation_id``
-# from its ``chunk_id``. The tabular executor persists raw ``cited_chunk_ids``
-# (chunk references); the read-side surface (M3-C4) models structured
-# ``Citation`` objects keyed by ``citation_id``. Until the executor mints
-# real Citation-Engine rows (deferred — see PRD §9), we derive a stable,
-# display-only ``citation_id = uuid5(NS, chunk_id)`` so the same chunk always
-# maps to the same id. The citation drawer is display-only and never resolves
-# this id against the Citation Engine, so a synthetic id is safe.
+# from its ``chunk_id``. LEGACY BRIDGE (DE-309): the executor now mints real
+# offset-bearing ``tabular_cell_citations`` rows (migration 0066) and the
+# read side serves those ids/offsets when rows exist for an execution. This
+# uuid5 bridge is KEPT as the fallback for executions predating the
+# migration (no minted rows): a stable, display-only
+# ``citation_id = uuid5(NS, chunk_id)`` so the same chunk always maps to
+# the same id. Bridge citations carry NO offsets and are never resolvable
+# against the Citation Engine. The export path also still renders bridge
+# ids (export shape intentionally unchanged by DE-309).
 _TABULAR_CITATION_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_DNS, "tabular-citation.lq.ai")
 
 TabularExecutionStatus = Literal["pending", "running", "completed", "failed", "cancelled"]
@@ -117,12 +119,29 @@ class Citation(BaseModel):
     locates / highlights the cited span within this text."""
 
     verification_method: str | None = None
-    """The Citation-Engine verification method backing this citation
-    (Donna #6), e.g. ``ensemble_strict`` / ``ensemble_majority``.
-    Mirrors the parent cell's ``verification_method`` onto each citation
-    so the navigable UI can badge the ensemble-verified state per
-    citation. ``None`` when the column isn't ensemble-verified or
-    verification didn't confirm the value."""
+    """The Citation-Engine verification method backing this citation.
+    For minted ``tabular_cell_citations`` rows (DE-309) this is the
+    method that established the offsets (e.g. ``exact_match``). For
+    bridge citations it mirrors the parent cell's ensemble
+    ``verification_method`` (Donna #6, e.g. ``ensemble_strict``), or
+    ``None`` when the column isn't ensemble-verified or verification
+    didn't confirm the value."""
+
+    # --- Offset-bearing provenance fields (DE-309) -------------------------
+    # Populated only from minted ``tabular_cell_citations`` rows on
+    # ``GET /tabular/executions/{id}``. ``None`` on bridge-fallback
+    # citations (pre-migration executions) and on the export path.
+    source_offset_start: int | None = None
+    """Char offset (inclusive) of the located cell value inside the
+    cited chunk's content (= this citation's ``source_text``)."""
+
+    source_offset_end: int | None = None
+    """Char offset (exclusive) — ``source_text[start:end]`` re-derives
+    the located value."""
+
+    verification_confidence: float | None = None
+    """The locating cascade's confidence in ``[0, 1]`` (``1.0`` for
+    ``exact_match``). ``None`` on bridge citations."""
 
 
 class CellResult(BaseModel):
@@ -181,17 +200,20 @@ class TabularRow(BaseModel):
     @classmethod
     def _synthesize_cell_citations(cls, data: object) -> object:
         """Build display ``citations`` from each cell's persisted
-        ``cited_chunk_ids``.
+        ``cited_chunk_ids`` — the uuid5 bridge (DE-309: fallback only).
 
-        The executor persists raw chunk references (``cited_chunk_ids``)
-        rather than structured citations. Without this, the read-side
-        ``CellResult.citations`` would always be empty even though the
-        grounding chunks are recorded. We project each chunk id into a
-        ``Citation`` using the row's ``document_id`` (the citation's
-        source document), the cell's ``confidence``, and a deterministic
-        synthetic ``citation_id``. Cells that already carry ``citations``
-        (e.g., a future executor emitting real Citation-Engine rows) pass
-        through untouched.
+        The results JSONB persists raw chunk references
+        (``cited_chunk_ids``) rather than structured citations. This
+        validator projects each chunk id into a display-only ``Citation``
+        using the row's ``document_id``, the cell's ``confidence``, and a
+        deterministic synthetic ``citation_id``. Since DE-309 the
+        executor also mints real offset-bearing rows in
+        ``tabular_cell_citations``; ``GET /tabular/executions/{id}``
+        REPLACES these bridge citations with the minted rows whenever the
+        execution has any (per-execution presence check in
+        ``app.api.tabular``). The bridge therefore only reaches the wire
+        for pre-migration executions and on the export path. Cells that
+        already carry ``citations`` pass through untouched.
         """
 
         if not isinstance(data, dict):
@@ -226,6 +248,18 @@ class TabularResults(BaseModel):
     once status is ``completed``."""
 
     rows: list[TabularRow]
+
+    ensemble_halted_at_ceiling: bool = False
+    """DE-331: true when the mid-run ensemble cost ceiling halted
+    Stage-4 ensemble verification partway through the run. Extraction
+    itself still completed for every cell (degrade-only); the halted
+    cells simply carry ``verification_method=None``. Defaults false so
+    payloads persisted before DE-331 validate unchanged."""
+
+    ensemble_halted_cells: int = 0
+    """DE-331: number of ensemble-eligible cells whose Stage-4 pass was
+    skipped because the ceiling was reached. Zero when no halt occurred
+    (including all pre-DE-331 payloads)."""
 
 
 # --- Wire shapes for endpoints --------------------------------------------
