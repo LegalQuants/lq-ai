@@ -275,10 +275,11 @@ Engineering rigor is measurable, not asserted. Test **file** counts below are ve
 
 | Practice | Status | Verification |
 |---|---|---|
-| Backend tests (pytest, live Postgres) | M1–milestone | 233 `test_*.py` files in `api/tests/` (incl. `tests/autonomous/`, `tests/citation/`, `tests/tabular/`; pass count refreshed in CI per the `.github/workflows/ci.yml` API gate); `cd api && DATABASE_URL=… pytest` |
-| Gateway tests (pytest) | M1–milestone | 67 `test_*.py` files in `gateway/tests/`; `cd gateway && pytest` |
+| Documented test strategy + per-surface E2E coverage matrix | shipped (roadmap 4.1) | [`docs/test-strategy.md`](test-strategy.md) — inventory, surface × depth matrix with real spec paths, CI-reality statement, flake + gap registers |
+| Backend tests (pytest, live Postgres) | M1–milestone | 236 `test_*.py` files in `api/tests/` (incl. `tests/autonomous/`, `tests/citation/`, `tests/tabular/`; pass count refreshed in CI per the `.github/workflows/ci.yml` API gate); `cd api && DATABASE_URL=… pytest` |
+| Gateway tests (pytest) | M1–milestone | 71 `test_*.py` files in `gateway/tests/`; `cd gateway && pytest` |
 | Frontend unit tests (Vitest) | M1–milestone | 80 `*.test.ts` files in `web/src/`; `cd web && npx vitest run` |
-| Cypress E2E (LQ.AI shell) | M1–milestone | 17 specs in `web/cypress/e2e/` |
+| Cypress E2E (LQ.AI shell) | M1–milestone | 17 spec files in `web/cypress/e2e/` (16 with tests — `documents.cy.ts` is an empty shell; not run in CI, see [`docs/test-strategy.md`](test-strategy.md) §2) |
 | Ruff lint + format (Python) | M1–M4 | `.github/workflows/ci.yml`: `ruff check api scripts` + `ruff format --check` |
 | mypy (api standard, gateway strict) | M1–M4 | CI `mypy app` per subsystem |
 | svelte-check (LQ.AI-owned code) | M1–M4 | `cd web && npm run check:lq-ai` (0 errors on `src/{lib,routes}/lq-ai/**`); inherited OpenWebUI debt tracked as DE-262 (§8.1) |
