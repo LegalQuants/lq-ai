@@ -452,7 +452,9 @@ def make_drafting_node(
        opted in to artifacts (``params["emit_artifacts"]`` truthy — Donna
        ask #8), each parsed artifact is additionally dispatched via
        :attr:`~app.autonomous.enums.ToolIntent.emit_artifact`; skip /
-       storage-error outcomes surface as honest explanatory findings.
+       storage-error outcomes surface as honest explanatory findings
+       (two or more storage failures aggregate into ONE warn finding
+       naming every failed artifact — DE-333).
 
     Every return path emits ``findings`` (the list of dispatched finding
     dicts), ``findings_count`` (its length), and ``artifacts_count`` (the
@@ -600,6 +602,12 @@ def make_drafting_node(
         # and no finding is emitted about it either).
         artifacts_count = 0
         if (session.params or {}).get("emit_artifacts") and parsed.artifacts:
+            # (name, error_text) per storage failure — findings are emitted
+            # AFTER the loop so N>=2 failures aggregate into ONE warn
+            # finding instead of one per artifact (DE-333). Audit rows for
+            # every emit_artifact attempt are unaffected: the chokepoint
+            # writes them at dispatch time.
+            storage_failures: list[tuple[str, str]] = []
             for artifact in parsed.artifacts:
                 result = await guarded_tool_call(
                     session,
@@ -655,27 +663,45 @@ def make_drafting_node(
                     continue
                 if result.outcome == "storage_error":
                     # Storage failures are per-artifact (and possibly
-                    # transient) — emit ONE ``warn`` finding for THIS
-                    # artifact and continue with the remaining ones.
+                    # transient) — record the failure and continue with the
+                    # remaining artifacts; the warn finding(s) are emitted
+                    # after the loop (aggregated when N>=2, DE-333).
                     error_text = str(data.get("error") or "")[:500]
                     artifact_name = str(artifact.get("name") or "(unnamed)")[:255]
-                    finding = {
-                        "title": "Artifact persistence failed at storage",
-                        "summary": (
-                            f"The artifact {artifact_name!r} "
-                            f"could not be uploaded to object storage: {error_text}"
-                        ),
-                        "severity": "warn",
-                    }
-                    await guarded_tool_call(
-                        session,
-                        ToolIntent.emit_finding,
-                        {"finding": finding},
-                        db,
-                        gateway,
-                    )
-                    findings.append(finding)
+                    storage_failures.append((artifact_name, error_text))
                     continue
+
+            if storage_failures:
+                if len(storage_failures) == 1:
+                    # A single failure keeps the per-artifact message: the
+                    # name AND the error text stay actionable.
+                    artifact_name, error_text = storage_failures[0]
+                    summary = (
+                        f"The artifact {artifact_name!r} "
+                        f"could not be uploaded to object storage: {error_text}"
+                    )
+                else:
+                    # N>=2 failures almost always share one cause (object
+                    # storage down) — ONE aggregated warn finding naming
+                    # every failed artifact, not one per artifact (DE-333).
+                    names = ", ".join(name for name, _ in storage_failures)
+                    summary = (
+                        f"{len(storage_failures)} artifacts could not be "
+                        f"stored — object storage unavailable: {names}"
+                    )
+                finding = {
+                    "title": "Artifact persistence failed at storage",
+                    "summary": summary,
+                    "severity": "warn",
+                }
+                await guarded_tool_call(
+                    session,
+                    ToolIntent.emit_finding,
+                    {"finding": finding},
+                    db,
+                    gateway,
+                )
+                findings.append(finding)
 
         # ``findings_count`` counts findings ONLY — memories, precedents,
         # and artifacts are deliberately excluded (the artifact-explanatory
