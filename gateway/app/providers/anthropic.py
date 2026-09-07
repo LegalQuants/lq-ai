@@ -575,6 +575,9 @@ async def _anthropic_stream_iter(
 
     * One initial chunk with ``delta.role = "assistant"``.
     * One chunk per text delta with ``delta.content = "<text piece>"``.
+    * One chunk per completed ``tool_use`` block with
+      ``delta.tool_calls`` (DE-358 item 1: accumulated from
+      ``input_json_delta`` fragments, emitted at ``content_block_stop``).
     * One final chunk with ``finish_reason`` set, ``delta`` empty, and
       a ``usage`` block.
 
@@ -590,6 +593,14 @@ async def _anthropic_stream_iter(
     prompt_tokens = 0
     completion_tokens = 0
     role_emitted = False
+    # DE-358 item 1: accumulate streamed ``tool_use`` blocks. Anthropic
+    # streams a tool call as ``content_block_start`` (id + name), then
+    # ``input_json_delta`` fragments of the arguments JSON, closed by
+    # ``content_block_stop`` — at which point we emit one OpenAI-shaped
+    # ``tool_calls`` delta, mirroring the non-streaming bridge in
+    # :func:`_from_anthropic_response`. Keyed by Anthropic block index.
+    tool_blocks: dict[int, dict[str, Any]] = {}
+    next_tool_index = 0
 
     try:
         async with client.stream("POST", "/v1/messages", json=body, headers=headers) as response:
@@ -632,6 +643,19 @@ async def _anthropic_stream_iter(
                         )
                     continue
 
+                if kind == "content_block_start":
+                    block = parsed.get("content_block") or {}
+                    block_index = parsed.get("index")
+                    if block.get("type") == "tool_use" and isinstance(block_index, int):
+                        tool_blocks[block_index] = {
+                            "openai_index": next_tool_index,
+                            "id": str(block.get("id", "")),
+                            "name": str(block.get("name", "")),
+                            "parts": [],
+                        }
+                        next_tool_index += 1
+                    continue
+
                 if kind == "content_block_delta":
                     delta_block = parsed.get("delta") or {}
                     if delta_block.get("type") == "text_delta":
@@ -643,6 +667,43 @@ async def _anthropic_stream_iter(
                                 model=response_model,
                                 delta=ChatCompletionDelta(content=text),
                             )
+                    elif delta_block.get("type") == "input_json_delta":
+                        block_index = parsed.get("index")
+                        state = (
+                            tool_blocks.get(block_index) if isinstance(block_index, int) else None
+                        )
+                        if state is not None:
+                            state["parts"].append(str(delta_block.get("partial_json", "")))
+                    continue
+
+                if kind == "content_block_stop":
+                    block_index = parsed.get("index")
+                    state = (
+                        tool_blocks.pop(block_index, None) if isinstance(block_index, int) else None
+                    )
+                    if state is not None:
+                        yield _make_chunk(
+                            response_id=response_id,
+                            created=created,
+                            model=response_model,
+                            delta=ChatCompletionDelta(
+                                tool_calls=[
+                                    {
+                                        "index": state["openai_index"],
+                                        "id": state["id"],
+                                        "type": "function",
+                                        "function": {
+                                            "name": state["name"],
+                                            # OpenAI streams arguments as a
+                                            # JSON string; empty input maps
+                                            # to "{}" like the non-streaming
+                                            # bridge's json.dumps(input or {}).
+                                            "arguments": "".join(state["parts"]) or "{}",
+                                        },
+                                    }
+                                ]
+                            ),
+                        )
                     continue
 
                 if kind == "message_delta":
