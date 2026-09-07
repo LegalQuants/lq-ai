@@ -3,7 +3,7 @@ name: playbook-easy-extract
 description: Use when extracting the negotiated positions from a single prior contract as input to the Easy Playbook auto-generation pipeline. Reads a contract's text, identifies the clauses that take a substantive position on a contract issue (definition of confidential information, limitation of liability, indemnification, payment terms, etc.), and emits a structured list of {issue, clause_text, source_offsets} for downstream clustering. Output is intermediate; the in-house attorney evaluates the final assembled playbook, not this stage.
 lq_ai:
   title: Playbook Easy Extract
-  version: 1.0.0
+  version: 1.1.0
   author: LegalQuants
   tags: [contracts, playbooks, extraction, internal]
   jurisdiction: regime-aware
@@ -37,9 +37,11 @@ Apply when given a single contract text and asked to enumerate the negotiated po
 
 Read the contract end-to-end before emitting any output. Identify every clause that:
 
-1. **Takes a substantive position on a recurring contract issue.** Recurring issues are those that appear across most contracts of the same family: confidentiality definition, term, limitation of liability, indemnification, payment terms, governing law, etc. A clause that imposes an obligation, defines a key term, allocates risk, or sets a threshold is "substantive."
+1. **Takes a substantive position on a recurring contract issue.** Recurring issues are those that appear across most contracts of the same family: confidentiality definition, term, standard of care, limitation of liability, indemnification, payment terms, governing law, etc. A clause that imposes an obligation, defines a key term, allocates risk, or sets a threshold is "substantive."
 2. **Is recognizable as a position (not boilerplate).** Skip pure mechanical clauses (notices, severability, integration) — they don't represent a negotiated stance worth clustering. Include them only when the contract takes an unusual position on them.
 3. **Is contained in identifiable, contiguous text.** Don't emit overlapping or fragmentary spans — pick the section/sentence that captures the position.
+
+A single section often bundles positions on **more than one issue** — e.g., an "Obligations of Receiving Party" section that both fixes the standard of care and restricts use and disclosure. Emit one entry per issue, each quoting only the sentence(s) or list item(s) that carry that position; do not collapse distinct positions into one section-sized entry, and do not let the emitted spans overlap. The standard of care is a recurring negotiated position in confidentiality agreements — extract it as its own `"Standard of Care"` entry even when it has no dedicated heading.
 
 For each identified clause, emit one entry. The same contract typically yields 5–20 entries depending on length and complexity.
 
@@ -54,6 +56,7 @@ The `issue` field is a **short, descriptive label** the downstream clustering st
 - `"Payment Terms"`
 - `"Governing Law"`
 - `"Permitted Disclosures"`
+- `"Standard of Care"`
 - `"Service Level Agreement"`
 
 Do NOT invent novel labels when a common one fits — clustering depends on label consistency. If a clause genuinely doesn't match a common issue, pick the most descriptive short noun phrase ("Audit Rights", "Data Retention Period", "Sub-processor Approval").

@@ -28,6 +28,13 @@ Design notes
   normalized label join the same cluster. Embedding distance is used
   only for ranking within a cluster — for picking the modal and the
   variant neighbors.
+* **Low-support fold-in (DE-308).** After the centroid label-merge,
+  groups backed by fewer than ``min_document_support`` distinct
+  documents fold into their nearest supported cluster when the
+  clause-centroid similarity clears a floor — single-document
+  orphans that narrowly missed the merge bar stop inflating the
+  position count. Below the floor a group stays standalone
+  (fail-closed; genuinely distinct outliers keep their own position).
 * **No sub-clustering.** A single label like "Indemnification" may
   carry materially different positions (mutual vs. one-way), but the
   user-attorney edits the assembled playbook downstream (Phase 6's
@@ -108,6 +115,47 @@ already knows the labels are clean or for unit tests that pin only
 the exact-match path."""
 
 
+DEFAULT_MIN_DOCUMENT_SUPPORT: Final[int] = 2
+"""Minimum number of DISTINCT source documents a label group needs to
+stand as its own playbook position (DE-308).
+
+Groups below this support are fold-in candidates: they are folded
+into the nearest supported cluster (by clause-centroid cosine) when
+the similarity clears :data:`DEFAULT_SINGLETON_FOLD_FLOOR`. A
+position supported by a single document is usually either (a) label
+drift the 0.85 merge pass narrowly missed — a single clause has no
+averaging, so its "centroid" is one noisy vector — or (b) a
+document-idiosyncratic clause. Case (a) should join its parent
+cluster as a fallback-tier candidate; case (b) should stay separate
+(the similarity floor keeps it out).
+
+Support counts distinct ``document_id`` values, not clauses: two
+near-duplicate spans of the same clause from one document (overlap
+chunking in the extractor) are corpus support of 1, not 2.
+
+``min_document_support <= 1`` disables the fold pass entirely."""
+
+
+DEFAULT_SINGLETON_FOLD_FLOOR: Final[float] = 0.80
+"""Minimum clause-centroid cosine similarity for folding a
+low-support group into its nearest supported cluster (DE-308).
+
+Deliberately laxer than :data:`DEFAULT_LABEL_MERGE_THRESHOLD` (0.85)
+but above the distinct-concept band the merge-threshold probe
+observed (0.65-0.78 on the synthetic NDA corpus): a single-document
+group's centroid is a single unaveraged vector, so a same-concept
+orphan can land just under the 0.85 merge bar; the 0.80 floor
+captures that 0.80-0.85 gap while staying above the observed
+distinct-concept range.
+
+Fail-closed below the floor: a low-support group whose nearest
+supported cluster is not similar enough stays a standalone position
+rather than polluting a cluster. The asymmetry is intentional — a
+wrongly-standalone position is visible and deletable in the Step 3
+inline editor, while a wrongly-folded distinct position is buried
+inside another position's member list."""
+
+
 # ---------------------------------------------------------------------------
 # Wire shapes
 # ---------------------------------------------------------------------------
@@ -160,6 +208,8 @@ async def cluster_clauses_by_issue(
     embedding_model: str = DEFAULT_EMBEDDING_MODEL,
     max_fallback_neighbors: int = DEFAULT_MAX_FALLBACK_NEIGHBORS,
     label_merge_threshold: float | None = DEFAULT_LABEL_MERGE_THRESHOLD,
+    min_document_support: int = DEFAULT_MIN_DOCUMENT_SUPPORT,
+    singleton_fold_floor: float = DEFAULT_SINGLETON_FOLD_FLOOR,
 ) -> list[Cluster]:
     """Group ``clauses`` by issue label; return one :class:`Cluster` per label.
 
@@ -179,10 +229,17 @@ async def cluster_clauses_by_issue(
        of Confidentiality Obligation"; "Governing Law" / "Forum and
        Jurisdiction") that the exact-match step misses. The label
        string itself is NOT the signal — clause-text centroids are.
-    4. Within each (possibly merged) group, compute the medoid
+    4. **Low-support fold pass (DE-308)**: if ``min_document_support``
+       is > 1 and embeddings are available, groups supported by fewer
+       than ``min_document_support`` distinct documents are folded
+       into the nearest supported cluster (by clause-centroid cosine)
+       when the similarity is at or above ``singleton_fold_floor``.
+       Below the floor the group stays a standalone position
+       (fail-closed — an outlier must not pollute a cluster).
+    5. Within each (possibly merged) group, compute the medoid
        (clause whose embedding minimizes total cosine distance to the
        others) — that's the modal_clause.
-    5. Rank the non-modal members by cosine distance from the modal
+    6. Rank the non-modal members by cosine distance from the modal
        (largest first) and take the top ``max_fallback_neighbors``
        distinct-text clauses as neighbor_clauses.
 
@@ -210,6 +267,12 @@ async def cluster_clauses_by_issue(
             label-merge pass. ``None`` disables the pass entirely
             (exact-match grouping only — the original M3-A6 behavior).
             Default ``0.85`` was tuned against the synthetic NDA corpus.
+        min_document_support: minimum distinct-document support a
+            group needs to stand as its own position. Groups below it
+            are fold-in candidates. ``<= 1`` disables the fold pass.
+        singleton_fold_floor: minimum centroid cosine similarity for
+            folding a low-support group into its nearest supported
+            cluster. Below the floor the group stays standalone.
     """
 
     if not clauses:
@@ -256,6 +319,21 @@ async def cluster_clauses_by_issue(
             clause_index_by_id=clause_index_by_id,
             similarity_threshold=label_merge_threshold,  # type: ignore[arg-type]
         )
+
+    # Low-support fold pass (DE-308). Runs after the label-merge so
+    # fold candidates are the groups the 0.85 merge left standing —
+    # typically single-document orphans whose unaveraged centroid
+    # narrowly missed the merge bar. Skipped when embeddings failed
+    # (no centroid signal → fail-closed, groups stand as-is).
+    if min_document_support > 1 and len(groups) >= 2 and embeddings is not None:
+        groups = _fold_low_support_groups(
+            groups=groups,
+            embeddings=embeddings,
+            clause_index_by_id=clause_index_by_id,
+            min_document_support=min_document_support,
+            similarity_floor=singleton_fold_floor,
+        )
+
     clusters: list[Cluster] = []
 
     for canonical_label, group_clauses in groups.items():
@@ -428,6 +506,123 @@ def _merge_groups_by_clause_centroid(
         merged[canonical] = combined_clauses
 
     return merged
+
+
+def _document_support(group_clauses: list[ClauseInput]) -> int:
+    """Count the distinct source documents backing a group.
+
+    Distinct ``document_id`` values, not clause count — overlapping-span
+    extraction can emit near-duplicate clauses from one document, and
+    those must not count as corpus support.
+    """
+
+    return len({clause.document_id for clause in group_clauses})
+
+
+def _fold_low_support_groups(
+    *,
+    groups: dict[str, list[ClauseInput]],
+    embeddings: list[list[float]],
+    clause_index_by_id: dict[int, int],
+    min_document_support: int,
+    similarity_floor: float,
+) -> dict[str, list[ClauseInput]]:
+    """Fold groups below ``min_document_support`` into their nearest supported cluster (DE-308).
+
+    "Supported" = backed by at least ``min_document_support`` distinct
+    documents. Each low-support candidate is compared (clause-centroid
+    cosine) against every supported group's centroid; if the best
+    similarity is at or above ``similarity_floor`` the candidate's
+    clauses join that group (they become fallback-tier candidates via
+    the normal neighbor ranking downstream). Otherwise the candidate
+    stays a standalone group — fail-closed: an outlier position must
+    remain visible on its own rather than pollute a cluster.
+
+    Determinism notes:
+
+    * Target centroids are computed once from the PRE-fold supported
+      membership, so the outcome does not depend on the order in which
+      candidates are processed (folding A into T does not shift T's
+      centroid for candidate B).
+    * Candidates are processed in sorted-label order; similarity ties
+      between targets resolve to the lexicographically-first target
+      label.
+    * Candidates never fold into other low-support candidates — two
+      loose singletons both stay separate (the merge pass already
+      declined to unify them at group level).
+
+    If no group meets the support bar (e.g., a one-document corpus
+    where every group is a singleton), nothing folds.
+    """
+
+    target_labels = sorted(
+        label
+        for label, group_clauses in groups.items()
+        if _document_support(group_clauses) >= min_document_support
+    )
+    if not target_labels:
+        return groups
+    target_set = set(target_labels)
+    if len(target_set) == len(groups):
+        return groups
+
+    target_centroids = {
+        label: _centroid([embeddings[clause_index_by_id[id(c)]] for c in groups[label]])
+        for label in target_labels
+    }
+
+    # Preserve the original group ordering for supported groups;
+    # candidates that survive keep their original key too.
+    out: dict[str, list[ClauseInput]] = {
+        label: list(group_clauses) for label, group_clauses in groups.items() if label in target_set
+    }
+    kept: dict[str, list[ClauseInput]] = {}
+    folded_count = 0
+
+    for label in sorted(label for label in groups if label not in target_set):
+        candidate_clauses = groups[label]
+        candidate_centroid = _centroid(
+            [embeddings[clause_index_by_id[id(c)]] for c in candidate_clauses]
+        )
+        best_label: str | None = None
+        best_similarity = -math.inf
+        for target_label in target_labels:
+            similarity = 1.0 - _cosine_distance(candidate_centroid, target_centroids[target_label])
+            if similarity > best_similarity:
+                best_similarity = similarity
+                best_label = target_label
+        if best_label is not None and best_similarity >= similarity_floor:
+            out[best_label].extend(candidate_clauses)
+            folded_count += 1
+            logger.info(
+                "easy_cluster: folded low-support group %r into %r (similarity %.3f)",
+                label,
+                best_label,
+                best_similarity,
+                extra={
+                    "event": "easy_cluster_singleton_folded",
+                    "folded_label": label,
+                    "target_label": best_label,
+                    "similarity": best_similarity,
+                },
+            )
+        else:
+            kept[label] = candidate_clauses
+
+    if folded_count:
+        logger.info(
+            "easy_cluster: fold pass folded %d low-support group(s); %d group(s) remain",
+            folded_count,
+            len(out) + len(kept),
+            extra={
+                "event": "easy_cluster_fold_summary",
+                "folded_count": folded_count,
+                "group_count": len(out) + len(kept),
+            },
+        )
+
+    out.update(kept)
+    return out
 
 
 def _centroid(vectors: list[list[float]]) -> list[float]:

@@ -423,6 +423,52 @@ def test_default_character_budget_leaves_room_for_overlap() -> None:
     assert SPAN_OVERLAP_CHARACTERS < DEFAULT_CHARACTER_BUDGET
 
 
+# ---------------------------------------------------------------------------
+# Prompt taxonomy — DE-308 (missing "Standard of Care" axis)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_prompt_covers_standard_of_care_axis() -> None:
+    """The system prompt must cue the Standard of Care issue explicitly.
+
+    DE-308 diagnosis: the sample-NDA corpus embeds the standard of
+    care inside the "Obligations of Receiving Party" section (no
+    dedicated heading), and the prompt's issue-vocabulary examples
+    never mentioned it — so extractions collapsed the care standard
+    into one section-sized obligations entry and the axis never
+    surfaced as a position. The prompt must (a) name "Standard of
+    Care" in the label vocabulary and (b) instruct one-entry-per-issue
+    splitting for sections that bundle multiple positions.
+    """
+
+    from app.playbooks.easy.extractor import EASY_EXTRACT_SYSTEM_PROMPT
+
+    # (a) the label vocabulary names the axis (quoted example form).
+    assert '"Standard of Care"' in EASY_EXTRACT_SYSTEM_PROMPT
+    # (b) bundled sections must be split one-entry-per-issue.
+    normalized = " ".join(EASY_EXTRACT_SYSTEM_PROMPT.split())
+    assert "one entry per issue" in normalized
+
+
+@pytest.mark.unit
+def test_skill_md_mirror_carries_standard_of_care_taxonomy() -> None:
+    """The SKILL.md is the human-readable mirror of the embedded prompt.
+
+    Per the extractor module docstring, prompt changes must land in
+    both places. This pins the DE-308 taxonomy addition in the
+    SKILL.md so the pair can't silently drift on this axis.
+    """
+
+    from pathlib import Path
+
+    skill_md = (
+        Path(__file__).resolve().parents[2] / "skills" / "playbook-easy-extract" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    assert '"Standard of Care"' in skill_md
+    assert "one entry per issue" in skill_md
+
+
 @pytest.mark.unit
 def test_extracted_clause_pydantic_rejects_extra_fields() -> None:
     """``ExtractedClause`` model_config sets ``extra='forbid'`` — keeps the wire shape tight."""
