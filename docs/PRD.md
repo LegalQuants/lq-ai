@@ -3269,11 +3269,13 @@ This subsection operationalizes the §1.9 engineering-discipline posture and the
 
 #### DE-225 — NIST AI RMF 1.0 Profile commitments
 
+> **Status: DRAFTED (AI-drafted, pending AI-governance-professional review).** Shipped as `docs/compliance/nist-ai-rmf-profile.md` (the mini-PRD's canonical filename; this entry's original `nist-ai-rmf-alignment.md` name is superseded) — all 72 AI RMF subcategories + the 12 AI 600-1 GenAI risks, with per-row ownership classes and resolving evidence paths; MEASURE gaps named honestly.
+
 **Priority:** P1 · **Effort:** M
 
 **Context:** The NIST AI Risk Management Framework 1.0 (with the Generative AI Profile NIST AI 600-1) is the U.S. federal-aligned framework for AI risk governance. This is the document a federal procurement team (or a federal-adjacent enterprise) will look for first. The mini-PRD is at `docs/contribute/mini-prds/nist-ai-rmf-profile.md`.
 
-**Specific scope:** A new document `docs/compliance/nist-ai-rmf-alignment.md` structured as the four AI RMF functions (Govern / Map / Measure / Manage) plus the Generative AI Profile additions. Each function maps to a row of "subcategory → LQ.AI design choice or operational practice → code citation or PRD section reference → residual operator responsibility." The Generative AI Profile additions emphasize prompt-injection, data-poisoning, and confabulation rows specifically.
+**Specific scope:** A new document `docs/compliance/nist-ai-rmf-profile.md` structured as the four AI RMF functions (Govern / Map / Measure / Manage) plus the Generative AI Profile additions. Each function maps to a row of "subcategory → LQ.AI design choice or operational practice → code citation or PRD section reference → residual operator responsibility." The Generative AI Profile additions emphasize prompt-injection, data-poisoning, and confabulation rows specifically.
 
 **Acceptance criteria:** Every subcategory is addressed; Govern subcategories that are operator-only are explicitly marked as such; the doc is referenced from the README under compliance and governance; a federal-procurement reviewer can produce a substantive list of gaps rather than a "this is marketing" rejection.
 
