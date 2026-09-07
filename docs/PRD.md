@@ -3347,6 +3347,8 @@ This subsection operationalizes the §1.9 engineering-discipline posture and the
 
 **Acceptance criteria:** axe-core CI gate is green on `main`; gate fails PRs with new WCAG 2.1 AA violations; third-party audit at M2 produces a public report with all critical findings remediated or documented.
 
+**Status (2026-07-25):** The automated half is in place with narrower-than-aspirational semantics, documented honestly at `docs/compliance/accessibility-audit.md`: axe-core (cypress-axe) runs over LQ.AI-owned routes on the deterministic Cypress track (nightly `e2e.yml`, not yet per-PR — per-PR promotion tracks the Cypress-in-CI caching work), gating with a severity ratchet (critical always fails; serious fails unless in the checked-in baseline `web/cypress/a11y-baseline.json`; moderate/minor logged). This is a no-regressions gate on the automatable subset of WCAG 2.1 A/AA, **not** a compliance claim. The manual/third-party audit half remains open.
+
 #### DE-233 — Air-gap install verification CI test
 
 **Priority:** P1 · **Effort:** S
