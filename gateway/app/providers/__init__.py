@@ -24,6 +24,7 @@ from app.providers.base import (
     ProviderHealth,
     ProviderHTTPError,
     ProviderNetworkError,
+    ProviderTimeoutError,
     ProviderUnsupportedError,
 )
 from app.providers.ollama import OllamaAdapter, ProviderModelNotFound
@@ -69,5 +70,6 @@ __all__ = [
     "ProviderHealth",
     "ProviderModelNotFound",
     "ProviderNetworkError",
+    "ProviderTimeoutError",
     "ProviderUnsupportedError",
 ]

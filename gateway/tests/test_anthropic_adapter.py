@@ -37,10 +37,12 @@ from app.providers import (
     ProviderAuthError,
     ProviderHTTPError,
     ProviderNetworkError,
+    ProviderTimeoutError,
     ProviderUnsupportedError,
 )
 from app.providers.anthropic import (
     DEFAULT_MAX_TOKENS,
+    DEFAULT_TIMEOUT_SECONDS,
     _to_anthropic_request,
 )
 
@@ -437,6 +439,61 @@ async def test_network_error_raises_provider_network_error() -> None:
             await adapter.chat_completion(_basic_request(), model="claude-sonnet-4-6", stream=False)
     finally:
         await adapter.aclose()
+
+
+@pytest.mark.unit
+def test_default_timeout_accommodates_long_generations() -> None:
+    """The default per-request timeout is 300s (#15a): frontier drafting
+    responses of 4-16K output tokens routinely exceed 60s of generation
+    time, and a client-side timeout mid-generation surfaced as a provider
+    outage. Per-provider ``timeout_s`` still overrides."""
+
+    assert DEFAULT_TIMEOUT_SECONDS == 300.0
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_client_timeout_raises_provider_timeout_error() -> None:
+    """A client-side timeout raises :class:`ProviderTimeoutError` — a
+    :class:`ProviderNetworkError` subclass (wire code unchanged) that the
+    routing log labels distinctly from an upstream 5xx outage."""
+
+    respx.post(f"{ANTHROPIC_BASE}/v1/messages").mock(
+        side_effect=httpx.ReadTimeout("read timed out")
+    )
+    adapter = _make_adapter()
+    try:
+        with pytest.raises(ProviderTimeoutError) as excinfo:
+            await adapter.chat_completion(_basic_request(), model="claude-sonnet-4-6", stream=False)
+    finally:
+        await adapter.aclose()
+    exc = excinfo.value
+    # Wire contract unchanged: same code (and 503 mapping) as any network error.
+    assert isinstance(exc, ProviderNetworkError)
+    assert exc.code == "provider_unavailable"
+    # But the message and details say "we gave up", not "Anthropic is down".
+    assert "client-side timeout" in exc.message
+    assert exc.details["timeout_s"] == DEFAULT_TIMEOUT_SECONDS
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_streaming_client_timeout_raises_provider_timeout_error() -> None:
+    respx.post(f"{ANTHROPIC_BASE}/v1/messages").mock(
+        side_effect=httpx.ReadTimeout("read timed out")
+    )
+    adapter = _make_adapter()
+    try:
+        stream = await adapter.chat_completion(
+            _basic_request(), model="claude-sonnet-4-6", stream=True
+        )
+        assert not isinstance(stream, ChatCompletionResponse)
+        with pytest.raises(ProviderTimeoutError) as excinfo:
+            async for _chunk in stream:
+                pass
+    finally:
+        await adapter.aclose()
+    assert "client-side timeout" in excinfo.value.message
 
 
 @pytest.mark.unit

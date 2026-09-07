@@ -88,6 +88,7 @@ from app.providers import (
     ProviderAuthError,
     ProviderHTTPError,
     ProviderNetworkError,
+    ProviderTimeoutError,
     ProviderUnsupportedError,
 )
 from app.router import (
@@ -270,9 +271,16 @@ def _failure_reason(error: ProviderAdapterError) -> str:
     plus the upstream HTTP status when known — the distinguishing signal
     an operator needs to tell a request rejection from a genuine outage
     when reading inference_routing_log rows.
+
+    A gateway-side timeout (:class:`ProviderTimeoutError`) is prefixed
+    ``client_timeout:`` rather than ``upstream_error:`` — we gave up
+    waiting, the provider may be healthy — so operators can tell a
+    too-tight ``timeout_s`` from a genuine provider outage.
     """
 
     code, _ = _classify_provider_error(error)
+    if isinstance(error, ProviderTimeoutError):
+        return f"client_timeout:{code}"
     if isinstance(error, ProviderHTTPError):
         return f"upstream_error:{code}:status={error.upstream_status}"
     return f"upstream_error:{code}"

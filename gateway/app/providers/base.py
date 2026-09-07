@@ -118,6 +118,21 @@ class ProviderNetworkError(ProviderAdapterError):
     code = "provider_unavailable"
 
 
+class ProviderTimeoutError(ProviderNetworkError):
+    """The *gateway's own* request timeout elapsed (``httpx.TimeoutException``).
+
+    Distinct from an upstream 5xx: the provider may be perfectly healthy
+    and mid-generation — we gave up waiting. Inherits ``code``
+    (``provider_unavailable``) so the wire contract and HTTP mapping are
+    unchanged (503, same as any network failure); the routing-log
+    ``refusal_reason`` builder reads ``isinstance(..., ProviderTimeoutError)``
+    to label these rows ``client_timeout:...`` so operators can tell a
+    too-tight ``timeout_s`` from a genuine provider outage. Mirrors the
+    :class:`app.providers.ollama.ProviderModelNotFound` approach of a
+    distinct class rather than a new error-code enum entry.
+    """
+
+
 class ProviderUnsupportedError(ProviderAdapterError):
     """The adapter does not support this operation.
 
