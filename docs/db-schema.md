@@ -1521,11 +1521,16 @@ Substrate for the Tabular / Multi-Document Review surface
 execution walks a `documents × columns` grid and produces a
 row-per-document by column-per-spec result, run as a LangGraph workflow
 on the existing `arq:m3a6` queue (Decision C-3 from the Phase C prep
-doc: reuse the queue rather than add a second worker container). One
-table, introduced by migration `0036_tabular_executions.py`:
+doc: reuse the queue rather than add a second worker container). Two
+tables:
 
-* `tabular_executions` — one row per execution; persists the inputs +
-  status + assembled grid so the result view can re-render a week later.
+* `tabular_executions` (migration `0036_tabular_executions.py`) — one
+  row per execution; persists the inputs + status + assembled grid so
+  the result view can re-render a week later.
+* `tabular_cell_citations` (migration `0066_tabular_cell_citations.py`,
+  DE-309) — offset-bearing Citation-Engine provenance rows for grounded
+  cells; one row per (cell, cited chunk) pair whose extracted value was
+  deterministically located in the chunk's canonical text.
 
 ### `tabular_executions` (M3)
 
@@ -1603,6 +1608,64 @@ populated once status is `completed` (may carry partial output on
 
 Soft delete via `deleted_at` matches the `playbooks.deleted_at` posture
 from M3-A6's migration 0034.
+
+### `tabular_cell_citations` (DE-309)
+
+```sql
+CREATE TABLE tabular_cell_citations (
+    id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    execution_id             UUID NOT NULL REFERENCES tabular_executions(id) ON DELETE CASCADE,
+    document_id              UUID NOT NULL,      -- grid-row key; NOT an FK (snapshot/audit posture)
+    column_name              TEXT NOT NULL,      -- grid-column key; matches results.rows[*].cells keys
+    chunk_id                 UUID NOT NULL,      -- cited document_chunks.id; NOT an FK
+    source_offset_start      INTEGER NOT NULL,   -- char offsets into the chunk's content
+    source_offset_end        INTEGER NOT NULL,
+    verification_method      TEXT NOT NULL,      -- cascade method that established the offsets
+    verification_confidence  NUMERIC(3,2),
+    created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT chk_tabular_cell_citations_offset_start_nonneg
+        CHECK (source_offset_start >= 0),
+    CONSTRAINT chk_tabular_cell_citations_offset_end_gt_start
+        CHECK (source_offset_end > source_offset_start),
+    CONSTRAINT chk_tabular_cell_citations_method_values
+        CHECK (verification_method IN
+            ('exact_match','tolerant_match','paraphrase_judge',
+             'ensemble_strict','ensemble_majority')),
+    CONSTRAINT chk_tabular_cell_citations_confidence_range
+        CHECK (verification_confidence IS NULL OR
+               (verification_confidence >= 0 AND verification_confidence <= 1))
+);
+
+-- The read side loads all of an execution's rows in one query.
+CREATE INDEX ix_tabular_cell_citations_execution_id
+    ON tabular_cell_citations (execution_id);
+```
+
+Minted by the executor's aggregate node, in the same transaction as the
+`results` write: for each grounded cell, the extracted value is located
+verbatim (`locate_passage` + verification cascade Stages 1–2,
+`gateway=None`) inside each cited chunk's canonical text; every hit
+mints one row. **Fail-closed:** an unlocatable value mints no row and
+the cell renders unverified — a row's existence is itself the
+verification claim, which is why `verification_method` is NOT NULL
+(this table has no unverified state).
+
+A cell is addressed by `(execution_id, document_id, column_name)` —
+the same keying as the `results` payload (rows by document, cells by
+column name). `source_offset_start/end` are char offsets into the cited
+chunk's `document_chunks.content` (served as the citation's
+`source_text` on `GET /tabular/executions/{id}`), so
+`source_text[start:end]` re-derives the located value.
+
+`document_id` / `chunk_id` are deliberately **not** foreign keys,
+matching `tabular_executions.document_ids`' snapshot posture — a
+re-ingest or hard delete of the source must not cascade-clear the
+provenance audit row. `execution_id` cascades with its parent execution.
+
+Executions predating migration 0066 have no rows here; the read side
+falls back to the legacy display-only uuid5-bridge citations
+(per-execution presence check).
 
 ---
 

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncIterator
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -31,8 +32,9 @@ from app.db.session import get_db
 from app.main import app
 from app.models.document import Document, DocumentChunk
 from app.models.file import File as FileModel
-from app.models.tabular import TabularExecution
+from app.models.tabular import TabularCellCitation, TabularExecution
 from app.models.user import User
+from app.schemas.tabular import _TABULAR_CITATION_NAMESPACE
 from app.security import create_access_token, hash_password
 from app.tabular import cost as tabular_cost
 
@@ -322,6 +324,182 @@ async def test_get_execution_batches_across_two_documents(
     assert cit_b["source_file_id"] == str(doc_b.file_id)
     assert cit_b["source_page"] == 5
     assert cit_b["source_text"] == "bravo source text"
+
+
+# --- DE-309: minted offset-bearing citations vs uuid5-bridge fallback -------
+
+
+@pytest.mark.integration
+async def test_get_execution_serves_minted_citations_with_offsets(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """An execution with minted ``tabular_cell_citations`` rows serves
+    REAL citation ids + chunk-local offsets, and the offsets resolve
+    into the served ``source_text`` (acceptance: minted rows resolve
+    into source_text)."""
+
+    user = await _make_user(db_session)
+    content = "The term of this Agreement is five (5) years from the Effective Date."
+    value = "five (5) years"
+    start = content.index(value)
+    end = start + len(value)
+    doc, chunk = await _make_doc_with_chunk(db_session, owner=user, content=content, page_start=2)
+    execution = await _insert_execution(
+        db_session,
+        owner=user,
+        document_ids=[doc.id],
+        rows=[
+            {
+                "document_id": str(doc.id),
+                "document_name": "nda.pdf",
+                "cells": {
+                    "Term": {
+                        "value": value,
+                        "cited_chunk_ids": [str(chunk.id)],
+                        "confidence": "high",
+                        "tier_used": 2,
+                    }
+                },
+            }
+        ],
+    )
+    minted = TabularCellCitation(
+        execution_id=execution.id,
+        document_id=doc.id,
+        column_name="Term",
+        chunk_id=chunk.id,
+        source_offset_start=start,
+        source_offset_end=end,
+        verification_method="exact_match",
+        verification_confidence=Decimal("1.00"),
+    )
+    db_session.add(minted)
+    await db_session.flush()
+
+    resp = await client.get(f"/api/v1/tabular/executions/{execution.id}", headers=_bearer(user))
+    assert resp.status_code == 200, resp.text
+    citations = resp.json()["results"]["rows"][0]["cells"]["Term"]["citations"]
+    assert len(citations) == 1
+    cit = citations[0]
+
+    # Real minted id — NOT the uuid5 bridge id.
+    assert cit["citation_id"] == str(minted.id)
+    bridge_id = str(uuid.uuid5(_TABULAR_CITATION_NAMESPACE, str(chunk.id)))
+    assert cit["citation_id"] != bridge_id
+
+    # Offsets + method/confidence from the minted row.
+    assert cit["source_offset_start"] == start
+    assert cit["source_offset_end"] == end
+    assert cit["verification_method"] == "exact_match"
+    assert cit["verification_confidence"] == 1.0
+
+    # Navigation enrichment still applies, and the offsets resolve
+    # into the served source_text.
+    assert cit["source_file_id"] == str(doc.file_id)
+    assert cit["source_page"] == 2
+    assert cit["source_text"] == content
+    assert cit["source_text"][cit["source_offset_start"] : cit["source_offset_end"]] == value
+
+
+@pytest.mark.integration
+async def test_get_execution_minted_run_ungrounded_cell_renders_unverified(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Fail-closed: in an execution that HAS minted rows, a cell the
+    locator could not ground gets an EMPTY citations list — the bridge
+    must not resurrect a synthetic citation for it."""
+
+    user = await _make_user(db_session)
+    content = "Governing law: the State of Delaware shall govern this Agreement."
+    doc, chunk = await _make_doc_with_chunk(db_session, owner=user, content=content, page_start=1)
+    execution = await _insert_execution(
+        db_session,
+        owner=user,
+        document_ids=[doc.id],
+        rows=[
+            {
+                "document_id": str(doc.id),
+                "document_name": "nda.pdf",
+                "cells": {
+                    "Law": {
+                        "value": "Delaware",
+                        "cited_chunk_ids": [str(chunk.id)],
+                        "confidence": "high",
+                    },
+                    # Paraphrased value — never located, no minted row.
+                    "Term": {
+                        "value": "5 years",
+                        "cited_chunk_ids": [str(chunk.id)],
+                        "confidence": "medium",
+                    },
+                },
+            }
+        ],
+    )
+    start = content.index("Delaware")
+    db_session.add(
+        TabularCellCitation(
+            execution_id=execution.id,
+            document_id=doc.id,
+            column_name="Law",
+            chunk_id=chunk.id,
+            source_offset_start=start,
+            source_offset_end=start + len("Delaware"),
+            verification_method="exact_match",
+            verification_confidence=Decimal("1.00"),
+        )
+    )
+    await db_session.flush()
+
+    resp = await client.get(f"/api/v1/tabular/executions/{execution.id}", headers=_bearer(user))
+    assert resp.status_code == 200, resp.text
+    cells = resp.json()["results"]["rows"][0]["cells"]
+
+    assert len(cells["Law"]["citations"]) == 1
+    # The ungrounded cell renders unverified — no bridge fallback here.
+    assert cells["Term"]["citations"] == []
+
+
+@pytest.mark.integration
+async def test_get_execution_without_minted_rows_falls_back_to_bridge(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Back-compat: an execution predating migration 0066 (no minted
+    rows at all) keeps the deterministic uuid5-bridge citations, with
+    no offset fields."""
+
+    user = await _make_user(db_session)
+    content = "Assignment requires prior written consent."
+    doc, chunk = await _make_doc_with_chunk(db_session, owner=user, content=content, page_start=1)
+    execution = await _insert_execution(
+        db_session,
+        owner=user,
+        document_ids=[doc.id],
+        rows=[
+            {
+                "document_id": str(doc.id),
+                "document_name": "nda.pdf",
+                "cells": {
+                    "Assignment": {
+                        "value": "consent required",
+                        "cited_chunk_ids": [str(chunk.id)],
+                        "confidence": "medium",
+                    }
+                },
+            }
+        ],
+    )
+
+    resp = await client.get(f"/api/v1/tabular/executions/{execution.id}", headers=_bearer(user))
+    assert resp.status_code == 200, resp.text
+    cit = resp.json()["results"]["rows"][0]["cells"]["Assignment"]["citations"][0]
+
+    assert cit["citation_id"] == str(uuid.uuid5(_TABULAR_CITATION_NAMESPACE, str(chunk.id)))
+    assert cit["source_offset_start"] is None
+    assert cit["source_offset_end"] is None
+    assert cit["verification_confidence"] is None
+    # Navigation enrichment still fires for bridge citations.
+    assert cit["source_text"] == content
 
 
 # --- preview-cost: ensemble premium surface (Donna #6) ----------------------
