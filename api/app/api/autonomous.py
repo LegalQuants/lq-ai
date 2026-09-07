@@ -1376,7 +1376,8 @@ async def _spawn_manual_session(
     ``params`` carrying only the non-null target keys (plus
     ``emit_artifacts`` — set to ``True`` only when the request body opted
     in; Donna ask #8 — a manual run has no schedule/watch row, so the
-    body carries the flag), sets a non-null ``max_cost_usd`` (per-run cap
+    body carries the flag; plus ``query`` — the optional matter
+    description, item 1.6), sets a non-null ``max_cost_usd`` (per-run cap
     or the config default so R4 always arms), flushes to obtain the id,
     then best-effort enqueues. The five-phase executor + R4/R5/R6 brakes
     + receipt are unchanged.
@@ -1400,6 +1401,13 @@ async def _spawn_manual_session(
         # Opt-in (Donna ask #8) — non-null-subset convention: the key is
         # present iff the caller opted in.
         params["emit_artifacts"] = True
+    if body.query is not None:
+        # Matter intake (item 1.6) — the free-text matter description the
+        # executor reads via ``session.params.get("query")`` into the
+        # ADR-0020 matter loop. Non-null-subset convention: key present
+        # iff the caller supplied a description; absent keeps the
+        # query-less path unchanged.
+        params["query"] = body.query
 
     session = AutonomousSession(
         user_id=user_id,
