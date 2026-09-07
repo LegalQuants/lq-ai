@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import signal
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -60,7 +61,7 @@ def _capture_loader_warnings(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     captured: list[str] = []
     original_warning = loader_mod.log.warning
 
-    def _capture(msg: object, *args: object, **kwargs: object) -> None:
+    def _capture(msg: str, *args: object, **kwargs: Any) -> None:
         # Render the format string with the printf-style args the loader
         # passes, so the test can grep for substrings like "missing-name".
         try:
@@ -510,7 +511,7 @@ def test_install_sighup_reload_handler_swaps_registry(tmp_path: Path) -> None:
         handler = signal.getsignal(signal.SIGHUP)
         assert callable(handler)
         # The handler signature is (signum, frame).
-        handler(signal.SIGHUP, None)  # type: ignore[arg-type, misc]
+        handler(signal.SIGHUP, None)
         new_registry = holder.current()
         assert new_registry is not initial
         assert "alpha-test-skill" in new_registry.names()

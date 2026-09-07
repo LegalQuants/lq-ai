@@ -3,6 +3,7 @@ import uuid
 import pytest
 import pytest_asyncio
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.chat import Chat, Message
 from app.models.message_caselaw_citation import MessageCaselawCitation
@@ -12,7 +13,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest_asyncio.fixture
-async def msg(db_session):
+async def msg(db_session: AsyncSession) -> uuid.UUID:
     u = User(email=f"cm-{uuid.uuid4().hex[:8]}@e.com", hashed_password="x", role="member")
     db_session.add(u)
     await db_session.flush()
@@ -26,7 +27,7 @@ async def msg(db_session):
 
 
 @pytest.mark.asyncio
-async def test_paraphrase_judge_method_accepted(db_session, msg):
+async def test_paraphrase_judge_method_accepted(db_session: AsyncSession, msg: uuid.UUID) -> None:
     db_session.add(
         MessageCaselawCitation(
             message_id=msg,
@@ -45,7 +46,7 @@ async def test_paraphrase_judge_method_accepted(db_session, msg):
 
 
 @pytest.mark.asyncio
-async def test_bogus_method_rejected(db_session, msg):
+async def test_bogus_method_rejected(db_session: AsyncSession, msg: uuid.UUID) -> None:
     db_session.add(
         MessageCaselawCitation(
             message_id=msg,

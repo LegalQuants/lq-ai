@@ -26,8 +26,9 @@ from __future__ import annotations
 import contextlib
 import json as _json
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
+from typing import Literal
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -65,7 +66,7 @@ GATEWAY_KEY = "test-gw-key"
 # ---------------------------------------------------------------------------
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -138,7 +139,7 @@ def _parse_sse_frames(body: bytes) -> list[dict]:
 def _make_tool_spec(
     *,
     function_name: str = "mcp__files__delete_doc",
-    kind: str = "mcp",
+    kind: Literal["research", "mcp", "authority"] = "mcp",
     provider: str = "files",
     tool: str = "delete_doc",
     destructive: bool = True,
@@ -203,7 +204,7 @@ async def test_empty_allowlist_uses_single_shot_stream_path(
         routed_provider="anthropic-prod",
     )
 
-    async def _stream_gen(*_args, **_kwargs):
+    async def _stream_gen(*_args: object, **_kwargs: object) -> AsyncIterator[ChatCompletionChunk]:
         yield chunk
 
     empty_allowlist = ChatToolAllowlist(specs={})

@@ -12,7 +12,7 @@ from app.research.html import html_to_text
         ("plain text already", "plain text already", "<"),
     ],
 )
-def test_html_to_text(html, expected_contains, expected_excludes) -> None:
+def test_html_to_text(html: str, expected_contains: str, expected_excludes: str) -> None:
     out = html_to_text(html)
     assert expected_contains in out
     assert expected_excludes not in out

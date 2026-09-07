@@ -443,7 +443,9 @@ async def test_halted_event_with_details(db_session: AsyncSession) -> None:
         .all()
     )
     assert len(rows) == 1
-    assert rows[0].details["reason"] == "cost_cap_reached"
+    details = rows[0].details
+    assert details is not None
+    assert details["reason"] == "cost_cap_reached"
 
 
 @pytest.mark.integration
@@ -476,6 +478,8 @@ async def test_phases_run_phase_transition_uses_autonomous_audit(
         .all()
     )
     assert len(rows) == 1
-    assert rows[0].details["to_phase"] == str(Phase.analysis)
+    details = rows[0].details
+    assert details is not None
+    assert details["to_phase"] == str(Phase.analysis)
     assert rows[0].resource_type == "autonomous_session"
     assert rows[0].user_id == user.id

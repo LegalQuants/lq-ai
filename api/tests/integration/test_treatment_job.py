@@ -29,7 +29,9 @@ class _FastGW:
 
 
 @pytest.mark.asyncio
-async def test_run_treatment_derivation_writes_row_and_links(db_session: AsyncSession, monkeypatch):
+async def test_run_treatment_derivation_writes_row_and_links(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # Prevent any outbound HTTP attempt after Task 6 wires in get_gateway_client().
     # The stub returns "fast" (the default) without hitting the network.
     monkeypatch.setattr(treatment_worker, "get_gateway_client", lambda: _FastGW())
@@ -69,7 +71,7 @@ async def test_run_treatment_derivation_writes_row_and_links(db_session: AsyncSe
     # The job's _run helper takes an injected session + fetch so we can test it without Redis/arq.
     from app.workers.treatment_worker import run_treatment_derivation
 
-    async def fake_fetch(opinion_id: int) -> dict:  # type: ignore[type-arg]
+    async def fake_fetch(opinion_id: int) -> dict:
         return {
             "cited_by_count": 7,
             "citing": [
@@ -96,7 +98,9 @@ async def test_run_treatment_derivation_writes_row_and_links(db_session: AsyncSe
 
 
 @pytest.mark.asyncio
-async def test_run_resolves_gateway_and_passes_it(db_session: AsyncSession, monkeypatch):
+async def test_run_resolves_gateway_and_passes_it(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """When a gateway is injected and its judge-model fetch succeeds, derive is
     called with that gateway instance and the returned model name."""
     captured: dict[str, Any] = {}
@@ -131,7 +135,9 @@ async def test_run_resolves_gateway_and_passes_it(db_session: AsyncSession, monk
 
 
 @pytest.mark.asyncio
-async def test_run_degrades_to_graph_only_on_gateway_failure(db_session: AsyncSession, monkeypatch):
+async def test_run_degrades_to_graph_only_on_gateway_failure(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """When the gateway's judge-model fetch raises, the worker degrades to
     graph-only (gateway=None passed to derive)."""
     captured: dict[str, Any] = {}

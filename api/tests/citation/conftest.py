@@ -14,7 +14,9 @@ from app.models.user import User
 
 
 @pytest.fixture
-async def seeded(db_session: AsyncSession):
+async def seeded(
+    db_session: AsyncSession,
+) -> tuple[uuid.UUID, uuid.UUID, MessageCaselawCitation, CitationLedgerEntry]:
     """Seed: User → Chat → assistant Message → MessageCaselawCitation(cluster_id=2812209)
     → CitationLedgerEntry.  Returns (msg_id, chat_id, cc, entry)."""
     user = User(email=f"t-{uuid.uuid4().hex[:8]}@e.com", hashed_password="x", role="member")

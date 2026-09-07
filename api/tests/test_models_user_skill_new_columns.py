@@ -8,7 +8,7 @@ names (``body``, ``display_name``) rather than the plan's draft names
 from app.models.user_skill import UserSkill
 
 
-def test_user_skill_has_slash_alias_and_forked_from_columns():
+def test_user_skill_has_slash_alias_and_forked_from_columns() -> None:
     us = UserSkill(
         scope="user",
         slug="x",

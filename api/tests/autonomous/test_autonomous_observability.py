@@ -334,7 +334,9 @@ async def test_retrieve_chunks_no_raw_entities_in_spans_or_audit(
     assert "autonomous.outcome" in attrs
     assert attrs["autonomous.outcome"] == "success"
     assert "autonomous.cost_usd" in attrs
-    assert float(attrs["autonomous.cost_usd"]) == pytest.approx(0.0)
+    cost_val = attrs["autonomous.cost_usd"]
+    assert isinstance(cost_val, float)
+    assert cost_val == pytest.approx(0.0)
 
     # ── Privacy assertion: no synthetic entity in any audit row ─────────────
     audit_rows = (

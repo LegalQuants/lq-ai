@@ -11,6 +11,7 @@ Coverage:
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from decimal import Decimal
 from unittest.mock import AsyncMock
 
@@ -72,10 +73,10 @@ _FREE_PROVIDERS: list[dict] = [
 
 
 @pytest.fixture(autouse=True)
-def _reset_cache() -> None:
+def _reset_cache() -> Iterator[None]:
     """Reset the process-level tier + cost caches before every test."""
     _reset_provider_tier_cache_for_tests()
-    yield  # type: ignore[misc]
+    yield
     _reset_provider_tier_cache_for_tests()
 
 

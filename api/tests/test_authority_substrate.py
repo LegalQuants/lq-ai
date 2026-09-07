@@ -19,6 +19,7 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.citation.authority import (
     AUTHORITY_TEXT_TTL,
@@ -79,7 +80,9 @@ def test_authority_target_is_deterministic_and_duck_types_document() -> None:
 
 
 @pytest.mark.asyncio
-async def test_store_then_load_round_trips(db_session, fake_storage) -> None:
+async def test_store_then_load_round_trips(
+    db_session: AsyncSession, fake_storage: dict[str, bytes]
+) -> None:
     body = "Every contract, combination ... in restraint of trade ... is declared to be illegal."
     await store_authority_text(
         db_session, source_type="govinfo", external_ref="USCODE-2022-title15", text=body
@@ -91,14 +94,18 @@ async def test_store_then_load_round_trips(db_session, fake_storage) -> None:
 
 
 @pytest.mark.asyncio
-async def test_load_returns_none_when_absent(db_session, fake_storage) -> None:
+async def test_load_returns_none_when_absent(
+    db_session: AsyncSession, fake_storage: dict[str, bytes]
+) -> None:
     assert (
         await load_authority_text(db_session, source_type="govinfo", external_ref="missing") is None
     )
 
 
 @pytest.mark.asyncio
-async def test_load_returns_none_when_stale(db_session, fake_storage) -> None:
+async def test_load_returns_none_when_stale(
+    db_session: AsyncSession, fake_storage: dict[str, bytes]
+) -> None:
     await store_authority_text(
         db_session, source_type="govinfo", external_ref="USCODE-old", text="old body"
     )
@@ -124,7 +131,9 @@ async def test_load_returns_none_when_stale(db_session, fake_storage) -> None:
 
 
 @pytest.mark.asyncio
-async def test_store_rejects_path_traversal_external_ref(db_session, fake_storage) -> None:
+async def test_store_rejects_path_traversal_external_ref(
+    db_session: AsyncSession, fake_storage: dict[str, bytes]
+) -> None:
     """Malicious external_ref containing path-traversal chars raises ValueError.
 
     The resulting storage key must never start with anything outside
@@ -141,7 +150,9 @@ async def test_store_rejects_path_traversal_external_ref(db_session, fake_storag
 
 
 @pytest.mark.asyncio
-async def test_store_rejects_path_traversal_source_type(db_session, fake_storage) -> None:
+async def test_store_rejects_path_traversal_source_type(
+    db_session: AsyncSession, fake_storage: dict[str, bytes]
+) -> None:
     """Malicious source_type also raises ValueError (load path consistent)."""
     with pytest.raises(ValueError, match="source_type"):
         await store_authority_text(
@@ -153,7 +164,9 @@ async def test_store_rejects_path_traversal_source_type(db_session, fake_storage
 
 
 @pytest.mark.asyncio
-async def test_store_second_call_updates_not_raises(db_session, fake_storage) -> None:
+async def test_store_second_call_updates_not_raises(
+    db_session: AsyncSession, fake_storage: dict[str, bytes]
+) -> None:
     """A second store for the same key updates the row, not raises IntegrityError.
 
     Simulates the concurrent-insert scenario by pre-inserting a row (first store)
@@ -173,7 +186,9 @@ async def test_store_second_call_updates_not_raises(db_session, fake_storage) ->
 
 
 @pytest.mark.asyncio
-async def test_verify_exact_match_against_authority_target(db_session, fake_storage) -> None:
+async def test_verify_exact_match_against_authority_target(
+    db_session: AsyncSession, fake_storage: dict[str, bytes]
+) -> None:
     body = "Every contract ... in restraint of trade ... is declared to be illegal."
     target = authority_target("govinfo", "USCODE-2022-title15", body)
     quote = "in restraint of trade"

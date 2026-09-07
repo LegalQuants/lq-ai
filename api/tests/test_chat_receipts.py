@@ -10,7 +10,7 @@ gates on owner-or-admin.
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -30,7 +30,7 @@ from app.security import create_access_token, hash_password
 pytestmark = pytest.mark.integration
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -277,6 +277,7 @@ async def test_receipts_auditor_can_view_any_chat_and_is_audited(
         .one()
     )
     assert row.user_id == auditor_user.id
+    assert row.details is not None
     assert row.details["viewed_user_id"] == str(owner_user.id)
 
 
@@ -483,6 +484,7 @@ async def test_receipts_export_auditor_can_view_any_chat_and_is_audited(
         .one()
     )
     assert row.user_id == auditor_user.id
+    assert row.details is not None
     assert row.details["viewed_user_id"] == str(owner_user.id)
 
 

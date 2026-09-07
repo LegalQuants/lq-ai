@@ -85,7 +85,7 @@ async def client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
 
 
 @pytest.fixture
-def fake_storage(monkeypatch):
+def fake_storage(monkeypatch: pytest.MonkeyPatch) -> dict[str, bytes]:
     """Monkeypatch upload_bytes / stream_download in the research service."""
     store: dict[str, bytes] = {}
 
@@ -96,18 +96,18 @@ def fake_storage(monkeypatch):
         def __init__(self, data: bytes) -> None:
             self._data = data
 
-        async def __aenter__(self):
+        async def __aenter__(self) -> AsyncIterator[bytes]:
             data = self._data
 
-            async def _gen():
+            async def _gen() -> AsyncIterator[bytes]:
                 yield data
 
             return _gen()
 
-        async def __aexit__(self, *a):
+        async def __aexit__(self, *a: object) -> bool:
             return False
 
-    def _download(*, storage_path: str):
+    def _download(*, storage_path: str) -> _Reader:
         return _Reader(store[storage_path])
 
     monkeypatch.setattr("app.research.service.upload_bytes", _upload)
@@ -233,7 +233,7 @@ async def test_search_returns_count_and_results(client: AsyncClient, db_user: Us
 
 @pytest.mark.integration
 async def test_get_cluster_fetches_and_returns(
-    client: AsyncClient, db_user: User, fake_storage
+    client: AsyncClient, db_user: User, fake_storage: dict[str, bytes]
 ) -> None:
     gw_resp = {
         "provider": "courtlistener-prod",
@@ -280,7 +280,7 @@ async def test_get_cluster_fetches_and_returns(
 
 @pytest.mark.integration
 async def test_read_opinion_404_when_not_cached(
-    client: AsyncClient, db_user: User, fake_storage
+    client: AsyncClient, db_user: User, fake_storage: dict[str, bytes]
 ) -> None:
     """GET /opinions/{id} returns 404 when the cluster was never fetched."""
     resp = await client.get(
@@ -292,7 +292,7 @@ async def test_read_opinion_404_when_not_cached(
 
 @pytest.mark.integration
 async def test_read_opinion_200_after_cluster_cached(
-    client: AsyncClient, db_session: AsyncSession, db_user: User, fake_storage
+    client: AsyncClient, db_session: AsyncSession, db_user: User, fake_storage: dict[str, bytes]
 ) -> None:
     """Cache the cluster first (via service), then read the opinion via endpoint."""
     from app.models.research import ResearchOpinionMetadata
@@ -327,7 +327,7 @@ async def test_read_opinion_200_after_cluster_cached(
 
 @pytest.mark.integration
 async def test_find_in_case_returns_matches(
-    client: AsyncClient, db_session: AsyncSession, db_user: User, fake_storage
+    client: AsyncClient, db_session: AsyncSession, db_user: User, fake_storage: dict[str, bytes]
 ) -> None:
     from app.models.research import ResearchOpinionMetadata
 
@@ -358,7 +358,7 @@ async def test_find_in_case_returns_matches(
 
 @pytest.mark.integration
 async def test_find_in_case_404_when_not_cached(
-    client: AsyncClient, db_user: User, fake_storage
+    client: AsyncClient, db_user: User, fake_storage: dict[str, bytes]
 ) -> None:
     resp = await client.post(
         "/api/v1/research/find-in-case",
@@ -381,11 +381,11 @@ async def test_capabilities_unauthenticated_returns_401(client: AsyncClient) -> 
 
 @pytest.mark.integration
 async def test_capabilities_enabled_when_courtlistener_configured(
-    client: AsyncClient, db_user: User, monkeypatch
+    client: AsyncClient, db_user: User, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from app.research import service
 
-    async def _mock_get_capabilities(**_kwargs):
+    async def _mock_get_capabilities(**_kwargs: object) -> dict[str, object]:
         return {
             "enabled": True,
             "providers": [{"name": "courtlistener-prod", "type": "courtlistener"}],
@@ -402,11 +402,11 @@ async def test_capabilities_enabled_when_courtlistener_configured(
 
 @pytest.mark.integration
 async def test_capabilities_disabled_when_not_configured(
-    client: AsyncClient, db_user: User, monkeypatch
+    client: AsyncClient, db_user: User, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from app.research import service
 
-    async def _mock_get_capabilities(**_kwargs):
+    async def _mock_get_capabilities(**_kwargs: object) -> dict[str, object]:
         return {"enabled": False, "providers": []}
 
     monkeypatch.setattr(service, "get_capabilities", _mock_get_capabilities)

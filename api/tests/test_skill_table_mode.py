@@ -102,12 +102,14 @@ class TestLQAIFrontmatterColumns:
 
         from app.skills.schema import LQAIFrontmatter
 
-        fm = LQAIFrontmatter(
-            output_format="table",
-            columns=[
-                {"name": "Term", "query": "What is the term?"},
-                {"name": "Survival", "query": "What is the survival period?"},
-            ],
+        fm = LQAIFrontmatter.model_validate(
+            {
+                "output_format": "table",
+                "columns": [
+                    {"name": "Term", "query": "What is the term?"},
+                    {"name": "Survival", "query": "What is the survival period?"},
+                ],
+            }
         )
 
         assert fm.output_format == "table"
@@ -122,9 +124,11 @@ class TestLQAIFrontmatterColumns:
 
         from app.skills.schema import LQAIFrontmatter
 
-        fm = LQAIFrontmatter(
-            output_format="report",
-            columns=[{"name": "X", "query": "Y"}],
+        fm = LQAIFrontmatter.model_validate(
+            {
+                "output_format": "report",
+                "columns": [{"name": "X", "query": "Y"}],
+            }
         )
 
         assert fm.output_format == "report"
