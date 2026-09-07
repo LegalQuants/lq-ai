@@ -31,13 +31,7 @@
 	{edges}
 	fitView
 	minZoom={0.001}
-	colorMode={$theme.includes('dark')
-		? 'dark'
-		: $theme === 'system'
-			? window.matchMedia('(prefers-color-scheme: dark)').matches
-				? 'dark'
-				: 'light'
-			: 'light'}
+	colorMode={$theme.includes('dark') ? 'dark' : 'light'}
 	nodesConnectable={false}
 	nodesDraggable={false}
 	on:nodeclick={(e) => dispatch('nodeclick', e.detail)}

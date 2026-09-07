@@ -915,8 +915,10 @@
 			const themes = ['dark', 'light', 'oled-dark'];
 			let themeToApply =
 				newTheme === 'oled-dark' ? 'dark' : newTheme === 'her' ? 'light' : newTheme;
+			// LQ.AI: dark mode isn't a supported deployment theme (see app.html);
+			// 'system' always resolves to light rather than the OS preference.
 			if (newTheme === 'system') {
-				themeToApply = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+				themeToApply = 'light';
 			}
 			themes
 				.filter((e) => e !== themeToApply)
@@ -1339,13 +1341,7 @@
 {/if}
 
 <Toaster
-	theme={$theme.includes('dark')
-		? 'dark'
-		: $theme === 'system'
-			? window.matchMedia('(prefers-color-scheme: dark)').matches
-				? 'dark'
-				: 'light'
-			: 'light'}
+	theme={$theme.includes('dark') ? 'dark' : 'light'}
 	richColors
 	position="top-right"
 	closeButton
