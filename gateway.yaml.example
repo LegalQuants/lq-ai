@@ -141,6 +141,28 @@ providers:
       - anthropic.claude-opus-4-7-v1:0
       - anthropic.claude-sonnet-4-6-v1:0
 
+  - name: bedrock-mantle
+    type: bedrock_mantle
+    # DE-035 (superseding the InvokeModel/SigV4 plan above): AWS's Mantle
+    # endpoint serves Bedrock models over native OpenAI/Anthropic wire
+    # protocols (Chat Completions, Messages, Responses) behind a single
+    # Bearer-token auth, with a hardware-attested Zero Operator Access
+    # (ZOA) custody guarantee. `bedrock` (InvokeModel) is kept above as a
+    # fallback path; this is the preferred provider for new deployments.
+    base_url: https://bedrock-mantle.${AWS_REGION:-us-east-1}.api.aws/v1
+    # A single Bedrock API key (IAM-backed) authenticates all three Mantle
+    # protocol surfaces via `Authorization: Bearer <key>` — not SigV4, not
+    # the access/secret key pair the `bedrock` entry above uses.
+    api_key_env: AWS_BEARER_TOKEN_BEDROCK
+    tier: 3  # AWS Bedrock routes through customer's AWS account; ZOA custody
+    models:
+      # Legacy/compat models — Chat Completions tier (reuses the OpenAI adapter).
+      - openai.gpt-oss-20b
+      # Current-generation Anthropic models — Messages tier.
+      - anthropic.claude-opus-4-8
+      # Current-generation OpenAI models — Responses tier.
+      - openai.gpt-5.5
+
   - name: azure-openai
     type: azure_openai
     # M2-E1 (DE-267): Azure OpenAI adapter. Mirrors the OpenAI wire shape

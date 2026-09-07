@@ -70,6 +70,7 @@ from app.model_discovery import ModelDiscoverer
 from app.providers import (
     AnthropicAdapter,
     AzureOpenAIAdapter,
+    BedrockMantleAdapter,
     OllamaAdapter,
     OpenAIAdapter,
     ProviderAdapter,
@@ -177,6 +178,11 @@ def build_adapter(provider: ProviderConfig) -> ProviderAdapter | None:
         # M2-E1 (DE-267): Azure OpenAI mirrors the OpenAI wire shape with
         # a deployment-scoped URL (+ api-version) and ``api-key`` auth.
         return AzureOpenAIAdapter.from_config(provider)
+    if provider.type == "bedrock_mantle":
+        # DE-036: Bearer-token auth across three wire-protocol tiers (Chat
+        # Completions / Messages / Responses), dispatched per-request by
+        # model-ID prefix. DE-035 (IAM/SigV4 InvokeModel) remains deferred.
+        return BedrockMantleAdapter.from_config(provider)
     if provider.type == "ollama":
         # B6 partial: Ollama is the Mode-2 (air-gapped local inference)
         # backbone per PRD §1.5.1 / §6.1.
