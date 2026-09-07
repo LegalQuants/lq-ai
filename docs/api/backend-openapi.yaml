@@ -60,6 +60,8 @@ tags:
     description: Per-user saved prompt fragments
   - name: user-skills
     description: Per-user DB-backed skills (D8) — owned CRUD that shadows built-ins per ADR 0012
+  - name: admin-community-skills
+    description: Admin community-skill installer — catalog from the local lq-skills submodule (DE-263, ADR 0027)
   - name: teams
     description: Operator-admin-controlled teams (D8.1a) — D8.1b will gate team-scope user-skills mutate on team-admin role
   - name: audit-log
@@ -4035,6 +4037,110 @@ paths:
           description: Tenant not found or already disconnected
 
 # ============================================================
+# 3.8 / DE-263 — Admin community-skill installer (ADR 0027)
+# ============================================================
+
+  /api/v1/admin/community-skills:
+    get:
+      tags: [admin-community-skills]
+      summary: List the community skill catalog from the local submodule (DE-263)
+      description: |
+        Serves the catalog FROM THE LOCAL `skills/community` submodule
+        checkout — never a network fetch (ADR 0027; preserves the
+        backend single-outbound-client invariant and air-gap
+        compatibility). Re-scans the directory per request; the
+        operator refresh path is `git submodule update --remote
+        skills/community`. An absent/empty submodule returns 200 with
+        an empty list plus `source.operator_hint`. Per-skill parse
+        failures surface in `load_errors`. Admin-only. Backs the
+        SvelteKit admin page at `/lq-ai/admin/community-skills`.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Community catalog (possibly empty, with operator hint)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommunityCatalogResponse'
+        '401':
+          description: Not authenticated
+        '403':
+          description: Authenticated but not an admin
+
+  /api/v1/admin/community-skills/{slug}:
+    get:
+      tags: [admin-community-skills]
+      summary: Full SKILL.md detail for one community skill (DE-263)
+      description: |
+        The install-confirm view — full body markdown + raw frontmatter
+        YAML so the operator reviews the actual work product before
+        installing (transparency principle). `attested_by` is the
+        verbatim frontmatter declaration or null ("none declared");
+        attestation is displayed, never synthesized. Admin-only.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Full community skill detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommunitySkillDetail'
+        '401':
+          description: Not authenticated
+        '403':
+          description: Authenticated but not an admin
+        '404':
+          description: Unknown community skill slug
+        '422':
+          description: SKILL.md exists but is malformed (detail says why)
+
+  /api/v1/admin/community-skills/{slug}/install:
+    post:
+      tags: [admin-community-skills]
+      summary: Install a community skill as an editable user-scope copy (DE-263)
+      description: |
+        Persists a `user_skills` row (ADR 0012 fork semantics) owned by
+        the installing admin, validated through the same bounds as
+        hand-authored user skills (malformed content → the same 422s).
+        Writes `forked_from: "lq-skills:<slug>@<sha>"` where `<sha>` is
+        the submodule HEAD commit resolved by file reads of git
+        plumbing (degrades to `"unknown"`), plus a
+        `community_skill.installed` audit row in the same transaction.
+        The copy does not auto-update when the submodule moves.
+        Admin-only.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '201':
+          description: Installed — the created user-skill row
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSkill'
+        '401':
+          description: Not authenticated
+        '403':
+          description: Authenticated but not an admin
+        '404':
+          description: Unknown community skill slug
+        '409':
+          description: Caller already has a live user skill at this slug
+        '422':
+          description: SKILL.md malformed or violates user-skill bounds
+
+# ============================================================
 # M4-A4-i — Autonomous sessions read/halt API
 # ============================================================
 
@@ -5803,6 +5909,91 @@ components:
         tenant_name: { type: string }
         installer_oid: { type: string }
         installed_at: { type: string, format: date-time }
+
+    CommunityCatalogSource:
+      type: object
+      description: |
+        Where the community catalog came from (DE-263, ADR 0027) —
+        stated so staleness is visible, not hidden. `sha` is the
+        submodule HEAD commit resolved via file reads of git plumbing;
+        null when unresolvable (rendered as "unknown").
+        `operator_hint` is set when the catalog is absent/empty and
+        names the `git submodule update --init` remedy.
+      required:
+        - path
+        - submodule_present
+      properties:
+        path: { type: string }
+        sha: { type: string, nullable: true }
+        submodule_present: { type: boolean }
+        operator_hint: { type: string, nullable: true }
+
+    CommunitySkillSummary:
+      type: object
+      description: |
+        One community catalog entry (DE-263). `attested_by` is the
+        verbatim frontmatter declaration or null — attestation is
+        displayed, never synthesized. `installed` reflects whether the
+        CALLING admin already has a live user-scope row at this slug
+        (the same condition that makes install return 409).
+      required:
+        - slug
+        - title
+        - description
+        - version
+        - installed
+        - body_preview
+      properties:
+        slug: { type: string }
+        title: { type: string }
+        description: { type: string }
+        version: { type: string }
+        author: { type: string, nullable: true }
+        tags:
+          type: array
+          items: { type: string }
+        jurisdiction: { type: string, nullable: true }
+        attested_by: { type: string, nullable: true }
+        installed: { type: boolean }
+        body_preview: { type: string }
+
+    CommunityCatalogResponse:
+      type: object
+      description: |
+        Response for `GET /api/v1/admin/community-skills`. `load_errors`
+        carries per-skill parse failures verbatim so broken corpus
+        entries are visible to the operator rather than silently
+        dropped.
+      required:
+        - items
+        - source
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CommunitySkillSummary' }
+        source: { $ref: '#/components/schemas/CommunityCatalogSource' }
+        load_errors:
+          type: array
+          items: { type: string }
+
+    CommunitySkillDetail:
+      allOf:
+        - $ref: '#/components/schemas/CommunitySkillSummary'
+        - type: object
+          description: |
+            Full SKILL.md view for the install-confirm surface (DE-263).
+            `install_ref` is the `forked_from` provenance string an
+            install would write now (`lq-skills:<slug>@<sha|unknown>`).
+          required:
+            - content_yaml
+            - content_md
+            - install_ref
+          properties:
+            output_format: { type: string, nullable: true }
+            minimum_inference_tier: { type: integer, nullable: true }
+            content_yaml: { type: string }
+            content_md: { type: string }
+            install_ref: { type: string }
 
     IntakeBridgesList:
       type: object

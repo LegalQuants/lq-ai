@@ -202,6 +202,10 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("PATCH", "/api/v1/admin/tool-providers/{provider_type}"),
     ("DELETE", "/api/v1/admin/tool-providers/{provider_type}"),
     ("GET", "/api/v1/admin/config"),
+    # 3.8 / DE-263 — admin community-skill installer (ADR 0027)
+    ("GET", "/api/v1/admin/community-skills"),
+    ("GET", "/api/v1/admin/community-skills/{slug}"),
+    ("POST", "/api/v1/admin/community-skills/{slug}/install"),
     # D3 — admin audit-log read endpoint
     ("GET", "/api/v1/admin/audit-log"),
     # M3-0.3 / DE-276 — admin ingest-health aggregate

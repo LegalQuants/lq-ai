@@ -31,6 +31,7 @@ from app.api import (
     bootstrap,
     chat_receipts,
     chats,
+    community_skills,
     enhance_prompt,
     files,
     inference,
@@ -114,6 +115,11 @@ api_router.include_router(admin.router, dependencies=_active)
 # AdminUser dependency; mounted under the `_active` group so the
 # bearer-token + must-change-password gates fire first.
 api_router.include_router(admin_intake_bridges.router, dependencies=_active)
+# 3.8 / DE-263: community skill installer (catalog from the local
+# submodule per ADR 0027). Admin-gated at handler level via AdminUser;
+# mounted under `_active` so the bearer + must-change-password gates
+# fire first.
+api_router.include_router(community_skills.router, dependencies=_active)
 # M4-A4-i: Autonomous sessions read/halt API — per-user isolated, bearer-auth.
 api_router.include_router(autonomous.router, dependencies=_active)
 # M3-A2: Playbook executor — two endpoints under different prefixes
