@@ -1,0 +1,620 @@
+{
+  "schema_version": 1,
+  "title": "DE-240 PII leakage corpus",
+  "description": "Labeled synthetic PII corpus for measuring the gateway Anonymization Layer's leakage rates. Every value is synthetic: names, organizations, and matter identifiers are invented; phone numbers use reserved fictional ranges (US 555-01xx, UK 20 7946 0xxx); account numbers, SSNs, and card numbers are fabricated or standard test values. Entry classes mirror the recognizer set the gateway actually registers (gateway/app/anonymization/engine.py): six kept Presidio defaults (PERSON, ORGANIZATION, EMAIL_ADDRESS, PHONE_NUMBER, US_BANK_NUMBER, LOCATION) plus two custom recognizers (CASE_NUMBER, MATTER_NUMBER). Entries with targeted=false document classes the gateway DELIBERATELY does not target (recognizers disabled or never registered); they are measured informationally and never gate. Shared concern with DE-282 (empirical recall/precision on real legal-document corpus): this corpus is synthetic and format-focused; DE-282's curated-document corpus supersedes it for recall claims.",
+  "entries": [
+    {
+      "id": "person-canonical-01",
+      "class": "PERSON",
+      "variant": "canonical",
+      "targeted": true,
+      "text": "Marcus Ellery signed the settlement agreement yesterday.",
+      "expected_entities": [{ "value": "Marcus Ellery", "class": "PERSON" }]
+    },
+    {
+      "id": "person-canonical-02",
+      "class": "PERSON",
+      "variant": "canonical",
+      "targeted": true,
+      "text": "Priya Raghunathan will depose the witness on Thursday.",
+      "expected_entities": [{ "value": "Priya Raghunathan", "class": "PERSON" }]
+    },
+    {
+      "id": "person-midsentence-01",
+      "class": "PERSON",
+      "variant": "mid_sentence",
+      "targeted": true,
+      "text": "The parties agree that Daniel Okonkwo shall serve as escrow agent for the deposit.",
+      "expected_entities": [{ "value": "Daniel Okonkwo", "class": "PERSON" }]
+    },
+    {
+      "id": "person-list-01",
+      "class": "PERSON",
+      "variant": "list_context",
+      "targeted": true,
+      "text": "Attendees: Helena Vargas, Tomasz Zielinski, and Mei-Ling Chow.",
+      "expected_entities": [
+        { "value": "Helena Vargas", "class": "PERSON" },
+        { "value": "Tomasz Zielinski", "class": "PERSON" },
+        { "value": "Mei-Ling Chow", "class": "PERSON" }
+      ]
+    },
+    {
+      "id": "person-nonanglo-01",
+      "class": "PERSON",
+      "variant": "non_anglo",
+      "targeted": true,
+      "text": "Nguyễn Thị Minh signed on behalf of the seller.",
+      "expected_entities": [{ "value": "Nguyễn Thị Minh", "class": "PERSON" }]
+    },
+    {
+      "id": "person-nonanglo-02",
+      "class": "PERSON",
+      "variant": "non_anglo",
+      "targeted": true,
+      "text": "Counsel for the defendant is Oluwaseun Adeyemi.",
+      "expected_entities": [{ "value": "Oluwaseun Adeyemi", "class": "PERSON" }]
+    },
+    {
+      "id": "person-nonanglo-03",
+      "class": "PERSON",
+      "variant": "non_anglo",
+      "targeted": true,
+      "text": "Aoife Ní Bhraonáin attended the mediation session.",
+      "expected_entities": [{ "value": "Aoife Ní Bhraonáin", "class": "PERSON" }]
+    },
+    {
+      "id": "person-allcaps-01",
+      "class": "PERSON",
+      "variant": "all_caps",
+      "targeted": true,
+      "text": "IN WITNESS WHEREOF, ROBERT KOWALSKI has executed this Agreement.",
+      "expected_entities": [{ "value": "ROBERT KOWALSKI", "class": "PERSON" }]
+    },
+    {
+      "id": "person-surnamefirst-01",
+      "class": "PERSON",
+      "variant": "surname_first",
+      "targeted": true,
+      "text": "Deponent: Whitfield, Sandra (Vice President, Operations).",
+      "expected_entities": [{ "value": "Whitfield, Sandra", "class": "PERSON" }]
+    },
+    {
+      "id": "person-punctuated-01",
+      "class": "PERSON",
+      "variant": "punctuated",
+      "targeted": true,
+      "text": "Per Dr. Elena Marchetti's report, damages exceed the threshold.",
+      "expected_entities": [{ "value": "Elena Marchetti", "class": "PERSON" }]
+    },
+    {
+      "id": "org-canonical-01",
+      "class": "ORGANIZATION",
+      "variant": "canonical",
+      "targeted": true,
+      "text": "Meridian Fabrication LLC breached the supply agreement.",
+      "expected_entities": [{ "value": "Meridian Fabrication LLC", "class": "ORGANIZATION" }]
+    },
+    {
+      "id": "org-canonical-02",
+      "class": "ORGANIZATION",
+      "variant": "canonical",
+      "targeted": true,
+      "text": "The claim was filed against Cobalt Ridge Logistics, Inc.",
+      "expected_entities": [{ "value": "Cobalt Ridge Logistics, Inc.", "class": "ORGANIZATION" }]
+    },
+    {
+      "id": "org-midsentence-01",
+      "class": "ORGANIZATION",
+      "variant": "mid_sentence",
+      "targeted": true,
+      "text": "Payments owed by Harborview Analytics Corporation remain outstanding.",
+      "expected_entities": [{ "value": "Harborview Analytics Corporation", "class": "ORGANIZATION" }]
+    },
+    {
+      "id": "org-list-01",
+      "class": "ORGANIZATION",
+      "variant": "list_context",
+      "targeted": true,
+      "text": "Vendors: Tessellate Systems Ltd, Quarry Bend Partners, and Ferrous Oak Holdings.",
+      "expected_entities": [
+        { "value": "Tessellate Systems Ltd", "class": "ORGANIZATION" },
+        { "value": "Quarry Bend Partners", "class": "ORGANIZATION" },
+        { "value": "Ferrous Oak Holdings", "class": "ORGANIZATION" }
+      ]
+    },
+    {
+      "id": "org-nosuffix-01",
+      "class": "ORGANIZATION",
+      "variant": "no_suffix",
+      "targeted": true,
+      "text": "The indemnity offered by Silverpine Mutual is capped at two million dollars.",
+      "expected_entities": [{ "value": "Silverpine Mutual", "class": "ORGANIZATION" }]
+    },
+    {
+      "id": "org-unicode-01",
+      "class": "ORGANIZATION",
+      "variant": "unicode",
+      "targeted": true,
+      "text": "The distributor, Müller & Söhne GmbH, disputes the delivery terms.",
+      "expected_entities": [{ "value": "Müller & Söhne GmbH", "class": "ORGANIZATION" }]
+    },
+    {
+      "id": "org-allcaps-01",
+      "class": "ORGANIZATION",
+      "variant": "all_caps",
+      "targeted": true,
+      "text": "BETWEEN: NORTHGATE PRECISION TOOLING INC. (the \"Supplier\") and the Buyer.",
+      "expected_entities": [{ "value": "NORTHGATE PRECISION TOOLING INC.", "class": "ORGANIZATION" }]
+    },
+    {
+      "id": "org-firm-01",
+      "class": "ORGANIZATION",
+      "variant": "law_firm",
+      "targeted": true,
+      "text": "Opposing counsel at Delacroix & Marsh LLP requested an extension.",
+      "expected_entities": [{ "value": "Delacroix & Marsh LLP", "class": "ORGANIZATION" }]
+    },
+    {
+      "id": "email-canonical-01",
+      "class": "EMAIL_ADDRESS",
+      "variant": "canonical",
+      "targeted": true,
+      "text": "Send the executed copy to r.calloway@meridianfab-example.com by Friday.",
+      "expected_entities": [{ "value": "r.calloway@meridianfab-example.com", "class": "EMAIL_ADDRESS" }]
+    },
+    {
+      "id": "email-midsentence-01",
+      "class": "EMAIL_ADDRESS",
+      "variant": "mid_sentence",
+      "targeted": true,
+      "text": "Delivery of notice to legal.notices@cobaltridge-example.net shall constitute service.",
+      "expected_entities": [{ "value": "legal.notices@cobaltridge-example.net", "class": "EMAIL_ADDRESS" }]
+    },
+    {
+      "id": "email-list-01",
+      "class": "EMAIL_ADDRESS",
+      "variant": "list_context",
+      "targeted": true,
+      "text": "CC: h.vargas@delmarsh-example.com, t.zielinski@delmarsh-example.com.",
+      "expected_entities": [
+        { "value": "h.vargas@delmarsh-example.com", "class": "EMAIL_ADDRESS" },
+        { "value": "t.zielinski@delmarsh-example.com", "class": "EMAIL_ADDRESS" }
+      ]
+    },
+    {
+      "id": "email-angle-01",
+      "class": "EMAIL_ADDRESS",
+      "variant": "punctuated",
+      "targeted": true,
+      "text": "Contact: <sandra.whitfield@harborview-example.org>.",
+      "expected_entities": [{ "value": "sandra.whitfield@harborview-example.org", "class": "EMAIL_ADDRESS" }]
+    },
+    {
+      "id": "email-plus-01",
+      "class": "EMAIL_ADDRESS",
+      "variant": "plus_address",
+      "targeted": true,
+      "text": "Route billing queries to invoices+matter42@silverpine-example.com.",
+      "expected_entities": [{ "value": "invoices+matter42@silverpine-example.com", "class": "EMAIL_ADDRESS" }]
+    },
+    {
+      "id": "email-upper-01",
+      "class": "EMAIL_ADDRESS",
+      "variant": "all_caps",
+      "targeted": true,
+      "text": "The notice address is LEGAL@FERROUSOAK-EXAMPLE.COM.",
+      "expected_entities": [{ "value": "LEGAL@FERROUSOAK-EXAMPLE.COM", "class": "EMAIL_ADDRESS" }]
+    },
+    {
+      "id": "email-spaced-01",
+      "class": "EMAIL_ADDRESS",
+      "variant": "spaced",
+      "targeted": true,
+      "text": "The address was transcribed as elena . marchetti @ quarrybend-example . com in the minutes.",
+      "expected_entities": [{ "value": "elena . marchetti @ quarrybend-example . com", "class": "EMAIL_ADDRESS" }]
+    },
+    {
+      "id": "email-subdomain-01",
+      "class": "EMAIL_ADDRESS",
+      "variant": "subdomain",
+      "targeted": true,
+      "text": "Escalations go to ops@mail.tessellate-example.co.uk.",
+      "expected_entities": [{ "value": "ops@mail.tessellate-example.co.uk", "class": "EMAIL_ADDRESS" }]
+    },
+    {
+      "id": "phone-canonical-01",
+      "class": "PHONE_NUMBER",
+      "variant": "canonical",
+      "targeted": true,
+      "text": "Call the claims desk at 415-555-0132.",
+      "expected_entities": [{ "value": "415-555-0132", "class": "PHONE_NUMBER" }]
+    },
+    {
+      "id": "phone-dotted-01",
+      "class": "PHONE_NUMBER",
+      "variant": "punctuated",
+      "targeted": true,
+      "text": "Fax responses to 312.555.0187.",
+      "expected_entities": [{ "value": "312.555.0187", "class": "PHONE_NUMBER" }]
+    },
+    {
+      "id": "phone-parens-01",
+      "class": "PHONE_NUMBER",
+      "variant": "punctuated",
+      "targeted": true,
+      "text": "Reception can be reached at (206) 555-0144.",
+      "expected_entities": [{ "value": "(206) 555-0144", "class": "PHONE_NUMBER" }]
+    },
+    {
+      "id": "phone-spaced-01",
+      "class": "PHONE_NUMBER",
+      "variant": "spaced",
+      "targeted": true,
+      "text": "The mediator's line is 646 555 0179.",
+      "expected_entities": [{ "value": "646 555 0179", "class": "PHONE_NUMBER" }]
+    },
+    {
+      "id": "phone-intl-uk-01",
+      "class": "PHONE_NUMBER",
+      "variant": "international",
+      "targeted": true,
+      "text": "Ring the London office on +44 20 7946 0958.",
+      "expected_entities": [{ "value": "+44 20 7946 0958", "class": "PHONE_NUMBER" }]
+    },
+    {
+      "id": "phone-intl-de-01",
+      "class": "PHONE_NUMBER",
+      "variant": "international",
+      "targeted": true,
+      "text": "The Hamburg agent answers at +49 40 555 0123.",
+      "expected_entities": [{ "value": "+49 40 555 0123", "class": "PHONE_NUMBER" }]
+    },
+    {
+      "id": "phone-plusone-01",
+      "class": "PHONE_NUMBER",
+      "variant": "international",
+      "targeted": true,
+      "text": "Dial +1-503-555-0106 for the records custodian.",
+      "expected_entities": [{ "value": "+1-503-555-0106", "class": "PHONE_NUMBER" }]
+    },
+    {
+      "id": "phone-midsentence-01",
+      "class": "PHONE_NUMBER",
+      "variant": "mid_sentence",
+      "targeted": true,
+      "text": "According to the log, the witness, reachable at 917-555-0163, will confirm the timeline.",
+      "expected_entities": [{ "value": "917-555-0163", "class": "PHONE_NUMBER" }]
+    },
+    {
+      "id": "phone-list-01",
+      "class": "PHONE_NUMBER",
+      "variant": "list_context",
+      "targeted": true,
+      "text": "Contacts: 415-555-0198 (main), 415-555-0121 (after hours).",
+      "expected_entities": [
+        { "value": "415-555-0198", "class": "PHONE_NUMBER" },
+        { "value": "415-555-0121", "class": "PHONE_NUMBER" }
+      ]
+    },
+    {
+      "id": "phone-ext-01",
+      "class": "PHONE_NUMBER",
+      "variant": "extension",
+      "targeted": true,
+      "text": "Reach accounting at 802-555-0135 ext. 204.",
+      "expected_entities": [{ "value": "802-555-0135", "class": "PHONE_NUMBER" }]
+    },
+    {
+      "id": "bank-canonical-01",
+      "class": "US_BANK_NUMBER",
+      "variant": "canonical",
+      "targeted": true,
+      "text": "Wire the settlement funds to account 447291805233.",
+      "expected_entities": [{ "value": "447291805233", "class": "US_BANK_NUMBER" }]
+    },
+    {
+      "id": "bank-labeled-01",
+      "class": "US_BANK_NUMBER",
+      "variant": "labeled",
+      "targeted": true,
+      "text": "Account No. 89041127365 at First Meridian Savings shall receive the escrow balance.",
+      "expected_entities": [{ "value": "89041127365", "class": "US_BANK_NUMBER" }]
+    },
+    {
+      "id": "bank-midsentence-01",
+      "class": "US_BANK_NUMBER",
+      "variant": "mid_sentence",
+      "targeted": true,
+      "text": "The funds were deposited into account number 5521904873 before closing.",
+      "expected_entities": [{ "value": "5521904873", "class": "US_BANK_NUMBER" }]
+    },
+    {
+      "id": "bank-spaced-01",
+      "class": "US_BANK_NUMBER",
+      "variant": "spaced",
+      "targeted": true,
+      "text": "The ledger lists the account as 4472 9180 5233.",
+      "expected_entities": [{ "value": "4472 9180 5233", "class": "US_BANK_NUMBER" }]
+    },
+    {
+      "id": "bank-punctuated-01",
+      "class": "US_BANK_NUMBER",
+      "variant": "punctuated",
+      "targeted": true,
+      "text": "Escrow acct. #7730264418 remains frozen pending appeal.",
+      "expected_entities": [{ "value": "7730264418", "class": "US_BANK_NUMBER" }]
+    },
+    {
+      "id": "loc-street-01",
+      "class": "LOCATION",
+      "variant": "street_address",
+      "targeted": true,
+      "text": "Service was attempted at 1247 Marlowe Avenue, Springfield, Illinois 62704.",
+      "expected_entities": [
+        { "value": "1247 Marlowe Avenue, Springfield, Illinois 62704", "class": "LOCATION" }
+      ]
+    },
+    {
+      "id": "loc-street-02",
+      "class": "LOCATION",
+      "variant": "street_address",
+      "targeted": true,
+      "text": "The premises at 88 Quarry Bend Road, Missoula, Montana 59801 were inspected.",
+      "expected_entities": [
+        { "value": "88 Quarry Bend Road, Missoula, Montana 59801", "class": "LOCATION" }
+      ]
+    },
+    {
+      "id": "loc-city-01",
+      "class": "LOCATION",
+      "variant": "canonical",
+      "targeted": true,
+      "text": "The deposition will take place in Sacramento, California.",
+      "expected_entities": [{ "value": "Sacramento, California", "class": "LOCATION" }]
+    },
+    {
+      "id": "loc-courthouse-01",
+      "class": "LOCATION",
+      "variant": "mid_sentence",
+      "targeted": true,
+      "text": "Hearings resume at the county courthouse in Seattle next month.",
+      "expected_entities": [{ "value": "Seattle", "class": "LOCATION" }]
+    },
+    {
+      "id": "loc-midsentence-01",
+      "class": "LOCATION",
+      "variant": "mid_sentence",
+      "targeted": true,
+      "text": "The goods were warehoused in Toledo, Ohio, before shipment.",
+      "expected_entities": [{ "value": "Toledo, Ohio", "class": "LOCATION" }]
+    },
+    {
+      "id": "loc-list-01",
+      "class": "LOCATION",
+      "variant": "list_context",
+      "targeted": true,
+      "text": "Branch closures: Denver, Tucson, and Baton Rouge.",
+      "expected_entities": [
+        { "value": "Denver", "class": "LOCATION" },
+        { "value": "Tucson", "class": "LOCATION" },
+        { "value": "Baton Rouge", "class": "LOCATION" }
+      ]
+    },
+    {
+      "id": "loc-unicode-01",
+      "class": "LOCATION",
+      "variant": "unicode",
+      "targeted": true,
+      "text": "The arbitration will be seated in Zürich, Switzerland.",
+      "expected_entities": [{ "value": "Zürich, Switzerland", "class": "LOCATION" }]
+    },
+    {
+      "id": "loc-country-01",
+      "class": "LOCATION",
+      "variant": "canonical",
+      "targeted": true,
+      "text": "The subsidiary is incorporated in Luxembourg.",
+      "expected_entities": [{ "value": "Luxembourg", "class": "LOCATION" }]
+    },
+    {
+      "id": "case-cite-01",
+      "class": "CASE_NUMBER",
+      "variant": "canonical",
+      "targeted": true,
+      "text": "See Calloway v. Meridian Fabrication, 512 F.3d 118 (7th Cir. 2019).",
+      "expected_entities": [
+        {
+          "value": "Calloway v. Meridian Fabrication, 512 F.3d 118 (7th Cir. 2019)",
+          "class": "CASE_NUMBER"
+        }
+      ]
+    },
+    {
+      "id": "case-inre-01",
+      "class": "CASE_NUMBER",
+      "variant": "canonical",
+      "targeted": true,
+      "text": "In re Harborview Analytics, 601 F.Supp.3d 44 (S.D.N.Y. 2022), controls here.",
+      "expected_entities": [
+        {
+          "value": "In re Harborview Analytics, 601 F.Supp.3d 44 (S.D.N.Y. 2022)",
+          "class": "CASE_NUMBER"
+        }
+      ]
+    },
+    {
+      "id": "case-docket-01",
+      "class": "CASE_NUMBER",
+      "variant": "docket",
+      "targeted": true,
+      "text": "The complaint was filed as Case No. 1:24-cv-00317.",
+      "expected_entities": [{ "value": "Case No. 1:24-cv-00317", "class": "CASE_NUMBER" }]
+    },
+    {
+      "id": "case-docket-short-01",
+      "class": "CASE_NUMBER",
+      "variant": "docket",
+      "targeted": true,
+      "text": "The appeal is docketed as No. 23-1584.",
+      "expected_entities": [{ "value": "No. 23-1584", "class": "CASE_NUMBER" }]
+    },
+    {
+      "id": "case-state-01",
+      "class": "CASE_NUMBER",
+      "variant": "state_reporter",
+      "targeted": true,
+      "text": "Compare Voss v. Quarry Bend Partners, 87 N.E.3d 210 (Ill. App. 2021).",
+      "expected_entities": [
+        {
+          "value": "Voss v. Quarry Bend Partners, 87 N.E.3d 210 (Ill. App. 2021)",
+          "class": "CASE_NUMBER"
+        }
+      ]
+    },
+    {
+      "id": "case-midsentence-01",
+      "class": "CASE_NUMBER",
+      "variant": "mid_sentence",
+      "targeted": true,
+      "text": "The court reasoned, as held in Okonkwo v. Silverpine Mutual, 934 P.2d 771 (Wash. 2017), that the duty attaches at signing.",
+      "expected_entities": [
+        {
+          "value": "Okonkwo v. Silverpine Mutual, 934 P.2d 771 (Wash. 2017)",
+          "class": "CASE_NUMBER"
+        }
+      ]
+    },
+    {
+      "id": "case-lowercase-01",
+      "class": "CASE_NUMBER",
+      "variant": "lowercase",
+      "targeted": true,
+      "text": "the matter proceeds under case no. 2:23-cv-04412 in the district court.",
+      "expected_entities": [{ "value": "case no. 2:23-cv-04412", "class": "CASE_NUMBER" }]
+    },
+    {
+      "id": "case-spaced-01",
+      "class": "CASE_NUMBER",
+      "variant": "spaced",
+      "targeted": true,
+      "text": "The clerk stamped it Case No. 1:24 - cv - 00317 on the cover sheet.",
+      "expected_entities": [{ "value": "Case No. 1:24 - cv - 00317", "class": "CASE_NUMBER" }]
+    },
+    {
+      "id": "matter-canonical-01",
+      "class": "MATTER_NUMBER",
+      "variant": "canonical",
+      "targeted": true,
+      "text": "Please bill all time to matter LQ-2026-0042.",
+      "expected_entities": [{ "value": "LQ-2026-0042", "class": "MATTER_NUMBER" }]
+    },
+    {
+      "id": "matter-dotted-01",
+      "class": "MATTER_NUMBER",
+      "variant": "dotted",
+      "targeted": true,
+      "text": "The engagement letter references matter 2025.0138.",
+      "expected_entities": [{ "value": "2025.0138", "class": "MATTER_NUMBER" }]
+    },
+    {
+      "id": "matter-midsentence-01",
+      "class": "MATTER_NUMBER",
+      "variant": "mid_sentence",
+      "targeted": true,
+      "text": "Fees accrued under ACME-2024-117 exceed the retainer.",
+      "expected_entities": [{ "value": "ACME-2024-117", "class": "MATTER_NUMBER" }]
+    },
+    {
+      "id": "matter-list-01",
+      "class": "MATTER_NUMBER",
+      "variant": "list_context",
+      "targeted": true,
+      "text": "Open matters: KLD-2023-0009, KLD-2024-0031.",
+      "expected_entities": [
+        { "value": "KLD-2023-0009", "class": "MATTER_NUMBER" },
+        { "value": "KLD-2024-0031", "class": "MATTER_NUMBER" }
+      ]
+    },
+    {
+      "id": "matter-lowercase-01",
+      "class": "MATTER_NUMBER",
+      "variant": "lowercase",
+      "targeted": true,
+      "text": "Archived under lq-2019-0007 in the records system.",
+      "expected_entities": [{ "value": "lq-2019-0007", "class": "MATTER_NUMBER" }]
+    },
+    {
+      "id": "matter-punctuated-01",
+      "class": "MATTER_NUMBER",
+      "variant": "punctuated",
+      "targeted": true,
+      "text": "The audit (matter LQ-2022-0311) closed in March.",
+      "expected_entities": [{ "value": "LQ-2022-0311", "class": "MATTER_NUMBER" }]
+    },
+    {
+      "id": "untargeted-ssn-01",
+      "class": "US_SSN",
+      "variant": "canonical",
+      "targeted": false,
+      "text": "The claimant's social security number 123-45-6789 appears in the intake form.",
+      "expected_entities": [{ "value": "123-45-6789", "class": "US_SSN" }]
+    },
+    {
+      "id": "untargeted-ein-01",
+      "class": "EIN",
+      "variant": "canonical",
+      "targeted": false,
+      "text": "The company's EIN 12-3456789 was listed on the W-9.",
+      "expected_entities": [{ "value": "12-3456789", "class": "EIN" }]
+    },
+    {
+      "id": "untargeted-dob-01",
+      "class": "DATE_OF_BIRTH",
+      "variant": "canonical",
+      "targeted": false,
+      "text": "The deponent was born on March 4, 1985.",
+      "expected_entities": [{ "value": "March 4, 1985", "class": "DATE_OF_BIRTH" }]
+    },
+    {
+      "id": "untargeted-passport-01",
+      "class": "US_PASSPORT",
+      "variant": "canonical",
+      "targeted": false,
+      "text": "Passport number 483205917 was presented at the border crossing.",
+      "expected_entities": [{ "value": "483205917", "class": "US_PASSPORT" }]
+    },
+    {
+      "id": "untargeted-dl-01",
+      "class": "US_DRIVER_LICENSE",
+      "variant": "canonical",
+      "targeted": false,
+      "text": "Driver license D1234567 was suspended after the incident.",
+      "expected_entities": [{ "value": "D1234567", "class": "US_DRIVER_LICENSE" }]
+    },
+    {
+      "id": "untargeted-ip-01",
+      "class": "IP_ADDRESS",
+      "variant": "canonical",
+      "targeted": false,
+      "text": "The server at 203.0.113.47 hosted the disputed repository.",
+      "expected_entities": [{ "value": "203.0.113.47", "class": "IP_ADDRESS" }]
+    },
+    {
+      "id": "untargeted-iban-01",
+      "class": "IBAN_CODE",
+      "variant": "canonical",
+      "targeted": false,
+      "text": "Funds were routed through IBAN DE89 3704 0044 0532 0130 00.",
+      "expected_entities": [{ "value": "DE89 3704 0044 0532 0130 00", "class": "IBAN_CODE" }]
+    },
+    {
+      "id": "untargeted-cc-01",
+      "class": "CREDIT_CARD",
+      "variant": "canonical",
+      "targeted": false,
+      "text": "The retainer was charged to card 4111 1111 1111 1111.",
+      "expected_entities": [{ "value": "4111 1111 1111 1111", "class": "CREDIT_CARD" }]
+    }
+  ]
+}

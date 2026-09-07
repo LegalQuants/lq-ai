@@ -4,4 +4,5 @@ testpaths = ["."]
 markers = [
     "unit: pure unit tests, no I/O",
     "integration: tests that exercise contracts across subsystems",
+    "live: tests that need a running stack + provider key (opt-in via env guards)",
 ]

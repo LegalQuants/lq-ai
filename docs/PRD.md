@@ -3421,6 +3421,8 @@ This subsection operationalizes the §1.9 engineering-discipline posture and the
 
 **Priority:** P1 · **Effort:** M
 
+**Status:** First harness + measured baseline shipped (2026-07-25). Labeled synthetic corpus at `tests/pii/corpus/`, measurement harness in `gateway/tests/anonymization/pii_leakage.py` (slow-marked CI test with a ±5-point anti-regression pin against `tests/pii/baseline/`), measured rates published in [docs/quality/pii-leakage-rates.md](quality/pii-leakage-rates.md). Headline honest finding: ORGANIZATION leaks 100% (Presidio's default NLP config suppresses `ORG` via `labels_to_ignore`; un-suppressing is a precision trade-off deferred to DE-282 calibration). Adversarial-extraction fixtures live at `tests/pii/extraction/` with a maintainer-run live test (`LQ_PII_LIVE=1`); the "each NER backend × each tier" matrix collapses to the single spaCy backend the gateway supports, as documented in the rates doc. Remaining open scope: real legal-document recall/precision (DE-282) and per-release refresh cadence.
+
 **Context:** Per §5.8. The measurable analog of the privacy claim. Depends on the Anonymization Layer being wired (§4.7 at M2).
 
 **Specific scope:** Test the Anonymization Layer against a documented PII corpus: each entity class × each NER backend × each inference tier × each adversarial-extraction technique. Publish a per-release "PII leakage probability" rate per configuration in `docs/quality/pii-leakage-rates.md` with the test methodology.
@@ -5038,6 +5040,14 @@ The document-ingestion pipeline (ADR [0006](adr/0006-document-pipeline-architect
 ---
 
 ## 10. Appendices
+
+#### DE-390 — Anonymization layer never pseudonymizes ORGANIZATION entities (Presidio default suppression)
+
+**Priority:** P1 · **Effort:** S · **Status (2026-07-25): filed (measured by the DE-240 harness — 10/10 organization names survive anonymization).**
+
+The DE-240 leakage harness measured a 100% miss rate for organization names through the pre-egress anonymization path, and root-caused it: raw spaCy detects the ORG entities, but Presidio's default `AnalyzerEngine` NLP configuration ships `ORGANIZATION` in `labels_to_ignore` (a deliberate upstream precision choice — ORG detection is noisy), and `gateway/app/anonymization/engine.py` never overrides it. For a legal product, organization names in privileged documents are often exactly the sensitive identifier an operator enables the layer to protect. Fix requires a maintainer decision inside the security boundary: un-suppress ORGANIZATION (accepting the precision cost — likely over-pseudonymization of common nouns spaCy mislabels), gate it behind a config flag (e.g. `anonymize_organizations: true|false` defaulting per the committee's risk posture), or document the exclusion prominently in the operator-facing anonymization docs. Whichever lands must re-run the DE-240 harness and update the published rates + the DE-282 calibration plan. Related finding recorded in the rates doc: `ENABLED_DEFAULT_RECOGNIZERS` in `engine.py` is descriptive-only (several undocumented Presidio defaults are active) — documentation drift worth fixing in the same pass.
+
+---
 
 ### Appendix A — Glossary
 
