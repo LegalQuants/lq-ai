@@ -1191,3 +1191,91 @@ async def test_dispatch_authority_unknown_source_does_not_raise(db):
     assert result.outcome == "success"
     assert result.data["authority"]["error"] == "source not available"
     assert gw.calls == []  # never reached the gateway for an unknown source
+
+
+# ---------------------------------------------------------------------------
+# EUR-Lex search → get chaining (DE-374)
+# ---------------------------------------------------------------------------
+
+
+class _FakeGatewayByOp:
+    """Gateway double returning a distinct payload per op — lets one test
+    exercise the search → get chain the model performs across two calls."""
+
+    def __init__(self, payloads_by_op):
+        self._payloads = payloads_by_op
+        self.calls = []
+
+    async def call_tool(self, provider, op, args):
+        self.calls.append((provider, op, args))
+        return {"payload": self._payloads[op]}
+
+
+@pytest.mark.asyncio
+async def test_dispatch_authority_eurlex_search_then_get_chains(
+    db, fake_authority_storage: dict[str, bytes]
+):
+    """DE-374: an eurlex search_authority call yields a CELEX external_ref
+    with NO body; feeding that ref to get_authority fetches the quotable text
+    and writes the durable authority cache under source_type='eurlex'. Only
+    the get step may produce citable content (fail-closed search contract)."""
+    celex = "32016R0679"
+    page_url = f"https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:{celex}"
+    gw = _FakeGatewayByOp(
+        {
+            "search_authority": {
+                "results": [
+                    {
+                        "external_ref": celex,
+                        "title": "General Data Protection Regulation",
+                        "url": page_url,
+                    }
+                ],
+                "count": 1,
+            },
+            "get_authority": {
+                "external_ref": celex,
+                "title": celex,
+                "url": page_url,
+                "text": "Article 6 Lawfulness of processing ...",
+                "content_kind": "eu_regulation",
+            },
+        }
+    )
+
+    search_result = await _dispatch_authority(
+        db,
+        spec=_shared_authority_spec("search_authority"),
+        args={"source": "eurlex", "query": "data protection"},
+        gateway=gw,
+        request_id="r1",
+    )
+    search_auth = search_result.data["authority"]
+    assert search_auth["source"] == "eurlex"
+    assert search_auth["external_ref"] == celex
+    # Search carries no quotable body — only the title label — and must not
+    # populate the durable authority cache.
+    assert search_auth["citable_text"] == "General Data Protection Regulation"
+    from app.citation.authority import load_authority_text
+
+    assert await load_authority_text(db, source_type="eurlex", external_ref=celex) is None
+
+    get_result = await _dispatch_authority(
+        db,
+        spec=_shared_authority_spec("get_authority"),
+        args={"source": "eurlex", "external_ref": search_auth["external_ref"]},
+        gateway=gw,
+        request_id="r1",
+    )
+    get_auth = get_result.data["authority"]
+    assert get_auth["source"] == "eurlex"
+    assert get_auth["content_kind"] == "eu_regulation"
+    assert "Article 6" in get_auth["citable_text"]
+    # get_authority persisted the body for the finalize verify hook.
+    body = await load_authority_text(db, source_type="eurlex", external_ref=celex)
+    assert body is not None and "Article 6" in body
+    # Both calls were routed under the eurlex source, chained on the same ref.
+    assert gw.calls == [
+        ("eurlex", "search_authority", {"query": "data protection"}),
+        ("eurlex", "get_authority", {"external_ref": celex}),
+    ]

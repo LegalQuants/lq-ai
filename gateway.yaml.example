@@ -258,7 +258,7 @@ providers:
 #
 #   - name: eurlex-prod
 #     type: eurlex                 # shipped in WS-E PR2b; uncomment to enable
-#     base_url: https://publications.europa.eu    # EU Cellar (content-negotiation by CELEX)
+#     base_url: https://publications.europa.eu    # EU Cellar (CELEX retrieval + /webapi/rdf/sparql title search)
 #     user_agent: "YourOrg legal-ops@yourorg.example"   # descriptive UA — REQUIRED, no API key
 #     egress_tier: 4               # public EU legal text (ADR 0014 D4)
 #     allowlist:
