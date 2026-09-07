@@ -72,6 +72,7 @@ from app.models.autonomous import (
 from app.models.chat import Chat
 from app.models.document import Document
 from app.models.knowledge import KnowledgeBase
+from app.models.playbook import Playbook
 from app.models.project import Project
 from app.models.user import User
 from app.schemas.autonomous import (
@@ -197,12 +198,18 @@ async def _load_owned_project(
     existence disclosure — same idiom as the autonomous loaders. The
     autonomous layer never reveals another user's Projects.
 
+    ``archived_at IS NULL`` matches :func:`app.api.projects._load_visible_project`,
+    which excludes archived rows by default: a matter the caller has deleted is
+    gone from their UI and must not be re-attachable as an autonomous target.
+
     Raises:
-        HTTPException: 404 if the row is absent or owned by a different user.
+        HTTPException: 404 if the row is absent, archived, or owned by a
+        different user.
     """
     stmt = select(Project).where(
         Project.id == project_id,
         Project.owner_id == user_id,
+        Project.archived_at.is_(None),
     )
     row = (await db.execute(stmt)).scalar_one_or_none()
     if row is None:
@@ -211,6 +218,79 @@ async def _load_owned_project(
             detail="project not found",
         )
     return row
+
+
+async def _load_owned_kb(
+    db: AsyncSession,
+    *,
+    kb_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> KnowledgeBase:
+    """Fetch a KnowledgeBase by id; 404 if missing OR not owned by the caller.
+
+    Conflates "doesn't exist" and "belongs to someone else" to avoid
+    existence disclosure — same idiom as :func:`_load_owned_project`.
+    Conservative per-user isolation: KB-sharing is out of scope for the
+    autonomous layer, so only the KB's owner may target it.
+
+    ``archived_at IS NULL`` matches :func:`app.api.knowledge_bases._load_visible_kb`.
+    ``DELETE /kb/{id}`` sets ``archived_at``, after which the KB 404s on its own
+    endpoint and disappears from the owner's UI; without this predicate it could
+    still be attached as a schedule/watch/run-now target and silently resurrected
+    as a live recurring retrieval source.
+
+    Raises:
+        HTTPException: 404 if the row is absent, archived, or owned by a
+        different user.
+    """
+    stmt = select(KnowledgeBase).where(
+        KnowledgeBase.id == kb_id,
+        KnowledgeBase.owner_id == user_id,
+        KnowledgeBase.archived_at.is_(None),
+    )
+    row = (await db.execute(stmt)).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="knowledge base not found",
+        )
+    return row
+
+
+async def _load_visible_playbook(
+    db: AsyncSession,
+    *,
+    playbook_id: uuid.UUID,
+    user: User,
+) -> Playbook:
+    """Fetch a playbook by id, applying the read-visibility predicate.
+
+    Mirrors :func:`app.api.playbooks._load_visible_playbook` exactly —
+    the rule the execute endpoint applies:
+
+    * Admins see every non-deleted playbook.
+    * Non-admins see playbooks they authored OR built-ins
+      (``created_by IS NULL``).
+    * Soft-deleted rows (``deleted_at IS NOT NULL``) are invisible to
+      everyone, including admins.
+
+    Raises:
+        HTTPException: 404 if the row is absent, soft-deleted, or
+            authored by a different non-admin user (collapsed into 404 —
+            not 403 — to avoid existence disclosure via id-probing).
+    """
+    playbook = await db.get(Playbook, playbook_id)
+    if playbook is None or playbook.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="playbook not found",
+        )
+    if not user.is_admin and playbook.created_by is not None and playbook.created_by != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="playbook not found",
+        )
+    return playbook
 
 
 async def _load_owned_proposal(
@@ -1298,7 +1378,7 @@ async def reject_project_context_proposal(
     responses={
         201: {"description": "Schedule created"},
         422: {"description": "Invalid cron expression"},
-        404: {"description": "Referenced project not found"},
+        404: {"description": "Referenced project, playbook, or knowledge base not found"},
         401: {"description": "Not authenticated"},
     },
 )
@@ -1313,7 +1393,10 @@ async def create_schedule(
     Validates ``cron_expr`` via :func:`~app.autonomous.cron.validate_cron_expr`
     (invalid → 422), creates the schedule row, and seeds
     ``next_run_at = next_run_after(cron_expr, now(UTC))`` so the
-    dispatcher's first eligible tick can pick it up.  Returns the created
+    dispatcher's first eligible tick can pick it up.  Non-null FK targets
+    are validated (DE-322): ``project_id`` and ``target_kb_id`` must be
+    owned by the caller; ``playbook_id`` must be visible to the caller
+    (own or built-in) — otherwise 404.  Returns the created
     :class:`~app.schemas.autonomous.AutonomousScheduleRead` (201).
 
     Audited.
@@ -1330,6 +1413,13 @@ async def create_schedule(
     # is rejected 404 (id-probing-safe). NULL = no matter; no check needed.
     if body.project_id is not None:
         await _load_owned_project(db, project_id=body.project_id, user_id=user.id)
+
+    # Validate target FKs (DE-322) — a playbook the caller cannot see or a
+    # KB the caller doesn't own is rejected 404 (id-probing-safe).
+    if body.playbook_id is not None:
+        await _load_visible_playbook(db, playbook_id=body.playbook_id, user=user)
+    if body.target_kb_id is not None:
+        await _load_owned_kb(db, kb_id=body.target_kb_id, user_id=user.id)
 
     now = datetime.now(UTC)
     schedule = AutonomousSchedule(
@@ -1365,7 +1455,7 @@ async def create_schedule(
 async def _spawn_manual_session(
     db: AsyncSession,
     *,
-    user_id: uuid.UUID,
+    user: User,
     body: AutonomousManualRunRequest,
     enqueue: Callable[[uuid.UUID], Awaitable[bool]] | None = None,
 ) -> AutonomousSession:
@@ -1387,7 +1477,14 @@ async def _spawn_manual_session(
     # Validate matter ownership — a non-null project_id the caller doesn't own
     # is rejected 404 (id-probing-safe). NULL = no matter; no check needed.
     if body.project_id is not None:
-        await _load_owned_project(db, project_id=body.project_id, user_id=user_id)
+        await _load_owned_project(db, project_id=body.project_id, user_id=user.id)
+
+    # Validate target FKs (DE-322) — a playbook the caller cannot see or a
+    # KB the caller doesn't own is rejected 404 (id-probing-safe).
+    if body.playbook_id is not None:
+        await _load_visible_playbook(db, playbook_id=body.playbook_id, user=user)
+    if body.target_kb_id is not None:
+        await _load_owned_kb(db, kb_id=body.target_kb_id, user_id=user.id)
 
     params: dict[str, object] = {"since": None}
     if body.target_kb_id is not None:
@@ -1402,7 +1499,7 @@ async def _spawn_manual_session(
         params["emit_artifacts"] = True
 
     session = AutonomousSession(
-        user_id=user_id,
+        user_id=user.id,
         project_id=body.project_id,
         trigger_kind="manual",
         trigger_ref=None,
@@ -1428,7 +1525,7 @@ async def _spawn_manual_session(
         201: {"description": "Session spawned"},
         403: {"description": "Autonomous layer not enabled for this user"},
         422: {"description": "Invalid target (need exactly one of playbook_id/skill_ref)"},
-        404: {"description": "Referenced project not found"},
+        404: {"description": "Referenced project, playbook, or knowledge base not found"},
         401: {"description": "Not authenticated"},
     },
 )
@@ -1446,7 +1543,7 @@ async def run_now(
     session runs under the same R4/R5/R6 brakes as every other session.
     Audited.
     """
-    session = await _spawn_manual_session(db, user_id=user.id, body=body)
+    session = await _spawn_manual_session(db, user=user, body=body)
     await audit_action(
         db,
         user_id=user.id,
@@ -1517,7 +1614,7 @@ async def list_schedules(
     response_model=AutonomousScheduleRead,
     summary="Partially update an autonomous schedule (edit / enable / disable)",
     responses={
-        404: {"description": "Schedule or referenced project not found"},
+        404: {"description": "Schedule, referenced project, playbook, or knowledge base not found"},
         422: {"description": "Invalid cron expression"},
         401: {"description": "Not authenticated"},
     },
@@ -1563,11 +1660,19 @@ async def update_schedule(
         # explicit null is a no-op rather than a constraint violation.
         schedule.emit_artifacts = fields["emit_artifacts"]
     if "playbook_id" in fields:
-        schedule.playbook_id = fields["playbook_id"]
+        new_playbook_id = fields["playbook_id"]
+        if new_playbook_id is not None:
+            # DE-322: a playbook the caller cannot see → 404 (id-probing-safe).
+            await _load_visible_playbook(db, playbook_id=new_playbook_id, user=user)
+        schedule.playbook_id = new_playbook_id  # explicit null clears the target
     if "skill_ref" in fields:
         schedule.skill_ref = fields["skill_ref"]
     if "target_kb_id" in fields:
-        schedule.target_kb_id = fields["target_kb_id"]
+        new_target_kb_id = fields["target_kb_id"]
+        if new_target_kb_id is not None:
+            # DE-322: a KB the caller doesn't own → 404 (id-probing-safe).
+            await _load_owned_kb(db, kb_id=new_target_kb_id, user_id=user.id)
+        schedule.target_kb_id = new_target_kb_id  # explicit null clears the target
     if "project_id" in fields:
         new_project_id = fields["project_id"]
         if new_project_id is not None:
@@ -1653,7 +1758,7 @@ async def delete_schedule(
     summary="Create an autonomous watch (KB-arrival-triggered run definition)",
     responses={
         201: {"description": "Watch created"},
-        404: {"description": "Target knowledge base or referenced project not found"},
+        404: {"description": "Target knowledge base, referenced project, or playbook not found"},
         401: {"description": "Not authenticated"},
     },
 )
@@ -1668,28 +1773,26 @@ async def create_watch(
     Validates the caller **owns** the target ``knowledge_base_id``
     (``KnowledgeBase.owner_id == user.id``) — a KB the caller cannot see
     returns 404 (conservative per-user isolation; KB-sharing is out of
-    scope). Creates the watch row. Returns the created
+    scope). A non-null ``playbook_id`` must be visible to the caller
+    (own or built-in; DE-322) — otherwise 404. Creates the watch row.
+    Returns the created
     :class:`~app.schemas.autonomous.AutonomousWatchRead` (201).
 
     Audited.
     """
     # Validate KB ownership — 404 (not 403) on a KB the caller doesn't own,
     # same existence-disclosure posture as the autonomous loaders.
-    kb_stmt = select(KnowledgeBase).where(
-        KnowledgeBase.id == body.knowledge_base_id,
-        KnowledgeBase.owner_id == user.id,
-    )
-    kb = (await db.execute(kb_stmt)).scalar_one_or_none()
-    if kb is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="knowledge base not found",
-        )
+    await _load_owned_kb(db, kb_id=body.knowledge_base_id, user_id=user.id)
 
     # Validate matter ownership — a non-null project_id the caller doesn't own
     # is rejected 404 (id-probing-safe). NULL = no matter; no check needed.
     if body.project_id is not None:
         await _load_owned_project(db, project_id=body.project_id, user_id=user.id)
+
+    # Validate the target playbook (DE-322) — a playbook the caller cannot
+    # see is rejected 404 (id-probing-safe).
+    if body.playbook_id is not None:
+        await _load_visible_playbook(db, playbook_id=body.playbook_id, user=user)
 
     watch = AutonomousWatch(
         user_id=user.id,
@@ -1779,7 +1882,7 @@ async def list_watches(
     response_model=AutonomousWatchRead,
     summary="Partially update an autonomous watch (enable / disable / retarget)",
     responses={
-        404: {"description": "Watch or referenced project not found"},
+        404: {"description": "Watch, referenced project, or playbook not found"},
         401: {"description": "Not authenticated"},
     },
 )
@@ -1811,7 +1914,11 @@ async def update_watch(
         # explicit null is a no-op rather than a constraint violation.
         watch.emit_artifacts = fields["emit_artifacts"]
     if "playbook_id" in fields:
-        watch.playbook_id = fields["playbook_id"]
+        new_playbook_id = fields["playbook_id"]
+        if new_playbook_id is not None:
+            # DE-322: a playbook the caller cannot see → 404 (id-probing-safe).
+            await _load_visible_playbook(db, playbook_id=new_playbook_id, user=user)
+        watch.playbook_id = new_playbook_id  # explicit null clears the target
     if "skill_ref" in fields:
         watch.skill_ref = fields["skill_ref"]
     if "project_id" in fields:
