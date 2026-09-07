@@ -494,7 +494,7 @@ For security disclosures, see [`SECURITY.md`](SECURITY.md). The disclosure proce
 - [`docs/contribute/EASIEST-CONTRIBUTIONS.md`](docs/contribute/EASIEST-CONTRIBUTIONS.md) — curated short-cycle contributions with mini-PRDs.
 - [`docs/skill-authoring-guide.md`](docs/skill-authoring-guide.md) — how to write a high-quality skill.
 - [`docs/playbooks.md`](docs/playbooks.md) — how Playbooks work and how to write one.
-- [`deploy/`](deploy/) — deployment recipes (Helm chart, Caddy/Tailscale, observability stack); see also [`docs/INSTALL-MAC.md`](docs/INSTALL-MAC.md) for a from-scratch macOS install.
+- [`deploy/`](deploy/) — deployment recipes (Helm chart, [reverse-proxy + TLS recipes](deploy/reverse-proxy/) for Caddy/Traefik/nginx, Caddy/Tailscale, observability stack); see also [`docs/INSTALL-MAC.md`](docs/INSTALL-MAC.md) for a from-scratch macOS install.
 - [`docs/compliance/`](docs/compliance/) — Compliance Alignment Pack.
 - [`docs/security/`](docs/security/) — security artifacts (SBOM, threat model, supply-chain transparency).
 - [`docs/procurement/`](docs/procurement/) — procurement-readiness templates (SIG Lite, CAIQ).

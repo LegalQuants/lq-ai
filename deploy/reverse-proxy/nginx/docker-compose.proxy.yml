@@ -1,0 +1,39 @@
+# LQ.AI reverse-proxy overlay — nginx with OPERATOR-PROVIDED certificates.
+#
+# No ACME: certificates are issued out-of-band (corporate/internal CA,
+# wildcard cert program, or host-side certbot) and dropped into the certs
+# directory — see certs/README.md. This is the recipe for air-gapped or
+# egress-restricted sites where Let's Encrypt is unreachable.
+#
+# Compose onto the base stack from the REPO ROOT:
+#
+#   docker compose \
+#     -f docker-compose.yml \
+#     -f deploy/reverse-proxy/nginx/docker-compose.proxy.yml \
+#     up -d
+
+name: lq-ai
+
+services:
+  nginx:
+    # nginx >= 1.25.1 required (the config uses the `http2 on;` directive).
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      # web's first boot can take minutes (model/asset warm-up); don't hold
+      # the front door down on it — nginx answers 502 until web listens,
+      # which recovers on its own. Same rationale as deploy/caddy-tailscale.
+      web:
+        condition: service_started
+      api:
+        condition: service_healthy
+    volumes:
+      # Server config (replaces the stock image's default server).
+      - ./deploy/reverse-proxy/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # Certificates: fullchain.pem + privkey.pem. Default is the certs/
+      # directory next to this file; point LQ_AI_TLS_CERT_DIR somewhere
+      # else (e.g. /etc/letsencrypt/live/<fqdn>) to use host-managed certs.
+      - ${LQ_AI_TLS_CERT_DIR:-./deploy/reverse-proxy/nginx/certs}:/etc/nginx/certs:ro
+    ports:
+      - "80:80"
+      - "443:443"
