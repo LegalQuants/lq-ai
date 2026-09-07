@@ -113,6 +113,54 @@ describe('Wave D.2 — Skill Creator', () => {
 		cy.contains(/use it/i, { timeout: 10000 }).should('exist');
 	});
 
+	it('2b. Table-mode wizard (DE-297): pick Table → column list → save → frontmatter_extra persisted', () => {
+		const ts = Date.now();
+		const displayName = `Table Grid Skill ${ts}`;
+		const expectedSlug = `table-grid-skill-${ts}`;
+
+		cy.visit('/lq-ai/skills/new');
+
+		// Sections 1-2.
+		cy.get('[data-testid="lq-ai-wizard-display-name"]').type(displayName);
+		cy.get('[data-testid="lq-ai-wizard-description"]').type(
+			'DE-297 Cypress fixture: table-mode skill.'
+		);
+
+		// Section 3 — switch to table mode; the body editor is swapped for
+		// the column list (one blank column row is pre-seeded).
+		cy.get('[data-testid="lq-ai-wizard-mode-table"]').check();
+		cy.get('[data-testid="lq-ai-wizard-body"]').should('not.exist');
+		cy.get('[data-testid="lq-ai-column-row"]').should('have.length', 1);
+
+		// Inline empty-query validation: blur the empty query field.
+		cy.get('[data-testid="lq-ai-column-query"]').first().focus();
+		cy.get('[data-testid="lq-ai-column-query"]').first().blur();
+		cy.get('[data-testid="lq-ai-column-query-error"]').should('exist');
+
+		// Fill the first column and add a second.
+		cy.get('[data-testid="lq-ai-column-name"]').first().type('Term');
+		cy.get('[data-testid="lq-ai-column-query"]').first().type('What is the term?');
+		cy.get('[data-testid="lq-ai-column-query-error"]').should('not.exist');
+		cy.get('[data-testid="lq-ai-column-add"]').click();
+		cy.get('[data-testid="lq-ai-column-row"]').should('have.length', 2);
+		cy.get('[data-testid="lq-ai-column-name"]').eq(1).type('Governing law');
+		cy.get('[data-testid="lq-ai-column-query"]').eq(1).type('Which law governs?');
+
+		// Save; the POST body must carry output_format=table + both columns.
+		cy.intercept('POST', '/api/v1/user-skills').as('createTableSkill');
+		cy.get('[data-testid="lq-ai-wizard-save"]').click();
+		cy.wait('@createTableSkill').then((interception) => {
+			expect(interception.response?.statusCode).to.eq(201);
+			const extra = interception.request.body.frontmatter_extra;
+			expect(extra.output_format).to.eq('table');
+			expect(extra.columns.map((c: { name: string }) => c.name)).to.deep.eq([
+				'Term',
+				'Governing law'
+			]);
+		});
+		cy.url({ timeout: 10000 }).should('include', `/lq-ai/skills/${expectedSlug}`);
+	});
+
 	it('3. Fork flow: detail page → fork → wizard pre-populated → save', () => {
 		// Timestamp suffix makes the forked slug unique across reruns so the
 		// uniqueSlug dedup in skills/new/+page.svelte doesn't silently append -2.
