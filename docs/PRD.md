@@ -73,6 +73,35 @@ Practical implication for contributors and operators: treat skills as the canoni
 
 **Contributor:** the open-source community. Skill authors, playbook authors, plugin developers, and engineers extending the platform. The product must be friendly to contribution.
 
+#### 1.4.1 The job to be done
+
+Target users are not the same thing as the job the product is hired for, and this section states
+the latter explicitly. It was added by [ADR 0029](adr/0029-definition-of-1.0.md) in response to
+the strongest dissent recorded on the 2026-09 member survey: that a 1.0 gate should follow from a
+stated job, not stand in for one.
+
+**The job:** *"I have a document, a question about it, and a professional obligation to be right.
+Help me answer it faster without asking me to trust a black box or send the document somewhere I
+cannot account for."*
+
+Three clauses, each load-bearing:
+
+- **"A document"** — the unit of work is a document or a small set of them, not a corpus and not a
+  chat session. This is why the document pipeline's honesty is a product concern rather than an
+  implementation detail ([ADR 0033](adr/0033-document-pipeline-honesty-and-ocr.md)).
+- **"A professional obligation to be right"** — the user is accountable to a client, a board or a
+  regulator for the answer. This is what the citation invariant, the validity-treatment layer and
+  the fiduciary-grade output ledger exist to serve; it is also why a confident wrong answer is a
+  worse failure here than in general-purpose tooling.
+- **"Cannot account for"** — the user must be able to say where the document went and what read
+  it. This is the self-hosted, bring-your-own-keys posture and the gateway boundary, stated as a
+  user need rather than an architectural preference.
+
+**What this excludes**, said plainly so the roadmap can use it: the product is not hired to
+replace judgment, to be a matter-management system, or to be a general-purpose assistant that
+happens to know law. Capabilities that do not serve the job above compete for the same scarce
+review capacity as capabilities that do.
+
 ### 1.5 Deployment Modes and the Inference Choice Spectrum
 
 LQ.AI's deployment posture has two dimensions. The first dimension is the **deployment mode** — where the application itself runs and how inference is reached. The second dimension is the **Inference Choice Spectrum** — what kind of trust relationship the operator has with whichever party is actually running the model. The two dimensions are orthogonal: a single deployment mode can map to multiple tiers depending on what the operator configures inside the gateway.
@@ -1102,6 +1131,8 @@ In-house teams report (across the competitive research) that the majority of inc
 
 ### 3.16 Contract Repository — Auto-Relationship Detection (M4)
 
+**Status: post-1.0. Re-scoped out of the 1.0 gate by [ADR 0029](adr/0029-definition-of-1.0.md) decision 7** — the clearest result on the 2026-09 member survey (0 keep · 6 cut · 3 blank; on its afterlife, 3 said post-1.0 and 4 said not a priority). It is **not scheduled and has no owner**, and the shape it would take if revived is a separate project or a pluggable integration point rather than a capability of the core product. The re-scope exists so that 1.0 does not tag with an unmet PRD commitment; the specification below is retained as the design of record for whoever picks it up.
+
 **M4 status: Deferred-M4+.** M4 closed without this capability — it was the one M4-roadmap item not built. No `contract_relationships` table exists in `api/alembic/versions/`; no relationship-detection pipeline or graph-query surface. Both upstream dependencies are met: the Knowledge Service pgvector+FTS baseline shipped in M1; the Citation Engine pipeline (§3.3) shipped in M2. See [HONEST-STATE.md §6](HONEST-STATE.md#6-capabilities-not-yet-started-in-source).
 
 **Description.** A pipeline that runs over a Knowledge Base of contracts and produces a relationship graph: amendments (modifies-X), restatements (replaces-X), references (cross-references-X), and master/sub (parent-of-X) edges. The graph is queryable and visible in the UI as a sidebar on each document. Contracts about a counterparty rarely stand alone, and answering questions like "which liability cap actually governs?" requires knowing which document supersedes which. This is Ivo's positioning — that contracts are not isolated documents but a graph — and is not currently addressed in the PRD's flat Knowledge Base model.
@@ -1758,6 +1789,7 @@ PyMuPDF (AGPL) is used server-side only and not redistributed as a library; the 
 - Semantic versioning (semver). The versioning unit and pre-1.0 semantics are defined in [ADR 0025](adr/0025-release-versioning-and-pipeline-ordering.md): `api`, `gateway`, `web`, and `proxy` share one release version; the desktop launcher versions independently and records the image set it ships against. Pre-1.0 the project promises more than semver requires: **a patch release never requires operator action** — no new environment variable, config change, migration step or client change — and anything that does require it bumps the minor instead. A patch is safe to take unread; a minor means read the release notes.
 - Releases tagged on GitHub with full changelog.
 - Targeted cadence: minor release **every 8–12 weeks**, patch releases as needed. Cadence is **best-effort and capacity-dependent** while the project operates with its current maintainer and signing-identity concentration; revisit once desktop signing moves to an org-owned Apple Developer account and/or a second maintainer holds release authority (see ADR 0025, *Cadence*).
+- **Release planning uses named trains; release numbering stays computed.** Per [ADR 0030](adr/0030-pacing-1.0-preconditions-and-named-trains.md), the road to 1.0 is planned as four named milestones with target months (*Enforced*, *Honest Documents*, *First Run*, *Candidate*), spaced inside the 8–12-week cadence above. A train promises a **theme and a date**, never a version number — ADR 0025 computes `vX.Y.Z` from what accumulates on `main`, so the number is an output of the diff. The rule of the trains is **dates hold, content moves**: a train ships what is green on its date and what is not rolls forward visibly. The `1.0.0` tag itself is deliberately undated (ADR 0030 decision 5).
 - Long-term-support (LTS) designation for one minor version per year, with security backports for **6 months**, reflecting current capacity to staff backport work; extend once the bottlenecks above are resolved.
 
 **Supply-chain transparency commitments (M1, per §1.8 and Appendix E).**
@@ -4353,7 +4385,7 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 #### DE-320 — Scanned-PDF OCR for the ingestion pipeline
 
-**Priority:** P2 · **Effort:** M
+**Priority:** P1 · **Effort:** M · **Status (2026-09-09): scheduled in tiers by [ADR 0033](adr/0033-document-pipeline-honesty-and-ocr.md).** Scanned-PDF handling was the highest-voted candidate on the 2026-09 member survey (6 for 1.0). **T1** — a scanned PDF gets an explicit `needs_ocr` state instead of a "successful" upload that never enters retrieval context — is required at 1.0 by [ADR 0029](adr/0029-definition-of-1.0.md)'s operating principle, not as a new gate row but as the honest-labeling duty applied. **T2** — an opt-in OCR adapter behind the DE-387 parser seam, default off, models fetched only when enabled — has a confirmed champion and is scheduled in the *Honest Documents* train. See also DE-387 (the seam) and DE-355 (the embedding path).
 
 **Context:** The ingestion pipeline (`api/app/pipeline/ingest.py`, `api/app/pipeline/parsers.py`) parses text-bearing PDFs via PyMuPDF (the canonical character stream) plus Docling (structure), and sets `was_ocrd=False` unconditionally — image-only / scanned PDFs yield no extractable text and so cannot be chunked or cited. A `paddleocr` sidecar referencing `legalquants/paddleocr-vl:latest` was sketched in `docker-compose.yml` under the `local` profile but was never implemented: the image was never published and the placeholder entrypoint only echoed "lands in M2". Worse, its presence forced `docker compose --profile local up` to attempt the missing pull and abort the whole profile — including the Ollama sidecar local inference actually needs (issue #99). The dead placeholder was removed and the README / `HONEST-STATE` claims of a PaddleOCR scanned-PDF fallback were corrected; this DE tracks the genuine capability.
 
@@ -4714,7 +4746,7 @@ No code change — the runtime already returns these with the correct typed `cod
 
 #### DE-355 — Document ingestion requires an OpenAI key specifically (the `embedding` alias is OpenAI-only)
 
-**Priority:** P2 · **Effort:** M · **Status: OPEN**
+**Priority:** P1 · **Effort:** M · **Status: OPEN — scheduled by [ADR 0033](adr/0033-document-pipeline-honesty-and-ocr.md) decision 5**, which adds a local (Ollama) path to the gateway's `embedding` alias as an explicit revision of [ADR 0008](adr/0008-embedding-model-and-openai-adapter.md), and by decision 1, which requires the silent FTS-only degradation to become an actionable message at upload time. The local path must serve 1536 dimensions or carry its own migration story — ADR 0008's dimension objection still holds. `gateway/` is a security path; this routes accordingly.**
 
 **Context:** Surfaced during the v0.5.0 launcher provider-key work. The default `smart` chat alias works with *either* an Anthropic or an OpenAI key (Anthropic primary, OpenAI fallback), so first-use chat is provider-agnostic. But the `embedding` alias in `gateway.yaml.example` points only at OpenAI `text-embedding-3-small` (1536-dim, matching the `document_chunks.embedding` column). So a user who supplies **only an Anthropic key** — via the first-run wizard field or the in-app Provider keys page — gets working chat but **silently broken document ingestion / knowledge-base search** (embedding calls fail with no resolvable OpenAI key). **Proposed fix(es):** (a) detect the missing-embedding-provider case and surface a clear, actionable message at upload time ("document search needs an OpenAI key — add one under Provider keys") rather than a late failure; and/or (b) offer a non-OpenAI embedding path (a local/Ollama embedding model, or an Anthropic-compatible embedding) so an Anthropic-only operator can run ingestion. Until then, the install docs should note that **document upload + search specifically need an OpenAI key**, even though chat does not.
 
@@ -5021,7 +5053,7 @@ Every shipped authority source authenticates with a static API key or nothing at
 
 #### DE-387 — Pluggable parser / more powerful document ingestion
 
-**Priority:** P2 · **Effort:** M (adapter seam) + per-parser adapters · **Status (2026-08-16): filed (opened by ADR 0026's removal of the dead Docling integration); the deferral was confirmed at the committee call of 2026-08-23 — “anyone may build it, but it is not a current priority.”**
+**Priority:** P1 · **Effort:** M (adapter seam) + per-parser adapters · **Status (2026-09-09): the 2026-08-23 deferral's *priority* is reversed by [ADR 0033](adr/0033-document-pipeline-honesty-and-ocr.md)** — OCR was the highest-voted candidate on the 2026-09 member survey (6 for 1.0) and a champion is confirmed. ADR 0033 also answers the core-vs-operator question this entry left to "the design ADR": **the seam lives in core; adapters are opt-in.** Work is tiered — T1 honest flagging (gate-true under [ADR 0029](adr/0029-definition-of-1.0.md)), T2 an opt-in scanned-PDF adapter, T3 the full pluggable parser with a structured-output consumer (post-1.0 unless championed). The original status line, for the record: *filed 2026-08-16 by ADR 0026's removal of the dead Docling integration; deferral confirmed at the committee call of 2026-08-23 — "anyone may build it, but it is not a current priority."*
 
 The document-ingestion pipeline (ADR [0006](adr/0006-document-pipeline-architecture.md)) parses PDFs with PyMuPDF into a flat character stream. That is sufficient for everything shipped today — chunking, embedding, retrieval, citation verification, and playbook extraction all operate on the flat stream, and the citation invariant is immune to layout scrambling by construction. The higher-fidelity parser originally planned (Docling, for structural understanding feeding §3.3's `CitableChunk`) was never wired to a consumer and was **removed** (ADR [0026](adr/0026-document-ingestion-parser-and-docling.md)) after shipping broken and unused since May. Two forward needs remain open: (1) a **structured-output consumer** (§3.3's bbox/`structural_role`/hierarchy design, still good) will want real heading/table structure; (2) **OCR/extraction quality is foundational** for image-PDFs and scanned trust documents — a bad extraction is an input problem, not a hallucination problem — and different operators want different parsers (a local-models power user vs. an in-house team scanning image-PDFs). Rather than re-bundle one heavyweight parser on everyone, make ingestion **pluggable**.
 
@@ -5034,6 +5066,60 @@ The document-ingestion pipeline (ADR [0006](adr/0006-document-pipeline-architect
 **The research is done and preserved.** Anyone picking this up should start from [`docs/research/2026-08-15-docling-ingestion-research.md`](research/2026-08-15-docling-ingestion-research.md) and its executed-conversion receipts (`docs/research/2026-08-15-docling-receipts/`), which already establish: PyMuPDF-only is sufficient for everything currently shipped; Docling 2.x works on our document class with the exact call-site idiom (re-runnable test scripts included); the CPU-torch pin recipe and its direct-deps trap (2.91 GB → ~0.45 GB); the full alternatives survey with license/weight/capability verdicts; and the untested multi-column reading-order gap (a separate, cheap PyMuPDF-quality item).
 
 **Acceptance criteria:** a parser adapter interface behind the ADR 0006 ingestion step, with PyMuPDF as the default adapter and at least one opt-in adapter wired end-to-end (parse → `structured_content` populated → a consumer reads it); the parser selectable by configuration; its cost (image weight, model downloads) incurred only when enabled; documented in ADR 0006's successor and in `docs/HONEST-STATE.md`; the design ADR resolves the core-vs-operator-adapter open question. Depends on a concrete structured-output consumer being scoped first (§3.3). Adjacent, keep coherent: the DOCX-ingest mini-PRD ([`docs/contribute/mini-prds/docx-ingest-support.md`](contribute/mini-prds/docx-ingest-support.md), a Pandoc branch that also writes `structured_content`) and DE-332 (text/markdown ingest). Related: ADR 0026 (the removal that opened this), DE-271 (amend the Apache Tika fallback claim per the research), DE-351 (first-run timeout — closed by the ADR 0026 removal).
+
+---
+
+#### DE-388 — Lite mode: a slim image for small teams
+
+**Priority:** P1 · **Effort:** L · **Status: filed 2026-09-09** (member survey: 4 votes for 1.0, the third-highest candidate; scheduled in the *First Run* train per [ADR 0030](adr/0030-pacing-1.0-preconditions-and-named-trains.md)).
+
+**Context:** The `api` image is roughly 12 GB, most of it Docling and torch — weight that [ADR 0026](adr/0026-document-ingestion-parser-and-docling.md) made removable by deleting the dead integration, and that [ADR 0033](adr/0033-document-pipeline-honesty-and-ocr.md) keeps removable by making heavy parsers opt-in adapters rather than baked-in defaults. A small in-house team evaluating LQ.AI pulls 12 GB before it can decide whether it wants the product. This is the single largest friction point in the first-run story, and the survey's write-in ordering (attorney-first UX polish first) says the first run is where the project is losing people.
+
+**Specific scope:** a slim image variant carrying the application, the API and gateway, and the PyMuPDF default parser — with heavy parsers, OCR models and their transitive ML stack pulled only when an operator enables the corresponding adapter. Publish it alongside the full image with a documented choice between them; the desktop launcher's pinned image set (gate row R1) selects one deliberately.
+
+**Acceptance criteria:** a published slim image; a documented decision table telling an operator which to run; the full image unchanged for operators who want everything; first-run time-to-first-skill measured before and after and written down (the *First Run* train's exit criterion). Related: DE-387 (the adapter seam this depends on), [ADR 0031](adr/0031-headless-api-only-use.md) (the slim image is a named revisit trigger for the headless question).
+
+---
+
+#### DE-389 — Document-dump ingest
+
+**Priority:** P2 · **Effort:** M–L (scoping first) · **Status: filed 2026-09-09** (member survey write-in, 4 mentions — the third-strongest write-in).
+
+**Context:** Users arrive with a folder, not a document. The current ingestion path is per-document upload, so onboarding a real matter means repeating an upload flow dozens of times, and nothing tells the user which of those documents actually landed in a usable state — a problem that compounds with the silent-failure paths [ADR 0033](adr/0033-document-pipeline-honesty-and-ocr.md) decision 1 closes.
+
+**Specific scope:** deliberately unscoped pending a scoping pass. The open questions are the intake surface (bulk upload, watched directory, or archive), what per-document feedback a bulk run gives, how partial failure is reported, and how it interacts with Knowledge Base structure. Scoping is the deliverable before any implementation is claimed.
+
+**Acceptance criteria (for the scoping pass):** a written scope with the four questions above answered and an effort estimate, sufficient for a contributor to claim the build. Depends on ADR 0033's ingestion-state visibility landing first — bulk ingest without per-document honesty multiplies the existing failure mode.
+
+---
+
+#### DE-390 — SSO / OIDC for team deployments
+
+**Priority:** P2 · **Effort:** L · **Status: filed 2026-09-09** (member survey write-in: multi-user and 2FA, 2 mentions; scoped in the *First Run* train).
+
+**Context:** PRD §1.4 names the operator as potentially IT or SRE deploying on the legal team's behalf, and identity-provider integration as something they care about. The multi-user lane is in flight (#534, #536), but team deployments have no single-sign-on path, so an organization that mandates SSO cannot deploy LQ.AI without an exception — an early and often fatal question in the procurement conversations the Procurement-Readiness Pack (gate row P1) exists to open.
+
+**Specific scope:** OIDC-based SSO against the operator's existing identity provider, sized for the self-hosted deployment model; not a hosted identity service. Session and role mapping to the existing authorization model; no change to the gateway's key-holding boundary.
+
+**Acceptance criteria:** an operator can configure an OIDC provider and have users sign in through it; roles map to the existing model; the flow is documented with at least one worked provider example. Touches authentication and therefore routes as a security path per [.github/CODEOWNERS](../.github/CODEOWNERS). Related: #534, #536.
+
+---
+
+#### DE-391 — Principles-as-tests / review assistance
+
+**Priority:** P3 · **Effort:** M · **Status: filed 2026-09-09 as a proposal, not a commitment** (member survey candidate c16: 1 for 1.0 · 5 post-1.0; [ADR 0034](adr/0034-review-capacity-and-reviewer-roles.md) decision 6).
+
+**Context:** The project's review capacity is its binding constraint, and this is the one candidate on the survey aimed directly at it: encode the conventions in CLAUDE.md and CONTRIBUTING.md — the DELETE-204 recipe, the test-collision guards, the security-path routing, the documentation-is-part-of-the-change rule — as automated checks, so that human review spends its time on judgment rather than on conventions a machine can verify.
+
+**Specific scope:** deliberately a proposal first. ADR 0034 records the reasoning for not doing this yet: automating review before there are reviewers solves the wrong half of the constraint, and a check that produces false positives costs more review time than it saves. The proposal issue should identify the smallest set of conventions that are mechanically checkable and already cause repeated review comments.
+
+**Acceptance criteria (for the proposal):** a written list of candidate checks, each with the review comment it would replace and an estimate of its false-positive rate. Related: [ADR 0034](adr/0034-review-capacity-and-reviewer-roles.md), DE-229 (mutation testing), DE-237 (evaluation harness).
+
+---
+
+#### Note — headless / API-only use
+
+Recorded here because it is a recurring question with a decided answer rather than an open enhancement. A headless `api + gateway` stack boots and serves the HTTP surface today without `web`. Per [ADR 0031](adr/0031-headless-api-only-use.md) this is **acknowledged but not supported**: it is documented as a factual capability with no compatibility promise, API-consumer issues are triaged as unsupported with PRs welcome, and — the load-bearing part — **the OpenAPI export is a CI drift guard, not a public compatibility contract, so [ADR 0025](adr/0025-release-versioning-and-pipeline-ordering.md)'s patch and minor promises do not extend to third-party clients.** The decision reopens on either of two named triggers: the slim image shipping (DE-388), or a design partner with a demonstrated API-only need.
 
 ---
 
