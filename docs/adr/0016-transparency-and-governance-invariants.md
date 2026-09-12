@@ -102,6 +102,12 @@ tier is the ceiling 5) plus the existing
 
 ### P5 — Atomic audit: no state change without its audit row, and vice-versa
 
+**Proposed orchestration clarification:** [ADR 0035 D5](0035-governed-orchestration-run-tree.md#d5--durable-admission-short-transactions-and-explicit-uncertain-effects)
+keeps helpers flush-only and pairs each database transition with its audit row,
+while defining separate admission and outcome transactions around external I/O.
+A provider effect cannot be atomic with a database commit; uncertain outcomes
+must remain explicit. This proposal does not change this ADR's ratification status.
+
 Audit/governance writes `flush()` inside the caller's transaction; the handler
 commits the state change and the audit row in one boundary. There is no
 "did-it-but-didn't-log-it" and no "logged-it-but-didn't-do-it" failure mode.
