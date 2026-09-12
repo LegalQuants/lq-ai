@@ -1,0 +1,34 @@
+[project]
+name = "issue-563-execution-spike"
+version = "0.0.0"
+description = "Disposable execution-adapter experiment; not application code"
+requires-python = ">=3.12"
+dependencies = [
+    "aiosqlite==0.22.1",
+    "langchain-core==1.6.3",
+    "langgraph==1.2.11",
+    "langgraph-checkpoint==4.2.0",
+    "langgraph-checkpoint-sqlite==3.1.1",
+    "langgraph-sdk==0.4.4",
+]
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "pytest-asyncio>=1,<2", "ruff>=0.12,<1", "mypy>=1.15,<2"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
