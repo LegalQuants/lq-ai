@@ -179,6 +179,13 @@ dev = [
     # Same pin family the gateway already uses.
     "types-PyYAML>=6.0",
 ]
+# W2 integration probe only: real Postgres continuation without enabling a
+# production saver. Psycopg 3 is required by the saver (existing migrations
+# still use psycopg2); binary wheels avoid requiring host libpq for tests.
+orchestration-test = [
+    "langgraph-checkpoint-postgres==3.1.2",
+    "psycopg[binary]>=3.2,<4",
+]
 
 # Note: a `[project.scripts]` console-script entry was considered for
 # the CLI but the current Dockerfile installs the package metadata only

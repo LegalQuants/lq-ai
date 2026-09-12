@@ -44,7 +44,7 @@ new changes or unresolved concerns.
 |---|---|---|
 | W0 — Runtime maintenance (#524) | Upgrade the existing LangGraph family; retype all three executors; review actual lock additions/removals/advisories; refresh the pin and debt docs and Dependabot exception. Preserve behavior and leave checkpointing disabled. Lock, Ruff, mypy, compiled graphs, required API tests and stack smoke pass. | Complete locally; publication held |
 | W1 — Governed plan contracts | Strict bounded task data separate from server authority; stable plan identity/revision/hash; immutable approval scope; no model-supplied authority or arbitrary handler. Test malformed/hostile/extra input and scope/version changes. | Complete locally; 96 tests passed |
-| W2 — LangGraph/Postgres integration | Real LQ guard and actual Postgres checkpoints, meaningful multi-step effect boundaries, independent child DB sessions, competing-owner/restart/halt fixtures and uncertain-call handling. Record worker topology and locked saver configuration; no second continuation cursor. | Pending |
+| W2 — LangGraph/Postgres integration | Real LQ guard and actual Postgres checkpoints, meaningful multi-step effect boundaries, independent child DB sessions, competing-owner/restart/halt fixtures and uncertain-call handling. Record worker topology and locked saver configuration; no second continuation cursor. | In progress; six probes establish the W3/W4 seams |
 | W3 — Durable run tree and approval | Hierarchy migration/backfill/deletion rules, plan and approval persistence, version-bound approval, durable unique child admission and wakeup recovery. Real Postgres race/crash tests and migration up/down pass. | Pending |
 | W4 — Authority, accounting and halt | Approved resource subset and current permission checks; inference/egress restrictions; atomic Decimal reservations/settlement; root allowance; fenced execution and cancellation; correct waiting/deadline/watchdog semantics. | Pending |
 | W5 — Parallel research and joining | Versioned visible orchestrator skill, isolated skill-backed children, bounded concurrency across root/user/deployment, internal child delivery, root-only output, partial/empty/failure outcomes. Barrier tests prove overlap and restart does not duplicate completed work. | Pending |
@@ -105,7 +105,16 @@ cost tests. Uncertain external outcomes remain distinct from completed work.
   Ruff and mypy (193 source files) passed. No orchestration routes, migrations or
   dispatch paths are enabled. The snapshot check is explicitly insufficient for
   durable admission or current authorization.
-- Next: W2 actual Postgres recovery integration.
+- W2: [six actual Postgres/guard probes](issue-563-postgres-probe.md) demonstrate
+  interrupt/resume, overlapping multi-step children and current halt enforcement.
+  They also reproduce committed-but-uncheckpointed replay, an uncertain request
+  without a durable intent, and duplicate owners reaching the provider. The
+  combined contract/probe run passed 102 tests. These diagnostic assertions do
+  not satisfy production replay/fencing acceptance.
+- Next: implement W3 durable approval, admission and effect identities with the
+  W4 ownership/transaction boundaries needed to close those reproduced gaps;
+  then rerun W2 against the actual production adapter. Keep LangGraph continuation
+  as proposed. Final worker topology and deployment capacity are still open.
 - Ratification, production integration, code publication and release remain open.
 
 ### W1 implementation entry point
