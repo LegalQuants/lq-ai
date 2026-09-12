@@ -43,7 +43,7 @@ new changes or unresolved concerns.
 | Package | Deliverable and acceptance gate | State |
 |---|---|---|
 | W0 — Runtime maintenance (#524) | Upgrade the existing LangGraph family; retype all three executors; review actual lock additions/removals/advisories; refresh the pin and debt docs and Dependabot exception. Preserve behavior and leave checkpointing disabled. Lock, Ruff, mypy, compiled graphs, required API tests and stack smoke pass. | Complete locally; publication held |
-| W1 — Governed plan contracts | Strict bounded task data separate from server authority; stable plan identity/revision/hash; immutable approval scope; no model-supplied authority or arbitrary handler. Test malformed/hostile/extra input and scope/version changes. | Pending |
+| W1 — Governed plan contracts | Strict bounded task data separate from server authority; stable plan identity/revision/hash; immutable approval scope; no model-supplied authority or arbitrary handler. Test malformed/hostile/extra input and scope/version changes. | Complete locally; 96 tests passed |
 | W2 — LangGraph/Postgres integration | Real LQ guard and actual Postgres checkpoints, meaningful multi-step effect boundaries, independent child DB sessions, competing-owner/restart/halt fixtures and uncertain-call handling. Record worker topology and locked saver configuration; no second continuation cursor. | Pending |
 | W3 — Durable run tree and approval | Hierarchy migration/backfill/deletion rules, plan and approval persistence, version-bound approval, durable unique child admission and wakeup recovery. Real Postgres race/crash tests and migration up/down pass. | Pending |
 | W4 — Authority, accounting and halt | Approved resource subset and current permission checks; inference/egress restrictions; atomic Decimal reservations/settlement; root allowance; fenced execution and cancellation; correct waiting/deadline/watchdog semantics. | Pending |
@@ -99,11 +99,13 @@ cost tests. Uncertain external outcomes remain distinct from completed work.
   plus successful health probes and docling import. Detailed evidence is on the maintenance
   branch in `docs/plans/issue-524-runtime-migration.md`.
 - W0 is saved as local signed-off commit `b5cd93a9` on
-  `codex/issue-524-langgraph-runtime`. Integrate that reviewed commit when W2
-  needs the upgraded runtime; it is not yet part of the harness branch.
-- Next: W1 contracts and approval-binding tests, then W2 actual Postgres recovery
-  integration. No new orchestration routes, migrations or dispatch paths have
-  been introduced by W0.
+  `codex/issue-524-langgraph-runtime`. Integrated locally as `66602522`; resolved
+  the PRD-only conflict by retaining the ADR link and verified migration evidence.
+- W1: [contracts and limits](issue-563-contracts.md) implemented; 96 focused tests,
+  Ruff and mypy (193 source files) passed. No orchestration routes, migrations or
+  dispatch paths are enabled. The snapshot check is explicitly insufficient for
+  durable admission or current authorization.
+- Next: W2 actual Postgres recovery integration.
 - Ratification, production integration, code publication and release remain open.
 
 ### W1 implementation entry point
