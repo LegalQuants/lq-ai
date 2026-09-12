@@ -176,6 +176,22 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ----- Matter access control (migration 0067) -----
+    lq_ai_matter_default_share_scope: str = Field(
+        default="personal",
+        pattern="^(personal|members|org)$",
+        description=(
+            "Ambient grant applied to a newly created matter when the caller "
+            "does not set one. 'personal' (the default) is fail-restrictive: "
+            "a new matter reaches only its owner until someone is added. "
+            "'org' gives every non-blocked user in the deployment READ on new "
+            "matters, which suits a small firm where ambient visibility is the "
+            "working assumption and an ethical screen is the exception. It "
+            "never widens WRITE, and a 'blocked' membership row overrides it. "
+            "Sandbox matters ignore this and stay 'personal' (DB CHECK)."
+        ),
+    )
+
     # ----- JWT (per ADR 0002 — backend owns auth) -----
     jwt_secret: str = Field(
         default=DEV_JWT_SECRET,

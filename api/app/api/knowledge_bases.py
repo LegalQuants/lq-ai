@@ -44,6 +44,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import ActiveUser
 from app.audit import audit_action
+from app.authz.matters import require_matter
 from app.clients.gateway import GatewayClient, get_gateway_client
 from app.db.session import get_db
 from app.errors import Conflict, LQAIError, NotFound, ValidationError
@@ -58,6 +59,7 @@ from app.models.file import File as FileModel
 from app.models.knowledge import KnowledgeBase, KnowledgeBaseFile
 from app.models.project import Project
 from app.models.project_knowledge_base import ProjectKnowledgeBase
+from app.models.user import User
 from app.schemas.knowledge import (
     AttachFileRequest,
     KBFileResponse,
@@ -147,24 +149,17 @@ async def _load_visible_file_for_kb(
 async def _load_visible_project_for_kb(
     db: AsyncSession,
     project_id: uuid.UUID,
-    owner_id: uuid.UUID,
+    user: User,
 ) -> Project:
-    """Validate that ``project_id`` is owned by the caller (active) before
-    accepting it as the KB's project association."""
+    """Validate the caller may contribute to ``project_id`` (active) before
+    accepting it as the KB's matter association.
 
-    stmt = select(Project).where(
-        Project.id == project_id,
-        Project.owner_id == owner_id,
-        Project.archived_at.is_(None),
-    )
-    result = await db.execute(stmt)
-    row = result.scalar_one_or_none()
-    if row is None:
-        raise NotFound(
-            f"Project {project_id} not found.",
-            details={"project_id": str(project_id)},
-        )
-    return row
+    ``write``, not ``read``: attaching a knowledge base decides what every
+    chat in the matter retrieves from, so it is a change to the matter, not
+    a use of it.
+    """
+
+    return await require_matter(db, project_id, user, need="write")
 
 
 async def _kb_counts(db: AsyncSession, kb_id: uuid.UUID) -> tuple[int, int]:
@@ -249,7 +244,7 @@ async def create_kb(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> KnowledgeBaseResponse:
     if payload.project_id is not None:
-        await _load_visible_project_for_kb(db, payload.project_id, user.id)
+        await _load_visible_project_for_kb(db, payload.project_id, user)
 
     kb = KnowledgeBase(
         owner_id=user.id,
@@ -379,7 +374,7 @@ async def update_kb(
     if "project_id" in update_fields:
         new_project_id = update_fields["project_id"]
         if new_project_id is not None:
-            await _load_visible_project_for_kb(db, new_project_id, user.id)
+            await _load_visible_project_for_kb(db, new_project_id, user)
         kb.project_id = new_project_id
 
     if "archived" in update_fields:

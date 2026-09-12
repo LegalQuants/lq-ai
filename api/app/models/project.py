@@ -80,6 +80,14 @@ class Project(Base):
             "char_length(slug) > 0 AND char_length(slug) <= 80",
             name="chk_projects_slug_len",
         ),
+        CheckConstraint(
+            "share_scope IN ('personal', 'members', 'org')",
+            name="chk_projects_share_scope_enum",
+        ),
+        CheckConstraint(
+            "(is_sandbox = false) OR (share_scope = 'personal')",
+            name="chk_projects_sandbox_personal",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -96,6 +104,24 @@ class Project(Base):
     slug: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     context_md: Mapped[str | None] = mapped_column(Text, nullable=True)
+    share_scope: Mapped[str] = mapped_column(
+        String,
+        nullable=False,
+        server_default=text("'personal'"),
+    )
+    """Ambient grant over this matter (migration 0067).
+
+    ``personal`` — owner + explicit ``project_members`` rows only.
+    ``members``  — same reach as ``personal``; distinguishes "deliberately
+                   restricted" from "never shared" for the UI.
+    ``org``      — every non-blocked user in the deployment gets **read**.
+                   Writing still requires an explicit membership row, so the
+                   roster stays a truthful answer to "who worked this matter".
+
+    A ``blocked`` membership row overrides every value here — see
+    :func:`app.authz.matters.matter_access`.
+    """
+
     privileged: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     minimum_inference_tier: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     is_sandbox: Mapped[bool] = mapped_column(

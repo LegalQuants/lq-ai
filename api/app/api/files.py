@@ -44,12 +44,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import ActiveUser
 from app.audit import audit_action
+from app.authz.matters import require_matter
 from app.config import get_settings
 from app.db.session import get_db
-from app.errors import NotFound, ValidationError
+from app.errors import Forbidden, NotFound, ValidationError
 from app.models.document import Document
 from app.models.file import File as FileModel
-from app.models.project import Project
 from app.schemas.files import FileMetadata
 from app.storage import (
     StreamUploadResult,
@@ -246,17 +246,19 @@ async def upload_file(
                 details={"project_id": project_id},
             ) from exc
 
-        stmt = select(Project.id).where(
-            Project.id == resolved_project_id,
-            Project.owner_id == user.id,
-            Project.archived_at.is_(None),
-        )
-        result = await db.execute(stmt)
-        if result.scalar_one_or_none() is None:
+        # Uploading into a matter is contributing to it, so ``write`` —
+        # firm-wide read does not entitle a colleague to put documents in
+        # someone's matter file. Both the not-found and the not-permitted
+        # cases fold into the same 422 the create contract already
+        # documents, rather than leaking a 403/404 distinction on what is
+        # request input.
+        try:
+            await require_matter(db, resolved_project_id, user, need="write")
+        except (NotFound, Forbidden) as exc:
             raise ValidationError(
-                "project_id does not reference a project owned by the caller.",
+                "project_id does not reference a matter the caller can contribute to.",
                 details={"project_id": str(resolved_project_id)},
-            )
+            ) from exc
 
     file_id = uuid.uuid4()
     storage_path = str(file_id)

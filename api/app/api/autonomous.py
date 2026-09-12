@@ -191,26 +191,49 @@ async def _load_owned_project(
     project_id: uuid.UUID,
     user_id: uuid.UUID,
 ) -> Project:
-    """Fetch a Project by id; 404 if missing OR not owned by the caller.
+    """Fetch a matter the caller may act on; 404 if missing OR out of reach.
 
-    Conflates "doesn't exist" and "belongs to someone else" to avoid
-    existence disclosure — same idiom as the autonomous loaders. The
-    autonomous layer never reveals another user's Projects.
+    Conflates "doesn't exist" and "you have no access" to avoid existence
+    disclosure — same idiom as the autonomous loaders. The autonomous layer
+    never reveals a matter the caller cannot reach.
+
+    Access is resolved by :func:`app.authz.matters.require_matter` at
+    ``write``, because everything reached through here *spends* against the
+    matter — spawning a session, scheduling a watch, accepting a context
+    proposal. Reading a shared matter does not entitle a colleague to run
+    autonomous work under it and bill the firm for it.
 
     Raises:
-        HTTPException: 404 if the row is absent or owned by a different user.
+        HTTPException: 404 if the row is absent or unreachable; 403 if the
+        caller can read the matter but not contribute to it.
     """
-    stmt = select(Project).where(
-        Project.id == project_id,
-        Project.owner_id == user_id,
-    )
-    row = (await db.execute(stmt)).scalar_one_or_none()
-    if row is None:
+    from app.authz.matters import require_matter
+    from app.errors import Forbidden as _Forbidden, NotFound as _NotFound
+
+    # The caller is identified by id at several of these call sites, so
+    # re-load the row rather than threading a User object through seven
+    # signatures; it is normally already in the session identity map.
+    user = await db.get(User, user_id)
+    if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="project not found",
         )
-    return row
+
+    try:
+        return await require_matter(db, project_id, user, need="write")
+    except _NotFound:
+        # Re-raise in this module's plain shape so the autonomous surface's
+        # error contract does not shift underneath its callers.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="project not found",
+        ) from None
+    except _Forbidden:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="project requires contributor access",
+        ) from None
 
 
 async def _load_owned_proposal(

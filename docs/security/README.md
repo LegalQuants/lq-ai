@@ -16,6 +16,7 @@ This folder is the home for LQ.AI's security artifacts. The PRD documents the pr
 | **Cryptographic implementations** (`cryptography.md`) | Landed | Documentation of cryptographic primitives used, key lifecycle, and known limitations. |
 | **Network access controls** (`network-access-controls.md`) | M2 (or earlier with [DE-103 IP allowlisting](../PRD.md#de-103--ip-allowlisting-and-geo-restriction)) | IP allowlisting, geo-restriction, outbound proxy configuration. |
 | **Audit logging** (`audit-logging.md`) | Landed | What is logged, retention, integrity protection. |
+| **Matter access control** ([`matter-access-control.md`](matter-access-control.md)) | Landed (ADR 0024) | Who can reach a matter, ethical screens, the share-scope default, and the limits of the guarantee. |
 | **Encrypted-at-rest provider keys** ([`encrypted-keys.md`](encrypted-keys.md)) | Landed (ADR 0011) | Operator workflow for the master-key + Fernet-wrapped `api_key_encrypted` path in `gateway.yaml`. Bootstrap, rotation, recovery. |
 | **Past advisories** (`advisories/`) | As advisories are published | Historical security advisories with reporter credit. |
 

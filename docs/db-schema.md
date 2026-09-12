@@ -159,6 +159,7 @@ CREATE TABLE projects (
     privileged               BOOLEAN NOT NULL DEFAULT FALSE,
     minimum_inference_tier   SMALLINT,
     is_sandbox               BOOLEAN NOT NULL DEFAULT FALSE,  -- 0022: system-managed try-it sandbox
+    share_scope              TEXT NOT NULL DEFAULT 'personal',  -- 0067: personal | members | org
     created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
     archived_at              TIMESTAMPTZ,  -- soft-delete; NULL means active
@@ -173,6 +174,15 @@ CREATE TABLE projects (
     ),
     CONSTRAINT chk_projects_slug_len CHECK (
         char_length(slug) > 0 AND char_length(slug) <= 80
+    ),
+    -- Migration 0067.
+    CONSTRAINT chk_projects_share_scope_enum CHECK (
+        share_scope IN ('personal', 'members', 'org')
+    ),
+    -- A sandbox is per-user scratch space; sharing one would leak a
+    -- colleague's try-it project into the matter list.
+    CONSTRAINT chk_projects_sandbox_personal CHECK (
+        (is_sandbox = false) OR (share_scope = 'personal')
     )
 );
 
@@ -202,6 +212,75 @@ CREATE TRIGGER trg_projects_set_updated_at
 | Column | Migration | Notes |
 |---|---|---|
 | `is_sandbox` | 0022 | System-managed flag for the per-user skill try-it sandbox (`slug='__sandbox__'`). `POST /projects/sandbox/ensure` creates or returns the row. Sandbox projects are excluded from the default `GET /projects` list; the `include_sandbox` / `only_sandbox` query params control visibility. |
+| `share_scope` | 0067 | Ambient grant over the matter. `personal` — owner + explicit `project_members` rows only. `members` — same reach; marks a matter as deliberately restricted rather than never shared. `org` — every non-blocked user in the deployment gets **read**; writing still requires an explicit membership row. A `blocked` membership row overrides all three. New matters take `LQ_AI_MATTER_DEFAULT_SHARE_SCOPE` (default `personal`) unless the caller sets one. Only a matter lead may change it. |
+
+### `project_members` (migration 0067)
+
+The matter roster. PRD §3.11 listed `share_scope` in the Project data
+model and named `POST /api/v1/projects/{id}/share`; §3.11's M1 status
+recorded share-with-group as deferred. This is that surface, shaped as a
+roster rather than a one-shot share call so "who was on this matter, and
+who put them there" is a table rather than an inference from an event log.
+
+A matter is a `projects` row (ADR 0020 D3 — there is no separate `Matter`
+model), so matter membership is project membership. The shape mirrors
+`team_members` (0014) deliberately: composite PK, the same
+CASCADE/RESTRICT split, and the same `added_by_user_id` forensic column.
+
+```sql
+CREATE TABLE project_members (
+    project_id       UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    user_id          UUID NOT NULL REFERENCES users(id)    ON DELETE CASCADE,
+    role             TEXT NOT NULL,
+    added_by_user_id UUID NOT NULL REFERENCES users(id)    ON DELETE RESTRICT,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT pk_project_members PRIMARY KEY (project_id, user_id),
+    CONSTRAINT ck_project_members_role_enum CHECK (
+        role IN ('lead', 'contributor', 'reader', 'blocked')
+    )
+);
+
+-- Drives the "which matters can this user see" list query.
+CREATE INDEX idx_project_members_user ON project_members (user_id);
+```
+
+**Roles.** `lead` — manage the roster, the share scope, the privilege
+flag, the tier floor, and archiving. `contributor` — read and write the
+matter and its attachments. `reader` — read only. `blocked` — a
+**negative** grant: an ethical screen or conflict wall.
+
+`blocked` is a role value rather than a separate table so the composite
+primary key guarantees "is this person screened?" has exactly one answer
+— a grant and a screen can never coexist on the same matter — and so the
+roster answers both halves of a conflicts check from one indexed query.
+
+**Resolution order** (`app/authz/matters.py`, the only place this is
+decided):
+
+1. a `blocked` row → no access. **Absolute**, and it beats `is_admin`: a
+   wall an operator-admin can walk through is not a wall, and in a small
+   firm the operator-admin is usually also a practising lawyer.
+2. `projects.owner_id == caller` → `lead`. Ownership short-circuits the
+   roster lookup, so a matter whose lead row was deleted by hand never
+   becomes unreachable by its own owner.
+3. an explicit row → `lead` / `write` / `read`.
+4. `share_scope = 'org'` → `read`, never write.
+5. otherwise → no access, surfaced as **404 rather than 403** so an id
+   probe cannot distinguish "no such matter" from "not yours". 403 is
+   reserved for a caller who can already read the matter and is asking
+   for more than their role allows.
+
+There is deliberately **no operator-admin bypass and no `auditor`
+branch**: before this table existed, `is_admin` did not let anyone read
+another user's matter, and adding such a branch here would be a silent,
+unaudited widening of cross-user access smuggled in under a collaboration
+feature. The deployment-wide `auditor` role (migration 0065) keeps
+working exactly as before on the ledger and receipt surfaces.
+
+**Backfill.** 0067 writes one `lead` row per existing project for its
+owner (`added_by_user_id = owner_id`, `created_at = projects.created_at`),
+so the resolver returns exactly the pre-migration answer for every
+existing row.
 
 ### `project_files` and `project_skills`
 

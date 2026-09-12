@@ -35,6 +35,7 @@ from app.models import (
     File,
     KnowledgeBase,
     Project,
+    ProjectMember,
     User,
     UserExportJob,
 )
@@ -111,7 +112,40 @@ async def _hard_delete_user(session: AsyncSession, user: User) -> None:
 
     # Projects — RESTRICT FK on owner; project_files/skills cascade,
     # chats.project_id is SET NULL (already moot since chats are gone).
-    await session.execute(delete(Project).where(Project.owner_id == user.id))
+    #
+    # A matter this user owns but other people work on is NOT theirs alone
+    # to erase: deleting it would destroy colleagues' chats, attachments,
+    # and context along with it. Erasure covers the user's own data, not a
+    # shared matter file. Those rows are left standing and named in the
+    # log; an operator resolves them by transferring ownership before
+    # re-running the deletion, and ``projects.owner_id`` is RESTRICT, so
+    # the FK refuses the user delete below until they do — the job fails
+    # loudly rather than erasing a colleague's work quietly.
+    shared_project_ids = (
+        (
+            await session.execute(
+                select(Project.id)
+                .join(ProjectMember, ProjectMember.project_id == Project.id)
+                .where(Project.owner_id == user.id, ProjectMember.user_id != user.id)
+                .distinct()
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if shared_project_ids:
+        log.warning(
+            "user_deletion: %d matter(s) owned by %s have other members and were "
+            "NOT deleted; transfer ownership before retrying: %s",
+            len(shared_project_ids),
+            user.id,
+            ", ".join(str(pid) for pid in shared_project_ids),
+        )
+
+    stmt = delete(Project).where(Project.owner_id == user.id)
+    if shared_project_ids:
+        stmt = stmt.where(Project.id.not_in(shared_project_ids))
+    await session.execute(stmt)
 
     # User row — sessions + export_jobs CASCADE; audit_log +
     # inference_routing_log SET NULL (PRD §5.3 audit retention).

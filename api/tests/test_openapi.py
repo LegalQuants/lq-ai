@@ -47,6 +47,10 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         # Wave D.1 T3 — matter <-> KB attach/detach (extends the sketch).
         "/api/v1/projects/{project_id}/knowledge-bases",
         "/api/v1/projects/{project_id}/knowledge-bases/{kb_id}",
+        # Migration 0067 — the matter roster (extends the sketch).
+        "/api/v1/projects/{project_id}/members",
+        "/api/v1/projects/{project_id}/members/{user_id}",
+        "/api/v1/projects/{project_id}/access",
         # chats + messages
         "/api/v1/chats",
         "/api/v1/chats/{chat_id}",
@@ -110,6 +114,10 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/admin/users/{user_id}/role",
         # Wave B v2 — admin user list for DevRoleManagementCard
         "/api/v1/admin/users",
+        # User provisioning — reset a user's password (extends the sketch).
+        "/api/v1/admin/users/{user_id}/reset-password",
+        # People-picker source for the matter roster (extends the sketch).
+        "/api/v1/users/directory",
         # admin
         "/api/v1/admin/audit-log",
         "/api/v1/admin/tier-policy",
@@ -255,6 +263,10 @@ async def test_openapi_paths_match_sketch() -> None:
     # /skills/autocomplete, /projects/sandbox/ensure.
     # + M3-0.1's /admin/bootstrap-status.
     # + M3-0.3's /admin/ingest-health.
+    # + matter membership (0067): three /projects/{id}/members|access paths,
+    #   /admin/users/{id}/reset-password, and /users/directory. Note
+    #   POST /admin/users adds a method to an existing path, so it
+    #   contributes 0 new entries here.
     # + M3-A2's two playbook-executor endpoints.
     # + M3-A4's two playbook list/detail endpoints.
     # + M3-A6's Playbook CRUD adds POST/PATCH/DELETE methods on /playbooks +
@@ -342,7 +354,7 @@ async def test_openapi_paths_match_sketch() -> None:
     # Donna #3 adds two new paths (137 -> 139):
     # /api/v1/admin/tool-providers
     # /api/v1/admin/tool-providers/{provider_type}
-    assert len(actual) == 139
+    assert len(actual) == 144
 
 
 @pytest.mark.unit

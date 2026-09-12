@@ -283,6 +283,14 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("PATCH", "/api/v1/admin/users/{user_id}/role"),
     # Wave B v2 — admin user list for DevRoleManagementCard (PRD §5.2)
     ("GET", "/api/v1/admin/users"),
+    # People-picker directory (id/email/display_name only)
+    ("GET", "/api/v1/users/directory"),
+    # Matter membership — the roster surface over project_members (0067)
+    ("GET", "/api/v1/projects/{project_id}/members"),
+    ("POST", "/api/v1/projects/{project_id}/members"),
+    ("PATCH", "/api/v1/projects/{project_id}/members/{user_id}"),
+    ("DELETE", "/api/v1/projects/{project_id}/members/{user_id}"),
+    ("GET", "/api/v1/projects/{project_id}/access"),
     # Wave D.2 — sandbox ensure, skills autocomplete, user-skill versions, KB files
     ("POST", "/api/v1/projects/sandbox/ensure"),
     ("GET", "/api/v1/skills/autocomplete"),

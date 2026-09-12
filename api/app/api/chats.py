@@ -74,6 +74,7 @@ from app.api.dependencies import ActiveUser, is_privileged_reader
 from app.api.skills import _resolve_skill_for_user
 from app.audit import audit_action
 from app.auditor_audit import auditor_audit
+from app.authz.matters import matter_access, require_matter
 from app.autonomous.guard import _args_digest
 from app.chat.tool_loop import (
     LoopConfirmation,
@@ -356,31 +357,66 @@ async def _load_visible_chat(
 async def _load_visible_project_for_chat(
     db: AsyncSession,
     project_id: uuid.UUID,
-    owner_id: uuid.UUID,
+    user: User,
 ) -> Project:
-    """Validate that ``project_id`` is owned by the caller before accepting it
-    as a chat's project association; 404 on miss / cross-user / archived.
+    """Validate the caller may contribute to ``project_id`` before accepting it
+    as a chat's matter association; 404 on miss / no access / archived.
 
-    Mirrors :func:`app.api.knowledge_bases._load_visible_project_for_kb`.
-    Inlined here rather than imported to keep the chat surface free of a
-    reverse dependency on the projects router module — it is a one-statement
-    SELECT. Without this guard a caller can bind a chat to another user's
-    project id and, on ``send_message``, pull that project's attached
+    Without this guard a caller can bind a chat to a matter they cannot
+    reach and, on ``send_message``, pull that matter's attached
     knowledge-base content into the response and out to the LLM provider.
+
+    ``write`` rather than ``read`` deliberately: a firm-wide-readable matter
+    lets a colleague *see* the work, but starting a new thread against it is
+    contributing, and contributing is what the roster is supposed to record.
     """
 
-    stmt = select(Project).where(
-        Project.id == project_id,
-        Project.owner_id == owner_id,
-        Project.archived_at.is_(None),
-    )
+    return await require_matter(db, project_id, user, need="write")
+
+
+async def _load_readable_chat(
+    db: AsyncSession,
+    chat_id: uuid.UUID,
+    user: User,
+    *,
+    include_archived: bool = False,
+) -> Chat:
+    """Load a chat the caller may *read*; 404 otherwise.
+
+    Wider than :func:`_load_visible_chat` by exactly one rule: a chat
+    pinned to a matter is readable by anyone who can read that matter.
+    That is the point of sharing a matter — colleagues can see the work
+    already done on it instead of duplicating it.
+
+    Writing stays owner-only (:func:`_load_visible_chat`). Two lawyers
+    interleaving turns in one thread would make
+    ``work_product_attribution`` ambiguous about who directed which
+    output, which is precisely the record that has to stay unambiguous.
+    A colleague who wants to act on a shared matter starts their own
+    thread in it.
+    """
+    stmt = select(Chat).where(Chat.id == chat_id)
+    if not include_archived:
+        stmt = stmt.where(Chat.archived_at.is_(None))
     row = (await db.execute(stmt)).scalar_one_or_none()
     if row is None:
-        raise NotFound(
-            f"Project {project_id} not found.",
-            details={"project_id": str(project_id)},
-        )
-    return row
+        raise NotFound(f"Chat {chat_id} not found.", details={"chat_id": str(chat_id)})
+
+    if row.owner_id == user.id:
+        return row
+
+    if row.project_id is not None:
+        project = (
+            await db.execute(select(Project).where(Project.id == row.project_id))
+        ).scalar_one_or_none()
+        if project is not None:
+            access, _basis = await matter_access(db, project, user)
+            if access != "none":
+                return row
+
+    # Existence-safe: a caller with no path to the chat cannot tell
+    # "exists, not yours" from "does not exist".
+    raise NotFound(f"Chat {chat_id} not found.", details={"chat_id": str(chat_id)})
 
 
 async def _load_chat_for_reader(
@@ -618,7 +654,7 @@ async def create_chat(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ChatResponse:
     if payload.project_id is not None:
-        await _load_visible_project_for_chat(db, payload.project_id, user.id)
+        await _load_visible_project_for_chat(db, payload.project_id, user)
 
     chat = Chat(
         owner_id=user.id,
@@ -804,10 +840,24 @@ async def list_chats(
         Query(ge=1, le=LIST_LIMIT_MAX, description="Page size; capped at 100."),
     ] = LIST_LIMIT_DEFAULT,
 ) -> ChatListResponse:
-    stmt = select(Chat).where(
-        Chat.owner_id == user.id,
-        Chat.autonomous_session_id.is_(None),
-    )
+    # Scoping rule: the unfiltered sidebar stays strictly personal, so a
+    # firm-wide-readable matter never floods a colleague's chat list. Ask
+    # for a specific matter you can read, and you get that matter's threads
+    # — every author's, not just your own. That is the whole point of
+    # sharing a matter: see the work already done rather than repeat it.
+    scope_to_owner = True
+    if project_id is not None:
+        project = (
+            await db.execute(select(Project).where(Project.id == project_id))
+        ).scalar_one_or_none()
+        if project is not None:
+            access, _basis = await matter_access(db, project, user)
+            scope_to_owner = access == "none"
+
+    stmt = select(Chat).where(Chat.autonomous_session_id.is_(None))
+    if scope_to_owner:
+        stmt = stmt.where(Chat.owner_id == user.id)
+
     if archived is True:
         stmt = stmt.where(Chat.archived_at.is_not(None))
     else:
@@ -860,7 +910,7 @@ async def get_chat(
     cid = _validate_chat_id(chat_id)
     # Archived chats are visible via direct GET (so a client can render
     # the archived-detail page); list excludes them by default.
-    chat = await _load_visible_chat(db, cid, user.id, include_archived=True)
+    chat = await _load_readable_chat(db, cid, user, include_archived=True)
     return await _serialize_chat(db, chat)
 
 
@@ -967,7 +1017,7 @@ async def list_messages(
     # The chat must be visible to the caller (404 cross-user). We
     # accept archived chats so a user can read history of an archived
     # conversation.
-    await _load_visible_chat(db, cid, user.id, include_archived=True)
+    await _load_readable_chat(db, cid, user, include_archived=True)
 
     stmt = select(Message).where(Message.chat_id == cid)
 
