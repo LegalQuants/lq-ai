@@ -36,7 +36,6 @@ from __future__ import annotations
 
 import dataclasses
 import logging
-from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -61,6 +60,7 @@ from app.autonomous.state import AutonomousSessionState
 from app.autonomous.structured_output import parse_structured_output
 from app.config import DEFAULT_MAX_ANALYSIS_STEPS, get_settings
 from app.errors import AutonomousBrake
+from app.graph_types import AsyncStateNode
 from app.models.autonomous import AutonomousSession
 from app.research.registry import resolve_available_sources
 from app.schemas.autonomous import Phase
@@ -76,7 +76,7 @@ logger = logging.getLogger(__name__)
 def make_intake_node(
     db: AsyncSession,
     gateway: Any = None,
-) -> Callable[[AutonomousSessionState], Awaitable[dict[str, Any]]]:
+) -> AsyncStateNode[AutonomousSessionState]:
     """Build the intake-phase node bound to a DB session.
 
     The intake node transitions the session to :attr:`Phase.intake`
@@ -299,7 +299,7 @@ async def _run_analysis_loop(
 def make_analysis_node(
     db: AsyncSession,
     gateway: Any = None,
-) -> Callable[[AutonomousSessionState], Awaitable[dict[str, Any]]]:
+) -> AsyncStateNode[AutonomousSessionState]:
     """Build the analysis-phase node bound to a DB session.
 
     The analysis node transitions the session to :attr:`Phase.analysis`
@@ -420,7 +420,7 @@ def make_analysis_node(
 def make_drafting_node(
     db: AsyncSession,
     gateway: Any = None,
-) -> Callable[[AutonomousSessionState], Awaitable[dict[str, Any]]]:
+) -> AsyncStateNode[AutonomousSessionState]:
     """Build the drafting-phase node bound to a DB session.
 
     The drafting node transitions the session to :attr:`Phase.drafting`,
@@ -696,7 +696,7 @@ def make_drafting_node(
 def make_ethics_review_node(
     db: AsyncSession,
     gateway: Any = None,
-) -> Callable[[AutonomousSessionState], Awaitable[dict[str, Any]]]:
+) -> AsyncStateNode[AutonomousSessionState]:
     """Build the ethics-review-phase node bound to a DB session.
 
     The ethics-review node transitions the session to
@@ -764,7 +764,7 @@ def make_ethics_review_node(
 def make_delivery_node(
     db: AsyncSession,
     gateway: Any = None,
-) -> Callable[[AutonomousSessionState], Awaitable[dict[str, Any]]]:
+) -> AsyncStateNode[AutonomousSessionState]:
     """Build the delivery-phase node bound to a DB session.
 
     The delivery node transitions the session to :attr:`Phase.delivery`,

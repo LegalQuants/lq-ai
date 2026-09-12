@@ -127,21 +127,12 @@ dependencies = [
     # verifier's `fuzz.ratio` against normalized text with threshold
     # 95. MIT-licensed; C-extension backbone, no runtime config needed.
     "rapidfuzz~=3.5",
-    # M3-A2 — LangGraph powers the Playbook executor workflow (retrieve
-    # → classify → redline → compile) per the M3 plan's M3-1 decision
-    # ("LangGraph runtime lives in api/, not a separate service"). The
-    # same runtime is reused by the M3-C2 Tabular Review workflow and the
-    # M4 autonomous executor (api/app/autonomous/), so the SBOM cost is
-    # amortized across three features. MIT-licensed; transitive deps are
-    # mostly LangChain-core types (already permissive licenses, no new
-    # SBOM family beyond LangGraph + LangChain-core).
-    # M4-0.1 — held at 0.2 for M4. langgraph 1.x re-types StateGraph as
-    # generic, so our `add_node` node factories (typed -> Awaitable[dict])
-    # fail mypy [call-overload] (this is what dependabot #68 tripped on).
-    # The break is type-only — every runtime API we use is unchanged — and
-    # the autonomous executor needs no 1.x-only API. Migration of all three
-    # executors deferred to DE-319. Floor pinned to the validated 0.2.76.
-    "langgraph>=0.2.76,<0.3",
+    # DE-319 / #524 — one maintained runtime for playbook, tabular and
+    # autonomous execution. The 1.x family adds prebuilt/protocol packages
+    # and upgrades Core/checkpoint; review the actual frozen lock as SBOM
+    # changes. All three graphs retain their existing phase behavior;
+    # checkpoint activation belongs to the later #563 integration.
+    "langgraph>=1,<2",
     # M3-C4 — openpyxl powers the Tabular Review XLSX export
     # (GET /tabular/executions/{id}/export?format=xlsx). Each grid cell
     # gets a Comment with its citation source so operators can pivot
@@ -201,6 +192,18 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
+
+[tool.uv]
+# Reviewed transitive minimums for the LangGraph family. A broad 1.x runtime
+# range alone still admits dependencies preceding these fixes. Constraints
+# restrict existing transitive packages without declaring unused direct APIs.
+# Checkpoint: GHSA-fjqc-hq36-qh5p (JSON loading); SDK: GHSA-fvww-7h3r-vfhp
+# (custom resource auth). Neither feature is activated by this migration.
+constraint-dependencies = [
+    "langchain-core>=1.6.3",
+    "langgraph-checkpoint>=4.1.1",
+    "langgraph-sdk>=0.4.4",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
