@@ -992,6 +992,14 @@ async def _handle_emit_artifact(
     # Parse BEFORE the upload: a malformed kb_id must fail here, not at the
     # KB-attach insert after the bytes have already landed in MinIO (orphan).
     kb_uuid = uuid.UUID(str(kb_id))
+    # Ownership gate, on the same reasoning and at the same spot. The id came
+    # from ``session.params`` — copied there by schedule/watch/run-now from
+    # caller input — so the session owner must actually own the target KB
+    # (and it must not be archived) before any byte is uploaded. This is the
+    # write-path twin of the ``retrieve_chunks`` gate (#288, AG-01): a
+    # foreign id raises ``ValueError`` and the executor fails the session
+    # closed rather than attaching a file to another user's knowledge base.
+    await _assert_kb_owned(db, kb_uuid, session.user_id)
 
     # ── extract + sanitize (inner keys are LLM-emitted) ──────────────────
     # Strip NUL bytes: "\u0000" is valid JSON (LLM-emittable) but Postgres
