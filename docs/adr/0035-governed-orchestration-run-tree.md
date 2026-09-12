@@ -20,9 +20,11 @@ single-session, watch or scheduled execution.
 The original epic proposed sequential children, approval only above a threshold,
 custom Postgres/arq continuation, and a replayable JSONL transcript. Subsequent
 requirements and research changed that proposal. Parallel children and approval
-before **any child runs** are required in the first release. The runtime choice is
-still open. A successful orchestration test may return no research results; it
-must prove control flow, persistence and governance rather than legal quality.
+before **any child runs** are required in the first release. This ADR proposes
+LangGraph for execution continuation, retaining arq for scheduling and LQ-owned
+records for governance, subject to production integration acceptance. A successful
+orchestration test may return no research results; it must prove control flow,
+persistence and governance rather than legal quality.
 
 The code baseline for this draft is main at
 [`27c4521`](https://github.com/LegalQuants/lq-ai/commit/27c4521de0174a48070484cbaf66b7716432076a),
@@ -176,21 +178,32 @@ LQ-owned records. Framework types must remain inside the execution adapter. The
 adapter resumes work by stable run identity and returns structured progress;
 checkpoints must not restore obsolete permissions over current LQ policy.
 
-**Backend selection is unresolved.** Evaluate maintained LangGraph first against
-the actual LQ integration, with a native continuation design as the comparator.
-Ratification must choose exactly one production continuation owner and topology:
+**Propose LangGraph as the execution-continuation owner**, retaining arq for
+scheduling and LQ-owned records for governance. Validate this design against
+Postgres, competing workers and multi-step recovery before production adoption.
+Reopen the choice if that integration reveals a material problem. The ADR remains
+Proposed until ratification.
 
-| Candidate | Owns progress | Responsibilities that remain in LQ |
-|---|---|---|
-| LangGraph with persistent checkpointing | Graph step continuation, interrupt/resume and join | Approval, authority, admissions, effect receipts, budgets and audit; arq may schedule resumptions, not a competing graph cursor |
-| LQ Postgres continuation with arq | Application step records and durable continuation; arq delivers work | The same controls, plus explicit implementation and maintenance of scheduling/join/recovery |
+| Component | Responsibility |
+|---|---|
+| LangGraph with persistent checkpointing | Own graph step continuation, interrupt/resume, parallel fan-out and join. |
+| arq | Deliver background jobs that start or resume execution. It does not own a competing graph cursor or reconstruct the workflow independently. |
+| LQ-owned Postgres records | Own current authority, approval, child admissions, effect receipts, budgets, results and audit. A restored checkpoint cannot override them. |
 
-Prefer the candidate that reduces total supported continuation work while
-passing the same acceptance scenarios. Do not ship both as configurable runtime
-alternatives. Graph fan-out is not itself a distributed queue; whether children
-run within a coordinator invocation or as separate jobs remains part of this
-comparison. Separate jobs must not depend on a waiting parent occupying the
-worker slots they need. Bound capacity across workers, not only in one semaphore.
+The experiment demonstrates that LangGraph supports the required fixed-batch
+behavior behind a narrow adapter, and the application already uses its runtime.
+Using its continuation primitives is the proposed direction instead of building
+equivalent custom scheduling/join/recovery machinery. This is an engineering
+choice supported by the experiment, not a measured performance or maintenance
+advantage. The native fixture remains a comparison and portability test, not a
+second production backend or a production arq implementation.
+
+Graph fan-out is not itself a distributed queue. The integration must still
+settle whether children run within a coordinator invocation or as separate jobs,
+while keeping LangGraph the single continuation owner. Separate jobs must not
+depend on a waiting parent occupying the worker slots they need. Bound capacity
+across workers, not only in one semaphore. Record this worker topology and the
+reviewed runtime/saver versions with the integration evidence before adoption.
 
 Persist step/effect identities outside compactable conversation history. Define
 meaningful recovery boundaries inside the multi-step analysis loop. LangGraph
@@ -308,7 +321,7 @@ on an operator configuration/admin surface; orchestration starts disabled.
 |---|---|
 | [PR #411](https://github.com/LegalQuants/lq-ai/pull/411) | Merged foundation: preserve write-time project/KB/playbook visibility and archived-resource rejection. Add current per-child approved-scope checks after approval waits. |
 | [PR #410](https://github.com/LegalQuants/lq-ai/pull/410) / issue #332 | Reuse intake after its review and checks pass. The current review requires a project for query intake, correct numeric inputs, loading/error handling and matching contracts/tests. Its [KB comment](https://github.com/LegalQuants/lq-ai/pull/410#discussion_r3996565271) explicitly defers retrieval to separate work. Correct manual selected-KB execution and complete project data-policy propagation before exercising real matter orchestration. |
-| [Issue #524 / DE-319](https://github.com/LegalQuants/lq-ai/issues/524) | Separately review the maintained runtime migration across all three executors before activating durable LangGraph in the application, if selected. Review the actual dependency diff, advisory floors and serializer configuration; fixture compatibility does not approve the application lock. |
+| [Issue #524 / DE-319](https://github.com/LegalQuants/lq-ai/issues/524) | Separately review the maintained runtime migration across all three executors before activating the proposed durable LangGraph execution in the application. Review the actual dependency diff, advisory floors and serializer configuration; fixture compatibility does not approve the application lock. |
 | [PR #558](https://github.com/LegalQuants/lq-ai/pull/558) | The 0.6.11 proposal does not complete the 1.x migration. The saved review records 12 typing errors before pytest; prefer a corrected direct migration under #524. |
 | [PR #536](https://github.com/LegalQuants/lq-ai/pull/536) | Separate membership work; not a prerequisite for the owner-scoped pilot. Use one current-access interface so later membership/revocation integrates without tree-wide access grants. |
 | [PR #564](https://github.com/LegalQuants/lq-ai/pull/564) | Coordinate ADR/DE identifiers and actual review assignments. Its broader governance proposal need not merge before this one. Do not assume automatic review routing is working. |
@@ -319,13 +332,15 @@ as a code PR until this ADR is ratified. Local integration experiments may suppl
 evidence back to the proposed ADR; local coding does not constitute ratification.
 The runtime maintenance remains a distinct reviewable change from harness behavior.
 
-Prepare contracts and the bounded integration experiment first. Use its evidence
-to finish D4 and the ratification record below. Continue with durable admissions,
-budgets and halt; governed child dispatch and recovery; root synthesis/evidence;
+Prepare contracts and the bounded LangGraph integration experiment first. Use its
+evidence to validate D4, settle worker topology and complete the ratification
+record below. Continue with durable admissions, budgets and halt; governed child
+dispatch and recovery; root synthesis/evidence;
 approval/tree API and UI; then release verification. Extract only the harness
 interface and closed registry required by these profiles. Do not do a general
 loop rewrite as a prerequisite. The epic's earlier 35–55 engineer-day estimate
-does not estimate this revised design; estimate after backend selection.
+does not estimate this revised design; estimate after integration establishes the
+remaining implementation work.
 
 ## Acceptance gates
 
@@ -360,8 +375,10 @@ before any rollback that removes their schema/runtime support.
 
 - [ ] Accept D1 limits, parallel first release and one approved batch.
 - [ ] Accept D2/D3 version-bound approval and delegated authority contract.
-- [ ] Select **one** D4 continuation owner and worker topology; link actual LQ /
-      Postgres / multi-step integration results and the reviewed runtime baseline.
+- [ ] Ratify D4's proposed division: LangGraph owns continuation, arq schedules
+      work and LQ owns governance. Record worker topology, actual LQ / Postgres /
+      competing-worker / multi-step integration results and the reviewed runtime
+      baseline; reopen the choice if a material integration problem is found.
 - [ ] Accept D5's external-effect uncertainty and audit transaction clarification.
 - [ ] Accept D6's accounted-budget meaning and D7's partial/halt semantics.
 - [ ] Accept internal child delivery, evidence-status separation, required UI and deferrals.
@@ -370,7 +387,9 @@ before any rollback that removes their schema/runtime support.
 - [ ] Record ratifier names, dated decision/minutes or review links, and security
       reviewers for authority, audit, budget, cancellation and gateway changes.
 
-**Selected backend/topology:** pending integration evidence and ratification.
+**Proposed backend:** LangGraph for continuation; arq for scheduling; LQ-owned
+Postgres records for governance. Production acceptance and ratification remain pending.
+**Worker topology and runtime/saver versions:** to be recorded from integration.
 **Decision date and ratifiers:** pending.
 **Implementation publication:** held until the above decision is recorded.
 
