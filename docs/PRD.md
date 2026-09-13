@@ -5053,6 +5053,12 @@ The document-ingestion pipeline (ADR [0006](adr/0006-document-pipeline-architect
 
 Attached-file content is injected into the prompt as a system message (`_format_attached_files_block`, `api/app/api/chats.py`) and then counted against `lq_ai_chat_history_token_budget` although it is not conversation. Raising the budget (6,000 → 64,000 in #504) fixes the symptom: a ~47,000-token case file supplied in turn 1 was silently gone by turn 2 on models with 200k–1M context windows, and nothing in the response said trimming had occurred. The category fix is to give injected document blocks their own budget, or exclude them from the trim, so a document cannot be dropped between turns by a history setting. **Specific scope:** a turn-2 follow-up over a turn-1 attachment retains the document regardless of the history budget; a regression test covers the trim boundary; the history budget's field comment stops describing itself as the document ceiling. Related: #503 item 4, #512 (surfacing `applied_file_ids` so a non-contributing attachment is visible), DE-355.
 
+#### DE-392 — Enforce or remove `request_validation.max_max_tokens`
+
+**Priority:** P2 · **Effort:** S · **Status (2026-09-13): filed.** Credit: @sergiomaldo (#317 first tried to honour the ceiling); #504 review finding F-2.
+
+`request_validation.max_max_tokens` is declared in the gateway config schema (`gateway/app/config.py`), documented as 16384 in `gateway.yaml.example`, and enforced on no request path — neither on an explicit request `max_tokens` nor on the Anthropic adapter's injected default. #317's clamp of the injected default was dropped because it compared against a freshly constructed `RequestValidationConfig()` rather than the operator's loaded value (the adapter factories receive only a `ProviderConfig`). ADR 0027 D1 keeps the injected default at the documented ceiling instead. **Specific scope:** decide enforce-or-remove. If enforce: thread `request_validation` into `build_adapter` / the request validator, reject an explicit `max_tokens` above the ceiling with `invalid_request`, clamp the injected default against the loaded value with a startup log line, and test both; if remove: delete the field from the schema and the example so operators stop reading a cap that does not exist. Related: ADR 0027 D5, #317, #489.
+
 ---
 
 ## 10. Appendices

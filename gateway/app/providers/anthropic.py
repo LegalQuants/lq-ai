@@ -15,7 +15,7 @@ Wire-format differences worth knowing
   messages concatenate with a blank line.
 * Anthropic requires ``max_tokens``. OpenAI doesn't. The adapter falls
   back to the provider's configured ``default_max_tokens`` — or
-  :data:`DEFAULT_MAX_TOKENS` (4096) when unconfigured — when the caller
+  :data:`DEFAULT_MAX_TOKENS` (16384) when unconfigured — when the caller
   omits it.
 * Anthropic requires ``anthropic-version`` on every request; we pin
   :data:`ANTHROPIC_API_VERSION`.
@@ -45,7 +45,7 @@ from typing import Any
 
 import httpx
 
-from app.config import ProviderConfig, RequestValidationConfig
+from app.config import ProviderConfig
 from app.providers.base import (
     ProviderAdapter,
     ProviderAuthError,
@@ -95,15 +95,26 @@ tried. The api's own gateway-client timeout must stay looser than this
 (``LQ_AI_GATEWAY_TIMEOUT_SECONDS``, default 900s) or it fires first and
 this adapter's label never appears."""
 
-DEFAULT_MAX_TOKENS = 4096
+DEFAULT_MAX_TOKENS = 16384
 """Anthropic Messages requires ``max_tokens``. When the OpenAI-format
-request omits it, the gateway sends this default. Keeping it modest
-(rather than the per-model ceiling) avoids accidentally enormous
-responses on requests that didn't specify a budget.
+request omits it, the gateway sends this default (ADR 0027 D1).
 
-Operators can raise (or lower) this per provider via the
-``default_max_tokens`` field on the provider entry; see
-:meth:`AnthropicAdapter.from_config`."""
+16384 rather than the earlier 4096. Two independent findings: drafting
+workloads routinely need 8-16K output tokens and were truncated at ~4K
+(#317); and on a model with adaptive thinking on by default the whole
+4096 budget can be spent on reasoning tokens, leaving nothing visible —
+measured at an identical budget, ``claude-opus-4-7`` spent 0 thinking
+tokens and returned 11,518 characters while ``claude-opus-5`` spent all
+4096 and returned none (#503). ``max_tokens`` is a ceiling, not a spend,
+so the raise costs nothing on turns that don't use it. The value equals
+the documented ``request_validation.max_max_tokens`` example so the
+default never exceeds the documented ceiling (which is enforced nowhere
+today — DE-392).
+
+A caller wanting a different budget sets ``max_tokens`` on the request;
+an operator can move the default per provider via ``default_max_tokens``
+on the provider entry (see :meth:`AnthropicAdapter.from_config`) — an
+escape hatch, not the tuning axis (ADR 0027 D2)."""
 
 STOP_REASON_MAP: dict[str, FinishReason] = {
     "end_turn": "stop",
@@ -204,20 +215,32 @@ class AnthropicAdapter(ProviderAdapter):
         timeout_raw = extra.get("timeout_s")
         timeout_s = float(timeout_raw) if timeout_raw is not None else DEFAULT_TIMEOUT_SECONDS
 
-        # ``default_max_tokens`` mirrors ``timeout_s``: a forward-looking
-        # per-provider field (#18) that today lives in extra-allow
+        # ``default_max_tokens`` mirrors ``timeout_s``: a per-provider
+        # operator escape hatch (ADR 0027 D2) that lives in extra-allow
         # territory, so read it defensively via ``model_extra``. Falls
-        # back to the module constant when absent. Clamped to the
-        # request-validation ceiling (RequestValidationConfig.max_max_tokens)
-        # so a generous per-provider default can never inject a budget
-        # larger than the gateway would accept on an explicit request.
+        # back to the module constant when absent. A malformed or
+        # non-positive value is a config error surfaced at startup, like a
+        # missing key, rather than silently replaced. It is deliberately
+        # NOT clamped to ``request_validation.max_max_tokens``: that ceiling
+        # is enforced on no request path today, and clamping against a
+        # freshly constructed config would ignore the operator's own value
+        # anyway (DE-392 decides enforce-or-remove).
         default_max_tokens_raw = extra.get("default_max_tokens")
-        default_max_tokens = (
-            int(default_max_tokens_raw)
-            if default_max_tokens_raw is not None
-            else DEFAULT_MAX_TOKENS
-        )
-        default_max_tokens = min(default_max_tokens, RequestValidationConfig().max_max_tokens)
+        if default_max_tokens_raw is None:
+            default_max_tokens = DEFAULT_MAX_TOKENS
+        else:
+            try:
+                default_max_tokens = int(default_max_tokens_raw)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"Anthropic provider {provider.name!r}: default_max_tokens must be "
+                    f"an integer, got {default_max_tokens_raw!r}"
+                ) from exc
+            if default_max_tokens < 1:
+                raise ValueError(
+                    f"Anthropic provider {provider.name!r}: default_max_tokens must be "
+                    f">= 1, got {default_max_tokens}"
+                )
 
         return cls(
             name=provider.name,

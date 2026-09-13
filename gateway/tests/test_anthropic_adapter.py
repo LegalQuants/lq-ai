@@ -683,7 +683,7 @@ async def test_default_max_tokens_from_provider_config_is_honored() -> None:
 @respx.mock
 async def test_default_max_tokens_absent_falls_back_to_module_constant() -> None:
     """Without ``default_max_tokens`` on the provider entry, the adapter
-    keeps sending :data:`DEFAULT_MAX_TOKENS` (4096)."""
+    sends :data:`DEFAULT_MAX_TOKENS` (16384 — ADR 0027 D1)."""
 
     provider = _anthropic_provider_config()
     adapter = AnthropicAdapter.from_config(provider, env={"ANTHROPIC_API_KEY": "sk-ant-x"})
@@ -695,31 +695,33 @@ async def test_default_max_tokens_absent_falls_back_to_module_constant() -> None
     finally:
         await adapter.aclose()
     sent = json.loads(route.calls[-1].request.content)
-    assert sent["max_tokens"] == DEFAULT_MAX_TOKENS == 4096
+    assert sent["max_tokens"] == DEFAULT_MAX_TOKENS == 16384
 
 
 @pytest.mark.unit
-@respx.mock
-async def test_default_max_tokens_capped_by_max_max_tokens() -> None:
-    """A configured default larger than the request-validation ceiling
-    (RequestValidationConfig.max_max_tokens) is clamped to that ceiling,
-    so the injected default can never exceed what the gateway would
-    accept on an explicit request."""
+@pytest.mark.parametrize("bad", ["lots", 0, -5])
+def test_default_max_tokens_rejects_malformed_values(bad: object) -> None:
+    """A ``default_max_tokens`` that is not a positive integer is a config
+    error surfaced at startup (the same ValueError channel as a missing
+    key), never silently replaced by the module constant."""
 
-    from app.config import RequestValidationConfig
+    provider = _anthropic_provider_config(default_max_tokens=bad)
+    with pytest.raises(ValueError, match="default_max_tokens"):
+        AnthropicAdapter.from_config(provider, env={"ANTHROPIC_API_KEY": "sk-ant-x"})
 
-    cap = RequestValidationConfig().max_max_tokens
-    provider = _anthropic_provider_config(default_max_tokens=cap + 100_000)
+
+@pytest.mark.unit
+def test_default_max_tokens_is_not_clamped_to_the_unenforced_ceiling() -> None:
+    """``request_validation.max_max_tokens`` is enforced on no request path
+    (DE-392), so the injected default is not clamped against it: an
+    operator's explicit ``default_max_tokens`` is honoured as written."""
+
+    provider = _anthropic_provider_config(default_max_tokens=200_000)
     adapter = AnthropicAdapter.from_config(provider, env={"ANTHROPIC_API_KEY": "sk-ant-x"})
-    route = respx.post(f"{ANTHROPIC_BASE}/v1/messages").mock(
-        return_value=_minimal_anthropic_response()
-    )
     try:
-        await adapter.chat_completion(_basic_request(), model="claude-sonnet-4-6", stream=False)
+        assert adapter._default_max_tokens == 200_000
     finally:
-        await adapter.aclose()
-    sent = json.loads(route.calls[-1].request.content)
-    assert sent["max_tokens"] == cap
+        pass
 
 
 # --- PR5b: tools / tool_choice forwarding + tool_use bridging ----------------
