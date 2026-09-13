@@ -92,14 +92,22 @@ REQUEST_ID_HEADER = "X-Request-Id"
 TIER_RESPONSE_HEADER = "X-LQ-AI-Routed-Inference-Tier"
 """Response header set by the gateway (B4) carrying the routed Inference Tier."""
 
-DEFAULT_TIMEOUT_SECONDS = 60.0
+DEFAULT_TIMEOUT_SECONDS = 900.0
 """Fallback per-request timeout when the caller passes none.
 
 The deployment-wide value is ``LQ_AI_GATEWAY_TIMEOUT_SECONDS`` (see
 :func:`get_gateway_client`); this constant is the library default for
-direct construction, e.g. in tests. Streaming overrides it (a stream is
-expected to outlast a single API call), and the health check overrides to
-a tight value separately."""
+direct construction, e.g. in tests, and the two must agree
+(``tests/test_gateway_timeout_setting.py`` pins it). The health check
+overrides to a tight value separately; streaming shares this budget as a
+per-read-gap limit, not a wall-clock one.
+
+900s rather than the earlier 60s (issue #503). This timeout sits
+*outside* the gateway's own per-provider timeouts (600s by default), so
+it has to be the loosest of the three or it truncates first and the
+gateway's more specific ``client_timeout:`` label never gets to fire.
+The connect leg is capped separately in :class:`GatewayClient` so a
+long read budget is not also a 900s wait on an unreachable gateway."""
 
 
 def _structured_log_extra(**fields: Any) -> dict[str, Any]:
@@ -155,7 +163,10 @@ class GatewayClient:
         self._timeout = timeout
         self._client = httpx.AsyncClient(
             base_url=self._base_url,
-            timeout=timeout,
+            # A bare float makes ``timeout`` the connect budget too. Keep
+            # the connect leg tight so an unreachable gateway fails fast;
+            # only the read/write/pool legs get the long budget.
+            timeout=httpx.Timeout(timeout, connect=min(timeout, 10.0)),
             headers={GATEWAY_KEY_HEADER: self._gateway_key} if self._gateway_key else {},
         )
 

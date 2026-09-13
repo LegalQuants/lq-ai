@@ -8,7 +8,9 @@ were patching the constant inside the running image — a change lost on every
 container recreate, and one that silently reverts a deployment to a timeout
 that surfaces as a fake "upstream error" with no hint that a timeout caused it.
 
-The default stays 60.0, so this changes nothing for anyone who does not set it.
+The default is 900.0 (issue #503): the api's timeout sits outside the
+gateway's own 600s per-provider timeouts and must stay the loosest, or it
+fires first and the gateway's more specific timeout label never appears.
 """
 
 from __future__ import annotations
@@ -33,9 +35,11 @@ def _clear_client():
     get_settings.cache_clear()
 
 
-def test_default_is_unchanged() -> None:
-    """A deployment that sets nothing keeps the previous behaviour."""
-    assert Settings().lq_ai_gateway_timeout_seconds == DEFAULT_TIMEOUT_SECONDS == 60.0
+def test_default_matches_library_constant() -> None:
+    """A deployment that sets nothing gets the 900s default, and the
+    settings default agrees with the client module's constant (config.py
+    cannot import it without a circular import, so this test is the pin)."""
+    assert Settings().lq_ai_gateway_timeout_seconds == DEFAULT_TIMEOUT_SECONDS == 900.0
 
 
 def test_setting_reaches_the_http_client(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -43,10 +47,20 @@ def test_setting_reaches_the_http_client(monkeypatch: pytest.MonkeyPatch) -> Non
     get_settings.cache_clear()
 
     client = get_gateway_client()
-    # httpx stores the per-request timeout on the client; the connect/read/write
-    # legs all inherit the scalar we passed.
+    # httpx stores the per-request timeout on the client. The read/write
+    # legs get the configured budget; the connect leg is capped at 10s so a
+    # long generation budget never becomes a long wait on an unreachable
+    # gateway.
     assert client.http_client.timeout.read == pytest.approx(1800.0)
-    assert client.http_client.timeout.connect == pytest.approx(1800.0)
+    assert client.http_client.timeout.write == pytest.approx(1800.0)
+    assert client.http_client.timeout.connect == pytest.approx(10.0)
+
+
+def test_connect_leg_never_exceeds_the_budget() -> None:
+    """A budget tighter than the 10s connect cap caps the connect leg too."""
+    client = GatewayClient(base_url="http://gw", gateway_key="k", timeout=5.0)
+    assert client.http_client.timeout.connect == pytest.approx(5.0)
+    assert client.http_client.timeout.read == pytest.approx(5.0)
 
 
 def test_explicit_construction_still_wins() -> None:
