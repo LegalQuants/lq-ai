@@ -118,6 +118,15 @@ async def _now(db: AsyncSession) -> datetime:
     return (await db.execute(select(func.clock_timestamp()))).scalar_one()
 
 
+def _project_scope(project: Project, plan: PreparedPlan) -> None:
+    # Gateway tier semantics: lower numbers provide stronger protection.
+    # An unset project floor adds no restriction beyond the explicit plan.
+    if plan.root.minimum_inference_tier > (project.minimum_inference_tier or 5) or (
+        project.privileged and not plan.root.privileged
+    ):
+        raise Forbidden(message="Project data policy has changed")
+
+
 async def _audit(db: AsyncSession, root: Root, event: str, **details: Any) -> None:
     assert event in _EVENTS
     await audit_action(
@@ -189,10 +198,7 @@ class OrchestrationStore:
             stored.plan_hash,
         ):
             raise Conflict(message="Stored plan identity does not match the root")
-        if plan.root.minimum_inference_tier < (project.minimum_inference_tier or 1) or (
-            project.privileged and not plan.root.privileged
-        ):
-            raise Forbidden(message="Project data policy has changed")
+        _project_scope(project, plan)
         return root, plan, await _now(db)
 
     async def _live(self, db: AsyncSession, root: Root, plan: PreparedPlan, now: datetime) -> None:
@@ -232,7 +238,10 @@ class OrchestrationStore:
             raise Forbidden(message="Only the owner may prepare this plan")
         try:
             async with self.sessions.begin() as db:
-                await self._owner_project(db, plan.owner_id, plan.project_id, creating=True)
+                project = await self._owner_project(
+                    db, plan.owner_id, plan.project_id, creating=True
+                )
+                _project_scope(project, plan)
                 root = await db.scalar(
                     select(Root).where(Root.session_id == plan.root_id).with_for_update()
                 )

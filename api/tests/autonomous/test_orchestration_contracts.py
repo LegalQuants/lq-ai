@@ -220,7 +220,7 @@ def test_roundtrip_and_equivalent_scope_order_preserve_approval(plan_data: dict)
         (("children", 0, "execution", "resources", "source_names"), ("govinfo",)),
         (("children", 0, "execution", "resources", "document_ids"), (UUID(int=11),)),
         (("children", 0, "execution", "grants", "analysis"), (ToolIntent.plan,)),
-        (("children", 0, "execution", "minimum_inference_tier"), 4),
+        (("children", 0, "execution", "minimum_inference_tier"), 2),
         (("children", 0, "execution", "maximum_egress_tier"), 1),
     ],
 )
@@ -240,7 +240,7 @@ def test_any_changed_execution_setting_requires_new_approval(
 @pytest.mark.parametrize(
     ("key", "value"),
     [
-        ("minimum_inference_tier", 2),
+        ("minimum_inference_tier", 4),
         ("maximum_egress_tier", 3),
         ("privileged", False),
         ("anonymize", False),

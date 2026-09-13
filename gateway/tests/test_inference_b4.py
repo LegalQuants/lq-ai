@@ -90,8 +90,10 @@ async def client_with_recorder(
 
 @pytest.mark.integration
 @respx.mock
+@pytest.mark.parametrize("requested_model", ["smart", "anthropic-prod/claude-opus-4-7"])
 async def test_response_carries_tier_in_header_and_body(
     client_with_recorder: tuple[AsyncClient, RecordingRoutingLogWriter],
+    requested_model: str,
 ) -> None:
     """Both surfaces (header + body field) carry ``routed_inference_tier``."""
 
@@ -101,7 +103,7 @@ async def test_response_carries_tier_in_header_and_body(
             200,
             json={
                 "id": "msg_b4_001",
-                "model": "claude-opus-4-7",
+                "model": "provider-version-label",
                 "content": [{"type": "text", "text": "hi"}],
                 "stop_reason": "end_turn",
                 "usage": {"input_tokens": 10, "output_tokens": 5},
@@ -112,7 +114,7 @@ async def test_response_carries_tier_in_header_and_body(
     response = await client.post(
         "/v1/chat/completions",
         json={
-            "model": "smart",
+            "model": requested_model,
             "messages": [{"role": "user", "content": "hi"}],
         },
     )
@@ -125,6 +127,8 @@ async def test_response_carries_tier_in_header_and_body(
     body = response.json()
     assert body["routed_inference_tier"] == 4
     assert body["routed_provider"] == "anthropic-prod"
+    assert body["routed_model"] == "claude-opus-4-7"
+    assert body["model"] == "provider-version-label"
 
 
 # --- inference_routing_log writes ------------------------------------------

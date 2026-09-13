@@ -290,7 +290,7 @@ async def test_halt_blocks_new_calls_but_allows_one_admitted_completion(ready):
         await begin(env, "analysis:two")
 
 
-@pytest.mark.parametrize("revocation", ["policy", "optout", "archive", "tier"])
+@pytest.mark.parametrize("revocation", ["policy", "optout", "archive"])
 async def test_current_revocation_stops_admission_but_halt_stays_reachable(ready, revocation):
     env = ready
     if revocation == "policy":
@@ -307,16 +307,58 @@ async def test_current_revocation_stops_admission_but_halt_stays_reachable(ready
                     .where(Project.id == env.project_id)
                     .values(archived_at=func.now())
                 )
-            else:
-                await db.execute(
-                    update(Project)
-                    .where(Project.id == env.project_id)
-                    .values(minimum_inference_tier=5)
-                )
     with pytest.raises(Forbidden):
         await begin(env)
     await env.store.halt(env.root_id, actor_id=env.owner_id)
     assert await audit_count(env, "halted") == 1
+
+
+async def test_stronger_project_floor_revokes_weaker_plan(env):
+    scope = env.plan.root.model_copy(update={"minimum_inference_tier": 3})
+    env.plan = env.plan.model_copy(
+        update={
+            "root": scope,
+            "children": tuple(c.model_copy(update={"execution": scope}) for c in env.plan.children),
+        }
+    )
+    await env.store.save_plan(env.plan, actor_id=env.owner_id)
+    await env.store.approve(
+        env.root_id, actor_id=env.owner_id, revision=1, plan_hash=env.plan.approval_hash()
+    )
+    env.claim = await env.store.claim(env.root_id, env.root_id, worker_id=uuid4(), seconds=60)
+    async with env.factory.begin() as db:
+        await db.execute(
+            update(Project).where(Project.id == env.project_id).values(minimum_inference_tier=2)
+        )
+    with pytest.raises(Forbidden, match="Project data policy"):
+        await begin(env)
+    await env.store.halt(env.root_id, actor_id=env.owner_id)
+
+
+@pytest.mark.parametrize(
+    "project_floor,plan_floor,allowed", [(None, 4, True), (3, 2, True), (2, 3, False)]
+)
+async def test_plan_preparation_uses_gateway_tier_direction(
+    env, project_floor, plan_floor, allowed
+):
+    async with env.factory.begin() as db:
+        await db.execute(
+            update(Project)
+            .where(Project.id == env.project_id)
+            .values(minimum_inference_tier=project_floor)
+        )
+    scope = env.plan.root.model_copy(update={"minimum_inference_tier": plan_floor})
+    env.plan = env.plan.model_copy(
+        update={
+            "root": scope,
+            "children": tuple(c.model_copy(update={"execution": scope}) for c in env.plan.children),
+        }
+    )
+    if allowed:
+        await env.store.save_plan(env.plan, actor_id=env.owner_id)
+    else:
+        with pytest.raises(Forbidden, match="Project data policy"):
+            await env.store.save_plan(env.plan, actor_id=env.owner_id)
 
 
 async def test_budget_reservation_and_observed_overrun_are_honest(ready):

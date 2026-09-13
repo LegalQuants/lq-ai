@@ -91,8 +91,9 @@ from app.autonomous.cost import estimate_tool_cost
 from app.autonomous.enums import PHASE_GRANTS, HaltState, Phase, ToolIntent
 from app.autonomous.notify_email import send_notification_email
 from app.autonomous.orchestration.contracts import ExecutionScope
+from app.autonomous.orchestration.inference import InferenceBinding
 from app.autonomous.orchestration.sources import SourceBinding
-from app.errors import CostCapReached, SessionHalted, ToolNotGranted
+from app.errors import Conflict, CostCapReached, SessionHalted, ToolNotGranted
 from app.models.autonomous import (
     AutonomousArtifact,
     AutonomousFinding,
@@ -187,6 +188,7 @@ async def guarded_tool_call(
     execution_scope: ExecutionScope | None = None,
     effect: GuardedEffect | None = None,
     source_binding: SourceBinding | None = None,
+    inference_binding: InferenceBinding | None = None,
 ) -> ToolResult:
     """Single chokepoint for every autonomous tool invocation.
 
@@ -286,7 +288,7 @@ async def guarded_tool_call(
 
             try:
                 params = await constrain_call(
-                    db, session, intent, params, execution_scope, source_binding
+                    db, session, intent, params, execution_scope, source_binding, inference_binding
                 )
             except ToolNotGranted:
                 await autonomous_audit(
@@ -296,6 +298,12 @@ async def guarded_tool_call(
                 raise
 
         # ── R4 economic ─────────────────────────────────────────────────────
+        if inference_binding is not None and (
+            execution_scope is None
+            or effect is None
+            or intent not in {ToolIntent.run_skill, ToolIntent.plan}
+        ):
+            raise ToolNotGranted("inference bindings require a durable scoped inference call")
         # Estimate cost ONCE here — used both for the cap check AND passed
         # into _dispatch so inference handlers use the same Decimal value
         # that R4 checked.  This prevents any divergence between what R4
@@ -349,6 +357,14 @@ async def guarded_tool_call(
                 maximum_egress_tier=(
                     execution_scope.maximum_egress_tier if execution_scope else None
                 ),
+            )
+        elif inference_binding is not None:
+            result = await _handle_gateway_inference(
+                intent,
+                params,
+                gateway=gateway,
+                estimated_cost=estimate,
+                inference_binding=inference_binding,
             )
         else:
             # Local writes (emit_finding/propose_memory/…) and local retrieval
@@ -1685,6 +1701,7 @@ async def _handle_gateway_inference(
     *,
     gateway: Any,
     estimated_cost: Decimal,
+    inference_binding: InferenceBinding | None = None,
 ) -> ToolResult:
     """Handle ``run_skill`` and ``run_playbook`` via a gateway chat-completion.
 
@@ -1737,6 +1754,10 @@ async def _handle_gateway_inference(
     try:
         response = await gateway.chat_completion(request)
     except Exception as exc:
+        if inference_binding is not None:
+            # Error bodies can echo private prompt data. The adapter will mark
+            # the admitted effect uncertain after rollback; keep this path quiet.
+            raise Conflict(message="Bound inference provider outcome is uncertain") from None
         log.warning(
             "autonomous gateway inference error for %s: %s",
             intent,
@@ -1759,6 +1780,11 @@ async def _handle_gateway_inference(
                 "token_counts": {"prompt_tokens": 0, "completion_tokens": 0},
             },
         )
+
+    if inference_binding is not None:
+        from app.autonomous.orchestration.inference import bound_result
+
+        return bound_result(inference_binding, response, intent=str(intent))
 
     try:
         choices = response.choices

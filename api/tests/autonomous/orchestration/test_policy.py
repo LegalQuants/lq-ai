@@ -443,7 +443,7 @@ async def test_plan_must_fit_current_data_and_skill_policy(policy_env, restricti
     policy = env.config.current
     scope = env.plan.root
     if restriction == "inference":
-        policy = policy.model_copy(update={"minimum_inference_tier": 2})
+        scope = scope.model_copy(update={"minimum_inference_tier": 2})
     elif restriction == "egress":
         scope = scope.model_copy(update={"maximum_egress_tier": 3})
     elif restriction == "anonymization":
@@ -459,6 +459,53 @@ async def test_plan_must_fit_current_data_and_skill_policy(policy_env, restricti
     env.plan = env.plan.model_copy(update={"root": scope, "policy_version": policy.version()})
     with pytest.raises(Forbidden, match="current data or grant policy"):
         await env.store.save_plan(env.plan, actor_id=env.owner_id)
+
+
+@pytest.mark.parametrize(
+    "operator_floor,skill_floor,scope_floor,allowed",
+    [
+        (5, None, 3, True),
+        (5, 2, 3, False),
+        (2, 5, 3, False),
+        (3, 5, 2, True),
+    ],
+)
+async def test_operator_and_skill_floors_use_strongest_requirement(
+    policy_env, operator_floor, skill_floor, scope_floor, allowed
+):
+    from app.autonomous.orchestration.policy import skill_pin
+    from app.skills.loader import load_registry
+
+    env = policy_env
+    path = env.folder / "SKILL.md"
+    path.write_text(
+        path.read_text().replace(
+            "minimum_inference_tier: 1",
+            f"minimum_inference_tier: {skill_floor if skill_floor is not None else 'null'}",
+        )
+    )
+    env.holder.replace(load_registry(env.folder.parent))
+    pin = skill_pin(env.holder.current().get("fixture-skill"))
+    policy = env.config.current.model_copy(
+        update={
+            "minimum_inference_tier": operator_floor,
+            "skills": tuple(s.model_copy(update={"pin": pin}) for s in env.config.current.skills),
+        }
+    )
+    env.config.current = policy
+    scope = env.plan.root.model_copy(update={"minimum_inference_tier": scope_floor, "skill": pin})
+    env.plan = env.plan.model_copy(
+        update={
+            "root": scope,
+            "policy_version": policy.version(),
+            "children": tuple(c.model_copy(update={"execution": scope}) for c in env.plan.children),
+        }
+    )
+    if allowed:
+        await approve(env)
+    else:
+        with pytest.raises(Forbidden, match="current data or grant policy"):
+            await env.store.save_plan(env.plan, actor_id=env.owner_id)
 
 
 @pytest.mark.parametrize("halt_state,status", [("halted", "running"), ("running", "completed")])

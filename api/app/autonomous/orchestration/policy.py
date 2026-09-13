@@ -13,9 +13,9 @@ import hashlib
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -85,6 +85,25 @@ class SkillPolicy(Snapshot):
     source_types: tuple[ShortText, ...]
 
 
+class InferencePolicy(Snapshot):
+    """Explicit direct route and input/output limits, included in approval."""
+
+    provider: ShortText
+    native_model: ShortText
+    max_input_bytes: Annotated[int, Field(ge=1, le=131072)]
+    max_output_tokens: Annotated[int, Field(ge=1, le=8192)]
+
+    @model_validator(mode="after")
+    def direct_route(self) -> InferencePolicy:
+        if "/" in self.provider or len(self.model_key) > 256:
+            raise ValueError("inference requires a bounded direct provider/model route")
+        return self
+
+    @property
+    def model_key(self) -> str:
+        return f"{self.provider}/{self.native_model}"
+
+
 class OperatorPolicy(Snapshot):
     """No implicit skill, source, tier, grant or anonymization defaults."""
 
@@ -94,6 +113,7 @@ class OperatorPolicy(Snapshot):
     minimum_inference_tier: InferenceTier
     maximum_egress_tier: EgressTier
     require_anonymization: bool
+    inference: InferencePolicy | None = None
 
     @model_validator(mode="after")
     def unique_catalog(self) -> OperatorPolicy:
@@ -197,9 +217,9 @@ class CurrentPolicy:
                 raise Forbidden(message="Approved skill artifact has changed")
             if (
                 scope.minimum_inference_tier
-                < max(
+                > min(
                     policy.minimum_inference_tier,
-                    record.frontmatter.lq_ai.minimum_inference_tier or 1,
+                    record.frontmatter.lq_ai.minimum_inference_tier or 5,
                 )
                 or scope.maximum_egress_tier > policy.maximum_egress_tier
                 or (policy.require_anonymization and not scope.anonymize)

@@ -54,7 +54,8 @@ this increment does not permit replay under revoked or changed configuration.
   numeric zero; missing pricing never means free for orchestration. Nonzero or
   malformed `cost_per_unit` is refused because no variable-unit meter is bound.
 - The price is a configured **accounted** per-call charge, not a measured provider
-  invoice. Inference alias/fallback routing and token pricing remain unbound.
+  invoice. The later [direct inference binding](issue-563-inference-bindings.md)
+  supplies current token pricing; inference aliases/fallbacks remain closed.
 - Tool-provider `anonymize_outbound` is currently parsed but its transform is not
   implemented. An orchestration scope requiring anonymization therefore refuses
   authority dispatch before configuration I/O. This is an explicit enablement

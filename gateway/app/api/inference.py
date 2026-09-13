@@ -1352,6 +1352,7 @@ def _annotate_response(
     """Stamp the routed-tier and routed-provider fields plus cost estimate."""
 
     response.routed_provider = target.provider.name
+    response.routed_model = target.native_model
     response.routed_inference_tier = target.routed_inference_tier
     cost = estimate_cost(
         provider_name=target.provider.name,

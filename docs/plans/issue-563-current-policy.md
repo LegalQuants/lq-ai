@@ -10,7 +10,8 @@ current-policy callback. The operator supplies a local immutable `OperatorPolicy
 snapshot; `None` disables execution. No default skill, provider or permissive
 fallback is supplied. Its SHA-256 version covers all declared skill pins/profile
 grants, enabled source names/types/operations, egress tiers, inference floor and
-anonymization requirement. A changed snapshot invalidates existing approval.
+anonymization requirement, plus optional direct inference route/input/output limits.
+A changed snapshot invalidates existing approval.
 Snapshot distribution and refresh across API/worker processes are still an
 enablement gate; this callback does not establish distributed revocation by itself.
 
@@ -23,6 +24,13 @@ Configured operations must exist in the source registry: for example, EUR-Lex
 cannot acquire search support by configuration. An allowed source type is not
 proof that arbitrary task prose fits a skill's substantive or jurisdictional
 coverage; that remains a plan-builder validation gate.
+
+Inference tier comparisons use the gateway's lower-number-means-stronger rule.
+The numerically lowest operator/skill requirement wins; a scope cannot declare
+a weaker, higher-numbered requirement. Missing skill/project metadata adds no
+restriction. Child delegation and the store's project checks use the same rule,
+including before initial plan persistence. The [inference increment](issue-563-inference-bindings.md)
+records the correction to the earlier unpublished comparisons and its regressions.
 
 Skill pins hash the filesystem artifact's name, origin, raw frontmatter, body and
 sorted paths/content of all reference/example files. The checker reads the main
@@ -95,7 +103,7 @@ stack.
 
 Pinned instructions and atomic guarded outcomes now have adapter and hard-process-
 death evidence in the linked execution increment. Authority-source binding is
-implemented locally; inference pricing/routing and dispatch-time configuration
-revision enforcement remain open. Provide shared current-policy distribution, worker
+implemented locally, as are direct inference route/rate bindings. Dispatch-time
+configuration revision enforcement remains open. Provide shared current-policy distribution, worker
 capacity/lease lifecycle and wakeup recovery. The production arq/LangGraph topology
 still requires integration evidence before public dispatch.

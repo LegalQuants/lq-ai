@@ -1124,6 +1124,9 @@ components:
           type: integer
           enum: [1,2,3,4,5]
         routed_provider: {type: string}
+        routed_model:
+          type: [string, 'null']
+          description: Gateway-resolved native model for a non-streaming completion; independent of the upstream model label.
         cost_estimate: {type: number}
         anonymization_applied: {type: boolean}
         lq_ai_applied_skills:

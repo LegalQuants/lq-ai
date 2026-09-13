@@ -46,7 +46,7 @@ new changes or unresolved concerns.
 | W1 — Governed plan contracts | Strict bounded task data separate from server authority; stable plan identity/revision/hash; immutable approval scope; no model-supplied authority or arbitrary handler. Test malformed/hostile/extra input and scope/version changes. | Complete locally; 96 tests passed |
 | W2 — LangGraph/Postgres integration | Real LQ guard and actual Postgres checkpoints, meaningful multi-step effect boundaries, independent child DB sessions, competing-owner/restart/halt fixtures and uncertain-call handling. Record worker topology and locked saver configuration; no second continuation cursor. | Guarded effect adapter passes fresh-checkpoint and hard-process-death fixtures; final arq/LangGraph worker topology and external integration remain |
 | W3 — Durable run tree and approval | Hierarchy migration/backfill/deletion rules, plan and approval persistence, version-bound approval, durable unique child admission and wakeup recovery. Real Postgres race/crash tests and migration up/down pass. | Persistence core implemented and tested locally; worker/wakeup integration remains |
-| W4 — Authority, accounting and halt | Approved resource subset and current permission checks; inference/egress restrictions; atomic Decimal reservations/settlement; root allowance; fenced execution and cancellation; correct waiting/deadline/watchdog semantics. | Allocations, effect accounting, worker fences, current policy, scoped guard and authority-source bindings implemented; inference pricing, tool anonymization, gateway revision enforcement and shared policy/capacity/lifecycle remain |
+| W4 — Authority, accounting and halt | Approved resource subset and current permission checks; inference/egress restrictions; atomic Decimal reservations/settlement; root allowance; fenced execution and cancellation; correct waiting/deadline/watchdog semantics. | Allocations, effect accounting, worker fences, current policy, scoped guard, authority-source and direct inference bindings implemented; tier direction corrected; tool anonymization, gateway revision enforcement and shared policy/capacity/lifecycle remain |
 | W5 — Parallel research and joining | Versioned visible orchestrator skill, isolated skill-backed children, bounded concurrency across root/user/deployment, internal child delivery, root-only output, partial/empty/failure outcomes. Barrier tests prove overlap and restart does not duplicate completed work. | Pending |
 | W6 — API, gateway and receipts | Plan read/approve/reject, tree read, correlation stripped before provider calls, stable child receipts, separate completion/coverage/verification statuses and parent synthesis gate. Update API sketches/generated export, route pins and schema docs with code. | Pending |
 | W7 — Intake and UI | Reuse corrected #410 entry point; explicit plan review, approve/reject, changing child progress, budget breakdown, halt, receipt links and bounded polling/manual refresh. Svelte/Vitest and controlled Cypress flow pass. | Pending |
@@ -155,7 +155,26 @@ cost tests. Uncertain external outcomes remain distinct from completed work.
   **155 passed** in 11.58 seconds, including 35 source-binding cases.
   Ruff check/format, mypy (199 source files) and diff whitespace checks passed.
   All gateway/provider responses were stubbed; only a disposable database was used.
-- Next: bind inference routing/pricing, tool anonymization and gateway configuration
+- W4: [direct inference bindings](issue-563-inference-bindings.md) now bind the
+  approved operator provider/model and limits to fresh rates, a conservative
+  reservation and validated gateway response metadata. Larger reported usage is
+  charged in full and can stop the root; lower observations do not refund the
+  accounted estimate. Gateway responses identify the actual resolved model
+  independently of the upstream version label. Inspection exposed reversed tier
+  comparisons in the unpublished orchestration checks; root/child, operator/skill
+  and project checks now match the gateway's lower-number-means-stronger rule.
+  Initial/revised plan persistence also validates current project data policy.
+  Focused orchestration/contracts regression: **250 passed** in 9.04 seconds.
+  Full API regression: **2,919 passed, one skipped** in 221.82 seconds.
+  Gateway regression: **796 passed, three skipped** in 12.05 seconds.
+  Final bound-inference error/route checks: **31 passed** in 2.24 seconds.
+  Ruff check/format and mypy passed for both services (200 API / 56 gateway
+  source files); diff whitespace checks passed. The first focused run exposed
+  a test assertion using the wrong ORM field name; it was corrected before
+  the passing runs. Gateway setup initially lacked its existing spaCy model;
+  after installing it in the isolated environment, all anonymization tests ran.
+  No live providers, development/production migrations or feature enablement.
+- Next: bind tool anonymization and gateway configuration
   revisions, then shared current-policy distribution,
   worker topology/capacity, queue wakeup recovery and lifecycle handling. No public
   orchestration routes or ordinary workers invoke the store yet. Keep LangGraph

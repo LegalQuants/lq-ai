@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.autonomous.enums import ToolIntent
 from app.autonomous.orchestration.contracts import ExecutionScope
+from app.autonomous.orchestration.inference import InferenceBinding
 from app.autonomous.orchestration.sources import SourceBinding
 from app.errors import ToolNotGranted
 from app.models.autonomous import AutonomousSession
@@ -40,6 +41,7 @@ async def constrain_call(
     params: dict[str, Any],
     scope: ExecutionScope,
     source_binding: SourceBinding | None = None,
+    inference_binding: InferenceBinding | None = None,
 ) -> dict[str, Any]:
     """Return narrowed params, refusing unsupported or out-of-scope reads."""
     if intent not in _IMPLEMENTED or intent not in getattr(scope.grants, session.current_phase):
@@ -59,6 +61,11 @@ async def constrain_call(
             raise ToolNotGranted("authority call differs from supported source binding")
         return dict(params)
     if intent in {ToolIntent.run_skill, ToolIntent.plan}:
+        if inference_binding is not None and (
+            not inference_binding.matches(params)
+            or inference_binding.routed_tier > scope.minimum_inference_tier
+        ):
+            raise ToolNotGranted("inference call differs from approved route binding")
         # These values come from server authority, never from planner params.
         return {
             **params,

@@ -252,7 +252,7 @@ class PreparedPlan(Snapshot):
                 raise ValueError("child resources exceed selected root scope")
             if not self.delegation_grants.contains(scope.grants):
                 raise ValueError("child grants exceed delegation envelope")
-            if scope.minimum_inference_tier < self.root.minimum_inference_tier:
+            if scope.minimum_inference_tier > self.root.minimum_inference_tier:
                 raise ValueError("child weakens minimum inference tier")
             if scope.maximum_egress_tier > self.root.maximum_egress_tier:
                 raise ValueError("child weakens maximum egress tier")

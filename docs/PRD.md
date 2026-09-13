@@ -896,8 +896,11 @@ guarded outcome with its receipt and accounting. Checkpoint-resume and abrupt
 process-exit fixtures verify completed-effect reuse and uncertain-effect recovery.
 The [authority-source binding](plans/issue-563-source-bindings.md) fixes configured
 provider/operation, explicit per-call price and egress ceiling through dispatch;
-empty searches succeed and all candidates are retained. Required tool anonymization,
-inference pricing/routing, dispatch-time configuration revision enforcement,
+empty searches succeed and all candidates are retained. [Direct inference bindings](plans/issue-563-inference-bindings.md)
+now require current token rates, preserve conservative accounting and validate
+gateway route metadata; orchestration tier comparisons follow the gateway's
+lower-number-means-stronger convention. Required tool anonymization,
+dispatch-time configuration revision enforcement,
 shared policy distribution, worker lifecycle and the public orchestration interface
 remain unimplemented; the
 [workflow](plans/issue-563-workflow.md) records acceptance progress.

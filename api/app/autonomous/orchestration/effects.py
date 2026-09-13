@@ -1,10 +1,9 @@
 """Guarded execution with durable, fenced admission and atomic outcomes.
 
-No graph/queue types or public routes. The required pricing resolver must return
-an explicit, current quote (including explicit free pricing) or None to refuse.
-Authority sources have a separate exact provider/per-call price binding.
-Inference routing/pricing and shared policy distribution remain enablement gates;
-the legacy cold-start estimator is never a fallback here.
+No graph/queue types or public routes. Inference and authority sources have exact
+route/price bindings; fixtures may supply an explicit current quote (including
+explicit free pricing). Shared policy/configuration distribution remains an
+enablement gate; the legacy cold-start estimator is never a fallback here.
 """
 
 from __future__ import annotations
@@ -23,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.autonomous.enums import ToolIntent
 from app.autonomous.guard import ToolResult, guarded_tool_call
 from app.autonomous.orchestration.contracts import ExecutionScope, Money, ShortText, Snapshot
+from app.autonomous.orchestration.inference import InferenceBinding, InferenceRoutes
 from app.autonomous.orchestration.policy import load_pinned_skill
 from app.autonomous.orchestration.sources import AuthoritySources, SourceBinding
 from app.autonomous.orchestration.store import ExecutionView, OrchestrationStore, WorkerClaim
@@ -71,13 +71,15 @@ class _Invocation:
         view: ExecutionView,
         effect_key: str,
         phase: Phase,
-        quote: QuoteProvider,
+        quote: QuoteProvider | None,
         source_binding: SourceBinding | None = None,
+        inference_binding: InferenceBinding | None = None,
     ) -> None:
         self.store, self.claim, self.view = store, claim, view
         self.effect_key, self.phase, self.quote = effect_key, phase, quote
         self.admitted = False
         self.source_binding = source_binding
+        self.inference_binding = inference_binding
 
     async def admit(
         self, intent: ToolIntent, params: dict[str, Any]
@@ -86,15 +88,26 @@ class _Invocation:
         # and model text cannot change the identity while admission awaits I/O.
         request = _bounded_json(params)
         quote: CostQuote | None
-        if self.source_binding is not None:
+        if self.inference_binding is not None:
+            if self.inference_binding.policy_version != self.view.plan.policy_version:
+                raise Forbidden(message="Inference binding differs from approved policy")
+            quote = CostQuote(
+                amount_usd=self.inference_binding.reservation_usd,
+                pricing_version=self.inference_binding.config_digest,
+            )
+        elif self.source_binding is not None:
             if self.source_binding.policy_version != self.view.plan.policy_version:
                 raise Forbidden(message="Source binding differs from approved policy")
             quote = CostQuote(
                 amount_usd=self.source_binding.cost_usd,
                 pricing_version=self.source_binding.config_digest,
             )
-        else:
+        elif self.quote is not None:
             quote = self.quote(intent, json.loads(request), self.view.scope)
+        elif intent == ToolIntent.retrieve_chunks:
+            quote = CostQuote(amount_usd=Decimal("0"), pricing_version="local-document-read-v1")
+        else:
+            quote = None
         if quote is None:
             raise Forbidden(message="Known current pricing is required for orchestration")
         quote = CostQuote.model_validate(quote)
@@ -108,6 +121,11 @@ class _Invocation:
                 "quote": quote.model_dump(mode="json"),
                 "source_binding": (
                     self.source_binding.model_dump(mode="json") if self.source_binding else None
+                ),
+                "inference_binding": (
+                    self.inference_binding.model_dump(mode="json")
+                    if self.inference_binding
+                    else None
                 ),
             }
         )
@@ -162,14 +180,17 @@ class GuardedEffects:
         *,
         skills: MutableSkillRegistry,
         gateway: Any,
-        quote: QuoteProvider,
-        model: str,
-        max_tokens: int,
+        quote: QuoteProvider | None = None,
+        model: str | None = None,
+        max_tokens: int | None = None,
         sources: AuthoritySources | None = None,
+        inference: InferenceRoutes | None = None,
     ) -> None:
-        if not isinstance(model, str) or not model.strip() or len(model) > 256:
+        if inference is None and (
+            not isinstance(model, str) or not model.strip() or len(model) > 256
+        ):
             raise ValidationError(message="Inference model must be explicitly configured")
-        if type(max_tokens) is not int or not 1 <= max_tokens <= 8192:
+        if inference is None and (type(max_tokens) is not int or not 1 <= max_tokens <= 8192):
             raise ValidationError(message="Inference output limit must be between 1 and 8192")
         if sources is not None and sources.gateway is not gateway:
             raise ValidationError(
@@ -178,6 +199,11 @@ class GuardedEffects:
         self.store, self.skills, self.gateway = store, skills, gateway
         self.quote, self.model, self.max_tokens = quote, model, max_tokens
         self.sources = sources
+        if inference is not None and inference.gateway is not gateway:
+            raise ValidationError(
+                message="Inference configuration and dispatch must use the same gateway"
+            )
+        self.inference = inference
 
     async def infer(
         self,
@@ -208,7 +234,7 @@ class GuardedEffects:
                 if c.dispatch_id == claim.session_id
             )
         )
-        params = {
+        params: dict[str, Any] = {
             "model": self.model,
             "max_tokens": self.max_tokens,
             "messages": [
@@ -219,7 +245,16 @@ class GuardedEffects:
                 },
             ],
         }
-        return await self._call(claim, view, effect_key, phase, intent, params)
+        binding = None
+        if self.inference is not None:
+            async with asyncio.timeout(view.lease_seconds):
+                binding = await self.inference.bind(view.plan, view.scope, params["messages"])
+            params["model"] = binding.policy.model_key
+            params["max_tokens"] = binding.policy.max_output_tokens
+            view = await self.store.execution_view(claim)
+        return await self._call(
+            claim, view, effect_key, phase, intent, params, inference_binding=binding
+        )
 
     async def retrieve(
         self,
@@ -276,9 +311,17 @@ class GuardedEffects:
         params: dict[str, Any],
         *,
         source_binding: SourceBinding | None = None,
+        inference_binding: InferenceBinding | None = None,
     ) -> ToolResult:
         invocation = _Invocation(
-            self.store, claim, view, effect_key, phase, self.quote, source_binding
+            self.store,
+            claim,
+            view,
+            effect_key,
+            phase,
+            self.quote,
+            source_binding,
+            inference_binding,
         )
         try:
             async with asyncio.timeout(view.lease_seconds), self.store.sessions.begin() as db:
@@ -294,6 +337,7 @@ class GuardedEffects:
                     execution_scope=view.scope,
                     effect=invocation,
                     source_binding=source_binding,
+                    inference_binding=inference_binding,
                 )
         except BaseException:
             # The outcome transaction has rolled back before recovery acquires
