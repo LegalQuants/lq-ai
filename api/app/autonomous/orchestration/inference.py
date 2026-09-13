@@ -80,6 +80,7 @@ class InferenceBinding(Snapshot):
     estimated_prompt_tokens: Annotated[int, Field(ge=0, le=131168)]
     reservation_usd: Money
     config_digest: Digest
+    gateway_revision: Digest
     anonymization_expected: bool
 
     @field_serializer("reservation_usd")
@@ -178,6 +179,7 @@ class InferenceRoutes:
                 config_digest=hashlib.sha256(
                     json.dumps(routing, sort_keys=True, allow_nan=False).encode()
                 ).hexdigest(),
+                gateway_revision=config["configuration_revision"],
                 anonymization_expected=expected,
             )
         except (KeyError, TypeError, ValueError, ArithmeticError, AttributeError):

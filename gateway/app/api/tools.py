@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.api.dependencies import make_require_gateway_key
+from app.config_revision import REVISION_HEADER, ConfigRevisionMismatch
 from app.providers.tool.base import (
     ToolProviderAuthError,
     ToolProviderError,
@@ -112,6 +113,16 @@ async def call_tool(
     provider: str, tool: str, body: ToolCallRequest, request: Request
 ) -> JSONResponse:
     gw_router = _router(request)
+    revision = request.headers.get(REVISION_HEADER)
+    if revision is not None:
+        try:
+            gw_router = gw_router.pin(revision, provider, tool=True)
+        except ConfigRevisionMismatch:
+            return _error(
+                412,
+                "configuration_revision_mismatch",
+                "Gateway configuration or adapter changed before dispatch",
+            )
     request_id = _request_id(request)
     user_token = _user_token(request)
     try:
@@ -144,5 +155,6 @@ async def call_tool(
             "tool": result.tool,
             "payload": result.payload,
             "tier": result.tier,
-        }
+        },
+        headers={REVISION_HEADER: revision} if revision is not None else None,
     )

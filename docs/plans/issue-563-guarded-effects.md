@@ -96,8 +96,9 @@ migrated Postgres with stub providers. They include:
 The checkpoint and process-death cases are integration fixtures, not the final
 arq/LangGraph worker topology. They establish the effect boundary without adding
 a second continuation cursor. The full autonomous lifecycle, lease renewal/release,
-shared capacity, queue wakeups, operator policy distribution and gateway
-configuration revision enforcement remain gates. Root planning before approval, visible
+shared capacity, queue wakeups and operator policy distribution remain gates.
+[Gateway revision enforcement](issue-563-configuration-revisions.md) was subsequently
+implemented for bound inference and authority calls. Root planning before approval, visible
 orchestrator instructions, child result joining and public endpoints/UI also remain
 in their work packages. Scoped authority calls require the subsequently implemented
 source binding; missing pricing and required tool anonymization fail closed.

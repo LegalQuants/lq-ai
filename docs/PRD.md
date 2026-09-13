@@ -899,8 +899,9 @@ provider/operation, explicit per-call price and egress ceiling through dispatch;
 empty searches succeed and all candidates are retained. [Direct inference bindings](plans/issue-563-inference-bindings.md)
 now require current token rates, preserve conservative accounting and validate
 gateway route metadata; orchestration tier comparisons follow the gateway's
-lower-number-means-stronger convention. Required tool anonymization,
-dispatch-time configuration revision enforcement,
+lower-number-means-stronger convention. [Gateway revision checks](plans/issue-563-configuration-revisions.md)
+now require dispatch to use the checked configuration and matching adapter;
+successful responses acknowledge the revision. Required tool anonymization,
 shared policy distribution, worker lifecycle and the public orchestration interface
 remain unimplemented; the
 [workflow](plans/issue-563-workflow.md) records acceptance progress.

@@ -948,7 +948,11 @@ async def _handle_retrieve_authority(
         result = await gateway.call_tool(provider_name, op, args)
     else:
         result = await gateway.call_tool(
-            provider_name, op, args, max_allowed_tier=maximum_egress_tier
+            provider_name,
+            op,
+            args,
+            max_allowed_tier=maximum_egress_tier,
+            configuration_revision=source_binding.gateway_revision,
         )
         if (
             result.get("provider") != provider_name
@@ -1752,7 +1756,12 @@ async def _handle_gateway_inference(
     )
 
     try:
-        response = await gateway.chat_completion(request)
+        if inference_binding is not None:
+            response = await gateway.chat_completion(
+                request, configuration_revision=inference_binding.gateway_revision
+            )
+        else:
+            response = await gateway.chat_completion(request)
     except Exception as exc:
         if inference_binding is not None:
             # Error bodies can echo private prompt data. The adapter will mark

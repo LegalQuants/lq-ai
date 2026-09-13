@@ -25,6 +25,7 @@ from app.schemas.autonomous import Phase
 class Gateway:
     def __init__(self):
         self.config = {
+            "configuration_revision": "a" * 64,
             "providers": [
                 {
                     "name": "selected",
@@ -57,7 +58,8 @@ class Gateway:
             await self.config_hook()
         return deepcopy(self.config)
 
-    async def chat_completion(self, request):
+    async def chat_completion(self, request, *, configuration_revision):
+        assert configuration_revision == self.config["configuration_revision"]
         self.requests.append(request)
         self.entered.set()
         await self.release.wait()
@@ -141,6 +143,8 @@ async def test_direct_route_and_conservative_accounting_are_recoverable(inferenc
         "weak_tier",
         "anonymization_disabled",
         "anonymization_wrong_tier",
+        "revision_missing",
+        "revision_malformed",
     ],
 )
 async def test_unavailable_route_or_pricing_refuses_before_admission(inference_env, mutation):
@@ -169,8 +173,12 @@ async def test_unavailable_route_or_pricing_refuses_before_admission(inference_e
         config["providers"][0]["tier"] = 2
     elif mutation == "anonymization_disabled":
         config["anonymization"]["enabled"] = False
-    else:
+    elif mutation == "anonymization_wrong_tier":
         config["anonymization"]["apply_at_tiers"] = [4]
+    elif mutation == "revision_missing":
+        del config["configuration_revision"]
+    else:
+        config["configuration_revision"] = "invalid"
     with pytest.raises(Forbidden, match="route, protection or pricing"):
         await infer(env)
     assert not env.gateway.requests
@@ -301,7 +309,7 @@ async def test_cancellation_keeps_quote_reserved(inference_env):
 async def test_transport_failure_does_not_echo_provider_error_text(inference_env, caplog):
     env = inference_env
 
-    async def fail(request):
+    async def fail(request, **kwargs):
         raise RuntimeError("PRIVATE_PROMPT_ECHO")
 
     env.gateway.chat_completion = fail
@@ -313,3 +321,43 @@ async def test_transport_failure_does_not_echo_provider_error_text(inference_env
         effect = await db.get(Effect, (env.root_id, "infer:one"))
         assert effect.status == "uncertain" and effect.result is None
         assert (await db.get(Account, env.root_id)).reserved_usd == effect.reserved_usd
+
+
+async def test_gateway_revision_refusal_is_not_replayed(inference_env):
+    import respx
+
+    from app.clients.gateway import GatewayClient
+
+    env = inference_env
+    client = GatewayClient(base_url="http://gateway.fixture", gateway_key="fixture-key")
+    env.effects = GuardedEffects(
+        env.store,
+        skills=env.holder,
+        gateway=client,
+        inference=InferenceRoutes(gateway=client, operator=lambda: env.config.current),
+    )
+    try:
+        with respx.mock() as mock:
+            mock.get("http://gateway.fixture/admin/v1/config").respond(200, json=env.gateway.config)
+            dispatch = mock.post("http://gateway.fixture/v1/chat/completions").respond(
+                412,
+                json={
+                    "error": {
+                        "code": "configuration_revision_mismatch",
+                        "message": "changed",
+                        "details": {},
+                    },
+                },
+            )
+            with pytest.raises(Conflict, match="outcome is uncertain"):
+                await infer(env)
+            assert dispatch.calls[0].request.headers["X-LQ-AI-Config-Revision"] == "a" * 64
+            with pytest.raises(Conflict):
+                await infer(env)
+            assert dispatch.call_count == 1
+        async with env.factory.begin() as db:
+            effect = await db.get(Effect, (env.root_id, "infer:one"))
+            assert effect.status == "uncertain"
+            assert (await db.get(Account, env.root_id)).reserved_usd == effect.reserved_usd
+    finally:
+        await client.aclose()

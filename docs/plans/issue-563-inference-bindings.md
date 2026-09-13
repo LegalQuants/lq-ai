@@ -91,12 +91,12 @@ another provider call and charge, subject to current configuration/authority.
 
 ## Remaining gates and validation
 
-The API's fresh snapshot does not freeze gateway configuration during dispatch.
-Conditional gateway configuration-revision enforcement and coordinated policy
-distribution remain production gates, including protection against an alias added
-after resolution. Post-response checks cannot undo egress or detect every change
-to endpoints, prices or hidden usage. This increment does not enable dispatch or
-provide a guaranteed invoice ceiling. Runtime/policy semantics have changed on
+The subsequent [gateway revision increment](issue-563-configuration-revisions.md)
+checks the API-bound revision before dispatch and pins the gateway configuration
+and matching adapter through the request. This covers aliases added after API
+resolution, provider configuration and configured rates. Coordinated policy
+distribution remains a production gate. A configuration snapshot cannot establish
+actual provider billing or a guaranteed invoice ceiling; dispatch remains disabled. Runtime/policy semantics have changed on
 this unpublished branch; recreate local fixture runs rather than assume existing
 checkpoint compatibility.
 

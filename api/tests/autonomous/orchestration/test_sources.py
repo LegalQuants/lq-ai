@@ -23,6 +23,7 @@ from app.schemas.autonomous import Phase
 class Gateway:
     def __init__(self):
         self.config = {
+            "configuration_revision": "a" * 64,
             "tool_providers": [
                 {
                     "name": "other-statutes",
@@ -40,7 +41,7 @@ class Gateway:
                     "base_url": "https://fixture.invalid",
                     "api_key_env": "MUST_NOT_APPEAR_IN_BINDING",
                 },
-            ]
+            ],
         }
         self.config_reads = 0
         self.calls = []
@@ -57,7 +58,8 @@ class Gateway:
             await self.config_hook()
         return deepcopy(self.config)
 
-    async def call_tool(self, provider, tool, args, *, max_allowed_tier):
+    async def call_tool(self, provider, tool, args, *, max_allowed_tier, configuration_revision):
+        assert configuration_revision == self.config["configuration_revision"]
         self.calls.append((provider, tool, deepcopy(args), max_allowed_tier))
         self.entered.set()
         await self.release.wait()
@@ -228,6 +230,17 @@ async def test_missing_price_and_duplicate_provider_refuse(source_env):
     with pytest.raises(Forbidden):
         await search(env)
     assert not env.gateway.calls
+
+
+async def test_missing_gateway_revision_refuses_before_admission(source_env):
+    env = source_env
+    await start(env)
+    del env.gateway.config["configuration_revision"]
+    with pytest.raises(Forbidden):
+        await search(env)
+    assert not env.gateway.calls
+    async with env.factory.begin() as db:
+        assert await db.get(Effect, (env.root_id, "source:one")) is None
 
 
 @pytest.mark.parametrize("changes", [{"source_name": "other-statutes"}, {"operation": "delete"}])

@@ -103,7 +103,8 @@ stack.
 
 Pinned instructions and atomic guarded outcomes now have adapter and hard-process-
 death evidence in the linked execution increment. Authority-source binding is
-implemented locally, as are direct inference route/rate bindings. Dispatch-time
-configuration revision enforcement remains open. Provide shared current-policy distribution, worker
+implemented locally, as are direct inference route/rate bindings and
+[dispatch-time configuration revision enforcement](issue-563-configuration-revisions.md).
+Provide shared current-policy distribution, worker
 capacity/lease lifecycle and wakeup recovery. The production arq/LangGraph topology
 still requires integration evidence before public dispatch.

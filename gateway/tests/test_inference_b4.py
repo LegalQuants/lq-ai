@@ -32,6 +32,7 @@ import respx
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
+from app.config_revision import REVISION_HEADER, configuration_revision
 from app.routing_log import RecordingRoutingLogWriter
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -132,6 +133,152 @@ async def test_response_carries_tier_in_header_and_body(
 
 
 # --- inference_routing_log writes ------------------------------------------
+
+
+@pytest.mark.parametrize("revision", ["current", "0" * 64, "bad"])
+@respx.mock
+async def test_checked_inference_revision_and_header_isolation(client_with_recorder, revision):
+    client, _ = client_with_recorder
+    config = (await client.get("/admin/v1/config")).json()
+    expected = config["configuration_revision"]
+    route = respx.post("https://api.anthropic.com/v1/messages").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "checked",
+                "model": "provider-version",
+                "content": [{"type": "text", "text": "done"}],
+                "stop_reason": "end_turn",
+                "usage": {"input_tokens": 1, "output_tokens": 1},
+            },
+        )
+    )
+    response = await client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "anthropic-prod/claude-opus-4-7",
+            "messages": [{"role": "user", "content": "hi"}],
+        },
+        headers={REVISION_HEADER: expected if revision == "current" else revision},
+    )
+    if revision == "current":
+        assert response.status_code == 200
+        assert response.headers[REVISION_HEADER] == expected
+        assert REVISION_HEADER not in route.calls[0].request.headers
+        assert expected not in route.calls[0].request.content.decode()
+    else:
+        assert response.status_code == 412 and not route.called
+
+
+@respx.mock
+@pytest.mark.parametrize("setting", ["base_url", "api_key_env"])
+async def test_checked_inference_refuses_fresh_config_with_obsolete_adapter(
+    app_with_recorder, setting
+):
+    app, _ = app_with_recorder
+    holder = app.state.config_holder
+    old_revision = configuration_revision(holder.current())
+    updated = holder.current().model_copy(deep=True)
+    provider = updated.provider_by_name("anthropic-prod")
+    assert provider is not None
+    if setting == "base_url":
+        provider.base_url = "https://replacement.example"
+    else:
+        provider.api_key_env = "REPLACEMENT_ANTHROPIC_KEY"
+    holder.replace(updated)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        revision = (await client.get("/admin/v1/config")).json()["configuration_revision"]
+        assert revision != old_revision
+        response = await client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "anthropic-prod/claude-opus-4-7",
+                "messages": [{"role": "user", "content": "hi"}],
+            },
+            headers={REVISION_HEADER: revision},
+        )
+    assert response.status_code == 412
+    assert not respx.calls
+
+
+@pytest.mark.parametrize("mode", ["alias", "shadowing_alias", "stream"])
+@respx.mock
+async def test_checked_inference_requires_unambiguous_nonstreaming_route(app_with_recorder, mode):
+    app, _ = app_with_recorder
+    holder = app.state.config_holder
+    config = holder.current().model_copy(deep=True)
+    direct = "anthropic-prod/claude-opus-4-7"
+    if mode == "shadowing_alias":
+        config.model_aliases[direct] = config.model_aliases["fast"]
+        holder.replace(config)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "smart" if mode == "alias" else direct,
+                "messages": [{"role": "user", "content": "hi"}],
+                "stream": mode == "stream",
+            },
+            headers={REVISION_HEADER: configuration_revision(config)},
+        )
+    assert response.status_code == 412
+    assert not respx.calls
+
+
+@respx.mock
+async def test_checked_inference_keeps_snapshot_during_hot_swap(app_with_recorder, monkeypatch):
+    app, _recorder = app_with_recorder
+    holder = app.state.config_holder
+    expected = configuration_revision(holder.current())
+    live_router = app.state.router
+    original = dict(live_router.adapters)
+
+    async def swap_during_assembly(*args, **kwargs):
+        new = holder.current().model_copy(deep=True)
+        new.cost_tracking.rates.clear()
+        new.model_aliases["anthropic-prod/claude-opus-4-7"] = new.model_aliases["fast"]
+        holder.replace(new)
+        live_router.adapters.clear()
+        return []
+
+    monkeypatch.setattr("app.api.inference._apply_skill_prompt_assembly", swap_during_assembly)
+    route = respx.post("https://api.anthropic.com/v1/messages").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "pinned",
+                "model": "provider-version",
+                "content": [{"type": "text", "text": "done"}],
+                "stop_reason": "end_turn",
+                "usage": {"input_tokens": 100, "output_tokens": 100},
+            },
+        )
+    )
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "anthropic-prod/claude-opus-4-7",
+                    "messages": [{"role": "user", "content": "hi"}],
+                    "lq_ai_skills": ["fixture"],
+                },
+                headers={REVISION_HEADER: expected},
+            )
+            assert response.status_code == 200, response.text
+            assert response.headers[REVISION_HEADER] == expected
+            assert response.json()["routed_model"] == "claude-opus-4-7"
+            assert response.json()["cost_estimate"] > 0
+            assert json.loads(route.calls[0].request.content)["model"] == "claude-opus-4-7"
+            assert len(route.calls) == 1
+            rejected = await client.post(
+                "/v1/chat/completions",
+                json={"model": "anthropic-prod/claude-opus-4-7", "messages": []},
+                headers={REVISION_HEADER: expected},
+            )
+            assert rejected.status_code == 412 and len(route.calls) == 1
+    finally:
+        live_router.adapters.update(original)
 
 
 @pytest.mark.integration

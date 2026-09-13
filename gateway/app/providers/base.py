@@ -167,6 +167,7 @@ class ProviderAdapter(ABC):
     they share the underlying HTTP client.
     """
 
+    configuration_revision: str | None = None
     name: str
     """The operator-chosen provider name (matches ``ProviderConfig.name``)."""
 

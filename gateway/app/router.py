@@ -636,6 +636,43 @@ class Router:
     def adapters(self) -> dict[str, ProviderAdapter]:
         return self._adapters
 
+    def pin(self, expected_revision: str, provider_name: str, *, tool: bool = False) -> Router:
+        """Capture configuration and adapter references without awaiting or holding locks.
+
+        Retired adapters stay open until shutdown, so an accepted request can
+        finish against this snapshot while hot updates affect subsequent calls.
+        A config-only reload with an obsolete adapter refuses checked dispatch.
+        """
+        from app.config_revision import (
+            ConfigRevisionMismatch,
+            configuration_revision,
+            require_revision,
+        )
+
+        config = self.config.model_copy(deep=True)
+        require_revision(expected_revision, config)
+        adapters, tool_adapters = dict(self._adapters), dict(self._tool_adapters)
+        provider = (
+            config.tool_provider_by_name(provider_name)
+            if tool
+            else config.provider_by_name(provider_name)
+        )
+        adapter = tool_adapters.get(provider_name) if tool else adapters.get(provider_name)
+        if (
+            provider is None
+            or not provider.enabled
+            or adapter is None
+            or adapter.configuration_revision != configuration_revision(provider)
+        ):
+            raise ConfigRevisionMismatch("Gateway adapter does not match current configuration")
+        return Router(
+            config=config,
+            adapters=adapters,
+            tool_adapters=tool_adapters,
+            tool_egress_log=self._tool_egress_log,
+            tool_rate_limiter=self._tool_rate_limiter,
+        )
+
     def resolve(self, requested_model: str) -> list[ResolvedTarget]:
         """Resolve ``requested_model`` to an ordered list of candidate targets."""
 

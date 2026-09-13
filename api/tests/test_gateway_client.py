@@ -96,6 +96,38 @@ async def client() -> AsyncIterator[GatewayClient]:
 # --- Non-streaming: success --------------------------------------------------
 
 
+@pytest.mark.parametrize("kind", ["inference", "tool"])
+@pytest.mark.parametrize("ack", ["a" * 64, "b" * 64, None])
+@respx.mock
+async def test_checked_calls_require_revision_acknowledgement(client, kind, ack):
+    revision = "a" * 64
+    path = "/v1/chat/completions" if kind == "inference" else "/v1/tools/source/search"
+    payload = (
+        _success_payload()
+        if kind == "inference"
+        else {"provider": "source", "tool": "search", "payload": {}, "tier": 1}
+    )
+    route = respx.post(GATEWAY_BASE + path).mock(
+        return_value=httpx.Response(
+            200, json=payload, headers={"X-LQ-AI-Config-Revision": ack} if ack else {}
+        )
+    )
+
+    async def call():
+        if kind == "inference":
+            return await client.chat_completion(_request(), configuration_revision=revision)
+        return await client.call_tool("source", "search", {}, configuration_revision=revision)
+
+    if ack == revision:
+        await call()
+    else:
+        with pytest.raises(GatewayInvalidResponse, match="acknowledge"):
+            await call()
+    request = route.calls[0].request
+    assert request.headers["X-LQ-AI-Config-Revision"] == revision
+    assert revision not in request.content.decode()
+
+
 @pytest.mark.unit
 @respx.mock
 async def test_chat_completion_success_returns_parsed_response(

@@ -35,6 +35,7 @@ class SourceBinding(Snapshot):
     operation: ShortText
     cost_usd: Money
     config_digest: Digest
+    gateway_revision: Digest
 
     @field_serializer("cost_usd")
     def serialize_cost(self, value: Decimal) -> str:
@@ -116,6 +117,7 @@ class AuthoritySources:
                 config_digest=hashlib.sha256(
                     json.dumps(routing, sort_keys=True, allow_nan=False).encode()
                 ).hexdigest(),
+                gateway_revision=config["configuration_revision"],
             )
         except (KeyError, TypeError, ValueError, ArithmeticError):
             raise Forbidden(

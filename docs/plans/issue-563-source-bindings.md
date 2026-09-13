@@ -60,12 +60,12 @@ this increment does not permit replay under revoked or changed configuration.
   implemented. An orchestration scope requiring anonymization therefore refuses
   authority dispatch before configuration I/O. This is an explicit enablement
   dependency, not a claim that the gateway has anonymized the arguments.
-- The gateway has no conditional configuration-revision field on tool dispatch.
-  Fresh resolution plus a fixed name and tier ceiling does not freeze an operator's
-  endpoint, rate or other configuration during the request. Coordinated gateway
-  configuration/policy distribution and dispatch-time revision enforcement remain
-  production gates. The response check detects some changes after dispatch; it
-  cannot undo egress or establish an invoice cap.
+- The subsequent [gateway revision increment](issue-563-configuration-revisions.md)
+  checks the API-bound configuration revision before tool dispatch, requires the
+  selected adapter to match its provider configuration and pins both for the
+  request. Shared policy distribution remains a production gate. Configuration
+  changes after acceptance affect subsequent calls; the configured per-call
+  charge still does not establish an invoice cap.
 - Shared capacity, the arq/LangGraph worker topology, lifecycle/reconciliation,
   pre-approval planning, visible orchestration instructions, child joining and the
   public API/UI remain in the main workflow. Evidence exceeding the receipt size

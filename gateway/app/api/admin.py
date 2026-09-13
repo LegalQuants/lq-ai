@@ -163,6 +163,9 @@ def _sanitized_config_payload(config: GatewayConfig) -> dict[str, Any]:
     """
 
     payload = config.model_dump(mode="json")
+    from app.config_revision import configuration_revision
+
+    payload["configuration_revision"] = configuration_revision(config)
     for key in ("providers", "tool_providers"):
         for entry in payload.get(key, []) or []:
             if isinstance(entry, dict):
