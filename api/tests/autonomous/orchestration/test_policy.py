@@ -339,7 +339,7 @@ async def test_guard_r5_precedes_scope_refusal_and_cost(policy_env, monkeypatch)
             )
 
 
-async def test_guard_denies_external_dispatch_until_bound_adapter_exists(policy_env, monkeypatch):
+async def test_guard_denies_external_dispatch_without_source_binding(policy_env, monkeypatch):
     env = policy_env
 
     async def unexpected_estimate(*args):
@@ -355,7 +355,7 @@ async def test_guard_denies_external_dispatch_until_bound_adapter_exists(policy_
     )
     async with env.factory.begin() as db:
         session = await db.get(AutonomousSession, env.root_id)
-        with pytest.raises(ToolNotGranted, match="implemented orchestration scope"):
+        with pytest.raises(ToolNotGranted, match="source binding"):
             await guarded_tool_call(
                 session,
                 ToolIntent.retrieve_authority,

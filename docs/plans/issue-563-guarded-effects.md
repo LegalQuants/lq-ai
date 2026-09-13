@@ -19,9 +19,10 @@ in additional provider request fields.
 A required local `QuoteProvider` returns an explicit Decimal `CostQuote`, with a
 pricing version, or `None` to refuse. Explicit zero pricing is valid. The legacy
 judge estimator's cold-start fallback and unknown-external-price-as-zero behavior
-are never used by this adapter. This is the pricing interface, not a production
-gateway pricing resolver: exact configured provider/operation/routing and current
-price binding still need implementation before dispatch can be enabled.
+are never used by this adapter. Inference still uses this required pricing interface;
+production inference alias/fallback routing and token rates are not yet bound.
+The subsequent [authority-source increment](issue-563-source-bindings.md) supplies
+exact provider/operation and explicit per-call pricing from fresh gateway config.
 
 The effect identity hashes the approved plan, run, phase, intent, narrowed call
 and quote. Reusing an effect key for a different request is refused. The existing
@@ -93,10 +94,11 @@ migrated Postgres with stub providers. They include:
 The checkpoint and process-death cases are integration fixtures, not the final
 arq/LangGraph worker topology. They establish the effect boundary without adding
 a second continuation cursor. The full autonomous lifecycle, lease renewal/release,
-shared capacity, queue wakeups, operator policy distribution, production pricing
-and external source binding remain gates. Root planning before approval, visible
+shared capacity, queue wakeups, operator policy distribution, inference pricing
+and gateway configuration revision enforcement remain gates. Root planning before approval, visible
 orchestrator instructions, child result joining and public endpoints/UI also remain
-in their work packages. Scoped external calls continue to fail closed.
+in their work packages. Scoped authority calls require the subsequently implemented
+source binding; missing pricing and required tool anonymization fail closed.
 
 Final validation used locked dev/orchestration-test extras and a disposable
 pgvector/Postgres 16 container:
@@ -114,4 +116,5 @@ rerun was stopped after reproducing the remaining probe-fixture failure; the
 final full parallel run and ordered regression above passed after both fixes.
 
 No live provider, production database migration or application feature enablement
-was used. External source/pricing binding and the worker lifecycle remain pending.
+was used. Subsequent source-binding evidence and its remaining enablement gates
+are recorded in the linked increment; the worker lifecycle remains pending.

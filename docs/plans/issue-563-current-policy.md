@@ -61,11 +61,12 @@ semantics remain intact: privileged requests cause the gateway to skip rewriting
 even when the explicit anonymization flag is true. No skill slug or internal
 root/run IDs are added to provider requests.
 
-Scoped external calls remain refused until the exact provider/operation and
-price are bound through the actual dispatch adapter. The legacy external handlers
-re-resolve providers and allow unknown pricing to become zero; those paths cannot
-yet satisfy ADR 0035. Merely selecting a source in a valid plan does not activate
-it. Only scoped document reads, inference and internal findings are implemented.
+Scoped external calls require the [exact authority-source binding](issue-563-source-bindings.md).
+That adapter now fixes provider/operation, configured price and egress ceiling
+through guarded dispatch. The legacy external handlers re-resolve providers and
+allow unknown pricing to become zero; orchestration does not use those resolutions.
+Merely selecting a source does not activate it. Required tool anonymization,
+CourtListener's composite operations and MCP remain closed in this adapter.
 
 The optional guard scope narrows calls; it is not proof of durable authorization.
 The [guarded execution adapter](issue-563-guarded-effects.md) now obtains it from
@@ -93,7 +94,8 @@ flags were used. The disposable database is independent of the user's developmen
 stack.
 
 Pinned instructions and atomic guarded outcomes now have adapter and hard-process-
-death evidence in the linked execution increment. Next: bind provider/operation
-selection and known pricing; provide shared current-policy distribution, worker
+death evidence in the linked execution increment. Authority-source binding is
+implemented locally; inference pricing/routing and dispatch-time configuration
+revision enforcement remain open. Provide shared current-policy distribution, worker
 capacity/lease lifecycle and wakeup recovery. The production arq/LangGraph topology
 still requires integration evidence before public dispatch.

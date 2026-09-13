@@ -91,6 +91,7 @@ from app.autonomous.cost import estimate_tool_cost
 from app.autonomous.enums import PHASE_GRANTS, HaltState, Phase, ToolIntent
 from app.autonomous.notify_email import send_notification_email
 from app.autonomous.orchestration.contracts import ExecutionScope
+from app.autonomous.orchestration.sources import SourceBinding
 from app.errors import CostCapReached, SessionHalted, ToolNotGranted
 from app.models.autonomous import (
     AutonomousArtifact,
@@ -185,6 +186,7 @@ async def guarded_tool_call(
     *,
     execution_scope: ExecutionScope | None = None,
     effect: GuardedEffect | None = None,
+    source_binding: SourceBinding | None = None,
 ) -> ToolResult:
     """Single chokepoint for every autonomous tool invocation.
 
@@ -210,6 +212,8 @@ async def guarded_tool_call(
         effect: Internal adapter hook for durable R4 admission and atomic outcome
             settlement. Requires execution_scope; the store's allocation replaces
             the legacy session cap for this path. No provider I/O in settlement.
+        source_binding: Internal exact authority-source selection and pricing.
+            Requires both a durable effect and approved scope. Never model params.
 
     Returns:
         A :class:`ToolResult` on success.
@@ -223,6 +227,10 @@ async def guarded_tool_call(
             ``max_cost_usd`` (R4).
     """
     with _tracer.start_as_current_span("autonomous.tool_call") as span:
+        if source_binding is not None and (
+            execution_scope is None or effect is None or intent != ToolIntent.retrieve_authority
+        ):
+            raise ToolNotGranted("source bindings require a durable scoped authority call")
         # COUNTS + TYPES ONLY — never raw values or document text
         record_attributes(
             span,
@@ -277,7 +285,9 @@ async def guarded_tool_call(
             from app.autonomous.orchestration.boundary import constrain_call
 
             try:
-                params = await constrain_call(db, session, intent, params, execution_scope)
+                params = await constrain_call(
+                    db, session, intent, params, execution_scope, source_binding
+                )
             except ToolNotGranted:
                 await autonomous_audit(
                     db, session, "tool_call", tool=str(intent), outcome="tool_not_granted"
@@ -335,6 +345,10 @@ async def guarded_tool_call(
                 gateway=gateway,
                 estimate=estimate,
                 span=span,
+                source_binding=source_binding,
+                maximum_egress_tier=(
+                    execution_scope.maximum_egress_tier if execution_scope else None
+                ),
             )
         else:
             # Local writes (emit_finding/propose_memory/…) and local retrieval
@@ -433,6 +447,8 @@ async def _governed_external_dispatch(
     gateway: Any,
     estimate: Decimal,
     span: Any,
+    source_binding: SourceBinding | None = None,
+    maximum_egress_tier: int | None = None,
 ) -> ToolResult:
     """Route an external-tool intent through ``governed_tool_invocation``.
 
@@ -441,20 +457,31 @@ async def _governed_external_dispatch(
     shared helper, annotating the caller-owned ``autonomous.tool_call`` span
     (D-a1).  The ``estimate`` from R4 is forwarded verbatim as
     ``estimated_cost`` (single-estimate invariant — the helper never
-    re-estimates).  ``max_allowed_tier=None`` because an
-    :class:`~app.models.autonomous.AutonomousSession` carries no per-session
-    tier ceiling in v1 (the gateway still enforces the ceiling on the actual
-    call — defence in depth).  ``origin="autonomous"`` and there is no
+    re-estimates). Bound orchestration sources use their fixed provider/tier
+    and approved ceiling through dispatch; legacy sessions retain a None ceiling.
+    ``origin="autonomous"`` and there is no
     per-user OAuth token (D-a5).
     """
     # Local import: governance.py imports ToolResult from this module, so a
     # top-level import here would be circular.
     from app.tools.governance import governed_tool_invocation, resolve_provider_tier
 
-    provider, tool = await _resolve_external_call(intent, params, gateway)
-    provider_tier = await resolve_provider_tier(provider)
+    if source_binding is None:
+        provider, tool = await _resolve_external_call(intent, params, gateway)
+        provider_tier = await resolve_provider_tier(provider)
+    else:
+        provider, tool = source_binding.source.name, source_binding.operation
+        provider_tier = source_binding.source.egress_tier
 
     async def _dispatch_closure() -> ToolResult:
+        if source_binding is not None:
+            return await _handle_retrieve_authority(
+                params,
+                db=db,
+                gateway=gateway,
+                source_binding=source_binding,
+                maximum_egress_tier=maximum_egress_tier,
+            )
         return await _dispatch(
             intent, params, gateway=gateway, db=db, session=session, estimated_cost=estimate
         )
@@ -466,7 +493,7 @@ async def _governed_external_dispatch(
         tool=tool,
         intent=intent,
         provider_tier=provider_tier,
-        max_allowed_tier=None,  # AutonomousSession has no tier ceiling in v1
+        max_allowed_tier=maximum_egress_tier,
         estimated_cost=estimate,  # single-estimate — forwarded, never re-estimated
         dispatch=_dispatch_closure,
         span=span,
@@ -808,6 +835,8 @@ async def _handle_retrieve_authority(
     *,
     db: AsyncSession,
     gateway: Any,
+    source_binding: SourceBinding | None = None,
+    maximum_egress_tier: int | None = None,
 ) -> ToolResult:
     """Handle ``retrieve_authority`` — GovInfo authority retrieval via gateway.
 
@@ -877,13 +906,17 @@ async def _handle_retrieve_authority(
     # ── Validate: source enabled (belt-and-suspenders; _resolve_external_call
     # already checked, but validate again before the gateway call so a race
     # or param-mutation between the two can never bypass source validation).
-    sources = await resolve_available_sources(gateway)
-    enabled_map = {s.type: s for s in sources if s.enabled}
-    source = enabled_map.get(source_type)
-    if source is None:
-        raise ValueError(
-            f"_handle_retrieve_authority: source {source_type!r} not available or disabled"
-        )
+    if source_binding is None:
+        sources = await resolve_available_sources(gateway)
+        enabled_map = {s.type: s for s in sources if s.enabled}
+        source = enabled_map.get(source_type)
+        if source is None:
+            raise ValueError(
+                f"_handle_retrieve_authority: source {source_type!r} not available or disabled"
+            )
+        provider_name = str(source.name)
+    else:
+        provider_name = source_binding.source.name
 
     # ── Validate: op ∈ source's registered ops ──────────────────────────────
     spec = SOURCE_REGISTRY.get(source_type)
@@ -894,12 +927,36 @@ async def _handle_retrieve_authority(
         )
 
     # ── One egress (ADR 0014): call through gateway only ────────────────────
-    provider_name = str(source.name)
-    result: dict[str, Any] = await gateway.call_tool(provider_name, op, args)
+    result: dict[str, Any]
+    if source_binding is None:
+        result = await gateway.call_tool(provider_name, op, args)
+    else:
+        result = await gateway.call_tool(
+            provider_name, op, args, max_allowed_tier=maximum_egress_tier
+        )
+        if (
+            result.get("provider") != provider_name
+            or result.get("tool") != op
+            or type(result.get("tier")) is not int
+            or result["tier"] != source_binding.source.egress_tier
+            or not isinstance(result.get("payload"), dict)
+        ):
+            raise ValueError("Authority response differs from admitted provider binding")
     # GatewayClient.call_tool returns the envelope {provider, tool, payload, tier};
     # the actual GovInfo fields live under result["payload"].  Match the
     # sibling convention in _handle_call_mcp_tool and research/service.py.
     payload: dict[str, Any] = result.get("payload") or {}
+    if source_binding is not None and op == "search_authority":
+        # Preserve every candidate and distinguish a successful empty search
+        # from missing/malformed results. The legacy adapter extracts only the
+        # first result and raises on empty, unsuitable for parallel research.
+        results = payload.get("results")
+        if not isinstance(results, list) or any(not isinstance(r, dict) for r in results):
+            raise ValueError("Authority search response is malformed")
+        return ToolResult(
+            cost_usd=source_binding.cost_usd,
+            data={"source": source_type, "results": results},
+        )
 
     # ── Normalise via adapter ────────────────────────────────────────────────
     if spec.adapter is None:
@@ -917,6 +974,11 @@ async def _handle_retrieve_authority(
         "content_kind": authority.content_kind,
         "source": params["source"],  # registry source name, for delivery verification
     }
+    if source_binding is not None:
+        # The bounded durable receipt carries evidence for the parent. Do not
+        # add an untracked object-storage write to this one admitted provider
+        # call or publish a child's evidence into the shared authority cache.
+        return ToolResult(cost_usd=source_binding.cost_usd, data={"authority": authority_data})
 
     # ── PR1b: non-fatal cache write ──────────────────────────────────────────
     # Best-effort: any failure (including ValueError for a bad external_ref)

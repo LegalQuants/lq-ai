@@ -2,8 +2,9 @@
 
 No graph/queue types or public routes. The required pricing resolver must return
 an explicit, current quote (including explicit free pricing) or None to refuse.
-Production provider/pricing resolution and shared policy distribution remain
-enablement gates; the legacy cold-start estimator is never a fallback here.
+Authority sources have a separate exact provider/per-call price binding.
+Inference routing/pricing and shared policy distribution remain enablement gates;
+the legacy cold-start estimator is never a fallback here.
 """
 
 from __future__ import annotations
@@ -16,12 +17,14 @@ from decimal import Decimal
 from typing import Any, Protocol
 from uuid import UUID
 
+from pydantic import field_serializer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.autonomous.enums import ToolIntent
 from app.autonomous.guard import ToolResult, guarded_tool_call
 from app.autonomous.orchestration.contracts import ExecutionScope, Money, ShortText, Snapshot
 from app.autonomous.orchestration.policy import load_pinned_skill
+from app.autonomous.orchestration.sources import AuthoritySources, SourceBinding
 from app.autonomous.orchestration.store import ExecutionView, OrchestrationStore, WorkerClaim
 from app.errors import Conflict, Forbidden, ValidationError
 from app.models.autonomous import AutonomousSession
@@ -34,6 +37,10 @@ log = logging.getLogger(__name__)
 class CostQuote(Snapshot):
     amount_usd: Money
     pricing_version: ShortText
+
+    @field_serializer("amount_usd")
+    def serialize_amount(self, value: Decimal) -> str:
+        return format(value, ".4f")
 
 
 class QuoteProvider(Protocol):
@@ -65,10 +72,12 @@ class _Invocation:
         effect_key: str,
         phase: Phase,
         quote: QuoteProvider,
+        source_binding: SourceBinding | None = None,
     ) -> None:
         self.store, self.claim, self.view = store, claim, view
         self.effect_key, self.phase, self.quote = effect_key, phase, quote
         self.admitted = False
+        self.source_binding = source_binding
 
     async def admit(
         self, intent: ToolIntent, params: dict[str, Any]
@@ -76,7 +85,16 @@ class _Invocation:
         # Snapshot the narrowed call before quoting; caller-owned dictionaries
         # and model text cannot change the identity while admission awaits I/O.
         request = _bounded_json(params)
-        quote = self.quote(intent, json.loads(request), self.view.scope)
+        quote: CostQuote | None
+        if self.source_binding is not None:
+            if self.source_binding.policy_version != self.view.plan.policy_version:
+                raise Forbidden(message="Source binding differs from approved policy")
+            quote = CostQuote(
+                amount_usd=self.source_binding.cost_usd,
+                pricing_version=self.source_binding.config_digest,
+            )
+        else:
+            quote = self.quote(intent, json.loads(request), self.view.scope)
         if quote is None:
             raise Forbidden(message="Known current pricing is required for orchestration")
         quote = CostQuote.model_validate(quote)
@@ -88,6 +106,9 @@ class _Invocation:
                 "intent": intent.value,
                 "request": json.loads(request),
                 "quote": quote.model_dump(mode="json"),
+                "source_binding": (
+                    self.source_binding.model_dump(mode="json") if self.source_binding else None
+                ),
             }
         )
         receipt = await self.store.begin_effect(
@@ -127,7 +148,7 @@ class _Invocation:
 
 
 class GuardedEffects:
-    """Internal execution adapter for pinned inference and selected file reads.
+    """Internal adapter for pinned inference, selected reads and bound sources.
 
     The store resolves the scope from durable approval on every call. Consumers
     cannot pass a scope, system prompt, provider handler or another child's task.
@@ -144,13 +165,19 @@ class GuardedEffects:
         quote: QuoteProvider,
         model: str,
         max_tokens: int,
+        sources: AuthoritySources | None = None,
     ) -> None:
         if not isinstance(model, str) or not model.strip() or len(model) > 256:
             raise ValidationError(message="Inference model must be explicitly configured")
         if type(max_tokens) is not int or not 1 <= max_tokens <= 8192:
             raise ValidationError(message="Inference output limit must be between 1 and 8192")
+        if sources is not None and sources.gateway is not gateway:
+            raise ValidationError(
+                message="Source configuration and dispatch must use the same gateway"
+            )
         self.store, self.skills, self.gateway = store, skills, gateway
         self.quote, self.model, self.max_tokens = quote, model, max_tokens
+        self.sources = sources
 
     async def infer(
         self,
@@ -207,6 +234,38 @@ class GuardedEffects:
             claim, view, effect_key, phase, ToolIntent.retrieve_chunks, {"file_id": str(file_id)}
         )
 
+    async def authority(
+        self,
+        claim: WorkerClaim,
+        *,
+        effect_key: str,
+        phase: Phase,
+        source_name: str,
+        operation: str,
+        args: dict[str, Any],
+    ) -> ToolResult:
+        args_json = _bounded_json(args)
+        if self.sources is None:
+            raise Forbidden(message="Authority sources are not configured")
+        view = await self.store.execution_view(claim)
+        # No control or outcome transaction is open during gateway config I/O.
+        async with asyncio.timeout(view.lease_seconds):
+            binding = await self.sources.bind(
+                view.plan, view.scope, source_name=source_name, operation=operation
+            )
+        # Config fetch consumed lease time. Refresh the remaining attempt time
+        # and current authority before entering the dispatch transaction.
+        view = await self.store.execution_view(claim)
+        return await self._call(
+            claim,
+            view,
+            effect_key,
+            phase,
+            ToolIntent.retrieve_authority,
+            {"source": binding.source.source_type, "op": operation, "args": json.loads(args_json)},
+            source_binding=binding,
+        )
+
     async def _call(
         self,
         claim: WorkerClaim,
@@ -215,8 +274,12 @@ class GuardedEffects:
         phase: Phase,
         intent: ToolIntent,
         params: dict[str, Any],
+        *,
+        source_binding: SourceBinding | None = None,
     ) -> ToolResult:
-        invocation = _Invocation(self.store, claim, view, effect_key, phase, self.quote)
+        invocation = _Invocation(
+            self.store, claim, view, effect_key, phase, self.quote, source_binding
+        )
         try:
             async with asyncio.timeout(view.lease_seconds), self.store.sessions.begin() as db:
                 session = await db.get(AutonomousSession, claim.session_id)
@@ -230,6 +293,7 @@ class GuardedEffects:
                     self.gateway,
                     execution_scope=view.scope,
                     effect=invocation,
+                    source_binding=source_binding,
                 )
         except BaseException:
             # The outcome transaction has rolled back before recovery acquires
