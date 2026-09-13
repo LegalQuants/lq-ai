@@ -906,6 +906,9 @@ now transforms bounded GovInfo/EDGAR search queries and validates retrieval IDs,
 with verbatim returned evidence and explicit receipts. [Safe worker handoff](plans/issue-563-worker-handoff-milestone.md)
 now releases ownership at a completed-effect boundary; fresh-worker checkpoint
 fixtures resume root and child runs without duplicate provider calls or charges.
+[Bounded lease renewal](plans/issue-563-lease-renewal.md) now preserves worker
+ownership within a fixed approved attempt deadline, without treating heartbeats
+as progress or extending an in-flight provider timeout.
 General legacy/MCP tool anonymization, shared policy distribution, production
 worker lifecycle and the public orchestration interface remain unimplemented; the
 [workflow](plans/issue-563-workflow.md) records acceptance progress.

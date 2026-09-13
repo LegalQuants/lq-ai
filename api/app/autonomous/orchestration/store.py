@@ -56,6 +56,7 @@ _EVENTS = frozenset(
         "children_admitted",
         "claimed",
         "claim_released",
+        "claim_renewed",
         "halted",
         "effect_admitted",
         "effect_completed",
@@ -440,7 +441,7 @@ class OrchestrationStore:
                 pending.status = "uncertain"
                 root.status, root.stop_reason = "uncertain", "unresolved_effect"
                 account.generation += 1
-                account.worker_id = account.lease_until = None
+                account.worker_id = account.lease_until = account.attempt_deadline = None
                 await _audit(
                     db,
                     root,
@@ -450,11 +451,16 @@ class OrchestrationStore:
                 )
                 uncertain = True
             else:
+                now = await _now(db)
+                if now >= plan.deadline:
+                    raise Conflict(message="Plan expired while claiming worker ownership")
                 account.generation += 1
                 account.worker_id = worker_id
+                account.attempt_deadline = min(
+                    plan.deadline, now + timedelta(seconds=plan.attempt_timeout_seconds)
+                )
                 account.lease_until = min(
-                    plan.deadline,
-                    now + timedelta(seconds=min(seconds, plan.attempt_timeout_seconds)),
+                    account.attempt_deadline, now + timedelta(seconds=seconds)
                 )
                 root.status = "running"
                 await _audit(
@@ -467,6 +473,38 @@ class OrchestrationStore:
                 message="An unresolved effect requires reconciliation before further work"
             )
         return claim
+
+    async def renew_claim(self, claim: WorkerClaim, *, seconds: int) -> datetime:
+        """Extend live ownership within its fixed attempt and approved deadline.
+
+        Recheck execution authority even for a no-op renewal. An admitted call
+        may remain in flight; renewal changes neither its receipt/reservation nor
+        any provider timeout already computed by the adapter. Heartbeats do not
+        count as phase progress, change lifecycle or create a new generation.
+        """
+        if type(seconds) is not int or not 1 <= seconds <= 900:
+            raise ValidationError(message="Worker lease must be between 1 and 900 seconds")
+        async with self.sessions.begin() as db:
+            root, plan, now = await self._root(db, claim.root_id)
+            await self._approved(db, root, plan, now)
+            account = await self._account(db, claim.root_id, claim.session_id)
+            now = await _now(db)
+            self._fence(account, claim, now)
+            assert account.attempt_deadline is not None and account.lease_until is not None
+            if now >= min(account.attempt_deadline, plan.deadline):
+                raise Conflict(message="Worker attempt or plan has expired")
+            until = min(account.attempt_deadline, plan.deadline, now + timedelta(seconds=seconds))
+            # A delayed shorter heartbeat must not shorten already granted time.
+            if until > account.lease_until:
+                account.lease_until = until
+                await _audit(
+                    db,
+                    root,
+                    "claim_renewed",
+                    session_id=str(claim.session_id),
+                    generation=claim.generation,
+                )
+            return account.lease_until
 
     async def release_claim(self, claim: WorkerClaim) -> None:
         """Relinquish current ownership after the caller has stopped its graph.
@@ -510,7 +548,7 @@ class OrchestrationStore:
             now = await _now(db)
             self._fence(account, claim, now)
             account.generation += 1
-            account.worker_id = account.lease_until = None
+            account.worker_id = account.lease_until = account.attempt_deadline = None
             root.updated_at = now
             await _audit(
                 db,
@@ -582,7 +620,7 @@ class OrchestrationStore:
                 return False
             effect.status = "uncertain"
             account.generation += 1
-            account.worker_id = account.lease_until = None
+            account.worker_id = account.lease_until = account.attempt_deadline = None
             root.status, root.updated_at = "uncertain", await _now(db)
             root.stop_reason = root.stop_reason or "unresolved_effect"
             await _audit(
@@ -739,7 +777,7 @@ class OrchestrationStore:
                     continue
                 pending.status = "uncertain"
                 account.generation += 1
-                account.worker_id = account.lease_until = None
+                account.worker_id = account.lease_until = account.attempt_deadline = None
                 root.status, root.updated_at = "uncertain", now
                 root.stop_reason = root.stop_reason or "unresolved_effect"
                 await _audit(

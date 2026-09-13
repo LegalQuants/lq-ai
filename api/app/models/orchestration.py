@@ -1,6 +1,6 @@
 """Private governance records for ADR 0035; no graph continuation cursor.
 
-Migration 0067 is authoritative. Content-bearing snapshots/results stay here,
+Migrations 0067 and 0068 are authoritative. Content-bearing snapshots/results stay here,
 not in audit details or framework trace payloads. No public route exposes these
 tables yet. The store owns short transactions; the eventual adapter owns I/O.
 """
@@ -90,6 +90,7 @@ class OrchestrationAccount(Base):
     generation: Mapped[int] = mapped_column(BigInteger, server_default=text("0"))
     worker_id: Mapped[UUID | None]
     lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempt_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class OrchestrationEffect(Base):

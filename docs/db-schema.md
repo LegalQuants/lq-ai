@@ -1781,7 +1781,7 @@ cascades children. Existing single-session status/phase enums are unchanged.
 | `orchestration_roots` | `session_id` PK/FK; `owner_id`, `project_id`, unique `plan_id`; `current_revision`, nullable `admitted_revision`; `status`, `stop_reason`, created/updated timestamps | One active root per owner, including approval/child waits and uncertainty. Deferred composite FK binds current revision to a stored plan. An admitted revision equals the current revision and prevents recreating a deleted batch. |
 | `orchestration_plans` | PK `(root_id, revision)`; `plan_hash`, private JSONB `snapshot`, `status`, nullable JSONB `approval`, creation timestamp | Positive revision; SHA-256 digest shape; proposed/approved/rejected/superseded states. Approved requires consent. Superseding retains prior consent for inspection; never edits old snapshot content. |
 | `orchestration_admissions` | `session_id` PK/FK; `root_id`, `revision`, `dispatch_id`, `child_order`, creation timestamp | FK to stored plan; unique `(root, revision, dispatch)` and `(root, revision, order)`. Approval, child sessions, fixed allocations and admission audit are serialized by the root transaction. |
-| `orchestration_accounts` | `session_id` PK/FK; `root_id`; `allocation_usd NUMERIC(10,4)`, `spent_usd/reserved_usd NUMERIC(14,4)`; generation, worker UUID, lease expiry | Nonnegative amounts/generation. Worker and lease are both set or both null. Larger spent field records observed overruns honestly; admission enforces available allocation in a locked transaction. |
+| `orchestration_accounts` | `session_id` PK/FK; `root_id`; `allocation_usd NUMERIC(10,4)`, `spent_usd/reserved_usd NUMERIC(14,4)`; generation, worker UUID, lease expiry, fixed attempt deadline (0068) | Nonnegative amounts/generation. Worker, lease and attempt deadline are all set or all null; lease cannot exceed attempt deadline. Larger spent field records observed overruns honestly; admission enforces available allocation in a locked transaction. |
 | `orchestration_effects` | PK `(session_id, effect_key)`; request hash, phase, intent, generation, status; reservation, nullable charge/result/completion time, creation timestamp | One admitted/uncertain effect per run. Bounded stable effect key and digest shape. Completed requires charge/result/time. Result JSONB is private content; audit does not contain it. Uncertain effects retain reservations. |
 
 The internal `release_claim` transaction clears account worker/lease fields and
@@ -1791,6 +1791,17 @@ in the same transaction; audit failure rolls back ownership changes. Cleanup
 remains possible after execution permission is revoked and preserves consent,
 root lifecycle and accounting. A replacement claim rechecks current authority.
 No new columns or migration are needed for this operation.
+
+Migration **0068** adds `attempt_deadline TIMESTAMPTZ` to each account. New claims
+fix it to the earlier of the approved root deadline and claim time plus the
+approved attempt timeout; renewable `lease_until` cannot exceed it. Existing
+claims backfill to their current lease expiry, without extra authority. Release
+and uncertainty recovery clear both timestamps. `renew_claim` revalidates current
+authority, preserves generation/accounting/activity, and atomically audits actual
+extensions as `orchestration.claim_renewed`. Downgrade refuses owned accounts and
+preserves receipts/reservations once drained. Drain and rebuild all API workers
+together; old writers do not maintain the new constraint. See the
+[lease renewal evidence](plans/issue-563-lease-renewal.md).
 
 All root-owned records cascade on root/session deletion. Projects use RESTRICT
 while orchestration roots exist; ordinary archival remains available. Deleting

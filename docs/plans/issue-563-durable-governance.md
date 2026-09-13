@@ -19,6 +19,7 @@ public session views must use this lifecycle for orchestration sessions.
 | Repeat approval | Current approved revision in executable state | Same consent, no additional event |
 | Reject | `awaiting_approval` | `rejected`; repeat rejection is idempotent |
 | Claim root/child | Approved `queued`, `running` or `waiting_children`; no live claim | New worker generation and bounded lease; root `running` |
+| Renew root/child claim | Exact live worker generation and current approval/authority | Extend lease within fixed attempt/root deadline; preserve generation, lifecycle and activity; audit extension atomically |
 | Release root/child claim | Exact live worker generation; no outstanding effect or reservation; cleanup allowed after revocation | Clear worker/lease, advance generation and audit atomically; preserve lifecycle, consent and accounting |
 | Admit batch | Valid root worker claim and current approval | Child sessions, unique admissions, budget allocations and audit atomically stored; `waiting_children` |
 | Admit effect | Executable root, current policy/phase/grants, live worker fence, budget available | Durable unique effect and reservation, then caller may perform I/O |
@@ -110,6 +111,11 @@ reuses a completed receipt and then executes a second effect without duplicate
 provider calls or charges. This is a cooperative handoff, not arbitrary stale
 checkpoint fencing or production queue integration.
 
+The subsequent [lease-renewal increment](issue-563-lease-renewal.md) adds migration
+0068 and bounded renewal. The fixed attempt deadline survives each heartbeat;
+renewal leaves progress/lifecycle untouched and cannot revive expired ownership.
+Release and uncertainty recovery clear the deadline alongside worker and lease.
+
 ## Outstanding integration
 
 - Connect a production current-policy resolver and preserve R5 → R6 → R4 through
@@ -117,7 +123,7 @@ checkpoint fencing or production queue integration.
   is insufficient authority to call a provider.
 - Connect the adapter to completed/uncertain receipts, including actual worker
   death, stale completion, checkpoint gaps and queue wakeup recovery.
-- Implement final topology, shared deployment capacity, claim renewal,
+- Implement final topology, shared deployment capacity, heartbeat scheduling,
   root/child watchdogs, deadline recovery and terminal joins. Do not put new child
   sessions on existing workers until these distinctions are honored.
 - Implement pricing validation, budget reclamation and reconciliation policy for

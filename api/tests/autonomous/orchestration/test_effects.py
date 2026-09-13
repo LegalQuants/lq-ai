@@ -652,3 +652,57 @@ async def test_worker_handoff_resumes_checkpoint_and_continues_once(
         if child_run:
             assert (await db.get(Account, env.root_id)).spent_usd == 0
             assert (await db.get(Account, children[1])).spent_usd == 0
+
+
+@pytest.mark.parametrize("expire_attempt", [False, True])
+async def test_renewal_during_provider_io_preserves_receipt_and_fixed_limit(
+    execution, expire_attempt
+):
+    from datetime import timedelta
+
+    env = execution
+    async with env.factory.begin() as db:
+        account = await db.get(Account, env.root_id)
+        limit = account.attempt_deadline
+        account.lease_until = limit - timedelta(seconds=20)
+    env.gateway.release.clear()
+    async with asyncio.TaskGroup() as group:
+
+        async def call():
+            if expire_attempt:
+                with pytest.raises(Conflict, match="stale or expired"):
+                    await infer(env)
+            else:
+                assert (await infer(env)).outcome == "success"
+
+        task = group.create_task(call())
+        try:
+            await asyncio.wait_for(env.gateway.entered.wait(), timeout=5)
+            until = await asyncio.wait_for(env.store.renew_claim(env.claim, seconds=900), timeout=2)
+            assert until == limit
+            async with env.factory.begin() as db:
+                account = await db.get(Account, env.root_id)
+                assert account.attempt_deadline == limit
+                assert account.reserved_usd == 1 and account.spent_usd == 0
+                if expire_attempt:
+                    end = await db.scalar(select(func.clock_timestamp()))
+                    account.lease_until = account.attempt_deadline = end
+            if expire_attempt:
+                with pytest.raises(Conflict, match="stale or expired"):
+                    await env.store.renew_claim(env.claim, seconds=900)
+        finally:
+            env.gateway.release.set()
+        await asyncio.wait_for(task, timeout=5)
+    assert len(env.gateway.requests) == 1
+    if expire_attempt:
+        await assert_uncertain(env)
+    else:
+        # Same generation still authorizes settlement after the renewal.
+        async with env.factory() as db:
+            account = await db.get(Account, env.root_id)
+            effect = await db.get(Effect, (env.root_id, "analysis:one"))
+            session = await db.get(AutonomousSession, env.root_id)
+            assert account.spent_usd == session.cost_total_usd == 1
+            assert account.reserved_usd == 0 and effect.status == "completed"
+            assert account.generation == effect.generation == env.claim.generation
+        await env.store.release_claim(env.claim)

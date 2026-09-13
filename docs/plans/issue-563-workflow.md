@@ -46,7 +46,7 @@ new changes or unresolved concerns.
 | W1 — Governed plan contracts | Strict bounded task data separate from server authority; stable plan identity/revision/hash; immutable approval scope; no model-supplied authority or arbitrary handler. Test malformed/hostile/extra input and scope/version changes. | Complete locally; 96 tests passed |
 | W2 — LangGraph/Postgres integration | Real LQ guard and actual Postgres checkpoints, meaningful multi-step effect boundaries, independent child DB sessions, competing-owner/restart/halt fixtures and uncertain-call handling. Record worker topology and locked saver configuration; no second continuation cursor. | Guarded effect adapter passes fresh-checkpoint and hard-process-death fixtures; final arq/LangGraph worker topology and external integration remain |
 | W3 — Durable run tree and approval | Hierarchy migration/backfill/deletion rules, plan and approval persistence, version-bound approval, durable unique child admission and wakeup recovery. Real Postgres race/crash tests and migration up/down pass. | Persistence core implemented and tested locally; explicit claim release implemented; worker/wakeup integration remains |
-| W4 — Authority, accounting and halt | Approved resource subset and current permission checks; inference/egress restrictions; atomic Decimal reservations/settlement; root allowance; fenced execution and cancellation; correct waiting/deadline/watchdog semantics. | Allocations, effect accounting, worker fences, current policy, scoped guard, authority-source and direct inference bindings implemented; tier direction corrected; gateway revision checks and pinned dispatch implemented; required authority anonymization implemented; explicit safe claim release implemented; shared policy/capacity/lifecycle remain |
+| W4 — Authority, accounting and halt | Approved resource subset and current permission checks; inference/egress restrictions; atomic Decimal reservations/settlement; root allowance; fenced execution and cancellation; correct waiting/deadline/watchdog semantics. | Allocations, effect accounting, worker fences, current policy, scoped guard, authority-source and direct inference bindings implemented; tier direction corrected; gateway revision checks and pinned dispatch implemented; required authority anonymization implemented; explicit safe claim release and bounded renewal implemented; shared policy/capacity/lifecycle remain |
 | W5 — Parallel research and joining | Versioned visible orchestrator skill, isolated skill-backed children, bounded concurrency across root/user/deployment, internal child delivery, root-only output, partial/empty/failure outcomes. Barrier tests prove overlap and restart does not duplicate completed work. | Pending |
 | W6 — API, gateway and receipts | Plan read/approve/reject, tree read, correlation stripped before provider calls, stable child receipts, separate completion/coverage/verification statuses and parent synthesis gate. Update API sketches/generated export, route pins and schema docs with code. | Pending |
 | W7 — Intake and UI | Reuse corrected #410 entry point; explicit plan review, approve/reject, changing child progress, budget breakdown, halt, receipt links and bounded polling/manual refresh. Svelte/Vitest and controlled Cypress flow pass. | Pending |
@@ -212,6 +212,17 @@ cost tests. Uncertain external outcomes remain distinct from completed work.
   pending effects and lease expiry during lock waits. Ruff check/format, mypy
   (200 API source files) and diff checks passed. Providers were stubbed and the
   database was disposable; production worker integration remains open.
+- W2/W4: [bounded lease renewal](issue-563-lease-renewal.md) adds a fixed attempt
+  deadline in migration 0068. Exact live claims renew only within that deadline
+  after current-authority checks; expired claims cannot revive. Heartbeats leave
+  lifecycle, progress and accounting unchanged. Existing claims receive no extra
+  time on migration; downgrade refuses owned accounts and preserves receipts.
+  The orchestration suite passed **214 tests** in 11.78 seconds. Full API,
+  including three additional boundary cases: **2,988 passed, one skipped** in
+  254.64 seconds. Ruff check/format, mypy (200 API files) and diff checks passed.
+  Isolated stack smoke passed: eight healthy services, no restarts after 75
+  seconds, health probes and docling import successful. No development or
+  production database was migrated and no orchestration worker was enabled.
 - Following integration work: shared current-policy distribution,
   worker topology/capacity, queue wakeup recovery and lifecycle handling. No public
   orchestration routes or ordinary workers invoke the store yet. Keep LangGraph
