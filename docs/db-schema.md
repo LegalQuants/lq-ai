@@ -1721,6 +1721,11 @@ CREATE TABLE autonomous_sessions (
     project_id        UUID REFERENCES projects(id) ON DELETE SET NULL,             -- fk_autonomous_sessions_project_id
     trigger_kind      TEXT NOT NULL CHECK (trigger_kind IN ('watch','schedule','suggestion','manual')),
     trigger_ref       UUID,                                                        -- id of the schedule/watch/suggestion that started it
+    -- 0067 / ADR 0035: legacy inserts receive root_session_id=id from a trigger.
+    parent_session_id UUID REFERENCES autonomous_sessions(id) ON DELETE CASCADE,
+    root_session_id   UUID NOT NULL REFERENCES autonomous_sessions(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+    delegation_depth INTEGER NOT NULL DEFAULT 0,
+    child_order      INTEGER,
     current_phase     TEXT NOT NULL DEFAULT 'intake'
                           CHECK (current_phase IN ('intake','analysis','drafting','ethics_review','delivery')),
     halt_state        TEXT NOT NULL DEFAULT 'running'
@@ -1749,6 +1754,37 @@ CREATE INDEX idx_autonomous_sessions_user_created ON autonomous_sessions(user_id
 -- The scheduler's "which running sessions need a halt/idle check?" scan (partial).
 CREATE INDEX idx_autonomous_sessions_active ON autonomous_sessions(halt_state, last_activity_at) WHERE status = 'running';
 ```
+
+### Governed orchestration records (0067, local implementation)
+
+These private tables support proposed ADR 0035. They are not yet connected to
+public orchestration routes or ordinary workers. The authoritative DDL is
+[`0067_orchestration_governance.py`](../api/alembic/versions/0067_orchestration_governance.py);
+the [lifecycle and transaction contract](plans/issue-563-durable-governance.md)
+defines allowed transitions and remaining integration gates.
+
+`autonomous_sessions` gains immutable tree identity. Depth-zero roots have no
+parent/order and reference themselves. Depth-one children reference the same
+parent and root, with order 1–4. A check constraint and trigger reject deeper
+delegation, cycles and cross-owner/project edges. The migration backfills old
+sessions; the insert trigger supplies root identity for unchanged callers.
+Partial parent and full root indexes support tree reads. Parent/root deletion
+cascades children. Existing single-session status/phase enums are unchanged.
+
+| Table | Keys and fields | Constraints and lifecycle |
+|---|---|---|
+| `orchestration_roots` | `session_id` PK/FK; `owner_id`, `project_id`, unique `plan_id`; `current_revision`, nullable `admitted_revision`; `status`, `stop_reason`, created/updated timestamps | One active root per owner, including approval/child waits and uncertainty. Deferred composite FK binds current revision to a stored plan. An admitted revision equals the current revision and prevents recreating a deleted batch. |
+| `orchestration_plans` | PK `(root_id, revision)`; `plan_hash`, private JSONB `snapshot`, `status`, nullable JSONB `approval`, creation timestamp | Positive revision; SHA-256 digest shape; proposed/approved/rejected/superseded states. Approved requires consent. Superseding retains prior consent for inspection; never edits old snapshot content. |
+| `orchestration_admissions` | `session_id` PK/FK; `root_id`, `revision`, `dispatch_id`, `child_order`, creation timestamp | FK to stored plan; unique `(root, revision, dispatch)` and `(root, revision, order)`. Approval, child sessions, fixed allocations and admission audit are serialized by the root transaction. |
+| `orchestration_accounts` | `session_id` PK/FK; `root_id`; `allocation_usd NUMERIC(10,4)`, `spent_usd/reserved_usd NUMERIC(14,4)`; generation, worker UUID, lease expiry | Nonnegative amounts/generation. Worker and lease are both set or both null. Larger spent field records observed overruns honestly; admission enforces available allocation in a locked transaction. |
+| `orchestration_effects` | PK `(session_id, effect_key)`; request hash, phase, intent, generation, status; reservation, nullable charge/result/completion time, creation timestamp | One admitted/uncertain effect per run. Bounded stable effect key and digest shape. Completed requires charge/result/time. Result JSONB is private content; audit does not contain it. Uncertain effects retain reservations. |
+
+All root-owned records cascade on root/session deletion. Projects use RESTRICT
+while orchestration roots exist; ordinary archival remains available. Deleting
+an admitted child removes its private account/effects but leaves the plan and
+root's admitted marker; recovery refuses to recreate an incomplete batch.
+Downgrade refuses to drop this schema while roots/children exist, requiring an
+explicit drain/export/removal procedure. No automatic loss of receipts is allowed.
 
 ### `autonomous_schedules` (M4)
 

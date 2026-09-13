@@ -35,6 +35,13 @@ from app.models.mcp_oauth import MCPOAuthState, MCPOAuthToken
 from app.models.message_authority_citation import MessageAuthorityCitation
 from app.models.message_caselaw_citation import MessageCaselawCitation
 from app.models.message_tool_source import MessageToolSource
+from app.models.orchestration import (
+    OrchestrationAccount,
+    OrchestrationAdmission,
+    OrchestrationEffect,
+    OrchestrationPlan,
+    OrchestrationRoot,
+)
 from app.models.organization_profile import OrganizationProfile
 from app.models.playbook import Playbook, PlaybookExecution, PlaybookPosition
 from app.models.project import Project, ProjectFile, ProjectSkill
@@ -80,6 +87,11 @@ __all__ = [
     "MessageAuthorityCitation",
     "MessageCaselawCitation",
     "MessageToolSource",
+    "OrchestrationAccount",
+    "OrchestrationAdmission",
+    "OrchestrationEffect",
+    "OrchestrationPlan",
+    "OrchestrationRoot",
     "OrganizationProfile",
     "Playbook",
     "PlaybookExecution",

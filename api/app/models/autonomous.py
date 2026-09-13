@@ -52,7 +52,17 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, Numeric, Text, text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    FetchedValue,
+    ForeignKey,
+    Integer,
+    Numeric,
+    Text,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -100,6 +110,19 @@ class AutonomousSession(Base):
     )
     trigger_kind: Mapped[str] = mapped_column(Text, nullable=False)
     trigger_ref: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    # ADR 0035: migration 0067 backfills roots and supplies root identity via
+    # a DB trigger for legacy callers. Tree identity is immutable after insert.
+    parent_session_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("autonomous_sessions.id", ondelete="CASCADE"), nullable=True
+    )
+    root_session_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey(
+            "autonomous_sessions.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"
+        ),
+        server_default=FetchedValue(),
+    )
+    delegation_depth: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    child_order: Mapped[int | None] = mapped_column(Integer)
     current_phase: Mapped[str] = mapped_column(
         Text, nullable=False, server_default=text("'intake'")
     )

@@ -44,9 +44,9 @@ new changes or unresolved concerns.
 |---|---|---|
 | W0 — Runtime maintenance (#524) | Upgrade the existing LangGraph family; retype all three executors; review actual lock additions/removals/advisories; refresh the pin and debt docs and Dependabot exception. Preserve behavior and leave checkpointing disabled. Lock, Ruff, mypy, compiled graphs, required API tests and stack smoke pass. | Complete locally; publication held |
 | W1 — Governed plan contracts | Strict bounded task data separate from server authority; stable plan identity/revision/hash; immutable approval scope; no model-supplied authority or arbitrary handler. Test malformed/hostile/extra input and scope/version changes. | Complete locally; 96 tests passed |
-| W2 — LangGraph/Postgres integration | Real LQ guard and actual Postgres checkpoints, meaningful multi-step effect boundaries, independent child DB sessions, competing-owner/restart/halt fixtures and uncertain-call handling. Record worker topology and locked saver configuration; no second continuation cursor. | In progress; six probes establish the W3/W4 seams |
-| W3 — Durable run tree and approval | Hierarchy migration/backfill/deletion rules, plan and approval persistence, version-bound approval, durable unique child admission and wakeup recovery. Real Postgres race/crash tests and migration up/down pass. | Pending |
-| W4 — Authority, accounting and halt | Approved resource subset and current permission checks; inference/egress restrictions; atomic Decimal reservations/settlement; root allowance; fenced execution and cancellation; correct waiting/deadline/watchdog semantics. | Pending |
+| W2 — LangGraph/Postgres integration | Real LQ guard and actual Postgres checkpoints, meaningful multi-step effect boundaries, independent child DB sessions, competing-owner/restart/halt fixtures and uncertain-call handling. Record worker topology and locked saver configuration; no second continuation cursor. | In progress; new store closes replay/uncertainty gaps in three actual guard/checkpoint fixtures; production adapter and process-death tests remain |
+| W3 — Durable run tree and approval | Hierarchy migration/backfill/deletion rules, plan and approval persistence, version-bound approval, durable unique child admission and wakeup recovery. Real Postgres race/crash tests and migration up/down pass. | Persistence core implemented and tested locally; worker/wakeup integration remains |
+| W4 — Authority, accounting and halt | Approved resource subset and current permission checks; inference/egress restrictions; atomic Decimal reservations/settlement; root allowance; fenced execution and cancellation; correct waiting/deadline/watchdog semantics. | Initial allocations, effect accounting and worker fences implemented; full policy/capacity/lifecycle integration remains |
 | W5 — Parallel research and joining | Versioned visible orchestrator skill, isolated skill-backed children, bounded concurrency across root/user/deployment, internal child delivery, root-only output, partial/empty/failure outcomes. Barrier tests prove overlap and restart does not duplicate completed work. | Pending |
 | W6 — API, gateway and receipts | Plan read/approve/reject, tree read, correlation stripped before provider calls, stable child receipts, separate completion/coverage/verification statuses and parent synthesis gate. Update API sketches/generated export, route pins and schema docs with code. | Pending |
 | W7 — Intake and UI | Reuse corrected #410 entry point; explicit plan review, approve/reject, changing child progress, budget breakdown, halt, receipt links and bounded polling/manual refresh. Svelte/Vitest and controlled Cypress flow pass. | Pending |
@@ -111,10 +111,21 @@ cost tests. Uncertain external outcomes remain distinct from completed work.
   without a durable intent, and duplicate owners reaching the provider. The
   combined contract/probe run passed 102 tests. These diagnostic assertions do
   not satisfy production replay/fencing acceptance.
-- Next: implement W3 durable approval, admission and effect identities with the
-  W4 ownership/transaction boundaries needed to close those reproduced gaps;
-  then rerun W2 against the actual production adapter. Keep LangGraph continuation
-  as proposed. Final worker topology and deployment capacity are still open.
+- W3/W4: [durable store and lifecycle](issue-563-durable-governance.md) implemented
+  locally with migration 0067. Separate approval and admission transactions,
+  immutable history/tree identity, fixed account allocations, worker generations,
+  effect reservations/settlement and uncertainty recovery have real Postgres
+  coverage. The final focused run passed 133 tests, including 31 new persistence,
+  migration and actual guard/checkpoint tests. Full API regression passed 2,792
+  tests with one skip; final focused regressions then verified preserved planning
+  spend and that child phase updates do not lock their parent across I/O.
+- Migration testing on populated legacy data caught and fixed the deferred-FK
+  backfill ordering. Downgrade refuses to erase an existing tree/receipt history;
+  legacy-only backfill and upgrade/down/upgrade preserve existing sessions.
+- Next: production current-resource/skill/operator policy resolution and the
+  adapter's guard/effect transaction integration, then worker topology, shared
+  capacity, queue wakeup recovery and lifecycle handling. No public orchestration
+  routes or ordinary workers invoke the store yet. Keep LangGraph as proposed.
 - Ratification, production integration, code publication and release remain open.
 
 ### W1 implementation entry point
