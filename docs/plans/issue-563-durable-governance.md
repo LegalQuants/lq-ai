@@ -26,6 +26,7 @@ public session views must use this lifecycle for orchestration sessions.
 | Record effect | Matching live generation and admitted identity | Result/charge and reservation settlement stored; allowed for a pre-admitted call after halt/revocation |
 | Recover expired claim with unresolved effect | An admitted/uncertain effect remains | Root `uncertain`; reservation retained, old generation invalidated; no replacement dispatch |
 | Recover expired effects after halt/deadline/opt-out | Expired worker lease and an admitted effect | Recovery-only operation marks uncertainty and fences the old worker; does not require execution permission or retry a call |
+| Recover expired ownership | Expired owned root/child account; available after execution revocation | Clear ownership and advance generation once with atomic audit; preserve clean lifecycle/receipts, retain unresolved effects/reservations as uncertainty |
 | Owner halt | Any nonterminal root, even after opt-out/archival/revocation | `halted` (or retains `uncertain`); later effect admission refuses |
 | Observed charge exceeds allocation | During completion | Record full charge; root `halted` with `observed_budget_overrun` |
 
@@ -115,6 +116,11 @@ The subsequent [lease-renewal increment](issue-563-lease-renewal.md) adds migrat
 0068 and bounded renewal. The fixed attempt deadline survives each heartbeat;
 renewal leaves progress/lifecycle untouched and cannot revive expired ownership.
 Release and uncertainty recovery clear the deadline alongside worker and lease.
+
+The subsequent [expired-claim recovery increment](issue-563-expired-claim-recovery.md)
+drains expired idle ownership as well as unresolved effects, preserving receipts,
+reservations and existing stop reasons. It supplies the internal cleanup needed
+before migration 0068 downgrade; production watchdog/drain scheduling remains open.
 
 ## Outstanding integration
 

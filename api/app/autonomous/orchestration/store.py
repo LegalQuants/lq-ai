@@ -57,6 +57,7 @@ _EVENTS = frozenset(
         "claimed",
         "claim_released",
         "claim_renewed",
+        "claim_expired",
         "halted",
         "effect_admitted",
         "effect_completed",
@@ -732,11 +733,20 @@ class OrchestrationStore:
             await _audit(db, root, "halted")
 
     async def recover_expired_effects(self, root_id: UUID) -> int:
-        """Fence unresolved effects even after deadline, opt-out or root halt.
+        """Fence expired owners with admitted effects; retain the legacy count."""
+        return await self._recover_expired(root_id, effects_only=True)
 
-        This is a recovery-only operation: it cannot admit or retry any work.
-        A later watchdog can call it without requiring revoked execution policy.
+    async def recover_expired_claims(self, root_id: UUID) -> int:
+        """Drain expired ownership even after halt, deadline or revocation.
+
+        Return the number of claims fenced. Completed receipts and accounting
+        survive cleanup. Pending effects or orphaned reservations make the root
+        uncertain; clean accounts preserve lifecycle and progress. This does not
+        authorize a retry or fence arbitrary framework checkpoint writes.
         """
+        return await self._recover_expired(root_id, effects_only=False)
+
+    async def _recover_expired(self, root_id: UUID, *, effects_only: bool) -> int:
         async with self.sessions.begin() as db:
             initial = await db.get(Root, root_id)
             if initial is None:
@@ -761,7 +771,11 @@ class OrchestrationStore:
             accounts = (
                 await db.scalars(
                     select(Account)
-                    .where(Account.root_id == root_id, Account.lease_until <= now)
+                    .where(
+                        Account.root_id == root_id,
+                        Account.worker_id.is_not(None),
+                        Account.lease_until <= now,
+                    )
                     .order_by(Account.session_id)
                     .with_for_update()
                 )
@@ -770,23 +784,40 @@ class OrchestrationStore:
             for account in accounts:
                 pending = await db.scalar(
                     select(Effect)
-                    .where(Effect.session_id == account.session_id, Effect.status == "admitted")
+                    .where(
+                        Effect.session_id == account.session_id,
+                        Effect.status.in_(["admitted", "uncertain"]),
+                    )
                     .with_for_update()
                 )
-                if pending is None:
+                if effects_only and (pending is None or pending.status != "admitted"):
                     continue
-                pending.status = "uncertain"
+                was_admitted = pending is not None and pending.status == "admitted"
+                if pending is not None:
+                    pending.status = "uncertain"
                 account.generation += 1
                 account.worker_id = account.lease_until = account.attempt_deadline = None
-                root.status, root.updated_at = "uncertain", now
-                root.stop_reason = root.stop_reason or "unresolved_effect"
-                await _audit(
-                    db,
-                    root,
-                    "effect_uncertain",
-                    session_id=str(account.session_id),
-                    generation=account.generation,
-                )
+                if pending is not None or account.reserved_usd != 0:
+                    root.status, root.updated_at = "uncertain", await _now(db)
+                    root.stop_reason = root.stop_reason or (
+                        "unresolved_effect" if pending is not None else "unresolved_reservation"
+                    )
+                if was_admitted:
+                    await _audit(
+                        db,
+                        root,
+                        "effect_uncertain",
+                        session_id=str(account.session_id),
+                        generation=account.generation,
+                    )
+                if not effects_only:
+                    await _audit(
+                        db,
+                        root,
+                        "claim_expired",
+                        session_id=str(account.session_id),
+                        generation=account.generation,
+                    )
                 count += 1
             return count
 

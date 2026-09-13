@@ -526,8 +526,9 @@ async def test_process_death_preserves_intent_and_prevents_replay(execution, tes
 
 
 @pytest.mark.parametrize("child_run", [False, True])
+@pytest.mark.parametrize("handoff", ["release", "expiry"])
 async def test_worker_handoff_resumes_checkpoint_and_continues_once(
-    execution, test_db_url, child_run
+    execution, test_db_url, child_run, handoff
 ):
     pytest.importorskip("langgraph.checkpoint.postgres", reason="requires orchestration-test extra")
     from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
@@ -585,8 +586,18 @@ async def test_worker_handoff_resumes_checkpoint_and_continues_once(
         effect = await db.get(Effect, (old.session_id, "analysis:one"))
         first_receipt = effect.result
         assert effect.status == "completed" and effect.charged_usd == 1
-    # A's invocation and saver are stopped before cooperative ownership release.
-    await env.store.release_claim(old)
+    # A's invocation and saver stop before either handoff; checkpoint writers
+    # are not independently fenced by application claim expiry.
+    if handoff == "release":
+        await env.store.release_claim(old)
+    else:
+        async with env.factory.begin() as db:
+            await db.execute(
+                update(Account)
+                .where(Account.session_id == old.session_id)
+                .values(lease_until=func.clock_timestamp())
+            )
+        assert await env.store.recover_expired_claims(env.root_id) == 1
     contenders = await asyncio.gather(
         *(
             env.store.claim(env.root_id, old.session_id, worker_id=uuid4(), seconds=60)

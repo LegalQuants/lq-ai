@@ -266,7 +266,8 @@ async def test_renewal_and_release_race_cannot_restore_released_ownership(leased
         await env.store.renew_claim(env.claim, seconds=900)
 
 
-async def test_expired_pending_effect_cannot_be_renewed_or_reclaimed(leased):
+@pytest.mark.parametrize("recovery_method", ["recover_expired_effects", "recover_expired_claims"])
+async def test_expired_pending_effect_cannot_be_renewed_or_reclaimed(leased, recovery_method):
     env = leased
     await begin(env)
     async with env.factory.begin() as db:
@@ -278,7 +279,7 @@ async def test_expired_pending_effect_cannot_be_renewed_or_reclaimed(leased):
         )
     results = await asyncio.gather(
         env.store.renew_claim(env.claim, seconds=900),
-        env.store.recover_expired_effects(env.root_id),
+        getattr(env.store, recovery_method)(env.root_id),
         env.store.claim(env.root_id, env.root_id, worker_id=uuid4(), seconds=60),
         return_exceptions=True,
     )
@@ -294,12 +295,13 @@ async def test_expired_pending_effect_cannot_be_renewed_or_reclaimed(leased):
     assert await audit_count(env, "effect_uncertain") == 1
 
 
-async def test_live_renewal_keeps_recovery_and_competing_claim_out(leased):
+@pytest.mark.parametrize("recovery_method", ["recover_expired_effects", "recover_expired_claims"])
+async def test_live_renewal_keeps_recovery_and_competing_claim_out(leased, recovery_method):
     env = leased
     await begin(env)
     results = await asyncio.gather(
         env.store.renew_claim(env.claim, seconds=900),
-        env.store.recover_expired_effects(env.root_id),
+        getattr(env.store, recovery_method)(env.root_id),
         env.store.claim(env.root_id, env.root_id, worker_id=uuid4(), seconds=60),
         return_exceptions=True,
     )

@@ -53,10 +53,11 @@ worker ownership remains, including an expired claim that has not been drained.
 Complete safe releases or existing uncertainty recovery first. The migration
 preserves charges, reservations, approval and receipts; it does not clear them to
 force rollback. Unowned accounts and uncertain receipts round-trip unchanged.
-For abandoned ownership without an effect, the bounded store currently permits
-reclaim followed by release while execution remains authorized; stopped/expired
-roots need the future lifecycle drain tooling before downgrade. Do not bypass
-this guard with a destructive database reset.
+The subsequent [expired-claim recovery increment](issue-563-expired-claim-recovery.md)
+adds internal cleanup for expired idle ownership, including stopped/expired roots.
+Stop workers and allow leases to expire before invoking recovery for downgrade;
+production drain tooling remains unimplemented. Do not bypass this guard with
+a destructive database reset.
 
 ## Verification
 

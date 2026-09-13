@@ -839,3 +839,250 @@ async def test_release_rechecks_expiry_after_waiting_for_account_lock(ready, mon
         assert (
             account.generation == env.claim.generation and account.worker_id == env.claim.worker_id
         )
+
+
+@pytest.mark.parametrize(
+    "state",
+    ["running", "waiting_children", "halted", "completed", "failed", "expired", "uncertain"],
+)
+async def test_expired_idle_cleanup_preserves_lifecycle_and_completed_receipts(ready, state):
+    env = ready
+    await begin(env)
+    await env.store.complete_effect(
+        env.claim,
+        effect_key="analysis:one",
+        charged_usd=Decimal("1"),
+        result={"fixture": "completed"},
+    )
+    async with env.factory.begin() as db:
+        root = await db.get(Root, env.root_id)
+        root.status, root.stop_reason = state, "fixture_reason"
+        progress = root.updated_at
+        approval = (await db.get(PlanRow, (env.root_id, 1))).approval
+        receipt = (await db.get(Effect, (env.root_id, "analysis:one"))).result
+    await expire(env)
+    # The older API deliberately counts only admitted effects, not idle claims.
+    assert await env.store.recover_expired_effects(env.root_id) == 0
+    assert await env.store.recover_expired_claims(env.root_id) == 1
+    assert await env.store.recover_expired_claims(env.root_id) == 0
+    async with env.factory() as db:
+        account = await db.get(Account, env.root_id)
+        root = await db.get(Root, env.root_id)
+        assert account.worker_id is account.lease_until is account.attempt_deadline is None
+        assert account.generation == env.claim.generation + 1
+        assert account.spent_usd == 1 and account.reserved_usd == 0
+        assert (root.status, root.stop_reason, root.updated_at) == (
+            state,
+            "fixture_reason",
+            progress,
+        )
+        assert (await db.get(PlanRow, (env.root_id, 1))).approval == approval
+        effect = await db.get(Effect, (env.root_id, "analysis:one"))
+        assert effect.result == receipt and effect.status == "completed" and effect.charged_usd == 1
+    assert await audit_count(env, "claim_expired") == 1
+    for operation in (
+        env.store.renew_claim(env.claim, seconds=60),
+        env.store.release_claim(env.claim),
+    ):
+        with pytest.raises(Conflict):
+            await operation
+
+
+@pytest.mark.parametrize(
+    "revocation", ["policy", "optout", "archive", "project_policy", "halt", "deadline"]
+)
+async def test_expired_claim_cleanup_requires_no_execution_authority(
+    ready, revocation, monkeypatch
+):
+    env = ready
+    if revocation == "policy":
+        env.policy.valid = False
+    elif revocation == "halt":
+        await env.store.halt(env.root_id, actor_id=env.owner_id)
+    elif revocation == "deadline":
+        from app.autonomous.orchestration import store
+
+        async def past_deadline(db):
+            return env.plan.deadline
+
+        monkeypatch.setattr(store, "_now", past_deadline)
+    else:
+        async with env.factory.begin() as db:
+            if revocation == "optout":
+                await db.execute(
+                    update(User).where(User.id == env.owner_id).values(autonomous_enabled=False)
+                )
+            elif revocation == "archive":
+                await db.execute(
+                    update(Project)
+                    .where(Project.id == env.project_id)
+                    .values(archived_at=func.clock_timestamp())
+                )
+            else:
+                await db.execute(
+                    update(Project)
+                    .where(Project.id == env.project_id)
+                    .values(privileged=True, minimum_inference_tier=1)
+                )
+    await expire(env)
+    assert await env.store.recover_expired_claims(env.root_id) == 1
+    with pytest.raises((Conflict, Forbidden)):
+        await env.store.claim(env.root_id, env.root_id, worker_id=uuid4(), seconds=60)
+    async with env.factory() as db:
+        assert (await db.get(Account, env.root_id)).worker_id is None
+
+
+@pytest.mark.parametrize(
+    "pending,amount",
+    [("admitted", "1"), ("admitted", "0"), ("uncertain", "1"), ("uncertain", "0"), (None, "1")],
+)
+async def test_expired_claim_cleanup_retains_uncertainty_and_orphan_reservations(
+    ready, pending, amount
+):
+    env = ready
+    if pending is not None:
+        await begin(env, amount=amount)
+    async with env.factory.begin() as db:
+        if pending == "uncertain":
+            (await db.get(Effect, (env.root_id, "analysis:one"))).status = "uncertain"
+        if pending is None:
+            (await db.get(Account, env.root_id)).reserved_usd = Decimal(amount)
+    await env.store.halt(env.root_id, actor_id=env.owner_id)
+    await expire(env)
+    assert await env.store.recover_expired_claims(env.root_id) == 1
+    assert await env.store.recover_expired_claims(env.root_id) == 0
+    async with env.factory() as db:
+        account = await db.get(Account, env.root_id)
+        root = await db.get(Root, env.root_id)
+        assert root.status == "uncertain" and root.stop_reason == "owner_halt"
+        assert account.worker_id is account.lease_until is account.attempt_deadline is None
+        assert account.reserved_usd == Decimal(amount) and account.spent_usd == 0
+        assert account.generation == env.claim.generation + 1
+        if pending is not None:
+            effect = await db.get(Effect, (env.root_id, "analysis:one"))
+            assert effect.status == "uncertain" and effect.result is None
+            assert effect.reserved_usd == Decimal(amount)
+    assert await audit_count(env, "claim_expired") == 1
+    assert await audit_count(env, "effect_uncertain") == int(pending == "admitted")
+    with pytest.raises(Conflict):
+        await env.store.claim(env.root_id, env.root_id, worker_id=uuid4(), seconds=60)
+
+
+async def test_expired_child_cleanup_leaves_live_parent_and_sibling_alone(ready):
+    env = ready
+    children = await env.store.admit_children(env.claim)
+    claims = [
+        await env.store.claim(env.root_id, child, worker_id=uuid4(), seconds=60)
+        for child in children
+    ]
+    async with env.factory.begin() as db:
+        parent_before = await db.get(Account, env.root_id)
+        sibling_before = await db.get(Account, children[1])
+        await db.execute(
+            update(Account)
+            .where(Account.session_id == children[0])
+            .values(lease_until=func.clock_timestamp())
+        )
+    assert await env.store.recover_expired_claims(env.root_id) == 1
+    async with env.factory() as db:
+        child = await db.get(Account, children[0])
+        assert child.worker_id is None and child.generation == claims[0].generation + 1
+        for before in (parent_before, sibling_before):
+            after = await db.get(Account, before.session_id)
+            assert (
+                after.worker_id,
+                after.generation,
+                after.lease_until,
+                after.attempt_deadline,
+            ) == (before.worker_id, before.generation, before.lease_until, before.attempt_deadline)
+
+
+async def test_competing_expired_claim_recovery_fences_once(ready):
+    env = ready
+    await expire(env)
+    results = await asyncio.gather(
+        *(env.store.recover_expired_claims(env.root_id) for _ in range(3))
+    )
+    assert sorted(results) == [0, 0, 1]
+    assert await audit_count(env, "claim_expired") == 1
+    async with env.factory() as db:
+        assert (await db.get(Account, env.root_id)).generation == env.claim.generation + 1
+
+
+async def test_expiry_recovery_cannot_clear_a_replacement_claim(ready):
+    from app.autonomous.orchestration.store import WorkerClaim
+
+    env = ready
+    await expire(env)
+    recovered, replacement = await asyncio.gather(
+        env.store.recover_expired_claims(env.root_id),
+        env.store.claim(env.root_id, env.root_id, worker_id=uuid4(), seconds=60),
+    )
+    assert recovered in (0, 1) and isinstance(replacement, WorkerClaim)
+    async with env.factory() as db:
+        account = await db.get(Account, env.root_id)
+        assert account.worker_id == replacement.worker_id
+        assert account.generation == replacement.generation == env.claim.generation + recovered + 1
+    assert await env.store.recover_expired_claims(env.root_id) == 0
+    await env.store.renew_claim(replacement, seconds=60)
+
+
+async def test_expiry_recovery_audit_failure_rolls_back_whole_tree(ready, monkeypatch):
+    from app.autonomous.orchestration import store
+
+    env = ready
+    children = await env.store.admit_children(env.claim)
+    claims = [env.claim] + [
+        await env.store.claim(env.root_id, child, worker_id=uuid4(), seconds=60)
+        for child in children
+    ]
+    await begin(env)
+    async with env.factory.begin() as db:
+        await db.execute(
+            update(Account)
+            .where(Account.root_id == env.root_id)
+            .values(lease_until=func.clock_timestamp())
+        )
+        root = await db.get(Root, env.root_id)
+        before = (root.status, root.stop_reason, root.updated_at)
+    original = store._audit
+    calls = 0
+
+    async def fail(db, root, event, **details):
+        nonlocal calls
+        await original(db, root, event, **details)
+        if event == "claim_expired":
+            calls += 1
+            if calls == len(claims):
+                raise RuntimeError("final recovered claim audit failed")
+
+    monkeypatch.setattr(store, "_audit", fail)
+    with pytest.raises(RuntimeError, match="final recovered"):
+        await env.store.recover_expired_claims(env.root_id)
+    async with env.factory() as db:
+        for claim in claims:
+            account = await db.get(Account, claim.session_id)
+            assert account.worker_id == claim.worker_id and account.generation == claim.generation
+            assert account.lease_until is not None and account.attempt_deadline is not None
+        root = await db.get(Root, env.root_id)
+        assert (root.status, root.stop_reason, root.updated_at) == before
+        assert (await db.get(Effect, (env.root_id, "analysis:one"))).status == "admitted"
+        assert (await db.get(Account, env.root_id)).reserved_usd == 1
+    assert await audit_count(env, "claim_expired") == 0
+    assert await audit_count(env, "effect_uncertain") == 0
+
+
+async def test_orphan_reservation_without_prior_stop_reason_remains_visible(ready):
+    env = ready
+    async with env.factory.begin() as db:
+        account = await db.get(Account, env.root_id)
+        account.reserved_usd = Decimal("1")
+        account.lease_until = await db.scalar(select(func.clock_timestamp()))
+    assert await env.store.recover_expired_claims(env.root_id) == 1
+    async with env.factory() as db:
+        root = await db.get(Root, env.root_id)
+        assert (root.status, root.stop_reason) == ("uncertain", "unresolved_reservation")
+        account = await db.get(Account, env.root_id)
+        assert account.reserved_usd == 1 and account.worker_id is None
+    with pytest.raises(Conflict, match="not approved"):
+        await env.store.claim(env.root_id, env.root_id, worker_id=uuid4(), seconds=60)

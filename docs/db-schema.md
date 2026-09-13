@@ -1803,6 +1803,15 @@ preserves receipts/reservations once drained. Drain and rebuild all API workers
 together; old writers do not maintain the new constraint. See the
 [lease renewal evidence](plans/issue-563-lease-renewal.md).
 
+The internal `recover_expired_claims` transaction drains expired account ownership
+without requiring current execution permission. It advances each generation,
+clears worker/lease/attempt fields and records `orchestration.claim_expired`
+atomically across the root's affected accounts. Clean accounts preserve lifecycle,
+progress and receipts; pending effects or orphaned reservations keep funds and
+mark the root uncertain. Live accounts are skipped. This also supplies cleanup
+for expired idle accounts before 0068 downgrade; no additional migration is
+needed. See [recovery evidence](plans/issue-563-expired-claim-recovery.md).
+
 All root-owned records cascade on root/session deletion. Projects use RESTRICT
 while orchestration roots exist; ordinary archival remains available. Deleting
 an admitted child removes its private account/effects but leaves the plan and
