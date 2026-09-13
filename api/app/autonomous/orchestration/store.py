@@ -58,6 +58,8 @@ _EVENTS = frozenset(
         "claim_released",
         "claim_renewed",
         "claim_expired",
+        "root_expired",
+        "deadline_uncertain",
         "halted",
         "effect_admitted",
         "effect_completed",
@@ -178,7 +180,12 @@ class OrchestrationStore:
                 .execution_options(populate_existing=True)
             )
         ).scalar_one()
-        stored = await db.get(PlanRow, (root_id, root.current_revision))
+        plan = await self._stored_plan(db, root)
+        _project_scope(project, plan)
+        return root, plan, await _now(db)
+
+    async def _stored_plan(self, db: AsyncSession, root: Root) -> PreparedPlan:
+        stored = await db.get(PlanRow, (root.session_id, root.current_revision))
         if stored is None:
             raise Conflict(message="Current orchestration plan is missing")
         try:
@@ -193,7 +200,7 @@ class OrchestrationStore:
             plan.revision,
             plan.approval_hash(),
         ) != (
-            root_id,
+            root.session_id,
             root.owner_id,
             root.project_id,
             root.plan_id,
@@ -201,8 +208,7 @@ class OrchestrationStore:
             stored.plan_hash,
         ):
             raise Conflict(message="Stored plan identity does not match the root")
-        _project_scope(project, plan)
-        return root, plan, await _now(db)
+        return plan
 
     async def _live(self, db: AsyncSession, root: Root, plan: PreparedPlan, now: datetime) -> None:
         session = await db.get(AutonomousSession, root.session_id)
@@ -732,6 +738,68 @@ class OrchestrationStore:
             root.stop_reason, root.updated_at = "owner_halt", await _now(db)
             await _audit(db, root, "halted")
 
+    async def expire_root(self, root_id: UUID) -> bool:
+        """Recover a due root; return whether it newly became cleanly expired.
+
+        Unresolved effects/reservations retain uncertainty, including unowned
+        accounts. Other clean terminal outcomes are preserved. This is a private
+        watchdog seam; it neither schedules work nor changes legacy session state.
+        """
+        async with self.sessions.begin() as db:
+            initial = await db.get(Root, root_id)
+            if initial is None:
+                raise NotFound(message="Orchestration root not found")
+            await db.execute(
+                select(User.id).where(User.id == initial.owner_id).with_for_update(read=True)
+            )
+            await db.execute(
+                select(Project.id)
+                .where(Project.id == initial.project_id)
+                .with_for_update(read=True)
+            )
+            root = (
+                await db.execute(
+                    select(Root)
+                    .where(Root.session_id == root_id)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+            ).scalar_one()
+            plan = await self._stored_plan(db, root)
+            if await _now(db) < plan.deadline:
+                return False
+            previous_state = (root.status, root.stop_reason)
+            await self._recover_accounts(db, root, effects_only=False)
+            # Unowned unresolved accounts must also prevent a clean expiration.
+            pending = await db.scalar(
+                select(Effect.session_id)
+                .join(Account, Account.session_id == Effect.session_id)
+                .where(Account.root_id == root_id, Effect.status.in_(["admitted", "uncertain"]))
+                .limit(1)
+            )
+            reserved = await db.scalar(
+                select(Account.session_id)
+                .where(Account.root_id == root_id, Account.reserved_usd != 0)
+                .limit(1)
+            )
+            if pending is not None or reserved is not None:
+                root.status = "uncertain"
+                root.stop_reason = root.stop_reason or (
+                    "unresolved_effect" if pending is not None else "unresolved_reservation"
+                )
+            if root.status == "uncertain":
+                if previous_state != (root.status, root.stop_reason):
+                    root.updated_at = await _now(db)
+                    await _audit(db, root, "deadline_uncertain", revision=plan.revision)
+                return False
+            if root.status not in _ACTIVE | {"awaiting_approval"}:
+                return False
+            root.status = "expired"
+            root.stop_reason = root.stop_reason or "root_deadline"
+            root.updated_at = await _now(db)
+            await _audit(db, root, "root_expired", revision=plan.revision)
+            return True
+
     async def recover_expired_effects(self, root_id: UUID) -> int:
         """Fence expired owners with admitted effects; retain the legacy count."""
         return await self._recover_expired(root_id, effects_only=True)
@@ -767,59 +835,63 @@ class OrchestrationStore:
                     .execution_options(populate_existing=True)
                 )
             ).scalar_one()
-            now = await _now(db)
-            accounts = (
-                await db.scalars(
-                    select(Account)
-                    .where(
-                        Account.root_id == root_id,
-                        Account.worker_id.is_not(None),
-                        Account.lease_until <= now,
-                    )
-                    .order_by(Account.session_id)
-                    .with_for_update()
+            return await self._recover_accounts(db, root, effects_only=effects_only)
+
+    async def _recover_accounts(self, db: AsyncSession, root: Root, *, effects_only: bool) -> int:
+        root_id = root.session_id
+        now = await _now(db)
+        accounts = (
+            await db.scalars(
+                select(Account)
+                .where(
+                    Account.root_id == root_id,
+                    Account.worker_id.is_not(None),
+                    Account.lease_until <= now,
                 )
-            ).all()
-            count = 0
-            for account in accounts:
-                pending = await db.scalar(
-                    select(Effect)
-                    .where(
-                        Effect.session_id == account.session_id,
-                        Effect.status.in_(["admitted", "uncertain"]),
-                    )
-                    .with_for_update()
+                .order_by(Account.session_id)
+                .with_for_update()
+            )
+        ).all()
+        count = 0
+        for account in accounts:
+            pending = await db.scalar(
+                select(Effect)
+                .where(
+                    Effect.session_id == account.session_id,
+                    Effect.status.in_(["admitted", "uncertain"]),
                 )
-                if effects_only and (pending is None or pending.status != "admitted"):
-                    continue
-                was_admitted = pending is not None and pending.status == "admitted"
-                if pending is not None:
-                    pending.status = "uncertain"
-                account.generation += 1
-                account.worker_id = account.lease_until = account.attempt_deadline = None
-                if pending is not None or account.reserved_usd != 0:
-                    root.status, root.updated_at = "uncertain", await _now(db)
-                    root.stop_reason = root.stop_reason or (
-                        "unresolved_effect" if pending is not None else "unresolved_reservation"
-                    )
-                if was_admitted:
-                    await _audit(
-                        db,
-                        root,
-                        "effect_uncertain",
-                        session_id=str(account.session_id),
-                        generation=account.generation,
-                    )
-                if not effects_only:
-                    await _audit(
-                        db,
-                        root,
-                        "claim_expired",
-                        session_id=str(account.session_id),
-                        generation=account.generation,
-                    )
-                count += 1
-            return count
+                .with_for_update()
+            )
+            if effects_only and (pending is None or pending.status != "admitted"):
+                continue
+            was_admitted = pending is not None and pending.status == "admitted"
+            if pending is not None:
+                pending.status = "uncertain"
+            account.generation += 1
+            account.worker_id = account.lease_until = account.attempt_deadline = None
+            if pending is not None or account.reserved_usd != 0:
+                root.status, root.updated_at = "uncertain", await _now(db)
+                root.stop_reason = root.stop_reason or (
+                    "unresolved_effect" if pending is not None else "unresolved_reservation"
+                )
+            if was_admitted:
+                await _audit(
+                    db,
+                    root,
+                    "effect_uncertain",
+                    session_id=str(account.session_id),
+                    generation=account.generation,
+                )
+            if not effects_only:
+                await _audit(
+                    db,
+                    root,
+                    "claim_expired",
+                    session_id=str(account.session_id),
+                    generation=account.generation,
+                )
+            count += 1
+        return count
 
     async def begin_effect(
         self,

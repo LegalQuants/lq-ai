@@ -27,11 +27,13 @@ public session views must use this lifecycle for orchestration sessions.
 | Recover expired claim with unresolved effect | An admitted/uncertain effect remains | Root `uncertain`; reservation retained, old generation invalidated; no replacement dispatch |
 | Recover expired effects after halt/deadline/opt-out | Expired worker lease and an admitted effect | Recovery-only operation marks uncertainty and fences the old worker; does not require execution permission or retry a call |
 | Recover expired ownership | Expired owned root/child account; available after execution revocation | Clear ownership and advance generation once with atomic audit; preserve clean lifecycle/receipts, retain unresolved effects/reservations as uncertainty |
+| Recover root deadline | Valid stored current plan at/past its root deadline; no current execution permission required | Drain expired claims atomically; clean awaiting/queued/running/waiting root becomes `expired`; unresolved effects/reservations remain `uncertain`; preserve other clean terminal outcomes |
 | Owner halt | Any nonterminal root, even after opt-out/archival/revocation | `halted` (or retains `uncertain`); later effect admission refuses |
 | Observed charge exceeds allocation | During completion | Record full charge; root `halted` with `observed_budget_overrun` |
 
-`completed`, `failed` and `expired` are reserved terminal outcomes. No terminal
-join/watchdog implementation sets them yet. `uncertain` counts against the
+`completed` and `failed` remain reserved terminal outcomes for future joins.
+The internal root-deadline operation now sets `expired` for clean overdue roots;
+production watchdog scheduling is not enabled. `uncertain` counts against the
 one-active-root-per-owner limit and has no automatic retry or resolution path.
 The first implementation allows replacement revisions only before execution;
 the immutable admitted batch cannot be edited in place. New follow-on work needs
@@ -122,6 +124,11 @@ drains expired idle ownership as well as unresolved effects, preserving receipts
 reservations and existing stop reasons. It supplies the internal cleanup needed
 before migration 0068 downgrade; production watchdog/drain scheduling remains open.
 
+The subsequent [root-deadline increment](issue-563-root-deadline.md) now expires
+clean overdue approval/child waits and active roots, preserving prior terminal
+outcomes and uncertainty. Claim cleanup and lifecycle audit commit atomically;
+no public status or legacy session enum changes accompany this private operation.
+
 ## Outstanding integration
 
 - Connect a production current-policy resolver and preserve R5 → R6 → R4 through
@@ -130,7 +137,7 @@ before migration 0068 downgrade; production watchdog/drain scheduling remains op
 - Connect the adapter to completed/uncertain receipts, including actual worker
   death, stale completion, checkpoint gaps and queue wakeup recovery.
 - Implement final topology, shared deployment capacity, heartbeat scheduling,
-  root/child watchdogs, deadline recovery and terminal joins. Do not put new child
+  root/child watchdog scheduling, idle rules and terminal joins. Do not put new child
   sessions on existing workers until these distinctions are honored.
 - Implement pricing validation, budget reclamation and reconciliation policy for
   uncertain outcomes. No automatic uncertain-effect retry is allowed.

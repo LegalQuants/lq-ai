@@ -717,3 +717,33 @@ async def test_renewal_during_provider_io_preserves_receipt_and_fixed_limit(
             assert account.reserved_usd == 0 and effect.status == "completed"
             assert account.generation == effect.generation == env.claim.generation
         await env.store.release_claim(env.claim)
+
+
+async def test_root_deadline_recovers_while_provider_is_blocked(execution, monkeypatch):
+    from app.autonomous.orchestration import store
+
+    env = execution
+    env.gateway.release.clear()
+    async with asyncio.TaskGroup() as group:
+
+        async def call():
+            with pytest.raises(Conflict, match="stale or expired"):
+                await infer(env)
+
+        task = group.create_task(call())
+        try:
+            await asyncio.wait_for(env.gateway.entered.wait(), timeout=5)
+
+            async def clock(db):
+                return env.plan.deadline
+
+            monkeypatch.setattr(store, "_now", clock)
+            assert not await asyncio.wait_for(env.store.expire_root(env.root_id), timeout=2)
+            assert not await env.store.expire_root(env.root_id)
+        finally:
+            env.gateway.release.set()
+        await asyncio.wait_for(task, timeout=5)
+    await assert_uncertain(env)
+    with pytest.raises(Conflict):
+        await infer(env, key="analysis:two")
+    assert len(env.gateway.requests) == 1

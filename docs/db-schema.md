@@ -1812,6 +1812,15 @@ mark the root uncertain. Live accounts are skipped. This also supplies cleanup
 for expired idle accounts before 0068 downgrade; no additional migration is
 needed. See [recovery evidence](plans/issue-563-expired-claim-recovery.md).
 
+The private `expire_root` operation validates the stored current plan and compares
+its deadline with database time under the root lock. At/past that deadline, clean
+awaiting/queued/running/waiting roots become `expired`. Unresolved tree-wide
+accounting remains `uncertain`, including unowned accounts; clean prior terminal
+outcomes are preserved. Claim cleanup and `orchestration.root_expired` or
+`orchestration.deadline_uncertain` audits share one transaction. It changes no
+legacy session status/phase, budget or receipt schema. See
+[root deadline evidence](plans/issue-563-root-deadline.md).
+
 All root-owned records cascade on root/session deletion. Projects use RESTRICT
 while orchestration roots exist; ordinary archival remains available. Deleting
 an admitted child removes its private account/effects but leaves the plan and

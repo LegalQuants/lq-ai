@@ -911,7 +911,9 @@ ownership within a fixed approved attempt deadline, without treating heartbeats
 as progress or extending an in-flight provider timeout.
 [Expired ownership recovery](plans/issue-563-expired-claim-recovery.md) now drains
 stale root/child claims even after revocation, preserving completed receipts and
-retaining uncertain reservations.
+retaining uncertain reservations. [Root deadline recovery](plans/issue-563-root-deadline.md)
+now expires clean overdue roots, including approval/child waits, while preserving
+unresolved outcomes as uncertainty. Production watchdog scheduling remains open.
 General legacy/MCP tool anonymization, shared policy distribution, production
 worker lifecycle and the public orchestration interface remain unimplemented; the
 [workflow](plans/issue-563-workflow.md) records acceptance progress.
