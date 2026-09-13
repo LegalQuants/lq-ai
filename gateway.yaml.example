@@ -97,8 +97,9 @@ providers:
     tier: 4  # Standard commercial Anthropic API
     # tier: 3  # If operator has enterprise ZDR agreement
     # Optional: default max_tokens injected when the caller omits it
-    # (Anthropic requires the field). Falls back to 4096 when unset;
-    # clamped to request_validation.max_max_tokens.
+    # (Anthropic requires the field). Falls back to 16384 when unset — a
+    # ceiling, not a spend; an explicit request max_tokens always wins.
+    # Operator escape hatch (ADR 0027 D2), not the tuning axis.
     # default_max_tokens: 8192
     models:
       - claude-opus-4-7
