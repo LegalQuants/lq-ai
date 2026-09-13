@@ -110,6 +110,7 @@ async def run_ids(test_engine: AsyncEngine) -> AsyncIterator[list[str]]:
         yield ids
     finally:
         async with factory() as db:
+            await db.execute(delete(AuditLog).where(AuditLog.user_id == owner_id))
             await db.execute(delete(User).where(User.id == owner_id))
             await db.commit()
 

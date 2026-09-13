@@ -68,8 +68,9 @@ yet satisfy ADR 0035. Merely selecting a source in a valid plan does not activat
 it. Only scoped document reads, inference and internal findings are implemented.
 
 The optional guard scope narrows calls; it is not proof of durable authorization.
-The production adapter must obtain it from the stored plan, perform current-policy
-and fenced effect admission, call the guard, and persist the outcome. Ordinary
+The [guarded execution adapter](issue-563-guarded-effects.md) now obtains it from
+the stored plan, performs current-policy and fenced effect admission, calls the
+guard, and atomically persists its outcome and receipt. Ordinary
 workers/public routes do not invoke this orchestration path. It remains unsafe to
 adopt a concurrently running legacy session or enable dispatch by passing a scope
 alone. Existing unscoped callers retain their prior behavior.
@@ -91,8 +92,8 @@ and `git diff --check` passed. No live providers, production migrations or featu
 flags were used. The disposable database is independent of the user's development
 stack.
 
-Next: consume pinned instructions in the execution adapter; bind provider/operation
-selection and known pricing; integrate guard admission/settlement without control
-locks across provider I/O; provide shared current-policy distribution, worker
-capacity/lease lifecycle and wakeup recovery. Production process-death tests and
-the LangGraph worker topology remain required before public dispatch.
+Pinned instructions and atomic guarded outcomes now have adapter and hard-process-
+death evidence in the linked execution increment. Next: bind provider/operation
+selection and known pricing; provide shared current-policy distribution, worker
+capacity/lease lifecycle and wakeup recovery. The production arq/LangGraph topology
+still requires integration evidence before public dispatch.

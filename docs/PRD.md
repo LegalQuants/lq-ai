@@ -890,7 +890,11 @@ version-bound approval, atomic child admission, fixed budget allocations,
 worker fencing and completed/uncertain effect receipts. The migration backfills
 existing sessions as roots. A [current-policy callback and scoped guard](plans/issue-563-current-policy.md)
 validate selected project documents, skill artifacts and operator grants, and
-propagate approved inference restrictions. Public dispatch, exact external
+propagate approved inference restrictions. The [guarded effect adapter](plans/issue-563-guarded-effects.md)
+uses pinned instructions, requires explicit pricing and atomically commits the
+guarded outcome with its receipt and accounting. Checkpoint-resume and abrupt
+process-exit fixtures verify completed-effect reuse and uncertain-effect recovery.
+Public dispatch, exact external
 provider/operation/pricing binding, shared policy distribution, worker lifecycle
 integration and the orchestration interface remain unimplemented; the
 [workflow](plans/issue-563-workflow.md) records acceptance progress.

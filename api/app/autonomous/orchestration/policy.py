@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Literal
 
 from pydantic import model_validator
@@ -114,7 +115,13 @@ class OperatorPolicy(Snapshot):
         ).hexdigest()
 
 
-def skill_pin(record: SkillRecord) -> SkillPin:
+@dataclass(frozen=True)
+class PinnedSkill:
+    pin: SkillPin
+    instructions: str
+
+
+def load_pinned_skill(record: SkillRecord) -> PinnedSkill:
     """Hash exactly the loaded instructions, metadata and all supporting files.
 
     Re-read the main artifact to detect disk changes even before SIGHUP. Unlike
@@ -137,7 +144,16 @@ def skill_pin(record: SkillRecord) -> SkillPin:
         ).hexdigest()
     except (LoaderError, OSError, UnicodeError, ValueError):
         raise Forbidden(message="Pinned skill artifact is unavailable or changed") from None
-    return SkillPin(name=record.name, digest=digest)
+    # Build the prompt from the same bytes that were hashed. Do not materialise
+    # or ask the gateway to resolve this slug again after authority checks.
+    instructions = f"---\n{record.raw_yaml}\n---\n{record.body}"
+    for relative_path, content in files:
+        instructions += f"\n\n## Supporting file: {relative_path}\n\n{content}"
+    return PinnedSkill(SkillPin(name=record.name, digest=digest), instructions)
+
+
+def skill_pin(record: SkillRecord) -> SkillPin:
+    return load_pinned_skill(record).pin
 
 
 class CurrentPolicy:

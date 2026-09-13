@@ -409,3 +409,24 @@ async def test_audit_log_endpoint_without_bearer_returns_401(
 ) -> None:
     resp = await client.get("/api/v1/admin/audit-log")
     assert resp.status_code == 401
+
+
+@pytest.mark.integration
+async def test_audit_events_record_write_time_within_one_transaction(
+    db_session: AsyncSession,
+    regular_user: User,
+) -> None:
+    """Phase/effect events in one atomic commit must retain their write order."""
+    first = await audit_action(
+        db_session,
+        user_id=regular_user.id,
+        action="fixture.started",
+        resource_type="fixture",
+    )
+    second = await audit_action(
+        db_session,
+        user_id=regular_user.id,
+        action="fixture.completed",
+        resource_type="fixture",
+    )
+    assert second.timestamp > first.timestamp

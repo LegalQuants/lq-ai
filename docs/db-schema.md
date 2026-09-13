@@ -1265,6 +1265,11 @@ CREATE INDEX idx_audit_log_tier ON audit_log(routed_inference_tier, timestamp DE
 
 The audit log is **append-only** at the application layer; the database does not enforce this directly (the maintainer-team can add a trigger if desired).
 
+The shared `audit_action` writer explicitly stamps `clock_timestamp()` at insert
+time. The schema default stays `now()`, but transaction-start timestamps cannot
+order multiple phase/effect events committed together; the writer records when
+each event is written without splitting its atomic transaction.
+
 **`details` JSONB conventions.**
 
 The `details` column carries action-specific payloads. Documented keys by action:

@@ -79,7 +79,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Protocol
 
 import sqlalchemy as sa
 from sqlalchemy import select
@@ -161,6 +161,21 @@ class ToolResult:
     charged the R4 estimate, but its outcome is honest)."""
 
 
+class GuardedEffect(Protocol):
+    """Application-owned effect accounting at R4 and before outcome writes.
+
+    Admission commits in a separate short transaction. Settlement joins the
+    caller's transaction so its receipt, audit and local outcome commit together.
+    Implementations must never acquire control-row locks across provider I/O.
+    """
+
+    async def admit(
+        self, intent: ToolIntent, params: dict[str, Any]
+    ) -> tuple[Decimal, ToolResult | None]: ...
+
+    async def settle(self, db: AsyncSession, result: ToolResult) -> None: ...
+
+
 async def guarded_tool_call(
     session: AutonomousSession,
     intent: ToolIntent,
@@ -169,6 +184,7 @@ async def guarded_tool_call(
     gateway: Any,
     *,
     execution_scope: ExecutionScope | None = None,
+    effect: GuardedEffect | None = None,
 ) -> ToolResult:
     """Single chokepoint for every autonomous tool invocation.
 
@@ -191,6 +207,9 @@ async def guarded_tool_call(
         execution_scope: Server-resolved approved scope for orchestration.
             Narrows supported calls at R6; does not replace durable approval,
             current policy validation, worker fencing or effect admission.
+        effect: Internal adapter hook for durable R4 admission and atomic outcome
+            settlement. Requires execution_scope; the store's allocation replaces
+            the legacy session cap for this path. No provider I/O in settlement.
 
     Returns:
         A :class:`ToolResult` on success.
@@ -271,9 +290,19 @@ async def guarded_tool_call(
         # into _dispatch so inference handlers use the same Decimal value
         # that R4 checked.  This prevents any divergence between what R4
         # permitted and what the session is charged (no double-charge).
-        estimate = await estimate_tool_cost(intent, params, db)
+        if effect is not None:
+            if execution_scope is None:
+                raise ToolNotGranted("durable effects require an approved execution scope")
+            # The store's allocated account is the orchestration R4 authority.
+            # A completed receipt must remain recoverable at an exhausted cap;
+            # it incurs neither another provider call nor another session charge.
+            estimate, cached = await effect.admit(intent, params)
+            if cached is not None:
+                return cached
+        else:
+            estimate = await estimate_tool_cost(intent, params, db)
         projected = session.cost_total_usd + estimate
-        if session.max_cost_usd is not None and projected > session.max_cost_usd:
+        if effect is None and session.max_cost_usd is not None and projected > session.max_cost_usd:
             session.cost_cap_reached = True
             session.halt_state = str(HaltState.halted)
             await autonomous_audit(
@@ -314,6 +343,11 @@ async def guarded_tool_call(
             result = await _dispatch(
                 intent, params, gateway=gateway, db=db, session=session, estimated_cost=estimate
             )
+
+        # Fence and settle BEFORE flushing the session's outcome. The caller
+        # commits both together; stale/failed settlement rolls back local writes.
+        if effect is not None:
+            await effect.settle(db, result)
 
         # ── record cost + outcome ────────────────────────────────────────────
         session.cost_total_usd += result.cost_usd

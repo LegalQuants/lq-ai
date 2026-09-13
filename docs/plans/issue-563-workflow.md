@@ -44,7 +44,7 @@ new changes or unresolved concerns.
 |---|---|---|
 | W0 — Runtime maintenance (#524) | Upgrade the existing LangGraph family; retype all three executors; review actual lock additions/removals/advisories; refresh the pin and debt docs and Dependabot exception. Preserve behavior and leave checkpointing disabled. Lock, Ruff, mypy, compiled graphs, required API tests and stack smoke pass. | Complete locally; publication held |
 | W1 — Governed plan contracts | Strict bounded task data separate from server authority; stable plan identity/revision/hash; immutable approval scope; no model-supplied authority or arbitrary handler. Test malformed/hostile/extra input and scope/version changes. | Complete locally; 96 tests passed |
-| W2 — LangGraph/Postgres integration | Real LQ guard and actual Postgres checkpoints, meaningful multi-step effect boundaries, independent child DB sessions, competing-owner/restart/halt fixtures and uncertain-call handling. Record worker topology and locked saver configuration; no second continuation cursor. | In progress; new store closes replay/uncertainty gaps in three actual guard/checkpoint fixtures; production adapter and process-death tests remain |
+| W2 — LangGraph/Postgres integration | Real LQ guard and actual Postgres checkpoints, meaningful multi-step effect boundaries, independent child DB sessions, competing-owner/restart/halt fixtures and uncertain-call handling. Record worker topology and locked saver configuration; no second continuation cursor. | Guarded effect adapter passes fresh-checkpoint and hard-process-death fixtures; final arq/LangGraph worker topology and external integration remain |
 | W3 — Durable run tree and approval | Hierarchy migration/backfill/deletion rules, plan and approval persistence, version-bound approval, durable unique child admission and wakeup recovery. Real Postgres race/crash tests and migration up/down pass. | Persistence core implemented and tested locally; worker/wakeup integration remains |
 | W4 — Authority, accounting and halt | Approved resource subset and current permission checks; inference/egress restrictions; atomic Decimal reservations/settlement; root allowance; fenced execution and cancellation; correct waiting/deadline/watchdog semantics. | Allocations, effect accounting, worker fences, current-policy callback and scoped document/inference guard implemented; external binding and shared policy/capacity/lifecycle integration remain |
 | W5 — Parallel research and joining | Versioned visible orchestrator skill, isolated skill-backed children, bounded concurrency across root/user/deployment, internal child delivery, root-only output, partial/empty/failure outcomes. Barrier tests prove overlap and restart does not duplicate completed work. | Pending |
@@ -130,8 +130,21 @@ cost tests. Uncertain external outcomes remain distinct from completed work.
   Autonomous regression: 791 passed; final focused policy/guard checks: 35 passed.
   Ruff check/format and mypy (197 source files) passed. The combined revocation
   fixture settles a pre-admitted call but refuses the next effect.
-- Next: consume pinned instructions and bind external dispatch/pricing in the
-  adapter's guard/effect integration, then shared current-policy distribution,
+- W2/W4: [guarded effect adapter](issue-563-guarded-effects.md) now consumes pinned
+  instructions, obtains current scope from durable approval, requires explicit
+  pricing, and commits receipts/accounting with the guarded outcome. Stale workers
+  and failed final audits cannot leave committed session cost. Cancellation and
+  hard process death preserve reservations for uncertainty recovery. Completed
+  receipts survive a fresh Postgres checkpoint resume without a second call/charge.
+  The focused adapter run passed 16 tests, including selected-file receipt storage.
+  Full regression exposed committed-fixture audit leakage and tied audit event
+  timestamps; both were reproduced and fixed. The combined store/policy/adapter,
+  phase-machine and audit suite then passed 105 tests.
+  The older W2 probe fixture needed the same audit cleanup; after that correction,
+  the complete autonomous suite followed by the audit tests passed 822 tests.
+  Final full API verification (`pytest -n 4 -q`): **2,847 passed, one skipped**.
+  Ruff check/format, mypy (198 source files) and diff whitespace checks passed.
+- Next: bind external dispatch and production pricing, then shared current-policy distribution,
   worker topology/capacity, queue wakeup recovery and lifecycle handling. No public
   orchestration routes or ordinary workers invoke the store yet. Keep LangGraph
   as proposed.

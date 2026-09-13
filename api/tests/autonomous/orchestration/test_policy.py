@@ -8,7 +8,6 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-import pytest_asyncio
 from pydantic import ValidationError
 from sqlalchemy import delete, select, update
 
@@ -16,11 +15,7 @@ from app.autonomous.enums import ToolIntent
 from app.autonomous.guard import guarded_tool_call
 from app.autonomous.orchestration.contracts import ResourceScope
 from app.autonomous.orchestration.policy import (
-    CurrentPolicy,
-    OperatorPolicy,
-    SkillPolicy,
     SourcePolicy,
-    skill_pin,
 )
 from app.errors import Forbidden, SessionHalted, ToolNotGranted
 from app.models.audit import AuditLog
@@ -29,57 +24,6 @@ from app.models.document import Document, DocumentChunk
 from app.models.file import File
 from app.models.project import ProjectFile
 from app.schemas.autonomous import Phase
-from app.skills.loader import load_registry
-from app.skills.registry import MutableSkillRegistry
-
-
-@pytest_asyncio.fixture
-async def policy_env(env, tmp_path):
-    folder = tmp_path / "fixture-skill"
-    folder.mkdir()
-    (folder / "SKILL.md").write_text(
-        "---\nname: fixture-skill\ndescription: Test fixture\n"
-        "lq_ai:\n  minimum_inference_tier: 1\n---\nFixture instructions.\n"
-    )
-    (folder / "reference").mkdir()
-    (folder / "reference" / "limits.md").write_text("Fixture coverage only.")
-    holder = MutableSkillRegistry(load_registry(tmp_path))
-    pin = skill_pin(holder.current().get("fixture-skill"))
-    grants = env.plan.root.grants
-    policy = OperatorPolicy(
-        skills=tuple(
-            SkillPolicy(pin=pin, profile=profile, grants=grants, source_types=("govinfo",))
-            for profile in ("orchestrator", "research")
-        ),
-        sources=(
-            SourcePolicy(
-                name="statutes",
-                source_type="govinfo",
-                egress_tier=1,
-                operations=("search_authority", "get_authority"),
-            ),
-        ),
-        grants=grants,
-        minimum_inference_tier=1,
-        maximum_egress_tier=2,
-        require_anonymization=True,
-    )
-    config = SimpleNamespace(current=policy)
-    env.store.check_policy = CurrentPolicy(skills=holder, operator=lambda: config.current)
-    scope = env.plan.root.model_copy(update={"skill": pin})
-    env.plan = env.plan.model_copy(
-        update={
-            "root": scope,
-            "children": tuple(c.model_copy(update={"execution": scope}) for c in env.plan.children),
-            "policy_version": policy.version(),
-        }
-    )
-    env.config, env.holder, env.folder = config, holder, folder
-    try:
-        yield env
-    finally:
-        async with env.factory.begin() as db:
-            await db.execute(delete(File).where(File.owner_id == env.owner_id))
 
 
 async def add_document(env, *, attached=True):

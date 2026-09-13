@@ -55,6 +55,7 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 from fastapi import Request
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit import AuditLog
@@ -144,6 +145,9 @@ async def audit_action(
     ip_address, user_agent, request_id = _client_metadata(request)
 
     row = AuditLog(
+        # now() is the transaction start time: multiple phase/effect events in
+        # one atomic outcome would otherwise tie and lose their write order.
+        timestamp=func.clock_timestamp(),
         user_id=user_id,
         action=action,
         resource_type=resource_type,

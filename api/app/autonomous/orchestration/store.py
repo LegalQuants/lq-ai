@@ -27,7 +27,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.audit import audit_action
 from app.autonomous.enums import ToolIntent
-from app.autonomous.orchestration.contracts import ApprovalBinding, Money, PreparedPlan
+from app.autonomous.orchestration.contracts import (
+    ApprovalBinding,
+    ExecutionScope,
+    Money,
+    PreparedPlan,
+)
 from app.errors import Conflict, Forbidden, NotFound, ValidationError
 from app.models.autonomous import AutonomousSession
 from app.models.orchestration import (
@@ -80,6 +85,13 @@ class EffectReceipt:
     reserved_usd: Decimal
     charged_usd: Decimal | None
     result: dict[str, Any] | None
+
+
+@dataclass(frozen=True)
+class ExecutionView:
+    plan: PreparedPlan
+    scope: ExecutionScope
+    lease_seconds: float
 
 
 def _receipt(effect: Effect) -> EffectReceipt:
@@ -446,6 +458,80 @@ class OrchestrationStore:
             )
         return claim
 
+    async def execution_view(self, claim: WorkerClaim) -> ExecutionView:
+        """Resolve immutable worker input, releasing all control locks on return.
+
+        This read is not effect admission. Admission rechecks policy and fencing
+        after request preparation, at the guard's R4 boundary.
+        """
+        async with self.sessions.begin() as db:
+            root, plan, now = await self._root(db, claim.root_id)
+            await self._approved(db, root, plan, now)
+            account = await self._account(db, claim.root_id, claim.session_id)
+            now = await _now(db)
+            self._fence(account, claim, now)
+            scope = (
+                plan.root
+                if claim.session_id == claim.root_id
+                else next(
+                    (c.execution for c in plan.children if c.dispatch_id == claim.session_id), None
+                )
+            )
+            if scope is None or account.lease_until is None:
+                raise Forbidden(message="Worker is outside the approved tree")
+            return ExecutionView(plan, scope, (account.lease_until - now).total_seconds())
+
+    async def mark_effect_uncertain(self, claim: WorkerClaim, *, effect_key: str) -> bool:
+        """Conservatively abandon one admitted effect after rollback/cancellation.
+
+        Reachable after halt, deadline or revocation. Never overwrites a completed
+        receipt or another generation. Uncertainty retains the reservation and
+        fences this worker; no retry authority is created.
+        """
+        async with self.sessions.begin() as db:
+            initial = await db.get(Root, claim.root_id)
+            if initial is None:
+                return False
+            await db.execute(
+                select(User.id).where(User.id == initial.owner_id).with_for_update(read=True)
+            )
+            await db.execute(
+                select(Project.id)
+                .where(Project.id == initial.project_id)
+                .with_for_update(read=True)
+            )
+            root = (
+                await db.execute(
+                    select(Root)
+                    .where(Root.session_id == claim.root_id)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+            ).scalar_one()
+            account = await self._account(db, claim.root_id, claim.session_id)
+            effect = await db.get(Effect, (claim.session_id, effect_key))
+            if (
+                account.generation != claim.generation
+                or account.worker_id != claim.worker_id
+                or effect is None
+                or effect.generation != claim.generation
+                or effect.status != "admitted"
+            ):
+                return False
+            effect.status = "uncertain"
+            account.generation += 1
+            account.worker_id = account.lease_until = None
+            root.status, root.updated_at = "uncertain", await _now(db)
+            root.stop_reason = root.stop_reason or "unresolved_effect"
+            await _audit(
+                db,
+                root,
+                "effect_uncertain",
+                session_id=str(claim.session_id),
+                generation=account.generation,
+            )
+            return True
+
     async def admit_children(self, claim: WorkerClaim) -> tuple[UUID, ...]:
         if claim.session_id != claim.root_id:
             raise Conflict(message="Only the root worker can admit children")
@@ -691,6 +777,25 @@ class OrchestrationStore:
     async def complete_effect(
         self, claim: WorkerClaim, *, effect_key: str, charged_usd: Decimal, result: dict[str, Any]
     ) -> EffectReceipt:
+        async with self.sessions.begin() as db:
+            return await self._settle_effect(
+                db, claim, effect_key=effect_key, charged_usd=charged_usd, result=result
+            )
+
+    async def _settle_effect(
+        self,
+        db: AsyncSession,
+        claim: WorkerClaim,
+        *,
+        effect_key: str,
+        charged_usd: Decimal,
+        result: dict[str, Any],
+    ) -> EffectReceipt:
+        """Join the guarded outcome transaction; caller commits or rolls back all.
+
+        Internal adapter seam. Must run after provider I/O and before the guard
+        flushes session cost/outcome. No new execution is authorized here.
+        """
         charge = _money(charged_usd)
         try:
             if not isinstance(result, dict):
@@ -700,50 +805,47 @@ class OrchestrationStore:
                 raise ValueError("oversized result")
         except (ValueError, TypeError):
             raise ValidationError(message="Effect result must be bounded JSON") from None
-        async with self.sessions.begin() as db:
-            # Completion may record one admitted call after halt/revocation.
-            # It does not resolve policy or authorize another external action.
-            root = await db.get(Root, claim.root_id)
-            if root is None:
-                raise NotFound(message="Orchestration root not found")
+        # Completion may record one admitted call after halt/revocation.
+        # It does not resolve policy or authorize another external action.
+        root = await db.get(Root, claim.root_id)
+        if root is None:
+            raise NotFound(message="Orchestration root not found")
+        await db.execute(select(User.id).where(User.id == root.owner_id).with_for_update(read=True))
+        await db.execute(
+            select(Project.id).where(Project.id == root.project_id).with_for_update(read=True)
+        )
+        root = (
             await db.execute(
-                select(User.id).where(User.id == root.owner_id).with_for_update(read=True)
+                select(Root)
+                .where(Root.session_id == claim.root_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
             )
-            await db.execute(
-                select(Project.id).where(Project.id == root.project_id).with_for_update(read=True)
-            )
-            root = (
-                await db.execute(
-                    select(Root)
-                    .where(Root.session_id == claim.root_id)
-                    .with_for_update()
-                    .execution_options(populate_existing=True)
-                )
-            ).scalar_one()
-            account = await self._account(db, claim.root_id, claim.session_id)
-            self._fence(account, claim, await _now(db))
-            effect = await db.get(Effect, (claim.session_id, effect_key))
-            if effect is None or effect.generation != claim.generation:
-                raise Conflict(message="Effect is not owned by this worker generation")
-            if effect.status == "completed":
-                if effect.charged_usd != charge or effect.result != result:
-                    raise Conflict(message="Completed effect cannot be rewritten")
-                return _receipt(effect)
-            if effect.status != "admitted":
-                raise Conflict(message="Uncertain effect requires reconciliation")
-            account.reserved_usd -= effect.reserved_usd
-            account.spent_usd += charge
-            effect.status, effect.charged_usd = "completed", charge
-            effect.result, effect.completed_at = json.loads(content), await _now(db)
-            if account.spent_usd + account.reserved_usd > account.allocation_usd:
-                root.status, root.stop_reason = "halted", "observed_budget_overrun"
-            root.updated_at = effect.completed_at
-            await _audit(
-                db,
-                root,
-                "effect_completed",
-                session_id=str(claim.session_id),
-                generation=claim.generation,
-                charged_usd=str(charge),
-            )
+        ).scalar_one()
+        account = await self._account(db, claim.root_id, claim.session_id)
+        self._fence(account, claim, await _now(db))
+        effect = await db.get(Effect, (claim.session_id, effect_key))
+        if effect is None or effect.generation != claim.generation:
+            raise Conflict(message="Effect is not owned by this worker generation")
+        if effect.status == "completed":
+            if effect.charged_usd != charge or effect.result != result:
+                raise Conflict(message="Completed effect cannot be rewritten")
             return _receipt(effect)
+        if effect.status != "admitted":
+            raise Conflict(message="Uncertain effect requires reconciliation")
+        account.reserved_usd -= effect.reserved_usd
+        account.spent_usd += charge
+        effect.status, effect.charged_usd = "completed", charge
+        effect.result, effect.completed_at = json.loads(content), await _now(db)
+        if account.spent_usd + account.reserved_usd > account.allocation_usd:
+            root.status, root.stop_reason = "halted", "observed_budget_overrun"
+        root.updated_at = effect.completed_at
+        await _audit(
+            db,
+            root,
+            "effect_completed",
+            session_id=str(claim.session_id),
+            generation=claim.generation,
+            charged_usd=str(charge),
+        )
+        return _receipt(effect)
