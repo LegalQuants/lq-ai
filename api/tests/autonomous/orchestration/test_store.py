@@ -601,3 +601,241 @@ async def test_child_phase_transaction_does_not_lock_its_parent(ready):
         # The child transaction remains open, as it can during a guarded call.
         # Ordinary child updates must not make an independent root halt wait.
         await asyncio.wait_for(halt_parent(), timeout=2)
+
+
+async def test_release_preserves_completed_receipt_and_fences_old_worker(ready):
+    env = ready
+    await begin(env)
+    receipt = await env.store.complete_effect(
+        env.claim, effect_key="analysis:one", charged_usd=Decimal("0.5"), result={"content": "done"}
+    )
+    async with env.factory() as db:
+        approved = (await db.get(PlanRow, (env.root_id, 1))).approval
+    await env.store.release_claim(env.claim)
+    async with env.factory() as db:
+        account = await db.get(Account, env.root_id)
+        assert account.worker_id is account.lease_until is None
+        assert account.generation == env.claim.generation + 1
+        assert account.spent_usd == Decimal("0.5") and account.reserved_usd == 0
+        assert (await db.get(Root, env.root_id)).status == "running"
+        assert (await db.get(PlanRow, (env.root_id, 1))).approval == approved
+        effect = await db.get(Effect, (env.root_id, "analysis:one"))
+        assert effect.status == receipt.status == "completed"
+        assert effect.result == receipt.result and effect.charged_usd == receipt.charged_usd
+    assert await audit_count(env, "claim_released") == 1
+    with pytest.raises(Conflict, match="stale"):
+        await env.store.release_claim(env.claim)
+    fresh = await env.store.claim(env.root_id, env.root_id, worker_id=uuid4(), seconds=60)
+    assert fresh.generation == env.claim.generation + 2
+    with pytest.raises(Conflict, match="stale"):
+        await env.store.release_claim(env.claim)
+    with pytest.raises(Conflict, match="stale"):
+        await begin(env, key="analysis:stale")
+    with pytest.raises(Conflict, match="stale"):
+        await env.store.complete_effect(
+            env.claim, effect_key="analysis:one", charged_usd=Decimal("0"), result={}
+        )
+    async with env.factory() as db:
+        account = await db.get(Account, env.root_id)
+        assert account.worker_id == fresh.worker_id and account.generation == fresh.generation
+        assert account.spent_usd == Decimal("0.5")
+
+
+@pytest.mark.parametrize(
+    "pending_status,amount",
+    [
+        ("admitted", "1"),
+        ("admitted", "0"),
+        ("uncertain", "1"),
+        ("uncertain", "0"),
+        ("orphan_reservation", "1"),
+    ],
+)
+async def test_release_refuses_outstanding_effect_or_reservation(ready, pending_status, amount):
+    env = ready
+    if pending_status == "orphan_reservation":
+        async with env.factory.begin() as db:
+            await db.execute(
+                update(Account).where(Account.session_id == env.root_id).values(reserved_usd=1)
+            )
+    else:
+        await begin(env, amount=amount)
+        if pending_status == "uncertain":
+            # Isolate the unresolved-receipt check from recovery's usual fence.
+            async with env.factory.begin() as db:
+                await db.execute(
+                    update(Effect)
+                    .where(Effect.session_id == env.root_id)
+                    .values(status="uncertain")
+                )
+    with pytest.raises(Conflict, match="Outstanding effect"):
+        await env.store.release_claim(env.claim)
+    async with env.factory() as db:
+        account = await db.get(Account, env.root_id)
+        assert (
+            account.worker_id == env.claim.worker_id and account.generation == env.claim.generation
+        )
+        assert account.lease_until is not None and account.reserved_usd == Decimal(amount)
+        if pending_status != "orphan_reservation":
+            assert (await db.get(Effect, (env.root_id, "analysis:one"))).status == pending_status
+    assert await audit_count(env, "claim_released") == 0
+
+
+@pytest.mark.parametrize("revocation", ["policy", "halt", "optout", "archive", "project_policy"])
+async def test_release_allows_revoked_cleanup_but_not_execution(ready, revocation):
+    env = ready
+    if revocation == "policy":
+        env.policy.valid = False
+    elif revocation == "halt":
+        await env.store.halt(env.root_id, actor_id=env.owner_id)
+    else:
+        async with env.factory.begin() as db:
+            if revocation == "optout":
+                await db.execute(
+                    update(User).where(User.id == env.owner_id).values(autonomous_enabled=False)
+                )
+            elif revocation == "archive":
+                await db.execute(
+                    update(Project)
+                    .where(Project.id == env.project_id)
+                    .values(archived_at=func.now())
+                )
+            else:
+                await db.execute(
+                    update(Project)
+                    .where(Project.id == env.project_id)
+                    .values(privileged=True, minimum_inference_tier=1)
+                )
+    async with env.factory() as db:
+        root = await db.get(Root, env.root_id)
+        state = root.status, root.stop_reason
+    await env.store.release_claim(env.claim)
+    async with env.factory() as db:
+        root = await db.get(Root, env.root_id)
+        assert (root.status, root.stop_reason) == state
+        assert (await db.get(Account, env.root_id)).worker_id is None
+    with pytest.raises((Conflict, Forbidden)):
+        await env.store.claim(env.root_id, env.root_id, worker_id=uuid4(), seconds=60)
+
+
+async def test_release_audit_failure_rolls_back_ownership_and_audit(ready, monkeypatch):
+    from app.autonomous.orchestration import store
+
+    env = ready
+    original = store._audit
+
+    async def fail(db, root, event, **details):
+        await original(db, root, event, **details)
+        if event == "claim_released":
+            raise RuntimeError("release audit fixture failure")
+
+    monkeypatch.setattr(store, "_audit", fail)
+    with pytest.raises(RuntimeError, match="release audit"):
+        await env.store.release_claim(env.claim)
+    async with env.factory() as db:
+        account = await db.get(Account, env.root_id)
+        assert (
+            account.worker_id == env.claim.worker_id and account.generation == env.claim.generation
+        )
+        assert account.lease_until is not None
+    assert await audit_count(env, "claim_released") == 0
+    await begin(env)
+
+
+async def test_release_expired_or_wrong_claim_cannot_clear_ownership(ready):
+    from dataclasses import replace
+
+    env = ready
+    for wrong in (
+        replace(env.claim, worker_id=uuid4()),
+        replace(env.claim, generation=env.claim.generation + 1),
+        replace(env.claim, session_id=uuid4()),
+    ):
+        with pytest.raises(Conflict):
+            await env.store.release_claim(wrong)
+    await expire(env)
+    with pytest.raises(Conflict, match="expired"):
+        await env.store.release_claim(env.claim)
+    assert await audit_count(env, "claim_released") == 0
+    async with env.factory() as db:
+        account = await db.get(Account, env.root_id)
+        assert (
+            account.worker_id == env.claim.worker_id and account.generation == env.claim.generation
+        )
+
+
+async def test_release_waiting_parent_and_child_ownership_are_independent(ready):
+    env = ready
+    children = await env.store.admit_children(env.claim)
+    await env.store.release_claim(env.claim)
+    async with env.factory() as db:
+        assert (await db.get(Root, env.root_id)).status == "waiting_children"
+    claims = [
+        await env.store.claim(env.root_id, child, worker_id=uuid4(), seconds=60)
+        for child in children
+    ]
+    await env.store.release_claim(claims[0])
+    async with env.factory() as db:
+        assert (await db.get(Account, children[0])).worker_id is None
+        sibling = await db.get(Account, children[1])
+        assert (
+            sibling.worker_id == claims[1].worker_id and sibling.generation == claims[1].generation
+        )
+        assert (await db.get(Account, env.root_id)).generation == env.claim.generation + 1
+        assert (await db.get(Root, env.root_id)).admitted_revision == 1
+
+
+async def test_release_racing_effect_admission_has_one_safe_winner(ready):
+    env = ready
+    released, admitted = await asyncio.gather(
+        env.store.release_claim(env.claim), begin(env), return_exceptions=True
+    )
+    assert sum(isinstance(result, Conflict) for result in (released, admitted)) == 1
+    async with env.factory() as db:
+        account = await db.get(Account, env.root_id)
+        effect = await db.get(Effect, (env.root_id, "analysis:one"))
+        if released is None:
+            assert isinstance(admitted, Conflict)
+            assert effect is None and account.reserved_usd == 0
+            assert account.worker_id is None and account.generation == env.claim.generation + 1
+        else:
+            assert isinstance(released, Conflict) and not isinstance(admitted, BaseException)
+            assert effect.status == "admitted" and account.reserved_usd == 1
+            assert (
+                account.worker_id == env.claim.worker_id
+                and account.generation == env.claim.generation
+            )
+
+
+async def test_release_rechecks_expiry_after_waiting_for_account_lock(ready, monkeypatch):
+    env = ready
+    waiting = asyncio.Event()
+    original = env.store._account
+
+    async def observe_lock(db, root_id, session_id):
+        waiting.set()
+        return await original(db, root_id, session_id)
+
+    monkeypatch.setattr(env.store, "_account", observe_lock)
+    async with asyncio.TaskGroup() as group:
+        async with env.factory.begin() as blocker:
+            account = await blocker.scalar(
+                select(Account).where(Account.session_id == env.root_id).with_for_update()
+            )
+
+            async def release():
+                with pytest.raises(Conflict, match="expired"):
+                    await env.store.release_claim(env.claim)
+
+            attempt = group.create_task(release())
+            await asyncio.wait_for(waiting.wait(), timeout=2)
+            # Expire while release is blocked, using the database clock rather
+            # than sleeping. Its post-lock check must see this committed value.
+            account.lease_until = await blocker.scalar(select(func.clock_timestamp()))
+        await asyncio.wait_for(attempt, timeout=2)
+    assert await audit_count(env, "claim_released") == 0
+    async with env.factory() as db:
+        account = await db.get(Account, env.root_id)
+        assert (
+            account.generation == env.claim.generation and account.worker_id == env.claim.worker_id
+        )

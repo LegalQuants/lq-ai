@@ -523,3 +523,132 @@ async def test_process_death_preserves_intent_and_prevents_replay(execution, tes
     with pytest.raises(Conflict):
         await infer(env)
     assert not env.gateway.requests
+
+
+@pytest.mark.parametrize("child_run", [False, True])
+async def test_worker_handoff_resumes_checkpoint_and_continues_once(
+    execution, test_db_url, child_run
+):
+    pytest.importorskip("langgraph.checkpoint.postgres", reason="requires orchestration-test extra")
+    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+    from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+    from langgraph.graph import END, START, StateGraph
+
+    from app.autonomous.orchestration.store import WorkerClaim
+
+    env = execution
+    old = env.claim
+    if child_run:
+        children = await env.store.admit_children(env.claim)
+        old = await env.store.claim(env.root_id, children[0], worker_id=uuid4(), seconds=60)
+        async with env.factory.begin() as db:
+            await db.execute(
+                update(AutonomousSession)
+                .where(AutonomousSession.id == old.session_id)
+                .values(current_phase="analysis")
+            )
+    config = {"configurable": {"thread_id": str(old.session_id)}}
+    serde = JsonPlusSerializer(
+        allowed_msgpack_modules=[], allowed_json_modules=[], pickle_fallback=False
+    )
+    url = test_db_url.replace("postgresql+asyncpg://", "postgresql://", 1)
+
+    def build(saver, claim, *, stop):
+        async def first(state: dict):
+            result = await env.effects.infer(
+                claim, effect_key="analysis:one", phase=Phase.analysis, inputs={"step": "one"}
+            )
+            if stop:
+                raise RuntimeError("stop after receipt before checkpoint")
+            return {"first": result.data["content"]}
+
+        async def second(state: dict):
+            result = await env.effects.infer(
+                claim, effect_key="analysis:two", phase=Phase.analysis, inputs={"step": "two"}
+            )
+            return {**state, "second": result.data["content"]}
+
+        builder = StateGraph(dict)
+        builder.add_node("first", first)
+        builder.add_node("second", second)
+        builder.add_edge(START, "first")
+        builder.add_edge("first", "second")
+        builder.add_edge("second", END)
+        return builder.compile(checkpointer=saver)
+
+    async with AsyncPostgresSaver.from_conn_string(url, serde=serde) as saver:
+        await saver.setup()
+        with pytest.raises(RuntimeError, match="receipt before checkpoint"):
+            await build(saver, old, stop=True).ainvoke({}, config, durability="sync")
+    assert len(env.gateway.requests) == 1
+    async with env.factory() as db:
+        effect = await db.get(Effect, (old.session_id, "analysis:one"))
+        first_receipt = effect.result
+        assert effect.status == "completed" and effect.charged_usd == 1
+    # A's invocation and saver are stopped before cooperative ownership release.
+    await env.store.release_claim(old)
+    contenders = await asyncio.gather(
+        *(
+            env.store.claim(env.root_id, old.session_id, worker_id=uuid4(), seconds=60)
+            for _ in range(2)
+        ),
+        return_exceptions=True,
+    )
+    assert sum(isinstance(c, Conflict) for c in contenders) == 1
+    fresh = next(c for c in contenders if isinstance(c, WorkerClaim))
+    assert fresh.generation == old.generation + 2
+
+    env.gateway.wait_for_calls = 2
+    env.gateway.entered.clear()
+    env.gateway.release.clear()
+    async with AsyncPostgresSaver.from_conn_string(url, serde=serde) as saver:
+        graph = build(saver, fresh, stop=False)
+        async with asyncio.TaskGroup() as group:
+            continuation = group.create_task(graph.ainvoke(None, config, durability="sync"))
+            try:
+                await asyncio.wait_for(env.gateway.entered.wait(), timeout=5)
+                # B has reused effect one and is inside effect two's provider I/O.
+                # Control locks must be free and the reservation prevents release.
+                with pytest.raises(Conflict, match="Outstanding effect"):
+                    await asyncio.wait_for(env.store.release_claim(fresh), timeout=2)
+                with pytest.raises(Conflict, match="stale"):
+                    await env.store.release_claim(old)
+                with pytest.raises(Conflict, match="stale"):
+                    await env.store.begin_effect(
+                        old,
+                        effect_key="analysis:stale",
+                        request_hash="d" * 64,
+                        reservation_usd=Decimal("0"),
+                        phase=Phase.analysis,
+                        intent=ToolIntent.run_skill,
+                    )
+                with pytest.raises(Conflict, match="stale"):
+                    await env.store.complete_effect(
+                        old, effect_key="analysis:two", charged_usd=Decimal("0"), result={}
+                    )
+                assert not await env.store.mark_effect_uncertain(old, effect_key="analysis:two")
+            finally:
+                env.gateway.release.set()
+        assert continuation.result() == {"first": "result", "second": "result"}
+    assert len(env.gateway.requests) == 2
+    await env.store.release_claim(fresh)
+    async with env.factory() as db:
+        account = await db.get(Account, old.session_id)
+        session = await db.get(AutonomousSession, old.session_id)
+        assert account.spent_usd == session.cost_total_usd == 2
+        assert account.reserved_usd == 0 and account.worker_id is None
+        first = await db.get(Effect, (old.session_id, "analysis:one"))
+        second = await db.get(Effect, (old.session_id, "analysis:two"))
+        assert first.result == first_receipt
+        assert first.status == second.status == "completed"
+        assert first.generation == old.generation and second.generation == fresh.generation
+        assert first.charged_usd == second.charged_usd == 1
+        assert (
+            await db.scalar(
+                select(func.count()).select_from(Effect).where(Effect.session_id == old.session_id)
+            )
+            == 2
+        )
+        if child_run:
+            assert (await db.get(Account, env.root_id)).spent_usd == 0
+            assert (await db.get(Account, children[1])).spent_usd == 0

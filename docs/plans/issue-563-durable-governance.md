@@ -19,6 +19,7 @@ public session views must use this lifecycle for orchestration sessions.
 | Repeat approval | Current approved revision in executable state | Same consent, no additional event |
 | Reject | `awaiting_approval` | `rejected`; repeat rejection is idempotent |
 | Claim root/child | Approved `queued`, `running` or `waiting_children`; no live claim | New worker generation and bounded lease; root `running` |
+| Release root/child claim | Exact live worker generation; no outstanding effect or reservation; cleanup allowed after revocation | Clear worker/lease, advance generation and audit atomically; preserve lifecycle, consent and accounting |
 | Admit batch | Valid root worker claim and current approval | Child sessions, unique admissions, budget allocations and audit atomically stored; `waiting_children` |
 | Admit effect | Executable root, current policy/phase/grants, live worker fence, budget available | Durable unique effect and reservation, then caller may perform I/O |
 | Record effect | Matching live generation and admitted identity | Result/charge and reservation settlement stored; allowed for a pre-admitted call after halt/revocation |
@@ -101,6 +102,14 @@ Plan/result content stays in private governance records. Audit events carry
 only identifiers, revision/counts, generations, intent enums and monetary values.
 The store uses the existing flush-only audit helper within its transaction.
 
+The subsequent [worker-handoff milestone](issue-563-worker-handoff-milestone.md)
+adds explicit claim release. It requires the caller to stop its graph invocation
+first, refuses pending/uncertain effects or any retained reservation, and does not
+wait for lease expiration. Root and child checkpoint fixtures prove a fresh worker
+reuses a completed receipt and then executes a second effect without duplicate
+provider calls or charges. This is a cooperative handoff, not arbitrary stale
+checkpoint fencing or production queue integration.
+
 ## Outstanding integration
 
 - Connect a production current-policy resolver and preserve R5 → R6 → R4 through
@@ -108,7 +117,7 @@ The store uses the existing flush-only audit helper within its transaction.
   is insufficient authority to call a provider.
 - Connect the adapter to completed/uncertain receipts, including actual worker
   death, stale completion, checkpoint gaps and queue wakeup recovery.
-- Implement final topology, shared deployment capacity, claim renewal/release,
+- Implement final topology, shared deployment capacity, claim renewal,
   root/child watchdogs, deadline recovery and terminal joins. Do not put new child
   sessions on existing workers until these distinctions are honored.
 - Implement pricing validation, budget reclamation and reconciliation policy for

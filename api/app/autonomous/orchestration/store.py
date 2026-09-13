@@ -55,6 +55,7 @@ _EVENTS = frozenset(
         "rejected",
         "children_admitted",
         "claimed",
+        "claim_released",
         "halted",
         "effect_admitted",
         "effect_completed",
@@ -466,6 +467,58 @@ class OrchestrationStore:
                 message="An unresolved effect requires reconciliation before further work"
             )
         return claim
+
+    async def release_claim(self, claim: WorkerClaim) -> None:
+        """Relinquish current ownership after the caller has stopped its graph.
+
+        This only narrows authority, so cleanup remains possible after policy
+        revocation, opt-out or halt. It does not admit work, change lifecycle
+        status, release uncertain reservations or fence framework checkpoints.
+        """
+        async with self.sessions.begin() as db:
+            initial = await db.get(Root, claim.root_id)
+            if initial is None:
+                raise NotFound(message="Orchestration root not found")
+            await db.execute(
+                select(User.id).where(User.id == initial.owner_id).with_for_update(read=True)
+            )
+            await db.execute(
+                select(Project.id)
+                .where(Project.id == initial.project_id)
+                .with_for_update(read=True)
+            )
+            root = (
+                await db.execute(
+                    select(Root)
+                    .where(Root.session_id == claim.root_id)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+            ).scalar_one()
+            account = await self._account(db, claim.root_id, claim.session_id)
+            self._fence(account, claim, await _now(db))
+            pending = await db.scalar(
+                select(Effect)
+                .where(
+                    Effect.session_id == claim.session_id,
+                    Effect.status.in_(["admitted", "uncertain"]),
+                )
+                .with_for_update()
+            )
+            if pending is not None or account.reserved_usd != 0:
+                raise Conflict(message="Outstanding effect prevents worker release")
+            now = await _now(db)
+            self._fence(account, claim, now)
+            account.generation += 1
+            account.worker_id = account.lease_until = None
+            root.updated_at = now
+            await _audit(
+                db,
+                root,
+                "claim_released",
+                session_id=str(claim.session_id),
+                generation=account.generation,
+            )
 
     async def execution_view(self, claim: WorkerClaim) -> ExecutionView:
         """Resolve immutable worker input, releasing all control locks on return.

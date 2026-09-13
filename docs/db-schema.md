@@ -1784,6 +1784,14 @@ cascades children. Existing single-session status/phase enums are unchanged.
 | `orchestration_accounts` | `session_id` PK/FK; `root_id`; `allocation_usd NUMERIC(10,4)`, `spent_usd/reserved_usd NUMERIC(14,4)`; generation, worker UUID, lease expiry | Nonnegative amounts/generation. Worker and lease are both set or both null. Larger spent field records observed overruns honestly; admission enforces available allocation in a locked transaction. |
 | `orchestration_effects` | PK `(session_id, effect_key)`; request hash, phase, intent, generation, status; reservation, nullable charge/result/completion time, creation timestamp | One admitted/uncertain effect per run. Bounded stable effect key and digest shape. Completed requires charge/result/time. Result JSONB is private content; audit does not contain it. Uncertain effects retain reservations. |
 
+The internal `release_claim` transaction clears account worker/lease fields and
+increments the generation only for the exact unexpired claim with no admitted or
+uncertain effect and zero reserved balance. It writes `orchestration.claim_released`
+in the same transaction; audit failure rolls back ownership changes. Cleanup
+remains possible after execution permission is revoked and preserves consent,
+root lifecycle and accounting. A replacement claim rechecks current authority.
+No new columns or migration are needed for this operation.
+
 All root-owned records cascade on root/session deletion. Projects use RESTRICT
 while orchestration roots exist; ordinary archival remains available. Deleting
 an admitted child removes its private account/effects but leaves the plan and
