@@ -90,6 +90,7 @@ from app.autonomous.audit import autonomous_audit
 from app.autonomous.cost import estimate_tool_cost
 from app.autonomous.enums import PHASE_GRANTS, HaltState, Phase, ToolIntent
 from app.autonomous.notify_email import send_notification_email
+from app.autonomous.orchestration.contracts import ExecutionScope
 from app.errors import CostCapReached, SessionHalted, ToolNotGranted
 from app.models.autonomous import (
     AutonomousArtifact,
@@ -166,6 +167,8 @@ async def guarded_tool_call(
     params: dict[str, Any],
     db: AsyncSession,
     gateway: Any,
+    *,
+    execution_scope: ExecutionScope | None = None,
 ) -> ToolResult:
     """Single chokepoint for every autonomous tool invocation.
 
@@ -185,6 +188,9 @@ async def guarded_tool_call(
         db: An open :class:`~sqlalchemy.ext.asyncio.AsyncSession`.
         gateway: The Inference Gateway client (used by A3.3b inference
             handlers; not used by local-intent handlers).
+        execution_scope: Server-resolved approved scope for orchestration.
+            Narrows supported calls at R6; does not replace durable approval,
+            current policy validation, worker fencing or effect admission.
 
     Returns:
         A :class:`ToolResult` on success.
@@ -212,12 +218,22 @@ async def guarded_tool_call(
         # ── R5 temporal ─────────────────────────────────────────────────────
         # Re-read halt_state from the DB so an external signal that arrives
         # after the executor started is honoured at the next tool boundary.
-        await db.refresh(session, ["halt_state"])
+        await db.refresh(
+            session,
+            ["halt_state", "current_phase", "status"]
+            if execution_scope is not None
+            else ["halt_state"],
+        )
         if session.halt_state == HaltState.halt_requested:
             session.halt_state = str(HaltState.halted)
             await autonomous_audit(db, session, "halted", reason="external_halt")
             record_attributes(span, **{"autonomous.outcome": "external_halt"})
             raise SessionHalted("session halted externally", reason="external_halt")
+
+        if execution_scope is not None and (
+            session.halt_state != HaltState.running or session.status != "running"
+        ):
+            raise SessionHalted("orchestration session is stopped", reason="external_halt")
 
         # ── R6 contextual ───────────────────────────────────────────────────
         # Compare intent against the grant set for the current phase.
@@ -237,6 +253,18 @@ async def guarded_tool_call(
                 intent=str(intent),
                 phase=str(session.current_phase),
             )
+
+        if execution_scope is not None:
+            from app.autonomous.orchestration.boundary import constrain_call
+
+            try:
+                params = await constrain_call(db, session, intent, params, execution_scope)
+            except ToolNotGranted:
+                await autonomous_audit(
+                    db, session, "tool_call", tool=str(intent), outcome="tool_not_granted"
+                )
+                record_attributes(span, **{"autonomous.outcome": "tool_not_granted"})
+                raise
 
         # ── R4 economic ─────────────────────────────────────────────────────
         # Estimate cost ONCE here — used both for the cap check AND passed
@@ -1605,6 +1633,9 @@ async def _handle_gateway_inference(
         max_tokens=max_tokens,
         anonymize=anonymize,
         lq_ai_purpose="autonomous_executor",
+        minimum_inference_tier=params.get("minimum_inference_tier"),
+        lq_ai_project_minimum_inference_tier=params.get("lq_ai_project_minimum_inference_tier"),
+        lq_ai_privileged=params.get("lq_ai_privileged", False),
     )
 
     try:

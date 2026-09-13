@@ -888,9 +888,12 @@ Local implementation includes [strict plan and consent contracts](plans/issue-56
 and the [durable governance store](plans/issue-563-durable-governance.md):
 version-bound approval, atomic child admission, fixed budget allocations,
 worker fencing and completed/uncertain effect receipts. The migration backfills
-existing sessions as roots. Public dispatch, the full current-resource policy
-resolver, worker lifecycle integration and the orchestration interface remain
-unimplemented; the [workflow](plans/issue-563-workflow.md) records acceptance progress.
+existing sessions as roots. A [current-policy callback and scoped guard](plans/issue-563-current-policy.md)
+validate selected project documents, skill artifacts and operator grants, and
+propagate approved inference restrictions. Public dispatch, exact external
+provider/operation/pricing binding, shared policy distribution, worker lifecycle
+integration and the orchestration interface remain unimplemented; the
+[workflow](plans/issue-563-workflow.md) records acceptance progress.
 
 **M4 status: SHIPPED.** The opt-in background executor runs real in-loop work end-to-end. The five-phase LangGraph state machine (intake → analysis → drafting → ethics_review → delivery) lives in `api/app/autonomous/executor.py` (`run_autonomous_session`) + `nodes.py`; every external action routes through the single `guarded_tool_call` chokepoint (`api/app/autonomous/guard.py`) enforcing R5 (external halt + idle watchdog → `SessionHalted`), R6 (`PHASE_GRANTS` phase-gated tool grants → `ToolNotGranted`), and R4 (per-session **and** per-trigger cost cap → `CostCapReached`). The four primitives ship: watches (`api/app/autonomous/watch_trigger.py`, table `autonomous_watches` — migration `0039`), schedules (`api/app/autonomous/cron.py`, table `autonomous_schedules`), per-user memory (`autonomous_memory`), and the precedent board (`precedent_entries` — migration `0039`; `project_context_proposals` — migration `0041`). Honest per-session receipts carry `terminal_reason` (completed / cost_cap_reached / external_halt) via `api/app/autonomous/receipt.py` (`build_receipt` / `build_receipt_safe`). The layer is per-user opt-in, off by default (`User.autonomous_enabled` — migration `0044`), with a full web dashboard at `web/src/routes/lq-ai/autonomous/`. Migration head at M4 close is `0045`. See [HONEST-STATE.md §5](HONEST-STATE.md#5-m4--autonomous-layer-shipped). As of M4 close the **Contract Repository auto-relationship graph** (§3.16) and the MCP-client subsystem (§8.5) remained deferred; the **MCP-client subsystem subsequently shipped** in the legal-research + connectors milestone (#158–#193 — see [DE-200](#de-200--mcp-client-subsystem-in-the-lq-ai-backend) and [HONEST-STATE.md §5.5](HONEST-STATE.md)), while the contract relationship graph remains deferred.
 
