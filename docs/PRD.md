@@ -5047,6 +5047,12 @@ The document-ingestion pipeline (ADR [0006](adr/0006-document-pipeline-architect
 
 `messages.applied_skills` stores skill *names* only (ADR 0007 denormalization). The admin tier-floor override (`POST /api/v1/inference/override-tier-floor` → `run_inference_override` in `api/app/api/chats.py`) re-runs a refused user message by replaying those names with no `lq_ai_skill_inputs`, no `file_ids`, and no retrieval context. Before the gateway enforced the corpus's declared required inputs it ran the skill body without its document and returned a degraded answer; now it is refused with `skill_input_missing` for the 13 of 15 built-in skills that declare required inputs, which is honest but leaves the override unusable for skilled turns. **Specific scope:** decide where a turn's skill inputs live for replay (a JSONB column on `messages`, or the request-log envelope), what the retention and anonymization posture is for stored inputs that may carry document text (they currently cross the gateway anonymizer but are not persisted), and whether the override should also replay `file_ids`; then make the re-run replay them and add a test that an override of a skilled turn forwards the original inputs. Related: DE-388 (the channel those inputs will travel), ADR 0007.
 
+#### DE-391 — Exclude attached-document content from the chat-history trim
+
+**Priority:** P2 · **Effort:** S–M · **Status (2026-09-13): filed.** Credit: @SaifAlYounan (proposed in #503/#504 as the narrower fix).
+
+Attached-file content is injected into the prompt as a system message (`_format_attached_files_block`, `api/app/api/chats.py`) and then counted against `lq_ai_chat_history_token_budget` although it is not conversation. Raising the budget (6,000 → 64,000 in #504) fixes the symptom: a ~47,000-token case file supplied in turn 1 was silently gone by turn 2 on models with 200k–1M context windows, and nothing in the response said trimming had occurred. The category fix is to give injected document blocks their own budget, or exclude them from the trim, so a document cannot be dropped between turns by a history setting. **Specific scope:** a turn-2 follow-up over a turn-1 attachment retains the document regardless of the history budget; a regression test covers the trim boundary; the history budget's field comment stops describing itself as the document ceiling. Related: #503 item 4, #512 (surfacing `applied_file_ids` so a non-contributing attachment is visible), DE-355.
+
 ---
 
 ## 10. Appendices

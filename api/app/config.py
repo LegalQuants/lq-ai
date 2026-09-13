@@ -160,13 +160,19 @@ class Settings(BaseSettings):
     # on long-context models can raise the budget; set it to 0 to disable
     # history replay entirely (revert to single-turn requests).
     lq_ai_chat_history_token_budget: int = Field(
-        default=6_000,
+        default=64_000,
         ge=0,
         description=(
             "Approximate token budget (~4 chars/token) for prior chat turns "
             "replayed to the model. 0 disables multi-turn history."
         ),
     )
+    # Raised from 6,000 (issue #503): at 6k a ~47,000-token case file supplied
+    # in turn 1 was silently gone by turn 2, on models whose context windows
+    # are 200k-1M, and nothing in the response said trimming had occurred.
+    # This raises a ceiling; the category fix — not counting injected
+    # attached-document blocks (``_format_attached_files_block``) against the
+    # *chat-history* budget at all — is DE-391.
     lq_ai_chat_history_max_messages: int = Field(
         default=20,
         ge=0,

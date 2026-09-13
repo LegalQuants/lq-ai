@@ -96,7 +96,15 @@ from app.citation.ledger import (
 from app.clients.gateway import EnsembleConfig, GatewayClient, get_gateway_client
 from app.config import get_settings
 from app.db.session import get_db
-from app.errors import Conflict, InternalError, LQAIError, NotFound, ValidationError
+from app.errors import (
+    CODE_PROVIDER_UNAVAILABLE,
+    Conflict,
+    InternalError,
+    LQAIError,
+    NotFound,
+    ProviderUnavailable,
+    ValidationError,
+)
 from app.knowledge.embed import DEFAULT_EMBEDDING_MODEL, request_embedding_vector
 from app.knowledge.retrieval import HybridSearchResult, hybrid_search
 from app.models.chat import Chat, Message, MessageCitation
@@ -2385,6 +2393,20 @@ async def resume_tool_call(
             yield b"data: [DONE]\n\n"
             return
 
+        # Issue #503 — never present an empty turn as a success. Runs BEFORE
+        # persistence so the stored row and the wire agree (see
+        # ``_empty_turn_error``).
+        if error_envelope is None and not "".join(accumulated).strip():
+            error_code, error_envelope = _empty_turn_error(request_id)
+            log.warning(
+                "chat resume_tool_call produced no content",
+                extra={
+                    "event": "resume_tool_call_empty_completion",
+                    "assistant_message_id": str(assistant_message_id),
+                    "request_id": request_id,
+                },
+            )
+
         # Persist the assistant message (LoopFinal or error path).
         try:
             await _load_visible_chat(db, cid, user.id, include_archived=False)
@@ -2856,6 +2878,32 @@ async def _persist_message_tool_sources(
         ]
     )
     await db.flush()
+
+
+def _empty_turn_error(request_id: str) -> tuple[str, dict[str, Any]]:
+    """Issue #503 — an empty turn is an upstream failure, not an answer.
+
+    A stream that ended with no content and raised nothing used to fall
+    through to the success tail. The client could not tell "the system
+    broke" from "the model had little to say", and for a legal tool that
+    ambiguity is the defect: the operator blames the model. The gateway now
+    emits its own error frame for a contentless stream; this is the
+    belt-and-braces layer for any path that still yields nothing without
+    raising. Both SSE generators call it *before* persisting the assistant
+    row, so the stored ``error_code``, the wire frame, and the history
+    replay exclusion (errored rows are never replayed) all agree.
+
+    Returns ``(error_code, error_envelope)`` for the generator's final
+    frames.
+    """
+
+    envelope = ProviderUnavailable(
+        "The turn completed without producing any content. This is an "
+        "upstream failure, not an empty answer — check the gateway logs "
+        "for this request id.",
+        details={"request_id": request_id},
+    ).to_envelope()
+    return CODE_PROVIDER_UNAVAILABLE, envelope
 
 
 async def _persist_assistant_message(
@@ -3623,6 +3671,22 @@ async def _stream_response(
                         "error_code": error_code,
                     },
                 )
+
+        # Issue #503 — never present an empty turn as a success. Runs BEFORE
+        # persistence so the stored row, the audit row and the wire agree
+        # (see ``_empty_turn_error``).
+        if error_envelope is None and not "".join(accumulated).strip():
+            error_code, error_envelope = _empty_turn_error(request_id)
+            log.warning(
+                "chat send_message produced no content",
+                extra={
+                    "event": "chat_send_message_empty_completion",
+                    "user_id": str(user.id),
+                    "chat_id": str(chat.id),
+                    "assistant_message_id": str(assistant_message_id),
+                    "request_id": request_id,
+                },
+            )
 
         # Persist the assistant row exactly once. Even if everything
         # failed, we record what we got so operators see the full
