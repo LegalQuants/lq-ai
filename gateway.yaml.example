@@ -178,6 +178,15 @@ providers:
     # local, air-gap-capable) backbone — Tier 1 by every authoritative
     # reference (PRD §1.5.2: "Local-only inference (air-gap-capable)").
     # See B6 partial in M1-PROGRESS for the adapter that wires this up.
+    #
+    # NOTE (LLM egress policy, GW-04): a plaintext ``http://`` base_url is
+    # accepted only for loopback/private/local hosts (localhost, RFC-1918
+    # ranges, host.docker.internal, in-Compose service names). A base_url
+    # that violates the policy is FATAL AT STARTUP — the gateway refuses to
+    # boot rather than silently skip the provider, because a skipped local
+    # primary would let the router fall through to a cloud fallback the
+    # operator did not choose. If startup fails naming this provider, fix
+    # the base_url (most often a mistyped OLLAMA_BASE_URL).
     base_url: ${OLLAMA_BASE_URL:-http://ollama:11434}
     api_key_env: ''  # Ollama doesn't require an API key
     tier: 1  # Fully local; no data leaves the deployment

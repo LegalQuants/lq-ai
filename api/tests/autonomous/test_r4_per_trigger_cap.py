@@ -25,7 +25,6 @@ asserts exactly that.
 
 from __future__ import annotations
 
-import uuid
 from decimal import Decimal
 from unittest.mock import AsyncMock
 
@@ -37,7 +36,6 @@ from app.autonomous.executor import run_autonomous_session
 from app.autonomous.watch_trigger import fire_watches_for_kb
 from app.models.autonomous import AutonomousSession, AutonomousWatch
 from app.models.user import User
-from app.security import hash_password
 from tests.autonomous.conftest import KbOneFile
 
 # ``alpha-test-skill`` is the fixture skill installed into
@@ -48,24 +46,18 @@ from tests.autonomous.conftest import KbOneFile
 _FIXTURE_SKILL_REF = "alpha-test-skill"
 
 
-async def _make_opted_in_user(db: AsyncSession) -> User:
-    """Create a user with ``autonomous_enabled=True``.
+async def _kb_owner(db: AsyncSession, kb: KbOneFile) -> User:
+    """Return the KB's owner, to run the watch as them.
 
-    ``fire_watches_for_kb`` joins on ``User.autonomous_enabled.is_(True)``
-    — a non-opted-in user's watch never fires.  Mirrors the proven helper
-    in ``test_spawn_max_cost_usd.py``.
+    The watch must belong to the user who owns the KB and its files:
+    ``retrieve_chunks`` is scoped to the session owner (#288, AG-01), and a
+    watch on someone else's KB is a state production cannot produce —
+    ``create_watch`` requires ``KnowledgeBase.owner_id == user.id``. The
+    conftest fixture owner is created with ``autonomous_enabled=True``, which
+    ``fire_watches_for_kb`` joins on, so the watch still fires.
     """
-    user = User(
-        email=f"r4-cap-test-{uuid.uuid4().hex[:8]}@example.com",
-        display_name="R4 Per-Trigger Cap Test User",
-        hashed_password=hash_password("correct-horse-battery-staple"),
-        is_admin=False,
-        mfa_enabled=False,
-        must_change_password=False,
-        autonomous_enabled=True,
-    )
-    db.add(user)
-    await db.flush()
+    user = await db.get(User, kb.owner_id)
+    assert user is not None, f"fixture KB owner {kb.owner_id} not found"
     return user
 
 
@@ -83,7 +75,7 @@ async def test_r4_trips_on_low_per_trigger_max_cost_usd(
     pre-call brake that trips on the estimate, before dispatch.
     """
     kb = kb_with_one_indexed_file
-    opted_in_user = await _make_opted_in_user(db_session)
+    opted_in_user = await _kb_owner(db_session, kb)
 
     watch = AutonomousWatch(
         user_id=opted_in_user.id,
@@ -152,7 +144,7 @@ async def test_r4_halt_populates_receipt_terminal_reason(
     brake-halted receipt behavior. The gap documented at Task 16 is now closed.
     """
     kb = kb_with_one_indexed_file
-    opted_in_user = await _make_opted_in_user(db_session)
+    opted_in_user = await _kb_owner(db_session, kb)
 
     watch = AutonomousWatch(
         user_id=opted_in_user.id,

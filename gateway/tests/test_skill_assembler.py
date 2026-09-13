@@ -12,6 +12,9 @@ Pure-function tests; no I/O. Covers:
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
 
 from app.clients.backend import Skill, SkillFile
@@ -717,3 +720,110 @@ def test_assemble_with_no_skills_ignores_profile() -> None:
     profile = _profile_skill("Should not appear.")
     out = assemble_skill_prompt([], organization_profile=profile)
     assert out == ""
+
+
+# --- required inputs nested under ``lq_ai:`` ---------------------------------
+
+
+_NDA_REVIEW_SHAPED_YAML = (
+    "name: nda-review\n"
+    "lq_ai:\n"
+    "  title: NDA Review\n"
+    "  inputs:\n"
+    "    required:\n"
+    "      - name: document\n"
+    "        type: document\n"
+    "      - name: perspective\n"
+    "        type: text\n"
+    "    optional:\n"
+    "      - name: jurisdiction\n"
+)
+
+
+@pytest.mark.unit
+def test_extract_required_inputs_reads_lq_ai_nested_block() -> None:
+    """Every shipped SKILL.md nests ``inputs`` under ``lq_ai:``; it must count."""
+
+    skill = Skill(name="nda-review", content_md="body", content_yaml=_NDA_REVIEW_SHAPED_YAML)
+    assert extract_required_inputs(skill) == ["document", "perspective"]
+
+
+@pytest.mark.unit
+def test_assemble_enforces_required_inputs_nested_under_lq_ai() -> None:
+    skill = Skill(name="nda-review", content_md="body", content_yaml=_NDA_REVIEW_SHAPED_YAML)
+    with pytest.raises(SkillInputMissing) as excinfo:
+        assemble_skill_prompt([skill], skill_inputs={"nda-review": {"document": "the NDA"}})
+    assert excinfo.value.details["missing"] == ["nda-review.perspective"]
+
+
+# --- Shipped corpus ----------------------------------------------------------
+#
+# ``extract_required_inputs`` read the top-level ``inputs:`` block only
+# for the whole of M1-M4 while every built-in SKILL.md nests it under
+# ``lq_ai:``, so enforcement silently never fired. These tests load the
+# real files so the corpus and the enforcer cannot drift apart again.
+
+_SHIPPED_SKILLS_DIR = Path(__file__).resolve().parents[2] / "skills"
+
+# Required inputs each built-in skill declares. Update deliberately when a
+# skill's interface changes — every caller that attaches the skill must
+# bind these, or the gateway refuses the request (ADR 0007 §2).
+_SHIPPED_REQUIRED_INPUTS: dict[str, list[str]] = {
+    "action-items-from-client-alert": ["document"],
+    "case-law-research": ["question"],
+    "comms-improver": ["text", "audience"],
+    "contract-qa": ["document", "question"],
+    "contract-snapshot": [],
+    "dpa-checklist-review": ["document", "regulatory_regime"],
+    "enhance-prompt": ["raw_input"],
+    "msa-review-commercial-purchase": ["document", "perspective"],
+    "msa-review-saas": ["document", "perspective"],
+    "msa-snapshot": [],
+    "nda-review": ["document", "perspective"],
+    "nda-snapshot": [],
+    "playbook-easy-extract": ["document"],
+    "skill-creator": [],
+    "vendor-privacy-policy-first-pass": ["document"],
+}
+
+
+def _shipped_skill(name: str) -> Skill:
+    text = (_SHIPPED_SKILLS_DIR / name / "SKILL.md").read_text(encoding="utf-8")
+    match = re.match(r"^---\n(.*?)\n---\n(.*)$", text, re.S)
+    assert match is not None, f"{name}/SKILL.md has no frontmatter"
+    return Skill(name=name, content_md=match.group(2), content_yaml=match.group(1))
+
+
+@pytest.mark.unit
+def test_shipped_corpus_required_inputs_are_read() -> None:
+    """Every built-in skill's nested ``lq_ai.inputs.required`` is what the enforcer sees."""
+
+    on_disk = sorted(p.name for p in _SHIPPED_SKILLS_DIR.iterdir() if (p / "SKILL.md").exists())
+    assert on_disk == sorted(_SHIPPED_REQUIRED_INPUTS), (
+        "a built-in skill was added or removed — update _SHIPPED_REQUIRED_INPUTS"
+    )
+    for name in on_disk:
+        assert extract_required_inputs(_shipped_skill(name)) == _SHIPPED_REQUIRED_INPUTS[name], name
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "name", sorted(n for n, required in _SHIPPED_REQUIRED_INPUTS.items() if required)
+)
+def test_shipped_skill_with_required_inputs_refuses_empty_bindings(name: str) -> None:
+    """Attaching a built-in skill without its required inputs is a 400, not a silent run."""
+
+    with pytest.raises(SkillInputMissing) as excinfo:
+        assemble_skill_prompt([_shipped_skill(name)], skill_inputs={})
+    expected = [f"{name}.{n}" for n in _SHIPPED_REQUIRED_INPUTS[name]]
+    assert excinfo.value.details["missing"] == expected
+
+
+@pytest.mark.unit
+def test_shipped_skill_assembles_once_required_inputs_are_bound() -> None:
+    out = assemble_skill_prompt(
+        [_shipped_skill("nda-review")],
+        skill_inputs={"nda-review": {"document": "NDA text", "perspective": "recipient"}},
+    )
+    assert "### Provided inputs for" in out
+    assert "NDA text" in out

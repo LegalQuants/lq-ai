@@ -33,6 +33,7 @@ Considerations:
 - Quarterly rebase against the latest upstream stable tag, or earlier if an upstream security fix lands that affects us.
 - Rebase work happens in a `vendor/openwebui-upstream` branch; the rebase result lands in `main` as a single PR titled `chore(web): rebase OpenWebUI fork to vX.Y.Z` with a body listing every upstream commit included and any of our patches that needed rework.
 - Rebase PRs require two maintainer approvals because the merge cost is real and the integration surface is large.
+- `web/`'s npm dependencies are upstream's, not ours, so their currency arrives with the rebase. `.github/dependabot.yml` runs the `/web` npm ecosystem at `open-pull-requests-limit: 0` — **security updates only**. Routine version bumps raised between refreshes are superseded by the next rebase before they can be reviewed; advisories are not, and still open PRs.
 
 **How customizations are organized:**
 
@@ -76,3 +77,11 @@ Considerations:
 ---
 
 *Superseding this ADR requires an explicit follow-on ADR. Updating the pinned version (e.g., v0.9.2 → v0.10.0 at the next quarterly rebase) is an in-place edit to this document — record the new version, the date, and a one-line rationale in a "Revisions" section at the bottom.*
+
+---
+
+## Revisions
+
+- **2026-08-25 — v0.9.2 → v0.11.0.** First quarterly refresh under this ADR. Latest upstream stable at the time (released 2026-07-27); 1402 upstream commits, 880 changed paths, 12 files changed on both sides of which 6 conflicted. The [ADR 0014](0014-gateway-egress-boundary-for-tool-providers.md) deletion of `utils/mcp/client.py` was re-asserted, and Cypress was carried forward after upstream removed it entirely. Procedure and findings: [`docs/openwebui-rebase-runbook.md`](../openwebui-rebase-runbook.md); tracked in [#498](https://github.com/LegalQuants/lq-ai/issues/498).
+
+> **Note on the text above.** The Decision, Consequences and Mitigations sections record the position *at the time this ADR was accepted* and are deliberately left unedited — including their references to `v0.9.2`. This Revisions section is the authoritative record of the current pin. Likewise, `v0.9.2` references in ADR 0009, `M1-PROGRESS.md` and `M1-IMPLEMENTATION-ORDER.md` are historical statements about what happened during M1 and are correct as written; they are not stale pins and should not be rewritten at each refresh.

@@ -34,7 +34,6 @@ from collections.abc import AsyncIterator
 
 import pytest
 import pytest_asyncio
-from fastapi.routing import APIRoute
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -344,20 +343,39 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
 }
 
 
+_HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
+
+
 def _api_v1_routes() -> list[tuple[str, str, str]]:
-    """Return (method, registered_path, materialised_path) for every still-stub /api/v1 route."""
+    """Return (method, registered_path, materialised_path) for every still-stub /api/v1 route.
+
+    Enumerated from the generated OpenAPI schema rather than `app.routes`.
+    FastAPI 0.139 builds included-router routes lazily (the thread-safe router
+    refactor in 0.139.2), so at import time `app.routes` holds only the eight
+    routes added directly to the app — `/openapi.json`, `/docs`, `/metrics` and
+    friends — while all 141 real paths are reachable only through
+    `app.openapi()`. Enumerating `app.routes` here silently returned an EMPTY
+    list under 0.139, which collapsed this module's parametrized stub tests to
+    zero collected cases rather than failing: a vacuous pass.
+
+    `app.openapi()` is the same surface `test_openapi.py` asserts against, and
+    it is public API, so it does not depend on FastAPI's internal build timing.
+    The only route excluded from the schema is `/metrics`
+    (`include_in_schema=False` in app/observability.py), which is not under
+    /api/v1 and was never in this inventory.
+    """
     rows: list[tuple[str, str, str]] = []
-    for route in app.routes:
-        if not isinstance(route, APIRoute):
+    for path, operations in app.openapi().get("paths", {}).items():
+        if not path.startswith("/api/v1"):
             continue
-        if not route.path.startswith("/api/v1"):
-            continue
-        for method in route.methods or ():
-            if method in {"HEAD", "OPTIONS"}:
+        for method_key in operations:
+            method = method_key.upper()
+            # Path-item objects may carry non-operation keys (e.g. `parameters`).
+            if method not in _HTTP_METHODS:
                 continue
-            if (method, route.path) in IMPLEMENTED_ROUTES:
+            if (method, path) in IMPLEMENTED_ROUTES:
                 continue
-            rows.append((method, route.path, _materialise(route.path)))
+            rows.append((method, path, _materialise(path)))
     return rows
 
 
@@ -380,8 +398,12 @@ async def test_route_inventory_is_nonempty() -> None:
 
     from app.main import app as _app
 
-    api_routes = [r for r in _app.routes if getattr(r, "path", "").startswith("/api/v1")]
-    assert len(api_routes) >= 50
+    # Counted off the OpenAPI schema, not `_app.routes` — see _api_v1_routes()
+    # for why the latter is empty at import time under FastAPI 0.139. This
+    # assertion is the canary that caught that change, so keep it counting the
+    # same surface the rest of the module enumerates.
+    api_paths = [p for p in _app.openapi().get("paths", {}) if p.startswith("/api/v1")]
+    assert len(api_paths) >= 50
 
 
 @pytest_asyncio.fixture
