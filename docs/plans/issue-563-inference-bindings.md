@@ -100,7 +100,8 @@ actual provider billing or a guaranteed invoice ceiling; dispatch remains disabl
 this unpublished branch; recreate local fixture runs rather than assume existing
 checkpoint compatibility.
 
-Tool-source anonymization, CourtListener composite operations, worker topology,
+[Required authority anonymization](issue-563-authority-anonymization.md) is now
+implemented for supported operations. CourtListener composite operations, worker topology,
 shared capacity, leases/wakeups, pre-approval planning, child joining and public
 API/UI remain in the [workflow](issue-563-workflow.md).
 

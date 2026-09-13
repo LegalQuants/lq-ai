@@ -24,6 +24,8 @@ class Gateway:
     def __init__(self):
         self.config = {
             "configuration_revision": "a" * 64,
+            "authority_anonymization_version": 1,
+            "anonymization": {"enabled": True, "apply_at_tiers": [1, 2, 3, 4, 5]},
             "tool_providers": [
                 {
                     "name": "other-statutes",
@@ -34,6 +36,7 @@ class Gateway:
                 },
                 {
                     "name": "statutes",
+                    "anonymize_outbound": True,
                     "type": "govinfo",
                     "enabled": True,
                     "egress_tier": 1,
@@ -58,7 +61,16 @@ class Gateway:
             await self.config_hook()
         return deepcopy(self.config)
 
-    async def call_tool(self, provider, tool, args, *, max_allowed_tier, configuration_revision):
+    async def call_tool(
+        self,
+        provider,
+        tool,
+        args,
+        *,
+        max_allowed_tier,
+        configuration_revision,
+        require_anonymization,
+    ):
         assert configuration_revision == self.config["configuration_revision"]
         self.calls.append((provider, tool, deepcopy(args), max_allowed_tier))
         self.entered.set()
@@ -68,6 +80,7 @@ class Gateway:
             "tool": tool,
             "tier": 1,
             "payload": self.payload,
+            "anonymization_applied": require_anonymization,
             **self.response_changes,
         }
 
@@ -155,7 +168,7 @@ async def test_exact_provider_price_ceiling_and_empty_success(source_env, monkey
     monkeypatch.setattr("app.research.registry.resolve_available_sources", forbidden_resolution)
     await start(env)
     result = await search(env)
-    assert result.data == {"source": "govinfo", "results": []}
+    assert result.data == {"source": "govinfo", "results": [], "anonymization_applied": False}
     assert result.cost_usd == Decimal("0.1250")
     assert (await search(env)) == result
     assert env.gateway.config_reads == 2
@@ -201,7 +214,7 @@ async def test_unavailable_or_changed_config_never_admits(source_env, patch):
     env = source_env
     await start(env)
     env.gateway.config["tool_providers"][1].update(patch)
-    with pytest.raises(Forbidden, match="configuration or pricing"):
+    with pytest.raises(Forbidden, match="configuration, anonymization or pricing"):
         await search(env)
     assert not env.gateway.calls
     async with env.factory.begin() as db:
@@ -252,8 +265,7 @@ async def test_unselected_source_or_operation_refuses_before_config_io(source_en
     assert env.gateway.config_reads == 0
 
 
-async def test_required_anonymization_refuses_before_config_io(source_env):
-    env = source_env
+def require_anonymization(env):
     scope = env.plan.root.model_copy(update={"anonymize": True})
     env.plan = env.plan.model_copy(
         update={
@@ -261,10 +273,59 @@ async def test_required_anonymization_refuses_before_config_io(source_env):
             "children": tuple(c.model_copy(update={"execution": scope}) for c in env.plan.children),
         }
     )
+
+
+async def test_required_anonymization_is_bound_and_receipted(source_env):
+    env = source_env
+    require_anonymization(env)
+    await start(env)
+    first = await search(env)
+    assert first.data["anonymization_applied"] is True
+    assert await search(env) == first
+    assert len(env.gateway.calls) == 1
+
+
+@pytest.mark.parametrize(
+    "mutation", ["provider", "disabled", "tiers", "malformed", "missing", "old_gateway"]
+)
+async def test_unavailable_anonymization_refuses_before_admission(source_env, mutation):
+    env = source_env
+    require_anonymization(env)
+    if mutation == "provider":
+        env.gateway.config["tool_providers"][1]["anonymize_outbound"] = False
+    elif mutation == "disabled":
+        env.gateway.config["anonymization"]["enabled"] = False
+    elif mutation == "tiers":
+        env.gateway.config["anonymization"]["apply_at_tiers"] = [3, 4, 5]
+    elif mutation == "malformed":
+        env.gateway.config["anonymization"] = None
+    elif mutation == "old_gateway":
+        del env.gateway.config["authority_anonymization_version"]
+    else:
+        del env.gateway.config["anonymization"]
     await start(env)
     with pytest.raises(Forbidden, match="anonymization"):
         await search(env)
-    assert env.gateway.config_reads == 0
+    assert not env.gateway.calls
+    async with env.factory.begin() as db:
+        assert await db.get(Effect, (env.root_id, "source:one")) is None
+
+
+@pytest.mark.parametrize("ack", [False, None, "true"])
+async def test_missing_or_wrong_anonymization_ack_is_uncertain(source_env, ack):
+    env = source_env
+    require_anonymization(env)
+    await start(env)
+    env.gateway.response_changes = {"anonymization_applied": ack}
+    with pytest.raises(ValueError, match="response differs"):
+        await search(env)
+    with pytest.raises(Conflict):
+        await search(env)
+    assert len(env.gateway.calls) == 1
+    async with env.factory.begin() as db:
+        effect = await db.get(Effect, (env.root_id, "source:one"))
+        assert effect.status == "uncertain"
+        assert (await db.get(Account, env.root_id)).reserved_usd == effect.reserved_usd
 
 
 async def test_price_change_cannot_reuse_completed_effect_key(source_env):
@@ -422,3 +483,21 @@ async def test_source_binding_is_required_even_with_scoped_guard(source_env):
                 execution_scope=env.plan.root,
             )
     assert not env.gateway.calls
+
+
+async def test_binding_cannot_drop_required_anonymization(source_env, monkeypatch):
+    env = source_env
+    require_anonymization(env)
+    await start(env)
+    original = env.sources.bind
+
+    async def tampered(*args, **kwargs):
+        binding = await original(*args, **kwargs)
+        return binding.model_copy(update={"anonymization_expected": False})
+
+    monkeypatch.setattr(env.sources, "bind", tampered)
+    with pytest.raises(ToolNotGranted, match="source binding"):
+        await search(env)
+    assert not env.gateway.calls
+    async with env.factory.begin() as db:
+        assert await db.get(Effect, (env.root_id, "source:one")) is None

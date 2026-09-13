@@ -901,9 +901,11 @@ now require current token rates, preserve conservative accounting and validate
 gateway route metadata; orchestration tier comparisons follow the gateway's
 lower-number-means-stronger convention. [Gateway revision checks](plans/issue-563-configuration-revisions.md)
 now require dispatch to use the checked configuration and matching adapter;
-successful responses acknowledge the revision. Required tool anonymization,
-shared policy distribution, worker lifecycle and the public orchestration interface
-remain unimplemented; the
+successful responses acknowledge the revision. [Required authority anonymization](plans/issue-563-authority-anonymization.md)
+now transforms bounded GovInfo/EDGAR search queries and validates retrieval IDs,
+with verbatim returned evidence and explicit receipts. General legacy/MCP tool
+anonymization, shared policy distribution, worker lifecycle and the public
+orchestration interface remain unimplemented; the
 [workflow](plans/issue-563-workflow.md) records acceptance progress.
 
 **M4 status: SHIPPED.** The opt-in background executor runs real in-loop work end-to-end. The five-phase LangGraph state machine (intake → analysis → drafting → ethics_review → delivery) lives in `api/app/autonomous/executor.py` (`run_autonomous_session`) + `nodes.py`; every external action routes through the single `guarded_tool_call` chokepoint (`api/app/autonomous/guard.py`) enforcing R5 (external halt + idle watchdog → `SessionHalted`), R6 (`PHASE_GRANTS` phase-gated tool grants → `ToolNotGranted`), and R4 (per-session **and** per-trigger cost cap → `CostCapReached`). The four primitives ship: watches (`api/app/autonomous/watch_trigger.py`, table `autonomous_watches` — migration `0039`), schedules (`api/app/autonomous/cron.py`, table `autonomous_schedules`), per-user memory (`autonomous_memory`), and the precedent board (`precedent_entries` — migration `0039`; `project_context_proposals` — migration `0041`). Honest per-session receipts carry `terminal_reason` (completed / cost_cap_reached / external_halt) via `api/app/autonomous/receipt.py` (`build_receipt` / `build_receipt_safe`). The layer is per-user opt-in, off by default (`User.autonomous_enabled` — migration `0044`), with a full web dashboard at `web/src/routes/lq-ai/autonomous/`. Migration head at M4 close is `0045`. See [HONEST-STATE.md §5](HONEST-STATE.md#5-m4--autonomous-layer-shipped). As of M4 close the **Contract Repository auto-relationship graph** (§3.16) and the MCP-client subsystem (§8.5) remained deferred; the **MCP-client subsystem subsequently shipped** in the legal-research + connectors milestone (#158–#193 — see [DE-200](#de-200--mcp-client-subsystem-in-the-lq-ai-backend) and [HONEST-STATE.md §5.5](HONEST-STATE.md)), while the contract relationship graph remains deferred.

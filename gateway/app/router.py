@@ -53,6 +53,8 @@ from decimal import Decimal
 from typing import Final
 from urllib.parse import urlencode
 
+from app.anonymization.authority import AuthorityAnonymizationRefused, anonymize_authority_args
+from app.anonymization.engine import Anonymizer
 from app.config import (
     MAX_ALIAS_DEPTH,
     CostRateEntry,
@@ -164,6 +166,7 @@ class ToolCallRoutedResult:
     tool: str
     payload: object
     tier: int
+    anonymization_applied: bool = False
 
 
 # --- Resolution data --------------------------------------------------------
@@ -788,6 +791,8 @@ class Router:
         request_id: str,
         max_allowed_tier: int | None = None,
         user_token: str | None = None,
+        require_anonymization: bool = False,
+        anonymizer: Anonymizer | None = None,
     ) -> ToolCallRoutedResult:
         """Govern + dispatch one tool call (ADR 0014 D2/D3/D4).
 
@@ -795,7 +800,8 @@ class Router:
         adapter invoke (which validates SSRF) -> write audit row. Every
         refusal writes a ``refused=True`` row before raising.
         """
-        provider = self.config.tool_provider_by_name(provider_name)
+        config = self.config
+        provider = config.tool_provider_by_name(provider_name)
         adapter = self._tool_adapters.get(provider_name)
         if provider is None or adapter is None:
             await self._tool_egress_log.write(
@@ -840,6 +846,30 @@ class Router:
                 f"egress_tier {provider.egress_tier} exceeds ceiling {max_allowed_tier}"
             )
 
+        if require_anonymization:
+            try:
+                if (
+                    not provider.anonymize_outbound
+                    or not config.anonymization.enabled
+                    or provider.egress_tier not in config.anonymization.apply_at_tiers
+                ):
+                    raise AuthorityAnonymizationRefused("Required anonymization is disabled")
+                args = anonymize_authority_args(
+                    provider.type, tool, args, anonymizer=anonymizer or Anonymizer()
+                )
+            except AuthorityAnonymizationRefused:
+                await self._tool_egress_log.write(
+                    ToolEgressLogRow(
+                        provider=provider_name,
+                        tool=tool,
+                        tier=provider.egress_tier,
+                        refused=True,
+                        refusal_reason="required authority anonymization unavailable",
+                        request_id=request_id,
+                    )
+                )
+                raise ToolEgressRefused("Required authority anonymization unavailable") from None
+
         try:
             result: ToolResult = await adapter.invoke_tool(
                 tool, args, request_id=request_id, user_token=user_token
@@ -864,7 +894,7 @@ class Router:
                 tier=provider.egress_tier,
                 bytes_out=result.bytes_out,
                 bytes_in=result.bytes_in,
-                anonymization_applied=False,
+                anonymization_applied=require_anonymization,
                 refused=False,
                 request_id=request_id,
             )
@@ -874,6 +904,7 @@ class Router:
             tool=tool,
             payload=result.payload,
             tier=provider.egress_tier,
+            anonymization_applied=require_anonymization,
         )
 
     async def _resolve_oauth_provider(

@@ -73,8 +73,9 @@ Scoped external calls require the [exact authority-source binding](issue-563-sou
 That adapter now fixes provider/operation, configured price and egress ceiling
 through guarded dispatch. The legacy external handlers re-resolve providers and
 allow unknown pricing to become zero; orchestration does not use those resolutions.
-Merely selecting a source does not activate it. Required tool anonymization,
-CourtListener's composite operations and MCP remain closed in this adapter.
+Merely selecting a source does not activate it. [Required authority anonymization](issue-563-authority-anonymization.md)
+now has a checked transform and receipt; CourtListener's composite operations
+and MCP remain closed in this adapter.
 
 The optional guard scope narrows calls; it is not proof of durable authorization.
 The [guarded execution adapter](issue-563-guarded-effects.md) now obtains it from

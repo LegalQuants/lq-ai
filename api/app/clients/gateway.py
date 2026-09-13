@@ -704,6 +704,7 @@ class GatewayClient:
         args: dict[str, Any],
         *,
         max_allowed_tier: int | None = None,
+        require_anonymization: bool | None = None,
         configuration_revision: str | None = None,
         user_token: str | None = None,
         request_id: str | None = None,
@@ -726,6 +727,8 @@ class GatewayClient:
         body: dict[str, Any] = {"args": args}
         if configuration_revision is not None:
             headers["X-LQ-AI-Config-Revision"] = configuration_revision
+        if require_anonymization is not None:
+            body["require_anonymization"] = require_anonymization
         if max_allowed_tier is not None:
             body["max_allowed_tier"] = max_allowed_tier
         op = f"call_tool:{provider}/{tool}"

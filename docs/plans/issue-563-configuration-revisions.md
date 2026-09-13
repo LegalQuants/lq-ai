@@ -11,8 +11,10 @@ after the API read the configuration. Response metadata could detect some
 changes, but could not prevent the resulting egress.
 
 `GET /admin/v1/config` now includes an opaque `configuration_revision`: the
-SHA-256 digest of the complete validated configuration serialized as canonical
-JSON. The digest includes credential configuration; the response continues to
+SHA-256 digest of the complete validated configuration and dispatch contract
+version serialized as canonical JSON. The subsequent
+[authority anonymization increment](issue-563-authority-anonymization.md) adds
+contract version 2 so older replicas cannot ignore its required transform. The digest includes credential configuration; the response continues to
 strip encrypted credential fields. Environment variable names are included,
 but their resolved values are not. This is a consistency identifier, not an
 authorization credential. Any configuration change, even unrelated to the
@@ -58,7 +60,8 @@ Special handling to release a proven pre-dispatch refusal is not implemented.
 
 The snapshot is local to one gateway request. It does not distribute current
 operator policy across workers, establish a provider invoice ceiling or revoke
-an already accepted call. Tool anonymization, shared capacity, worker leases and
+an already accepted call. Required authority anonymization is now implemented
+for supported operations; shared capacity, worker leases and
 wakeups, phase reconciliation, pre-approval planning, joining and public API/UI
 remain in the [workflow](issue-563-workflow.md).
 

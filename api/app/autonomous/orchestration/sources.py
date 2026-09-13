@@ -2,8 +2,8 @@
 
 Fetch configuration before opening the guard's transaction. No legacy process
 cache, type-based provider selection, implicit free rate or model-owned binding.
-Gateway configuration revisions are not yet conditional on dispatch; deployment
-must still provide coordinated policy/configuration updates before enablement.
+Bound dispatch requires a gateway configuration revision and verifies the
+requested anonymization outcome. Shared operator policy distribution is separate.
 """
 
 from __future__ import annotations
@@ -36,6 +36,7 @@ class SourceBinding(Snapshot):
     cost_usd: Money
     config_digest: Digest
     gateway_revision: Digest
+    anonymization_expected: bool
 
     @field_serializer("cost_usd")
     def serialize_cost(self, value: Decimal) -> str:
@@ -66,11 +67,6 @@ class AuthoritySources:
             or SOURCE_REGISTRY[source.source_type].adapter is None
         ):
             raise Forbidden(message="Authority source operation is outside approved scope")
-        # Tool dispatch does not yet implement the configured anonymization
-        # transform. Never silently send raw arguments for an anonymized scope.
-        if scope.anonymize:
-            raise Forbidden(message="Authority-source anonymization is not implemented")
-
         config = await self.gateway.get_admin_config()
         try:
             entries = config["tool_providers"]
@@ -87,6 +83,19 @@ class AuthoritySources:
                 or entry["egress_tier"] != source.egress_tier
             ):
                 raise ValueError("provider differs from policy")
+            if scope.anonymize:
+                anon = config["anonymization"]
+                if (
+                    type(config.get("authority_anonymization_version")) is not int
+                    or config["authority_anonymization_version"] != 1
+                    or not isinstance(anon, dict)
+                    or entry.get("anonymize_outbound") is not True
+                    or not isinstance(anon.get("apply_at_tiers"), list)
+                    or any(type(t) is not int for t in anon["apply_at_tiers"])
+                    or anon.get("enabled") is not True
+                    or source.egress_tier not in anon.get("apply_at_tiers", [])
+                ):
+                    raise ValueError("required anonymization unavailable")
             # Gateway JSON/YAML permits numeric extras. Convert their decimal
             # spelling once at this boundary; never do float budget arithmetic.
             raw = entry["cost_per_call"]
@@ -118,10 +127,11 @@ class AuthoritySources:
                     json.dumps(routing, sort_keys=True, allow_nan=False).encode()
                 ).hexdigest(),
                 gateway_revision=config["configuration_revision"],
+                anonymization_expected=scope.anonymize,
             )
         except (KeyError, TypeError, ValueError, ArithmeticError):
             raise Forbidden(
-                message="Authority provider configuration or pricing is unavailable"
+                message="Authority provider configuration, anonymization or pricing is unavailable"
             ) from None
         # A policy refresh while config I/O was pending cannot produce a binding
         # to the previous policy. Durable admission checks current policy again.

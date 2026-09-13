@@ -56,10 +56,11 @@ this increment does not permit replay under revoked or changed configuration.
 - The price is a configured **accounted** per-call charge, not a measured provider
   invoice. The later [direct inference binding](issue-563-inference-bindings.md)
   supplies current token pricing; inference aliases/fallbacks remain closed.
-- Tool-provider `anonymize_outbound` is currently parsed but its transform is not
-  implemented. An orchestration scope requiring anonymization therefore refuses
-  authority dispatch before configuration I/O. This is an explicit enablement
-  dependency, not a claim that the gateway has anonymized the arguments.
+- The subsequent [authority anonymization increment](issue-563-authority-anonymization.md)
+  binds a required transform to current provider/configuration capability and
+  checks its acknowledgement. Search prose is pseudonymized; sensitive or
+  malformed reference arguments refuse. Public response evidence stays verbatim.
+  Arbitrary legacy/MCP argument anonymization remains outside this profile.
 - The subsequent [gateway revision increment](issue-563-configuration-revisions.md)
   checks the API-bound configuration revision before tool dispatch, requires the
   selected adapter to match its provider configuration and pins both for the

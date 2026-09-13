@@ -52,7 +52,7 @@ async def constrain_call(
             or source_binding.source.name not in scope.resources.source_names
             or source_binding.source.egress_tier > scope.maximum_egress_tier
             or source_binding.operation not in source_binding.source.operations
-            or scope.anonymize
+            or source_binding.anonymization_expected is not scope.anonymize
             or set(params) != {"source", "op", "args"}
             or params["source"] != source_binding.source.source_type
             or params["op"] != source_binding.operation

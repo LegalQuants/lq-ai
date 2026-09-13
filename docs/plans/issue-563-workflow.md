@@ -46,7 +46,7 @@ new changes or unresolved concerns.
 | W1 — Governed plan contracts | Strict bounded task data separate from server authority; stable plan identity/revision/hash; immutable approval scope; no model-supplied authority or arbitrary handler. Test malformed/hostile/extra input and scope/version changes. | Complete locally; 96 tests passed |
 | W2 — LangGraph/Postgres integration | Real LQ guard and actual Postgres checkpoints, meaningful multi-step effect boundaries, independent child DB sessions, competing-owner/restart/halt fixtures and uncertain-call handling. Record worker topology and locked saver configuration; no second continuation cursor. | Guarded effect adapter passes fresh-checkpoint and hard-process-death fixtures; final arq/LangGraph worker topology and external integration remain |
 | W3 — Durable run tree and approval | Hierarchy migration/backfill/deletion rules, plan and approval persistence, version-bound approval, durable unique child admission and wakeup recovery. Real Postgres race/crash tests and migration up/down pass. | Persistence core implemented and tested locally; worker/wakeup integration remains |
-| W4 — Authority, accounting and halt | Approved resource subset and current permission checks; inference/egress restrictions; atomic Decimal reservations/settlement; root allowance; fenced execution and cancellation; correct waiting/deadline/watchdog semantics. | Allocations, effect accounting, worker fences, current policy, scoped guard, authority-source and direct inference bindings implemented; tier direction corrected; gateway revision checks and pinned dispatch implemented; tool anonymization and shared policy/capacity/lifecycle remain |
+| W4 — Authority, accounting and halt | Approved resource subset and current permission checks; inference/egress restrictions; atomic Decimal reservations/settlement; root allowance; fenced execution and cancellation; correct waiting/deadline/watchdog semantics. | Allocations, effect accounting, worker fences, current policy, scoped guard, authority-source and direct inference bindings implemented; tier direction corrected; gateway revision checks and pinned dispatch implemented; required authority anonymization implemented; shared policy/capacity/lifecycle remain |
 | W5 — Parallel research and joining | Versioned visible orchestrator skill, isolated skill-backed children, bounded concurrency across root/user/deployment, internal child delivery, root-only output, partial/empty/failure outcomes. Barrier tests prove overlap and restart does not duplicate completed work. | Pending |
 | W6 — API, gateway and receipts | Plan read/approve/reject, tree read, correlation stripped before provider calls, stable child receipts, separate completion/coverage/verification statuses and parent synthesis gate. Update API sketches/generated export, route pins and schema docs with code. | Pending |
 | W7 — Intake and UI | Reuse corrected #410 entry point; explicit plan review, approve/reject, changing child progress, budget breakdown, halt, receipt links and bounded polling/manual refresh. Svelte/Vitest and controlled Cypress flow pass. | Pending |
@@ -186,7 +186,20 @@ cost tests. Uncertain external outcomes remain distinct from completed work.
   Ruff check/format, mypy (200 API / 57 gateway files), OpenAPI local-reference
   validation and diff checks passed. All providers were stubbed; the test
   database was disposable. No production dispatch or publication was enabled.
-- Next: bind tool anonymization, then shared current-policy distribution,
+- W4: [required authority anonymization](issue-563-authority-anonymization.md)
+  now binds the stored scope to a gateway capability, versioned configuration
+  revision and explicit transform acknowledgement. Bounded search queries are
+  pseudonymized; sensitive or malformed reference arguments refuse before egress.
+  Public evidence stays verbatim and the receipt records whether the pass ran.
+  General legacy/MCP anonymization is outside this governed authority profile.
+  The real detector refuses a valid-format EDGAR reference fixture; safer
+  identifier provenance/recognizer handling remains open for those retrievals.
+  Full API: **2,940 passed, one skipped** in 214.25 seconds. Full gateway:
+  **835 passed, three skipped** in 11.47 seconds. Final gateway authority/route
+  regression: **64 passed** in 2.47 seconds. Ruff check/format, mypy (200 API /
+  58 gateway files), OpenAPI reference validation and diff checks passed.
+  Providers were stubbed and the database was disposable; nothing was enabled.
+- Next: shared current-policy distribution,
   worker topology/capacity, queue wakeup recovery and lifecycle handling. No public
   orchestration routes or ordinary workers invoke the store yet. Keep LangGraph
   as proposed.

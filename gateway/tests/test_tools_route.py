@@ -253,6 +253,8 @@ async def test_tool_call_forwards_user_token_to_route_tool_call(monkeypatch) -> 
         request_id: str,
         max_allowed_tier: int | None = None,
         user_token: str | None = None,
+        require_anonymization: bool = False,
+        anonymizer=None,
     ) -> object:
         captured["user_token"] = user_token
         from app.router import ToolCallRoutedResult

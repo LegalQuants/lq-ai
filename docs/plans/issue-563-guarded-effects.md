@@ -101,7 +101,8 @@ shared capacity, queue wakeups and operator policy distribution remain gates.
 implemented for bound inference and authority calls. Root planning before approval, visible
 orchestrator instructions, child result joining and public endpoints/UI also remain
 in their work packages. Scoped authority calls require the subsequently implemented
-source binding; missing pricing and required tool anonymization fail closed.
+source binding; missing pricing fails closed. [Required authority anonymization](issue-563-authority-anonymization.md)
+now runs through a checked gateway transform for supported operations.
 
 Final validation used locked dev/orchestration-test extras and a disposable
 pgvector/Postgres 16 container:

@@ -953,6 +953,7 @@ async def _handle_retrieve_authority(
             args,
             max_allowed_tier=maximum_egress_tier,
             configuration_revision=source_binding.gateway_revision,
+            require_anonymization=source_binding.anonymization_expected,
         )
         if (
             result.get("provider") != provider_name
@@ -960,6 +961,7 @@ async def _handle_retrieve_authority(
             or type(result.get("tier")) is not int
             or result["tier"] != source_binding.source.egress_tier
             or not isinstance(result.get("payload"), dict)
+            or result.get("anonymization_applied") is not source_binding.anonymization_expected
         ):
             raise ValueError("Authority response differs from admitted provider binding")
     # GatewayClient.call_tool returns the envelope {provider, tool, payload, tier};
@@ -975,7 +977,11 @@ async def _handle_retrieve_authority(
             raise ValueError("Authority search response is malformed")
         return ToolResult(
             cost_usd=source_binding.cost_usd,
-            data={"source": source_type, "results": results},
+            data={
+                "source": source_type,
+                "results": results,
+                "anonymization_applied": source_binding.anonymization_expected,
+            },
         )
 
     # ── Normalise via adapter ────────────────────────────────────────────────
@@ -998,7 +1004,13 @@ async def _handle_retrieve_authority(
         # The bounded durable receipt carries evidence for the parent. Do not
         # add an untracked object-storage write to this one admitted provider
         # call or publish a child's evidence into the shared authority cache.
-        return ToolResult(cost_usd=source_binding.cost_usd, data={"authority": authority_data})
+        return ToolResult(
+            cost_usd=source_binding.cost_usd,
+            data={
+                "authority": authority_data,
+                "anonymization_applied": source_binding.anonymization_expected,
+            },
+        )
 
     # ── PR1b: non-fatal cache write ──────────────────────────────────────────
     # Best-effort: any failure (including ValueError for a bad external_ref)
