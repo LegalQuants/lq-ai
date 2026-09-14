@@ -77,7 +77,19 @@ ephemeral planner observations, cleanup after uncertain container creation,
 restart cleanup, daemon-warning refusal and accurate nonzero-exit outcomes.
 The private broker connection is documented in the transparency invariant;
 third-party requests remain gateway-only. CI includes real helper acceptance,
-and the new execution paths are assigned security reviewers in CODEOWNERS.
+and the runner/service paths are assigned security reviewers in CODEOWNERS.
+Bundled script files under `/skills/` still need an explicit security-review
+assignment alongside the existing maintainer/attorney routing.
+
+### Subsequent confidentiality requirements — pending
+
+The later 14 September security discussion adds
+[ADR D8d](../adr/0035-governed-orchestration-run-tree.md#d8d--confidentiality-must-survive-compromised-helper-output).
+The completed increment below does not establish that a hostile helper result
+cannot induce unauthorized disclosure through subsequent model/tool calls or
+persisted reuse. Executable review routing/evidence, those application-flow tests
+and production executor/log-handling separation remain pending before script
+enablement. See [the follow-up workflow](issue-563-workflow.md#skill-confidentiality-follow-up--14-september-2026).
 
 ### Evidence
 
@@ -109,6 +121,8 @@ Test images used for the final acceptance:
 - Broker: `sha256:7bd8da60eec5bc4abcd2b64eb31b667adf12aaa2906f9036814b2f497f3fd253`.
 
 Publication, ADR ratification and operator enablement remain external gates.
+The subsequent confidentiality requirements above add implementation and
+deployment evidence gates; the earlier passing tests do not satisfy them.
 Bundled code still needs review; containers are not a VM security boundary.
 Account/project backups retain their existing policy, and engine failure can
 delay disposal until recovery. These limits are recorded in the deployment guide.

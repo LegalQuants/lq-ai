@@ -51,6 +51,24 @@ review and evidence](issue-563-skill-capabilities.md#completion-and-review--14-s
 record the scope and remaining external gates. ADR D8b/D8c document the extension;
 generated code remains excluded and no application feature was enabled.
 
+### Skill confidentiality follow-up — 14 September 2026
+
+After reviewing other harnesses, Houfu requested an ADR update retaining vetted
+bundled-only execution while addressing review failure and indirect disclosure.
+[ADR D8c/D8d](../adr/0035-governed-orchestration-run-tree.md#d8d--confidentiality-must-survive-compromised-helper-output)
+now require containment of a compromised approved helper, preservation of source
+restrictions through output and persisted reuse, explicit executable security
+review, and a production executor separated from application storage/credentials.
+
+**Pending before production script enablement:** security review routing and
+recorded approval for bundled scripts/dependencies/images; hostile-helper output
+tests through chat, background planning and root/child calls, including later
+workspace reuse; and deployment/operational-log separation evidence. The 34
+capability tests remain evidence for the original increment at `b8d782f43`; they
+do not establish the strengthened end-to-end confidentiality requirement.
+This follow-up updates documentation only. It does not implement the pending
+controls, demonstrate an exploit, record ratification or authorize publication.
+
 ### Continuous demonstration task — owner direction, 14 September 2026
 
 Continue across work packages without stopping for another instruction to
