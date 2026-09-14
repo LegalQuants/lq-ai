@@ -3,7 +3,8 @@
 The local demonstration lets an owner approve parallel agent work, monitor it and
 inspect the combined result. It is available in the unpublished implementation
 under **Autonomous sessions → Orchestration demo**, behind an operator setting.
-See the [implementation overview](issue-563-workflow.md) for release status.
+See the [feature PRD](../prds/issue-563-governed-orchestration.md) for requirements
+and release status.
 
 ## User-visible behavior
 

@@ -218,8 +218,8 @@ not establish the complete confidentiality objective.
 
 The [research note](../research/issue-563-harness-research.md) preserves the findings,
 source comparisons and experiment limits, with links to the full assessment. The
-[implementation overview](../plans/issue-563-workflow.md) summarizes delivered
-capabilities, validation limits and remaining release work. The
+[feature PRD](../prds/issue-563-governed-orchestration.md) defines user needs,
+requirements, acceptance criteria and release conditions. The
 [skill capability summary](../plans/issue-563-skill-capabilities.md) and
 [draft operator notes](../deploy/skill-capabilities.md) describe behavior and
 operational limits. These documents do not constitute ratification or shipped

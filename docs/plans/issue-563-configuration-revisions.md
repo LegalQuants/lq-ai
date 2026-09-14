@@ -63,7 +63,7 @@ operator policy across workers, establish a provider invoice ceiling or revoke
 an already accepted call. Required authority anonymization is now implemented
 for supported operations; shared capacity, worker leases and
 wakeups, phase reconciliation, pre-approval planning, joining and public API/UI
-remain in the [workflow](issue-563-workflow.md).
+remain in the [feature PRD](../prds/issue-563-governed-orchestration.md).
 
 ## Validation
 

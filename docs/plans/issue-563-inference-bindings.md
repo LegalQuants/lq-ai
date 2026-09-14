@@ -103,7 +103,7 @@ checkpoint compatibility.
 [Required authority anonymization](issue-563-authority-anonymization.md) is now
 implemented for supported operations. CourtListener composite operations, worker topology,
 shared capacity, leases/wakeups, pre-approval planning, child joining and public
-API/UI remain in the [workflow](issue-563-workflow.md).
+API/UI remain in the [feature PRD](../prds/issue-563-governed-orchestration.md).
 
 Tests use disposable Postgres and stub providers. They cover direct route/price
 binding, tier precedence, approval/resource enforcement, invalid/free rates,

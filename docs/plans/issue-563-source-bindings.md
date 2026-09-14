@@ -86,5 +86,5 @@ Full API regression (`pytest -n 4 -q`): **2,881 passed, one skipped** in 210.96
 seconds. Final orchestration and guard checks, including the subsequent numeric
 rate magnitude guard: **155 passed** in 11.58 seconds, including **35** source
 cases. Ruff check/format, mypy (**199 source files**) and `git diff --check` passed.
-The [workflow](issue-563-workflow.md) records remaining work. No live providers,
+The [feature PRD](../prds/issue-563-governed-orchestration.md) records remaining work. No live providers,
 production migrations, feature enablement or publication were involved.

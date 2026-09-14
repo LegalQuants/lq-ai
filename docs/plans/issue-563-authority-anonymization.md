@@ -81,7 +81,7 @@ to support those references without weakening the privacy requirement.
 
 Shared current-policy distribution, worker scheduling/capacity, lease/wakeup and
 phase reconciliation, pre-approval planning, joins and public API/UI remain in the
-[workflow](issue-563-workflow.md). Accounting is the existing configured per-call
+[feature PRD](../prds/issue-563-governed-orchestration.md). Accounting is the existing configured per-call
 charge, not a provider invoice guarantee. Failed gateway calls retain conservative
 uncertainty even when the gateway reports a pre-dispatch refusal.
 
