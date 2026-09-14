@@ -54,7 +54,8 @@ these, not against general popularity:
    (ADR 0031).
 4. **Accessibility is gated in CI** at WCAG 2.1 AA, including on generated pages.
 5. **`/trust/` URLs stay stable** because procurement memos cite them. GitHub Pages
-   cannot send server redirects, so stability comes from naming discipline.
+   cannot configure redirects between a site's own pages, so stability comes from naming
+   discipline.
 6. **Latest-only until 1.0**, with per-page status badges and no versioned docs.
 7. **Non-engineers author pages.** Practising lawyers and compliance professionals write
    and review in plain Markdown.
@@ -143,10 +144,20 @@ these, not against general popularity:
   security review. Its actions are pinned by SHA, like the existing workflows.
 - **Starlight is pre-1.0.** Minor releases can break things, so upgrades are deliberate
   pin bumps with a local build, not auto-merged.
-- **The launch URL base is `/lq-ai/`.** Adopting a custom domain later changes every URL.
-  Because `/trust/` carries a stability commitment and Pages cannot redirect, the
-  domain question has to be settled before any `/trust/` page is published. This ADR
-  does not settle it (see below).
+- **The launch URL base is `/lq-ai/`.** One later move to a custom domain is cheap.
+  GitHub answers every `legalquants.github.io/lq-ai/<path>` request with a permanent
+  redirect to `<custom-domain>/<path>` (observed on two such project sites on
+  2026-09-14), so cited URLs keep resolving for as long as that domain stays set.
+  A second move, from one custom domain to another, is expensive. A Pages site holds one
+  custom domain and cannot redirect a previous one, so the old domain would have to stay
+  registered and be redirected outside GitHub for as long as anyone cites it. The final
+  domain is therefore chosen once, before `/trust/` is offered as a citable reference,
+  and verified at the organization level before use. This ADR does not choose it (see
+  below).
+- **The base path is configuration, never content.** Nothing in page content, link
+  rewriting, or generated absolute URLs (`/llms.txt`, canonical tags, the offline
+  bundle) hard-codes `/lq-ai/`, so the one move above is a configuration change and a
+  rebuild.
 - **Previews cannot deploy to Pages.** The environment rule refuses deploys from branches
   and PRs. Until preview hosting is decided, PR builds are checked in CI and made
   available as build artifacts.
