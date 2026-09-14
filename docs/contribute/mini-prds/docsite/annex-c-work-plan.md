@@ -8,7 +8,7 @@ thereafter.
 
 All numbers are **estimates for planning, not commitments** — a contributor claiming an
 item is expected to re-size it. Nothing here is assigned to anyone. Review is by the
-maintainer by default; because content stays in the repository (ADR 0036), CODEOWNERS
+maintainer by default; because content stays in the repository (ADR 0028), CODEOWNERS
 routing for security, compliance and skills paths applies as it does today.
 
 ---
