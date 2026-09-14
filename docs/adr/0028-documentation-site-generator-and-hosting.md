@@ -1,4 +1,4 @@
-# ADR 0036 — Documentation-site generator and hosting: Astro Starlight on GitHub Pages
+# ADR 0028 — Documentation-site generator and hosting: Astro Starlight on GitHub Pages
 
 **Status:** Proposed (2026-09-14) — for the weekly call
 **Date:** 2026-09-14
