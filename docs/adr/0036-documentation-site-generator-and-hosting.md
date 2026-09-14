@@ -13,8 +13,9 @@ ADR-first workflow rather than letting a PRD sentence stand in for it.
 review), ADR [0023](0023-uv-lockfiles-gateway-api.md) (lockfiles and supply-chain
 posture, extended here to a new npm tree), ADR
 [0025](0025-release-versioning-and-pipeline-ordering.md) (release versions; the site is
-latest-only until 1.0), PR #511 (the mini-PRD whose requirements this ADR tests
-against).
+latest-only until 1.0), ADR 0031 (headless / API-only use, proposed in PR #564: the site
+does not document building against LQ.AI), PR #511 (the mini-PRD whose requirements this
+ADR tests against).
 
 ## Context
 
@@ -48,8 +49,9 @@ these, not against general popularity:
    commit stamps, and applies exclusion rules.
 2. **A machine surface is a launch gate, not an extra.** That means `/llms.txt`, a `.md`
    version at every page URL, and an offline full-text bundle (Annex C item C3).
-3. **Reference pages are generated.** They are built from the OpenAPI export, the
-   Pydantic config models, skill frontmatter, and the ADR directory (C17, C18, C22).
+3. **Reference pages are generated.** They are built from the Pydantic config models,
+   skill frontmatter, and the ADR directory (C17, C18, C22). No API reference is published
+   (ADR 0031).
 4. **Accessibility is gated in CI** at WCAG 2.1 AA, including on generated pages.
 5. **`/trust/` URLs stay stable** because procurement memos cite them. GitHub Pages
    cannot send server redirects, so stability comes from naming discipline.
@@ -92,8 +94,9 @@ these, not against general popularity:
 ## Decision
 
 1. **Hosting: GitHub Pages on `LegalQuants/lq-ai`.** A GitHub Actions workflow deploys
-   the site from `main` only, matching the existing `github-pages` environment rule. No
-   third-party hosting or build service sits in the publishing path.
+   the site from `main` only, matching the existing `github-pages` environment rule. The
+   repository's maintainers operate the deployment as they operate CI. No third-party
+   hosting or build service sits in the publishing path.
 
 2. **Generator: Astro Starlight, isolated in a top-level `site/` directory.**
    - `site/` has its own `package.json` and committed lockfile, with exact version pins
@@ -133,7 +136,7 @@ these, not against general popularity:
 - **A new build-time npm dependency tree enters the SBOM.** It is never shipped in a
   release image. The justification CLAUDE.md asks for:
   - The PRD needs a machine surface, generated references, and an accessibility gate
-    across roughly 70 pages.
+    across roughly 60 pages.
   - Building and maintaining a generator for that is not a reasonable use of project
     capacity.
 - **The deploy workflow lives under `.github/workflows/`**, so CODEOWNERS routes it to
@@ -180,14 +183,14 @@ these, not against general popularity:
 
 ## Explicitly not decided
 
-- **Custom domain and final URL shape**, and who operates Pages and DNS (PR #511,
-  decision 6).
-- **Preview hosting for docs PRs.**
+- **Custom domain and final URL shape** (an open question in PR #511; the site launches
+  at `legalquants.github.io/lq-ai/`).
+- **Preview hosting for docs PRs** (open in PR #511; until then, PR builds are CI
+  artifacts).
 - **The accessibility tool** used for the WCAG 2.1 AA gate. That is chosen at scaffold
   (Annex C item C1).
-- **The priority, scope, quality rules, and mentors of the site itself.** Those are
-  decisions 2–5 of PR #511 and belong to the committee's review of the mini-PRD, not to
-  this ADR.
+- **The site's scope, page plan and priorities.** PR #511 holds those; they are not
+  architectural and do not need an ADR.
 
 ## References
 
