@@ -4,7 +4,7 @@
 >
 > **Honesty contract (same as [HONEST-STATE.md](HONEST-STATE.md)):** every cell in the coverage matrix cites a real file in this repository. Gaps are stated as gaps with a pointer to the roadmap item or DE row that closes them. If a claim here disagrees with the codebase, the codebase is canonical — please open an issue.
 
-Counts and CI facts below were verified on 2026-07-25 (`main`-based branch). Reproduce any count with the command shown; none require standing up the stack.
+Counts and CI facts below were verified on 2026-09-15 against `main` at `791309cf4`. Reproduce any count with the command shown; none require standing up the stack.
 
 ---
 
@@ -12,19 +12,19 @@ Counts and CI facts below were verified on 2026-07-25 (`main`-based branch). Rep
 
 | Suite | Files | Where | Reproduce count |
 |---|---|---|---|
-| Backend (api) pytest | 236 | `api/tests/` (root 131 + `autonomous/` 49 + `integration/` 21 + `citation/` 21 + `tabular/` 7 + `models/` 3 + `chat/` 2 + `playbooks/` 2) | `find api/tests -name "test_*.py" \| wc -l` |
-| Gateway pytest | 71 | `gateway/tests/` (incl. `anonymization/` 7) | `find gateway/tests -name "test_*.py" \| wc -l` |
-| Web unit (Vitest) | 80 | `web/src/` (71 in `lib/lq-ai`, 9 in `routes/lq-ai`) | `find web/src -name "*.test.ts" \| wc -l` |
-| Web E2E (Cypress) | 17 spec files — **16 with tests**; `documents.cy.ts` is an empty shell | `web/cypress/e2e/` | `ls web/cypress/e2e/*.cy.ts \| wc -l` |
+| Backend (api) pytest | 238 | `api/tests/` (root 131 + `autonomous/` 51 + `integration/` 21 + `citation/` 21 + `tabular/` 7 + `models/` 3 + `chat/` 2 + `playbooks/` 2) | `find api/tests -name "test_*.py" \| wc -l` |
+| Gateway pytest | 74 | `gateway/tests/` (incl. `anonymization/` 7) | `find gateway/tests -name "test_*.py" \| wc -l` |
+| Web unit (Vitest) | 84 | `web/src/` (74 in `lib/lq-ai`, 9 in `routes/lq-ai`, 1 in `lib/`) | `find web/src -name "*.test.ts" \| wc -l` |
+| Web E2E (Cypress) | 13 spec files, all LQ.AI-authored | `web/cypress/e2e/` | `ls web/cypress/e2e/*.cy.ts \| wc -l` |
 | Cross-cutting contract | 2 | `tests/` (`test_error_code_contract.py`, `test_observability.py`) | `ls tests/test_*.py` |
 | Slack bridge pytest | 3 | `slack-bridge/tests/` (`test_signing.py`, `test_oauth.py`, `test_config.py`) | `ls slack-bridge/tests/test_*.py` |
 | Teams bridge pytest | 2 | `teams-bridge/tests/` (`test_oauth.py`, `test_config.py`) | `ls teams-bridge/tests/test_*.py` |
 | Word add-in (Vitest) | 2 | `word-addin/src/taskpane/__tests__/` (`auth.test.ts`, `version.test.ts`) | `ls word-addin/src/taskpane/__tests__/` |
 | Desktop launcher (Vitest) | 9 | `desktop/src/core/*.test.ts` + `desktop/src/main/orchestrator.test.ts` | `find desktop/src -name "*.test.ts" \| wc -l` |
 
-Of the 17 Cypress spec files, four are inherited from upstream OpenWebUI (`chat.cy.ts`, `documents.cy.ts`, `registration.cy.ts`, `settings.cy.ts`); the other 13 are LQ.AI-authored (the `m2-*`/`m3-*`/`m4-*` and `wave-*` specs).
+All 13 Cypress spec files are LQ.AI-authored (the `m2-*`/`m3-*`/`m4-*` and `wave-*` specs). The four specs inherited from upstream OpenWebUI (`chat.cy.ts`, `documents.cy.ts`, `registration.cy.ts`, `settings.cy.ts`) were removed with the OpenWebUI v0.11.0 rebase (#541).
 
-The E2E tool is **Cypress**, not Playwright. Older prose (CONTRIBUTING.md "End-to-end tests — Playwright"; the `e2e` pytest marker text in `api/pyproject.toml`) predates that reality; no Playwright tests exist in the repository.
+The E2E tool is **Cypress**, not Playwright. The `e2e` pytest marker text in `api/pyproject.toml` ("end-to-end tests via Playwright") predates that reality; no Playwright tests exist in the repository.
 
 ---
 
@@ -32,11 +32,12 @@ The E2E tool is **Cypress**, not Playwright. Older prose (CONTRIBUTING.md "End-t
 
 Read the workflows yourself: [.github/workflows/ci.yml](../.github/workflows/ci.yml), [stack-smoke.yml](../.github/workflows/stack-smoke.yml), [release.yml](../.github/workflows/release.yml), [desktop-release.yml](../.github/workflows/desktop-release.yml).
 
-**`ci.yml`** — on every PR (any target branch) and pushes to `main`. Three jobs:
+**`ci.yml`** — on every PR (any target branch) and pushes to `main`. Four jobs:
 
 - **Web:** `npm run check:lq-ai` (svelte-check scoped to LQ.AI-owned code; upstream OpenWebUI debt tracked as DE-262) + `npm run test:frontend -- --run` (Vitest).
-- **API:** `ruff check api scripts`, `ruff format --check`, `mypy app` (standard mode), `pytest -q` against a real `pgvector/pgvector:pg16` service container (`api/tests/conftest.py` creates a fresh per-run database).
-- **Gateway:** `ruff check gateway`, `ruff format --check`, `mypy app` (`--strict` per config), `pytest -q` (no service containers).
+- **API:** `uv lock --check` (lockfile freshness gate, ADR 0023) and `uv sync --frozen --extra dev`, then `ruff check api scripts`, `ruff format --check api scripts`, `mypy app` (standard mode), and `pytest -n auto -q` (pytest-xdist) against a real `pgvector/pgvector:pg16` service container (`api/tests/conftest.py` creates a fresh per-run database).
+- **Gateway:** `uv lock --check` and `uv sync --frozen --extra dev`, then `ruff check gateway`, `ruff format --check gateway`, `mypy app` (`--strict` per config), `pytest -q` (no service containers).
+- **Release image (skills corpus):** `./scripts/release-image-check.sh` on a recursive checkout — builds only the `skills` stage of `api/Dockerfile.release` and asserts the community skill manifests are baked in; runs no test suites.
 
 **`stack-smoke.yml`** — on dependency-manifest/Dockerfile/migration PR paths, pushes to `main`, and manual dispatch. Runs `scripts/stack-smoke.sh`: builds every default-profile compose image, boots the stack to healthy (api boot runs `alembic upgrade head`), probes health endpoints and lazily-imported deps, soaks, asserts no restarts. It proves "builds, migrates, boots, and holds" — **not** that features work.
 
@@ -48,7 +49,7 @@ Read the workflows yourself: [.github/workflows/ci.yml](../.github/workflows/ci.
 
 | Not in CI | Where it lives | Closed by |
 |---|---|---|
-| Cypress E2E (all 17 specs) | `web/cypress/e2e/` | roadmap 4.2 |
+| Cypress E2E (all 13 specs) | `web/cypress/e2e/` | roadmap 4.2 |
 | Coverage measurement or gate (no `--cov` anywhere in workflows) | — | roadmap 4.3 |
 | Provider-marked tests (`pytest -m provider`) | `gateway/tests/test_anthropic_provider.py`, `test_inference_anthropic.py`, `test_courtlistener_live.py` | operator-run only (need real API keys) |
 | Cross-cutting contract tests | `tests/` | not wired into any workflow |
@@ -56,7 +57,7 @@ Read the workflows yourself: [.github/workflows/ci.yml](../.github/workflows/ci.
 | Word add-in Vitest | `word-addin/src/taskpane/__tests__/` | not wired into any workflow |
 | Desktop Vitest on PRs | `desktop/src/` | runs only at desktop-release tag time |
 
-Note the aspirational prose elsewhere: CONTRIBUTING.md says "CI enforces no-decrease coverage" and "provider tests run nightly" — neither is wired today. This document is the honest statement of record until 4.2/4.3 land.
+Note: CONTRIBUTING.md and CLAUDE.md already say that current PR CI enforces no coverage threshold and runs no browser end-to-end tests; the `e2e` pytest marker text in `api/pyproject.toml` still names Playwright. This document is the honest statement of record until 4.2/4.3 land.
 
 ---
 
@@ -66,7 +67,7 @@ Columns: **Smoke** (it renders / the route answers), **Happy path** (the primary
 
 | Surface | Milestone | Smoke | Happy path | Edge cases | Gaps |
 |---|---|---|---|---|---|
-| Chat & conversational | M1 | `web/cypress/e2e/registration.cy.ts`; `web/cypress/e2e/chat.cy.ts` (upstream) | `web/cypress/e2e/wave-d1-power-features.cy.ts` (enhance prompt, KB attach, receipts drawer); `api/tests/test_chats_send_message.py`, `api/tests/test_chat_rag.py` | tier-floor refusal + admin override + member-no-override (`wave-d1-power-features.cy.ts`); `api/tests/test_chats_tier_floor.py`; `gateway/tests/test_inference_tier_floor.py` | — |
+| Chat & conversational | M1 | — | `web/cypress/e2e/wave-d1-power-features.cy.ts` (enhance prompt, KB attach, receipts drawer); `api/tests/test_chats_send_message.py`, `api/tests/test_chat_rag.py` | tier-floor refusal + admin override + member-no-override (`wave-d1-power-features.cy.ts`); `api/tests/test_chats_tier_floor.py`; `gateway/tests/test_inference_tier_floor.py` | no Cypress smoke spec since the upstream `chat.cy.ts` and `registration.cy.ts` were removed (#541) |
 | App chrome / dashboard / trust surfaces | M1 | `web/cypress/e2e/wave-a-chrome.cy.ts` (tabs, role-aware visibility, ambient footer) | `web/cypress/e2e/wave-b-surfaces.cy.ts` (dashboard, trust cards, developer cards) | role-gated tab visibility (`wave-a-chrome.cy.ts`) | — |
 | Matters / projects | M1 | `web/cypress/e2e/wave-c-matters.cy.ts` (routes, modal) | create matter → workspace → chat-in-matter (`wave-c-matters.cy.ts`); `api/tests/test_projects_endpoints.py` | privileged matter without tier floor → validation error (`wave-c-matters.cy.ts`); `api/tests/integration/test_projects_sandbox_concurrency.py` | — |
 | Knowledge bases / ingestion | M1 | — | KB create → PDF upload → ingest to `ready` (`web/cypress/e2e/wave-m1-final-surfaces.cy.ts` Test 2 — real ingest round-trip, 90s response timeout in `web/cypress.config.ts`); `api/tests/test_knowledge_endpoints.py`, `api/tests/test_pipeline_ingest.py` | non-UTF-8 → `decode_error` (`api/tests/test_pipeline_parsers_text.py`); retrieval audit (`api/tests/test_kb_retrieval_audit.py`) | DOCX ingest is roadmap (DE-332 shipped text/md only) |
@@ -80,7 +81,7 @@ Columns: **Smoke** (it renders / the route answers), **Happy path** (the primary
 | Intake bridges (Slack/Teams) | M3 (partial) | — | request signing, OAuth install, config (`slack-bridge/tests/test_signing.py`, `slack-bridge/tests/test_oauth.py`, `teams-bridge/tests/test_oauth.py`); api side (`api/tests/test_integrations_slack.py`, `test_integrations_teams.py`, `test_admin_intake_bridges.py`) | — | never exercised against live Slack/Microsoft endpoints (DE-312); bridge suites not in CI; no E2E |
 | Autonomous layer | M4 | opt-in gating / tab visibility (`web/cypress/e2e/m4-autonomous.cy.ts` Scenario 1) | receipt view, memory keep, precedent dismiss, run-now (`m4-autonomous.cy.ts` Scenarios 2–6); `api/tests/autonomous/test_executor_real_work.py`, `test_sessions_api.py` | brakes R4/R5/R6 (`api/tests/autonomous/test_brakes.py`, `test_r4_per_trigger_cap.py`, `test_idle_watchdog.py`, `test_spawn_optin_guard.py`); gateway-error path (`test_executor_gateway_error.py`) | Cypress scenarios are network-stubbed, not live-executor E2E |
 | Legal research / fiduciary layer | post-M4 | — | `api/tests/test_research_endpoints.py`, `test_research_service.py`; ledger + gate (`api/tests/integration/test_citation_ledger.py`, `test_fiduciary_gate.py`); tool-loop (`api/tests/integration/test_chat_tool_loop_send.py`); adapters (`gateway/tests/test_courtlistener_adapter.py`, `test_edgar_adapter.py`, `test_govinfo_adapter.py`, `test_eurlex_adapter.py`) | fail attribution (`api/tests/integration/test_caselaw_fail_attribution.py`); treatment concurrency (`api/tests/citation/test_treatment_concurrency.py`); tool rate-limit (`gateway/tests/test_tool_ratelimit.py`) | no Cypress spec for research/"Sources consulted" UI |
-| Admin & settings | M1–M4 | `web/cypress/e2e/settings.cy.ts` (upstream modals); fresh-install login UX (`web/cypress/e2e/m3-0-fresh-install-login.cy.ts`) | `api/tests/test_admin_provider_keys.py`, `test_admin_users_list.py`, `test_admin_tool_providers.py` | bootstrap-hint 401 discrimination (`m3-0-fresh-install-login.cy.ts`); MFA + session timeout (`api/tests/test_mfa.py`, `test_session_timeout_mfa_mandatory.py`) | — |
+| Admin & settings | M1–M4 | fresh-install login UX (`web/cypress/e2e/m3-0-fresh-install-login.cy.ts`) | `api/tests/test_admin_provider_keys.py`, `test_admin_users_list.py`, `test_admin_tool_providers.py` | bootstrap-hint 401 discrimination (`m3-0-fresh-install-login.cy.ts`); MFA + session timeout (`api/tests/test_mfa.py`, `test_session_timeout_mfa_mandatory.py`) | no Cypress spec for the settings modals since the upstream `settings.cy.ts` was removed (#541) |
 | Gateway inference & providers | M1–M2 | `gateway/tests/test_health.py` | per-provider adapters (`gateway/tests/test_anthropic_adapter.py`, `test_openai_adapter.py`, `test_azure_openai_adapter.py`, `test_ollama_adapter.py`); streaming/routing (`test_inference_streaming_routing_log.py`) | provider error mapping (`gateway/tests/test_provider_error_mapping.py`); guarded egress (`test_guarded_egress.py`); live-provider tests gated `-m provider` | live-provider tests never run in CI |
 | Security & transparency invariants | cross-cutting | — | transparency invariants (`api/tests/test_transparency_invariants.py`); audit log (`api/tests/test_audit_log.py`); secrets (`gateway/tests/test_secrets.py`); encryption (`api/tests/test_encryption.py`) | receipt PII-sentinel assertions (`api/tests/autonomous/test_sessions_api.py`); error-code contract across subsystems (`tests/test_error_code_contract.py`) | `tests/` contract suite not in CI; injection/PII detection-rate measurement → DE-239/DE-240 |
 | Desktop launcher | post-M4 | — | `desktop/src/core/engine.test.ts`, `desktop/src/core/compose.test.ts`, `desktop/src/main/orchestrator.test.ts` | `desktop/src/core/ports.test.ts`, `desktop/src/core/secrets.test.ts` | runs in CI only at `desktop-v*` tag time; no E2E |
@@ -140,10 +141,9 @@ Known non-deterministic tests. A flake stays listed until the fix merges with a 
 
 | Gap | Impact | Closed by |
 |---|---|---|
-| Cypress not in CI | the 16 live E2E specs only run when someone runs them | roadmap 4.2 |
+| Cypress not in CI | the 13 E2E specs only run when someone runs them | roadmap 4.2 |
 | No coverage measurement/gate | the 80% api / 90% gateway targets are aspirational; no floor is enforced | roadmap 4.3 (ratchet from measured floor) |
 | Bridge, word-addin, and cross-cutting `tests/` suites not in any workflow | regressions in those packages land silently | fold into 4.2/4.3 wiring |
-| `documents.cy.ts` empty shell | inventory overstates E2E count by one | delete or populate during 4.2 |
 | No mutation / property-based / a11y / contract / chaos / perf testing | see the engineering-discipline roadmap | 4.4–4.9, DE-229/230/231/232, DE-250/251/252/253 |
 | No eval harness for skill substantive quality | "passes tests" ≠ "correct legal work product" | DE-237 |
 
