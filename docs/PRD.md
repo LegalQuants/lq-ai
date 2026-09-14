@@ -4517,6 +4517,8 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 #### DE-333 — Dedupe correlated artifact storage-failure warn findings
 
+**Status: Shipped (post-v0.7.1).** The drafting node's artifact dispatch loop (`api/app/autonomous/nodes.py`) records `storage_error` outcomes and emits after the loop: one failure keeps the per-artifact `warn` message; two or more emit one aggregated `warn` finding naming every failed artifact and carrying their distinct error messages, because the per-attempt `emit_artifact` audit rows record the outcome but not the error. It aggregates every storage failure in the pass rather than detecting correlation. The per-attempt audit rows are otherwise unchanged. Test: `api/tests/autonomous/test_executor_real_work.py::test_drafting_multiple_storage_errors_emit_one_aggregated_warn`.
+
 **Priority:** P3 · **Effort:** S
 
 **Context:** When an opted-in autonomous run emits N artifacts and object storage (MinIO) is down, the drafting node's dispatch loop produces one `storage_error` result — and therefore one `warn` finding — per artifact: N near-identical "artifact could not be stored" findings for a single underlying outage. A natural bound already exists (the artifact list comes from a single analysis response, so N is limited by the response token budget), and each finding is individually honest, so this is noise rather than harm — which is why it was deferred rather than absorbed into the Donna-#8 work.
