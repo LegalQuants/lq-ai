@@ -1,623 +1,230 @@
 # ADR 0035 — Governed orchestration on the autonomous executor
 
-**Status:** Proposed — open for comment; not ratified and not a shipped capability.
-**Date:** 2026-09-12
-**Updated:** 2026-09-14 — optional skill persistence, bundled helpers and confidentiality requirements.
-**Owner:** Issue #563 maintainers; ratifying and security reviewers to be recorded below.
-**Tracks:** [Issue #563](https://github.com/LegalQuants/lq-ai/issues/563).
-**Proposed amendments:** ADR 0013 D1 (one level of delegation), ADR 0020 D2/D4/D7
-(orchestrator lifecycle, tree budgets and internal child delivery), and ADR 0016 P5
-(explicit transaction boundaries around external effects). Existing single-session
-behavior and the gateway boundary remain the baseline until implementation lands.
+**Status:** Proposed; ratification pending.
+**Date:** 2026-09-12 · **Updated:** 2026-09-14
+**Tracks:** [Issue #563](https://github.com/LegalQuants/lq-ai/issues/563)
 
 ## Context
 
-A lawyer should be able to describe a matter, select documents and enabled research
-sources, review a proposed topic plan, and approve parallel research children. The
-root collects each child's outcome and produces an inspectable result. Research is
-the first example of an orchestration profile, not a replacement for existing
-single-session, watch or scheduled execution.
+LQ.AI needs parallel agent work that can pause for approval, survive interruption
+and retain the application's authority, budget and audit controls. Skills may
+also need reusable storage and executable helpers. Confidential documents must
+remain protected even when an approved helper is compromised.
 
-The original epic proposed sequential children, approval only above a threshold,
-custom Postgres/arq continuation, and a replayable JSONL transcript. Subsequent
-requirements and research changed that proposal. Parallel children and approval
-before **any child runs** are required in the first release. This ADR proposes
-LangGraph for execution continuation, retaining arq for scheduling and LQ-owned
-records for governance, subject to production integration acceptance. A successful
-orchestration test may return no research results; it must prove control flow,
-persistence and governance rather than legal quality.
+The first profile demonstrates planning, approval, delegation, monitoring,
+collection and synthesis with sample findings. Substantive research quality and
+additional verification are outside that demonstration's scope; existing
+governance and honest evidence status remain mandatory.
 
-The owner's 14 September implementation direction narrows the first visible
-skills to an orchestration demonstration: plan, approve, delegate, monitor,
-collect and synthesize sample findings. This is a technical utility, not a new
-substantive research skill. Research quality and expanded verification are not
-acceptance gates for this demonstration; existing controls and honest unverified
-outcomes remain required. This local clarification does not record ratification
-or enable the feature.
+## Proposed decision
 
-The subsequent security discussion retains optional skill persistence and
-bundled-only execution. Vetting reduces the likelihood of harmful code; the
-execution and data-handling boundaries must also contain a compromised approved
-helper. D8c/D8d distinguish implemented isolation from additional confidentiality
-requirements and acceptance evidence still needed before production enablement.
-
-The code baseline for this draft is main at
-[`27c4521`](https://github.com/LegalQuants/lq-ai/commit/27c4521de0174a48070484cbaf66b7716432076a),
-including PR #411's resource-visibility checks. The existing executor has a
-five-phase LangGraph without a checkpointer. Its analysis node contains multiple
-model/tool calls; adding checkpoints only between phases would not make those
-individual effects recoverable. See [executor](../../api/app/autonomous/executor.py),
-[analysis](../../api/app/autonomous/nodes.py), [guard](../../api/app/autonomous/guard.py)
-and [state](../../api/app/autonomous/state.py).
-
-This proposal builds on [ADR 0013](0013-autonomous-layer-design-influences.md),
-[ADR 0014](0014-gateway-egress-boundary-for-tool-providers.md),
-[ADR 0015](0015-governed-tool-calling-model.md),
-[ADR 0016](0016-transparency-and-governance-invariants.md),
-[ADR 0018](0018-citation-ledger-and-fiduciary-grade-output.md) and
-[ADR 0020](0020-governed-agentic-legal-matter-sessions.md).
-ADR 0013 and ADR 0016 currently retain **Proposed** headers even though deployed
-code implements their invariants. This draft does not silently accept either
-document wholesale; ratification must record the precise amendments adopted here.
-
-## Research and evidence
-
-The [saved assessment](https://github.com/LegalQuants/lq-ai/blob/4ac3fee64/outputs/issue-563-prior-art.md)
-and [prototype report and sources](https://github.com/LegalQuants/lq-ai/tree/4ac3fee64/outputs/issue-563-spike)
-are the dated evidence behind this draft. They are research artifacts, not
-application code or an accepted architecture.
-
-Subsequent local implementation records are included with this documentation PR.
-Start with [the workflow and current status](../plans/issue-563-workflow.md), then
-the [orchestration demonstration](../plans/issue-563-demonstration.md),
-[run working files](../plans/issue-563-workspace.md) and
-[optional skill capabilities](../plans/issue-563-skill-capabilities.md).
-The workflow links the earlier contracts, Postgres, authority, recovery and
-runtime-maintenance records. These are dated reports of local checks; their
-implementation commits remain unpublished and their test counts are not CI
-results for this documentation branch. Later records can supersede an earlier
-increment's integration limits. Ratification and the remaining production gates
-stay explicit below.
-
-| Reference | Finding and consequence for this proposal |
-|---|---|
-| [Anthropic research system](https://www.anthropic.com/engineering/multi-agent-research-system) | A lead assigns isolated research topics and synthesizes results. Adopt explicit questions, boundaries and artifact references; the account does not determine LQ worker topology or prove legal-research quality. |
-| [Open Deep Research](https://github.com/langchain-ai/open_deep_research/blob/1b7d2e80db9faa586165c60e09096dbbfd483a64/src/open_deep_research/deep_researcher.py) | Inspectable supervisor/researcher separation and parallel batches. Retain a typed outcome per topic and add durable user approval; concurrent calls alone do not establish restart safety. |
-| [Deep Agents](https://github.com/langchain-ai/deepagents/blob/178417d0dad063fea0300db68455f4574ef67db3/libs/deepagents/deepagents/middleware/subagents.py) | Packaged delegation and context isolation are relevant prior art. Its configurable tool/state inheritance requires explicit adaptation to LQ's grants, selected documents and gateway; whole-harness adoption is not justified by the current experiment. |
-| [OpenAI Agents SDK research example](https://github.com/openai/openai-agents-python/blob/298b87c72209ae88d1fb22f8361ebb89e876b2dc/examples/research_bot/manager.py) | Typed planning, concurrent searches and synthesis are useful patterns. The example does not supply LQ's durable approval, budget or audit transaction. Adding a second agent SDK has no demonstrated integration benefit here. |
-| [LangGraph 0.2.76 primitives](https://github.com/langchain-ai/langgraph/blob/0.2.76/libs/langgraph/langgraph/types.py) | The existing version already has interrupt, command and fan-out primitives. Capability is not the reason to upgrade. Integration, replay boundaries and dependency maintenance are separate decisions. |
-| [pi extension example](https://github.com/earendil-works/pi/tree/main/packages/coding-agent/examples/extensions/subagent) | The epic's categorical rejection was inaccurate: pi supports blocking tool hooks and extension-based subagents. Its TypeScript/process integration cost, rather than absent delegation, is the relevant objection. |
-| [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) and [Temporal child workflows](https://docs.temporal.io/develop/python/workflows/child-workflows) | Useful extension/lifecycle references. No demonstrated benefit warrants adding their runtime or operational platform to this pilot. |
-
-The isolated experiment used the same application contracts and effect receipts
-with a LangGraph adapter and a stdlib fixed-batch adapter. **23 tests passed** on
-LangGraph 1.2.11 and, unchanged, on 1.0.10. Tests included approval across process
-restarts, barrier-proven overlap, empty output, halt, revoked scope, completed and
-uncertain effect recovery, and replacing either adapter with the other. Two
-additional one-off checks resumed 1.2.11 data under 1.0.10. These are recorded
-results from the linked experiment, not new production tests run for this ADR.
-
-This demonstrates a narrow replaceable boundary for **one effect per immutable
-topic**. It does not prove arbitrary checkpoint portability, multi-step child
-recovery, Postgres transaction behavior, worker ownership, queue delivery,
-deployment-wide limits, real LQ authorization, dollar accounting or gateway
-integration. The 24-line native adapter is not a production Postgres/arq engine;
-its size cannot establish that a custom runtime is cheaper. LangGraph also did
-not remove the need for application-owned approval and effect receipts.
-
-The 1.0.10 experiment retained Core 1.6.3, checkpoint 4.2.0 and SQLite saver 3.1.1;
-it was not a test of the original 1.0 dependency family. Its SDK 0.3.15 excludes
-the [resource-decorator authorization fix in SDK 0.4.4](https://github.com/langchain-ai/langgraph/security/advisories/GHSA-fvww-7h3r-vfhp).
-That feature is unused in the fixture. Passing the fixture is neither a production
-dependency approval nor evidence that the application has an exploitable path.
-
-### Execution-policy follow-up — 14 September 2026
-
-The following comparison uses current upstream documentation. It supplements the
-original orchestration research; it does not describe capabilities tested at the
-pinned revisions above or constitute an independent security audit.
-
-| Reference | Execution model and lesson for LQ |
-|---|---|
-| [Pi security policy](https://github.com/earendil-works/pi/security) | Commands run within the local user's trust boundary; containment is the user's responsibility. A bundled skill is not itself a sandbox. |
-| [Deep Agents backends](https://docs.langchain.com/oss/python/deepagents/backends) and [sandboxes](https://docs.langchain.com/oss/python/deepagents/sandboxes) | File-only backends can omit execution. Shell and sandbox backends permit general commands; a sandbox protects the host but does not by itself prevent malicious instructions or disclosure through permitted network access. |
-| [DeepSeek Harness sandbox contract](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/sandbox/sandbox/README.md) | Selectable host-process file restrictions and approval-based escalation constrain general commands. That contract does not express network or credential restrictions; broader isolation requires a different executor. |
-| [OpenAI Agents SDK tools](https://openai.github.io/openai-agents-python/tools/) | Fixed function tools, hosted code interpretation and local/hosted shell are separate options. The selected tool and executor determine the authority; packaging a skill does not impose a bundled-only execution policy. |
-
-This assessment supports restricting both the code a caller may select and the
-resources its execution can access. Those choices are independent of LangGraph
-continuation and arq scheduling. LQ retains fixed installed helpers, isolated
-execution and application-owned controls on subsequent use of their output.
-
-## Proposed decisions
+Extend the existing autonomous executor with a governed run tree. Use LangGraph
+for continuation, arq for scheduling and LQ-owned Postgres records for governance.
+Provide optional persistent skill workspaces and isolated execution of reviewed,
+installed Python helpers. Exclude general generated-code execution.
 
 ### D1 — One approved research batch, with bounded parallel children
 
-Keep the orchestrator in `api/app/autonomous` as a profile of the existing
-executor. Each researcher is an ordinary LQ autonomous session with its own
-context, ownership and transaction scope. The model may propose bounded topics;
-it cannot create arbitrary agents, tools, system prompts or privileges.
-
-The proposed first-release defaults are:
-
-| Boundary | Proposal |
-|---|---|
-| Initiation | Manual, with a nonempty query and an owned, active project |
-| Delegation | One level; children cannot delegate |
-| Plan | One immutable approved batch; one to four topic slots |
-| Parallelism | Two active children by default; operator-configurable from one to four |
-| User capacity | One active orchestrated root per user, including approval/child waits |
-| Deployment capacity | Explicit operator-configured shared admission limits; no implicit unlimited fallback |
-| Inputs | Selected matter documents and operations actually supported by enabled source adapters |
-| Subsequent work | A changed batch, scope or budget requires a new revision and approval |
-
-Source enablement does not imply a universal search interface. Skill selection
-must respect the skill's declared coverage; the U.S. `case-law-research` skill
-does not become a general regulatory skill through delegation. Ship the root
-instructions as a visible, versioned `skills/orchestrator-harness/SKILL.md`.
-Substantive research-skill changes retain the attorney-attestation process.
+Each manual root belongs to an owner and active project. Permit one immutable
+batch of one to four children, one delegation level and no child delegation.
+Default to two concurrent children, configurable from one to four. Allow one
+active root per user and require explicit deployment-wide capacity limits.
+Children have separate contexts and transactions and use closed, pinned profiles.
 
 ### D2 — Approval is a durable barrier before child admission
 
-Planning may consume a disclosed root planning allowance. Persist and show the
-plan, topic scopes, selected sources/documents, skill version, budgets and limits
-before asking for approval. No child session is admitted, no child lease is
-activated and no child tool runs until an authorized owner approves that exact
-revision. Approval is not a model decision or a cost-threshold exception.
-
-Bind approval to the root and project, revision/hash, approving user, time,
-authority-policy version and skill digest. Repeated approval is idempotent;
-stale, rejected, expired or halted plans cannot start. Revalidate current policy
-and resource visibility after the wait. A changed executable plan needs approval
-again. Invalid planning output fails without falling back to free-text execution.
-
-Approval waits release worker capacity and database transactions. Use explicit
-lifecycle states such as `awaiting_approval`, `queued` and `waiting_children`,
-distinct from the existing phase and halt fields. Define the full transition
-table before changing status enums, DB constraints, watchdogs or client types.
+Show the plan, selected resources, skill version, budgets and limits before any
+child is admitted. The owner approves that exact revision and authority policy.
+Changed scope, budget, policy or executable skill requires renewed approval.
+Planning uses a disclosed root allowance. Approval waits release workers and
+database transactions; stale, halted or revoked approvals cannot admit work.
 
 ### D3 — Separate research data from delegated authority
 
-Use a strict model-authored task schema for bounded topic text, question,
-boundaries, output contract and stopping condition. Treat all such text, source
-content and child summaries as untrusted data. Parse JSON structurally; reject
-unknown fields, malformed/oversize input, unknown targets and forbidden intents.
-Typed strings, envelope markers and hashes do not make prose trustworthy.
+The model proposes bounded task data. The server supplies ownership, selected
+resources, profiles, grants, tiers, budgets and deadlines. Enforce the intersection
+of delegated authority, profile grants, phase grants and current policy at every
+effect; saved approval cannot override revocation.
 
-The server constructs the authority envelope: owner/project and tree IDs,
-approved scope, pinned skill, phase grants, tier restrictions, budget, deadlines
-and dispatch identity. Only a closed registry may select a child profile.
-System instructions come from the pinned skill artifact. A model must not supply
-authority fields, handler names, provider credentials or prompt overrides.
-
-For phase `p`, enforce:
-
-```text
-child intents(p) = inherited delegation envelope
-                   ∩ child profile grants(p)
-                   ∩ PHASE_GRANTS[p]
-                   ∩ current operator policy
-```
-
-The root's ability to delegate is distinct from its own directly executable
-intents. Do not intersect a child's complete lifecycle with only the parent's
-current analysis grants. Enforce owner/project and selected document/source
-scope before dispatch and each resource read. Ownership alone does not authorize
-an owned-but-unselected document. Saved grants never override later revocation.
-
-Resolve and enforce both the minimum inference tier and maximum external-egress
-tier under their existing semantics; these are different constraints. Apply
-authoritative project/skill restrictions and deliberate anonymization to root
-planning, research, synthesis and verification. Mandatory project selection in
-intake does not, by itself, propagate those restrictions through execution.
-
-Every model/tool effect uses `guarded_tool_call` and the shared governance
-substrate, retaining R5 → R6 → R4. Framework helpers and direct handler paths
-cannot bypass it. The gateway remains the only provider-key holder and external
-egress; internal run/root correlation IDs are stripped before provider requests.
+All effects use the shared governance path. Apply project/skill inference,
+external-egress and anonymization restrictions throughout the tree. Ownership does
+not authorize unselected documents. The gateway remains the provider-key holder
+and external egress boundary; prompts and tool results cannot grant authority.
 
 ### D4 — One execution-state owner behind a narrow adapter
 
-Keep task contracts, approval, current authority, budgets, results and audit in
-LQ-owned records. Framework types must remain inside the execution adapter. The
-adapter resumes work by stable run identity and returns structured progress;
-checkpoints must not restore obsolete permissions over current LQ policy.
-
-**Propose LangGraph as the execution-continuation owner**, retaining arq for
-scheduling and LQ-owned records for governance. Validate this design against
-Postgres, competing workers and multi-step recovery before production adoption.
-Reopen the choice if that integration reveals a material problem. The ADR remains
-Proposed until ratification.
-
 | Component | Responsibility |
 |---|---|
-| LangGraph with persistent checkpointing | Own graph step continuation, interrupt/resume, parallel fan-out and join. |
-| arq | Deliver background jobs that start or resume execution. It does not own a competing graph cursor or reconstruct the workflow independently. |
-| LQ-owned Postgres records | Own current authority, approval, child admissions, effect receipts, budgets, results and audit. A restored checkpoint cannot override them. |
+| LangGraph with persistent checkpoints | Resume graph steps, interrupt, fan out and join. |
+| arq | Schedule separate root and child invocations and durable wakeups. |
+| LQ-owned Postgres records | Own approval, current authority, admissions, budgets, effect receipts, results and audit. |
 
-The experiment demonstrates that LangGraph supports the required fixed-batch
-behavior behind a narrow adapter, and the application already uses its runtime.
-Using its continuation primitives is the proposed direction instead of building
-equivalent custom scheduling/join/recovery machinery. This is an engineering
-choice supported by the experiment, not a measured performance or maintenance
-advantage. The native fixture remains a comparison and portability test, not a
-second production backend or a production arq implementation.
-
-Graph fan-out is not itself a distributed queue. The
-[local demonstration](../plans/issue-563-demonstration.md) uses separate arq jobs
-for root and child invocations, checkpointed root/child graphs and durable wakeups.
-Approval and child waits release the arq invocation. LangGraph remains the single
-continuation owner, while LQ records govern admission and shared capacity.
-This is the proposed topology supported by local integration evidence; production
-review and enablement remain pending. Separate jobs must never depend on a waiting
-parent occupying the worker slots they need, and capacity must remain bounded
-across workers, not only in one semaphore.
-
-Persist step/effect identities outside compactable conversation history. Define
-meaningful recovery boundaries inside the multi-step analysis loop. LangGraph
-[interrupts replay their node](https://docs.langchain.com/oss/python/langgraph/interrupts),
-so approval and dispatch need separate, idempotent boundaries. Validate the
-selected saver and [persistence behavior](https://docs.langchain.com/oss/python/langgraph/persistence)
-at the locked versions, including serialization restrictions and trace settings.
-Changing runtime or graph versions requires a tested migration or draining runs;
-the fixed-batch swap test does not authorize arbitrary live checkpoint conversion.
+Approval and child waits release the arq invocation. Framework state stays behind
+a narrow adapter and cannot restore obsolete permissions. Checkpoints must bound
+individual effects within multi-step work. Runtime changes require a reviewed
+migration or drained runs.
 
 ### D5 — Durable admission, short transactions and explicit uncertain effects
 
-Add parent/root/depth and stable child order, with a unique
-parent/plan-revision/subtask identity. Existing sessions backfill as roots. Enforce
-same-owner/project edges, no cycles, depth limits and explicit deletion/retention
-behavior. Foreign keys alone do not establish permission to join a tree.
+Commit approval validation, admission, budget reservation, dispatch intent and
+audit atomically before dispatch. Use short transactions, consistent lock order,
+fenced worker ownership and durable step identities. Commit outcomes and their
+audit together.
 
-Atomically commit approval validation, child identity, budget reservation and
-admission audit before making the child runnable. If a queue boundary is used,
-persist dispatch intent in that transaction and recover commit-before-enqueue
-and completion-before-wakeup failures. Queue job IDs are not durable admission
-uniqueness. Checkpointed execution needs equivalent failure-window coverage.
-
-Use independently managed child DB sessions, short control-row transactions,
-consistent lock ordering and fenced execution ownership. Never hold control-row
-locks across model/provider I/O, user approval or child completion waits.
-Stale workers cannot admit another call or overwrite a newer execution owner.
-
-For ADR 0016 P5, preserve flush-only audit/governance helpers. The executor owns
-two distinct atomic boundaries: admission/reservation with audit intent, and
-recorded outcome/settlement with outcome audit. A provider call between them
-cannot be atomic with a Postgres commit. A crash after a possible external effect
-but before recording it produces an explicit **uncertain** outcome and retained
-reservation. Do not automatically repeat it or report exactly-once provider
-execution. Lease expiry alone is not proof that an old provider request stopped.
+An external call cannot be atomic with Postgres. If its outcome is uncertain
+after interruption, retain the reservation and require reconciliation. Do not
+automatically repeat it or claim exactly-once external execution. Replaying a
+completed effect reuses its receipt.
 
 ### D6 — An accounted budget shared by root and children
 
-Use Decimal amounts and retain the root's planning, synthesis, verification and
-delivery allowance before allocating child leases. Under the declared accounting
-model, enforce atomically:
-
-```text
-settled budget charges + outstanding reservations ≤ approved root budget
-```
-
-A child lease includes its unused and in-flight allowance. Settlement converts
-reservation into charge without double counting. Return demonstrably unused
-funds once; uncertain outcomes retain conservative funds. Record provider actuals
-separately from estimates. An observed overrun remains visible and stops further
-work; never rewrite usage to fit the cap. Unknown paid-provider pricing refuses
-admission for this profile; explicitly free configured providers/fixtures are valid.
-
-Label this an **accounted-budget ceiling**, not a guaranteed provider-invoice cap.
-Strict invoice guarantees require separately verified pricing and metering. Tests
-must cover concurrent admission, retries, double settlement/release and preserving
-enough parent allowance to finish an ordinarily partial run.
+Reserve the root's planning and completion allowance before funding children.
+Atomically enforce settled charges plus outstanding reservations within the
+approved root budget. Settle or release each reservation once; uncertain outcomes
+retain funds. Refuse unknown paid-provider pricing and expose observed overruns.
+This is an accounted-budget ceiling, not a guarantee about the provider's invoice.
 
 ### D7 — Halt, ordinary failure and empty success have different outcomes
 
-An independent child's ordinary failure does not cancel successful siblings.
-Join typed outcomes for every approved topic and report partial coverage. Empty
-search output is successful empty work; all-failed children cannot produce a
-successful research claim. This partial-result behavior is proposed for ratification.
-
-Root halt, exhausted root budget, revoked authority or invalid execution state
-stops further dispatch. Once halt commits, no new call is admitted. At most one
-already-admitted call per active child may finish; this is not one call for the
-entire tree. Halt does not start a fresh synthesis model call. Render available
-partial state deterministically and keep receipts inspectable.
-
-Use root and per-attempt deadlines, bounded retry/backoff and distinct watchdog
-treatment for queued, approval-waiting, child-waiting, active and abandoned work.
-Approval/child waits must not consume the shared 900-second arq invocation timeout.
+Ordinary child failure permits successful siblings to finish. Preserve partial,
+empty, all-failed and halted outcomes. Halt, revoked authority, exhausted budgets
+and deadlines prevent new admissions. At most one already-admitted call per active
+child may finish. Halt renders retained work without starting another synthesis
+call. Approval and child waits release worker invocations; the root deadline
+still applies.
 
 ### D8 — Internal child results; root delivery and honest evidence status
 
-Children preserve deterministic phase completion, including ethics review, but
-their delivery is internal. They return typed session/topic outcome and bounded
-authorized evidence references. They do not notify users, write KB artifacts or
-propose memory/precedent changes. The root owns user-facing delivery under the
-existing output governance and curation rules.
-
-Keep execution completion, topic coverage and citation verification distinct.
-Retain each child's gate verdict, including absent/failed/unverified states. A
-parent's new cited assertions require their own existing ledger/gate evaluation;
-passing child gates cannot make an unchecked synthesis green. Test aggregation
-with fixture verdicts, without requiring relevant or nonempty live search results.
-
-Receipts show the parent's events and ordered child sub-timelines, with stable
-dispatch/sequence tie-breakers and links to existing child receipts. Join
-`tool_call_log.session_id`; no extra root column is required there for v1. Keep
-research text in access-controlled content/work-product storage. Audit, OTel and
-framework traces contain only approved metadata, not raw goals or results.
-Defer a second replay/fork JSONL content store.
+Children return bounded results to the root; they do not notify users, publish
+KB artifacts or propose memory/precedent changes. Root delivery follows existing
+governance. Execution success does not establish citation verification, and a
+synthesis must retain its own evidence status. Receipts expose parent and child
+progress; audit and telemetry contain metadata rather than raw content.
 
 ### D8a — Run working files and explicit parent handoff
 
-The 14 September storage acceptance test establishes a missing capability in the
-initial demonstration: private work in progress must survive an interrupted
-worker, and the parent must consume a child's explicitly shared result file.
-See [the implementation and evidence](../plans/issue-563-workspace.md).
-
-Provide guarded read/write/share operations over bounded application-owned UTF-8
-files. Logical names do not expose a host filesystem or code execution. Authority
-is bound to the approved run and session. Children read and revise their own
-files; sharing freezes the content and permits the root to read that specific
-file. It does not grant sibling access, notify users, emit a KB document or
-propose a memory entry. The owner can inspect private and shared files through
-the run receipt, including after halt or opt-out.
-
-Writes require the expected content revision. File changes and their completed
-effect receipts commit atomically; replay of a committed effect returns the same
-revision. Shared outcome references identify the session, name, revision and
-digest, and parent synthesis consumes those stored contents. Storage is bounded
-per file and session, remains outside LangGraph state and audit text, and
-cascades on session/root/user deletion. Halt prevents new tool operations while
-preserving retained work for inspection. Failed local operations return a bounded
-refusal; an interrupted uncommitted effect retains the existing conservative
-recovery policy.
-
-Run working files retain their run-specific lifetime. The separate optional
-capability in D8b provides reuse across skill invocations; user-kept memory remains
-a separate curation mechanism.
+Store bounded, revisioned working files in application-owned storage. Children
+access their own files and explicitly share immutable revisions with the root;
+sharing grants no sibling access. Writes and effect receipts commit together.
+Run files survive worker interruption, remain inspectable after halt or opt-out,
+and are deleted with their owning session/root/user.
 
 ### D8b — Optional persistent skill workspaces
 
-The maintainer's 14 September direction authorizes a separate persistent workspace
-that a skill may choose to use. The [local implementation](../plans/issue-563-skill-capabilities.md)
-adds explicit list/read/write operations; absent declarations preserve existing
-behavior. Stored work is not automatically injected into a new prompt.
+A skill may separately opt into Postgres storage scoped by owner, project or
+personal namespace, exact skill identity and storage format version. Use explicit,
+bounded read/write/list operations and expected revisions; do not automatically
+inject saved work into prompts.
 
-Use application-owned Postgres storage keyed by authenticated owner, project
-(or a personal namespace for projectless chat), resolved skill identity and a
-declared workspace format version. Built-in/community identities and DB user/team
-UUIDs remain distinct, including when skills shadow the same slug. Team skills
-still keep each user's saved data separate. Recheck current skill and access at
-tool execution. A skill change starts a new invocation; retaining the storage
-format version permits compatible reuse without aliasing unrelated skills.
-
-Logical UTF-8 files have bounded names and content: 32 files, 64 KiB per file,
-1 MiB per workspace. Writes require an expected revision UUID; `null` creates a
-new file. Fresh UUIDs on every write prevent stale updates after deletion/reset.
-Writes and local audit/receipt records share a transaction. Orchestration retains
-its exact approval, phase grants, worker fences and replay checks. The shared
-tool service also supports attached chat skills and the query-driven background
-planner; saved content remains unverified task data, not citation authority.
-
-Workspace data survives run/chat deletion and skill removal. Owner inspection,
-export and reset remain available when execution is disabled. Hard deletion of
-the owner or project cascades; project archival blocks execution while retaining
-inspection. Account export includes saved contents. Format changes create a
-separate namespace, with no implicit migration. Migration 0071 refuses downgrade
-until retained work is explicitly exported and cleared.
+Data survives run/chat deletion and skill removal. Owner inspection, export and
+reset remain available when execution is disabled. Hard owner/project deletion
+cascades; archival blocks execution. Revalidate current access and preserve
+namespace isolation across skill changes. This storage is separate from curated
+user memory and executable bundles.
 
 ### D8c — Installed bundled helpers; no generated-code execution
 
-The same owner direction restricts execution to reviewed, installed Python
-helpers. A call selects a declared helper by name and passes bounded JSON data;
-there is no source-code, command, path, interpreter, image, mount or environment
-argument. DB/inline skill text cannot install executable helpers. Script source
-and supporting files contribute to the skill pin and remain inspectable work
-product. They are excluded from the automatically assembled instruction text.
+Execute only installed Python helpers enabled by exact bundle and immutable
+runtime-image identity. Security review covers scripts, supporting code,
+dependencies and the image; legal-content review alone is insufficient. Changed
+artifacts require renewed review, and revoked approval prevents new calls.
+Calls select a declared helper and supply bounded JSON data. Refuse unavailable
+configuration or mismatched artifacts.
 
-Operators separately enable exact bundle hashes and immutable runtime images in
-a private authenticated broker. Security review must cover the executable
-scripts, supporting code, dependencies and runtime image at those exact versions.
-Legal-content attestation does not substitute for executable-code review. Record
-reviewers and approval evidence; changed artifacts require renewed review and
-enablement, and revoked approvals must prevent new calls. A digest establishes
-artifact identity, not safety. Only the trusted broker has container-engine
-access. API and worker processes send typed requests; they never execute helpers
-on the application host or receive the engine socket. A missing configuration or
-changed bundle refuses execution without fallback.
+Run each helper in a fresh container with no network, credentials, application
+mounts or engine access, using a non-root user, read-only root and bounded
+resources, time and output. Only the trusted broker controls its engine.
+Production execution requires a dedicated environment whose engine cannot inspect
+or mount LQ application storage or credentials; rootless execution on a shared
+host alone is insufficient. Container isolation still depends on the host kernel.
 
-Each job uses a fresh container: non-root, read-only root filesystem, no network,
-no application mounts or credentials, dropped capabilities, no-new-privileges,
-bounded CPU/memory/processes/open files, 16 MiB temporary space, a ten-second
-helper deadline and 64 KiB combined stdout/stderr. The launcher verifies installed
-source again before dispatch, supplies JSON on stdin, captures output, and kills
-remaining descendants. Per-request deletion and an instance-scoped recovery sweep
-remove disposable containers. Engine failure can delay deletion; the
-[deployment guide](../deploy/skill-capabilities.md) records cleanup and retention.
-
-Scripts receive explicitly selected input data. Persistent workspace operations
-remain separate tools: no saved file is mounted as executable code or imported on
-a later call. Python isolation mode excludes writable working directories and
-user import paths. Additional dependencies belong in the reviewed immutable
-image; runtime package installation is unsupported.
-
-Bundling does not establish safety. Review must reject helpers that interpret
-input as code or shell commands, load executable content from saved work, or
-launch caller-generated programs. The restriction applies to helper behavior as
-well as its entry point. Container settings do not prove that a reviewed Python
-wrapper never evaluates its inputs.
-
-The broker is trusted infrastructure with engine privileges. Production execution
-must use a dedicated environment separated from LQ application storage and
-credentials; its engine must not be able to inspect or mount that storage.
-Rootless execution alone on a shared application host does not establish this
-separation. Record and review the broker/engine placement and available storage
-before enablement. Containers remain dependent on their host kernel and are not
-a VM boundary. See [Docker's daemon trust boundary](https://docs.docker.com/engine/security/#docker-daemon-attack-surface).
-This decision excludes general generated-code execution and does not ratify the
-ADR, publish implementation or enable the running deployment.
+Persistent workspace files are not mounted or imported. Helpers must not evaluate
+supplied text, load code from saved work, install packages at runtime or launch
+caller-generated programs. Storage and execution are independently optional.
 
 ### D8d — Confidentiality must survive compromised helper output
 
-**Security objective:** even a compromised approved helper receives only explicitly
-supplied, authorized data, cannot independently access other matter data, and
-cannot cause that data to reach an unauthorized destination. Treat a malicious
-bundle, vulnerable dependency, hostile document and hostile helper result as
-threats even after review. The broker, execution platform and LQ policy enforcement
-remain trusted components whose placement and privileges require separate review.
+Even a compromised approved helper must receive only explicitly supplied,
+authorized data, have no independent access to other matter data, and be unable
+to cause disclosure to an unauthorized destination.
 
-Limit input to the authorized subset needed for the operation. Helper stdout,
-stderr and saved results remain untrusted task data. They cannot change grants,
-destination permissions, approval requirements or data-handling policy. Enforce
-the applicable source restrictions at every subsequent inference and external
-tool call, including child handoff and reuse of persisted work in a later
-invocation. Processing locally, changing representation or saving a result must
-not silently relax those restrictions. If the applicable authority or restrictions
-cannot be established, refuse the outbound transfer.
+Treat documents, helper output and saved results as untrusted data. Preserve
+source restrictions through transformations, subsequent inference/tool calls,
+child handoff and later workspace reuse. If authority or restrictions cannot be
+established, refuse outbound transfer. A network-disabled helper can still induce
+an agent to disclose its output; enforce policy at the subsequent call rather
+than relying on instructions or output filtering.
 
-A helper with no network can still return confidential text and instructions to
-include it in an external search or connector call. The agent's subsequent action
-must be controlled independently of the helper's instructions. The gateway remains
-the external egress boundary, but routing through it alone does not establish
-that a particular disclosure is authorized. This is an application data-flow
-requirement, not a promise that prompting or output filtering detects every attack.
-
-Include operational data in that boundary. The current runner places inputs in
-transient container configuration and captures output in engine logs before
-cleanup. Inspection, diagnostics and log forwarding must respect the same data
-restrictions. Keep raw content out of audit/telemetry and unauthorized log sinks;
-document access and retention when interrupted jobs cannot be deleted immediately.
-
-**Current evidence and gaps:** the local implementation at `b8d782f43` has passed
-34 capability acceptance tests, including actual container restrictions, bundle
-pins and cross-invocation storage isolation. Those results do not establish the
-full indirect-disclosure objective above. Pending work includes explicit security
-review routing/evidence for bundled script files, review of production execution
-separation and operational data handling, and hostile-output tests through the
-complete application flow, including persisted reuse. Existing CODEOWNERS entries
-route `/skills/` to maintainers and practicing attorneys without a specific
-security assignment for bundled scripts. The [workflow](../plans/issue-563-workflow.md#skill-confidentiality-follow-up--14-september-2026)
-records these as pending gates rather than completed implementation or a
-demonstrated exploit. They must be satisfied before production script enablement.
+Apply the same restrictions to transient job configuration, engine logs,
+diagnostics and cleanup failures. The broker, execution platform and LQ policy
+enforcement are trusted components requiring separate review.
 
 ### D9 — Approval and changing progress are required UI
 
-Reuse the matter-intake entry point and existing receipts. Extend run-now with
-an explicit orchestrator profile and selected document/source scope; plan read,
-approve/reject and tree-read contracts are required. Approval identifies the
-revision/hash and documents stale/conflicting transitions. There is no arbitrary
-public child-spawn API. Final schemas, path counts and generated OpenAPI must
-land together with the corresponding implementation.
+Provide plan inspection, approval/rejection, concurrent progress, budgets, halt
+and retained-result inspection. Only approved profiles can create children.
+Capabilities start disabled and require operator enablement. Disabling execution
+preserves read/halt access; rollback requires draining or halting retained work.
 
-The required browser flow is intake → plan preview → approve/reject → concurrent
-child progress → halt or completion → tree inspection. Include budget breakdown,
-bounded polling that stops on terminal state/navigation, and manual refresh. SSE
-and expanded session-list trees can wait. Expose feature enablement and limits
-on an operator configuration/admin surface; orchestration starts disabled.
+## Alternatives considered
 
-## Dependencies and implementation sequence
+| Alternative | Benefit | Reason not selected |
+|---|---|---|
+| Custom Postgres/arq continuation | Complete control over execution state. | Requires LQ to build and maintain graph continuation and joining already supplied by LangGraph. Governance records remain LQ-owned either way. |
+| Adopt a complete agent harness | Ready-made delegation, filesystem and execution tools. | Deep Agents, OpenAI Agents SDK, Pi and DeepSeek Harness still require adaptation to LQ's grants, gateway and audit. No demonstrated integration benefit justifies replacing the existing executor. |
+| Temporal | Durable workflow and child-lifecycle primitives. | Adds an operational platform beyond the needs of the bounded first profile. |
+| Run-only storage | Simpler retention and isolation. | Cannot retain a skill's work across invocations. Keep it for run work, with separate optional persistent storage. |
+| General generated-code execution in a sandbox | Agents can invent and debug new calculations. | Expands executable behavior beyond reviewed helpers and the agreed product scope. |
+| Reviewed scripts with application-host access | Simpler deployment. | Vetting can miss malicious code or vulnerable dependencies; confidentiality also requires runtime containment. |
 
-| Work | Relationship to #563 |
-|---|---|
-| [PR #411](https://github.com/LegalQuants/lq-ai/pull/411) | Merged foundation: preserve write-time project/KB/playbook visibility and archived-resource rejection. Add current per-child approved-scope checks after approval waits. |
-| [PR #410](https://github.com/LegalQuants/lq-ai/pull/410) / issue #332 | Reuse intake after its review and checks pass. The current review requires a project for query intake, correct numeric inputs, loading/error handling and matching contracts/tests. Its [KB comment](https://github.com/LegalQuants/lq-ai/pull/410#discussion_r3996565271) explicitly defers retrieval to separate work. Correct manual selected-KB execution and complete project data-policy propagation before exercising real matter orchestration. |
-| [Issue #524 / DE-319](https://github.com/LegalQuants/lq-ai/issues/524) | Separately review the maintained runtime migration across all three executors before activating the proposed durable LangGraph execution in the application. Review the actual dependency diff, advisory floors and serializer configuration; fixture compatibility does not approve the application lock. |
-| [PR #558](https://github.com/LegalQuants/lq-ai/pull/558) | The 0.6.11 proposal does not complete the 1.x migration. The saved review records 12 typing errors before pytest; prefer a corrected direct migration under #524. |
-| [PR #536](https://github.com/LegalQuants/lq-ai/pull/536) | Separate membership work; not a prerequisite for the owner-scoped pilot. Use one current-access interface so later membership/revocation integrates without tree-wide access grants. |
-| [PR #564](https://github.com/LegalQuants/lq-ai/pull/564) | Coordinate ADR/DE identifiers and actual review assignments. Its broader governance proposal need not merge before this one. Do not assume automatic review routing is working. |
+LangGraph fits the existing Python executor and the required continuation model.
+This choice is supported by the linked integration evidence, without a claim of
+measured performance or maintenance superiority. The harness
+[execution models](https://docs.langchain.com/oss/python/deepagents/backends),
+[SDK tool options](https://openai.github.io/openai-agents-python/tools/),
+[Pi trust boundary](https://github.com/earendil-works/pi/security) and
+[DeepSeek sandbox contract](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/sandbox/sandbox/README.md)
+illustrate why delegation, execution permissions and isolation are separate choices.
 
-The authorized workflow is **this documentation PR first**, then a separate
-local implementation branch. Implementation commits must not be pushed or opened
-as a code PR until this ADR is ratified. Local integration experiments may supply
-evidence back to the proposed ADR; local coding does not constitute ratification.
-The runtime maintenance remains a distinct reviewable change from harness behavior.
+## Consequences
 
-Prepare contracts and the bounded LangGraph integration experiment first. Use its
-evidence to validate D4, settle worker topology and complete the ratification
-record below. Continue with durable admissions, budgets and halt; governed child
-dispatch and recovery; root synthesis/evidence;
-approval/tree API and UI; then release verification. Extract only the harness
-interface and closed registry required by these profiles. Do not do a general
-loop rewrite as a prerequisite. The epic's earlier 35–55 engineer-day estimate
-does not estimate this revised design; estimate after integration establishes the
-remaining implementation work.
+- Reuse existing execution primitives while retaining LQ control of authority
+  and data. Approval, reservations, receipts and recovery still need application
+  logic; checkpointing alone is insufficient.
+- Persistent workspaces improve continuity but add access, retention and
+  cross-invocation confidentiality obligations.
+- Bundled helpers offer predictable capabilities at the cost of upfront review
+  and packaging. New computations require new reviewed helpers.
+- Recursive delegation, watch/schedule orchestration, general generated code,
+  replay/fork transcripts, SSE and substantive research evaluation remain deferred.
 
-## Acceptance gates
+## Ratification and release conditions
 
-The production fixture suite must exercise actual LQ governance, separate
-transactions and the selected worker topology. The SQLite experiment satisfies
-none of the production integration gates by itself.
+This decision amends [ADR 0013 D1](0013-autonomous-layer-design-influences.md),
+[ADR 0020 D2/D4/D7](0020-governed-agentic-legal-matter-sessions.md) and
+[ADR 0016 P5](0016-transparency-and-governance-invariants.md) only as specified here.
+**Ratifiers and decision date: pending.** Implementation publication remains held
+until explicit ratification; production enablement is a separate gate.
 
-| Gate | Required evidence |
-|---|---|
-| Approval and races | Zero children/effects before approval; duplicate/stale/expired/rejected approval and halt-versus-approve cannot admit unauthorized work. |
-| Parallelism and empty output | Two stub searches both enter independent barriers before either is released; both may return empty, and the root joins without fabricated evidence. |
-| Isolation and handoff | Foreign and owned-but-unselected resources refuse; stale policy/skill versions invalidate authority; hostile input/output cannot change sibling scope, prompts, grants, tiers or budget. |
-| Executable approval | Record security review of exact helper/dependency/image versions. Changed or revoked approval cannot admit new calls; bundled wrappers must not execute supplied or persisted code. Pending for the strengthened D8c contract. |
-| Hostile helper containment | Use deliberately hostile test-only bundles with synthetic document canaries. Attempts to access unrelated matter data, application credentials, the engine socket, network/DNS or another job's storage fail. Include all supported invocation paths. Existing direct-isolation probes are a baseline. |
-| Indirect disclosure and persisted reuse | Controlled helper output attempts to induce unauthorized inference, search and connector requests. Capture outbound calls and assert restricted canaries are not sent, including transformed output saved and loaded by a later invocation. Preserve applicable source restrictions at the actual application boundary. Pending; no live documents or external recipients. |
-| Production execution and operational data | Review evidence that the executor/engine cannot inspect or mount LQ application storage or credentials. Verify input/output handling in job configuration, logs, diagnostics and interrupted-job cleanup stays within the approved boundary. Pending deployment acceptance. |
-| Recovery | Inject faults around admission commit, enqueue/checkpoint, invocation, effect receipt and parent continuation; no duplicate child or completed-step replay; uncertain external outcomes remain explicit. Include multi-step children and competing coordinators. |
-| Budget | Real Postgres concurrent reservations cannot exceed the accounted cap; settlement/retry cannot double charge/release; unknown outcomes retain funds. |
-| Cancellation and capacity | Halt commits while providers are blocked; no next call starts. Approval and parent waits release worker capacity; multiple workers respect root/user/deployment limits and bounded 429 backoff. |
-| Evidence and delivery | Ordinary partial, empty, all-failed and halted results stay distinct; missing/failed child or final verification never becomes a green aggregate; only the root delivers to users. |
-| Compatibility and UI | Existing manual/schedule/watch/receipt/halt behavior passes; controlled browser flow proves approval, concurrent progress and inspection; migration up/down and root backfill pass on throwaway pgvector Postgres. |
+Before production adoption, review the runtime migration under
+[#524](https://github.com/LegalQuants/lq-ai/issues/524) and the integration evidence
+for approval races, competing workers, recovery, budgets, halt, isolation and UI.
+Selected-document authorization and project data-policy propagation, including
+DE-294, are prerequisites for real matter orchestration.
 
-Run focused and required API tests, Ruff format/check and mypy; compiled graphs
-for all three executors when the shared runtime changes; relevant gateway and
-transparency tests; Svelte checks, Vitest and controlled Cypress for the UI.
-Dependency/container changes require the stack smoke gate. Never use the live
-dev database for migration testing. Documentation, schema and API changes accompany
-their implementation, and completion claims cite actual results.
+**Still required before script enablement:** explicit executable security-review
+routing and approval evidence; hostile-helper containment and indirect-disclosure
+tests across supported calls and persisted reuse; and review of production
+executor separation and operational data handling. Existing isolation tests do
+not establish the complete confidentiality objective.
 
-Expand schema before deploying compatible API/workers/UI. Enabling is an explicit
-operator action after review. Disabling prevents new roots/dispatch and preserves
-read/halt access to existing trees. Drain or halt live trees and retain evidence
-before any rollback that removes their schema/runtime support.
+## Supporting evidence
 
-## Ratification record — must be completed before the code branch is published
-
-- [ ] Accept D1 limits, parallel first release and one approved batch.
-- [ ] Accept D2/D3 version-bound approval and delegated authority contract.
-- [ ] Ratify D4's proposed division: LangGraph owns continuation, arq schedules
-      work and LQ owns governance. Record worker topology, actual LQ / Postgres /
-      competing-worker / multi-step integration results and the reviewed runtime
-      baseline; reopen the choice if a material integration problem is found.
-- [ ] Accept D5's external-effect uncertainty and audit transaction clarification.
-- [ ] Accept D6's accounted-budget meaning and D7's partial/halt semantics.
-- [ ] Accept internal child delivery, evidence-status separation, required UI and deferrals.
-- [ ] Accept D8a/D8b storage lifetimes and optional use, and D8c's bundled-only
-      execution and exact executable security-review requirement.
-- [ ] Accept D8d's compromised-helper threat model, inherited data restrictions
-      and required indirect-disclosure/persisted-reuse tests. Record the pending
-      implementation and deployment gates; ratification alone does not satisfy them.
-- [ ] Record the exact amendments to ADR 0013 D1, ADR 0020 D2/D4/D7 and ADR 0016 P5;
-      make DE-294 a prerequisite for shipping #563 without labeling it implemented.
-- [ ] Record ratifier names, dated decision/minutes or review links, and security
-      reviewers for authority, audit, budget, cancellation, gateway, executable
-      bundles and the execution environment.
-
-**Proposed backend:** LangGraph for continuation; arq for scheduling; LQ-owned
-Postgres records for governance. Production acceptance and ratification remain pending.
-**Proposed worker topology and tested runtime:** separate root/child arq jobs;
-LangGraph 1.2.11, checkpoint 4.2.0 and Postgres saver 3.1.2 in the local
-demonstration. See [integration evidence](../plans/issue-563-demonstration.md)
-and [runtime-maintenance evidence](../plans/issue-524-runtime-migration.md).
-Production approval of this baseline remains pending.
-**Decision date and ratifiers:** pending.
-**Implementation publication:** held until the above decision is recorded.
-
-## Consequences and deferred scope
-
-The existing governance and receipt substrate remains useful, but concurrency
-requires new durable admission, accounting and transaction work. A runtime library
-can reduce continuation work without taking ownership of LQ authority. Conversely,
-a small fixture is insufficient justification for building a custom workflow engine.
-
-Recursive delegation, watch/schedule orchestration, additional unapproved batches,
-real playbook execution as a child type, general harness extraction, raw replay/fork
-transcripts, SSE and research-quality evaluation are outside this first release.
-The preserved research plan lists these deferrals; allocate any additional DE IDs
-against the current register rather than reusing the epic's colliding DE-387 onward.
-This ADR does not add them to the shipped capability list or close issue #563.
+The [research assessment](https://github.com/LegalQuants/lq-ai/blob/4ac3fee64/outputs/issue-563-prior-art.md)
+records the alternatives and prototype limits. The
+[workflow and evidence index](../plans/issue-563-workflow.md) links detailed
+contracts, local test results, runtime versions and work history. The
+[skill capability record](../plans/issue-563-skill-capabilities.md) and
+[draft operator notes](../deploy/skill-capabilities.md) hold implementation details
+and outstanding acceptance work. These records do not constitute ratification
+or shipped capability.
