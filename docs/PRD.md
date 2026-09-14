@@ -892,8 +892,8 @@ durable recovery, shared accounted budgets and an inspectable run tree. The firs
 visible profile is a technical orchestration demonstration with sample findings;
 substantive research quality is outside that acceptance scope. It proposes
 LangGraph for continuation, arq for scheduling and LQ-owned governance records;
-the [implementation overview](plans/issue-563-workflow.md) summarizes what is built
-and the release conditions still pending. Optional skill storage
+the [feature PRD](prds/issue-563-governed-orchestration.md) defines requirements,
+acceptance criteria and release conditions. Optional skill storage
 and bundled helpers follow D8b–D8d, including the new confidentiality gates. The
 implementation branch stays local until ratification; this proposal does not
 change the M4 status below.

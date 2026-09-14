@@ -2,7 +2,8 @@
 
 The local implementation gives each orchestration session durable files for notes
 and findings. Files survive worker interruption and later execution of the same
-session. See the [implementation overview](issue-563-workflow.md) for release status.
+session. See the [feature PRD](../prds/issue-563-governed-orchestration.md) for
+requirements and release status.
 
 ## Available behavior
 

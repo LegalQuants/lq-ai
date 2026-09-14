@@ -2,8 +2,8 @@
 
 Findings from 12–14 September 2026 supporting
 [ADR 0035](../adr/0035-governed-orchestration-run-tree.md). These explain the
-architecture choices; the [implementation overview](../plans/issue-563-workflow.md)
-describes the delivered capabilities and remaining release conditions.
+architecture choices; the [feature PRD](../prds/issue-563-governed-orchestration.md)
+defines product requirements, acceptance and remaining release conditions.
 
 ## Main finding
 
@@ -103,4 +103,4 @@ experiments used controlled providers and do not establish research quality.
 The [full original research assessment](https://github.com/LegalQuants/lq-ai/blob/4ac3fee64/outputs/issue-563-prior-art.md)
 preserves detailed sources, dependency/advisory analysis and prototype limits.
 Its provisional recommendations and open gates describe that research snapshot;
-the current ADR and implementation overview govern present status.
+the current ADR and feature PRD govern present status.

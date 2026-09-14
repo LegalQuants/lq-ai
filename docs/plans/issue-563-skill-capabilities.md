@@ -2,8 +2,8 @@
 
 The local implementation adds two independent capabilities: persistent workspaces
 and installed Python helpers. Skills choose whether to use either. Both are
-disabled by default; see the [implementation overview](issue-563-workflow.md) for
-release status.
+disabled by default; see the [feature PRD](../prds/issue-563-governed-orchestration.md)
+for requirements and release status.
 
 ## Persistent workspaces
 
