@@ -12,8 +12,8 @@ adds persistent skill workspaces and installed Python helpers. Bundled scripts
 require security review of their exact code, dependencies and runtime image in
 addition to any legal-content review. Helpers must treat supplied and saved text
 as data and preserve its restrictions through subsequent agent calls. General
-generated-code execution remains excluded. The [implementation record](plans/issue-563-skill-capabilities.md)
-distinguishes local evidence from pending security gates; this documentation PR
+generated-code execution remains excluded. The [capability summary](plans/issue-563-skill-capabilities.md)
+describes available behavior and pending security gates; this documentation PR
 does not add runtime support for `scripts/`.
 
 ---

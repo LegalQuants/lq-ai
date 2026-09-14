@@ -522,7 +522,7 @@ specifies persistent skill workspaces and reviewed, installed Python helpers.
 Skills opt in separately to storage and execution. Generated-code execution is
 excluded; exact executable review, isolated jobs and protection against indirect
 disclosure through helper output or persisted reuse are required. The
-[supporting evidence](plans/issue-563-skill-capabilities.md) records local results
+[capability summary](plans/issue-563-skill-capabilities.md) describes local behavior
 and pending security gates. ADR ratification and implementation publication remain
 pending; the M1 status below is unchanged by this proposal.
 
@@ -892,8 +892,8 @@ durable recovery, shared accounted budgets and an inspectable run tree. The firs
 visible profile is a technical orchestration demonstration with sample findings;
 substantive research quality is outside that acceptance scope. It proposes
 LangGraph for continuation, arq for scheduling and LQ-owned governance records;
-the [workflow](plans/issue-563-workflow.md) records local integration and the
-production acceptance and ratification gates still pending. Optional skill storage
+the [implementation overview](plans/issue-563-workflow.md) summarizes what is built
+and the release conditions still pending. Optional skill storage
 and bundled helpers follow D8b–D8d, including the new confidentiality gates. The
 implementation branch stays local until ratification; this proposal does not
 change the M4 status below.
