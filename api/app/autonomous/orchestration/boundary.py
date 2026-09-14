@@ -23,6 +23,7 @@ from app.models.autonomous import AutonomousSession
 from app.models.document import Document
 from app.models.file import File
 from app.models.project import ProjectFile
+from app.skills.tools import SKILL_TOOL_INTENTS, parse_skill_tool
 
 _IMPLEMENTED = frozenset(
     {
@@ -32,6 +33,7 @@ _IMPLEMENTED = frozenset(
         ToolIntent.emit_finding,
         ToolIntent.retrieve_authority,
         *WORKSPACE_INTENTS,
+        *SKILL_TOOL_INTENTS,
     }
 )
 
@@ -50,6 +52,8 @@ async def constrain_call(
         raise ToolNotGranted("tool is outside implemented orchestration scope")
     if intent in WORKSPACE_INTENTS:
         return parse_request(intent, params).model_dump(mode="json")
+    if intent in SKILL_TOOL_INTENTS:
+        return parse_skill_tool(intent, params)
     if intent == ToolIntent.retrieve_authority:
         if (
             source_binding is None

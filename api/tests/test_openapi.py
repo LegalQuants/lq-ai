@@ -198,6 +198,9 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         # Phase 1 §4.4 — one-off manual session spawn (run a skill/playbook now)
         "/api/v1/autonomous/run-now",
         "/api/v1/autonomous/orchestration/capabilities",
+        "/api/v1/skill-workspaces",
+        "/api/v1/skill-workspaces/{workspace_id}",
+        "/api/v1/skill-workspaces/{workspace_id}/files/{name}",
         "/api/v1/autonomous/orchestration/plans",
         "/api/v1/autonomous/orchestration/{root_id}/tree",
         "/api/v1/autonomous/orchestration/{root_id}/approve",
@@ -350,7 +353,8 @@ async def test_openapi_paths_match_sketch() -> None:
     # /api/v1/admin/tool-providers
     # /api/v1/admin/tool-providers/{provider_type}
     # ADR 0035 adds seven demonstration/consent/tree/file paths (139 -> 146).
-    assert len(actual) == 146
+    # Optional persistent skill workspaces add three owner paths (146 -> 149).
+    assert len(actual) == 149
 
 
 @pytest.mark.unit

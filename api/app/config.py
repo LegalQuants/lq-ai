@@ -416,6 +416,18 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("LQ_AI_CHAT_TOOL_CALL_CAP", "CHAT_TOOL_CALL_CAP"),
     )
 
+    # Optional skill data/tools. Bundled execution is confined to a separately
+    # configured local broker; no command or host-process fallback exists.
+    skill_workspaces_enabled: bool = Field(
+        default=False, validation_alias="LQ_AI_SKILL_WORKSPACES_ENABLED"
+    )
+    skill_script_runner_url: str | None = Field(
+        default=None, validation_alias="LQ_AI_SKILL_SCRIPT_RUNNER_URL"
+    )
+    skill_script_runner_token: str = Field(
+        default="", repr=False, validation_alias="LQ_AI_SKILL_SCRIPT_RUNNER_TOKEN"
+    )
+
     # ----- Operational -----
     log_level: LogLevel = Field(default="info", description="Log level for the api/ service.")
     lq_ai_dev_mode: bool = Field(

@@ -209,6 +209,30 @@ async def _run_analysis_loop(
         )
         available_sources = []
 
+    from app.config import get_settings
+    from app.skills.binding import bind_record
+    from app.skills.tools import SKILL_TOOL_MODELS, SkillTools, current_registry
+
+    allowed = PLANNER_ALLOWLIST
+    skill_tool_schemas = None
+    settings = get_settings()
+    if settings.skill_workspaces_enabled or settings.skill_script_runner_url:
+        registry = current_registry()
+        record = registry.current().get(str(params.get("skill_ref") or ""))
+        if record is not None:
+            binding = bind_record(record)
+            optional = SkillTools(registry, settings).available(binding)
+            allowed = frozenset((*allowed, *optional))
+            if optional:
+                skill_tool_schemas = {
+                    "instructions": record.body,
+                    "helpers": [s.model_dump() for s in binding.capabilities.scripts],
+                    "tools": {
+                        intent.value: SKILL_TOOL_MODELS[intent].model_json_schema()
+                        for intent in optional
+                    },
+                }
+
     while steps < max_steps:
         plan_res = await guarded_tool_call(
             session,
@@ -218,15 +242,16 @@ async def _run_analysis_loop(
                 "messages": build_planner_messages(
                     goal=query,
                     observations=observations,
-                    allowlist=PLANNER_ALLOWLIST,
+                    allowlist=allowed,
                     available_sources=available_sources,
+                    skill_tools=skill_tool_schemas,
                 ),
                 "anonymize": False,
             },
             db,
             gateway,
         )
-        decision = parse_planner_decision((plan_res.data or {}).get("content"))
+        decision = parse_planner_decision((plan_res.data or {}).get("content"), allowlist=allowed)
         if decision is None:
             halt_reason = "planner_unparseable"
             break

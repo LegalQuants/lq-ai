@@ -333,17 +333,75 @@ preserving retained work for inspection. Failed local operations return a bounde
 refusal; an interrupted uncommitted effect retains the existing conservative
 recovery policy.
 
-**Run storage is not persistent skill memory.** A later invocation of the same
-session can use its working files; a new invocation of the same skill in a new
-run cannot automatically read them. General cross-invocation skill storage is
-not implemented. It needs a separate owner/matter/skill namespace, explicit
-reuse permissions, version compatibility, retention/deletion and concurrency
-rules. The intended extension is an optional persistent skill workspace: a skill
-chooses whether to use it. Skills need not persist work or load prior work on every
-invocation. This records the maintainer's direction; the capability is not yet
-implemented. User-kept memory remains a separate curation mechanism. This
-clarification does not ratify the ADR or enable code execution, live providers or
-publication.
+Run working files retain their run-specific lifetime. The separate optional
+capability in D8b provides reuse across skill invocations; user-kept memory remains
+a separate curation mechanism.
+
+### D8b — Optional persistent skill workspaces
+
+The maintainer's 14 September direction authorizes a separate persistent workspace
+that a skill may choose to use. The [local implementation](../plans/issue-563-skill-capabilities.md)
+adds explicit list/read/write operations; absent declarations preserve existing
+behavior. Stored work is not automatically injected into a new prompt.
+
+Use application-owned Postgres storage keyed by authenticated owner, project
+(or a personal namespace for projectless chat), resolved skill identity and a
+declared workspace format version. Built-in/community identities and DB user/team
+UUIDs remain distinct, including when skills shadow the same slug. Team skills
+still keep each user's saved data separate. Recheck current skill and access at
+tool execution. A skill change starts a new invocation; retaining the storage
+format version permits compatible reuse without aliasing unrelated skills.
+
+Logical UTF-8 files have bounded names and content: 32 files, 64 KiB per file,
+1 MiB per workspace. Writes require an expected revision UUID; `null` creates a
+new file. Fresh UUIDs on every write prevent stale updates after deletion/reset.
+Writes and local audit/receipt records share a transaction. Orchestration retains
+its exact approval, phase grants, worker fences and replay checks. The shared
+tool service also supports attached chat skills and the query-driven background
+planner; saved content remains unverified task data, not citation authority.
+
+Workspace data survives run/chat deletion and skill removal. Owner inspection,
+export and reset remain available when execution is disabled. Hard deletion of
+the owner or project cascades; project archival blocks execution while retaining
+inspection. Account export includes saved contents. Format changes create a
+separate namespace, with no implicit migration. Migration 0071 refuses downgrade
+until retained work is explicitly exported and cleared.
+
+### D8c — Installed bundled helpers; no generated-code execution
+
+The same owner direction restricts execution to reviewed, installed Python
+helpers. A call selects a declared helper by name and passes bounded JSON data;
+there is no source-code, command, path, interpreter, image, mount or environment
+argument. DB/inline skill text cannot install executable helpers. Script source
+and supporting files contribute to the skill pin and remain inspectable work
+product. They are excluded from the automatically assembled instruction text.
+
+Operators separately enable exact bundle hashes and immutable runtime images in
+a private authenticated broker. Only that trusted broker has container-engine
+access. API and worker processes send typed requests; they never execute helpers
+on the application host or receive the engine socket. A missing configuration or
+changed bundle refuses execution without fallback.
+
+Each job uses a fresh container: non-root, read-only root filesystem, no network,
+no application mounts or credentials, dropped capabilities, no-new-privileges,
+bounded CPU/memory/processes/open files, 16 MiB temporary space, a ten-second
+helper deadline and 64 KiB combined stdout/stderr. The launcher verifies installed
+source again before dispatch, supplies JSON on stdin, captures output, and kills
+remaining descendants. Per-request deletion and an instance-scoped recovery sweep
+remove disposable containers. Engine failure can delay deletion; the
+[deployment guide](../deploy/skill-capabilities.md) records cleanup and retention.
+
+Scripts receive explicitly selected input data. Persistent workspace operations
+remain separate tools: no saved file is mounted as executable code or imported on
+a later call. Python isolation mode excludes writable working directories and
+user import paths. Additional dependencies belong in the reviewed immutable
+image; runtime package installation is unsupported.
+
+Bundling does not establish safety. Review must reject helpers that interpret
+input as code or shell commands. The broker is trusted infrastructure with engine
+privileges; a dedicated/rootless engine is recommended. Container isolation is
+not a VM boundary. This decision excludes general generated-code execution and
+does not ratify the ADR, publish implementation or enable the running deployment.
 
 ### D9 — Approval and changing progress are required UI
 

@@ -51,6 +51,10 @@ class ToolIntent(StrEnum):
     notify = "notify"
     retrieve_caselaw = "retrieve_caselaw"
     call_mcp_tool = "call_mcp_tool"
+    skill_workspace_list = "skill_workspace_list"
+    skill_workspace_read = "skill_workspace_read"
+    skill_workspace_write = "skill_workspace_write"
+    run_bundled_script = "run_bundled_script"
     # WS-D PR1: the planner's next-step decision call (a gateway inference).
     # Granted only in analysis; the agentic loop dispatches it each iteration.
     plan = "plan"
@@ -87,6 +91,10 @@ PHASE_GRANTS: dict[Phase, frozenset[ToolIntent]] = {
             ToolIntent.workspace_read,
             ToolIntent.workspace_write,
             ToolIntent.workspace_share,
+            ToolIntent.skill_workspace_list,
+            ToolIntent.skill_workspace_read,
+            ToolIntent.skill_workspace_write,
+            ToolIntent.run_bundled_script,
         }
     ),
     Phase.drafting: frozenset(
@@ -103,6 +111,10 @@ PHASE_GRANTS: dict[Phase, frozenset[ToolIntent]] = {
             ToolIntent.workspace_read,
             ToolIntent.workspace_write,
             ToolIntent.workspace_share,
+            ToolIntent.skill_workspace_list,
+            ToolIntent.skill_workspace_read,
+            ToolIntent.skill_workspace_write,
+            ToolIntent.run_bundled_script,
         }
     ),
     Phase.ethics_review: frozenset({ToolIntent.emit_finding}),

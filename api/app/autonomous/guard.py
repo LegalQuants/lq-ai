@@ -107,6 +107,8 @@ from app.models.file import File as FileModel
 from app.models.knowledge import KnowledgeBase
 from app.models.user import User
 from app.observability_helpers import get_tracer, record_attributes
+from app.skills.binding import bind_record
+from app.skills.tools import SKILL_TOOL_INTENTS, SkillTools, current_registry, parse_skill_tool
 
 log = logging.getLogger(__name__)
 
@@ -191,6 +193,7 @@ async def guarded_tool_call(
     source_binding: SourceBinding | None = None,
     inference_binding: InferenceBinding | None = None,
     workspace_access: WorkspaceAccess | None = None,
+    skill_tools: SkillTools | None = None,
 ) -> ToolResult:
     """Single chokepoint for every autonomous tool invocation.
 
@@ -308,6 +311,24 @@ async def guarded_tool_call(
         ):
             raise ToolNotGranted("Workspace tools require durable orchestration authority")
 
+        skill_binding = None
+        if intent in SKILL_TOOL_INTENTS:
+            skill_tools = skill_tools or SkillTools(current_registry())
+            name = (
+                execution_scope.skill.name
+                if execution_scope
+                else (session.params or {}).get("skill_ref")
+            )
+            record = skill_tools.registry.current().get(name) if isinstance(name, str) else None
+            if record is None:
+                raise ToolNotGranted("A current installed skill is required")
+            skill_binding = bind_record(record)
+            if execution_scope and (
+                effect is None or skill_binding.digest != execution_scope.skill.digest
+            ):
+                raise ToolNotGranted("Skill tools require the approved pinned skill")
+            params = parse_skill_tool(intent, params)
+
         # ── R4 economic ─────────────────────────────────────────────────────
         if inference_binding is not None and (
             execution_scope is None
@@ -372,6 +393,22 @@ async def guarded_tool_call(
         elif intent in WORKSPACE_INTENTS:
             assert workspace_access is not None
             result = await workspace_access.execute(db, intent, params)
+        elif intent in SKILL_TOOL_INTENTS:
+            assert skill_tools is not None and skill_binding is not None
+            result = await skill_tools.execute(
+                db,
+                binding=skill_binding,
+                owner_id=session.user_id,
+                project_id=session.project_id,
+                intent=intent,
+                params=params,
+            )
+            if intent == ToolIntent.run_bundled_script:
+                await db.refresh(session, attribute_names=["halt_state"])
+                if session.halt_state != HaltState.running:
+                    raise SessionHalted(
+                        "session halted during script execution", reason="external_halt"
+                    )
         elif inference_binding is not None:
             result = await _handle_gateway_inference(
                 intent,

@@ -1854,7 +1854,7 @@ CASCADE`. Columns hold bounded UTF-8 `content`, `revision` (1–32), SHA-256 `di
 size; guarded writes enforce eight files and 256 KiB per session, 64 KiB per file,
 expected revisions and immutability after sharing. The root may read an approved
 child's shared file; siblings and other runs cannot. Owner receipt access includes
-private notes after halt. No host directory or cross-run skill namespace exists.
+private notes after halt. This table has no host directory or cross-run skill namespace.
 File writes and effect receipts commit atomically under the existing lock order.
 Downgrade refuses retained files or owned accounts; explicit session deletion
 removes the corresponding files. See [storage evidence](plans/issue-563-workspace.md).
@@ -1865,6 +1865,29 @@ an admitted child removes its private account/effects but leaves the plan and
 root's admitted marker; recovery refuses to recreate an incomplete batch.
 Downgrade refuses to drop this schema while roots/children exist, requiring an
 explicit drain/export/removal procedure. No automatic loss of receipts is allowed.
+
+### Optional persistent skill workspaces (0071, local implementation)
+
+These tables are independent of the run tree and LangGraph checkpoints.
+
+| Table | Key and fields | Lifetime and constraints |
+|---|---|---|
+| `skill_workspaces` | UUID `id`; `owner_id`, nullable `project_id`; `skill_key`, `skill_name`; integer `format_version` | Owner/project FKs cascade on hard deletion. `UNIQUE NULLS NOT DISTINCT(owner_id, project_id, skill_key, format_version)` isolates the personal null-project namespace too. Names/keys are 1–256 characters; version 1–1000. |
+| `skill_workspace_files` | PK `(workspace_id, name)`; `content`, UUID `revision`, `size_bytes`, `updated_at` | Parent FK cascades. Name regex excludes paths; content at most 65,536 bytes and size must equal `octet_length(content)`. |
+
+`skill_key` uses built-in/community slug identity or user/team skill UUID, so
+shadowing does not alias saved data. Tools bind it server-side. Names match
+`[a-zA-Z0-9][a-zA-Z0-9_.-]{0,95}`. Guarded application writes enforce 32 files and
+1 MiB per workspace under the owner/project lock order, require an expected
+revision (`null` for creation) and allocate a fresh revision UUID for every write.
+This prevents stale overwrites after reset. Writes share the caller's audit/effect
+transaction. File reads do not inject data into future prompts automatically.
+
+Run/chat deletion does not remove these rows. Skill disablement/removal preserves
+them for owner inspection/export/reset. Project archival blocks tool access but
+retains inspection. Account export includes `skill_workspaces.json`. Migration
+0071 refuses downgrade while any workspace remains: export and intentionally
+clear retained work first. See [capability evidence](plans/issue-563-skill-capabilities.md).
 
 ### `autonomous_schedules` (M4)
 

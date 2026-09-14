@@ -49,6 +49,10 @@ _RESEARCH_INTENTS = frozenset(
         ToolIntent.workspace_read,
         ToolIntent.workspace_write,
         ToolIntent.workspace_share,
+        ToolIntent.skill_workspace_list,
+        ToolIntent.skill_workspace_read,
+        ToolIntent.skill_workspace_write,
+        ToolIntent.run_bundled_script,
     }
 )
 
@@ -143,6 +147,7 @@ class OperatorPolicy(Snapshot):
 class PinnedSkill:
     pin: SkillPin
     instructions: str
+    bundle_digest: str | None = None
 
 
 def load_pinned_skill(record: SkillRecord) -> PinnedSkill:
@@ -158,7 +163,7 @@ def load_pinned_skill(record: SkillRecord) -> PinnedSkill:
         if current != record:
             raise ValueError("registry and disk differ")
         files = []
-        for path in sorted((*record.reference_paths, *record.example_paths)):
+        for path in sorted((*record.reference_paths, *record.example_paths, *record.script_paths)):
             if not path.resolve().is_relative_to(record.folder.resolve()):
                 raise ValueError("supporting file outside skill folder")
             files.append((path.relative_to(record.folder).as_posix(), path.read_text("utf-8")))
@@ -172,8 +177,18 @@ def load_pinned_skill(record: SkillRecord) -> PinnedSkill:
     # or ask the gateway to resolve this slug again after authority checks.
     instructions = f"---\n{record.raw_yaml}\n---\n{record.body}"
     for relative_path, content in files:
+        if relative_path.startswith("scripts/"):
+            continue
         instructions += f"\n\n## Supporting file: {relative_path}\n\n{content}"
-    return PinnedSkill(SkillPin(name=record.name, digest=digest), instructions)
+    scripts = [(p, c) for p, c in files if p.startswith("scripts/")]
+    bundle_digest = (
+        hashlib.sha256(
+            json.dumps(scripts, ensure_ascii=False, separators=(",", ":")).encode()
+        ).hexdigest()
+        if scripts
+        else None
+    )
+    return PinnedSkill(SkillPin(name=record.name, digest=digest), instructions, bundle_digest)
 
 
 def skill_pin(record: SkillRecord) -> SkillPin:

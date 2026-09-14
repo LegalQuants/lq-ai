@@ -47,6 +47,7 @@ from app.api import (
     projects,
     research,
     saved_prompts,
+    skill_workspaces,
     skills,
     tabular,
     teams,
@@ -98,6 +99,7 @@ api_router.include_router(projects.router, dependencies=_active)
 api_router.include_router(chats.router, dependencies=_active)
 api_router.include_router(chat_receipts.router, dependencies=_active)
 api_router.include_router(skills.router, dependencies=_active)
+api_router.include_router(skill_workspaces.router, dependencies=_active)
 api_router.include_router(models.router, dependencies=_active)
 api_router.include_router(files.router, dependencies=_active)
 api_router.include_router(knowledge_bases.router, dependencies=_active)

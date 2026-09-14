@@ -137,6 +137,10 @@ def test_phase_grants_exact_membership() -> None:
             ToolIntent.workspace_read,
             ToolIntent.workspace_write,
             ToolIntent.workspace_share,
+            ToolIntent.skill_workspace_list,
+            ToolIntent.skill_workspace_read,
+            ToolIntent.skill_workspace_write,
+            ToolIntent.run_bundled_script,
         }
     )
 
@@ -154,6 +158,10 @@ def test_phase_grants_exact_membership() -> None:
             ToolIntent.workspace_read,
             ToolIntent.workspace_write,
             ToolIntent.workspace_share,
+            ToolIntent.skill_workspace_list,
+            ToolIntent.skill_workspace_read,
+            ToolIntent.skill_workspace_write,
+            ToolIntent.run_bundled_script,
         }
     )
 
@@ -171,11 +179,11 @@ def test_phase_grants_covers_all_phases() -> None:
 
 @pytest.mark.unit
 def test_tool_intent_members() -> None:
-    """ToolIntent has exactly the fifteen members specified (M4-B2 adds
+    """ToolIntent has exactly the nineteen members specified (M4-B2 adds
     propose_precedent; Donna #8 adds emit_artifact; PR5a adds the two
     external-tool intents retrieve_caselaw + call_mcp_tool;
     WS-D PR1 adds plan; WS-E PR1a adds retrieve_authority;
-    ADR 0035 D8a adds the three guarded workspace operations)."""
+    ADR 0035 adds per-run files and four optional skill operations)."""
     expected = {
         "retrieve_chunks",
         "run_skill",
@@ -195,6 +203,10 @@ def test_tool_intent_members() -> None:
         "workspace_read",
         "workspace_write",
         "workspace_share",
+        "skill_workspace_list",
+        "skill_workspace_read",
+        "skill_workspace_write",
+        "run_bundled_script",
     }
     actual = {m.value for m in ToolIntent}
     assert actual == expected

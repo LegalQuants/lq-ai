@@ -4757,6 +4757,56 @@ components:
       - effects
       title: RunRead
       type: object
+    SavedContent:
+      properties:
+        content:
+          title: Content
+          type: string
+        name:
+          title: Name
+          type: string
+        revision:
+          format: uuid
+          title: Revision
+          type: string
+        size_bytes:
+          title: Size Bytes
+          type: integer
+        updated_at:
+          format: date-time
+          title: Updated At
+          type: string
+      required:
+      - name
+      - revision
+      - size_bytes
+      - updated_at
+      - content
+      title: SavedContent
+      type: object
+    SavedFile:
+      properties:
+        name:
+          title: Name
+          type: string
+        revision:
+          format: uuid
+          title: Revision
+          type: string
+        size_bytes:
+          title: Size Bytes
+          type: integer
+        updated_at:
+          format: date-time
+          title: Updated At
+          type: string
+      required:
+      - name
+      - revision
+      - size_bytes
+      - updated_at
+      title: SavedFile
+      type: object
     SavedPromptCreate:
       description: POST body. ``tags`` is optional and normalised to ``[]`` if absent.
       properties:
@@ -4850,6 +4900,43 @@ components:
           - type: 'null'
           title: Tags
       title: SavedPromptUpdate
+      type: object
+    SavedWorkspace:
+      properties:
+        files:
+          items:
+            $ref: '#/components/schemas/SavedFile'
+          title: Files
+          type: array
+        format_version:
+          title: Format Version
+          type: integer
+        id:
+          format: uuid
+          title: Id
+          type: string
+        project_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Project Id
+        project_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Project Name
+        skill_name:
+          title: Skill Name
+          type: string
+      required:
+      - id
+      - skill_name
+      - project_id
+      - project_name
+      - format_version
+      - files
+      title: SavedWorkspace
       type: object
     SearchRequest:
       additionalProperties: false
@@ -6152,6 +6239,10 @@ components:
       - notify
       - retrieve_caselaw
       - call_mcp_tool
+      - skill_workspace_list
+      - skill_workspace_read
+      - skill_workspace_write
+      - run_bundled_script
       - plan
       - retrieve_authority
       - workspace_read
@@ -13465,6 +13556,99 @@ paths:
       summary: Update a saved prompt (partial; owner-only)
       tags:
       - saved-prompts
+  /api/v1/skill-workspaces:
+    get:
+      operationId: list_workspaces_api_v1_skill_workspaces_get
+      parameters:
+      - in: query
+        name: offset
+        required: false
+        schema:
+          default: 0
+          minimum: 0
+          title: Offset
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/SavedWorkspace'
+                title: Response List Workspaces Api V1 Skill Workspaces Get
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: List Workspaces
+      tags:
+      - skills
+  /api/v1/skill-workspaces/{workspace_id}:
+    delete:
+      operationId: reset_workspace_api_v1_skill_workspaces__workspace_id__delete
+      parameters:
+      - in: path
+        name: workspace_id
+        required: true
+        schema:
+          format: uuid
+          title: Workspace Id
+          type: string
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Reset Workspace
+      tags:
+      - skills
+  /api/v1/skill-workspaces/{workspace_id}/files/{name}:
+    get:
+      operationId: read_file_api_v1_skill_workspaces__workspace_id__files__name__get
+      parameters:
+      - in: path
+        name: workspace_id
+        required: true
+        schema:
+          format: uuid
+          title: Workspace Id
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          title: Name
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedContent'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Read File
+      tags:
+      - skills
   /api/v1/skills:
     get:
       description: "Return summaries for skills visible to the caller.\n\nMerging\

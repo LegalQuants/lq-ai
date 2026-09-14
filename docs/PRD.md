@@ -516,7 +516,26 @@ This is the single most differentiated capability in the product. Specified in d
 
 ### 3.4 Skill Library and Skill Creator
 
-**M1 status:** Shipped. The Skill Library (browse built-in, user, and team scopes), Skill Creator (capture / wizard / fork), skill versions tab, per-version audit, Try-It sandbox, and slash-invoked skills with provenance pill are all wired end-to-end in Wave D.2. An operator can verify at `api/app/api/skills.py`; Cypress E2E coverage is in `web/cypress/e2e/wave-d2-skill-creator.cy.ts` (Tests 1–6). Skill script execution (`scripts/`) and autonomous skill self-improvement are deferred (M4). See [HONEST-STATE.md §1](HONEST-STATE.md#1-conversational-and-workspace-surface).
+**M1 status:** Shipped. The Skill Library (browse built-in, user, and team scopes), Skill Creator (capture / wizard / fork), skill versions tab, per-version audit, Try-It sandbox, and slash-invoked skills with provenance pill are all wired end-to-end in Wave D.2. An operator can verify at `api/app/api/skills.py`; Cypress E2E coverage is in `web/cypress/e2e/wave-d2-skill-creator.cy.ts` (Tests 1–6). Autonomous skill self-improvement remains deferred. The local #563 increment below adds optional storage and bundled helpers, pending publication. See [HONEST-STATE.md §1](HONEST-STATE.md#1-conversational-and-workspace-surface).
+
+**Optional capabilities (#563, local implementation).** A skill may independently
+declare a persistent workspace format and named installed Python helpers under
+`lq_ai.capabilities`. Storage belongs to the owner, matter (or personal namespace),
+exact skill identity and format version. Explicit read/write tools allow later
+invocations to reuse notes; there is no automatic memory injection. Named UTF-8
+files use revision checks and fixed quotas. Owners inspect, export or reset saved
+work, including after skill/feature disablement. Matter/account hard deletion
+clears its workspace; run deletion does not.
+
+Bundled helpers accept bounded JSON data and return bounded stdout/stderr/exit
+status from disposable isolated containers. Operators enable exact script bundles
+and immutable images through a separate private broker. No generated source,
+shell-command execution or runtime package installation is supported. Chat and
+guarded background calls share the capability service; orchestration additionally
+requires approved exact grants and pinned skills. Both features default off.
+See [ADR 0035 D8b–D8c](adr/0035-governed-orchestration-run-tree.md#d8b--optional-persistent-skill-workspaces),
+[authoring](skill-authoring-guide.md#optional-persistence-and-bundled-helpers) and
+[deployment/acceptance](deploy/skill-capabilities.md).
 
 **Description.** Skills are reusable, structured prompt artifacts that users attach to chats. They follow the agentskills.io / Claude Skills format: a folder containing `SKILL.md` (with YAML frontmatter) and optional supporting files. Three tiers: built-in skills (ship with the product), user skills (created by the user), and shared skills (shared by other users in the organization).
 
@@ -896,9 +915,10 @@ enablement defaults off and implementation publication still awaits ratification
 The [working-file increment](plans/issue-563-workspace.md) adds bounded storage
 within a run: private child notes, revision-aware read/write tools and explicitly
 shared result files consumed by the parent. Stored work survives worker restart
-and is inspectable by the owner. Code execution and storage reused automatically
-by later runs of the skill are not implemented; run storage is separate from
-user-kept memory. ADR 0035 D8a records that distinction.
+and is inspectable by the owner. The separate [optional skill capability increment](plans/issue-563-skill-capabilities.md)
+adds explicit reuse across skill invocations and installed bundled Python helpers.
+Generated code execution is excluded. ADR 0035 D8a–D8c separates these capabilities
+from user-kept memory and retains the publication/enablement hold.
 
 Local implementation includes [strict plan and consent contracts](plans/issue-563-contracts.md)
 and the [durable governance store](plans/issue-563-durable-governance.md):

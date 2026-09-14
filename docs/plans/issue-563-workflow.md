@@ -34,6 +34,23 @@ unreviewed external contribution code to run tests.
 
 ## Ordered work packages
 
+### Optional skill capabilities — owner direction, 14 September 2026
+
+Continue with [persistent skill workspaces and bundled script execution](issue-563-skill-capabilities.md).
+Both are optional capabilities used by the skill. Generated code execution is
+excluded. This supersedes the earlier local stopping point for the demonstration;
+the publication and deployment holds remain in force.
+
+**Completed locally, 14 September 2026:** independent persistent namespaces with
+owner inspection/reset/export and a separate authenticated broker for installed
+Python helpers. Chat, query-driven background planning and guarded root/child
+execution share the optional tools. Final capability acceptance: 34 passed;
+API regression: 3,120 passed; web unit tests: 770 passed; browser acceptance:
+3 passed; isolated stack smoke healthy with zero restarts. [Implementation,
+review and evidence](issue-563-skill-capabilities.md#completion-and-review--14-september-2026)
+record the scope and remaining external gates. ADR D8b/D8c document the extension;
+generated code remains excluded and no application feature was enabled.
+
 ### Continuous demonstration task — owner direction, 14 September 2026
 
 Continue across work packages without stopping for another instruction to

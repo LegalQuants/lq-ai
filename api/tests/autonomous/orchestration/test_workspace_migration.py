@@ -51,7 +51,7 @@ async def test_workspace_upgrade_downgrade_preserves_history(
         with pytest.raises(ValidationError, match="0070"):
             await env.checkpoints.setup()
     finally:
-        await migrate(test_db_url, test_engine, "upgrade", "0070")
+        await migrate(test_db_url, test_engine, "upgrade", "head")
     async with env.factory() as db:
         assert await db.get(AutonomousSession, env.root_id) is not None
     await approve(env)
@@ -75,4 +75,4 @@ async def test_workspace_upgrade_downgrade_preserves_history(
         await db.execute(delete(AutonomousSession).where(AutonomousSession.id == env.root_id))
         assert not await db.scalar(select(OrchestrationFile.session_id))
     await migrate(test_db_url, test_engine, "downgrade", "0069")
-    await migrate(test_db_url, test_engine, "upgrade", "0070")
+    await migrate(test_db_url, test_engine, "upgrade", "head")

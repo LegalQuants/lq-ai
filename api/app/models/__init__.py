@@ -49,6 +49,7 @@ from app.models.project import Project, ProjectFile, ProjectSkill
 from app.models.project_knowledge_base import ProjectKnowledgeBase
 from app.models.research import ResearchClusterMetadata, ResearchOpinionMetadata
 from app.models.saved_prompt import SavedPrompt
+from app.models.skill_workspace import SkillWorkspace, SkillWorkspaceFile
 from app.models.slack_workspace import SlackWorkspace
 from app.models.tabular import TabularExecution
 from app.models.team import Team, TeamMember
@@ -106,6 +107,8 @@ __all__ = [
     "ResearchClusterMetadata",
     "ResearchOpinionMetadata",
     "SavedPrompt",
+    "SkillWorkspace",
+    "SkillWorkspaceFile",
     "SlackWorkspace",
     "TabularExecution",
     "Team",

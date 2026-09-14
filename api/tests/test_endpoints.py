@@ -102,6 +102,9 @@ def _materialise(path: str) -> str:
 IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     # ADR 0035 closed demonstration; exercised against real governance storage.
     ("GET", "/api/v1/autonomous/orchestration/capabilities"),
+    ("GET", "/api/v1/skill-workspaces"),
+    ("DELETE", "/api/v1/skill-workspaces/{workspace_id}"),
+    ("GET", "/api/v1/skill-workspaces/{workspace_id}/files/{name}"),
     ("POST", "/api/v1/autonomous/orchestration/plans"),
     ("GET", "/api/v1/autonomous/orchestration/{root_id}/tree"),
     ("POST", "/api/v1/autonomous/orchestration/{root_id}/approve"),

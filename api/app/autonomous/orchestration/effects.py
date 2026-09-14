@@ -31,6 +31,7 @@ from app.errors import Conflict, Forbidden, ValidationError
 from app.models.autonomous import AutonomousSession
 from app.schemas.autonomous import Phase
 from app.skills.registry import MutableSkillRegistry
+from app.skills.tools import SKILL_TOOL_INTENTS, SkillTools, parse_skill_tool
 
 log = logging.getLogger(__name__)
 
@@ -103,7 +104,7 @@ class _Invocation:
                 amount_usd=self.source_binding.cost_usd,
                 pricing_version=self.source_binding.config_digest,
             )
-        elif intent in WORKSPACE_INTENTS:
+        elif intent in WORKSPACE_INTENTS or intent in SKILL_TOOL_INTENTS:
             quote = CostQuote(amount_usd=Decimal("0"), pricing_version="local-workspace-v1")
         elif self.quote is not None:
             quote = self.quote(intent, json.loads(request), self.view.scope)
@@ -287,6 +288,19 @@ class GuardedEffects:
             claim, view, effect_key, phase, ToolIntent.retrieve_chunks, {"file_id": str(file_id)}
         )
 
+    async def skill_tool(
+        self,
+        claim: WorkerClaim,
+        *,
+        effect_key: str,
+        phase: Phase,
+        intent: ToolIntent,
+        params: dict[str, Any],
+    ) -> ToolResult:
+        params = parse_skill_tool(intent, params)
+        view = await self.store.execution_view(claim)
+        return await self._call(claim, view, effect_key, phase, intent, params)
+
     async def authority(
         self,
         claim: WorkerClaim,
@@ -359,6 +373,7 @@ class GuardedEffects:
                     workspace_access=WorkspaceAccess(self.store, claim)
                     if intent in WORKSPACE_INTENTS
                     else None,
+                    skill_tools=SkillTools(self.skills) if intent in SKILL_TOOL_INTENTS else None,
                 )
         except BaseException:
             # The outcome transaction has rolled back before recovery acquires
