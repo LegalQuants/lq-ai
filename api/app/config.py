@@ -182,6 +182,26 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Must agree with ``app.clients.gateway.DEFAULT_TIMEOUT_SECONDS`` (pinned
+    # by tests/test_gateway_timeout_setting.py); config.py cannot import the
+    # client module without a circular import.
+    lq_ai_gateway_timeout_seconds: float = Field(
+        default=900.0,
+        gt=0,
+        description=(
+            "Per-request timeout, in seconds, for backend to Inference Gateway "
+            "calls. Keep it looser than the gateway's own per-provider timeouts "
+            "(600s by default) or the backend gives up first and the gateway's "
+            "more specific timeout label never appears (issue #503). A "
+            "self-hosted deployment running a local model on modest hardware "
+            "may need longer still — a single long generation on a fanless "
+            "laptop can exceed ten minutes — and without this setting the "
+            "request died at the wire as a fake 'upstream error' with no "
+            "indication that a timeout caused it; operators had to patch the "
+            "constant inside the image."
+        ),
+    )
+
     # ----- JWT (per ADR 0002 — backend owns auth) -----
     jwt_secret: str = Field(
         default=DEV_JWT_SECRET,
