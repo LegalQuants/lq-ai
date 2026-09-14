@@ -913,7 +913,9 @@ as progress or extending an in-flight provider timeout.
 stale root/child claims even after revocation, preserving completed receipts and
 retaining uncertain reservations. [Root deadline recovery](plans/issue-563-root-deadline.md)
 now expires clean overdue roots, including approval/child waits, while preserving
-unresolved outcomes as uncertainty. Production watchdog scheduling remains open.
+unresolved outcomes as uncertainty. A [bounded recovery sweep](plans/issue-563-recovery-sweep.md)
+now pages eligible roots, isolates failed recovery stages and preserves safe page
+replay. Production watchdog scheduling remains open.
 General legacy/MCP tool anonymization, shared policy distribution, production
 worker lifecycle and the public orchestration interface remain unimplemented; the
 [workflow](plans/issue-563-workflow.md) records acceptance progress.

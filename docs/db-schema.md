@@ -1821,6 +1821,13 @@ outcomes are preserved. Claim cleanup and `orchestration.root_expired` or
 legacy session status/phase, budget or receipt schema. See
 [root deadline evidence](plans/issue-563-root-deadline.md).
 
+The internal recovery sweep discovers only root IDs, using UUID pagination with
+existing root/account indexes available, then closes discovery before invoking independent
+claim/deadline transactions. Its caller-carried scan cursor is not persisted in
+these tables and does not represent execution continuation. Page limits and
+per-stage timeouts bound work; there is no migration or new authority record.
+See [recovery sweep evidence](plans/issue-563-recovery-sweep.md).
+
 All root-owned records cascade on root/session deletion. Projects use RESTRICT
 while orchestration roots exist; ordinary archival remains available. Deleting
 an admitted child removes its private account/effects but leaves the plan and

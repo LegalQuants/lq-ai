@@ -129,6 +129,11 @@ clean overdue approval/child waits and active roots, preserving prior terminal
 outcomes and uncertainty. Claim cleanup and lifecycle audit commit atomically;
 no public status or legacy session enum changes accompany this private operation.
 
+The subsequent [bounded recovery sweep](issue-563-recovery-sweep.md) reads eligible
+root IDs in pages and invokes claim/deadline recovery with separate transactions
+and per-stage timeouts. A blocked or invalid root cannot poison the whole page;
+reports use identifiers and fixed error codes. Production scheduling is disabled.
+
 ## Outstanding integration
 
 - Connect a production current-policy resolver and preserve R5 → R6 → R4 through

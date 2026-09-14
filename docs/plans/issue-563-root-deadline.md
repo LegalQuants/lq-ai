@@ -70,7 +70,9 @@ verification. No development or production database was migrated.
 
 ## Remaining integration
 
-Production watchdog scanning/scheduling, root/child idle rules, bounded retries,
+The subsequent [bounded recovery sweep](issue-563-recovery-sweep.md) supplies
+internal paged scanning and per-root fault isolation. Production scheduling,
+root/child idle rules, bounded retries,
 shared policy/capacity, checkpoint-writer fencing, joins and public API/UI remain
 in the workflow. The existing single-session cron/watchdog is unchanged. This
 private deadline transition must be connected deliberately to orchestration
