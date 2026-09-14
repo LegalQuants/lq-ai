@@ -4,7 +4,9 @@ The local implementation of [#563](https://github.com/LegalQuants/lq-ai/issues/5
 provides governed parallel agents, durable working files and optional skill
 storage and helpers. [ADR 0035](../adr/0035-governed-orchestration-run-tree.md)
 remains proposed: the code is unpublished and the capabilities are disabled by
-default. This PR documents the result for review.
+default. This PR documents the result for review. The
+[research note](../research/issue-563-harness-research.md) explains the evidence
+behind the architecture and security choices.
 
 ## What is built
 

@@ -178,13 +178,9 @@ preserves read/halt access; rollback requires draining or halting retained work.
 | Reviewed scripts with application-host access | Simpler deployment. | Vetting can miss malicious code or vulnerable dependencies; confidentiality also requires runtime containment. |
 
 LangGraph fits the existing Python executor and the required continuation model.
-This choice is supported by the linked integration evidence, without a claim of
-measured performance or maintenance superiority. The harness
-[execution models](https://docs.langchain.com/oss/python/deepagents/backends),
-[SDK tool options](https://openai.github.io/openai-agents-python/tools/),
-[Pi trust boundary](https://github.com/earendil-works/pi/security) and
-[DeepSeek sandbox contract](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/sandbox/sandbox/README.md)
-illustrate why delegation, execution permissions and isolation are separate choices.
+The [research findings](../research/issue-563-harness-research.md) compare harnesses,
+explain the backend experiments and examine execution security. They support this
+choice without claiming measured performance or maintenance superiority.
 
 ## Consequences
 
@@ -220,8 +216,8 @@ not establish the complete confidentiality objective.
 
 ## Supporting evidence
 
-The [research assessment](https://github.com/LegalQuants/lq-ai/blob/4ac3fee64/outputs/issue-563-prior-art.md)
-records the alternatives and prototype limits. The
+The [research note](../research/issue-563-harness-research.md) preserves the findings,
+source comparisons and experiment limits, with links to the full assessment. The
 [implementation overview](../plans/issue-563-workflow.md) summarizes delivered
 capabilities, validation limits and remaining release work. The
 [skill capability summary](../plans/issue-563-skill-capabilities.md) and
