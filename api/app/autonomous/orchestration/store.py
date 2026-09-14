@@ -21,7 +21,7 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from pydantic import TypeAdapter, ValidationError as SchemaError
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -32,6 +32,12 @@ from app.autonomous.orchestration.contracts import (
     ExecutionScope,
     Money,
     PreparedPlan,
+)
+from app.autonomous.orchestration.outcomes import (
+    CollectedTopic,
+    DemonstrationResult,
+    TopicOutcome,
+    topic_coverage,
 )
 from app.errors import Conflict, Forbidden, NotFound, ValidationError
 from app.models.autonomous import AutonomousSession
@@ -64,6 +70,9 @@ _EVENTS = frozenset(
         "effect_admitted",
         "effect_completed",
         "effect_uncertain",
+        "phase_changed",
+        "topic_delivered",
+        "root_delivered",
     }
 )
 
@@ -147,10 +156,19 @@ async def _audit(db: AsyncSession, root: Root, event: str, **details: Any) -> No
 
 class OrchestrationStore:
     def __init__(
-        self, sessions: async_sessionmaker[AsyncSession], *, check_policy: CurrentPolicyCheck
+        self,
+        sessions: async_sessionmaker[AsyncSession],
+        *,
+        check_policy: CurrentPolicyCheck,
+        deployment_children: int | None = None,
     ) -> None:
+        if deployment_children is not None and (
+            type(deployment_children) is not int or not 1 <= deployment_children <= 32
+        ):
+            raise ValidationError(message="Deployment child capacity must be 1-32")
         self.sessions = sessions
         self.check_policy = check_policy
+        self.deployment_children = deployment_children
 
     async def _owner_project(
         self, db: AsyncSession, owner_id: UUID, project_id: UUID, *, creating: bool = False
@@ -241,7 +259,9 @@ class OrchestrationStore:
         binding.require_matches(plan, now=now)
         await self._live(db, root, plan, now)
 
-    async def save_plan(self, plan: PreparedPlan, *, actor_id: UUID) -> None:
+    async def save_plan(
+        self, plan: PreparedPlan, *, actor_id: UUID, create_session: bool = False
+    ) -> None:
         plan = PreparedPlan.model_validate(plan)
         if actor_id != plan.owner_id:
             raise Forbidden(message="Only the owner may prepare this plan")
@@ -257,6 +277,22 @@ class OrchestrationStore:
                 if root is None:
                     if plan.revision != 1:
                         raise Conflict(message="A new plan starts at revision one")
+                    if create_session:
+                        db.add(
+                            AutonomousSession(
+                                id=plan.root_id,
+                                user_id=plan.owner_id,
+                                project_id=plan.project_id,
+                                trigger_kind="manual",
+                                max_cost_usd=plan.root_allowance_usd,
+                                params={
+                                    "orchestration_profile": "demonstration",
+                                    "query": plan.goal,
+                                    "skill_ref": plan.root.skill.name,
+                                },
+                            )
+                        )
+                        await db.flush()
                     root = Root(
                         session_id=plan.root_id,
                         owner_id=plan.owner_id,
@@ -399,6 +435,9 @@ class OrchestrationStore:
             assert stored is not None
             stored.status = root.status = "rejected"
             root.updated_at = now
+            session = await db.get(AutonomousSession, root_id)
+            assert session is not None
+            session.status, session.halt_state, session.completed_at = "halted", "halted", now
             await _audit(db, root, "rejected", revision=revision)
 
     async def _account(self, db: AsyncSession, root_id: UUID, session_id: UUID) -> Account:
@@ -429,7 +468,34 @@ class OrchestrationStore:
         async with self.sessions.begin() as db:
             root, plan, now = await self._root(db, root_id)
             await self._approved(db, root, plan, now)
+            if session_id != root_id:
+                # Serialize capacity admissions across roots/processes. Count
+                # expired ownership and uncertain calls until recovery proves
+                # they can be released; a lost saver connection frees no budget
+                # or execution authority in these durable records.
+                await db.execute(select(func.pg_advisory_xact_lock(563, 1)))
+                occupied = select(Account.session_id, Account.root_id).where(
+                    Account.session_id != Account.root_id,
+                    Account.session_id != session_id,
+                    or_(
+                        Account.worker_id.is_not(None),
+                        select(Effect.session_id)
+                        .where(
+                            Effect.session_id == Account.session_id,
+                            Effect.status.in_(["admitted", "uncertain"]),
+                        )
+                        .exists(),
+                    ),
+                )
+                active = list(await db.execute(occupied))
+                if sum(row.root_id == root_id for row in active) >= plan.max_active_children or (
+                    self.deployment_children is not None and len(active) >= self.deployment_children
+                ):
+                    raise Conflict(message="Child execution capacity is occupied")
             account = await self._account(db, root_id, session_id)
+            session = await db.get(AutonomousSession, session_id)
+            if session is None or session.status != "running":
+                raise Conflict(message="Run is already terminal")
             now = await _now(db)
             if (
                 account.worker_id is not None
@@ -710,6 +776,173 @@ class OrchestrationStore:
             )
             return tuple(child.dispatch_id for child in plan.children)
 
+    async def phase(self, claim: WorkerClaim, phase: Phase) -> None:
+        """Publish progress; LangGraph alone owns the continuation position."""
+        async with self.sessions.begin() as db:
+            root, plan, now = await self._root(db, claim.root_id)
+            await self._approved(db, root, plan, now)
+            account = await self._account(db, claim.root_id, claim.session_id)
+            self._fence(account, claim, await _now(db))
+            session = await db.get(AutonomousSession, claim.session_id)
+            assert session is not None
+            phases = list(Phase)
+            # Replayed nodes must not move visible progress backwards.
+            if phases.index(phase) <= phases.index(Phase(session.current_phase)):
+                return
+            if session.status != "running":
+                raise Conflict(message="Terminal run cannot advance phase")
+            session.current_phase = phase.value
+            session.last_activity_at = root.updated_at = await _now(db)
+            await _audit(db, root, "phase_changed", session_id=str(session.id), phase=phase.value)
+
+    async def stage_topic(self, claim: WorkerClaim, outcome: TopicOutcome) -> None:
+        """Store bounded internal content outside framework checkpoints/traces."""
+        outcome = TopicOutcome.model_validate(outcome)
+        if claim.session_id == claim.root_id:
+            raise Conflict(message="Only a child may stage a topic outcome")
+        async with self.sessions.begin() as db:
+            root, plan, now = await self._root(db, claim.root_id)
+            await self._approved(db, root, plan, now)
+            account = await self._account(db, claim.root_id, claim.session_id)
+            self._fence(account, claim, await _now(db))
+            session = await db.get(AutonomousSession, claim.session_id)
+            assert session is not None
+            value = outcome.model_dump(mode="json")
+            if session.result is not None and session.result != value:
+                raise Conflict(message="An existing topic outcome cannot change")
+            session.result = value
+
+    async def deliver_topic(self, claim: WorkerClaim, *, failed: bool = False) -> None:
+        if claim.session_id == claim.root_id:
+            raise Conflict(message="Only a child may deliver a topic outcome")
+        async with self.sessions.begin() as db:
+            root, plan, now = await self._root(db, claim.root_id)
+            await self._approved(db, root, plan, now)
+            account = await self._account(db, claim.root_id, claim.session_id)
+            self._fence(account, claim, await _now(db))
+            if account.reserved_usd or await db.scalar(
+                select(Effect.session_id)
+                .where(
+                    Effect.session_id == claim.session_id,
+                    Effect.status.in_(["admitted", "uncertain"]),
+                )
+                .limit(1)
+            ):
+                raise Conflict(message="Unresolved work prevents topic delivery")
+            session = await db.get(AutonomousSession, claim.session_id)
+            assert session is not None
+            outcome = TopicOutcome.model_validate_json(json.dumps(session.result))
+            if failed != (outcome.status == "failed"):
+                raise Conflict(message="Topic delivery status does not match its outcome")
+            if session.status != "running":
+                return
+            if not failed and session.current_phase != Phase.delivery.value:
+                raise Conflict(message="Topic must complete its phases before delivery")
+            session.status = "failed" if failed else "completed"
+            session.completed_at = session.last_activity_at = root.updated_at = await _now(db)
+            await _audit(
+                db, root, "topic_delivered", session_id=str(session.id), outcome=outcome.status
+            )
+
+    async def _topics(self, db: AsyncSession, plan: PreparedPlan) -> tuple[CollectedTopic, ...]:
+        topics = []
+        for child in plan.children:
+            session = await db.get(AutonomousSession, child.dispatch_id)
+            if session is None or session.status not in {"completed", "failed"}:
+                raise Conflict(message="Approved topics are still pending")
+            try:
+                outcome = TopicOutcome.model_validate_json(json.dumps(session.result))
+            except SchemaError:
+                raise Conflict(message="Stored topic outcome is invalid") from None
+            topics.append(
+                CollectedTopic(session_id=session.id, topic=child.task.topic, outcome=outcome)
+            )
+        return tuple(topics)
+
+    async def collect_topics(self, claim: WorkerClaim) -> tuple[CollectedTopic, ...]:
+        if claim.session_id != claim.root_id:
+            raise Forbidden(message="Only the root may collect sibling outcomes")
+        async with self.sessions.begin() as db:
+            root, plan, now = await self._root(db, claim.root_id)
+            await self._approved(db, root, plan, now)
+            account = await self._account(db, claim.root_id, claim.session_id)
+            self._fence(account, claim, await _now(db))
+            return await self._topics(db, plan)
+
+    async def wait_for_children(self, claim: WorkerClaim) -> bool:
+        """Report join readiness without retaining an invocation while waiting."""
+        if claim.session_id != claim.root_id:
+            raise Forbidden(message="Only the root may wait for children")
+        async with self.sessions.begin() as db:
+            root, plan, now = await self._root(db, claim.root_id)
+            await self._approved(db, root, plan, now)
+            account = await self._account(db, claim.root_id, claim.session_id)
+            self._fence(account, claim, await _now(db))
+            ready = await db.scalar(
+                select(func.count())
+                .select_from(AutonomousSession)
+                .where(
+                    AutonomousSession.parent_session_id == claim.root_id,
+                    AutonomousSession.status.in_(["completed", "failed"]),
+                )
+            ) == len(plan.children)
+            if not ready:
+                root.status = "waiting_children"
+            return ready
+
+    async def stage_synthesis(self, claim: WorkerClaim, summary: str) -> None:
+        if claim.session_id != claim.root_id:
+            raise Forbidden(message="Only the root may synthesize")
+        async with self.sessions.begin() as db:
+            root, plan, now = await self._root(db, claim.root_id)
+            await self._approved(db, root, plan, now)
+            account = await self._account(db, claim.root_id, claim.session_id)
+            self._fence(account, claim, await _now(db))
+            topics = await self._topics(db, plan)
+            result = DemonstrationResult(
+                coverage=topic_coverage(topics), summary=summary, topics=topics
+            )
+            session = await db.get(AutonomousSession, claim.root_id)
+            assert session is not None
+            value = result.model_dump(mode="json")
+            if session.result is not None and session.result != value:
+                raise Conflict(message="An existing root synthesis cannot change")
+            session.result = value
+
+    async def deliver_root(self, claim: WorkerClaim) -> None:
+        if claim.session_id != claim.root_id:
+            raise Forbidden(message="Only the root may deliver a synthesis")
+        async with self.sessions.begin() as db:
+            root, plan, now = await self._root(db, claim.root_id)
+            await self._approved(db, root, plan, now)
+            account = await self._account(db, claim.root_id, claim.session_id)
+            self._fence(account, claim, await _now(db))
+            if await db.scalar(
+                select(Account.session_id)
+                .where(Account.root_id == claim.root_id, Account.reserved_usd != 0)
+                .limit(1)
+            ) or await db.scalar(
+                select(Effect.session_id)
+                .join(Account)
+                .where(
+                    Account.root_id == claim.root_id, Effect.status.in_(["admitted", "uncertain"])
+                )
+                .limit(1)
+            ):
+                raise Conflict(message="Unresolved work prevents root delivery")
+            session = await db.get(AutonomousSession, claim.root_id)
+            assert session is not None
+            result = DemonstrationResult.model_validate_json(json.dumps(session.result))
+            if session.current_phase != Phase.delivery.value or result.topics != await self._topics(
+                db, plan
+            ):
+                raise Conflict(message="Root delivery is not ready")
+            root.status = session.status = "failed" if result.coverage == "failed" else "completed"
+            session.completed_at = session.last_activity_at = root.updated_at = await _now(db)
+            await _audit(
+                db, root, "root_delivered", coverage=result.coverage, verification="unverified"
+            )
+
     async def halt(self, root_id: UUID, *, actor_id: UUID) -> None:
         # Halt deliberately remains reachable after opt-out/project archival or
         # policy revocation: it only narrows authority. Take the same lock order.
@@ -736,6 +969,14 @@ class OrchestrationStore:
             if root.status != "uncertain":
                 root.status = "halted"
             root.stop_reason, root.updated_at = "owner_halt", await _now(db)
+            await db.execute(
+                update(AutonomousSession)
+                .where(
+                    AutonomousSession.root_session_id == root_id,
+                    AutonomousSession.status == "running",
+                )
+                .values(status="halted", halt_state="halt_requested", completed_at=root.updated_at)
+            )
             await _audit(db, root, "halted")
 
     async def expire_root(self, root_id: UUID) -> bool:
@@ -798,6 +1039,16 @@ class OrchestrationStore:
             root.stop_reason = root.stop_reason or "root_deadline"
             root.updated_at = await _now(db)
             await _audit(db, root, "root_expired", revision=plan.revision)
+            session = await db.get(AutonomousSession, root_id)
+            if session and session.params.get("orchestration_profile") == "demonstration":
+                await db.execute(
+                    update(AutonomousSession)
+                    .where(
+                        AutonomousSession.root_session_id == root_id,
+                        AutonomousSession.status == "running",
+                    )
+                    .values(status="halted", halt_state="halted", completed_at=root.updated_at)
+                )
             return True
 
     async def recover_expired_effects(self, root_id: UUID) -> int:

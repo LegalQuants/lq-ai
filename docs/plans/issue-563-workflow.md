@@ -28,11 +28,32 @@ Read-only GitHub checks and local commits are permitted.
 | `codex/issue-563-orchestration-implementation` | Harness implementation, based on the revised ADR commit; integrate reviewed local maintenance commits as required. |
 
 The published research is preserved at `4ac3fee64`. Its SQLite experiment is
-evidence for a fixed batch only; the application integration gates below remain
-outstanding. Never overwrite the user's unrelated research worktree or import
+evidence for a fixed batch only; the table below records subsequent application
+integration. Never overwrite the user's unrelated research worktree or import
 unreviewed external contribution code to run tests.
 
 ## Ordered work packages
+
+### Continuous demonstration task — owner direction, 14 September 2026
+
+Continue across work packages without stopping for another instruction to
+proceed. The next reviewable result is a complete orchestration demonstration:
+prepare a plan, obtain explicit approval, run bounded children concurrently,
+show changing progress, collect each topic's outcome and synthesize at the root.
+Use deterministic provider fixtures to exercise the real store and LangGraph
+continuation. Keep implementation commits local under the publication hold above.
+
+The visible `orchestrator-harness` skill is a technical demonstration, with a
+small companion child skill for sample findings. Neither is a new substantive
+legal-research skill. Research relevance, expanded verification, citation-quality
+improvements and attorney-calibrated research workflows are deferred. Existing
+approval, scope, budget, halt and recovery controls remain required; results
+must explicitly retain unverified or absent evidence status. Sample output must
+never look like completed legal research.
+
+The [continuous execution plan](issue-563-demonstration.md) tracks this vertical
+slice. Packages below remain the broader #563 inventory; completing the demo
+does not silently mark production research integrations or ADR ratification done.
 
 Each package is a coherent local commit or small series. Complete its focused
 tests, inspect the diff for ADR compliance and code quality, fix findings, and
@@ -44,13 +65,13 @@ new changes or unresolved concerns.
 |---|---|---|
 | W0 — Runtime maintenance (#524) | Upgrade the existing LangGraph family; retype all three executors; review actual lock additions/removals/advisories; refresh the pin and debt docs and Dependabot exception. Preserve behavior and leave checkpointing disabled. Lock, Ruff, mypy, compiled graphs, required API tests and stack smoke pass. | Complete locally; publication held |
 | W1 — Governed plan contracts | Strict bounded task data separate from server authority; stable plan identity/revision/hash; immutable approval scope; no model-supplied authority or arbitrary handler. Test malformed/hostile/extra input and scope/version changes. | Complete locally; 96 tests passed |
-| W2 — LangGraph/Postgres integration | Real LQ guard and actual Postgres checkpoints, meaningful multi-step effect boundaries, independent child DB sessions, competing-owner/restart/halt fixtures and uncertain-call handling. Record worker topology and locked saver configuration; no second continuation cursor. | Guarded effect adapter passes fresh-checkpoint and hard-process-death fixtures; final arq/LangGraph worker topology and external integration remain |
-| W3 — Durable run tree and approval | Hierarchy migration/backfill/deletion rules, plan and approval persistence, version-bound approval, durable unique child admission and wakeup recovery. Real Postgres race/crash tests and migration up/down pass. | Persistence core implemented and tested locally; explicit claim release implemented; worker/wakeup integration remains |
-| W4 — Authority, accounting and halt | Approved resource subset and current permission checks; inference/egress restrictions; atomic Decimal reservations/settlement; root allowance; fenced execution and cancellation; correct waiting/deadline/watchdog semantics. | Allocations, effect accounting, worker fences, current policy, scoped guard, authority-source and direct inference bindings implemented; tier direction corrected; gateway revision checks and pinned dispatch implemented; required authority anonymization implemented; explicit safe claim release, bounded renewal and expired ownership recovery and root deadline transitions and bounded recovery sweep implemented; shared policy/capacity/lifecycle remain |
-| W5 — Parallel research and joining | Versioned visible orchestrator skill, isolated skill-backed children, bounded concurrency across root/user/deployment, internal child delivery, root-only output, partial/empty/failure outcomes. Barrier tests prove overlap and restart does not duplicate completed work. | Pending |
-| W6 — API, gateway and receipts | Plan read/approve/reject, tree read, correlation stripped before provider calls, stable child receipts, separate completion/coverage/verification statuses and parent synthesis gate. Update API sketches/generated export, route pins and schema docs with code. | Pending |
-| W7 — Intake and UI | Reuse corrected #410 entry point; explicit plan review, approve/reject, changing child progress, budget breakdown, halt, receipt links and bounded polling/manual refresh. Svelte/Vitest and controlled Cypress flow pass. | Pending |
-| W8 — Integration and release readiness | Adversarial/race/crash/capacity/regression matrix, operator controls disabled by default, honesty/docs, migration compatibility, drain/rollback instructions and review evidence. No live search relevance or nonempty-result gate. | Pending |
+| W2 — LangGraph/Postgres integration | Real LQ guard and actual Postgres checkpoints, meaningful multi-step effect boundaries, independent child DB sessions, competing-owner/restart/halt fixtures and uncertain-call handling. Record worker topology and locked saver configuration; no second continuation cursor. | Complete locally for the demonstration: separate root/child graphs, arq wakeups, durable join/resume and one owned saver connection per invocation; earlier hard-process-death probes retained |
+| W3 — Durable run tree and approval | Hierarchy migration/backfill/deletion rules, plan and approval persistence, version-bound approval, durable unique child admission and wakeup recovery. Real Postgres race/crash tests and migration up/down pass. | Complete locally for the demonstration, including queue recovery and migration 0069's session-owned checkpoint schema |
+| W4 — Authority, accounting and halt | Approved resource subset and current permission checks; inference/egress restrictions; atomic Decimal reservations/settlement; root allowance; fenced execution and cancellation; correct waiting/deadline/watchdog semantics. | Governance foundation retained; demonstration connects current policy, explicit shared child capacity, lifecycle, halt and recovery. Live sources and deployment policy changes remain outside this slice |
+| W5 — Parallel topic demonstration and joining | Versioned visible orchestrator skill, isolated skill-backed children, bounded concurrency across root/user/deployment, internal child delivery, root-only output, partial/empty/failure outcomes. Barrier tests prove overlap and restart does not duplicate completed work. | Complete locally with sample responses and explicit unverified outcomes; substantive research authorship and quality evaluation deferred by owner direction |
+| W6 — API, gateway and receipts | Plan read/approve/reject, tree read, correlation stripped before provider calls, stable child receipts, separate completion/coverage/verification statuses and parent synthesis gate. Update API sketches/generated export, route pins and schema docs with code. | Complete locally for the closed demonstration: six API paths, stable guarded effects and owner-only tree inspection; live-provider activation deferred |
+| W7 — Intake and UI | Explicit plan review, approve/reject, changing child progress, budget breakdown, halt, receipt links and bounded polling/manual refresh. Svelte/Vitest and controlled Cypress flow pass. | Complete locally in Autonomous sessions → Orchestration demo. Selected-KB/#410 real-matter integration remains deferred |
+| W8 — Integration and release readiness | Adversarial/race/crash/capacity/regression matrix, operator controls disabled by default, honesty/docs, migration compatibility, drain/rollback instructions and review evidence. No live search relevance or nonempty-result gate. | Local demonstration integration and operator handoff implemented; final evidence recorded in the demonstration plan. ADR ratification, publication and production release remain held |
 
 W1 can be prepared before the runtime migration is integrated. W2 validates the
 proposed backend before the larger persistence/execution work depends on it. W3
@@ -255,13 +276,22 @@ cost tests. Uncertain external outcomes remain distinct from completed work.
   check/format, mypy (201 API files) and diff checks passed. The disposable test
   database was removed. The sweep is not registered with arq or the existing
   single-session watchdog.
-- Following integration work: shared current-policy distribution,
-  worker topology/capacity, queue wakeup recovery and lifecycle handling. No public
-  orchestration routes or ordinary workers invoke the store yet. Keep LangGraph
-  as proposed.
-- Ratification, production integration, code publication and release remain open.
+- W2–W8: the [continuous demonstration](issue-563-demonstration.md) now connects
+  plan preparation, exact approval, bounded parallel child sessions, observable
+  progress, internal findings and root synthesis. API/arq share pinned sample
+  policy and an explicit deployment limit. LangGraph owns continuation; arq
+  provides short invocations and lost-wakeup recovery. Migration 0069 owns the
+  isolated checkpoint schema and cascades session/user deletion through it.
+  The root releases its invocation while waiting for children. A real arq process
+  completes the tree from one approved wakeup against disposable Postgres/Redis.
+  The demonstration plan records final regression and browser evidence.
+- The sustained local demonstration is the reviewable stopping point requested
+  on 14 September. No further research-quality milestone is required for it.
+  Next external step: owner review and explicit ADR ratification before any
+  implementation publication. Real-matter source/KB intake, live inference and
+  production release remain separate follow-on work.
 
-### W1 implementation entry point
+### W1 contract reference (implemented)
 
 Keep pure contracts under `api/app/autonomous/orchestration/`, separate from
 framework imports and existing single-session request schemas. Start with the
@@ -279,6 +309,6 @@ is only evidence of consent to that snapshot: current-access validation, durable
 idempotency, atomic admission and halt checks belong to the persistence boundary
 and must never be represented as accomplished by a hash or an in-memory object.
 
-Do not wire these contracts into dispatch before W2/W3 prove the durable barrier.
-Record the internal contract and limits with its tests; add public API and DB
-documentation when those surfaces are introduced in W3/W6.
+W2/W3 proved the durable barrier before the demonstration connected dispatch.
+The internal contracts and tests remain the authority boundary; W6's API and DB
+documentation now describe the implemented demonstration surfaces.

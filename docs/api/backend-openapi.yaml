@@ -4961,6 +4961,108 @@ paths:
         '404':
           description: Notification not found
 
+  # ADR 0035: closed local demonstration; canonical detailed shapes are generated
+  # alongside these handlers. Six paths add no public child-spawn authority.
+  /api/v1/autonomous/orchestration/capabilities:
+    get:
+      tags: [autonomous]
+      summary: Read demonstration enablement and explicit shared capacity
+      responses:
+        '200':
+          description: Disabled by default; live providers are always false
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/DemoCapabilities'
+  /api/v1/autonomous/orchestration/plans:
+    post:
+      tags: [autonomous]
+      summary: Prepare a sample plan for an owned active matter; requires opt-in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './backend-openapi.generated.yaml#/components/schemas/DemoPlanRequest'
+      responses:
+        '201':
+          description: Awaiting approval; no child is admitted or queued yet
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/TreeRead'
+        '403': {description: Demonstration disabled or autonomous opt-in missing}
+        '404': {description: Owned active project not found}
+        '409': {description: Owner already has an active root}
+  /api/v1/autonomous/orchestration/{root_id}/tree:
+    parameters:
+      - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      tags: [autonomous]
+      summary: Inspect owned plan, progress, budgets, receipts and unverified outcomes
+      responses:
+        '200':
+          description: Readable after opt-out, halt or feature disablement
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/TreeRead'
+        '404': {description: Root absent or owned by another user}
+  /api/v1/autonomous/orchestration/{root_id}/approve:
+    parameters:
+      - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [autonomous]
+      summary: Approve the exact revision and hash before worker wakeup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './backend-openapi.generated.yaml#/components/schemas/ApprovalRequest'
+      responses:
+        '200':
+          description: Durable approval; a lost queue wakeup is recovered by the sweep
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/TreeRead'
+        '409': {description: Stale revision/hash or conflicting transition}
+  /api/v1/autonomous/orchestration/{root_id}/reject:
+    parameters:
+      - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [autonomous]
+      summary: Reject an awaiting plan revision without executing children
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './backend-openapi.generated.yaml#/components/schemas/RejectionRequest'
+      responses:
+        '200':
+          description: Rejected plan and retained history
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/TreeRead'
+        '409': {description: Stale revision or execution already started}
+  /api/v1/autonomous/orchestration/{root_id}/halt:
+    parameters:
+      - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [autonomous]
+      summary: Halt an owned tree, including after opt-out or feature disablement
+      responses:
+        '200':
+          description: Deterministic partial state; no fresh synthesis call after halt
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/TreeRead'
+        '404': {description: Root absent or owned by another user}
+
   /api/v1/autonomous/run-now:
     post:
       tags: [autonomous]

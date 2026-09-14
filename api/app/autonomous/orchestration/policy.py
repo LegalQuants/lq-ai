@@ -114,6 +114,7 @@ class OperatorPolicy(Snapshot):
     maximum_egress_tier: EgressTier
     require_anonymization: bool
     inference: InferencePolicy | None = None
+    deployment_children: Annotated[int, Field(ge=1, le=32)] | None = None
 
     @model_validator(mode="after")
     def unique_catalog(self) -> OperatorPolicy:

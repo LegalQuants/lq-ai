@@ -191,6 +191,7 @@
 				</p>
 			</div>
 			<button type="button" class="new-button" on:click={openRunModal}> Run now </button>
+			<a href="/lq-ai/autonomous/orchestration" class="underline">Orchestration demo</a>
 		</div>
 	</header>
 

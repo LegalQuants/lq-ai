@@ -48,6 +48,7 @@ from app.security import create_access_token, hash_password
 _DUMMY_UUID = "00000000-0000-4000-8000-000000000000"
 _PARAM_VALUES: dict[str, str] = {
     "project_id": _DUMMY_UUID,
+    "root_id": _DUMMY_UUID,
     "chat_id": _DUMMY_UUID,
     "message_id": _DUMMY_UUID,
     "file_id": _DUMMY_UUID,
@@ -99,6 +100,13 @@ def _materialise(path: str) -> str:
 # now-implemented handler returns 200/204/etc. and fails the 501 assertion.
 # Format: (METHOD, registered_path).
 IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
+    # ADR 0035 closed demonstration; exercised against real governance storage.
+    ("GET", "/api/v1/autonomous/orchestration/capabilities"),
+    ("POST", "/api/v1/autonomous/orchestration/plans"),
+    ("GET", "/api/v1/autonomous/orchestration/{root_id}/tree"),
+    ("POST", "/api/v1/autonomous/orchestration/{root_id}/approve"),
+    ("POST", "/api/v1/autonomous/orchestration/{root_id}/reject"),
+    ("POST", "/api/v1/autonomous/orchestration/{root_id}/halt"),
     # B1 — User model + auth endpoints (backend)
     ("POST", "/api/v1/auth/login"),
     ("POST", "/api/v1/auth/refresh"),

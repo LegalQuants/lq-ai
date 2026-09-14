@@ -76,6 +76,7 @@ from app.workers.autonomous_worker import (
     autonomous_session_job,
 )
 from app.workers.easy_playbook_worker import easy_playbook_generation_job
+from app.workers.orchestration_worker import orchestration_session_job, orchestration_watchdog
 from app.workers.tabular_worker import tabular_execution_job
 
 log = logging.getLogger(__name__)
@@ -154,6 +155,15 @@ async def on_startup(ctx: dict[str, Any]) -> None:
 
     # No try/except: propagation is the contract (see docstring).
     holder = install_skill_registry(app, get_settings())
+    from app.autonomous.orchestration.service import DemonstrationService
+    from app.db.session import get_session_factory
+
+    runtime = DemonstrationService(get_settings(), holder, get_session_factory())
+    runtime.policy()  # Validate enabled configuration; never enable implicitly.
+    if get_settings().orchestration_demo_enabled:
+        await runtime.executor().checkpoints.setup()
+    # Keep cleanup available when new execution is disabled after a restart.
+    ctx["orchestration_runtime"] = runtime
     skill_count = len(holder.current().names())
     log.info(
         "arq-worker startup: skill registry installed (%d skills)",
@@ -220,6 +230,7 @@ def _build_cron_jobs() -> list[Any]:
         # Every minute at second=0: spawn sessions for due schedules and
         # advance next_run_at from each schedule's cron_expr (M4-B3).
         cron(autonomous_schedule_dispatcher, second=0),
+        cron(orchestration_watchdog, second=15),
     ]
 
 
@@ -260,6 +271,10 @@ def _populate_class_attrs() -> None:
     # cleanly in environments where arq is absent (matching the pattern in
     # :mod:`app.workers.document_pipeline`).
     with contextlib.suppress(ImportError):  # pragma: no cover - arq missing in some envs
+        from arq import func
+
+        # No retained arq result may suppress a later wakeup of the same session.
+        WorkerSettings.functions.append(func(orchestration_session_job, keep_result=0))
         WorkerSettings.redis_settings = _build_redis_settings()  # type: ignore[attr-defined]
         WorkerSettings.cron_jobs = _build_cron_jobs()  # type: ignore[attr-defined]
 

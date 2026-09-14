@@ -132,6 +132,20 @@ components:
       - model
       title: AliasUpdateRequest
       type: object
+    ApprovalRequest:
+      additionalProperties: false
+      properties:
+        plan_hash:
+          $ref: '#/components/schemas/Digest'
+        revision:
+          minimum: 1.0
+          title: Revision
+          type: integer
+      required:
+      - revision
+      - plan_hash
+      title: ApprovalRequest
+      type: object
     AttachKnowledgeBaseRequest:
       description: '``POST /api/v1/projects/{id}/knowledge-bases`` body.'
       properties:
@@ -1662,6 +1676,33 @@ components:
           title: Title
       title: ChatUpdateRequest
       type: object
+    ChildAssignment:
+      additionalProperties: false
+      description: Server-selected research profile; the dispatch ID is not an admitted
+        run.
+      properties:
+        budget_usd:
+          type: string
+        dispatch_id:
+          format: uuid
+          title: Dispatch Id
+          type: string
+        execution:
+          $ref: '#/components/schemas/ExecutionScope'
+        profile:
+          const: research
+          title: Profile
+          type: string
+        task:
+          $ref: '#/components/schemas/ResearchTask'
+      required:
+      - dispatch_id
+      - profile
+      - task
+      - execution
+      - budget_usd
+      title: ChildAssignment
+      type: object
     Citation:
       description: 'A single citation backing a cell value.
 
@@ -1786,6 +1827,23 @@ components:
       - cluster
       title: ClusterView
       type: object
+    CollectedTopic:
+      additionalProperties: false
+      properties:
+        outcome:
+          $ref: '#/components/schemas/TopicOutcome'
+        session_id:
+          format: uuid
+          title: Session Id
+          type: string
+        topic:
+          $ref: '#/components/schemas/TaskText'
+      required:
+      - session_id
+      - topic
+      - outcome
+      title: CollectedTopic
+      type: object
     ColumnSpec:
       description: 'One column in a tabular execution''s column spec.
 
@@ -1872,6 +1930,99 @@ components:
       - grace_period_days
       title: DeleteScheduledResponse
       type: object
+    DemoCapabilities:
+      properties:
+        deployment_children:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Deployment Children
+        enabled:
+          title: Enabled
+          type: boolean
+        live_providers:
+          default: false
+          title: Live Providers
+          type: boolean
+        max_topics:
+          default: 4
+          title: Max Topics
+          type: integer
+      required:
+      - enabled
+      - deployment_children
+      title: DemoCapabilities
+      type: object
+    DemoPlanRequest:
+      additionalProperties: false
+      properties:
+        goal:
+          $ref: '#/components/schemas/TaskText'
+        max_active_children:
+          default: 2
+          maximum: 4.0
+          minimum: 1.0
+          title: Max Active Children
+          type: integer
+        project_id:
+          format: uuid
+          title: Project Id
+          type: string
+        topics:
+          items:
+            $ref: '#/components/schemas/ShortText'
+          maxItems: 4
+          minItems: 1
+          title: Topics
+          type: array
+      required:
+      - project_id
+      - goal
+      - topics
+      title: DemoPlanRequest
+      type: object
+    DemonstrationResult:
+      additionalProperties: false
+      properties:
+        coverage:
+          enum:
+          - complete
+          - partial
+          - empty
+          - failed
+          title: Coverage
+          type: string
+        kind:
+          const: orchestration_demonstration
+          default: orchestration_demonstration
+          title: Kind
+          type: string
+        summary:
+          maxLength: 16384
+          minLength: 1
+          title: Summary
+          type: string
+        topics:
+          items:
+            $ref: '#/components/schemas/CollectedTopic'
+          maxItems: 4
+          minItems: 1
+          title: Topics
+          type: array
+        verification:
+          const: unverified
+          default: unverified
+          title: Verification
+          type: string
+      required:
+      - coverage
+      - summary
+      - topics
+      title: DemonstrationResult
+      type: object
+    Digest:
+      pattern: ^[0-9a-f]{64}$
+      type: string
     EasyPlaybookGeneration:
       description: 'One Easy Playbook generation row.
 
@@ -2010,6 +2161,35 @@ components:
       - contract_type
       title: EasyPlaybookGenerationCreate
       type: object
+    EffectRead:
+      properties:
+        charged_usd:
+          anyOf:
+          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+            type: string
+          - type: 'null'
+          title: Charged Usd
+        effect_key:
+          title: Effect Key
+          type: string
+        reserved_usd:
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Reserved Usd
+          type: string
+        status:
+          title: Status
+          type: string
+      required:
+      - effect_key
+      - status
+      - reserved_usd
+      - charged_usd
+      title: EffectRead
+      type: object
+    EgressTier:
+      maximum: 5.0
+      minimum: 0.0
+      type: integer
     EnhancePromptAttachedFile:
       description: Minimal shape for an attached file.
       properties:
@@ -2176,6 +2356,35 @@ components:
       - expansion_applied
       - expanded_prompt
       title: EnhancePromptResponse
+      type: object
+    ExecutionScope:
+      additionalProperties: false
+      properties:
+        anonymize:
+          title: Anonymize
+          type: boolean
+        grants:
+          $ref: '#/components/schemas/PhaseGrants'
+        maximum_egress_tier:
+          $ref: '#/components/schemas/EgressTier'
+        minimum_inference_tier:
+          $ref: '#/components/schemas/InferenceTier'
+        privileged:
+          title: Privileged
+          type: boolean
+        resources:
+          $ref: '#/components/schemas/ResourceScope'
+        skill:
+          $ref: '#/components/schemas/SkillPin'
+      required:
+      - resources
+      - grants
+      - skill
+      - minimum_inference_tier
+      - maximum_egress_tier
+      - privileged
+      - anonymize
+      title: ExecutionScope
       type: object
     ExportJobResponse:
       description: 'Shared shape for POST /users/me/export and GET /users/me/export/{id}.
@@ -2380,6 +2589,10 @@ components:
       - paused
       title: HaltState
       type: string
+    InferenceTier:
+      maximum: 5.0
+      minimum: 1.0
+      type: integer
     IngestHealthResponse:
       description: 'Aggregate ingest-status counts across the deployment.
 
@@ -3254,6 +3467,9 @@ components:
       - code
       title: MfaVerifyRequest
       type: object
+    Money:
+      pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,6}|(?=[\d.]{1,11}0*$)\d{0,6}\.\d{0,4}0*$)
+      type: string
     NotificationChannel:
       description: 'Delivery channel for an autonomous notification.
 
@@ -3422,6 +3638,44 @@ components:
       - delivery
       title: Phase
       type: string
+    PhaseGrants:
+      additionalProperties: false
+      description: Explicit grants for the whole lifecycle, not the parent's active
+        phase.
+      properties:
+        analysis:
+          items:
+            $ref: '#/components/schemas/ToolIntent'
+          title: Analysis
+          type: array
+        delivery:
+          items:
+            $ref: '#/components/schemas/ToolIntent'
+          title: Delivery
+          type: array
+        drafting:
+          items:
+            $ref: '#/components/schemas/ToolIntent'
+          title: Drafting
+          type: array
+        ethics_review:
+          items:
+            $ref: '#/components/schemas/ToolIntent'
+          title: Ethics Review
+          type: array
+        intake:
+          items:
+            $ref: '#/components/schemas/ToolIntent'
+          title: Intake
+          type: array
+      required:
+      - intake
+      - analysis
+      - drafting
+      - ethics_review
+      - delivery
+      title: PhaseGrants
+      type: object
     Playbook:
       description: 'Full playbook — header plus ordered positions.
 
@@ -3866,6 +4120,87 @@ components:
       - updated_at
       title: PrecedentEntryRead
       type: object
+    PreparedPlan:
+      additionalProperties: false
+      description: Canonical executable plan built from resolved server policy, never
+        an LLM.
+      properties:
+        attempt_timeout_seconds:
+          maximum: 900.0
+          minimum: 1.0
+          title: Attempt Timeout Seconds
+          type: integer
+        budget_usd:
+          type: string
+        children:
+          items:
+            $ref: '#/components/schemas/ChildAssignment'
+          maxItems: 4
+          minItems: 1
+          title: Children
+          type: array
+        contract_version:
+          const: 1
+          default: 1
+          title: Contract Version
+          type: integer
+        deadline:
+          format: date-time
+          title: Deadline
+          type: string
+        delegation_grants:
+          $ref: '#/components/schemas/PhaseGrants'
+        goal:
+          $ref: '#/components/schemas/TaskText'
+        max_active_children:
+          maximum: 4.0
+          minimum: 1.0
+          title: Max Active Children
+          type: integer
+        owner_id:
+          format: uuid
+          title: Owner Id
+          type: string
+        plan_id:
+          format: uuid
+          title: Plan Id
+          type: string
+        policy_version:
+          $ref: '#/components/schemas/ShortText'
+        project_id:
+          format: uuid
+          title: Project Id
+          type: string
+        revision:
+          minimum: 1.0
+          title: Revision
+          type: integer
+        root:
+          $ref: '#/components/schemas/ExecutionScope'
+        root_allowance_usd:
+          type: string
+        root_id:
+          format: uuid
+          title: Root Id
+          type: string
+      required:
+      - plan_id
+      - revision
+      - root_id
+      - project_id
+      - owner_id
+      - goal
+      - policy_version
+      - root
+      - delegation_grants
+      - children
+      - budget_usd
+      - root_allowance_usd
+      - max_active_children
+      - deadline
+      - attempt_timeout_seconds
+      title: PreparedPlan
+      type: object
     ProjectContextProposalListResponse:
       description: 'Paginated list of :class:`ProjectContextProposalRead` items (M4-B2).
 
@@ -4274,6 +4609,17 @@ components:
       - refresh_token
       title: RefreshRequest
       type: object
+    RejectionRequest:
+      additionalProperties: false
+      properties:
+        revision:
+          minimum: 1.0
+          title: Revision
+          type: integer
+      required:
+      - revision
+      title: RejectionRequest
+      type: object
     ResearchCapabilities:
       properties:
         enabled:
@@ -4300,6 +4646,105 @@ components:
       - name
       - type
       title: ResearchProvider
+      type: object
+    ResearchTask:
+      additionalProperties: false
+      description: Untrusted task data; no resource selectors or executable authority.
+      properties:
+        boundaries:
+          $ref: '#/components/schemas/TaskText'
+        output_contract:
+          $ref: '#/components/schemas/TaskText'
+        question:
+          $ref: '#/components/schemas/TaskText'
+        stopping_condition:
+          $ref: '#/components/schemas/TaskText'
+        topic:
+          $ref: '#/components/schemas/ShortText'
+      required:
+      - topic
+      - question
+      - boundaries
+      - output_contract
+      - stopping_condition
+      title: ResearchTask
+      type: object
+    ResourceScope:
+      additionalProperties: false
+      description: 'Selected document IDs and configured source names, including empty
+        scope.
+
+
+        The resolver must check adapter-specific operations at call time; a source
+
+        name never grants every operation offered by that provider.'
+      properties:
+        document_ids:
+          items:
+            format: uuid
+            type: string
+          maxItems: 128
+          title: Document Ids
+          type: array
+        source_names:
+          items:
+            $ref: '#/components/schemas/ShortText'
+          maxItems: 32
+          title: Source Names
+          type: array
+      required:
+      - document_ids
+      - source_names
+      title: ResourceScope
+      type: object
+    RunRead:
+      properties:
+        allocation_usd:
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Allocation Usd
+          type: string
+        effects:
+          items:
+            $ref: '#/components/schemas/EffectRead'
+          title: Effects
+          type: array
+        outcome:
+          anyOf:
+          - $ref: '#/components/schemas/TopicOutcome'
+          - type: 'null'
+        phase:
+          $ref: '#/components/schemas/Phase'
+        reserved_usd:
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Reserved Usd
+          type: string
+        session_id:
+          format: uuid
+          title: Session Id
+          type: string
+        spent_usd:
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Spent Usd
+          type: string
+        status:
+          title: Status
+          type: string
+        updated_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Updated At
+      required:
+      - session_id
+      - status
+      - phase
+      - allocation_usd
+      - spent_usd
+      - reserved_usd
+      - updated_at
+      - effects
+      title: RunRead
       type: object
     SavedPromptCreate:
       description: POST body. ``tags`` is optional and normalised to ``[]`` if absent.
@@ -4585,6 +5030,10 @@ components:
       - failed
       title: SessionStatus
       type: string
+    ShortText:
+      maxLength: 256
+      minLength: 1
+      type: string
     SkillAutocompleteItem:
       description: 'One row in the autocomplete response.
 
@@ -4739,6 +5188,18 @@ components:
       required:
       - name
       title: SkillInputs
+      type: object
+    SkillPin:
+      additionalProperties: false
+      properties:
+        digest:
+          $ref: '#/components/schemas/Digest'
+        name:
+          $ref: '#/components/schemas/ShortText'
+      required:
+      - name
+      - digest
+      title: SkillPin
       type: object
     SlackWorkspaceCreate:
       additionalProperties: false
@@ -5234,6 +5695,10 @@ components:
       - cells
       title: TabularRow
       type: object
+    TaskText:
+      maxLength: 4096
+      minLength: 1
+      type: string
     TeamCreate:
       properties:
         description:
@@ -5654,6 +6119,32 @@ components:
       - refresh_token
       title: TokenResponse
       type: object
+    ToolIntent:
+      description: 'The closed set of tool intents the autonomous executor can invoke.
+
+
+        Each member corresponds to one class of external action. The
+
+        :data:`PHASE_GRANTS` map governs which intents are permitted in each
+
+        phase; :func:`~app.autonomous.nodes.guarded_tool_call` enforces the
+
+        grant at call time (M4-A3).'
+      enum:
+      - retrieve_chunks
+      - run_skill
+      - run_playbook
+      - propose_memory
+      - propose_precedent
+      - emit_finding
+      - emit_artifact
+      - notify
+      - retrieve_caselaw
+      - call_mcp_tool
+      - plan
+      - retrieve_authority
+      title: ToolIntent
+      type: string
     ToolProviderPatchRequest:
       additionalProperties: false
       description: Request body for ``PATCH /api/v1/admin/tool-providers/{type}``.
@@ -5688,6 +6179,114 @@ components:
       required:
       - type
       title: ToolProviderSetRequest
+      type: object
+    TopicOutcome:
+      additionalProperties: false
+      properties:
+        failure_code:
+          anyOf:
+          - enum:
+            - invalid_output
+            - execution_failed
+            type: string
+          - type: 'null'
+          title: Failure Code
+        findings:
+          items:
+            $ref: '#/components/schemas/TaskText'
+          maxItems: 8
+          title: Findings
+          type: array
+        status:
+          enum:
+          - completed
+          - empty
+          - failed
+          title: Status
+          type: string
+        summary:
+          $ref: '#/components/schemas/TaskText'
+        verification:
+          const: unverified
+          default: unverified
+          title: Verification
+          type: string
+      required:
+      - status
+      - summary
+      - findings
+      title: TopicOutcome
+      type: object
+    TreeRead:
+      properties:
+        approved:
+          title: Approved
+          type: boolean
+        children:
+          items:
+            $ref: '#/components/schemas/RunRead'
+          title: Children
+          type: array
+        mode:
+          const: demonstration
+          default: demonstration
+          title: Mode
+          type: string
+        partial_summary:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Partial Summary
+        plan:
+          $ref: '#/components/schemas/PreparedPlan'
+        plan_hash:
+          title: Plan Hash
+          type: string
+        reserved_usd:
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Reserved Usd
+          type: string
+        result:
+          anyOf:
+          - $ref: '#/components/schemas/DemonstrationResult'
+          - type: 'null'
+        root:
+          $ref: '#/components/schemas/RunRead'
+        root_id:
+          format: uuid
+          title: Root Id
+          type: string
+        spent_usd:
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Spent Usd
+          type: string
+        status:
+          title: Status
+          type: string
+        stop_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Stop Reason
+        verification:
+          const: unverified
+          default: unverified
+          title: Verification
+          type: string
+      required:
+      - root_id
+      - status
+      - stop_reason
+      - plan
+      - plan_hash
+      - approved
+      - root
+      - children
+      - spent_usd
+      - reserved_usd
+      - result
+      - partial_summary
+      title: TreeRead
       type: object
     TriggerKind:
       description: 'How an autonomous session was started.
@@ -8441,6 +9040,176 @@ paths:
       security:
       - OAuth2PasswordBearer: []
       summary: Mark an autonomous notification read (the dismiss action; idempotent)
+      tags:
+      - autonomous
+  /api/v1/autonomous/orchestration/capabilities:
+    get:
+      operationId: capabilities_api_v1_autonomous_orchestration_capabilities_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoCapabilities'
+          description: Successful Response
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Capabilities
+      tags:
+      - autonomous
+  /api/v1/autonomous/orchestration/plans:
+    post:
+      operationId: prepare_plan_api_v1_autonomous_orchestration_plans_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DemoPlanRequest'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TreeRead'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Prepare Plan
+      tags:
+      - autonomous
+  /api/v1/autonomous/orchestration/{root_id}/approve:
+    post:
+      operationId: approve_api_v1_autonomous_orchestration__root_id__approve_post
+      parameters:
+      - in: path
+        name: root_id
+        required: true
+        schema:
+          format: uuid
+          title: Root Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TreeRead'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Approve
+      tags:
+      - autonomous
+  /api/v1/autonomous/orchestration/{root_id}/halt:
+    post:
+      operationId: halt_api_v1_autonomous_orchestration__root_id__halt_post
+      parameters:
+      - in: path
+        name: root_id
+        required: true
+        schema:
+          format: uuid
+          title: Root Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TreeRead'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Halt
+      tags:
+      - autonomous
+  /api/v1/autonomous/orchestration/{root_id}/reject:
+    post:
+      operationId: reject_api_v1_autonomous_orchestration__root_id__reject_post
+      parameters:
+      - in: path
+        name: root_id
+        required: true
+        schema:
+          format: uuid
+          title: Root Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectionRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TreeRead'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Reject
+      tags:
+      - autonomous
+  /api/v1/autonomous/orchestration/{root_id}/tree:
+    get:
+      operationId: tree_api_v1_autonomous_orchestration__root_id__tree_get
+      parameters:
+      - in: path
+        name: root_id
+        required: true
+        schema:
+          format: uuid
+          title: Root Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TreeRead'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Tree
       tags:
       - autonomous
   /api/v1/autonomous/precedents:

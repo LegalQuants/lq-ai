@@ -6,6 +6,7 @@
 	import { autonomousApi } from '$lib/lq-ai/api';
 
 	$: pathname = $page.url.pathname;
+	$: orchestrationReceipt = /^\/lq-ai\/autonomous\/orchestration\/[^/]+\/?$/.test(pathname);
 
 	const NOTIFICATIONS_HREF = '/lq-ai/autonomous/notifications';
 
@@ -39,7 +40,7 @@
 
 	onMount(async () => {
 		await initPreferences();
-		if (!$preferences.autonomous_enabled) {
+		if (!$preferences.autonomous_enabled && !orchestrationReceipt) {
 			goto('/lq-ai/settings/autonomous');
 			return;
 		}
@@ -67,7 +68,7 @@
 	}
 </script>
 
-{#if $preferences.autonomous_enabled}
+{#if $preferences.autonomous_enabled || orchestrationReceipt}
 	<div class="admin-shell">
 		<nav class="admin-nav" aria-label="Autonomous navigation">
 			<ul class="admin-nav-list">

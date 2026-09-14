@@ -41,6 +41,7 @@ from app.api import (
     knowledge_bases,
     mcp_oauth,
     models,
+    orchestration,
     organization_profile,
     playbooks as playbooks_api,
     projects,
@@ -116,6 +117,7 @@ api_router.include_router(admin.router, dependencies=_active)
 api_router.include_router(admin_intake_bridges.router, dependencies=_active)
 # M4-A4-i: Autonomous sessions read/halt API — per-user isolated, bearer-auth.
 api_router.include_router(autonomous.router, dependencies=_active)
+api_router.include_router(orchestration.router, dependencies=_active)
 # M3-A2: Playbook executor — two endpoints under different prefixes
 # (``/playbooks/{id}/execute`` and ``/playbook-executions/{id}``) so
 # they live alongside the M3-A4 list/CRUD endpoints in the same module.

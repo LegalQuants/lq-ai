@@ -1762,8 +1762,9 @@ CREATE INDEX idx_autonomous_sessions_active ON autonomous_sessions(halt_state, l
 
 ### Governed orchestration records (0067, local implementation)
 
-These private tables support proposed ADR 0035. They are not yet connected to
-public orchestration routes or ordinary workers. The authoritative DDL is
+These private tables support proposed ADR 0035. The local implementation connects
+them to the closed demonstration API and arq worker; live research remains disabled.
+The authoritative governance DDL is
 [`0067_orchestration_governance.py`](../api/alembic/versions/0067_orchestration_governance.py);
 the [lifecycle and transaction contract](plans/issue-563-durable-governance.md)
 defines allowed transitions and remaining integration gates.
@@ -1827,6 +1828,24 @@ claim/deadline transactions. Its caller-carried scan cursor is not persisted in
 these tables and does not represent execution continuation. Page limits and
 per-stage timeouts bound work; there is no migration or new authority record.
 See [recovery sweep evidence](plans/issue-563-recovery-sweep.md).
+
+Migration **0069** creates the separate `orchestration_checkpoints` schema for
+the pinned Postgres saver 3.1.2: `checkpoint_migrations` (versions 0–9),
+`checkpoints`, `checkpoint_blobs` and `checkpoint_writes`. The three content tables
+retain the saver's composite primary keys and add generated `session_id UUID`
+foreign keys to `autonomous_sessions`, with cascading deletion and indexes.
+Only UUID session thread IDs are accepted. Checkpoint state contains identifiers;
+bounded findings/synthesis live in `autonomous_sessions.result` and effect
+receipts. Node errors are sanitized before framework error writes. The application
+migration, not a worker startup or request, creates these tables. Downgrade
+refuses retained checkpoints or owned accounts; it never silently erases history.
+
+Each graph invocation owns its saver connection and a session advisory lock.
+That exact connection performs checkpoint writes; it cannot reconnect and keep
+writing after losing ownership. Additional advisory slots and serialized durable
+account admission enforce root/deployment child limits. Approval and child waits
+release worker ownership. The legacy idle watchdog excludes governed trees;
+their dedicated sweep handles leases, deadlines and lost arq wakeups.
 
 All root-owned records cascade on root/session deletion. Projects use RESTRICT
 while orchestration roots exist; ordinary archival remains available. Deleting

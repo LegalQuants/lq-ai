@@ -884,6 +884,15 @@ production integration acceptance and ratification remain pending. The
 implementation branch stays local until ratification; this proposal does not
 change the M4 status below.
 
+The owner's 14 September 2026 direction narrows the next local result to a
+[complete orchestration demonstration](plans/issue-563-demonstration.md): a small
+technical skill, explicit plan approval, parallel sample topics, progress,
+collection and root synthesis. No substantive research skill or expanded
+verification project is required. Results remain explicitly unverified; the
+demonstration uses deterministic local sample responses without provider egress.
+Approval, scope, accounted budgets, halt and recovery remain required. Operator
+enablement defaults off and implementation publication still awaits ratification.
+
 Local implementation includes [strict plan and consent contracts](plans/issue-563-contracts.md)
 and the [durable governance store](plans/issue-563-durable-governance.md):
 version-bound approval, atomic child admission, fixed budget allocations,

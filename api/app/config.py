@@ -16,7 +16,7 @@ from decimal import Decimal
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LogLevel = Literal["debug", "info", "warning", "warn", "error", "critical"]
@@ -245,6 +245,26 @@ class Settings(BaseSettings):
         ),
         validation_alias=AliasChoices("LQ_AI_AUTONOMOUS_DEFAULT_MODEL"),
     )
+
+    orchestration_demo_enabled: bool = Field(
+        default=False,
+        validation_alias="LQ_AI_ORCHESTRATION_DEMO_ENABLED",
+        description="Enable only the local sample orchestration demonstration, with no provider egress.",
+    )
+    orchestration_deployment_children: int | None = Field(
+        default=None,
+        ge=1,
+        le=32,
+        validation_alias="LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN",
+        description="Explicit shared child capacity. Required before enabling the demonstration.",
+    )
+
+    @field_validator("orchestration_deployment_children", mode="before")
+    @classmethod
+    def empty_orchestration_capacity(cls, value: object) -> object:
+        # Compose forwards an unset optional setting as an empty string.
+        # It remains unconfigured; enabling without a limit still refuses.
+        return None if value == "" else value
 
     # M-Sec.1 — MFA-mandatory deployment flag per PRD §5.1. When True,
     # the backend treats any authenticated user without MFA enrolled

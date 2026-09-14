@@ -26,6 +26,14 @@ records for governance, subject to production integration acceptance. A successf
 orchestration test may return no research results; it must prove control flow,
 persistence and governance rather than legal quality.
 
+The owner's 14 September implementation direction narrows the first visible
+skills to an orchestration demonstration: plan, approve, delegate, monitor,
+collect and synthesize sample findings. This is a technical utility, not a new
+substantive research skill. Research quality and expanded verification are not
+acceptance gates for this demonstration; existing controls and honest unverified
+outcomes remain required. This local clarification does not record ratification
+or enable the feature.
+
 The code baseline for this draft is main at
 [`27c4521`](https://github.com/LegalQuants/lq-ai/commit/27c4521de0174a48070484cbaf66b7716432076a),
 including PR #411's resource-visibility checks. The existing executor has a

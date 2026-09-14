@@ -215,6 +215,8 @@ services:
       # not mutate it (skill authoring is a host-side / human-attestation
       # workflow per CLAUDE.md "Working with skills").
       LQ_AI_SKILLS_DIR: ${LQ_AI_SKILLS_DIR:-/skills}
+      LQ_AI_ORCHESTRATION_DEMO_ENABLED: ${LQ_AI_ORCHESTRATION_DEMO_ENABLED:-false}
+      LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN: ${LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN:-}
       # M3-D1 slack-bridge integration. Both optional: only required for
       # operators who enable the `slack` compose profile. The api refuses
       # bridge traffic with 500 when either is unset.
@@ -354,6 +356,8 @@ services:
       # not mutate it (skill authoring is a host-side / human-attestation
       # workflow per CLAUDE.md "Working with skills").
       LQ_AI_SKILLS_DIR: ${LQ_AI_SKILLS_DIR:-/skills}
+      LQ_AI_ORCHESTRATION_DEMO_ENABLED: ${LQ_AI_ORCHESTRATION_DEMO_ENABLED:-false}
+      LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN: ${LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN:-}
     volumes:
       - ./skills:/skills:ro
     command: ["arq", "app.workers.arq_setup.WorkerSettings"]

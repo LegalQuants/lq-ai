@@ -1,8 +1,9 @@
 """Private governance records for ADR 0035; no graph continuation cursor.
 
-Migrations 0067 and 0068 are authoritative. Content-bearing snapshots/results stay here,
-not in audit details or framework trace payloads. No public route exposes these
-tables yet. The store owns short transactions; the eventual adapter owns I/O.
+Migrations 0067 and 0068 own governance; 0069 owns the isolated checkpoint schema.
+Content-bearing snapshots/results stay in application records, not audit details
+or framework traces. Owner-scoped demonstration routes expose bounded views.
+The store owns short transactions and the effect adapter owns external I/O.
 """
 
 from __future__ import annotations
