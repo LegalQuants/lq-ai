@@ -516,6 +516,16 @@ This is the single most differentiated capability in the product. Specified in d
 
 ### 3.4 Skill Library and Skill Creator
 
+**Proposed optional extension, not shipped:**
+[ADR 0035 D8b–D8d](adr/0035-governed-orchestration-run-tree.md#d8b--optional-persistent-skill-workspaces)
+specifies persistent skill workspaces and reviewed, installed Python helpers.
+Skills opt in separately to storage and execution. Generated-code execution is
+excluded; exact executable review, isolated jobs and protection against indirect
+disclosure through helper output or persisted reuse are required. The
+[supporting evidence](plans/issue-563-skill-capabilities.md) records local results
+and pending security gates. ADR ratification and implementation publication remain
+pending; the M1 status below is unchanged by this proposal.
+
 **M1 status:** Shipped. The Skill Library (browse built-in, user, and team scopes), Skill Creator (capture / wizard / fork), skill versions tab, per-version audit, Try-It sandbox, and slash-invoked skills with provenance pill are all wired end-to-end in Wave D.2. An operator can verify at `api/app/api/skills.py`; Cypress E2E coverage is in `web/cypress/e2e/wave-d2-skill-creator.cy.ts` (Tests 1–6). Skill script execution (`scripts/`) and autonomous skill self-improvement are deferred (M4). See [HONEST-STATE.md §1](HONEST-STATE.md#1-conversational-and-workspace-surface).
 
 **Description.** Skills are reusable, structured prompt artifacts that users attach to chats. They follow the agentskills.io / Claude Skills format: a folder containing `SKILL.md` (with YAML frontmatter) and optional supporting files. Three tiers: built-in skills (ship with the product), user skills (created by the user), and shared skills (shared by other users in the organization).
@@ -878,9 +888,13 @@ The scope-as-shipped is narrower than the original "ensemble runs on the whole a
 **Proposed extension, not shipped:** [ADR 0035 — Governed orchestration](adr/0035-governed-orchestration-run-tree.md)
 records the revised [#563](https://github.com/LegalQuants/lq-ai/issues/563) design:
 user approval of one topic batch before parallel child runs, inherited authority,
-durable recovery, shared accounted budgets and an inspectable run tree. It proposes
+durable recovery, shared accounted budgets and an inspectable run tree. The first
+visible profile is a technical orchestration demonstration with sample findings;
+substantive research quality is outside that acceptance scope. It proposes
 LangGraph for continuation, arq for scheduling and LQ-owned governance records;
-production integration acceptance and ratification remain pending. The
+the [workflow](plans/issue-563-workflow.md) records local integration and the
+production acceptance and ratification gates still pending. Optional skill storage
+and bundled helpers follow D8b–D8d, including the new confidentiality gates. The
 implementation branch stays local until ratification; this proposal does not
 change the M4 status below.
 
