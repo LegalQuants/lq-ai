@@ -222,9 +222,9 @@ not establish the complete confidentiality objective.
 
 The [research assessment](https://github.com/LegalQuants/lq-ai/blob/4ac3fee64/outputs/issue-563-prior-art.md)
 records the alternatives and prototype limits. The
-[workflow and evidence index](../plans/issue-563-workflow.md) links detailed
-contracts, local test results, runtime versions and work history. The
-[skill capability record](../plans/issue-563-skill-capabilities.md) and
-[draft operator notes](../deploy/skill-capabilities.md) hold implementation details
-and outstanding acceptance work. These records do not constitute ratification
-or shipped capability.
+[implementation overview](../plans/issue-563-workflow.md) summarizes delivered
+capabilities, validation limits and remaining release work. The
+[skill capability summary](../plans/issue-563-skill-capabilities.md) and
+[draft operator notes](../deploy/skill-capabilities.md) describe behavior and
+operational limits. These documents do not constitute ratification or shipped
+capability.
