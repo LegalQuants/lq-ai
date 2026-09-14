@@ -12,7 +12,8 @@ from app.api.dependencies import ActiveUser, AutonomousEnabledUser
 from app.autonomous.orchestration.contracts import Digest, ShortText, TaskText
 from app.autonomous.orchestration.demo import prepare_demo_plan
 from app.autonomous.orchestration.service import DemonstrationService
-from app.autonomous.orchestration.views import TreeRead, read_tree
+from app.autonomous.orchestration.views import TreeRead, read_tree, read_workspace_file
+from app.autonomous.orchestration.workspace import WorkspaceContent
 from app.config import get_settings
 from app.db.session import get_session_factory
 from app.errors import NotFound
@@ -113,6 +114,13 @@ async def approve(
     # Approval is durable before wakeup. The recovery sweep repairs a lost queue write.
     await enqueue_orchestration_job(root_id, root_id)
     return await read_tree(runtime.store.sessions, root_id, user.id)
+
+
+@router.get("/{root_id}/files/{session_id}/{name}", response_model=WorkspaceContent)
+async def workspace_file(
+    root_id: UUID, session_id: UUID, name: str, user: ActiveUser, runtime: Service
+) -> WorkspaceContent:
+    return await read_workspace_file(runtime.store.sessions, root_id, user.id, session_id, name)
 
 
 @router.post("/{root_id}/reject", response_model=TreeRead)

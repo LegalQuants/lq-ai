@@ -39,6 +39,7 @@ from app.models.orchestration import (
     OrchestrationAccount,
     OrchestrationAdmission,
     OrchestrationEffect,
+    OrchestrationFile,
     OrchestrationPlan,
     OrchestrationRoot,
 )
@@ -90,6 +91,7 @@ __all__ = [
     "OrchestrationAccount",
     "OrchestrationAdmission",
     "OrchestrationEffect",
+    "OrchestrationFile",
     "OrchestrationPlan",
     "OrchestrationRoot",
     "OrganizationProfile",

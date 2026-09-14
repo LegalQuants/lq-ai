@@ -893,6 +893,13 @@ demonstration uses deterministic local sample responses without provider egress.
 Approval, scope, accounted budgets, halt and recovery remain required. Operator
 enablement defaults off and implementation publication still awaits ratification.
 
+The [working-file increment](plans/issue-563-workspace.md) adds bounded storage
+within a run: private child notes, revision-aware read/write tools and explicitly
+shared result files consumed by the parent. Stored work survives worker restart
+and is inspectable by the owner. Code execution and storage reused automatically
+by later runs of the skill are not implemented; run storage is separate from
+user-kept memory. ADR 0035 D8a records that distinction.
+
 Local implementation includes [strict plan and consent contracts](plans/issue-563-contracts.md)
 and the [durable governance store](plans/issue-563-durable-governance.md):
 version-bound approval, atomic child admission, fixed budget allocations,

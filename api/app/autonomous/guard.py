@@ -93,6 +93,7 @@ from app.autonomous.notify_email import send_notification_email
 from app.autonomous.orchestration.contracts import ExecutionScope
 from app.autonomous.orchestration.inference import InferenceBinding
 from app.autonomous.orchestration.sources import SourceBinding
+from app.autonomous.orchestration.workspace import WORKSPACE_INTENTS, WorkspaceAccess
 from app.errors import Conflict, CostCapReached, SessionHalted, ToolNotGranted
 from app.models.autonomous import (
     AutonomousArtifact,
@@ -189,6 +190,7 @@ async def guarded_tool_call(
     effect: GuardedEffect | None = None,
     source_binding: SourceBinding | None = None,
     inference_binding: InferenceBinding | None = None,
+    workspace_access: WorkspaceAccess | None = None,
 ) -> ToolResult:
     """Single chokepoint for every autonomous tool invocation.
 
@@ -297,6 +299,15 @@ async def guarded_tool_call(
                 record_attributes(span, **{"autonomous.outcome": "tool_not_granted"})
                 raise
 
+        if intent in WORKSPACE_INTENTS and (
+            execution_scope is None
+            or effect is None
+            or workspace_access is None
+            or workspace_access.claim.session_id != session.id
+            or workspace_access.claim.root_id != session.root_session_id
+        ):
+            raise ToolNotGranted("Workspace tools require durable orchestration authority")
+
         # ── R4 economic ─────────────────────────────────────────────────────
         if inference_binding is not None and (
             execution_scope is None
@@ -358,6 +369,9 @@ async def guarded_tool_call(
                     execution_scope.maximum_egress_tier if execution_scope else None
                 ),
             )
+        elif intent in WORKSPACE_INTENTS:
+            assert workspace_access is not None
+            result = await workspace_access.execute(db, intent, params)
         elif inference_binding is not None:
             result = await _handle_gateway_inference(
                 intent,

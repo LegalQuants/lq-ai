@@ -59,7 +59,14 @@ is observable. This proves application orchestration with
 controlled responses, not the quality of model planning or research. Successful
 execution never changes `verification: unverified`.
 
-Completed locally on 14 September 2026 in one sustained task. Evidence:
+The subsequent [working-file acceptance test](issue-563-workspace.md) adds a
+seventh route for owner file inspection. Children save private notes, resume
+from them and share immutable result files that the parent reads for synthesis.
+Storage belongs to a run; reuse by a new invocation of the skill is not supported.
+
+The initial demonstration completed locally on 14 September 2026 in one sustained
+task (commit `75b115b94`). Its evidence follows; subsequent storage evidence is
+recorded in the linked working-file plan.
 
 - Full API regression: **3,083 passed, one skipped** in **242.16 seconds** against
   disposable pgvector Postgres, using four isolated test workers. This includes
@@ -102,7 +109,7 @@ No ADR acceptance, implementation push or live-provider execution has occurred.
 ## Operator handoff (after ratification; not performed on development/production)
 
 1. Deploy the same reviewed API/arq image and skill files together. Apply normal
-   application migrations through **0069**. The new checkpoint schema is empty
+   application migrations through **0070**. The new checkpoint schema is empty
    until execution; API requests and workers never create framework tables.
 2. Set `LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN` explicitly (1–32, for example 2)
    and `LQ_AI_ORCHESTRATION_DEMO_ENABLED=true` on both API and arq workers. Compose

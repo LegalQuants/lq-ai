@@ -15,6 +15,31 @@
 	let loadedId = '';
 	let polls = 0;
 	let generation = 0;
+	let fileController: AbortController | undefined;
+	let openedFile: { session: string; name: string; revision: number; content: string } | null =
+		null;
+	let fileError = '';
+	let fileLoading = false;
+
+	async function openFile(session: string, name: string) {
+		fileController?.abort();
+		const request = new AbortController();
+		fileController = request;
+		const root = loadedId;
+		openedFile = null;
+		fileError = '';
+		fileLoading = true;
+		try {
+			const file = await orchestrationApi.file(root, session, name, request.signal);
+			if (mounted && root === loadedId && fileController === request)
+				openedFile = { session, name, revision: file.revision, content: file.content };
+		} catch (err) {
+			if (mounted && root === loadedId && fileController === request && !request.signal.aborted)
+				fileError = err instanceof Error ? err.message : String(err);
+		} finally {
+			if (fileController === request) fileLoading = false;
+		}
+	}
 
 	function stopPolling() {
 		clearTimeout(timer);
@@ -86,10 +111,14 @@
 		return () => {
 			mounted = false;
 			stopPolling();
+			fileController?.abort();
 		};
 	});
 	$: if (mounted && $page.params.id && $page.params.id !== loadedId) {
 		loadedId = $page.params.id;
+		fileController?.abort();
+		openedFile = null;
+		fileError = '';
 		tree = null;
 		polls = 0;
 		pollPaused = false;
@@ -108,6 +137,10 @@
 		>
 	</div>
 	<p>Orchestration demonstration · Sample findings · Unverified</p>
+	<p class="text-sm">
+		Working files belong to this run. Shared findings are available to the parent; private notes
+		remain with their child. Files are not reused by future runs of the skill.
+	</p>
 	{#if error}<p role="alert" class="text-red-700 dark:text-red-300">{error}</p>{/if}
 	{#if loading && !tree}<p role="status">Loading plan…</p>{/if}
 	{#if pollPaused}<p>
@@ -167,6 +200,21 @@
 							{#each progress.outcome.findings as finding}<li>{finding}</li>{/each}
 						</ul>
 					{/if}
+					{#if progress.files?.length}
+						<div aria-label="Working files" class="space-y-2">
+							<p class="font-semibold">Working files</p>
+							{#each progress.files as file}
+								<button
+									class="block text-sm underline"
+									on:click={() => openFile(progress.session_id, file.name)}
+								>
+									{file.name} · revision {file.revision} · {file.shared
+										? 'Shared with parent'
+										: 'Private working file'}
+								</button>
+							{/each}
+						</div>
+					{/if}
 					{#if progress.effects.length}
 						<details>
 							<summary>Effect receipts ({progress.effects.length})</summary>
@@ -184,6 +232,18 @@
 				</article>
 			{/each}
 		</section>
+		{#if fileLoading}<p role="status">Loading working file…</p>{/if}
+		{#if fileError}<p role="alert">{fileError}</p>{/if}
+		{#if openedFile}
+			<section class="space-y-3 rounded border p-5" aria-label="Working file content">
+				<h2 class="text-xl font-semibold">{openedFile.name} · revision {openedFile.revision}</h2>
+				<p class="text-sm">
+					Saved work from this run. This preview shows the revision loaded when you selected the
+					file.
+				</p>
+				<pre class="whitespace-pre-wrap break-words text-sm">{openedFile.content}</pre>
+			</section>
+		{/if}
 		{#if tree.result || tree.partial_summary}
 			<section class="space-y-3 rounded border p-5" aria-label="Synthesis">
 				<h2 class="text-xl font-semibold">

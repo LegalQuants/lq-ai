@@ -46,6 +46,9 @@ _RESEARCH_INTENTS = frozenset(
         ToolIntent.retrieve_caselaw,
         ToolIntent.retrieve_authority,
         ToolIntent.emit_finding,
+        ToolIntent.workspace_read,
+        ToolIntent.workspace_write,
+        ToolIntent.workspace_share,
     }
 )
 

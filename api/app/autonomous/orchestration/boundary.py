@@ -17,6 +17,7 @@ from app.autonomous.enums import ToolIntent
 from app.autonomous.orchestration.contracts import ExecutionScope
 from app.autonomous.orchestration.inference import InferenceBinding
 from app.autonomous.orchestration.sources import SourceBinding
+from app.autonomous.orchestration.workspace import WORKSPACE_INTENTS, parse_request
 from app.errors import ToolNotGranted
 from app.models.autonomous import AutonomousSession
 from app.models.document import Document
@@ -30,6 +31,7 @@ _IMPLEMENTED = frozenset(
         ToolIntent.plan,
         ToolIntent.emit_finding,
         ToolIntent.retrieve_authority,
+        *WORKSPACE_INTENTS,
     }
 )
 
@@ -46,6 +48,8 @@ async def constrain_call(
     """Return narrowed params, refusing unsupported or out-of-scope reads."""
     if intent not in _IMPLEMENTED or intent not in getattr(scope.grants, session.current_phase):
         raise ToolNotGranted("tool is outside implemented orchestration scope")
+    if intent in WORKSPACE_INTENTS:
+        return parse_request(intent, params).model_dump(mode="json")
     if intent == ToolIntent.retrieve_authority:
         if (
             source_binding is None

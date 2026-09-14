@@ -308,6 +308,39 @@ research text in access-controlled content/work-product storage. Audit, OTel and
 framework traces contain only approved metadata, not raw goals or results.
 Defer a second replay/fork JSONL content store.
 
+### D8a — Run working files and explicit parent handoff
+
+The 14 September storage acceptance test establishes a missing capability in the
+initial demonstration: private work in progress must survive an interrupted
+worker, and the parent must consume a child's explicitly shared result file.
+See [the implementation and evidence](../plans/issue-563-workspace.md).
+
+Provide guarded read/write/share operations over bounded application-owned UTF-8
+files. Logical names do not expose a host filesystem or code execution. Authority
+is bound to the approved run and session. Children read and revise their own
+files; sharing freezes the content and permits the root to read that specific
+file. It does not grant sibling access, notify users, emit a KB document or
+propose a memory entry. The owner can inspect private and shared files through
+the run receipt, including after halt or opt-out.
+
+Writes require the expected content revision. File changes and their completed
+effect receipts commit atomically; replay of a committed effect returns the same
+revision. Shared outcome references identify the session, name, revision and
+digest, and parent synthesis consumes those stored contents. Storage is bounded
+per file and session, remains outside LangGraph state and audit text, and
+cascades on session/root/user deletion. Halt prevents new tool operations while
+preserving retained work for inspection. Failed local operations return a bounded
+refusal; an interrupted uncommitted effect retains the existing conservative
+recovery policy.
+
+**Run storage is not persistent skill memory.** A later invocation of the same
+session can use its working files; a new invocation of the same skill in a new
+run cannot automatically read them. General cross-invocation skill storage is
+not implemented. It needs a separate owner/matter/skill namespace, explicit
+reuse permissions, version compatibility, retention/deletion and concurrency
+rules. User-kept memory remains a separate curation mechanism. This clarification
+does not ratify the ADR or enable code execution, live providers or publication.
+
 ### D9 — Approval and changing progress are required UI
 
 Reuse the matter-intake entry point and existing receipts. Extend run-now with

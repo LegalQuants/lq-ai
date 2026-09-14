@@ -157,7 +157,10 @@ async def test_approved_plan_overlaps_children_collects_and_synthesizes(demonstr
             await db.scalar(
                 select(func.count())
                 .select_from(Effect)
-                .where(Effect.session_id.in_((env.root_id, *env.children)))
+                .where(
+                    Effect.session_id.in_((env.root_id, *env.children)),
+                    Effect.intent == "run_skill",
+                )
             )
             == 4
         )

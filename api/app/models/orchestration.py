@@ -1,6 +1,7 @@
 """Private governance records for ADR 0035; no graph continuation cursor.
 
 Migrations 0067 and 0068 own governance; 0069 owns the isolated checkpoint schema.
+Migration 0070 adds session-owned working files.
 Content-bearing snapshots/results stay in application records, not audit details
 or framework traces. Owner-scoped demonstration routes expose bounded views.
 The store owns short transactions and the effect adapter owns external I/O.
@@ -115,3 +116,22 @@ class OrchestrationEffect(Base):
         DateTime(timezone=True), server_default=text("now()")
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class OrchestrationFile(Base):
+    """Bounded run work product; sharing freezes a file for parent handoff."""
+
+    __tablename__ = "orchestration_files"
+
+    session_id: Mapped[UUID] = mapped_column(
+        ForeignKey("orchestration_accounts.session_id", ondelete="CASCADE"), primary_key=True
+    )
+    name: Mapped[str] = mapped_column(Text, primary_key=True)
+    content: Mapped[str] = mapped_column(Text)
+    revision: Mapped[int] = mapped_column(Integer)
+    digest: Mapped[str] = mapped_column(Text)
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    shared: Mapped[bool] = mapped_column(server_default=text("false"))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )

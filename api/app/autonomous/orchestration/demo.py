@@ -52,8 +52,13 @@ def demonstration_policy(
 ) -> OperatorPolicy:
     grants = PhaseGrants(
         intake=(),
-        analysis=(ToolIntent.run_skill,),
-        drafting=(ToolIntent.run_skill,),
+        analysis=(ToolIntent.run_skill, ToolIntent.workspace_read, ToolIntent.workspace_write),
+        drafting=(
+            ToolIntent.run_skill,
+            ToolIntent.workspace_read,
+            ToolIntent.workspace_write,
+            ToolIntent.workspace_share,
+        ),
         ethics_review=(),
         delivery=(),
     )

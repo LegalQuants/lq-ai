@@ -12,11 +12,17 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.autonomous.orchestration.contracts import PreparedPlan
 from app.autonomous.orchestration.outcomes import DemonstrationResult, TopicOutcome
+from app.autonomous.orchestration.workspace import (
+    WorkspaceContent,
+    WorkspaceFileRead,
+    file_metadata,
+)
 from app.errors import NotFound
 from app.models.autonomous import AutonomousSession
 from app.models.orchestration import (
     OrchestrationAccount as Account,
     OrchestrationEffect as Effect,
+    OrchestrationFile,
     OrchestrationPlan as PlanRow,
     OrchestrationRoot as Root,
 )
@@ -40,6 +46,7 @@ class RunRead(BaseModel):
     updated_at: datetime | None
     outcome: TopicOutcome | None = None
     effects: list[EffectRead]
+    files: list[WorkspaceFileRead] = []
 
 
 class TreeRead(BaseModel):
@@ -117,6 +124,15 @@ async def read_tree(
                         )
                         for e in receipts
                     ],
+                    files=[
+                        file_metadata(file)
+                        for file in await db.scalars(
+                            select(OrchestrationFile)
+                            .where(OrchestrationFile.session_id == session_id)
+                            .order_by(OrchestrationFile.name)
+                            .limit(8)
+                        )
+                    ],
                 )
             )
         root_session = await db.get(AutonomousSession, root_id)
@@ -149,3 +165,28 @@ async def read_tree(
             result=result,
             partial_summary=partial,
         )
+
+
+async def read_workspace_file(
+    sessions: async_sessionmaker[AsyncSession],
+    root_id: UUID,
+    actor_id: UUID,
+    session_id: UUID,
+    name: str,
+) -> WorkspaceContent:
+    """Owner receipt access includes private WIP after execution stops."""
+    async with sessions() as db:
+        row = await db.scalar(
+            select(OrchestrationFile)
+            .join(Account)
+            .join(Root)
+            .where(
+                Root.session_id == root_id,
+                Root.owner_id == actor_id,
+                Account.session_id == session_id,
+                OrchestrationFile.name == name,
+            )
+        )
+        if row is None:
+            raise NotFound(message="Workspace file not found")
+        return WorkspaceContent(**file_metadata(row).model_dump(), content=row.content)

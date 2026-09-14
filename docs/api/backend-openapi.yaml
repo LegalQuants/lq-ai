@@ -4962,7 +4962,7 @@ paths:
           description: Notification not found
 
   # ADR 0035: closed local demonstration; canonical detailed shapes are generated
-  # alongside these handlers. Six paths add no public child-spawn authority.
+  # alongside these handlers. These paths add no public child-spawn authority.
   /api/v1/autonomous/orchestration/capabilities:
     get:
       tags: [autonomous]
@@ -5062,6 +5062,23 @@ paths:
               schema:
                 $ref: './backend-openapi.generated.yaml#/components/schemas/TreeRead'
         '404': {description: Root absent or owned by another user}
+
+  /api/v1/autonomous/orchestration/{root_id}/files/{session_id}/{name}:
+    parameters:
+      - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: session_id, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: name, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [autonomous]
+      summary: Inspect a private or shared working file in an owned run
+      responses:
+        '200':
+          description: Bounded UTF-8 contents and revision; readable after halt or opt-out
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/WorkspaceContent'
+        '404': {description: File absent, belongs to another run or owner}
 
   /api/v1/autonomous/run-now:
     post:

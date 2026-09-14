@@ -204,6 +204,36 @@ describe('Orchestration demonstration', () => {
 		cy.contains('button', 'Prepare plan').should('not.exist');
 	});
 
+	it('shows saved working files after halt without treating their text as HTML', () => {
+		const onBeforeLoad = setup(false, false);
+		const tree: any = fixture('halted');
+		tree.children[0].files = [
+			{
+				session_id: 'child-0',
+				name: 'notes.md',
+				revision: 2,
+				digest: 'a'.repeat(64),
+				size_bytes: 42,
+				shared: false,
+				updated_at: '2026-09-14T00:00:00Z'
+			}
+		];
+		cy.intercept('GET', `${base}/${rootId}/tree`, { body: tree });
+		cy.intercept('GET', `${base}/${rootId}/files/child-0/notes.md`, {
+			body: {
+				...tree.children[0].files[0],
+				content: 'Saved WIP <script>window.bad = true</script>'
+			}
+		}).as('file');
+		cy.visit(`/lq-ai/autonomous/orchestration/${rootId}`, { onBeforeLoad });
+		cy.contains('button', 'notes.md').scrollIntoView().click();
+		cy.wait('@file');
+		cy.get('[aria-label="Working file content"]')
+			.scrollIntoView()
+			.should('contain.text', 'Saved WIP <script>');
+		cy.window().its('bad').should('not.exist');
+	});
+
 	it('shows stale consent errors without automatically approving again', () => {
 		const onBeforeLoad = setup();
 		cy.intercept('GET', `${base}/${rootId}/tree`, { body: fixture() });

@@ -107,6 +107,7 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("POST", "/api/v1/autonomous/orchestration/{root_id}/approve"),
     ("POST", "/api/v1/autonomous/orchestration/{root_id}/reject"),
     ("POST", "/api/v1/autonomous/orchestration/{root_id}/halt"),
+    ("GET", "/api/v1/autonomous/orchestration/{root_id}/files/{session_id}/{name}"),
     # B1 — User model + auth endpoints (backend)
     ("POST", "/api/v1/auth/login"),
     ("POST", "/api/v1/auth/refresh"),

@@ -22,10 +22,12 @@ from langgraph.types import Command, interrupt
 from langsmith import tracing_context
 from pydantic import ValidationError as SchemaError
 
+from app.autonomous.enums import ToolIntent
 from app.autonomous.orchestration.checkpoints import CheckpointRuntime
 from app.autonomous.orchestration.effects import GuardedEffects
 from app.autonomous.orchestration.outcomes import TopicOutcome, topic_coverage
 from app.autonomous.orchestration.store import OrchestrationStore, WorkerClaim
+from app.autonomous.orchestration.workspace import WorkspaceContent, WorkspaceRef
 from app.errors import Conflict, Forbidden, NotFound
 from app.graph_types import AsyncStateNode
 from app.models.autonomous import AutonomousSession
@@ -61,19 +63,49 @@ def child_graph(
         await store.phase(claim, Phase.intake)
         return {}
 
+    async def prepare_notes(state: RunState) -> dict[str, Any]:
+        await store.phase(claim, Phase.analysis)
+        view = await store.execution_view(claim)
+        topic = next(c.task.topic for c in view.plan.children if c.dispatch_id == claim.session_id)
+        saved = await effects.workspace(
+            claim,
+            effect_key="demo:notes:create:v1",
+            phase=Phase.analysis,
+            intent=ToolIntent.workspace_write,
+            params={
+                "name": "notes.md",
+                "revision": 0,
+                "content": f"Work in progress: {topic}. Sample findings remain unverified.",
+            },
+        )
+        if saved.outcome == "workspace_refused":
+            raise Conflict(message="Working notes could not be saved")
+        return {}
+
     async def analysis(state: RunState) -> dict[str, Any]:
         await store.phase(claim, Phase.analysis)
+        notes = await effects.workspace(
+            claim,
+            effect_key="demo:notes:read:v1",
+            phase=Phase.analysis,
+            intent=ToolIntent.workspace_read,
+            params={"name": "notes.md", "revision": 1},
+        )
+        if notes.outcome == "workspace_refused":
+            raise Conflict(message="Working notes are unavailable")
         result = await effects.infer(
             claim,
             effect_key="demo:topic:v1",
             phase=Phase.analysis,
-            inputs={"operation": "sample_topic"},
+            inputs={"operation": "sample_topic", "working_notes": notes.data["content"]},
         )
         try:
             content = result.data.get("content")
             if not isinstance(content, str) or len(content.encode("utf-8")) > 65536:
                 raise ValueError("invalid output")
             outcome = TopicOutcome.model_validate_json(content)
+            if outcome.artifact is not None:
+                raise ValueError("The application supplies artifact references")
         except (SchemaError, ValueError):
             outcome = TopicOutcome(
                 status="failed",
@@ -81,11 +113,51 @@ def child_graph(
                 findings=(),
                 failure_code="invalid_output",
             )
-        await store.stage_topic(claim, outcome)
+        for key, name, revision, body in (
+            ("demo:findings:write:v1", "findings.json", 0, outcome.model_dump_json()),
+            (
+                "demo:notes:update:v1",
+                "notes.md",
+                1,
+                f"Analysis saved to findings.json. {outcome.summary}",
+            ),
+        ):
+            saved = await effects.workspace(
+                claim,
+                effect_key=key,
+                phase=Phase.analysis,
+                intent=ToolIntent.workspace_write,
+                params={"name": name, "revision": revision, "content": body},
+            )
+            if saved.outcome == "workspace_refused":
+                raise Conflict(message="Sample work could not be saved")
         return {}
 
     async def drafting(state: RunState) -> dict[str, Any]:
         await store.phase(claim, Phase.drafting)
+        saved = await effects.workspace(
+            claim,
+            effect_key="demo:findings:read:v1",
+            phase=Phase.drafting,
+            intent=ToolIntent.workspace_read,
+            params={"name": "findings.json", "revision": 1},
+        )
+        if saved.outcome == "workspace_refused":
+            raise Conflict(message="Sample findings are unavailable")
+        outcome = TopicOutcome.model_validate_json(saved.data["content"])
+        shared = await effects.workspace(
+            claim,
+            effect_key="demo:findings:share:v1",
+            phase=Phase.drafting,
+            intent=ToolIntent.workspace_share,
+            params={"name": "findings.json", "revision": 1},
+        )
+        if shared.outcome == "workspace_refused":
+            raise Conflict(message="Sample findings could not be shared")
+        reference = WorkspaceRef.model_validate_json(
+            json.dumps({k: shared.data[k] for k in ("session_id", "name", "revision", "digest")})
+        )
+        await store.stage_topic(claim, outcome.model_copy(update={"artifact": reference}))
         return {}
 
     async def ethics_review(state: RunState) -> dict[str, Any]:
@@ -105,6 +177,7 @@ def child_graph(
     builder = StateGraph(RunState)
     nodes = {
         "intake": intake,
+        "prepare_notes": prepare_notes,
         "analysis": analysis,
         "drafting": drafting,
         "ethics_review": ethics_review,
@@ -139,6 +212,38 @@ def root_graph(
     async def synthesize(state: RunState) -> dict[str, Any]:
         await store.phase(claim, Phase.drafting)
         topics = await store.collect_topics(claim)
+        collected = []
+        for topic in topics:
+            reference = topic.outcome.artifact
+            if reference is None:
+                raise Conflict(message="Topic has no shared findings file")
+            saved = await effects.workspace(
+                claim,
+                effect_key=f"demo:collect:{topic.session_id}:v1",
+                phase=Phase.drafting,
+                intent=ToolIntent.workspace_read,
+                params={
+                    "session_id": str(reference.session_id),
+                    "name": reference.name,
+                    "revision": reference.revision,
+                },
+            )
+            if saved.outcome == "workspace_refused":
+                raise Conflict(message="Shared topic findings are unavailable")
+            file = WorkspaceContent.model_validate_json(json.dumps(saved.data))
+            outcome = TopicOutcome.model_validate_json(file.content)
+            if (
+                file.digest != reference.digest
+                or not file.shared
+                or outcome.model_copy(update={"artifact": reference}) != topic.outcome
+            ):
+                raise Conflict(message="Shared file differs from delivered topic outcome")
+            collected.append(
+                topic.model_copy(
+                    update={"outcome": outcome.model_copy(update={"artifact": reference})}
+                )
+            )
+        topics = tuple(collected)
         if topic_coverage(topics) == "failed":
             summary = "All demonstration topics failed. No research findings were established."
         else:

@@ -285,6 +285,12 @@ cost tests. Uncertain external outcomes remain distinct from completed work.
   The root releases its invocation while waiting for children. A real arq process
   completes the tree from one approved wakeup against disposable Postgres/Redis.
   The demonstration plan records final regression and browser evidence.
+- W5/W6 follow-on: [durable working files](issue-563-workspace.md) implements the
+  owner's storage acceptance test without code execution. Private notes survive
+  process interruption; the root reads explicitly shared findings for synthesis.
+  Migration 0070 owns the bounded session storage, and the receipt shows private
+  and shared files. ADR D8a documents the tested handoff and explicitly separates
+  future cross-invocation skill storage, which is not implemented.
 - The sustained local demonstration is the reviewable stopping point requested
   on 14 September. No further research-quality milestone is required for it.
   Next external step: owner review and explicit ADR ratification before any

@@ -58,6 +58,11 @@ class ToolIntent(StrEnum):
     # GovInfo through the registry + GovInfoAdapter egress path.  Granted only
     # in analysis (authority lookup is an analysis-phase activity).
     retrieve_authority = "retrieve_authority"
+    # Internal, run-scoped working files. Require orchestration authority and a
+    # durable effect in addition to phase grants; never expose a host filesystem.
+    workspace_read = "workspace_read"
+    workspace_write = "workspace_write"
+    workspace_share = "workspace_share"
 
 
 PHASE_GRANTS: dict[Phase, frozenset[ToolIntent]] = {
@@ -79,6 +84,9 @@ PHASE_GRANTS: dict[Phase, frozenset[ToolIntent]] = {
             ToolIntent.retrieve_authority,
             # WS-D PR1: the agentic planner decision call.
             ToolIntent.plan,
+            ToolIntent.workspace_read,
+            ToolIntent.workspace_write,
+            ToolIntent.workspace_share,
         }
     ),
     Phase.drafting: frozenset(
@@ -92,6 +100,9 @@ PHASE_GRANTS: dict[Phase, frozenset[ToolIntent]] = {
             # emit_artifact at drafting ONLY: the memo is synthesized work
             # product, written exactly once where synthesis happens (Donna #8).
             ToolIntent.emit_artifact,
+            ToolIntent.workspace_read,
+            ToolIntent.workspace_write,
+            ToolIntent.workspace_share,
         }
     ),
     Phase.ethics_review: frozenset({ToolIntent.emit_finding}),

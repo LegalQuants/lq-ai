@@ -1254,7 +1254,7 @@ class OrchestrationStore:
         try:
             if not isinstance(result, dict):
                 raise ValueError("result must be an object")
-            content = json.dumps(result, allow_nan=False)
+            content = json.dumps(result, allow_nan=False, ensure_ascii=False)
             if len(content.encode("utf-8")) > 131_072:
                 raise ValueError("oversized result")
         except (ValueError, TypeError):

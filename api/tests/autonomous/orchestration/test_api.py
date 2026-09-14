@@ -101,7 +101,17 @@ async def test_api_approval_worker_progress_and_root_delivery(api_demo):
     assert finished["status"] == "completed" and finished["result"]["coverage"] == "complete"
     assert finished["verification"] == finished["result"]["verification"] == "unverified"
     assert finished["spent_usd"] == finished["reserved_usd"] == "0.0000"
-    assert len(finished["root"]["effects"]) == 1
+    assert len(finished["root"]["effects"]) == 3  # Two shared-file reads and synthesis.
+    assert all(len(child["files"]) == 2 for child in finished["children"])
+    child_id = finished["children"][0]["session_id"]
+    file_url = f"{BASE}/{root_id}/files/{child_id}/notes.md"
+    api.runtime.settings.orchestration_demo_enabled = False
+    api.user.autonomous_enabled = False
+    file = await api.client.get(file_url)
+    assert file.status_code == 200 and file.json()["revision"] == 2
+    assert not file.json()["shared"]
+    api.user.id = uuid4()
+    assert (await api.client.get(file_url)).status_code == 404
 
 
 async def test_feature_gate_privacy_and_audit_after_opt_out(api_demo):
@@ -269,8 +279,8 @@ async def test_real_arq_worker_completes_tree_from_one_approved_wakeup(api_demo,
                         pytest.fail(f"Disposable worker exited: {log.read()}")
                     await asyncio.sleep(0.2)
             assert result["result"]["coverage"] == "complete"
-            assert len(result["root"]["effects"]) == 1
-            assert all(len(child["effects"]) == 1 for child in result["children"])
+            assert len(result["root"]["effects"]) == 3
+            assert all(len(child["effects"]) == 7 for child in result["children"])
         finally:
             if worker.returncode is None:
                 worker.terminate()

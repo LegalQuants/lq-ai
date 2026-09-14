@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from app.autonomous.orchestration.contracts import Snapshot, TaskText
+from app.autonomous.orchestration.workspace import WorkspaceRef
 
 
 class TopicOutcome(Snapshot):
@@ -14,6 +15,7 @@ class TopicOutcome(Snapshot):
     findings: Annotated[tuple[TaskText, ...], Field(max_length=8)]
     verification: Literal["unverified"] = "unverified"
     failure_code: Literal["invalid_output", "execution_failed"] | None = None
+    artifact: WorkspaceRef | None = None
 
     @model_validator(mode="after")
     def consistent(self) -> Self:

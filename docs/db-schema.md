@@ -1847,6 +1847,18 @@ account admission enforce root/deployment child limits. Approval and child waits
 release worker ownership. The legacy idle watchdog excludes governed trees;
 their dedicated sweep handles leases, deadlines and lost arq wakeups.
 
+Migration **0070** adds `orchestration_files`, keyed by `(session_id, name)`.
+`session_id` references the run's `orchestration_accounts` row with `ON DELETE
+CASCADE`. Columns hold bounded UTF-8 `content`, `revision` (1–32), SHA-256 `digest`,
+`size_bytes`, `shared` and `updated_at`. Database checks restrict names and content
+size; guarded writes enforce eight files and 256 KiB per session, 64 KiB per file,
+expected revisions and immutability after sharing. The root may read an approved
+child's shared file; siblings and other runs cannot. Owner receipt access includes
+private notes after halt. No host directory or cross-run skill namespace exists.
+File writes and effect receipts commit atomically under the existing lock order.
+Downgrade refuses retained files or owned accounts; explicit session deletion
+removes the corresponding files. See [storage evidence](plans/issue-563-workspace.md).
+
 All root-owned records cascade on root/session deletion. Projects use RESTRICT
 while orchestration roots exist; ordinary archival remains available. Deleting
 an admitted child removes its private account/effects but leaves the plan and

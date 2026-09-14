@@ -2520,6 +2520,11 @@ components:
       - created_at
       title: FileMetadata
       type: object
+    FileName:
+      maxLength: 96
+      minLength: 1
+      pattern: ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$
+      type: string
     FindInCaseRequest:
       additionalProperties: false
       properties:
@@ -4708,6 +4713,12 @@ components:
             $ref: '#/components/schemas/EffectRead'
           title: Effects
           type: array
+        files:
+          default: []
+          items:
+            $ref: '#/components/schemas/WorkspaceFileRead'
+          title: Files
+          type: array
         outcome:
           anyOf:
           - $ref: '#/components/schemas/TopicOutcome'
@@ -6143,6 +6154,9 @@ components:
       - call_mcp_tool
       - plan
       - retrieve_authority
+      - workspace_read
+      - workspace_write
+      - workspace_share
       title: ToolIntent
       type: string
     ToolProviderPatchRequest:
@@ -6183,6 +6197,10 @@ components:
     TopicOutcome:
       additionalProperties: false
       properties:
+        artifact:
+          anyOf:
+          - $ref: '#/components/schemas/WorkspaceRef'
+          - type: 'null'
         failure_code:
           anyOf:
           - enum:
@@ -7034,6 +7052,105 @@ components:
       - addin_max_compatible_version
       - taskpane_bundle_url
       title: WordAddinVersionResponse
+      type: object
+    WorkspaceContent:
+      additionalProperties: false
+      properties:
+        content:
+          title: Content
+          type: string
+        digest:
+          $ref: '#/components/schemas/Digest'
+        name:
+          $ref: '#/components/schemas/FileName'
+        revision:
+          maximum: 32.0
+          minimum: 1.0
+          title: Revision
+          type: integer
+        session_id:
+          format: uuid
+          title: Session Id
+          type: string
+        shared:
+          title: Shared
+          type: boolean
+        size_bytes:
+          title: Size Bytes
+          type: integer
+        updated_at:
+          format: date-time
+          title: Updated At
+          type: string
+      required:
+      - session_id
+      - name
+      - revision
+      - digest
+      - size_bytes
+      - shared
+      - updated_at
+      - content
+      title: WorkspaceContent
+      type: object
+    WorkspaceFileRead:
+      additionalProperties: false
+      properties:
+        digest:
+          $ref: '#/components/schemas/Digest'
+        name:
+          $ref: '#/components/schemas/FileName'
+        revision:
+          maximum: 32.0
+          minimum: 1.0
+          title: Revision
+          type: integer
+        session_id:
+          format: uuid
+          title: Session Id
+          type: string
+        shared:
+          title: Shared
+          type: boolean
+        size_bytes:
+          title: Size Bytes
+          type: integer
+        updated_at:
+          format: date-time
+          title: Updated At
+          type: string
+      required:
+      - session_id
+      - name
+      - revision
+      - digest
+      - size_bytes
+      - shared
+      - updated_at
+      title: WorkspaceFileRead
+      type: object
+    WorkspaceRef:
+      additionalProperties: false
+      properties:
+        digest:
+          $ref: '#/components/schemas/Digest'
+        name:
+          $ref: '#/components/schemas/FileName'
+        revision:
+          maximum: 32.0
+          minimum: 1.0
+          title: Revision
+          type: integer
+        session_id:
+          format: uuid
+          title: Session Id
+          type: string
+      required:
+      - session_id
+      - name
+      - revision
+      - digest
+      title: WorkspaceRef
       type: object
     _FallbackEntry:
       description: One ``fallback`` list entry on an alias write.
@@ -9117,6 +9234,48 @@ paths:
       security:
       - OAuth2PasswordBearer: []
       summary: Approve
+      tags:
+      - autonomous
+  /api/v1/autonomous/orchestration/{root_id}/files/{session_id}/{name}:
+    get:
+      operationId: workspace_file_api_v1_autonomous_orchestration__root_id__files__session_id___name__get
+      parameters:
+      - in: path
+        name: root_id
+        required: true
+        schema:
+          format: uuid
+          title: Root Id
+          type: string
+      - in: path
+        name: session_id
+        required: true
+        schema:
+          format: uuid
+          title: Session Id
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          title: Name
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceContent'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Workspace File
       tags:
       - autonomous
   /api/v1/autonomous/orchestration/{root_id}/halt:

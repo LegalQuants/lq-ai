@@ -53,11 +53,12 @@ class CheckpointRuntime:
         ) as conn:
             row = await (
                 await conn.execute(
-                    "SELECT max(v) AS version FROM orchestration_checkpoints.checkpoint_migrations"
+                    "SELECT max(v) AS version, to_regclass('public.orchestration_files') AS workspace "
+                    "FROM orchestration_checkpoints.checkpoint_migrations"
                 )
             ).fetchone()
-            if row is None or row["version"] != 9:
-                raise ValidationError(message="Orchestration checkpoint migration 0069 is required")
+            if row is None or row["version"] != 9 or row["workspace"] is None:
+                raise ValidationError(message="Orchestration migrations 0069 and 0070 are required")
 
     @asynccontextmanager
     async def acquire(

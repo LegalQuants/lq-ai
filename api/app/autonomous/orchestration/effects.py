@@ -26,6 +26,7 @@ from app.autonomous.orchestration.inference import InferenceBinding, InferenceRo
 from app.autonomous.orchestration.policy import load_pinned_skill
 from app.autonomous.orchestration.sources import AuthoritySources, SourceBinding
 from app.autonomous.orchestration.store import ExecutionView, OrchestrationStore, WorkerClaim
+from app.autonomous.orchestration.workspace import WORKSPACE_INTENTS, WorkspaceAccess, parse_request
 from app.errors import Conflict, Forbidden, ValidationError
 from app.models.autonomous import AutonomousSession
 from app.schemas.autonomous import Phase
@@ -102,6 +103,8 @@ class _Invocation:
                 amount_usd=self.source_binding.cost_usd,
                 pricing_version=self.source_binding.config_digest,
             )
+        elif intent in WORKSPACE_INTENTS:
+            quote = CostQuote(amount_usd=Decimal("0"), pricing_version="local-workspace-v1")
         elif self.quote is not None:
             quote = self.quote(intent, json.loads(request), self.view.scope)
         elif intent == ToolIntent.retrieve_chunks:
@@ -256,6 +259,21 @@ class GuardedEffects:
             claim, view, effect_key, phase, intent, params, inference_binding=binding
         )
 
+    async def workspace(
+        self,
+        claim: WorkerClaim,
+        *,
+        effect_key: str,
+        phase: Phase,
+        intent: ToolIntent,
+        params: dict[str, Any],
+    ) -> ToolResult:
+        request = parse_request(intent, params)
+        view = await self.store.execution_view(claim)
+        return await self._call(
+            claim, view, effect_key, phase, intent, request.model_dump(mode="json")
+        )
+
     async def retrieve(
         self,
         claim: WorkerClaim,
@@ -338,6 +356,9 @@ class GuardedEffects:
                     effect=invocation,
                     source_binding=source_binding,
                     inference_binding=inference_binding,
+                    workspace_access=WorkspaceAccess(self.store, claim)
+                    if intent in WORKSPACE_INTENTS
+                    else None,
                 )
         except BaseException:
             # The outcome transaction has rolled back before recovery acquires

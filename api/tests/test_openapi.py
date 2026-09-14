@@ -203,6 +203,7 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/autonomous/orchestration/{root_id}/approve",
         "/api/v1/autonomous/orchestration/{root_id}/reject",
         "/api/v1/autonomous/orchestration/{root_id}/halt",
+        "/api/v1/autonomous/orchestration/{root_id}/files/{session_id}/{name}",
         # WS3b — case-law research surface
         "/api/v1/research/capabilities",
         "/api/v1/research/verify-citations",
@@ -348,8 +349,8 @@ async def test_openapi_paths_match_sketch() -> None:
     # Donna #3 adds two new paths (137 -> 139):
     # /api/v1/admin/tool-providers
     # /api/v1/admin/tool-providers/{provider_type}
-    # ADR 0035 adds six closed demonstration/consent/tree paths (139 -> 145).
-    assert len(actual) == 145
+    # ADR 0035 adds seven demonstration/consent/tree/file paths (139 -> 146).
+    assert len(actual) == 146
 
 
 @pytest.mark.unit

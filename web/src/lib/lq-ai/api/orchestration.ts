@@ -9,6 +9,16 @@ export interface TopicOutcome {
 	failure_code: string | null;
 }
 
+export interface WorkspaceFile {
+	session_id: string;
+	name: string;
+	revision: number;
+	digest: string;
+	size_bytes: number;
+	shared: boolean;
+	updated_at: string;
+}
+
 export interface RunProgress {
 	session_id: string;
 	status: string;
@@ -17,6 +27,7 @@ export interface RunProgress {
 	spent_usd: string;
 	reserved_usd: string;
 	outcome: TopicOutcome | null;
+	files: WorkspaceFile[];
 	effects: {
 		effect_key: string;
 		status: string;
@@ -79,6 +90,11 @@ export const orchestrationApi = {
 	}) => apiRequest<OrchestrationTree>(`${base}/plans`, { method: 'POST', body }),
 	tree: (id: string, signal?: AbortSignal) =>
 		apiRequest<OrchestrationTree>(`${base}/${encodeURIComponent(id)}/tree`, { signal }),
+	file: (root: string, session: string, name: string, signal?: AbortSignal) =>
+		apiRequest<WorkspaceFile & { content: string }>(
+			`${base}/${encodeURIComponent(root)}/files/${encodeURIComponent(session)}/${encodeURIComponent(name)}`,
+			{ signal }
+		),
 	approve: (tree: OrchestrationTree) =>
 		apiRequest<OrchestrationTree>(`${base}/${encodeURIComponent(tree.root_id)}/approve`, {
 			method: 'POST',
