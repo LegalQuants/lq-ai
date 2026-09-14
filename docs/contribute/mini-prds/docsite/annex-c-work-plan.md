@@ -152,7 +152,7 @@ effort.
 | # | Item | Size | Profile | Acceptance / notes |
 |---|---|---|---|---|
 | C1 | Site scaffold: Astro/Starlight, theme, CI build to Pages | M–L | frontend engineer | builds green; a11y + link gates wired |
-| C2 | Content transform: frontmatter injection, link rewriting, commit stamps, archaeology exclusion rules | M | engineer | every page stamped; zero orphans |
+| C2 | Content transform: frontmatter injection, link rewriting, commit stamps, archaeology exclusion rules | M | engineer | every page stamped; zero orphans; no hard-coded `/lq-ai/` base anywhere in output |
 | C3 | Machine surface: llms.txt, .md routes, offline bundle | S–M | engineer | J5, J20 tests |
 | C4 | Entry hub + `/start/` set | M | technical writer | J1, J2 tests; J1 needs a second reader |
 | C5 | Install spine curation (macOS, Compose, TLS, air-gap) | M | DevOps | J2 test |
