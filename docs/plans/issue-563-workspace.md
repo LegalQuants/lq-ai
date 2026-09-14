@@ -39,6 +39,31 @@ skill identity and version compatibility, retention/deletion, concurrent writes,
 and what stored material may enter a later prompt. Record this distinction in
 the ADR assessment; do not silently turn run files into globally shared memory.
 
+The maintainer selected an **optional persistent skill workspace** as the intended
+extension. A skill chooses whether to use it; persistence and loading prior work
+are not mandatory steps for every skill invocation. This is a requirement for
+future implementation, not a capability established by the run-storage acceptance
+test above.
+
+## Script execution assessment
+
+The existing LQ.AI skill loader includes instructions, reference files and
+examples; it does not load `scripts/` or register executable helpers. Neither
+bundled scripts nor code written during a skill invocation have a built-in runner
+in LQ.AI chat, playbooks or autonomous execution. The authoring guide's directory
+convention is not an execution capability; the PRD still defers skill scripts.
+
+Chat can call enabled, configured MCP tools, so a separately hosted tool can
+execute a script and return its result. The gateway's MCP transport is HTTP; it
+does not start a local script process. The older autonomous MCP handler rejects
+tools needing confirmation, and the #563 orchestration scope does not currently
+allow general MCP calls. The inherited OpenWebUI Python interpreter is separate
+from LQ.AI's chat tool loop and message renderer.
+
+This is a code-inspection finding, not a live script-runner acceptance test. It
+does not add script execution or connect any execution service. Optional workspace
+use and optional script execution remain independent capabilities.
+
 ## Evidence
 
 The acceptance test kills a separate Python worker immediately after the notes

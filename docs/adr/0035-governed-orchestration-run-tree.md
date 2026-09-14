@@ -338,8 +338,12 @@ session can use its working files; a new invocation of the same skill in a new
 run cannot automatically read them. General cross-invocation skill storage is
 not implemented. It needs a separate owner/matter/skill namespace, explicit
 reuse permissions, version compatibility, retention/deletion and concurrency
-rules. User-kept memory remains a separate curation mechanism. This clarification
-does not ratify the ADR or enable code execution, live providers or publication.
+rules. The intended extension is an optional persistent skill workspace: a skill
+chooses whether to use it. Skills need not persist work or load prior work on every
+invocation. This records the maintainer's direction; the capability is not yet
+implemented. User-kept memory remains a separate curation mechanism. This
+clarification does not ratify the ADR or enable code execution, live providers or
+publication.
 
 ### D9 — Approval and changing progress are required UI
 

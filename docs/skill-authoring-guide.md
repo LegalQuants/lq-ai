@@ -28,6 +28,13 @@ my-skill/
 
 `SKILL.md` is the operational instruction the model executes when the skill is attached to a chat. Everything in `SKILL.md` becomes part of the prompt; everything in `reference/` is optionally surfaced when the skill's workflow references it. `examples/` are documentation for users and reviewers; they do not become part of the prompt by default.
 
+**Script execution is deferred.** The `scripts/` directory above is a packaging
+convention. The current LQ.AI loader does not load it or register executable
+helpers, and skill instructions cannot invoke a built-in runner for bundled or
+newly written code. See [PRD §3.4](PRD.md#34-skill-library-and-skill-creator).
+Calling a configured external tool is a separate capability; including a script
+in a skill does not install such a tool.
+
 **Where skills live.** Built-in skills are filesystem-canonical under `skills/<slug>/SKILL.md` in this repo. Community skills come from the [`LegalQuants/lq-skills`](https://github.com/LegalQuants/lq-skills) git submodule mounted at `skills/community/` — **empty on a fresh clone until you run `git submodule update --init --remote skills/community`**. At startup the loader (`api/app/skills/loader.py`) walks built-in skills first, then community skills, with **built-in winning on slug collision**. User- and team-authored skills are a separate path entirely: they live in the `user_skills` database table (created via the wizard UI or `POST /api/v1/user-skills`), not on the filesystem — see [User-scope skills](#user-scope-skills-slash_alias-forked_from-and-capture-from-chat-wave-d2) below.
 
 ---
