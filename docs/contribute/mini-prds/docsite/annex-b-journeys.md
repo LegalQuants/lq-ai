@@ -29,7 +29,7 @@ against the community record, issue tracker, and published minutes. Two journeys
 evidence for reasons of project age, are marked so, and should be re-tested once the site
 has lived long enough to produce readers.
 
-**Phase** proposes when the journey's pages ship; committee sign-off is parent decision 2.
+**Phase** proposes when the journey's pages ship. It is the working plan and changes by PR.
 
 | Theme | # | Journey | Reader | Status | Phase |
 |---|---|---|---|---|---|
@@ -41,20 +41,20 @@ has lived long enough to produce readers.
 | Getting it running | J20 | Air-gapped install | isolated-network operator | evidence | **Launch** (inventory) |
 | Getting it running | J22 | Which hosting combination is mine? | operator with a fixed topology | evidence | **Launch** (index) |
 | Getting it running | J19 | Will it run on what I have? | resource-constrained reader | synthetic · likely | Launch-with |
-| Keeping data safe | J3 | What leaves my deployment? | operator, evaluator | evidence | **Launch** ⚠ blocked |
+| Keeping data safe | J3 | What leaves my deployment? | operator, evaluator | evidence | Ships when #439 closes |
 | Keeping data safe | J4 | Hand this to our security team | evaluator | evidence | **Launch** |
 | Keeping data safe | J9 | A provider key leaked, 11pm | operator | synthetic · likely | Launch-with |
 | Keeping data safe | J24 | I found a security problem | outside reporter | evidence | Fast-follow |
 | Running it day to day | J11 | It broke — triage and recover | operator | evidence | **Launch** (min. set) |
 | Running it day to day | J6 | Week two: back up, upgrade, watch | operator | evidence | Launch-with |
 | Proving what happened | J10 | The output was wrong — reconstruct | practising lawyer | evidence | Launch-with |
-| Proving what happened | J25 | Compare techniques on my matter | benchmarking practitioner | evidence | Fast-follow |
+| Proving what happened | J25 | Compare techniques on my matter | benchmarking practitioner | evidence | Out of scope (ADR 0031) |
 | Proving what happened | J16 | The insurer asks what you deployed | accountability reader | synthetic · plausible | Post-launch re-test |
 | Proving what happened | J14 | The annual re-review | evaluator, a year on | synthetic · plausible | Post-launch re-test |
 | Making it your own | J7 | Bring my own workflow in | lawyer-author | evidence | Launch-with |
 | Making it your own | J18 | Should I trust this skill? | skill consumer | synthetic · likely | Launch-with |
 | Making it your own | J23 | My language, my law — fork or contribute? | non-anglophone practitioner | evidence | Launch-with |
-| Making it your own | J17 | What survives the next release? | fork/frontend builder | evidence | Fast-follow |
+| Making it your own | J17 | What survives the next release? | fork/frontend builder | evidence | Launch-with (one page, ADR 0031) |
 | As you grow | J8 | Can it carry our branding? | deployer, firm | evidence | **Ships independently** |
 | As you grow | J12 | We just crossed fifty users | deployer mid-engagement | synthetic · likely | Fast-follow |
 | As you grow | J13 | The pilot becomes a programme | prototyper + IT | synthetic · likely | Fast-follow |
@@ -174,7 +174,7 @@ The highest-severity journey: this reader's failure mode is a client-confidentia
 incident. The honest answer exists in [docs/security/anonymization.md](../../../security/anonymization.md)
 and is several clicks deep; the committee's
 [published minutes](https://github.com/LegalQuants/lq-ai-community/blob/main/meetings/2026-07-26-weekly/notes.md)
-record the layer's reliability as an open item. **Blocked** on parent decision 1; whatever
+record the layer's reliability as an open item. **Waits on #439** (open); whatever
 the outcome, this page states measured behaviour and ends in a decision (route privileged
 matters to Tier 1). No benchmarked site in any regulated field passes this test — it is
 genuinely differentiating.
@@ -258,6 +258,9 @@ access.
 > the page does not tell the reader how to distinguish a system failure from a poor answer.
 
 ### J25 — I want to compare techniques on my own matter
+*Out of scope under ADR 0031: its page was a cookbook for building against the API, which
+the site does not document. Kept as the evidence record; revisit with ADR 0031's triggers.*
+
 The test-bench reader, now real: a controlled five-model benchmark run through the full
 stack ([#503](https://github.com/LegalQuants/lq-ai/issues/503)), in which a platform
 default silently zeroed one model's results — a platform failure that would have been
@@ -324,11 +327,12 @@ ADR 0024 has since decided the routes; the coverage map is open
 Confirmed: a fork-builder built against a moving target and had to redo the work, asking
 in as many words when the platform would be "finished." Multiple real builds run on this
 backend; a first-party downstream product broke on an undocumented compose-level contract
-([#278](https://github.com/LegalQuants/lq-ai/pull/278)). The page ranks extension points
-by stability and states plainly what compatibility is and is not promised before 1.0.
-> **Failed when:** the site names an extension point without stating its stability, or a
-> reader cannot find a single statement of what compatibility the project does and does
-> not promise before 1.0.
+([#278](https://github.com/LegalQuants/lq-ai/pull/278)). ADR 0031 answers this reader:
+headless use is acknowledged, not supported. The site's one page on it lives in `/operate/`,
+describes the headless boot, and states plainly that no compatibility is promised.
+> **Failed when:** a reader cannot find a single statement of what the project does and
+> does not promise to people building on it — or a page other than that one invites them
+> to build against the API.
 
 ---
 
@@ -366,9 +370,10 @@ matrix is mixed, which is exactly why publishing it is credible.
 
 ## Running the tests
 
-- **The launch gate** (parent PRD, "How we'd know it's done"): J1–J4 pass, run by a
-  non-author; J1 and J3 additionally pass with a second reader who has not read the
-  source — until that reader exists they are *unverified*, not passed. J5's machine
+- **The launch gate** (parent PRD, "How we'd know it's done"): J1, J2 and J4 pass, run by
+  a non-author; J1 additionally passes with a second reader who has not read the
+  source — until that reader exists it is *unverified*, not passed. J3 joins the gate,
+  with its own second reader, when its page ships. J5's machine
   surface, J11's minimum set, J20's egress inventory, and J22's supported-shapes index are
   verified as build artifacts.
 - **Each later phase** runs its own journeys' tests on shipping.

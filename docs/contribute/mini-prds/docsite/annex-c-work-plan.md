@@ -7,8 +7,9 @@ nothing; *generated* = a build step over structured sources, near-zero cost per 
 thereafter.
 
 All numbers are **estimates for planning, not commitments** — a contributor claiming an
-item is expected to re-size it. Nothing here is assigned to anyone; mentors per section
-are a committee decision (parent decision 5).
+item is expected to re-size it. Nothing here is assigned to anyone. Review is by the
+maintainer by default; because content stays in the repository (ADR 0036), CODEOWNERS
+routing for security, compliance and skills paths applies as it does today.
 
 ---
 
@@ -25,7 +26,7 @@ are a committee decision (parent decision 5).
 | Choose your path *(routing by goal, permission to skip)* | new | S |
 | Where end-user help lives *(the in-app Learn boundary, stated as policy)* | new | S |
 
-### `/operate/` — run it · ~16 pages + extensible recipes · [OPS · J2, J6, J9, J11, J19, J20, J22]
+### `/operate/` — run it · ~16 pages + extensible recipes · [OPS · J2, J6, J9, J11, J17, J19, J20, J22]
 
 | Page | Kind | Est. |
 |---|---|---|
@@ -44,7 +45,7 @@ are a committee decision (parent decision 5).
 | Symptom index: "something is wrong" *(triage branches: install / upgrade / silent-degrade)* | new | S–M |
 | Move machines / uninstall cleanly | new | S |
 | Troubleshooting & FAQ | new | S–M |
-| Lite / headless profile | new | S — **blocked** (open product question) |
+| Headless boot: what runs without the web UI, labelled unsupported, no compatibility promised *(ADR 0031 — the site's only page on building against LQ.AI; J17)* | new | S |
 | **`recipes/`** — supported-shapes index + topology recipes in the house format | new + extensible | index S; each recipe S |
 
 ### `/trust/` — trust centre · ~13 pages · [EVAL, PRODUCT · J3, J4, J14, J16] · **URL-stability commitment**
@@ -52,7 +53,7 @@ are a committee decision (parent decision 5).
 | Page | Kind | Est. |
 |---|---|---|
 | Trust-centre index *(the single missing artifact — this page is the deliverable)* | new | S |
-| What leaves my deployment *(J3; ends in a decision)* | new | M — **blocked** (parent decision 1) |
+| What leaves my deployment *(J3; ends in a decision)* | new | M — **waits on #439** (open question 1) |
 | Threat model | curation | S |
 | Anonymization: what it does and does not do | curation | S |
 | Audit & evidence *(incl. the one-query privileged-evidence pattern)* | curation | S |
@@ -80,20 +81,16 @@ are a committee decision (parent decision 5).
 | **Skill catalogue** *(columns: skill · practice area · jurisdiction · contributor · attested-by · tier; covers first-party and community repos or scopes explicitly)* | generated | M |
 | **`coverage/`** — jurisdiction × practice-area index *(per-page: attested skills, sources/MCP connectors, scope notes from canon, gaps, contribution route)* | generated | M |
 
-### `/build/` — build on it · ~8 pages · [DEV · J17, J25]
+### Not in the tree: `/build/`
 
-| Page | Kind | Est. |
-|---|---|---|
-| Choose your surface *(incl. "you may not need the API")* | new | S |
-| Build a frontend / fork the backend *(the evidenced path; extension points ranked by stability)* | new | M |
-| Gateway as an OpenAI drop-in | new | S–M |
-| Authentication for scripts *(honest interim; names the API-token DE)* | new | S — **blocked-adjacent** |
-| SSE streaming + citation payloads | new | M |
-| Stability: what "finished" means before 1.0 | new | S |
-| Cookbooks: batch tabular review; KB ingest; test-bench comparisons *(J25's defaults documented)* | new | M |
-| Extend instead: MCP, Word add-in, bridges | curation | S |
+ADR 0031 (headless / API-only use: acknowledged, not supported) keeps building against
+LQ.AI out of scope. Its one page is the headless-boot page in `/operate/`. No API
+reference, frontend or fork guide, gateway drop-in page, streaming guide, or cookbook is
+planned. Revisit when ADR 0031's triggers fire.
 
 ### `/deliver/` — deliver to a client · ~8 pages · [PRODUCT · J8, J12, J13]
+
+Until the parent PRD's open question 4 is settled, only the branding page ships.
 
 | Page | Kind | Est. |
 |---|---|---|
@@ -119,20 +116,18 @@ are a committee decision (parent decision 5).
 | Contributing is a credential *(the membership route, stated)* | new | S |
 | Code of conduct | curation | S |
 
-### `/reference/` — generated · [OPS, DEV, AUTHOR]
+### `/reference/` — generated · [OPS, AUTHOR]
 
 | Artifact | Source | Est. (one-time) |
 |---|---|---|
 | Configuration reference *(env + gateway.yaml + mcp.yaml)* | Pydantic config models | M |
-| Backend API reference | generated OpenAPI spec *(the generated one; the hand-written sketch is retired)* | M — **after** the operationId fix |
-| Gateway API reference | gateway OpenAPI spec | included above |
 | Error vocabulary | specs + code | S |
 | Skill frontmatter schema | loader schema | S |
 | Playbook position schema | playbook docs/schema | S |
 | ADR index *(renders real statuses — which will surface the stale ones)* | `docs/adr/` | S |
-| API stability & versioning statement | ADR 0025 + `/build/` stability page | S |
+| Release versioning statement | ADR 0025 | S |
 
-### `/changelog/` · [OPS, DEV, EVAL · J6, J11, J14]
+### `/changelog/` · [OPS, EVAL · J6, J11, J14]
 
 One page per release, generated from GitHub Releases at build time: upgrade class (patch =
 upgrade blind / minor = read first, per ADR 0025), operator-action list, migration status,
@@ -151,7 +146,7 @@ offline artifact for free). Build steps, specified before the first page is writ
 
 Twenty-two items. Each is claimable by one contributor, sized independently, and carries
 its acceptance test (the journey failed-whens from Annex B plus the Annex A gates).
-**Profiles are roles, not people.** Items marked ⛔ are blocked on a decision, not on
+**Profiles are roles, not people.** Items marked ⛔ wait on an open question, not on
 effort.
 
 | # | Item | Size | Profile | Acceptance / notes |
@@ -168,21 +163,21 @@ effort.
 | C10 | Recipes catalogue: index, house format, first two recipes | M | DevOps | J22 test; each further recipe is its own S item |
 | C11 | Egress inventory page from air-gap CI output | S–M | engineer | J20 test |
 | C12 | Trust-centre index + curation set | M | compliance / security professional | J4 test |
-| C13 | ⛔ Data-flow page ("what leaves my deployment") | M | compliance + engineer | J3 test; blocked on parent decision 1 |
+| C13 | ⛔ Data-flow page ("what leaves my deployment") | M | compliance + engineer | J3 test; waits on #439 |
 | C14 | Continuity + verify-yourself + disclosure-test pages | S–M | compliance professional | R-G shape; J24 test |
 | C15 | Skills authoring set | M | practising lawyer | J7 test |
 | C16 | Skill-testing page | S–M | lawyer + engineer | coordinates with skill-acceptance-tests mini-PRD |
 | C17 | Skill catalogue generator + frontmatter/position schema references | M | engineer | catalogue axes render; schemas tabulated |
 | C18 | Coverage index generator (jurisdiction × practice area) | M | engineer, lawyer review | J23 test; scope notes from canon on every page |
 | C19 | Contribute set + live-board wiring + dev-env guide | M–L | technical writer + engineer | agent orients from one fetch (J5) |
-| C20 | Build-on-it set (surfaces, fork path, gateway drop-in, stability, SSE, cookbooks) | L (splittable ×3) | engineer | J17, J25 tests |
-| C21 | Deliver set (theming, stitched guide, multi-deploy, readiness matrix, claims, SaaS page, hand-off) | L (splittable ×2) | DevOps + licence-comfortable lawyer | J8, J12, J13 tests; licensing page ships first and independently |
-| C22 | Reference + changelog generators | M–L | engineer | after operationId fix; changelog states backfill gap honestly |
+| C20 | Headless boot page (unsupported; ADR 0031) | S | engineer | J17 test |
+| C21 | Deliver set (theming, stitched guide, multi-deploy, readiness matrix, claims, SaaS page, hand-off) | L (splittable ×2) | DevOps + licence-comfortable lawyer | J8, J12, J13 tests; licensing page ships first and independently; the rest waits on open question 4 |
+| C22 | Reference + changelog generators | M | engineer | config, schemas, ADR index; changelog states the backfill gap honestly |
 
 **Sequencing constraints, not assignments:** C1–C3 precede everything (the infrastructure
 is a prerequisite, and the machine surface is cheap only if specified first). C13 waits on
-decision 1. C22's API half waits on the operationId fix. The branding page inside C21 does
-not wait for anything — it ships as its own item per the parent PRD.
+#439. The branding page inside C21 does not wait for anything — it ships as its own item
+per the parent PRD.
 
 ---
 
@@ -190,20 +185,19 @@ not wait for anything — it ships as its own item per the parent PRD.
 
 | Phase | Sections | Narrative pages (curation / new) | Rough single-contributor equivalent |
 |---|---|---|---|
-| **P0 launch** | `/` + `/start/` + install spine + `/trust/` + machine surface + J11/J20/J22 minimums | ~27 (≈15 / ≈12) | ~5–6 weeks |
-| **P1 launch-with** | rest of `/operate/`, `/skills/`, `/contribute/` | ~24 (≈11 / ≈13) | ~3 weeks |
-| **P2 fast-follow** | `/build/`, `/deliver/` | ~16 (≈4 / ≈12) | ~3.5 weeks |
-| **Infrastructure** | scaffold, transform, machine surface, generators | — | ~2–3 weeks |
-| **Total** | | **~67 + generated** | **~14 weeks-equivalent** |
+| **P0 launch** | `/` + `/start/` + install spine + `/trust/` (less the data-flow page) + machine surface + J11/J20/J22 minimums | ~26 (≈15 / ≈11) | ~5–6 weeks |
+| **P1 launch-with** | rest of `/operate/` (incl. the headless page), `/skills/`, `/contribute/`, and the data-flow page when #439 closes | ~25 (≈11 / ≈14) | ~3.5 weeks |
+| **P2 fast-follow** | `/deliver/` (the branding page ships independently) | ~9 (≈3 / ≈6) | ~2 weeks |
+| **Infrastructure** | scaffold, transform, machine surface, generators | — | ~2 weeks |
+| **Total** | | **~60 + generated** | **~13 weeks-equivalent** |
 
 Three honest framings:
 
-1. **"Launch" is ~27 pages, more than half curation.** The single-contributor-weeks number
+1. **"Launch" is ~26 pages, more than half curation.** The single-contributor-weeks number
    is the wrong way to read this — the point of the item structure is that the same work
    is 22 claimable items across five profiles.
 2. **The expensive half is the unwritten half, and it is the fast-follow half.** P0 is
    mostly curation; P2 is mostly new writing. The cost curve supports the priority order.
-3. **Four items are blocked on decisions, not effort** — the data-flow page (decision 1),
-   the lite-profile page (open product question), the API auth page (token DE), and
-   changelog coverage (backfill). The PRD names them as dependencies so no contributor
+3. **Two items wait on something other than effort** — the data-flow page (#439) and
+   changelog coverage (the release-notes backfill). The PRD names them so no contributor
    discovers a wall mid-item.

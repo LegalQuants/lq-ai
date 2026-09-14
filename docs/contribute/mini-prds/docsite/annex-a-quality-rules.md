@@ -2,9 +2,9 @@
 
 **Status:** Frame only. The core rule set — twelve ranked rules each with a failure test,
 sixteen house-style rules, and two publication conditions — was authored by a community
-member from a three-site comparative review of self-hosted-AI documentation sites, and is
-adopted by reference pending the committee decision in the parent PRD (decision 4). It
-lands here under its author's name, in her own text, when she files it. This annex carries
+member from a three-site comparative review of self-hosted-AI documentation sites. The
+parent PRD uses it by reference as its acceptance tests; no separate committee adoption is
+sought. It lands here under its author's name, in her own text, when she files it. This annex carries
 only what the parent PRD adds around it.
 
 ## The two publication conditions (adopted as stated)
