@@ -685,9 +685,13 @@ def make_drafting_node(
                     # storage down) — ONE aggregated warn finding naming
                     # every failed artifact, not one per artifact (DE-333).
                     names = ", ".join(name for name, _ in storage_failures)
+                    # Audit rows record the outcome, not the error text — keep
+                    # each distinct error here so the finding stays actionable.
+                    errors = "; ".join(dict.fromkeys(err for _, err in storage_failures))
                     summary = (
                         f"{len(storage_failures)} artifacts could not be "
-                        f"stored — object storage unavailable: {names}"
+                        f"stored — object storage unavailable: {names} "
+                        f"(error: {errors})"
                     )
                 finding = {
                     "title": "Artifact persistence failed at storage",

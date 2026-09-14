@@ -604,6 +604,7 @@ async def test_drafting_multiple_storage_errors_emit_one_aggregated_warn(
     assert "object storage unavailable" in finding["summary"]
     assert "review-memo.md" in finding["summary"]
     assert "summary.md" in finding["summary"]
+    assert "RuntimeError: minio is down" in finding["summary"]
 
 
 # ---------------------------------------------------------------------------
