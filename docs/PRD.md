@@ -1224,17 +1224,21 @@ providers:
   anthropic:
     api_key_env: ANTHROPIC_API_KEY
     base_url: https://api.anthropic.com
-    timeout_s: 60
+    # Optional operator escape hatches (ADR 0027 D2). Defaults: timeout_s 600
+    # on every adapter; default_max_tokens 16384 (Anthropic requires
+    # max_tokens; an explicit request value always wins).
+    # timeout_s: 600
+    # default_max_tokens: 16384
     rate_limit:
       requests_per_minute: 1000
       tokens_per_minute: 200000
   openai:
     api_key_env: OPENAI_API_KEY
     base_url: https://api.openai.com/v1
-    timeout_s: 60
+    # timeout_s: 600
   ollama:
     base_url: http://ollama:11434
-    timeout_s: 300
+    # timeout_s: 600
 
 models:
   # Operator-defined model registry
@@ -5054,6 +5058,12 @@ The document-ingestion pipeline (ADR [0006](adr/0006-document-pipeline-architect
 **Priority:** P2 · **Effort:** S–M · **Status (2026-09-13): filed.** Credit: @SaifAlYounan (proposed in #503/#504 as the narrower fix).
 
 Attached-file content is injected into the prompt as a system message (`_format_attached_files_block`, `api/app/api/chats.py`) and then counted against `lq_ai_chat_history_token_budget` although it is not conversation. Raising the budget (6,000 → 64,000 in #504) fixes the symptom: a ~47,000-token case file supplied in turn 1 was silently gone by turn 2 on models with 200k–1M context windows, and nothing in the response said trimming had occurred. The category fix is to give injected document blocks their own budget, or exclude them from the trim, so a document cannot be dropped between turns by a history setting. **Specific scope:** a turn-2 follow-up over a turn-1 attachment retains the document regardless of the history budget; a regression test covers the trim boundary; the history budget's field comment stops describing itself as the document ceiling. Related: #503 item 4, #512 (surfacing `applied_file_ids` so a non-contributing attachment is visible), DE-355.
+
+#### DE-393 — Per-request / per-use-case timeout
+
+**Priority:** P3 · **Effort:** M · **Status (2026-09-13): filed with ADR 0027.**
+
+Timeout has no per-request path: it is fixed per provider (`timeout_s`, default 600s per ADR 0027 D1) and per deployment on the api hop (`LQ_AI_GATEWAY_TIMEOUT_SECONDS`, default 900s). `max_tokens` is already tunable per request, so the "tune by use case at the call site" position (#489, ADR 0027 D2) is half built. A skill run, playbook step or long drafting job that knows it will run for many minutes cannot ask for more than the deployment default, and a chat turn cannot ask for less. **Specific scope:** a bounded per-request timeout (or per-tier defaults) carried from the api's callers through the gateway to the adapter, capped by the operator's `timeout_s`; the api hop must remain the loosest (ADR 0027 D4); a test that a per-request value above the operator cap is clamped and logged. Do not build until a caller needs it. Related: #489, #318, #535, DE-392.
 
 ---
 
