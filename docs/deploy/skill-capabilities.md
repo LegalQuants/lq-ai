@@ -29,9 +29,12 @@ same workspace version. Work is loaded only through an explicit read call.
 
 ## Review and enable a bundled helper
 
-Use a dedicated or rootless Docker engine for execution. The broker has privileged
-control of its selected engine; keep it away from application credentials and
-public ingress. Container controls reduce access and resource use; they do not
+Production execution requires a dedicated environment separated from LQ application
+storage and credentials. Its engine must not be able to inspect or mount that
+storage; rootless execution on a shared application host alone is insufficient.
+The broker has privileged control of its selected engine; keep it away from
+application credentials and public ingress. Review this deployment boundary and
+operational input/output handling before enablement. Container controls reduce access and resource use; they do not
 replace review of bundled code or provide a VM security boundary. Docker's
 [engine security guidance](https://docs.docker.com/engine/security/) describes
 the daemon trust boundary.

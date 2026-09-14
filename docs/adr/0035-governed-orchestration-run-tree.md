@@ -67,6 +67,18 @@ and [prototype report and sources](https://github.com/LegalQuants/lq-ai/tree/4ac
 are the dated evidence behind this draft. They are research artifacts, not
 application code or an accepted architecture.
 
+Subsequent local implementation records are included with this documentation PR.
+Start with [the workflow and current status](../plans/issue-563-workflow.md), then
+the [orchestration demonstration](../plans/issue-563-demonstration.md),
+[run working files](../plans/issue-563-workspace.md) and
+[optional skill capabilities](../plans/issue-563-skill-capabilities.md).
+The workflow links the earlier contracts, Postgres, authority, recovery and
+runtime-maintenance records. These are dated reports of local checks; their
+implementation commits remain unpublished and their test counts are not CI
+results for this documentation branch. Later records can supersede an earlier
+increment's integration limits. Ratification and the remaining production gates
+stay explicit below.
+
 | Reference | Finding and consequence for this proposal |
 |---|---|
 | [Anthropic research system](https://www.anthropic.com/engineering/multi-agent-research-system) | A lead assigns isolated research topics and synthesizes results. Adopt explicit questions, boundaries and artifact references; the account does not determine LQ worker topology or prove legal-research quality. |
@@ -231,12 +243,15 @@ choice supported by the experiment, not a measured performance or maintenance
 advantage. The native fixture remains a comparison and portability test, not a
 second production backend or a production arq implementation.
 
-Graph fan-out is not itself a distributed queue. The integration must still
-settle whether children run within a coordinator invocation or as separate jobs,
-while keeping LangGraph the single continuation owner. Separate jobs must not
-depend on a waiting parent occupying the worker slots they need. Bound capacity
-across workers, not only in one semaphore. Record this worker topology and the
-reviewed runtime/saver versions with the integration evidence before adoption.
+Graph fan-out is not itself a distributed queue. The
+[local demonstration](../plans/issue-563-demonstration.md) uses separate arq jobs
+for root and child invocations, checkpointed root/child graphs and durable wakeups.
+Approval and child waits release the arq invocation. LangGraph remains the single
+continuation owner, while LQ records govern admission and shared capacity.
+This is the proposed topology supported by local integration evidence; production
+review and enablement remain pending. Separate jobs must never depend on a waiting
+parent occupying the worker slots they need, and capacity must remain bounded
+across workers, not only in one semaphore.
 
 Persist step/effect identities outside compactable conversation history. Define
 meaningful recovery boundaries inside the multi-step analysis loop. LangGraph
@@ -585,7 +600,11 @@ before any rollback that removes their schema/runtime support.
 
 **Proposed backend:** LangGraph for continuation; arq for scheduling; LQ-owned
 Postgres records for governance. Production acceptance and ratification remain pending.
-**Worker topology and runtime/saver versions:** to be recorded from integration.
+**Proposed worker topology and tested runtime:** separate root/child arq jobs;
+LangGraph 1.2.11, checkpoint 4.2.0 and Postgres saver 3.1.2 in the local
+demonstration. See [integration evidence](../plans/issue-563-demonstration.md)
+and [runtime-maintenance evidence](../plans/issue-524-runtime-migration.md).
+Production approval of this baseline remains pending.
 **Decision date and ratifiers:** pending.
 **Implementation publication:** held until the above decision is recorded.
 

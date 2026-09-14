@@ -9,7 +9,7 @@ of [#563](https://github.com/LegalQuants/lq-ai/issues/563), anchored in proposed
 
 Houfu authorized local implementation after opening the ADR PR. The proposed
 direction is LangGraph continuation, arq scheduling and LQ-owned governance.
-The ADR PR is open at `0e0b06d7120f6d5977233bbd0f3c50c51bab0f37`; no ratification
+The ADR PR started at `0e0b06d7120f6d5977233bbd0f3c50c51bab0f37`; no ratification
 was recorded when this workflow started. Local work may supply integration
 evidence for ratification. It must not be interpreted as ADR acceptance.
 
@@ -18,6 +18,29 @@ ratification is recorded.** Repository policy separately reserves Git fetch,
 pull and push for the owner. No merge, deployment, live-provider execution or
 application feature enablement is part of this workflow without authorization.
 Read-only GitHub checks and local commits are permitted.
+
+On 14 September 2026, Houfu explicitly authorized updating existing PR #567 with
+the revised ADR and its supporting documents. That authorization permits publishing
+this Markdown evidence package and updating the PR description. Application and
+runtime-maintenance code remain on their separate local branches under the hold.
+
+## Reading this evidence package
+
+This workflow is the current status index. For the completed local behavior, read
+the [demonstration](issue-563-demonstration.md), [run working files](issue-563-workspace.md)
+and [optional skill capabilities](issue-563-skill-capabilities.md). The
+[confidentiality follow-up](#skill-confidentiality-follow-up--14-september-2026)
+identifies the security work still pending. The proposed
+[operator notes](../deploy/skill-capabilities.md) require the future code change.
+
+The individual increment reports below preserve the state and test results at
+the time of each local check. Later integration can supersede earlier statements
+such as "not yet wired"; those reports are not a list of shipped capabilities.
+Unpublished commit IDs and implementation paths identify local work and cannot
+yet be inspected as code in this PR. Test counts describe those local runs, not
+new application verification on the documentation branch. The linked
+[#524 maintenance report](issue-524-runtime-migration.md) is supporting evidence;
+the runtime change retains its separate review.
 
 ## Workspaces and baseline
 
