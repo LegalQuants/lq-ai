@@ -29,6 +29,11 @@
 	import M2Citations from './M2Citations.svelte';
 	import MessageOverflowMenu from './MessageOverflowMenu.svelte';
 	import ProvenancePill from './ProvenancePill.svelte';
+	import LqGroup from './shared/LqGroup.svelte';
+	import LqStack from './shared/LqStack.svelte';
+	import LqHoverCard from './shared/LqHoverCard';
+	import LqAlert from './shared/LqAlert.svelte';
+	import LqButton from './shared/LqButton.svelte';
 	import RefusalMessageBubble from './RefusalMessageBubble.svelte';
 	import TierBadge from './TierBadge.svelte';
 	import TierDetailsPanel from './TierDetailsPanel.svelte';
@@ -37,6 +42,7 @@
 	import CitationLedgerPanel from './CitationLedgerPanel.svelte';
 	import TrustPill from './TrustPill.svelte';
 	import type { PendingGate } from '../chat/toolGate';
+	import { IconEdit } from '@tabler/icons-svelte';
 
 	export let message: Message;
 	export let isStreaming: boolean = false;
@@ -69,17 +75,11 @@
 	export let onGateDeny: () => void = () => {};
 	export let onGateConnect: () => void = () => {};
 
-	// D2: tier badge opens a click-for-details panel surfacing the
-	// resolved provider/model + token usage. Per PRD §1.3 the user
-	// can always answer "what just ran?" from the message they
-	// received. State stays local to this bubble so multiple open
-	// panels are not possible (the modal is exclusive).
-	let tierDetailsOpen = false;
+	// D2: tier badge surfaces routing info via a hover popover (LqHoverCard) —
+	// replaces the earlier click-for-details modal for this spot. Description
+	// text comes from TIER_DESCRIPTIONS (chat/tierDescriptions.ts), the same
+	// source TierBadge and TierDetailsPanel use.
 
-	// Wave D.1 T20 follow-on — ✨ enhanced pill state. Per-message-local
-	// so the diff modal is exclusive: clicking the pill on one message
-	// does not surface another message's diff.
-	let enhancedDiffOpen = false;
 
 	// Wave D.2 Task 5.3 — capture-as-skill modal trigger. Per-message-local
 	// so each bubble owns its own modal instance and the right
@@ -171,7 +171,6 @@
 	// means "fetched, no rows". Degrades silently on error.
 	let fetchedLedger: ChatLedger | null = null;
 	let ledgerFetchInflight = false;
-	let ledgerPanelOpen = false;
 
 	async function loadLedger(chatId: string, messageId: string): Promise<void> {
 		ledgerFetchInflight = true;
@@ -213,7 +212,7 @@
 </script>
 
 {#if message.kind === 'refusal'}
-	<div class="flex flex-col max-w-3xl items-start mb-3" data-testid={`lq-ai-message-${message.id}`}>
+	<LqStack gap={0} align="flex-start" maxWidth="48rem" data-testid={`lq-ai-message-${message.id}`}>
 		<RefusalMessageBubble
 			{message}
 			{currentUserRole}
@@ -221,10 +220,12 @@
 			onOverrideRequested={() => onRefusalOverrideRequested(message)}
 			onExplainerRequested={() => onRefusalExplainerRequested(message)}
 		/>
-	</div>
+	</LqStack>
 {:else}
-	<div
-		class="flex flex-col max-w-3xl {message.role === 'user' ? 'items-end' : 'items-start'} mb-3"
+	<LqStack
+		gap="sm"
+		align={message.role === 'user' ? 'flex-end' : 'flex-start'}
+		maxWidth="48rem"
 		data-testid={`lq-ai-message-${message.id}`}
 	>
 		<div class="rounded-lg px-3 py-2 {bubbleClasses} max-w-full">
@@ -250,7 +251,7 @@
 		</div>
 
 		{#if gateForMessage}
-			<div class="mt-2 w-full max-w-full" data-testid="lq-ai-tool-gate">
+			<div class="w-full" data-testid="lq-ai-tool-gate">
 				<ToolGatePrompt
 					variant={gateForMessage.kind}
 					confirm={gateForMessage.kind === 'confirm' ? gateForMessage.frame : null}
@@ -264,34 +265,42 @@
 		{/if}
 
 		{#if message.role === 'user' && message.is_enhanced}
-			<div
-				class="mt-1 flex items-center gap-2 flex-wrap justify-end"
-				data-testid="provenance-pill-enhanced"
-			>
-				<ProvenancePill
-					kind="enhanced"
-					summary="enhanced"
-					onTap={() => (enhancedDiffOpen = true)}
-				/>
-			</div>
-			{#if enhancedDiffOpen}
-				<EnhancedDiffModal
-					original={originalEnhancedPrompt}
-					enhanced={message.content}
-					on:close={() => (enhancedDiffOpen = false)}
-				/>
-			{/if}
+			<LqGroup gap="sm" justify="flex-end" class="w-full" data-testid="provenance-pill-enhanced">
+				<LqHoverCard>
+					<LqHoverCard.Target>
+						<ProvenancePill kind="enhanced" summary="enhanced" />
+					</LqHoverCard.Target>
+					<LqHoverCard.Dropdown padding={0} width="min(900px, 90vw)">
+						<EnhancedDiffModal original={originalEnhancedPrompt} enhanced={message.content} />
+					</LqHoverCard.Dropdown>
+				</LqHoverCard>
+			</LqGroup>
 		{/if}
 
 		{#if message.role === 'assistant'}
-			<div class="mt-1 flex items-center gap-2 flex-wrap justify-start w-full">
-				<div class="flex items-center gap-2 flex-wrap">
+			<LqGroup gap="sm">
+				<LqGroup gap="sm">
 					{#if message.routed_inference_tier}
-						<TierBadge
-							tier={message.routed_inference_tier}
-							provider={message.routed_provider ?? null}
-							on:open={() => (tierDetailsOpen = true)}
-						/>
+						<LqHoverCard>
+							<LqHoverCard.Target>
+								<TierBadge
+									tier={message.routed_inference_tier}
+									provider={message.routed_provider ?? null}
+									interactive={false}
+								/>
+							</LqHoverCard.Target>
+							<LqHoverCard.Dropdown padding={0}>
+								<TierDetailsPanel
+									tier={message.routed_inference_tier ?? null}
+									provider={message.routed_provider ?? null}
+									model={message.routed_model ?? null}
+									requestedModel={message.requested_model ?? null}
+									promptTokens={message.prompt_tokens ?? null}
+									completionTokens={message.completion_tokens ?? null}
+									costEstimate={message.cost_estimate ?? null}
+								/>
+							</LqHoverCard.Dropdown>
+						</LqHoverCard>
 					{/if}
 					<AppliedSkillsChip
 						appliedSkills={message.applied_skills ?? []}
@@ -301,19 +310,21 @@
 						<ProvenancePill kind="caselaw" summary={sourcesPillLabel(fetchedSources.length)} />
 					{/if}
 					{#if ledgerBadge && (fetchedLedger?.entries.length || ledgerGate)}
-						<TrustPill
-							variant="audit"
-							tone={ledgerBadge.tone}
-							label={ledgerBadge.label}
-							onClick={() => (ledgerPanelOpen = true)}
-						/>
+						<LqHoverCard>
+							<LqHoverCard.Target>
+								<TrustPill variant="audit" tone={ledgerBadge.tone} label={ledgerBadge.label} />
+							</LqHoverCard.Target>
+							<LqHoverCard.Dropdown padding={0}>
+								<CitationLedgerPanel entries={fetchedLedger?.entries ?? []} gate={ledgerGate} />
+							</LqHoverCard.Dropdown>
+						</LqHoverCard>
 					{/if}
-				</div>
-				<div class="flex items-center gap-1">
+				</LqGroup>
+				<LqGroup gap="xs" wrap="nowrap">
 					{#if $captureAffordanceInline}
-						<button
-							type="button"
-							class="text-base leading-none px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+						<LqButton
+							tone="neutral"
+							size="sm"
 							aria-label={isStreaming
 								? 'Capture as skill (available when streaming completes)'
 								: 'Capture as skill'}
@@ -322,42 +333,28 @@
 								: 'Capture as skill'}
 							disabled={isStreaming}
 							data-testid="lq-ai-message-capture-inline"
-							on:click={() => (captureOpen = true)}>📝</button
+							on:click={() => (captureOpen = true)}
 						>
+							<IconEdit size="12" />
+						</LqButton>
 					{/if}
 					<MessageOverflowMenu
 						captureInOverflow={!$captureAffordanceInline}
 						captureDisabled={isStreaming}
 						onCapture={() => (captureOpen = true)}
 					/>
-				</div>
-			</div>
+				</LqGroup>
+			</LqGroup>
 
 			{#if captureOpen}
 				<CaptureSkillModal sourceMessage={message} onClose={() => (captureOpen = false)} />
 			{/if}
 
-			{#if tierDetailsOpen}
-				<TierDetailsPanel
-					tier={message.routed_inference_tier ?? null}
-					provider={message.routed_provider ?? null}
-					model={message.routed_model ?? null}
-					requestedModel={message.requested_model ?? null}
-					promptTokens={message.prompt_tokens ?? null}
-					completionTokens={message.completion_tokens ?? null}
-					costEstimate={message.cost_estimate ?? null}
-					on:close={() => (tierDetailsOpen = false)}
-				/>
-			{/if}
-
 			{#if message.error_code}
-				<div
-					class="mt-2 px-2 py-1 rounded border border-rose-300 bg-rose-50 text-rose-800 text-xs max-w-full"
-					data-testid="lq-ai-message-error"
-				>
+				<LqAlert tone="red" data-testid="lq-ai-message-error">
 					Error: <strong>{message.error_code}</strong>. The assistant message was persisted with the
 					partial content above for audit.
-				</div>
+				</LqAlert>
 			{/if}
 
 			<!--
@@ -378,15 +375,6 @@
 			{#if fetchedSources && fetchedSources.length > 0}
 				<ToolSourcesPanel sources={fetchedSources} />
 			{/if}
-
-			{#if fetchedLedger}
-				<CitationLedgerPanel
-					entries={fetchedLedger.entries}
-					gate={ledgerGate}
-					open={ledgerPanelOpen}
-					onClose={() => (ledgerPanelOpen = false)}
-				/>
-			{/if}
 		{/if}
-	</div>
+	</LqStack>
 {/if}
