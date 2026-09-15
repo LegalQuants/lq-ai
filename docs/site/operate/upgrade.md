@@ -6,6 +6,7 @@ status: draft
 sources:
   - docs/adr/0025-release-versioning-and-pipeline-ordering.md
   - docs/releases/v0.7.0.md
+  - docs/releases/v0.7.1.md
   - docker-compose.yml
   - docker-compose.release.yml
   - CLAUDE.md
@@ -18,7 +19,7 @@ sidebar:
 
 ## 1. Read the release notes before you touch anything
 
-Every release under [ADR 0025](../../adr/0025-release-versioning-and-pipeline-ordering.md) states plainly whether it needs operator action. `v0.7.0` is the worked example the ADR itself uses: three of its changes required action, called out in an explicit "Operator note" — the gateway started requiring a key on every inference call, an install still on the published dev `JWT_SECRET` would refuse to boot, and a provider `base_url` over plaintext HTTP to a non-local host became a fatal startup error. Find the target release's notes under [Changelog](../changelog/index.intro.md) and read the equivalent note before you upgrade, not after something fails to start.
+Every release under [ADR 0025](../../adr/0025-release-versioning-and-pipeline-ordering.md) states plainly whether it needs operator action. `v0.7.0` is the worked example the ADR itself uses: three of its changes required action, called out in an explicit "Operator note" — the gateway started requiring a key on every inference call, an install still on the published dev `JWT_SECRET` would refuse to boot, and a provider `base_url` over plaintext HTTP to a non-local host became a fatal startup error. Find the target release's notes under [Changelog](../changelog/index.intro.md) and read the equivalent note before you upgrade, not after something fails to start. The most recent release as of the checked commit, [`v0.7.1`](../../releases/v0.7.1.md), is the other kind: a patch whose notes state that nothing in it requires an operator to touch a working install.
 
 ## 2. Back up first
 
@@ -30,14 +31,14 @@ If you run the pre-built stack (`docker-compose.release.yml`), set `LQ_AI_IMAGE_
 
 ```bash
 # .env
-LQ_AI_IMAGE_TAG=v0.7.0
+LQ_AI_IMAGE_TAG=v0.7.1
 ```
 
 ```bash
 docker compose -f docker-compose.release.yml pull
 ```
 
-If you build from source (`docker-compose.yml`), pull the matching tag of the repository instead (`git fetch --tags && git checkout v0.7.0`), then rebuild the images yourself in step 4 — a source build only picks up new code on `--build`.
+If you build from source (`docker-compose.yml`), pull the matching tag of the repository instead (`git fetch --tags && git checkout v0.7.1`), then rebuild the images yourself in step 4 — a source build only picks up new code on `--build`.
 
 ## 4. Rebuild the right services together
 

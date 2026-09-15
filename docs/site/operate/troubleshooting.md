@@ -4,6 +4,7 @@ description: Search by the error you're actually seeing — one index over every
 audience: [operator]
 status: draft
 sources:
+  - docs/adr/0026-document-ingestion-parser-and-docling.md
   - docs/quickstart.md
   - docs/INSTALL-MAC.md
   - deploy/tailnet-ollama/README.md
@@ -36,7 +37,7 @@ The full recovery text for a first run lives on [Quickstart](../start/quickstart
 | "Tier N not allowed" | Your deployment's `allowed_tiers_global` disallows that tier, or the routed provider doesn't match your policy. [Quickstart → Troubleshooting](../start/quickstart.md#troubleshooting) |
 | The gateway refuses to start, naming a provider `base_url` | The egress guard refuses plaintext `http` to anything but a small local allowlist — the exact refusal text is `plaintext http base_url is only permitted for local providers (host.docker.internal, localhost, ollama, vllm, or a loopback/private IP); host '<host>' must use https` (`deploy/tailnet-ollama/README.md`). Point the provider at an `https://` endpoint — see the [tailnet-Ollama recipe](recipes/tailnet-ollama.md) and [Reverse proxy and TLS](reverse-proxy-tls.md) |
 | A chat returns empty, or seems to "forget" an attached document a few turns in | Not a bug report you need to file first — read [Something is wrong → Silent degrade](something-is-wrong.md#silent-degrade), which names the specific defaults responsible |
-| A document sits in `processing` and never finishes | First-ingestion Docling model download (~700 MB) can outrun the ingest job's timeout on a slow connection — see [Air-gapped and local-only inference → Egress inventory](air-gapped.md#egress-inventory) |
+| A document sits in `processing` and never finishes | The first ingestion still downloads ~700 MB of Docling models (`lq_ai_docling_enabled` defaults to `True` in `api/app/config.py`), and that download can outrun the ingest job's timeout on a slow connection. The download buys nothing: [ADR 0026](../../adr/0026-document-ingestion-parser-and-docling.md) (Accepted 2026-08-23) records that Docling has never produced output in this codebase and decides its removal; parsing is PyMuPDF-only. See [Air-gapped and local-only inference → Egress inventory](air-gapped.md#egress-inventory) |
 | Ingestion completes but knowledge-base search finds nothing relevant | Check `documents.ingest_status` for `embed_failed` / `partial` — see [Something is wrong](something-is-wrong.md#silent-degrade) |
 | A stuck-looking first start on the macOS app | Normal — the first run downloads the engine and document-processing models; watch the live progress, sign in once it reaches **Running**. [Install on macOS](install-macos.md) |
 | Forgot the admin password (macOS app) | `docker compose ... exec -T api python -m app.cli reset-admin-password` against the bundled compose file — the exact command is in [Install on macOS](install-macos.md) |

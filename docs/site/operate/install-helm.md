@@ -43,7 +43,7 @@ kubectl create secret generic lq-ai-provider-keys \
 
 ## Set the image tag explicitly
 
-`values.yaml` leaves `image.tag` empty so it falls back to `.Chart.AppVersion` — and `Chart.yaml` pins that to `0.1.0`. `values-example.yaml` hardcodes `image.tag: "v0.1.0"` too. Neither matches a real released image: the api and gateway in this checked commit report `0.7.0` (`api/app/__init__.py`, `gateway/app/__init__.py`), and published image tags follow the project's release versioning ([ADR 0025](../../adr/0025-release-versioning-and-pipeline-ordering.md)), not the chart version. Set `image.tag` to an actual `vX.Y.Z` release yourself — copying `values-example.yaml` as-is will try to pull an image that was never published, and the Pods will sit in `ImagePullBackOff` with no clearer signal than that.
+`values.yaml` leaves `image.tag` empty so it falls back to `.Chart.AppVersion` — and `Chart.yaml` pins that to `0.1.0`. `values-example.yaml` hardcodes `image.tag: "v0.1.0"` too. Neither matches a real released image: the api and gateway in this checked commit report `0.7.1` (`api/app/__init__.py`, `gateway/app/__init__.py`), and published image tags follow the project's release versioning ([ADR 0025](../../adr/0025-release-versioning-and-pipeline-ordering.md)), not the chart version. Set `image.tag` to an actual `vX.Y.Z` release yourself — copying `values-example.yaml` as-is will try to pull an image that was never published, and the Pods will sit in `ImagePullBackOff` with no clearer signal than that.
 
 ```yaml
 image:

@@ -3,7 +3,8 @@
  *
  * Two different things, deliberately kept apart:
  *
- *  - **The index** lists *every* `v*` tag in the repository, whether or not
+ *  - **The index** lists *every* `v*` tag reachable from `HEAD` (OpenWebUI's own
+ *    tags, carried in by the `web/` fork rebase, are excluded), whether or not
  *    anyone wrote notes for it. A changelog that shows only the releases with
  *    notes is a changelog that hides the gap; this one shows the gap as rows.
  *    The count of tags without notes is stated in the page, computed, not typed.

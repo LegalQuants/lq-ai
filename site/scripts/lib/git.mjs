@@ -93,7 +93,11 @@ export const blobSha = (sha) => (sha && sha !== UNCOMMITTED ? sha : head().sha |
 
 /** Every `v*` tag in the repository, newest first by semantic version. */
 export function versionTags() {
-  const raw = git(['tag', '--list', 'v*']);
+  // --merged HEAD: only tags reachable from the commit being built. web/ is a
+  // fork of OpenWebUI, and its rebase brought upstream's own vX.Y.Z tags into
+  // this repository (v0.9.2, v0.11.0); they are not LQ.AI releases. Same filter
+  // as docs/BUILD-AND-RELEASE.md and the breaking-change gate in release.yml.
+  const raw = git(['tag', '--list', 'v*', '--merged', 'HEAD']);
   if (!raw) return [];
   return raw
     .split('\n')
