@@ -13,15 +13,28 @@
 	 */
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 
 	import { userSkillsApi, skillsApi, teamsApi } from '$lib/lq-ai/api';
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
 	import type { UserSkill, SkillSummary, TeamSummary } from '$lib/lq-ai/types';
 	import TrustPill from '$lib/lq-ai/components/TrustPill.svelte';
+	import {
+		FORMAT_ALL,
+		FORMAT_PROSE,
+		formatChips,
+		formatFilterFromParam,
+		matchesFormat,
+		normalizeFormat,
+		sortFromParam,
+		sortSkillRows,
+		type SkillSort
+	} from '$lib/lq-ai/skills/builtinsBrowser';
 
 	let rows: UserSkill[] = [];
 	let builtinSlugs = new Set<string>();
-	let builtinTableSkills: SkillSummary[] = [];
+	let builtins: SkillSummary[] = [];
+	let recentSlugs: string[] = [];
 	let teamNamesById = new Map<string, string>();
 	let loading = false;
 	let listError: string | null = null;
@@ -31,19 +44,25 @@
 		loading = true;
 		listError = null;
 		try {
-			const [mine, builtins, myTeams] = await Promise.all([
+			const [mine, builtinList, myTeams, recents] = await Promise.all([
 				userSkillsApi.listUserSkills('all'),
 				skillsApi.listSkills('builtin'),
-				teamsApi.listMyTeams()
+				teamsApi.listMyTeams(),
+				// DE-298 — per-user recents (messages.applied_skills ordering)
+				// via the autocomplete endpoint's empty-query mode. Tolerant:
+				// a recents failure degrades to alphabetical, never blocks the page.
+				skillsApi
+					.autocompleteSkills('', 25)
+					.then((r) => r.results.map((item) => item.slug))
+					.catch((e) => {
+						console.warn('user-skills: recents load failed', e);
+						return [] as string[];
+					})
 			]);
 			rows = mine;
-			builtinSlugs = new Set(builtins.map((s: SkillSummary) => s.name));
-			// Surface built-in table-mode reference skills (M3-C3) so
-			// operators can discover them; /skills only shows user-scope
-			// skills by default and otherwise these would be invisible.
-			builtinTableSkills = builtins
-				.filter((s: SkillSummary) => s.output_format === 'table')
-				.sort((a: SkillSummary, b: SkillSummary) => a.name.localeCompare(b.name));
+			builtins = builtinList;
+			builtinSlugs = new Set(builtinList.map((s: SkillSummary) => s.name));
+			recentSlugs = recents;
 			teamNamesById = new Map(
 				(myTeams as TeamSummary[]).map((t) => [t.id, t.name])
 			);
@@ -81,6 +100,65 @@
 		} catch {
 			return iso;
 		}
+	}
+
+	// DE-298 — output-format chip filter + recently-used sort, both
+	// persisted in the URL (?format= / ?sort=) so a filtered view
+	// survives refresh and is deep-linkable.
+	function userSkillFormat(row: UserSkill): string | undefined {
+		const v = row.frontmatter_extra?.['output_format'];
+		return typeof v === 'string' ? v : undefined;
+	}
+
+	$: chips = formatChips([
+		...builtins.map((b) => b.output_format),
+		...rows.map((r) => userSkillFormat(r))
+	]);
+	$: activeFormat = formatFilterFromParam($page.url.searchParams.get('format'), chips);
+	$: activeSort = sortFromParam($page.url.searchParams.get('sort'));
+	$: visibleBuiltins = sortSkillRows(
+		builtins.filter((b) => matchesFormat(b.output_format, activeFormat)),
+		activeSort,
+		recentSlugs,
+		(b) => b.name,
+		(b) => b.title ?? b.name
+	);
+	$: visibleRows = sortSkillRows(
+		rows.filter((r) => matchesFormat(userSkillFormat(r), activeFormat)),
+		activeSort,
+		recentSlugs,
+		(r) => r.slug,
+		(r) => r.display_name
+	);
+
+	function setParam(key: string, value: string | null): void {
+		const url = new URL($page.url);
+		if (value === null) {
+			url.searchParams.delete(key);
+		} else {
+			url.searchParams.set(key, value);
+		}
+		// replaceState: filter/sort tweaks shouldn't pollute history the
+		// way the detail page's tab navigation deliberately does.
+		void goto(url.pathname + url.search, {
+			replaceState: true,
+			keepFocus: true,
+			noScroll: true
+		});
+	}
+
+	function setFormat(f: string): void {
+		setParam('format', f === FORMAT_ALL ? null : f);
+	}
+
+	function setSort(s: SkillSort): void {
+		setParam('sort', s === 'recent' ? null : s);
+	}
+
+	function chipLabel(chip: string): string {
+		if (chip === FORMAT_ALL) return 'All';
+		if (chip === FORMAT_PROSE) return 'Prose';
+		return chip.charAt(0).toUpperCase() + chip.slice(1);
 	}
 
 	onMount(() => {
@@ -131,35 +209,93 @@
 		</div>
 	{/if}
 
-	{#if !loading && builtinTableSkills.length > 0}
-		<section class="mb-6" data-testid="lq-ai-builtin-table-skills">
-			<h2 class="lq-text-h4 mb-2">Reference table-mode skills</h2>
-			<p class="lq-text-caption mb-3" style="color: var(--lq-text-secondary);">
-				Built-in skills with <code>output_format: table</code> — usable from the
-				<a href="/lq-ai/tabular/new" class="lq-link">Tabular Review wizard</a>'s
-				skill picker. Paired with the synthetic corpus in
-				<code>docs/quickstart/</code> for first-run exploration.
-			</p>
-			<ul class="lq-table-skill-list">
-				{#each builtinTableSkills as s (s.name)}
-					<li class="lq-table-skill-card" data-testid="lq-ai-builtin-table-skill">
-						<div class="flex items-start justify-between gap-3">
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 flex-wrap">
-									<span class="font-medium lq-text-body">{s.title ?? s.name}</span>
-									<span data-testid="lq-ai-table-badge">
-										<TrustPill variant="tier" label="Table" />
-									</span>
-								</div>
-								<code class="lq-text-caption font-mono" style="color: var(--lq-text-secondary);">{s.name}</code>
-								{#if s.description}
-									<p class="lq-text-caption mt-1 line-clamp-2" style="color: var(--lq-text-tertiary);">{s.description}</p>
-								{/if}
-							</div>
-						</div>
-					</li>
+	{#if !loading && (builtins.length > 0 || rows.length > 0)}
+		<!-- DE-298 — output-format chips + sort toggle, URL-param persisted. -->
+		<div class="lq-browser-toolbar mb-4" data-testid="lq-ai-skills-toolbar">
+			<div class="lq-chip-row" role="group" aria-label="Filter by output format">
+				{#each chips as chip (chip)}
+					<button
+						type="button"
+						class="lq-chip"
+						data-active={chip === activeFormat}
+						data-testid="lq-ai-format-chip"
+						data-format={chip}
+						aria-pressed={chip === activeFormat}
+						on:click={() => setFormat(chip)}
+					>
+						{chipLabel(chip)}
+					</button>
 				{/each}
-			</ul>
+			</div>
+			<div class="lq-chip-row" role="group" aria-label="Sort skills">
+				<span class="lq-text-caption" style="color: var(--lq-text-tertiary);">Sort:</span>
+				<button
+					type="button"
+					class="lq-chip"
+					data-active={activeSort === 'recent'}
+					data-testid="lq-ai-sort-recent"
+					aria-pressed={activeSort === 'recent'}
+					on:click={() => setSort('recent')}
+				>
+					Recently used
+				</button>
+				<button
+					type="button"
+					class="lq-chip"
+					data-active={activeSort === 'name'}
+					data-testid="lq-ai-sort-name"
+					aria-pressed={activeSort === 'name'}
+					on:click={() => setSort('name')}
+				>
+					A–Z
+				</button>
+			</div>
+		</div>
+	{/if}
+
+	{#if !loading && builtins.length > 0}
+		<section class="mb-6" data-testid="lq-ai-builtin-table-skills">
+			<h2 class="lq-text-h4 mb-2">Built-in skills</h2>
+			<p class="lq-text-caption mb-3" style="color: var(--lq-text-secondary);">
+				Read-only skills that ship with LQ.AI. Open one to read its description
+				(and column spec for table-mode skills), run it from the
+				<a href="/lq-ai/tabular/new" class="lq-link">Tabular Review wizard</a>,
+				or fork it into an editable copy of your own.
+			</p>
+			{#if visibleBuiltins.length === 0}
+				<p class="lq-text-caption" style="color: var(--lq-text-tertiary);" data-testid="lq-ai-builtin-empty-filtered">
+					No built-in skills match the "{chipLabel(activeFormat)}" filter.
+				</p>
+			{:else}
+				<ul class="lq-table-skill-list">
+					{#each visibleBuiltins as s (s.name)}
+						<li class="lq-table-skill-card" data-testid="lq-ai-builtin-table-skill">
+							<div class="flex items-start justify-between gap-3">
+								<div class="min-w-0">
+									<div class="flex items-center gap-2 flex-wrap">
+										<a
+											href={`/lq-ai/skills/${encodeURIComponent(s.name)}`}
+											class="font-medium lq-text-body lq-link"
+											data-testid="lq-ai-builtin-skill-link"
+										>
+											{s.title ?? s.name}
+										</a>
+										{#if normalizeFormat(s.output_format) !== FORMAT_PROSE}
+											<span data-testid="lq-ai-table-badge">
+												<TrustPill variant="tier" label={chipLabel(normalizeFormat(s.output_format))} />
+											</span>
+										{/if}
+									</div>
+									<code class="lq-text-caption font-mono" style="color: var(--lq-text-secondary);">{s.name}</code>
+									{#if s.description}
+										<p class="lq-text-caption mt-1 line-clamp-2" style="color: var(--lq-text-tertiary);">{s.description}</p>
+									{/if}
+								</div>
+							</div>
+						</li>
+					{/each}
+				</ul>
+			{/if}
 		</section>
 	{/if}
 
@@ -177,6 +313,14 @@
 				, or fork a built-in from the picker.
 			</p>
 		</div>
+	{:else if visibleRows.length === 0}
+		<p
+			class="lq-text-caption"
+			style="color: var(--lq-text-tertiary);"
+			data-testid="lq-ai-user-skills-empty-filtered"
+		>
+			None of your skills match the "{chipLabel(activeFormat)}" filter.
+		</p>
 	{:else}
 		<div class="lq-table-wrap overflow-x-auto">
 			<table class="min-w-full lq-text-body-sm">
@@ -191,7 +335,7 @@
 					</tr>
 				</thead>
 				<tbody class="lq-tbody">
-					{#each rows as row (row.id)}
+					{#each visibleRows as row (row.id)}
 						<tr data-testid="lq-ai-user-skill-row" data-scope={row.scope}>
 							<td class="px-3 py-2" style="color: var(--lq-text);">
 								<a
@@ -256,6 +400,39 @@
 </div>
 
 <style>
+	/* DE-298 — filter / sort toolbar */
+	.lq-browser-toolbar {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem 1rem;
+	}
+	.lq-chip-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.375rem;
+	}
+	.lq-chip {
+		padding: 2px 10px;
+		border-radius: var(--lq-radius-pill);
+		border: 1px solid var(--lq-border);
+		background: var(--lq-surface);
+		color: var(--lq-text-secondary);
+		font-size: 12px;
+		font-weight: 500;
+		cursor: pointer;
+	}
+	.lq-chip:hover {
+		background: var(--lq-inset);
+	}
+	.lq-chip[data-active='true'] {
+		background: var(--lq-accent-soft, var(--lq-inset));
+		border-color: var(--lq-accent, var(--lq-border));
+		color: var(--lq-text);
+	}
+
 	.lq-table-skill-list {
 		list-style: none;
 		padding: 0;
