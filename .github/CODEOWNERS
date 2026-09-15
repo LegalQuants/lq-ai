@@ -3,49 +3,68 @@
 # Path-based reviewer assignments. The most recent matching
 # pattern takes precedence; later patterns override earlier ones.
 #
-# At launch, the @legalquants/maintainers team handles all
-# default reviews. As the project grows and specialized teams
-# stand up (security, compliance, practicing-attorneys), this
-# file is updated to route reviews appropriately.
+# EVERY TEAM NAMED IN THIS FILE MUST EXIST IN THE ORG.
+# GitHub silently ignores an entry that names a team which does
+# not exist: the routing does not happen and no error is raised.
+# This file previously named four teams (maintainers, security,
+# counsel, practicing-attorneys), none of which existed, so no
+# review was routed anywhere. See ADR 0034.
+#
+# Specialist routing returns here as each team is created AND
+# staffed — not before. The intent is recorded in comments below
+# so it is not lost; a comment is honest, a phantom team is not.
+#
+# CODEOWNERS only holds a PR if the branch ruleset requires
+# code-owner review. See ADR 0034 decision 5.
 #
 # References:
 # - PR review process: ../CONTRIBUTING.md#pull-request-process
+# - Review timelines:  ../CONTRIBUTING.md#review-timelines
 # - Skill review process: ../skills/CONTRIBUTING.md
+# - ADR 0034: ../docs/adr/0034-review-capacity-and-reviewer-roles.md
 # ============================================================
 
 # Default — all changes require maintainer review
-*                              @legalquants/maintainers
+*                              @LegalQuants/lq-ai-maintainers
 
 # ---------- Repository-level governance ----------
-/LICENSE                       @legalquants/maintainers
-/CODE_OF_CONDUCT.md            @legalquants/maintainers
-/CONTRIBUTING.md               @legalquants/maintainers
-/SECURITY.md                   @legalquants/maintainers @legalquants/security
-/.github/CODEOWNERS            @legalquants/maintainers
+/LICENSE                       @LegalQuants/lq-ai-maintainers
+/CODE_OF_CONDUCT.md            @LegalQuants/lq-ai-maintainers
+/GOVERNANCE.md                 @LegalQuants/lq-ai-maintainers
+/CONTRIBUTING.md               @LegalQuants/lq-ai-maintainers
+/SECURITY.md                   @LegalQuants/lq-ai-maintainers
+/.github/CODEOWNERS            @LegalQuants/lq-ai-maintainers
 
 # ---------- Security-sensitive paths ----------
-# Inference Gateway holds the security boundary; changes here
-# require security review in addition to maintainer review.
-/gateway/                      @legalquants/maintainers @legalquants/security
-/docs/security/                @legalquants/security @legalquants/maintainers
-/.github/workflows/            @legalquants/maintainers @legalquants/security
+# The Inference Gateway holds the security boundary. Until a
+# security team exists, these paths are held for maintainer
+# review with the security-path checklist applied — which is
+# weaker than a dedicated security reviewer, and is stated that
+# way in CLAUDE.md rather than overclaimed.
+# TODO(ADR 0034): add @LegalQuants/lq-ai-security when staffed.
+/gateway/                      @LegalQuants/lq-ai-maintainers
+/docs/security/                @LegalQuants/lq-ai-maintainers
+/.github/workflows/            @LegalQuants/lq-ai-maintainers
 
 # ---------- Compliance documentation ----------
-# Compliance Alignment Pack mappings affect procurement posture;
-# changes require counsel + maintainer review.
-/docs/compliance/              @legalquants/counsel @legalquants/maintainers
-/docs/procurement/             @legalquants/counsel @legalquants/maintainers
+# Compliance Alignment Pack mappings affect procurement posture.
+# TODO(ADR 0034): add a counsel team when one exists.
+/docs/compliance/              @LegalQuants/lq-ai-maintainers
+/docs/procurement/             @LegalQuants/lq-ai-maintainers
 
 # ---------- Skills (legal substance) ----------
-# Skills containing legal substance require attorney review
-# in addition to maintainer review. See skills/CONTRIBUTING.md
-# for the attestation and review process.
-/skills/                       @legalquants/maintainers @legalquants/practicing-attorneys
-/skills/CONTRIBUTING.md        @legalquants/maintainers @legalquants/practicing-attorneys
+# Skills containing legal substance require practicing-attorney
+# review in addition to maintainer review. That requirement is
+# enforced by the process in skills/CONTRIBUTING.md and the
+# attorney-reviewer pool, NOT by this file, until a
+# practicing-attorneys team exists.
+# TODO(ADR 0034): add @LegalQuants/lq-ai-attorneys when staffed.
+/skills/                       @LegalQuants/lq-ai-maintainers
+/skills/CONTRIBUTING.md        @LegalQuants/lq-ai-maintainers
 
 # ---------- Canonical specification ----------
-# PRD changes affect every downstream artifact; require
-# maintainer review by default.
-/docs/PRD.md                   @legalquants/maintainers
-/docs/architecture.md          @legalquants/maintainers
-/docs/skill-authoring-guide.md @legalquants/maintainers @legalquants/practicing-attorneys
+# PRD changes affect every downstream artifact.
+/docs/PRD.md                   @LegalQuants/lq-ai-maintainers
+/docs/architecture.md          @LegalQuants/lq-ai-maintainers
+/docs/adr/                     @LegalQuants/lq-ai-maintainers
+/docs/skill-authoring-guide.md @LegalQuants/lq-ai-maintainers

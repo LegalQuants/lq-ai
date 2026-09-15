@@ -18,6 +18,7 @@ This folder is the home for LQ.AI's security artifacts. The PRD documents the pr
 | **Audit logging** (`audit-logging.md`) | Landed | What is logged, retention, integrity protection. |
 | **Encrypted-at-rest provider keys** ([`encrypted-keys.md`](encrypted-keys.md)) | Landed (ADR 0011) | Operator workflow for the master-key + Fernet-wrapped `api_key_encrypted` path in `gateway.yaml`. Bootstrap, rotation, recovery. |
 | **Past advisories** (`advisories/`) | As advisories are published | Historical security advisories with reporter credit. |
+| **Risk-acceptance register** ([`risk-acceptance-register.md`](risk-acceptance-register.md)) | Template (ADR 0029 H2) | Low/Info audit findings the committee has decided to carry, with the reasoning, the compensating control, and who accepted them. |
 
 ## Reporting a vulnerability
 
