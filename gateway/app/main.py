@@ -74,9 +74,12 @@ from app.providers import (
     OpenAIAdapter,
     ProviderAdapter,
 )
+from app.providers.base_url_policy import ProviderEgressRefused, validate_llm_base_url
 from app.providers.tool.base import ToolProviderAdapter
 from app.providers.tool.courtlistener import CourtListenerToolAdapter
 from app.providers.tool.echo import EchoToolAdapter
+from app.providers.tool.edgar import EdgarToolAdapter
+from app.providers.tool.eurlex import EurLexToolAdapter
 from app.providers.tool.govinfo import GovInfoToolAdapter
 from app.router import Router
 from app.routing_log import NullRoutingLogWriter, RoutingLogWriter, SQLRoutingLogWriter
@@ -159,6 +162,11 @@ def build_adapter(provider: ProviderConfig) -> ProviderAdapter | None:
 
     if not provider.enabled:
         return None
+    # Egress guard (#288, GW-04): the prompt-carrying LLM path must not send
+    # cleartext to a public host or use a non-http(s) scheme. Validate before
+    # building any adapter so a bad base_url fails at startup — matching the
+    # build-time validation the tool path already does.
+    validate_llm_base_url(provider.base_url)
     if provider.type == "anthropic":
         return AnthropicAdapter.from_config(provider)
     if provider.type in ("openai", "openai_compatible"):
@@ -202,6 +210,14 @@ def build_tool_adapter(provider: ToolProviderConfig) -> ToolProviderAdapter | No
         govinfo_adapter = GovInfoToolAdapter.from_config(provider)
         govinfo_adapter.validate_base_url()
         return govinfo_adapter
+    if provider.type == "edgar":
+        edgar_adapter = EdgarToolAdapter.from_config(provider)
+        edgar_adapter.validate_base_url()
+        return edgar_adapter
+    if provider.type == "eurlex":
+        eurlex_adapter = EurLexToolAdapter.from_config(provider)
+        eurlex_adapter.validate_base_url()
+        return eurlex_adapter
     return None
 
 
@@ -251,6 +267,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     for provider in config.providers:
         try:
             adapter = build_adapter(provider)
+        except ProviderEgressRefused as exc:
+            # Deliberate: an egress-policy violation is fatal at startup.
+            # Skipping the provider would let the router fall through to the
+            # next candidate in the chain, silently sending prompts somewhere
+            # the operator did not choose.
+            logger.error(
+                "refusing to start: provider %r (type=%s) has a base_url that "
+                "violates LLM egress policy: %s",
+                provider.name,
+                provider.type,
+                exc.reason,
+            )
+            raise
         except ValueError as exc:
             # Missing/unresolvable key for a supported provider — non-fatal
             # at startup; the provider is skipped and chat requests routing
@@ -296,6 +325,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # the whole mutation. Created here (inside the running event loop) so the
     # lock binds to the right loop.
     app.state.provider_key_lock = asyncio.Lock()
+
+    # Task 2 (runtime tool-provider admin API, Donna #3): mirrors the
+    # provider-key lock/retired-list pair one layer down for tool
+    # providers. Serializes the write -> reload -> swap sequence for
+    # /admin/v1/tool-providers mutations; the retired list holds adapters
+    # displaced by a hot-apply/remove so shutdown closes them once (moved,
+    # never copied — see ``_swap_in_tool_adapter`` in tool_provider_keys.py).
+    app.state.tool_provider_key_lock = asyncio.Lock()
+    retired_tool_adapters: list[ToolProviderAdapter] = []
+    app.state.retired_tool_adapters = retired_tool_adapters
 
     # B4: wire the inference_routing_log writer. ``DATABASE_URL`` is
     # optional — without it the gateway falls back to a no-op writer
@@ -422,6 +461,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 await tool_adapter.aclose()
             except Exception:
                 logger.exception("error closing tool adapter %r", tool_name)
+        # Task 2: close any tool adapters retired by a runtime hot-apply /
+        # remove. Defensive ``getattr`` — a test bypassing the lifespan may
+        # not have set the attribute.
+        retired_tools = getattr(app.state, "retired_tool_adapters", [])
+        if retired_tools:
+            logger.info("closing %d retired tool adapters", len(retired_tools))
+            for tool_adapter in retired_tools:
+                try:
+                    await tool_adapter.aclose()
+                except Exception:
+                    logger.exception("error closing retired tool adapter")
         try:
             await close_backend_client()
         except Exception:

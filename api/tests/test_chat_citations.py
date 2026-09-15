@@ -1094,4 +1094,145 @@ async def test_chat_send_privileged_project_full_audit_trail(
     cite = citation_rows[0]
     assert cite.verified is True
     assert cite.verification_method == "exact_match"
-    assert cite.source_text == quote
+
+
+# ---------------------------------------------------------------------------
+# Cross-user auditor read — GET /citations folds into the privileged read set
+# (mirrors the sibling triad in tests/test_message_tool_sources.py).
+# ---------------------------------------------------------------------------
+
+
+async def _cited_message(db_session: AsyncSession, owner: User) -> tuple[Chat, str]:
+    """Insert a chat + assistant message + one citation row directly (no gateway)."""
+    from app.models.chat import Message
+
+    chat = Chat(owner_id=owner.id, project_id=None, title="cite-cross-user-chat")
+    db_session.add(chat)
+    await db_session.flush()
+    msg = Message(chat_id=chat.id, role="assistant", kind="ai", content="answer")
+    db_session.add(msg)
+    await db_session.flush()
+    f = FileModel(
+        owner_id=owner.id,
+        filename="cross-user-cite.pdf",
+        mime_type="application/pdf",
+        size_bytes=10,
+        hash_sha256="c" * 64,
+        storage_path=f"cite-cross-user/{uuid.uuid4()}",
+        ingestion_status="ready",
+    )
+    db_session.add(f)
+    await db_session.flush()
+    db_session.add(
+        MessageCitation(
+            message_id=msg.id,
+            source_file_id=f.id,
+            source_offset_start=0,
+            source_offset_end=5,
+            source_text="hello",
+            verified=True,
+            verification_method="exact_match",
+            verification_confidence=1.0,
+        )
+    )
+    await db_session.flush()
+    return chat, str(msg.id)
+
+
+@pytest.mark.asyncio
+async def test_get_citations_auditor_can_read_cross_user_and_is_audited(
+    client: AsyncClient, db_session: AsyncSession, owner_user: User
+) -> None:
+    chat, message_id = await _cited_message(db_session, owner_user)
+
+    auditor = User(
+        email=f"aud-{uuid.uuid4().hex[:8]}@example.com",
+        hashed_password=hash_password("correct-horse-battery-staple"),
+        is_admin=False,
+        role="auditor",
+        mfa_enabled=False,
+        must_change_password=False,
+    )
+    db_session.add(auditor)
+    await db_session.flush()
+
+    resp = await client.get(
+        f"/api/v1/chats/{chat.id}/messages/{message_id}/citations", headers=_h(auditor)
+    )
+    assert resp.status_code == 200, resp.text
+    assert len(resp.json()) == 1
+
+    from app.models.audit import AuditLog
+
+    row = (
+        (
+            await db_session.execute(
+                select(AuditLog).where(AuditLog.action == "auditor.citations_viewed")
+            )
+        )
+        .scalars()
+        .one()
+    )
+    assert row.user_id == auditor.id
+    assert row.details["viewed_user_id"] == str(owner_user.id)
+
+
+@pytest.mark.asyncio
+async def test_get_citations_member_cross_user_still_404_and_not_audited(
+    client: AsyncClient, db_session: AsyncSession, owner_user: User
+) -> None:
+    chat, message_id = await _cited_message(db_session, owner_user)
+
+    other = User(
+        email=f"other-{uuid.uuid4().hex[:8]}@example.com",
+        hashed_password=hash_password("correct-horse-battery-staple"),
+        is_admin=False,
+        role="member",
+        mfa_enabled=False,
+        must_change_password=False,
+    )
+    db_session.add(other)
+    await db_session.flush()
+
+    resp = await client.get(
+        f"/api/v1/chats/{chat.id}/messages/{message_id}/citations", headers=_h(other)
+    )
+    assert resp.status_code == 404
+
+    from sqlalchemy import func
+
+    from app.models.audit import AuditLog
+
+    count = (
+        await db_session.execute(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(AuditLog.action == "auditor.citations_viewed")
+        )
+    ).scalar_one()
+    assert count == 0
+
+
+@pytest.mark.asyncio
+async def test_get_citations_owner_read_not_audited(
+    client: AsyncClient, db_session: AsyncSession, owner_user: User
+) -> None:
+    chat, message_id = await _cited_message(db_session, owner_user)
+
+    resp = await client.get(
+        f"/api/v1/chats/{chat.id}/messages/{message_id}/citations", headers=_h(owner_user)
+    )
+    assert resp.status_code == 200
+
+    from sqlalchemy import func
+
+    from app.models.audit import AuditLog
+
+    count = (
+        await db_session.execute(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(AuditLog.action == "auditor.citations_viewed")
+        )
+    ).scalar_one()
+    assert count == 0

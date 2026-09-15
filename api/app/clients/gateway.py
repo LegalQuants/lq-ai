@@ -956,6 +956,84 @@ class GatewayClient:
             allow_204=True,
         )
 
+    # --- Admin: tool-provider CRUD (Donna #3) -------------------------------
+
+    async def list_tool_providers_admin(
+        self,
+        *,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        """GET /admin/v1/tool-providers. Secret-safe status per authority type.
+
+        Rows: ``{type, name, enabled, has_key, key_required, egress_tier, source}``
+        — never a key. Distinct from :meth:`list_tool_providers` (the sanitized
+        capabilities reader off ``/admin/v1/config``).
+        """
+
+        return await self._admin_request(
+            method="GET",
+            path="/admin/v1/tool-providers",
+            op="list_tool_providers_admin",
+            request_id=request_id,
+        )
+
+    async def set_tool_provider(
+        self,
+        body: dict[str, Any],
+        *,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        """POST /admin/v1/tool-providers. Enable a type + optionally set a key.
+
+        400 (``failed_precondition``) when the gateway master key is unset and a
+        key was supplied; 404 (``not_found``) for an unregistered type.
+        """
+
+        return await self._admin_request(
+            method="POST",
+            path="/admin/v1/tool-providers",
+            op="set_tool_provider",
+            request_id=request_id,
+            body=body,
+        )
+
+    async def patch_tool_provider(
+        self,
+        provider_type: str,
+        body: dict[str, Any],
+        *,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        """PATCH /admin/v1/tool-providers/{type}. Rotate key and/or toggle."""
+
+        return await self._admin_request(
+            method="PATCH",
+            path=f"/admin/v1/tool-providers/{provider_type}",
+            op="patch_tool_provider",
+            request_id=request_id,
+            body=body,
+        )
+
+    async def delete_tool_provider(
+        self,
+        provider_type: str,
+        *,
+        request_id: str | None = None,
+    ) -> None:
+        """DELETE /admin/v1/tool-providers/{type}. Remove entry + retire adapter.
+
+        404 unknown/absent type; 409 when the entry is env-configured (not
+        runtime-revocable). 204 on success.
+        """
+
+        await self._admin_request(
+            method="DELETE",
+            path=f"/admin/v1/tool-providers/{provider_type}",
+            op="delete_tool_provider",
+            request_id=request_id,
+            allow_204=True,
+        )
+
     async def get_admin_config(
         self,
         *,

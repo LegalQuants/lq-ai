@@ -6,6 +6,14 @@ export function composeBaseArgs(composeFile: string, projectName: string): strin
 }
 
 export const psArgs = (base: string[]): string[] => [...base, 'ps', '--format', 'json']
+/**
+ * `pull` — refresh the images for the configured tag before `up`. Run as a
+ * best-effort step so a released update is actually fetched: `up -d` alone
+ * reuses whatever `:latest` (or pinned tag) is already cached locally and
+ * never picks up a new release. A failed pull (offline / registry hiccup) is
+ * non-fatal — the caller proceeds to `up` with the cached images.
+ */
+export const pullArgs = (base: string[]): string[] => [...base, 'pull']
 export const upArgs = (base: string[]): string[] => [...base, 'up', '-d']
 export const downArgs = (base: string[]): string[] => [...base, 'down']
 /** `down -v` — also removes volumes. Used by Reset to wipe all data for a fresh setup. */

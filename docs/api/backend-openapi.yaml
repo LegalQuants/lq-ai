@@ -7,7 +7,13 @@ info:
     
     This is a **sketch** — it covers the endpoints, request/response shapes, and
     schemas needed to anchor implementation. Expect refinement during M1 build.
-    
+
+    NOTE (DE-373): for a faithful, always-current contract generated from the
+    live app (recommended for client typegen), use the companion
+    `backend-openapi.generated.yaml`, produced by `make openapi` and kept in
+    sync by a CI drift-guard. This hand-authored sketch is the human-facing
+    reference; the generated file is the machine-faithful one.
+
     The Inference Gateway has a separate OpenAPI specification at
     `gateway-openapi.yaml` (consumes OpenAI-compatible inference requests from
     this backend; not directly accessible to end-users).
@@ -745,6 +751,70 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
 
+  /api/v1/projects/{project_id}/knowledge-bases:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      tags: [projects]
+      summary: Attach a knowledge base to a matter
+      description: |
+        Wave D.1 T3. Body: ``{knowledge_base_id}``. The caller must own
+        both the project and the KB (cross-user → 404 on either side).
+        Idempotent — re-attaching an already-attached KB returns 200
+        with the current project state (unlike the skill/file attach
+        endpoints above, this does NOT return 409 on repeat attach).
+        Audit action: ``project.knowledge_base_attached``.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [knowledge_base_id]
+              properties:
+                knowledge_base_id: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Project state after attach (idempotent — same body on repeat calls)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Project'}
+        '404':
+          description: Project or knowledge base not found
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/v1/projects/{project_id}/knowledge-bases/{kb_id}:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: kb_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    delete:
+      tags: [projects]
+      summary: Detach a knowledge base from a matter
+      description: |
+        Wave D.1 T3. Idempotent — detaching a KB that is not attached
+        still returns 204. The KB row itself is untouched (use
+        ``DELETE /api/v1/knowledge-bases/{id}`` for the KB). Audit
+        action: ``project.knowledge_base_detached`` (only written when
+        a join row is actually removed).
+      responses:
+        '204': {description: Detached (or was already not attached)}
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
   # ----------- PROJECTS SANDBOX (Wave D.2 Task 2.2) -----------
   /api/v1/projects/sandbox/ensure:
     post:
@@ -849,6 +919,11 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Chat'}
+        '404':
+          description: Project (if `project_id` was provided) not found.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
 
   /api/v1/chats/{chat_id}:
     parameters:
@@ -3319,7 +3394,7 @@ paths:
       parameters:
         - name: role
           in: query
-          schema: {type: string, enum: [admin, member, viewer]}
+          schema: {type: string, enum: [admin, member, viewer, auditor]}
         - name: email_q
           in: query
           schema: {type: string}
@@ -3348,7 +3423,7 @@ paths:
         schema: {type: string, format: uuid}
     patch:
       tags: [admin]
-      summary: Set a user's RBAC role (admin | member | viewer)
+      summary: Set a user's RBAC role (admin | member | viewer | auditor)
       description: |
         Wave C. Updates ``users.role`` and keeps ``is_admin`` in sync
         (True iff role='admin'). Idempotent: re-applying the same role
@@ -3357,6 +3432,9 @@ paths:
 
         Lockout protection: refuses to demote the last admin in the
         deployment (409 — promote someone else first).
+
+        ``auditor`` (migration 0065) is a read-only, deployment-wide
+        cross-user reviewer role; ``is_admin`` stays False when set.
       requestBody:
         required: true
         content:
@@ -3365,7 +3443,7 @@ paths:
               type: object
               required: [role]
               properties:
-                role: {type: string, enum: [admin, member, viewer]}
+                role: {type: string, enum: [admin, member, viewer, auditor]}
       responses:
         '200':
           description: Updated role
@@ -3377,7 +3455,7 @@ paths:
                 properties:
                   user_id: {type: string, format: uuid}
                   email: {type: string, format: email}
-                  role: {type: string, enum: [admin, member, viewer]}
+                  role: {type: string, enum: [admin, member, viewer, auditor]}
                   is_admin: {type: boolean}
         '403':
           description: Last-admin demotion lockout.
@@ -4123,6 +4201,62 @@ paths:
           description: Not authenticated
         '404':
           description: Session not found
+
+  /api/v1/autonomous/sessions/{session_id}/ledger:
+    get:
+      tags: [autonomous]
+      summary: Citation ledger + fiduciary gate for an autonomous session (WS-D PR2 C5)
+      description: |
+        Returns ``{chat_id, entries, gates}`` — the identical shape
+        produced by ``GET /api/v1/chats/{chat_id}/ledger`` — so the
+        PR2 UI can reuse the chat ledger component directly without
+        adaptation. For a session ledger, ``gates`` always has exactly
+        one element (the single fiduciary-grade gate manufactured by
+        ``build_session_ledger``). Reuses ``resolve_ledger_entries`` and
+        ``resolve_gates`` — the same functions the chat ledger endpoint
+        calls.
+
+        Owner-gated: another user's ``session_id`` or a missing session
+        returns 404 (not 403) to avoid existence disclosure. Also
+        returns 404 if the session exists but ``build_session_ledger``
+        has not yet manufactured the hidden backing chat.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Ledger entries resolved to source + passage(s) + status + provenance, plus the session's single fiduciary-grade gate
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  chat_id: {type: string, format: uuid}
+                  entries:
+                    type: array
+                    items: {$ref: '#/components/schemas/LedgerEntry'}
+                  gates:
+                    type: array
+                    description: Exactly one element for a session ledger — the gate manufactured by build_session_ledger (ADR 0018 D3).
+                    items:
+                      type: object
+                      properties:
+                        message_id: {type: string, format: uuid}
+                        gate_status: {type: string, enum: [fiduciary_grade, supported_only, flagged]}
+                        pass_count: {type: integer}
+                        supported_count: {type: integer}
+                        fail_count: {type: integer}
+                        total_assertions: {type: integer}
+                        confidence: {type: number, nullable: true}
+                        created_at: {type: string, format: date-time}
+        '401':
+          description: Not authenticated
+        '404':
+          description: Session not found, or session has no ledger yet
 
   /api/v1/autonomous/sessions/{session_id}/halt:
     post:
@@ -5174,6 +5308,31 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
 
+  /api/v1/research/sources:
+    get:
+      tags: [research]
+      summary: List available content-authority sources from the registry
+      description: |
+        WS-E PR1a (ADR 0016 / P3). Returns one entry per registered
+        content-authority source type, indicating whether it is enabled
+        (configured in the gateway) and its safe metadata fields. Auth
+        keys and cost fields are never included. Requires an
+        authenticated user (bearer token).
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Available content-authority sources
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourcesResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
   # WS2/PR4b — MCP registry admin surface
   /api/v1/admin/mcp:
     get:
@@ -6209,7 +6368,7 @@ components:
         id: {type: string, format: uuid}
         email: {type: string, format: email}
         display_name: {type: string, nullable: true}
-        role: {type: string, enum: [admin, member, viewer]}
+        role: {type: string, enum: [admin, member, viewer, auditor]}
         is_admin: {type: boolean}
         mfa_enabled: {type: boolean}
         must_change_password: {type: boolean}
@@ -6876,13 +7035,17 @@ components:
         is_admin: {type: boolean}
         role:
           type: string
-          enum: [admin, member, viewer]
+          enum: [admin, member, viewer, auditor]
           default: member
           description: |
-            Wave C — PRD §5.2 RBAC three-role system. ``admin`` has
-            full access; ``member`` can mutate owned resources; ``viewer``
-            is read-only. Mutating endpoints reject ``viewer`` via the
-            ``MutatingUser`` dependency. Kept in sync with ``is_admin``
+            Wave C — PRD §5.2 RBAC system. ``admin`` has full access;
+            ``member`` can mutate owned resources; ``viewer`` is
+            read-only. Mutating endpoints reject ``viewer`` via the
+            ``MutatingUser`` dependency. ``auditor`` (migration 0065)
+            is a read-only, deployment-wide cross-user reviewer role —
+            like ``viewer`` it is excluded from ``_MUTATING_ROLES``, but
+            it is a distinct role (not an operator-admin: ``is_admin``
+            stays False). Kept in sync with ``is_admin``
             (``role='admin'`` iff ``is_admin=true``).
         mfa_enabled: {type: boolean}
         must_change_password:
@@ -7064,6 +7227,14 @@ components:
           type: array
           items: {type: string, format: uuid}
           description: "Files attached to this project, ordered by attachment time"
+        attached_knowledge_base_ids:
+          type: array
+          items: {type: string, format: uuid}
+          description: |
+            Knowledge bases attached to this project (matter), ordered by
+            attachment time (Wave D.1 T3). Mutated by
+            ``POST /api/v1/projects/{project_id}/knowledge-bases`` and
+            ``DELETE /api/v1/projects/{project_id}/knowledge-bases/{kb_id}``.
         is_sandbox:
           type: boolean
           default: false
@@ -8472,6 +8643,34 @@ components:
         source:
           type: object
           description: Resolved source block; shape varies by kind. Quote kinds carry passages[].
+
+    SourcesResponse:
+      type: object
+      description: Envelope for GET /api/v1/research/sources (WS-E PR1a).
+      required: [sources]
+      properties:
+        sources:
+          type: array
+          items: {$ref: '#/components/schemas/AvailableSourceResponse'}
+
+    AvailableSourceResponse:
+      type: object
+      description: |
+        One content-authority source registry entry. Exposes only the
+        safe fields defined by P3 (ADR 0016): name, type, jurisdiction,
+        coverage, content_kinds, enabled, egress_tier. Auth keys and
+        cost fields are NEVER included.
+      required: [type, jurisdiction, coverage, content_kinds, enabled]
+      properties:
+        name: {type: string, nullable: true}
+        type: {type: string}
+        jurisdiction: {type: string}
+        coverage: {type: string}
+        content_kinds:
+          type: array
+          items: {type: string}
+        enabled: {type: boolean}
+        egress_tier: {type: integer, nullable: true}
 
 security:
   - bearerAuth: []

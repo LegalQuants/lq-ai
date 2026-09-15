@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { snapshot } from './orchestrator'
+import { snapshot, startStack } from './orchestrator'
 
 // Inject a fake runner so this stays a pure unit test (no real docker).
 function fakeRunner(map: Record<string, { code: number; stdout: string; stderr: string }>) {
@@ -38,5 +38,35 @@ describe('snapshot', () => {
 		})
 		const snap = await snapshot(['compose', '-f', 'x', '-p', 'lq-ai-desktop'], runner)
 		expect(snap.state).toBe('NO_ENGINE')
+	})
+})
+
+describe('startStack', () => {
+	const base = ['compose', '-f', 'x', '-p', 'lq-ai-desktop']
+
+	it('pulls images before bringing the stack up', async () => {
+		const calls: string[][] = []
+		const runner = async (args: string[]) => {
+			calls.push(args)
+			return { code: 0, stdout: '', stderr: '' }
+		}
+		await startStack(base, {}, runner)
+		expect(calls).toEqual([
+			[...base, 'pull'],
+			[...base, 'up', '-d']
+		])
+	})
+
+	it('still brings the stack up when the pull fails (offline)', async () => {
+		const calls: string[][] = []
+		// runDocker never throws — a failed pull resolves with a non-zero code.
+		const runner = async (args: string[]) => {
+			calls.push(args)
+			const failed = args.includes('pull')
+			return { code: failed ? 1 : 0, stdout: '', stderr: failed ? 'no network' : '' }
+		}
+		const result = await startStack(base, {}, runner)
+		expect(calls.map((c) => c[c.length - 1])).toEqual(['pull', '-d'])
+		expect(result.code).toBe(0) // the `up` result is returned, not the pull's
 	})
 })

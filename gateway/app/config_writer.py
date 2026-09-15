@@ -48,6 +48,7 @@ from typing import Any
 import yaml
 
 from app.config_holder import ConfigReloadError, MutableConfigHolder
+from app.tool_provider_defaults import TOOL_PROVIDER_DEFAULTS
 
 logger = logging.getLogger(__name__)
 
@@ -537,12 +538,160 @@ def delete_provider_key(
         raise
 
 
+# --- Tool-provider mutation API (runtime authority sources, ADR 0014) --------
+
+
+def _find_tool_provider_entry(
+    raw: dict[str, Any],
+    *,
+    provider_type: str,
+) -> dict[str, Any] | None:
+    """Return the ``tool_providers`` entry for ``provider_type``, or None.
+
+    Unlike ``_find_provider_entry`` (inference), absence is NOT an error:
+    the runtime enable path CREATES the entry when it's missing. We match on
+    ``type`` (the admin surface is keyed by type; the writer owns the name).
+
+    Raises :class:`ProviderKeyMutationError` 500 only when ``tool_providers``
+    is present but not a list (malformed config).
+    """
+
+    providers = raw.get("tool_providers")
+    if providers is None:
+        return None
+    if not isinstance(providers, list):
+        raise ProviderKeyMutationError(
+            "gateway.yaml tool_providers is malformed (expected a list)",
+            http_status=500,
+        )
+    for entry in providers:
+        if isinstance(entry, dict) and entry.get("type") == provider_type:
+            return entry
+    return None
+
+
+def _tool_provider_entry_from_default(provider_type: str) -> dict[str, Any]:
+    """Build a fresh ``tool_providers`` YAML block from the gateway defaults."""
+
+    d = TOOL_PROVIDER_DEFAULTS[provider_type]
+    entry: dict[str, Any] = {
+        "name": d.name,
+        "type": d.type,
+        "base_url": d.base_url,
+        "egress_tier": d.egress_tier,
+        "allowlist": {"hosts": list(d.allowlist_hosts)},
+        "rate_limit": {"requests_per_minute": d.rate_limit_rpm},
+        "anonymize_outbound": d.anonymize_outbound,
+    }
+    if d.user_agent:
+        entry["user_agent"] = d.user_agent
+    return entry
+
+
+def upsert_tool_provider(
+    holder: MutableConfigHolder,
+    *,
+    provider_type: str,
+    encrypted_token: str | None,
+    enabled: bool = True,
+) -> None:
+    """Create/enable a tool-provider entry and set/rotate its runtime key.
+
+    ``provider_type`` must be a key in ``TOOL_PROVIDER_DEFAULTS`` (else 404).
+    If the entry is absent it's created from the gateway defaults (SSRF-safe;
+    the api never supplies base_url/allowlist). ``encrypted_token`` is the
+    Fernet ciphertext (set/rotate); ``None`` leaves the key untouched on an
+    existing entry, or creates a keyless entry when none exists.
+
+    Setting a runtime key switches the source to encrypted-at-rest: we set
+    ``api_key_encrypted`` and drop ``api_key_env`` (the validator forbids
+    both). Reload re-validates the whole file; on failure the file rolls back
+    to the prior bytes and :class:`ConfigReloadError` re-raises.
+    """
+
+    if provider_type not in TOOL_PROVIDER_DEFAULTS:
+        raise ProviderKeyMutationError(
+            f"unknown tool-provider type {provider_type!r}",
+            http_status=404,
+        )
+
+    raw = _read_yaml_mapping(holder.config_path)
+    tool_providers = raw.get("tool_providers")
+    if tool_providers is None:
+        tool_providers = []
+        raw["tool_providers"] = tool_providers
+    elif not isinstance(tool_providers, list):
+        raise ProviderKeyMutationError(
+            "gateway.yaml tool_providers is malformed (expected a list)",
+            http_status=500,
+        )
+
+    entry = _find_tool_provider_entry(raw, provider_type=provider_type)
+    if entry is None:
+        entry = _tool_provider_entry_from_default(provider_type)
+        tool_providers.append(entry)
+
+    entry["enabled"] = enabled
+    if encrypted_token is not None:
+        entry["api_key_encrypted"] = encrypted_token
+        entry.pop("api_key_env", None)
+
+    prior_bytes = holder.config_path.read_bytes()
+    _atomic_write_yaml(holder.config_path, raw)
+    try:
+        holder.reload_from_disk()
+    except ConfigReloadError:
+        holder.config_path.write_bytes(prior_bytes)
+        raise
+
+
+def remove_tool_provider(
+    holder: MutableConfigHolder,
+    *,
+    provider_type: str,
+) -> None:
+    """Remove a runtime-owned tool-provider entry and reload.
+
+    404 if no entry of that type exists. 409 if the matched entry is
+    env-sourced (``api_key_env`` set) — the runtime API only removes entries
+    it owns (runtime-keyed or keyless); an operator's env-configured entry is
+    theirs to remove in ``gateway.yaml``.
+    """
+
+    raw = _read_yaml_mapping(holder.config_path)
+    entry = _find_tool_provider_entry(raw, provider_type=provider_type)
+    if entry is None:
+        raise ProviderKeyMutationError(
+            f"tool provider of type {provider_type!r} not found",
+            http_status=404,
+        )
+    if entry.get("api_key_env"):
+        raise ProviderKeyMutationError(
+            f"tool provider {provider_type!r} is env-configured and not "
+            "runtime-revocable; edit gateway.yaml to remove it",
+            http_status=409,
+        )
+
+    providers = raw["tool_providers"]
+    raw["tool_providers"] = [e for e in providers if e is not entry]
+
+    prior_bytes = holder.config_path.read_bytes()
+    _atomic_write_yaml(holder.config_path, raw)
+    try:
+        holder.reload_from_disk()
+    except ConfigReloadError:
+        holder.config_path.write_bytes(prior_bytes)
+        raise
+
+
 __all__ = [
     "AliasMutationError",
     "ProviderKeyMutationError",
     "delete_alias",
     "delete_provider_key",
+    "remove_tool_provider",
     "update_tier_policy",
     "upsert_alias",
     "upsert_provider_key",
+    "upsert_tool_provider",
 ]

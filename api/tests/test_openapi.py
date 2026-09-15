@@ -137,6 +137,9 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         # Donna #7 — runtime provider-key (BYOK) admin proxy
         "/api/v1/admin/provider-keys",
         "/api/v1/admin/provider-keys/{provider}",
+        # Donna #3 — runtime tool/authority-provider admin proxy
+        "/api/v1/admin/tool-providers",
+        "/api/v1/admin/tool-providers/{provider_type}",
         # D0 — model availability proxy
         "/api/v1/models",
         # Wave D.1 T4 — admin tier-floor override re-run
@@ -336,7 +339,10 @@ async def test_openapi_paths_match_sketch() -> None:
     # /api/v1/autonomous/sessions/{session_id}/ledger
     # WS-E PR1a adds one new path (136 -> 137):
     # /api/v1/research/sources
-    assert len(actual) == 137
+    # Donna #3 adds two new paths (137 -> 139):
+    # /api/v1/admin/tool-providers
+    # /api/v1/admin/tool-providers/{provider_type}
+    assert len(actual) == 139
 
 
 @pytest.mark.unit

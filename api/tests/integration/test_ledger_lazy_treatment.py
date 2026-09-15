@@ -15,6 +15,7 @@ import uuid
 
 import pytest
 import pytest_asyncio
+from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.api.chats as chats_mod
@@ -26,6 +27,13 @@ from app.models.message_caselaw_citation import MessageCaselawCitation
 from app.models.user import User
 
 pytestmark = pytest.mark.integration
+
+
+def _fake_request() -> Request:
+    """Minimal ASGI-scope Request for direct handler invocation (no HTTP client)."""
+    return Request(
+        scope={"type": "http", "headers": [], "client": None, "method": "GET", "path": "/"}
+    )
 
 
 @pytest_asyncio.fixture
@@ -98,6 +106,7 @@ async def test_ledger_read_enqueues_for_null_treatment(
         chat_id=str(chat_id),
         user=user,
         db=db_session,
+        request=_fake_request(),
         message_id=None,
     )
 
@@ -176,6 +185,7 @@ async def test_ledger_read_skips_enqueue_for_fresh_treatment(
         chat_id=str(chat.id),
         user=user,
         db=db_session,
+        request=_fake_request(),
         message_id=None,
     )
 

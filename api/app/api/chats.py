@@ -70,9 +70,10 @@ from pydantic import BaseModel, ValidationError as PydanticValidationError
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import ActiveUser
+from app.api.dependencies import ActiveUser, is_privileged_reader
 from app.api.skills import _resolve_skill_for_user
 from app.audit import audit_action
+from app.auditor_audit import auditor_audit
 from app.autonomous.guard import _args_digest
 from app.chat.tool_loop import (
     LoopConfirmation,
@@ -83,6 +84,7 @@ from app.chat.tool_loop import (
 )
 from app.chat.tool_schemas import ChatToolAllowlist, assemble_allowlist
 from app.citation import extract_citations, verify
+from app.citation.authority import verify_and_persist_authority_citations
 from app.citation.caselaw import verify_and_persist_caselaw_citations
 from app.citation.cost import estimate_judge_call_cost_usd
 from app.citation.gate import compute_and_record_gate, resolve_gates
@@ -351,6 +353,63 @@ async def _load_visible_chat(
     return row
 
 
+async def _load_visible_project_for_chat(
+    db: AsyncSession,
+    project_id: uuid.UUID,
+    owner_id: uuid.UUID,
+) -> Project:
+    """Validate that ``project_id`` is owned by the caller before accepting it
+    as a chat's project association; 404 on miss / cross-user / archived.
+
+    Mirrors :func:`app.api.knowledge_bases._load_visible_project_for_kb`.
+    Inlined here rather than imported to keep the chat surface free of a
+    reverse dependency on the projects router module — it is a one-statement
+    SELECT. Without this guard a caller can bind a chat to another user's
+    project id and, on ``send_message``, pull that project's attached
+    knowledge-base content into the response and out to the LLM provider.
+    """
+
+    stmt = select(Project).where(
+        Project.id == project_id,
+        Project.owner_id == owner_id,
+        Project.archived_at.is_(None),
+    )
+    row = (await db.execute(stmt)).scalar_one_or_none()
+    if row is None:
+        raise NotFound(
+            f"Project {project_id} not found.",
+            details={"project_id": str(project_id)},
+        )
+    return row
+
+
+async def _load_chat_for_reader(
+    db: AsyncSession,
+    chat_id: uuid.UUID,
+    user: User,
+    *,
+    include_archived: bool = True,
+) -> tuple[Chat, bool]:
+    """Load a chat for a *reader*; return ``(chat, was_privileged_cross_user)``.
+
+    Owner → ``(chat, False)``. A privileged reader (admin/auditor) reading a
+    chat they do not own → ``(chat, True)``. Everyone else — and a missing
+    chat — → 404, indistinguishably (existence-safe): a non-privileged
+    non-owner cannot tell "exists, not yours" from "doesn't exist".
+    """
+    stmt = select(Chat).where(Chat.id == chat_id)
+    if not include_archived:
+        stmt = stmt.where(Chat.archived_at.is_(None))
+    row = (await db.execute(stmt)).scalar_one_or_none()
+    if row is None:
+        raise NotFound(f"Chat {chat_id} not found.", details={"chat_id": str(chat_id)})
+    if row.owner_id == user.id:
+        return row, False
+    if is_privileged_reader(user):
+        return row, True
+    raise NotFound(f"Chat {chat_id} not found.", details={"chat_id": str(chat_id)})
+
+
 async def _validate_owned_file_ids(
     db: AsyncSession,
     file_ids: list[str],
@@ -558,6 +617,9 @@ async def create_chat(
     user: ActiveUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ChatResponse:
+    if payload.project_id is not None:
+        await _load_visible_project_for_chat(db, payload.project_id, user.id)
+
     chat = Chat(
         owner_id=user.id,
         project_id=payload.project_id,
@@ -1006,7 +1068,13 @@ async def _retrieve_kb_context_for_chat(
         return [], []
 
     # Load KB rows (for hybrid_alpha per KB). One SELECT for the set.
-    kb_stmt = select(KnowledgeBase).where(KnowledgeBase.id.in_(kb_ids))
+    # Defense-in-depth: scope to the chat owner so a stale or foreign
+    # ``project_id`` (see _load_visible_project_for_chat) can never surface
+    # another user's KB content, even if one slipped past chat creation.
+    kb_stmt = select(KnowledgeBase).where(
+        KnowledgeBase.id.in_(kb_ids),
+        KnowledgeBase.owner_id == chat.owner_id,
+    )
     kb_rows = (await db.execute(kb_stmt)).scalars().all()
 
     # Embed the query once (reused across every KB). Mirrors the
@@ -1615,7 +1683,7 @@ async def send_message(
     # deployment or in environments without research/MCP), return an empty
     # allowlist so the existing single-shot path runs unchanged.
     try:
-        allowlist = await assemble_allowlist(db, request_id=request_id)
+        allowlist = await assemble_allowlist(db, gateway=gateway, request_id=request_id)
     except Exception:
         log.warning(
             "chat send_message: assemble_allowlist failed — falling back to empty allowlist",
@@ -1667,6 +1735,7 @@ async def get_citations(
     message_id: str,
     user: ActiveUser,
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
 ) -> list[dict[str, Any]]:
     """Return citations persisted for a message.
 
@@ -1684,9 +1753,12 @@ async def get_citations(
     column. The column itself remains for backward compatibility with
     older clients and is slated for retirement by M2-C2.
 
-    Chat ownership is enforced so a cross-user request can't enumerate
-    message ids — the visibility check uses the same path as message
-    list reads.
+    Owner-of-the-chat, admin, or the read-only cross-user ``auditor`` role
+    can read (``_load_chat_for_reader``); everyone else — and a missing
+    chat — gets an identical 404 (existence-safe), matching
+    :func:`get_chat_ledger` / :func:`get_message_sources`. A privileged
+    reader viewing another user's chat writes one ``auditor_audit`` row
+    (``citations_viewed``).
     """
 
     cid = _validate_chat_id(chat_id)
@@ -1698,7 +1770,18 @@ async def get_citations(
             details={"message_id": message_id},
         ) from exc
 
-    await _load_visible_chat(db, cid, user.id, include_archived=True)
+    chat, was_privileged = await _load_chat_for_reader(db, cid, user, include_archived=True)
+    if was_privileged:
+        await auditor_audit(
+            db,
+            user=user,
+            event="citations_viewed",
+            resource_type="chat",
+            resource_id=str(cid),
+            viewed_user_id=chat.owner_id,
+            request=request,
+        )
+        await db.commit()  # GET read-path: persist the audit row explicitly
 
     # Confirm the message exists (and belongs to the chat) before
     # returning an empty list — distinguishes "no citations" from
@@ -1746,6 +1829,7 @@ async def get_message_sources(
     message_id: str,
     user: ActiveUser,
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
 ) -> list[dict[str, Any]]:
     """Return the external sources (case-law clusters) a message's turn consulted.
 
@@ -1762,7 +1846,18 @@ async def get_message_sources(
             "message_id must be a UUID", details={"message_id": message_id}
         ) from exc
 
-    await _load_visible_chat(db, cid, user.id, include_archived=True)
+    chat, was_privileged = await _load_chat_for_reader(db, cid, user, include_archived=True)
+    if was_privileged:
+        await auditor_audit(
+            db,
+            user=user,
+            event="sources_viewed",
+            resource_type="chat",
+            resource_id=str(cid),
+            viewed_user_id=chat.owner_id,
+            request=request,
+        )
+        await db.commit()  # GET read-path: persist the audit row explicitly
 
     msg_stmt = select(Message.id).where(Message.id == mid, Message.chat_id == cid)
     if (await db.execute(msg_stmt)).scalar_one_or_none() is None:
@@ -1799,6 +1894,7 @@ async def get_chat_ledger(
     chat_id: str,
     user: ActiveUser,
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
     message_id: str | None = None,
 ) -> dict[str, Any]:
     """Return the Citation Ledger for a chat, each entry resolved to its source
@@ -1818,7 +1914,18 @@ async def get_chat_ledger(
                 "message_id must be a UUID", details={"message_id": message_id}
             ) from exc
 
-    await _load_visible_chat(db, cid, user.id, include_archived=True)
+    chat, was_privileged = await _load_chat_for_reader(db, cid, user, include_archived=True)
+    if was_privileged:
+        await auditor_audit(
+            db,
+            user=user,
+            event="ledger_viewed",
+            resource_type="chat",
+            resource_id=str(cid),
+            viewed_user_id=chat.owner_id,
+            request=request,
+        )
+        await db.commit()  # GET read-path: persist the audit row explicitly
 
     if mid is not None:
         msg_stmt = select(Message.id).where(Message.id == mid, Message.chat_id == cid)
@@ -2010,7 +2117,9 @@ async def resume_tool_call(
             # Re-assemble the allowlist to resolve the spec (tool may have been
             # removed since the gate; treat that as denial-style).
             try:
-                current_allowlist = await assemble_allowlist(db, request_id=request_id)
+                current_allowlist = await assemble_allowlist(
+                    db, gateway=gateway, request_id=request_id
+                )
             except Exception:
                 current_allowlist = ChatToolAllowlist(specs={})
 
@@ -2116,7 +2225,7 @@ async def resume_tool_call(
 
         # Re-assemble allowlist for the resumed loop.
         try:
-            resume_allowlist = await assemble_allowlist(db, request_id=request_id)
+            resume_allowlist = await assemble_allowlist(db, gateway=gateway, request_id=request_id)
         except Exception:
             resume_allowlist = ChatToolAllowlist(specs={})
 
@@ -2956,6 +3065,21 @@ async def _non_streaming_response(
             except Exception as caselaw_exc:  # never block the turn
                 log.warning("caselaw citation verification failed: %r", caselaw_exc)
             try:
+                await verify_and_persist_authority_citations(
+                    db,
+                    message_id=assistant_message_id,
+                    assistant_text=outcome.text,
+                    tool_sources=outcome.tool_sources,
+                    gateway=gateway,
+                    judge_model=_caselaw_judge_model,
+                )
+            except Exception:
+                log.warning(
+                    "chat finalize: authority citation verify failed — non-fatal",
+                    extra={"event": "chat_authority_verify_finalize_failed"},
+                    exc_info=True,
+                )
+            try:
                 await assemble_ledger_entries(db, message_id=assistant_message_id)
             except Exception as ledger_exc:  # never block the turn
                 log.warning("citation ledger assembly failed: %r", ledger_exc)
@@ -3553,6 +3677,23 @@ async def _stream_response(
                     )
                 except Exception as caselaw_exc:  # never block the turn
                     log.warning("caselaw citation verification failed: %r", caselaw_exc)
+                try:
+                    await verify_and_persist_authority_citations(
+                        db,
+                        message_id=assistant_message_id,
+                        assistant_text="".join(accumulated),
+                        tool_sources=loop_outcome.tool_sources
+                        if isinstance(loop_outcome, LoopFinal)
+                        else [],
+                        gateway=gateway,
+                        judge_model=_caselaw_judge_model,
+                    )
+                except Exception:
+                    log.warning(
+                        "chat finalize (stream): authority citation verify failed — non-fatal",
+                        extra={"event": "chat_authority_verify_finalize_failed"},
+                        exc_info=True,
+                    )
                 try:
                     await assemble_ledger_entries(db, message_id=assistant_message_id)
                 except Exception as ledger_exc:  # never block the turn

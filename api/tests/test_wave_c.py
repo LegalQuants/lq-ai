@@ -351,3 +351,91 @@ async def test_export_readme_mentions_work_product_attribution(
     with zipfile.ZipFile(BytesIO(zip_bytes)) as zf:
         readme = zf.read("README.md").decode("utf-8")
     assert "work_product_attribution.json" in readme
+
+
+# ---------------------------------------------------------------------------
+# Cross-user auditor role — Task 1 (RBAC enum + migration 0065)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+async def test_update_user_role_to_auditor_sets_readonly(
+    client: AsyncClient, admin_user: User, member_user: User
+) -> None:
+    """PATCH /admin/users/{id}/role accepts 'auditor' and keeps
+    is_admin False -- auditor is a read-only cross-user reviewer role,
+    not an operator-admin (see the cross-user auditor spec)."""
+
+    resp = await client.patch(
+        f"/api/v1/admin/users/{member_user.id}/role",
+        headers=_bearer(admin_user),
+        json={"role": "auditor"},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["role"] == "auditor"
+    assert body["is_admin"] is False  # auditor is NOT an operator-admin
+
+
+@pytest.mark.integration
+async def test_auditor_is_non_mutating_via_get_mutating_user(
+    db_session: AsyncSession,
+) -> None:
+    """auditor is deliberately excluded from ``_MUTATING_ROLES``
+    (dependencies.py) so any endpoint gated by ``MutatingUser`` treats an
+    auditor the same as a viewer: 403 forbidden.
+
+    No endpoint currently depends on ``MutatingUser`` (it is defined but
+    not yet wired to a handler), so this exercises the gate function
+    directly rather than via an HTTP round-trip -- the assertion is on
+    the gate's behavior for role='auditor', which is the contract this
+    task must prove.
+    """
+
+    from app.api.dependencies import get_mutating_user
+    from app.errors import Forbidden
+
+    auditor = User(
+        email=f"wavec-auditor-{uuid.uuid4().hex[:8]}@example.com",
+        display_name="Auditor",
+        hashed_password=hash_password("correct-horse-battery-staple"),
+        is_admin=False,
+        role="auditor",
+        mfa_enabled=False,
+        must_change_password=False,
+    )
+    db_session.add(auditor)
+    await db_session.flush()
+
+    with pytest.raises(Forbidden) as exc_info:
+        await get_mutating_user(auditor)
+    assert exc_info.value.code == "forbidden"
+
+
+@pytest.mark.integration
+async def test_users_role_constraint_accepts_auditor_rejects_bogus(
+    db_session: AsyncSession,
+) -> None:
+    """The DB-side ``chk_users_role_enum`` CHECK constraint (widened by
+    migration 0065) accepts 'auditor' and still rejects an unknown
+    role string."""
+
+    auditor = User(
+        email=f"wavec-auditor2-{uuid.uuid4().hex[:8]}@example.com",
+        hashed_password=hash_password("x"),
+        role="auditor",
+    )
+    db_session.add(auditor)
+    await db_session.flush()  # must not raise
+    await db_session.refresh(auditor)
+    assert auditor.role == "auditor"
+
+    bogus = User(
+        email=f"wavec-bogus-{uuid.uuid4().hex[:8]}@example.com",
+        hashed_password=hash_password("x"),
+        role="notarole",
+    )
+    db_session.add(bogus)
+    with pytest.raises(IntegrityError):
+        await db_session.flush()
+    await db_session.rollback()

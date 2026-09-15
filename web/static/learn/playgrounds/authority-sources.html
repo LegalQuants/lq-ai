@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LQ.AI — Authority Source Registry</title>
+<style>
+  :root {
+    --bg: #0c0f14;
+    --bg-elev: #151a23;
+    --bg-elev-2: #1d242f;
+    --border: #2a3340;
+    --border-hover: #3a4555;
+    --text: #e6ebf3;
+    --text-dim: #8a96a8;
+    --text-faint: #5a6578;
+    --accent: #7dd3fc;
+    --accent-dim: #38bdf8;
+    --fid: #f5b544;
+    --ok: #34d399;
+    --unavail: #6b7280;
+    --shadow: rgba(0,0,0,0.4);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+  }
+  .app { display: grid; grid-template-rows: auto 1fr auto; height: 100vh; }
+  header {
+    padding: 12px 20px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 16px;
+  }
+  header h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
+  header h1::before {
+    content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--fid); margin-right: 8px; vertical-align: middle;
+  }
+  header .subtitle { color: var(--text-dim); font-size: 13px; }
+  header .spacer { flex: 1; }
+  header a {
+    color: var(--accent); text-decoration: none; font-size: 12px;
+    border: 1px solid var(--border); padding: 4px 10px; border-radius: 4px;
+  }
+  header a:hover { border-color: var(--border-hover); background: var(--bg-elev-2); }
+
+  .main { display: grid; grid-template-columns: 330px 1fr; overflow: hidden; }
+  .controls {
+    background: var(--bg-elev); border-right: 1px solid var(--border);
+    padding: 16px; overflow-y: auto;
+  }
+  .controls h2 {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--fid); margin: 18px 0 8px;
+    border-bottom: 1px solid var(--border); padding-bottom: 6px;
+  }
+  .controls h2:first-child { margin-top: 0; }
+  .hint { font-size: 11.5px; color: var(--text-faint); margin: 0 0 10px; line-height: 1.4; }
+
+  .toggle {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 7px 8px; border-radius: 4px; cursor: pointer;
+    user-select: none; transition: background 0.1s; font-size: 13px;
+  }
+  .toggle:hover { background: var(--bg-elev-2); }
+  .toggle input { margin: 3px 0 0; cursor: pointer; accent-color: var(--fid); flex-shrink: 0; }
+  .toggle .toggle-label { flex: 1; line-height: 1.4; }
+  .toggle .toggle-label span { display: block; color: var(--text-dim); font-size: 11px; margin-top: 2px; }
+  .toggle.off .toggle-label b { color: var(--unavail); }
+
+  .caveat {
+    background: var(--bg-elev-2); border: 1px solid var(--border);
+    border-left: 3px solid var(--fid); border-radius: 4px;
+    padding: 8px 10px; font-size: 11.5px; line-height: 1.5; color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+  .caveat .lab {
+    display: block; font-weight: 700; color: var(--fid); font-size: 10.5px;
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px;
+  }
+  .caveat code { color: var(--text); font-size: 11px; }
+
+  .content-wrap {
+    overflow-y: auto; padding: 20px 24px;
+    background: radial-gradient(circle at 20% 15%, rgba(245,181,68,0.05), transparent 55%),
+      radial-gradient(circle at 80% 80%, rgba(125,211,252,0.03), transparent 55%), var(--bg);
+  }
+  .card-grid {
+    max-width: 900px; margin: 0 auto;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+  }
+  .source-card {
+    background: var(--bg-elev); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 16px; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
+    grid-column: span 1;
+  }
+  .source-card.enabled { border-left: 3px solid var(--ok); }
+  .source-card.disabled { border-left: 3px solid var(--unavail); opacity: 0.62; }
+  .source-card.expanded { grid-column: span 2; border-color: var(--fid); box-shadow: 0 0 0 1px rgba(245,181,68,0.25); opacity: 1; }
+  .source-card:hover { border-color: var(--border-hover); }
+  .source-card.expanded:hover { border-color: var(--fid); }
+
+  .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+  .src-type {
+    font-family: ui-monospace, Menlo, monospace; font-size: 13px; font-weight: 700; color: var(--text);
+    display: block;
+  }
+  .src-name { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--text-dim); display: block; margin-top: 2px; }
+  .src-name.dim { color: var(--text-faint); font-style: italic; }
+  .badge {
+    font-size: 9.5px; font-weight: 700; text-transform: none; letter-spacing: 0.02em;
+    padding: 3px 7px; border-radius: 3px; white-space: nowrap; font-family: ui-monospace, Menlo, monospace;
+    flex-shrink: 0;
+  }
+  .badge.b-enabled { background: rgba(52,211,153,0.14); color: var(--ok); border: 1px solid rgba(52,211,153,0.35); }
+  .badge.b-disabled { background: rgba(107,114,128,0.14); color: var(--unavail); border: 1px solid rgba(107,114,128,0.35); }
+
+  .src-jur { font-size: 11.5px; color: var(--text-dim); margin-bottom: 4px; }
+  .src-jur b { color: var(--text); }
+  .src-coverage { font-size: 12.5px; color: var(--text); line-height: 1.4; margin-bottom: 8px; }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chip {
+    background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text-dim);
+    font-size: 10.5px; padding: 2px 7px; border-radius: 10px; font-family: ui-monospace, Menlo, monospace;
+  }
+  .op-chip {
+    background: rgba(245,181,68,0.10); border: 1px solid rgba(245,181,68,0.3); color: var(--fid);
+    font-size: 10.5px; padding: 2px 7px; border-radius: 10px; font-family: ui-monospace, Menlo, monospace;
+    margin: 2px 4px 2px 0; display: inline-block;
+  }
+
+  .unavail-note {
+    margin-top: 8px; font-size: 11.5px; color: var(--text-dim); line-height: 1.5;
+    background: rgba(107,114,128,0.08); border: 1px dashed var(--unavail); border-radius: 4px; padding: 6px 8px;
+  }
+  .unavail-note b { color: var(--text); }
+
+  .expand-block { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+  .expand-row { margin-bottom: 8px; font-size: 12px; }
+  .expand-lab {
+    display: block; font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--text-faint); margin-bottom: 4px;
+  }
+  .expand-val { color: var(--text-dim); line-height: 1.5; }
+  .expand-val code { color: var(--fid); }
+
+  .rejected-note {
+    font-size: 11.5px; color: var(--text-dim); line-height: 1.5; margin-top: 4px;
+    background: var(--bg-elev-2); border-left: 2px solid var(--unavail); border-radius: 0 4px 4px 0; padding: 6px 8px;
+  }
+  .rejected-note code { color: var(--text); }
+
+  .sketch { margin-top: 6px; }
+  .sketch-lab {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--fid); margin-bottom: 6px;
+  }
+  .sketch-step {
+    display: flex; align-items: baseline; gap: 8px; font-size: 11.5px; color: var(--text-dim);
+    background: var(--bg-elev-2); border: 1px solid var(--border); border-radius: 4px;
+    padding: 6px 9px; line-height: 1.5;
+  }
+  .sketch-step code { color: var(--text); font-size: 11px; word-break: break-word; }
+  .sk-n {
+    font-family: ui-monospace, Menlo, monospace; font-size: 10px; font-weight: 700; color: var(--fid);
+    background: rgba(245,181,68,0.12); border-radius: 3px; padding: 1px 6px; flex-shrink: 0;
+  }
+  .sketch-arrow { text-align: center; color: var(--text-faint); font-size: 12px; padding: 1px 0; }
+
+  .output { background: var(--bg-elev); border-top: 1px solid var(--border); max-height: 190px; display: grid; grid-template-rows: auto 1fr; }
+  .output-tabs { display: flex; padding: 0 16px; border-bottom: 1px solid var(--border); gap: 4px; align-items: flex-end; }
+  .output-tab {
+    background: transparent; border: none; color: var(--text-dim);
+    padding: 10px 14px; cursor: pointer; font-size: 12px; font-weight: 500;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .output-tab.active { color: var(--text); border-bottom-color: var(--fid); }
+  .output-tab:hover { color: var(--text); }
+  .output-note { margin-left: auto; font-size: 11px; color: var(--text-faint); padding: 10px 4px; font-style: italic; }
+  .output-body { padding: 12px 16px; overflow-y: auto; font-size: 12px; line-height: 1.6; color: var(--text); }
+  .output-body .pane { display: none; }
+  .output-body .pane.active { display: block; }
+  .output-body .file {
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--accent);
+    text-decoration: none; display: inline-block; padding: 1px 4px; border-radius: 3px;
+    background: rgba(125,211,252,0.08); margin: 2px 6px 2px 0;
+  }
+  .output-body .file:hover { background: rgba(125,211,252,0.16); }
+  .src-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-faint); margin: 0 0 4px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>LQ.AI — Authority Source Registry</h1>
+    <span class="subtitle">What the 4-entry authority-source registry knows, and what it honestly reports when the operator hasn't configured a provider.</span>
+    <span class="spacer"></span>
+    <a href="../../" id="learn-home">↩ Learn</a>
+    <a href="https://github.com/LegalQuants/lq-ai" target="_blank" rel="noopener">View source ↗</a>
+  </header>
+
+  <div class="main">
+    <aside class="controls">
+      <h2>Operator configuration — gateway.yaml</h2>
+      <p class="hint">Each registry entry needs a matching <code>tool_providers</code> entry in the operator's <code>gateway.yaml</code> before it's reachable. Toggle a provider off to see how the registry reports it.</p>
+      <label class="toggle" data-tog="courtlistener">
+        <input type="checkbox" id="tog-courtlistener" checked>
+        <div class="toggle-label"><b>courtlistener</b> configured
+          <span>us-federal caselaw. Operator BYO CourtListener key.</span>
+        </div>
+      </label>
+      <label class="toggle" data-tog="govinfo">
+        <input type="checkbox" id="tog-govinfo" checked>
+        <div class="toggle-label"><b>govinfo</b> configured
+          <span>U.S. Code + CFR.</span>
+        </div>
+      </label>
+      <label class="toggle" data-tog="edgar">
+        <input type="checkbox" id="tog-edgar">
+        <div class="toggle-label"><b>edgar</b> configured
+          <span>SEC EDGAR company filings.</span>
+        </div>
+      </label>
+      <label class="toggle" data-tog="eurlex">
+        <input type="checkbox" id="tog-eurlex" checked>
+        <div class="toggle-label"><b>eurlex</b> configured
+          <span>EU legislation &amp; CJEU case law, by CELEX id.</span>
+        </div>
+      </label>
+
+      <h2>Honest caveats</h2>
+      <div class="caveat">
+        <span class="lab">get-by-CELEX only</span>
+        EUR-Lex is get-by-CELEX only — its <code>ops</code> is <code>('get_authority',)</code>. No keyword search (DE-374) or treaty lookup (DE-375) yet.
+      </div>
+      <div class="caveat">
+        <span class="lab">Never silently omitted</span>
+        A registered source with no configured provider is reported unavailable-with-reason, never silently omitted.
+      </div>
+      <div class="caveat">
+        <span class="lab">P3 / ADR 0016</span>
+        The registry exposes name / type / jurisdiction / coverage / content_kinds / ops only — never auth keys, cost, or secrets.
+      </div>
+    </aside>
+
+    <div class="content-wrap">
+      <div class="card-grid" id="card-grid"></div>
+    </div>
+  </div>
+
+  <div class="output">
+    <div class="output-tabs">
+      <button class="output-tab active" data-tab="verify">Verify in source</button>
+      <button class="output-tab" data-tab="why">Why it's built this way</button>
+      <span class="output-note">Illustrative walkthrough — this page makes no live network calls.</span>
+    </div>
+    <div class="output-body">
+      <div class="pane active" id="pane-verify"></div>
+      <div class="pane" id="pane-why"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const REPO = 'https://github.com/LegalQuants/lq-ai/blob/main/';
+
+// Mirrors SOURCE_REGISTRY in api/app/research/registry.py, in its insertion
+// order. Static metadata only — name/type/jurisdiction/coverage/content_kinds/ops,
+// never auth keys, cost, or secrets (P3 / ADR 0016).
+const REGISTRY = [
+  {
+    key: "courtlistener",
+    type: "courtlistener",
+    providerName: "courtlistener",
+    jurisdiction: "us-federal",
+    coverage: "U.S. federal &amp; state appellate caselaw (operator CourtListener key)",
+    content_kinds: ["caselaw"],
+    ops: ["verify_citations", "search_case_law", "get_citing_opinions", "get_cases"],
+    routing: "Routed via the dedicated <code>retrieve_caselaw</code> intent, not <code>retrieve_authority</code> &mdash; CourtListener keeps its own cache and feeds the caselaw citation-graph / treatment layer (ADR 0021 D2). It is <b>not</b> one of the sources the generic retrieval intent targets.",
+    sampleRef: "410 U.S. 113",
+    intentCall: 'retrieve_caselaw(query="410 U.S. 113")'
+  },
+  {
+    key: "govinfo",
+    type: "govinfo",
+    providerName: "govinfo-prod",
+    jurisdiction: "us-federal",
+    coverage: "U.S. Code + Code of Federal Regulations",
+    content_kinds: ["statute", "regulation"],
+    ops: ["search_authority", "get_authority"],
+    routing: "Routed via the generic <code>retrieve_authority(source, op, args)</code> intent &mdash; args are model-generated, handler-validated against this registry entry (ADR 0021 D2).",
+    sampleRef: "42 U.S.C. § 1983",
+    intentCall: 'retrieve_authority(source="govinfo", op="get_authority", args={external_ref: "42 U.S.C. § 1983"})'
+  },
+  {
+    key: "edgar",
+    type: "edgar",
+    providerName: "edgar-fulltext",
+    jurisdiction: "us-federal",
+    coverage: "U.S. SEC EDGAR company filings (10-K, 8-K, S-1, etc.) &mdash; full-text search + retrieval",
+    content_kinds: ["sec_filing"],
+    ops: ["search_authority", "get_authority"],
+    routing: "Routed via the generic <code>retrieve_authority(source, op, args)</code> intent (ADR 0021 D2).",
+    sampleRef: "AAPL 10-K FY2025, Item 1A",
+    intentCall: 'retrieve_authority(source="edgar", op="get_authority", args={external_ref: "AAPL 10-K FY2025, Item 1A"})'
+  },
+  {
+    key: "eurlex",
+    type: "eurlex",
+    providerName: "eurlex-cellar",
+    jurisdiction: "eu",
+    coverage: "EU legislation &amp; CJEU case law via EUR-Lex/Cellar &mdash; retrieve by CELEX id",
+    content_kinds: ["eu_regulation", "eu_directive", "eu_decision", "eu_caselaw", "eu_legislation"],
+    ops: ["get_authority"],
+    routing: "Routed via <code>retrieve_authority</code> &mdash; <b>get-by-CELEX only</b>: <code>ops</code> is <code>('get_authority',)</code>, so there is no <code>search_authority</code> op for EUR-Lex. No keyword search (DE-374) or treaty lookup (DE-375) yet.",
+    sampleRef: "32016R0679 (GDPR)",
+    intentCall: 'retrieve_authority(source="eurlex", op="get_authority", args={external_ref: "32016R0679"})'
+  }
+];
+
+const state = {
+  toggles: { courtlistener: true, govinfo: true, edgar: false, eurlex: true },
+  expanded: null
+};
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function renderCards() {
+  const grid = document.getElementById("card-grid");
+  grid.innerHTML = "";
+  REGISTRY.forEach(spec => {
+    const enabled = state.toggles[spec.key];
+    const isExpanded = state.expanded === spec.key;
+    const card = document.createElement("div");
+    card.className = "source-card" + (enabled ? " enabled" : " disabled") + (isExpanded ? " expanded" : "");
+
+    const badge = enabled
+      ? '<span class="badge b-enabled">enabled=True</span>'
+      : '<span class="badge b-disabled">enabled=False</span>';
+    const nameLine = enabled
+      ? `<span class="src-name">name = "${escapeHtml(spec.providerName)}"</span>`
+      : '<span class="src-name dim">name = None</span>';
+    const kinds = spec.content_kinds.map(k => `<span class="chip">${escapeHtml(k)}</span>`).join("");
+
+    let body = `
+      <div class="card-top">
+        <div>
+          <span class="src-type">${escapeHtml(spec.type)}</span>
+          ${nameLine}
+        </div>
+        ${badge}
+      </div>
+      <div class="src-jur">jurisdiction: <b>${escapeHtml(spec.jurisdiction)}</b></div>
+      <div class="src-coverage">${spec.coverage}</div>
+      <div class="chip-row">${kinds}</div>
+    `;
+
+    if (!enabled) {
+      body += `<div class="unavail-note"><b>enabled=False &mdash; unavailable</b> (reason: no configured provider). Reported honestly, never silently omitted from the list resolve_available_sources returns.</div>`;
+    }
+
+    if (isExpanded) {
+      const opsHtml = spec.ops.map(o => `<span class="op-chip">${escapeHtml(o)}</span>`).join("");
+      body += `<div class="expand-block">
+        <div class="expand-row"><span class="expand-lab">ops</span><span class="expand-val">${opsHtml}</span></div>
+        <div class="expand-row"><span class="expand-lab">routing</span><span class="expand-val">${spec.routing}</span></div>`;
+
+      if (enabled) {
+        body += `
+          <div class="sketch">
+            <div class="sketch-lab">Retrieve-by-identifier &rarr; character-verify (illustrative)</div>
+            <div class="sketch-step"><span class="sk-n">1</span><code>${escapeHtml(spec.intentCall)}</code></div>
+            <div class="sketch-arrow">&darr;</div>
+            <div class="sketch-step"><span class="sk-n">2</span>guarded_tool_call &rarr; gateway sole egress &rarr; adapter fetches text for &ldquo;${escapeHtml(spec.sampleRef)}&rdquo;</div>
+            <div class="sketch-arrow">&darr;</div>
+            <div class="sketch-step"><span class="sk-n">3</span>shared char-fidelity verify() runs against the fetched text (in-memory target, no raw payload persisted)</div>
+            <div class="sketch-arrow">&darr;</div>
+            <div class="sketch-step"><span class="sk-n">4</span>ledger row &rarr; fiduciary gate &mdash; same cascade as uploaded files and caselaw</div>
+          </div>`;
+      } else if (spec.key === "courtlistener") {
+        body += `<div class="rejected-note">Not selectable at all via <code>retrieve_caselaw</code> while disabled &mdash; that intent is hardwired to a configured CourtListener provider (<code>service.py</code> <code>_resolve_provider</code>), so a missing/disabled key surfaces here as <code>enabled=False</code>, honestly reported rather than silently dropped (ADR 0021 D5). It was never reachable via <code>retrieve_authority</code> to begin with, enabled or not.</div>`;
+      } else {
+        body += `<div class="rejected-note">Not selectable by <code>retrieve_authority</code> while disabled &mdash; the handler rejects it as a non-fatal failed observation (ADR 0021 D2/D5), never an exception that escapes the governed path.</div>`;
+      }
+      body += `</div>`;
+    }
+
+    card.innerHTML = body;
+    card.addEventListener("click", () => {
+      state.expanded = state.expanded === spec.key ? null : spec.key;
+      renderCards();
+    });
+    grid.appendChild(card);
+  });
+}
+
+function renderToggleLabels() {
+  document.querySelectorAll(".toggle").forEach(el => {
+    const key = el.dataset.tog;
+    el.classList.toggle("off", !state.toggles[key]);
+  });
+}
+
+function renderOutput() {
+  document.getElementById("pane-verify").innerHTML = `
+    <p class="src-label">Verify these claims in source</p>
+    <a class="file" href="${REPO}api/app/research/registry.py" target="_blank" rel="noopener">api/app/research/registry.py</a>
+    <span style="color:var(--text-faint)">SOURCE_REGISTRY, AvailableSource, resolve_available_sources</span><br>
+    <a class="file" href="${REPO}docs/adr/0021-content-source-registry-and-free-source-expansion.md" target="_blank" rel="noopener">docs/adr/0021-content-source-registry-and-free-source-expansion.md</a>
+    <span style="color:var(--text-faint)">D1 hybrid registry, D2 retrieve_authority, D5 honest unavailability</span>
+  `;
+  document.getElementById("pane-why").innerHTML = `
+    <p style="margin:0 0 6px"><strong>Why a static backend registry, joined at read time?</strong></p>
+    <p style="color:var(--text-dim);margin:0 0 8px;line-height:1.6">The gateway holds egress concerns (secrets, allowlist, tier) and the backend holds content semantics (jurisdiction, coverage, ops). <code>resolve_available_sources</code> joins them at read time so a source is available only when both an operator configured it in <code>gateway.yaml</code> <b>and</b> the backend ships an adapter for its type (ADR 0021 D1). Source semantics never leak into the egress boundary; egress secrets never leak into the planner's or this page's view.</p>
+    <p style="color:var(--text-dim);margin:0;line-height:1.6">A registered type with no configured provider is reported <code>enabled=False</code>, never omitted &mdash; the planner (and this playground) always sees the whole registry, honestly labeled (D5, anti-overclaiming). A configured provider whose type isn't in the registry is excluded entirely: the loop only calls sources it has both an adapter and a spec for.</p>
+  `;
+}
+
+document.querySelectorAll(".toggle input").forEach(input => {
+  input.addEventListener("change", e => {
+    const key = e.target.closest(".toggle").dataset.tog;
+    state.toggles[key] = e.target.checked;
+    renderToggleLabels();
+    renderCards();
+  });
+});
+
+document.querySelectorAll(".output-tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".output-tab").forEach(t => t.classList.toggle("active", t === tab));
+    document.querySelectorAll(".output-body .pane").forEach(p => p.classList.toggle("active", p.id === `pane-${tab.dataset.tab}`));
+  });
+});
+
+renderToggleLabels();
+renderCards();
+renderOutput();
+</script>
+</body>
+</html>

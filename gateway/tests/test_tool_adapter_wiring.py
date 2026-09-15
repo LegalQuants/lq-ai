@@ -99,6 +99,32 @@ def test_build_tool_adapter_mcp(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
+def test_build_tool_adapter_edgar(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.providers.tool.edgar import EdgarToolAdapter
+
+    monkeypatch.setattr(
+        "app.providers.tool.egress._resolve_ips",
+        lambda host: ["93.184.216.34"],
+    )
+    cfg = GatewayConfig.model_validate(
+        {
+            "tool_providers": [
+                {
+                    "name": "edgar-prod",
+                    "type": "edgar",
+                    "base_url": "https://efts.sec.gov",
+                    "egress_tier": 4,
+                    "allowlist": {"hosts": ["efts.sec.gov", "www.sec.gov"]},
+                    "user_agent": "LQ.AI test ops@lq.ai",
+                }
+            ]
+        }
+    )
+    adapter = build_tool_adapter(cfg.tool_providers[0])
+    assert isinstance(adapter, EdgarToolAdapter)
+
+
+@pytest.mark.unit
 def test_build_tool_adapter_courtlistener(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.providers.tool.courtlistener import CourtListenerToolAdapter
 

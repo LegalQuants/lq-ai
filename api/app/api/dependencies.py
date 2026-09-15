@@ -191,6 +191,16 @@ opt-out split."""
 _MUTATING_ROLES = frozenset({"admin", "member"})
 
 
+def is_privileged_reader(user: User) -> bool:
+    """True for callers allowed to read ANY user's ledger/gate/receipts.
+
+    The "privileged reader" set is {admin, auditor}: operator-admins
+    (``is_admin``) and the read-only cross-user ``auditor`` role. Ordinary
+    ``member``/``viewer`` users are owner-scoped and never privileged here.
+    """
+    return user.is_admin or getattr(user, "role", "member") == "auditor"
+
+
 async def get_mutating_user(user: ActiveUser) -> User:
     """``ActiveUser`` plus a role check that excludes ``viewer``.
 

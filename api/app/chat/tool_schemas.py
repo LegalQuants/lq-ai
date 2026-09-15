@@ -9,13 +9,17 @@ model picks among allowed tools and cannot reach beyond them.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any, Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.mcp.service import list_cached_tools, list_servers
+from app.research.registry import SOURCE_REGISTRY, resolve_available_sources
 from app.research.service import _resolve_provider as research_resolve_provider, get_capabilities
+
+log = logging.getLogger(__name__)
 
 MCP_NAME_PREFIX = "mcp__"
 _MCP_SEP = "__"
@@ -76,6 +80,116 @@ RESEARCH_TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
 }
 RESEARCH_OPS: frozenset[str] = frozenset(RESEARCH_TOOL_SCHEMAS)
 
+# Authority function-schema TEMPLATES (WS-E; generalized WS-E PR2a Task 3).
+# Gated on the content-source registry (app.research.registry.resolve_
+# available_sources), NOT on get_capabilities (which is CourtListener-only).
+# All are read_only.
+#
+# One pair of tools (search_authority/get_authority) serves EVERY enabled
+# authority source via a `source` argument — NOT one schema per source.
+# Property names are the union across the registered adapters' real gateway
+# contracts (GovInfo: collection/query, package_id; EDGAR: query/forms,
+# external_ref); each provider's gateway tool ignores properties it doesn't
+# recognise, so the model picks the properties relevant to the `source` it
+# chose. These templates carry the *shared* description/parameters shape;
+# `build_authority_tool_schemas` injects the per-turn `source` enum (the
+# enabled sources) — a turn with zero enabled sources gets no authority
+# tools at all.
+AUTHORITY_TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
+    "search_authority": {
+        "description": (
+            "Full-text search an authoritative source: govinfo (U.S. Code / "
+            "CFR — set 'collection' to 'USCODE' or 'CFR') or edgar (SEC "
+            "company filings — optional 'forms' filter, e.g. '10-K,8-K'). "
+            "Returns matching items with an external_ref; call get_authority "
+            "to fetch an item's full text before quoting it."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search terms, e.g. '17 USC 107 fair use'.",
+                },
+                "collection": {
+                    "type": "string",
+                    "description": "GovInfo only: collection filter, 'USCODE' or 'CFR'.",
+                },
+                "forms": {
+                    "type": "string",
+                    "description": (
+                        "EDGAR only: optional comma-separated form types, e.g. '10-K,8-K'."
+                    ),
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    "get_authority": {
+        "description": (
+            "Fetch the full text of a specific authority item (from "
+            "search_authority results) so its language can be quoted verbatim."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "package_id": {
+                    "type": "string",
+                    "description": "GovInfo only: package id, e.g. 'USCODE-2022-title17'.",
+                },
+                "external_ref": {
+                    "type": "string",
+                    "description": "EDGAR only: external_ref returned by search_authority.",
+                },
+            },
+            "required": [],
+        },
+    },
+}
+AUTHORITY_OPS = frozenset(AUTHORITY_TOOL_SCHEMAS)
+
+
+def build_authority_tool_schemas(enabled_sources: list[str]) -> list[dict[str, Any]]:
+    """Build the per-turn authority function schemas for the enabled sources.
+
+    Each op's `source` enum is scoped to the enabled sources whose registry
+    ``ops`` actually include that op (registry order preserved) — a get-only
+    source (e.g. EUR-Lex) is offered under ``get_authority`` but never under
+    ``search_authority``. An op with zero eligible sources is omitted
+    entirely. An empty ``enabled_sources`` yields ``[]`` — no authority tools
+    offered this turn.
+
+    Returns a list of ``{"name", "description", "parameters"}`` dicts (the
+    same shape :func:`assemble_allowlist` already expects from
+    ``AUTHORITY_TOOL_SCHEMAS.items()``).
+    """
+    if not enabled_sources:
+        return []
+    schemas: list[dict[str, Any]] = []
+    for op, template in AUTHORITY_TOOL_SCHEMAS.items():
+        op_sources = [
+            s
+            for s in enabled_sources
+            if (spec := SOURCE_REGISTRY.get(s)) is not None and op in spec.ops
+        ]
+        if not op_sources:
+            continue
+        source_enum = {"type": "string", "enum": op_sources}
+        properties = {"source": source_enum, **template["parameters"]["properties"]}
+        required = ["source", *template["parameters"]["required"]]
+        schemas.append(
+            {
+                "name": op,
+                "description": template["description"],
+                "parameters": {
+                    "type": "object",
+                    "properties": properties,
+                    "required": required,
+                },
+            }
+        )
+    return schemas
+
 
 def mcp_function_name(server: str, tool: str) -> str:
     """Model-visible function name for an MCP tool: ``mcp__{server}__{tool}``."""
@@ -96,7 +210,7 @@ def parse_mcp_function_name(name: str) -> tuple[str, str] | None:
 @dataclass(frozen=True)
 class ToolSpec:
     function_name: str
-    kind: Literal["research", "mcp"]
+    kind: Literal["research", "mcp", "authority"]
     provider: str
     tool: str
     read_only: bool
@@ -128,9 +242,9 @@ class ChatToolAllowlist:
 
 
 async def assemble_allowlist(
-    db: AsyncSession, *, request_id: str | None = None
+    db: AsyncSession, *, gateway: Any, request_id: str | None = None
 ) -> ChatToolAllowlist:
-    """Build the per-turn allowlist. Empty when no research/MCP is configured."""
+    """Build the per-turn allowlist. Empty when no research/MCP/authority is configured."""
     specs: dict[str, ToolSpec] = {}
 
     caps = await get_capabilities(request_id=request_id)
@@ -148,6 +262,51 @@ async def assemble_allowlist(
                 parameters=schema["parameters"],
                 description=schema["description"],
             )
+
+    # Authority ops (WS-E; registry-driven WS-E PR2a Task 3) gate on the
+    # content-source registry, NOT on get_capabilities (which is
+    # CourtListener-only).  Guarded independently: a registry/gateway hiccup
+    # must not strip research/MCP tools (PR1a lesson).
+    #
+    # "Authority sources" = registry entries whose ops include the authority
+    # ops (search_authority/get_authority) AND that are enabled in the
+    # gateway. A single search_authority/get_authority ToolSpec pair covers
+    # ALL of them; the model selects among them via the `source` argument
+    # (see build_authority_tool_schemas). `provider` on the shared ToolSpec
+    # is a best-effort default (the first enabled authority source, in
+    # registry order) — it is NOT used to dispatch the call; the real source
+    # is resolved per-call from the `source` argument in tool_loop.py.
+    try:
+        sources = await resolve_available_sources(gateway)
+        enabled_authority: list[str] = []
+        for s in sources:
+            if not getattr(s, "enabled", False):
+                continue
+            reg_spec = SOURCE_REGISTRY.get(getattr(s, "type", None) or "")
+            if reg_spec is None:
+                continue
+            if set(AUTHORITY_OPS) & set(reg_spec.ops):
+                enabled_authority.append(s.type)
+
+        authority_schemas = build_authority_tool_schemas(enabled_authority)
+        for schema in authority_schemas:
+            specs[schema["name"]] = ToolSpec(
+                function_name=schema["name"],
+                kind="authority",
+                provider=enabled_authority[0],
+                tool=schema["name"],
+                read_only=True,
+                destructive=False,
+                requires_confirmation=False,
+                parameters=schema["parameters"],
+                description=schema["description"],
+            )
+    except Exception:
+        log.warning(
+            "assemble_allowlist: authority source resolution failed — "
+            "authority tools unavailable this turn",
+            exc_info=True,
+        )
 
     for server in await list_servers(request_id=request_id):
         name = server.get("name")

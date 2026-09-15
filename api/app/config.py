@@ -21,6 +21,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LogLevel = Literal["debug", "info", "warning", "warn", "error", "critical"]
 
+# Published development default for the JWT signing secret. Refused at startup
+# outside dev mode (see ``assert_production_secrets``) so a deployment can never
+# silently ship with a public signing key.
+DEV_JWT_SECRET = "dev-jwt-secret-change-me"
+
 
 class Settings(BaseSettings):
     """Backend API configuration.
@@ -173,7 +178,7 @@ class Settings(BaseSettings):
 
     # ----- JWT (per ADR 0002 — backend owns auth) -----
     jwt_secret: str = Field(
-        default="dev-jwt-secret-change-me",
+        default=DEV_JWT_SECRET,
         description="Signing secret for JWT access and refresh tokens.",
     )
     jwt_access_token_ttl_seconds: int = Field(
@@ -470,6 +475,27 @@ def get_settings() -> Settings:
     monkeypatching environment variables.
     """
     return Settings()
+
+
+def assert_production_secrets(settings: Settings) -> None:
+    """Fail closed at startup if a known development default is used in prod.
+
+    Called from the app lifespan startup gate (``app.main.lifespan``), NOT as a
+    Settings validator — construction with the published defaults must stay
+    valid so ``test_config`` and any Settings() in tests keep working. The
+    guard fires only when the process actually starts serving.
+
+    ``jwt_secret`` signs and verifies every access/MFA token; shipping the
+    published default (``DEV_JWT_SECRET``) lets an attacker forge a token for
+    any user. Refuse to boot unless the operator sets a real secret, or opts
+    into ``LQ_AI_DEV_MODE`` for local development.
+    """
+    if settings.jwt_secret == DEV_JWT_SECRET and not settings.lq_ai_dev_mode:
+        raise RuntimeError(
+            "Refusing to start: JWT_SECRET is the published development default "
+            f"({DEV_JWT_SECRET!r}). Set JWT_SECRET to a strong random secret, or "
+            "set LQ_AI_DEV_MODE=true for local development."
+        )
 
 
 def is_allowed_return_url(url: str, settings: Settings) -> bool:

@@ -125,6 +125,86 @@ async def test_ledger_cross_user_404(client, db_session, seeded):
 
 
 @pytest.mark.asyncio
+async def test_ledger_auditor_can_read_cross_user_and_is_audited(client, db_session, seeded):
+    owner, chat, _msg = seeded
+    auditor = User(
+        email=f"aud-{uuid.uuid4().hex[:8]}@example.com",
+        hashed_password=hash_password("pw"),
+        role="auditor",
+    )
+    db_session.add(auditor)
+    await db_session.flush()
+
+    r = await client.get(f"/api/v1/chats/{chat.id}/ledger", headers=_auth(auditor))
+    assert r.status_code == 200
+    assert "entries" in r.json()
+
+    from sqlalchemy import select as _select
+
+    from app.models.audit import AuditLog
+
+    row = (
+        (
+            await db_session.execute(
+                _select(AuditLog).where(AuditLog.action == "auditor.ledger_viewed")
+            )
+        )
+        .scalars()
+        .one()
+    )
+    assert row.user_id == auditor.id
+    assert row.details["viewed_user_id"] == str(owner.id)
+
+
+@pytest.mark.asyncio
+async def test_ledger_member_cross_user_still_404_and_not_audited(client, db_session, seeded):
+    _owner, chat, _msg = seeded
+    other = User(
+        email=f"other2-{uuid.uuid4().hex[:8]}@example.com",
+        hashed_password=hash_password("pw"),
+        role="member",
+    )
+    db_session.add(other)
+    await db_session.flush()
+
+    r = await client.get(f"/api/v1/chats/{chat.id}/ledger", headers=_auth(other))
+    assert r.status_code == 404
+
+    from sqlalchemy import func, select as _select
+
+    from app.models.audit import AuditLog
+
+    count = (
+        await db_session.execute(
+            _select(func.count())
+            .select_from(AuditLog)
+            .where(AuditLog.action == "auditor.ledger_viewed")
+        )
+    ).scalar_one()
+    assert count == 0
+
+
+@pytest.mark.asyncio
+async def test_ledger_owner_read_not_audited(client, db_session, seeded):
+    owner, chat, _msg = seeded
+    r = await client.get(f"/api/v1/chats/{chat.id}/ledger", headers=_auth(owner))
+    assert r.status_code == 200
+
+    from sqlalchemy import func, select as _select
+
+    from app.models.audit import AuditLog
+
+    count = (
+        await db_session.execute(
+            _select(func.count())
+            .select_from(AuditLog)
+            .where(AuditLog.action == "auditor.ledger_viewed")
+        )
+    ).scalar_one()
+    assert count == 0
+
+
+@pytest.mark.asyncio
 async def test_ledger_non_uuid_400(client, seeded):
     # _validate_chat_id raises ValidationError (HTTP 400), matching the pattern
     # used by all other chat endpoints (e.g. send_message, get_citations).

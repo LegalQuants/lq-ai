@@ -178,6 +178,15 @@ providers:
     # local, air-gap-capable) backbone — Tier 1 by every authoritative
     # reference (PRD §1.5.2: "Local-only inference (air-gap-capable)").
     # See B6 partial in M1-PROGRESS for the adapter that wires this up.
+    #
+    # NOTE (LLM egress policy, GW-04): a plaintext ``http://`` base_url is
+    # accepted only for loopback/private/local hosts (localhost, RFC-1918
+    # ranges, host.docker.internal, in-Compose service names). A base_url
+    # that violates the policy is FATAL AT STARTUP — the gateway refuses to
+    # boot rather than silently skip the provider, because a skipped local
+    # primary would let the router fall through to a cloud fallback the
+    # operator did not choose. If startup fails naming this provider, fix
+    # the base_url (most often a mistyped OLLAMA_BASE_URL).
     base_url: ${OLLAMA_BASE_URL:-http://ollama:11434}
     api_key_env: ''  # Ollama doesn't require an API key
     tier: 1  # Fully local; no data leaves the deployment
@@ -203,6 +212,9 @@ providers:
 # (case-law APIs, MCP servers). Distinct from inference `providers:` above.
 # Every entry is SSRF/allowlist-guarded, tier-tagged, rate-limited, and
 # written to `tool_egress_log`. Uncomment and configure to enable.
+#
+# Runtime alternative: enable these from the app (Settings → Research sources)
+# or POST /api/v1/admin/tool-providers — no YAML edit or restart needed.
 #
 # tool_providers:
 #   - name: courtlistener-prod
@@ -230,6 +242,32 @@ providers:
 #     # for future cost-tracking dashboards; omit or set to 0 for free sources:
 #     # cost_per_call: 0.0
 #     # cost_per_unit: 0.0
+#
+#   - name: edgar-prod
+#     type: edgar                  # shipped in WS-E PR2a; uncomment to enable
+#     base_url: https://efts.sec.gov          # full-text search host; get_authority reaches www.sec.gov
+#     user_agent: "YourOrg legal-ops@yourorg.example"   # SEC fair-access policy — REQUIRED, no API key
+#     egress_tier: 4               # public filing data (ADR 0014 D4)
+#     allowlist:
+#       hosts: [efts.sec.gov, www.sec.gov]
+#     rate_limit:
+#       requests_per_minute: 300   # SEC allows ~10 req/s
+#     anonymize_outbound: false    # public filings; skip_anonymization=True on results
+#     # (no api_key_env — EDGAR needs only a User-Agent)
+#     # (no cost_per_call — free source; R4 stays a no-op)
+#
+#   - name: eurlex-prod
+#     type: eurlex                 # shipped in WS-E PR2b; uncomment to enable
+#     base_url: https://publications.europa.eu    # EU Cellar (content-negotiation by CELEX)
+#     user_agent: "YourOrg legal-ops@yourorg.example"   # descriptive UA — REQUIRED, no API key
+#     egress_tier: 4               # public EU legal text (ADR 0014 D4)
+#     allowlist:
+#       hosts: [publications.europa.eu]
+#     rate_limit:
+#       requests_per_minute: 60
+#     anonymize_outbound: false    # public legal text; skip_anonymization=True on results
+#     # (no api_key_env — EUR-Lex Cellar needs only a User-Agent)
+#     # (no cost_per_call — free source; R4 stays a no-op)
 
 # ============================================================
 # MODEL ALIASES — friendly names → specific provider/model

@@ -175,3 +175,142 @@ async def test_get_sources_endpoint(
         f"/api/v1/chats/{chat.id}/messages/{uuid.uuid4()}/sources", headers=headers
     )
     assert resp404.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_sources_auditor_can_read_cross_user_and_is_audited(
+    client: AsyncClient, db_session: AsyncSession, owner_user: User
+):
+    chat, msg = await _assistant_message(db_session, owner_user)
+    db_session.add(
+        MessageToolSource(
+            message_id=msg.id,
+            source_kind="caselaw",
+            label="Roe v. Wade",
+            subtitle="scotus · 1973-01-22",
+            url="https://www.courtlistener.com/opinion/42/",
+            external_ref="42",
+            provider="courtlistener",
+            tool="search_case_law",
+        )
+    )
+    await db_session.flush()
+
+    auditor = User(
+        email=f"aud-{uuid.uuid4().hex[:8]}@example.com",
+        hashed_password=hash_password("correct-horse-battery-staple"),
+        is_admin=False,
+        role="auditor",
+        mfa_enabled=False,
+        must_change_password=False,
+    )
+    db_session.add(auditor)
+    await db_session.flush()
+    token = create_access_token(user_id=auditor.id, email=auditor.email, is_admin=False)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = await client.get(f"/api/v1/chats/{chat.id}/messages/{msg.id}/sources", headers=headers)
+    assert resp.status_code == 200
+    assert len(resp.json()) == 1
+
+    from app.models.audit import AuditLog
+
+    row = (
+        (
+            await db_session.execute(
+                select(AuditLog).where(AuditLog.action == "auditor.sources_viewed")
+            )
+        )
+        .scalars()
+        .one()
+    )
+    assert row.user_id == auditor.id
+    assert row.details["viewed_user_id"] == str(owner_user.id)
+
+
+@pytest.mark.asyncio
+async def test_get_sources_member_cross_user_still_404_and_not_audited(
+    client: AsyncClient, db_session: AsyncSession, owner_user: User
+):
+    chat, msg = await _assistant_message(db_session, owner_user)
+    db_session.add(
+        MessageToolSource(
+            message_id=msg.id,
+            source_kind="caselaw",
+            label="Roe v. Wade",
+            subtitle="scotus · 1973-01-22",
+            url="https://www.courtlistener.com/opinion/42/",
+            external_ref="42",
+            provider="courtlistener",
+            tool="search_case_law",
+        )
+    )
+    await db_session.flush()
+
+    other = User(
+        email=f"other-{uuid.uuid4().hex[:8]}@example.com",
+        hashed_password=hash_password("correct-horse-battery-staple"),
+        is_admin=False,
+        role="member",
+        mfa_enabled=False,
+        must_change_password=False,
+    )
+    db_session.add(other)
+    await db_session.flush()
+    token = create_access_token(user_id=other.id, email=other.email, is_admin=False)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = await client.get(f"/api/v1/chats/{chat.id}/messages/{msg.id}/sources", headers=headers)
+    assert resp.status_code == 404
+
+    from sqlalchemy import func
+
+    from app.models.audit import AuditLog
+
+    count = (
+        await db_session.execute(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(AuditLog.action == "auditor.sources_viewed")
+        )
+    ).scalar_one()
+    assert count == 0
+
+
+@pytest.mark.asyncio
+async def test_get_sources_owner_read_not_audited(
+    client: AsyncClient, db_session: AsyncSession, owner_user: User
+):
+    chat, msg = await _assistant_message(db_session, owner_user)
+    db_session.add(
+        MessageToolSource(
+            message_id=msg.id,
+            source_kind="caselaw",
+            label="Roe v. Wade",
+            subtitle="scotus · 1973-01-22",
+            url="https://www.courtlistener.com/opinion/42/",
+            external_ref="42",
+            provider="courtlistener",
+            tool="search_case_law",
+        )
+    )
+    await db_session.flush()
+
+    token = create_access_token(user_id=owner_user.id, email=owner_user.email, is_admin=False)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = await client.get(f"/api/v1/chats/{chat.id}/messages/{msg.id}/sources", headers=headers)
+    assert resp.status_code == 200
+
+    from sqlalchemy import func
+
+    from app.models.audit import AuditLog
+
+    count = (
+        await db_session.execute(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(AuditLog.action == "auditor.sources_viewed")
+        )
+    ).scalar_one()
+    assert count == 0

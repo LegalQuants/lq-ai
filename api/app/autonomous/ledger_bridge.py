@@ -518,7 +518,14 @@ async def build_session_ledger(
                         quote=c["quote"],
                         source=ev.get("source") or "govinfo",
                         external_ref=ev["ref"],
-                        content_kind=ev.get("content_kind") or "statute",
+                        # Carry the real content_kind threaded onto the evidence
+                        # item by collect_evidence (WS-E PR1b: statute/regulation;
+                        # PR2a: sec_filing). Only fall back to "unknown" when it
+                        # is genuinely absent (e.g. a legacy evidence dict
+                        # predating PR1b) — NEVER assume "statute", which would
+                        # be a confident mislabel for a non-govinfo source
+                        # (anti-overclaiming, per PRD §1.3).
+                        content_kind=ev.get("content_kind") or "unknown",
                         carried_text=ev.get("content") or "",
                     )
                 )

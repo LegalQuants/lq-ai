@@ -11,21 +11,20 @@
 		<h1 class="lq-text-page-h">Learn</h1>
 		<div class="lq-learn-intro">
 			<p class="lq-text-body lq-learn-intro-p">
-				A guided introduction to LQ.AI for everyone — practicing attorneys curious about
-				what the project does, security and procurement teams evaluating it for deployment,
-				engineers exploring the architecture, and anyone considering contributing a skill.
-				The three sections below address a different question: what it does, how it works,
-				and how to contribute.
+				A guided introduction to LQ.AI for everyone — practicing attorneys curious about what the
+				project does, security and procurement teams evaluating it for deployment, engineers
+				exploring the architecture, and anyone considering contributing a skill. The three sections
+				below address a different question: what it does, how it works, and how to contribute.
 			</p>
 			<p class="lq-text-body lq-learn-intro-p">
-				Every claim on these pages is backed by a path to verify it in the codebase. If
-				the docs say something the code does not do, the code is canonical — please
+				Every claim on these pages is backed by a path to verify it in the codebase. If the docs say
+				something the code does not do, the code is canonical — please
 				<a
 					href="https://github.com/LegalQuants/lq-ai/issues"
 					class="lq-link"
 					target="_blank"
-					rel="noopener noreferrer"
-				>open an issue</a>.
+					rel="noopener noreferrer">open an issue</a
+				>.
 			</p>
 		</div>
 	</header>
@@ -44,8 +43,8 @@
 			<span class="lq-learn-card-icon" aria-hidden="true">🔍</span>
 			<h2 class="lq-learn-card-title">How It Works</h2>
 			<p class="lq-learn-card-desc">
-				Interactive playgrounds that show how the system fits together. Click any
-				visualization to verify claims against the source.
+				Interactive playgrounds that show how the system fits together. Click any visualization to
+				verify claims against the source.
 			</p>
 			<span class="lq-learn-card-cta">Explore →</span>
 		</a>
@@ -55,6 +54,16 @@
 			<h2 class="lq-learn-card-title">How to Build</h2>
 			<p class="lq-learn-card-desc">
 				How to contribute a skill, a mini-PRD, or a bug fix. What's open right now.
+			</p>
+			<span class="lq-learn-card-cta">Explore →</span>
+		</a>
+
+		<a class="lq-learn-card" href="/lq-ai/learn/compare" data-testid="lq-ai-learn-card-compare">
+			<span class="lq-learn-card-icon" aria-hidden="true">⚖️</span>
+			<h2 class="lq-learn-card-title">How It Compares</h2>
+			<p class="lq-learn-card-desc">
+				An evidence-linked, vendor-neutral comparison — every capability claim links to the code,
+				ADR, or interactive playground that proves it.
 			</p>
 			<span class="lq-learn-card-cta">Explore →</span>
 		</a>
@@ -110,7 +119,9 @@
 		background: var(--lq-canvas);
 		text-decoration: none;
 		color: var(--lq-text);
-		transition: border-color 0.15s ease, box-shadow 0.15s ease;
+		transition:
+			border-color 0.15s ease,
+			box-shadow 0.15s ease;
 	}
 
 	.lq-learn-card:hover {

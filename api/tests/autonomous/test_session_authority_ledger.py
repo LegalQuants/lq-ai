@@ -23,11 +23,13 @@ import uuid
 from collections.abc import AsyncIterator
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.autonomous.ledger_bridge import build_session_ledger
 from app.citation.authority import store_authority_text
 from app.models.autonomous import AutonomousSession
+from app.models.message_authority_citation import MessageAuthorityCitation
 from app.models.user import User
 from app.security import hash_password
 
@@ -194,3 +196,144 @@ async def test_cache_miss_falls_back_to_carried_content(
         gateway=None,
     )
     assert out is not None and out["pass_count"] >= 1
+
+
+# ---------------------------------------------------------------------------
+# DE-371: autonomous carry-through — EDGAR evidence must keep content_kind
+# "sec_filing", not fall back to build_authority_citations' "statute" default.
+# ---------------------------------------------------------------------------
+
+_EDGAR_BODY = (
+    "Item 1A. Risk Factors. Our business is subject to numerous risks and "
+    "uncertainties, including those highlighted in this Annual Report on Form 10-K."
+)
+
+
+def _edgar_evidence() -> list[dict]:  # type: ignore[type-arg]
+    """Mirrors dataclasses.asdict(EvidenceItem(...)) for an EDGAR authority hit:
+    source="edgar", content_kind="sec_filing" (both always set by EdgarAdapter,
+    per app/research/adapters.py)."""
+    return [
+        {
+            "n": 1,
+            "kind": "authority",
+            "ref": "0000320193-24-000123",
+            "content": _EDGAR_BODY,
+            "display": "Apple Inc. 10-K (sec_filing)",
+            "source": "edgar",
+            "content_kind": "sec_filing",
+        }
+    ]
+
+
+async def test_autonomous_edgar_authority_content_kind_not_forced_to_statute(
+    db_session: AsyncSession,
+    fake_storage: dict[str, bytes],
+) -> None:
+    """DE-371: an EDGAR evidence item carries content_kind="sec_filing" end to
+    end — build_session_ledger/build_authority_citations must NOT default it
+    to "statute" when the evidence explicitly supplies a different kind."""
+    sess = await _make_session(db_session)
+    await store_authority_text(
+        db_session,
+        source_type="edgar",
+        external_ref="0000320193-24-000123",
+        text=_EDGAR_BODY,
+    )
+    findings = [
+        {
+            "text": "The filing discloses risk factors.",
+            "citations": [{"quote": "Item 1A. Risk Factors", "source": 1}],
+        }
+    ]
+    out = await build_session_ledger(
+        db_session,
+        session=sess,
+        work_product_text="… Item 1A. Risk Factors …",
+        findings=findings,
+        evidence=_edgar_evidence(),
+        gateway=None,
+    )
+    assert out is not None and out["pass_count"] >= 1
+
+    rows = (
+        (
+            await db_session.execute(
+                select(MessageAuthorityCitation).where(
+                    MessageAuthorityCitation.external_ref == "0000320193-24-000123"
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0].content_kind == "sec_filing"
+    assert rows[0].source_type == "edgar"
+
+
+async def test_autonomous_missing_content_kind_falls_back_to_unknown_not_statute(
+    db_session: AsyncSession,
+    fake_storage: dict[str, bytes],
+) -> None:
+    """DE-371: when an evidence dict genuinely lacks a content_kind (e.g. a
+    stale/legacy session predating PR1b's content_kind threading), the
+    ledger bridge must NOT confidently mislabel it "statute" — that is an
+    overclaim for a source (edgar) that is never a statute. It should fall
+    back to "unknown" (honest non-claim), matching how the rest of the
+    codebase signals an unrecognised content kind (see
+    app.research.adapters._content_kind_from_id).
+
+    This is the actual hardcoded-default bug: build_session_ledger's
+    ``ev.get("content_kind") or "statute"`` (ledger_bridge.py, in the
+    authority branch of the evidence-splitting loop) forces "statute" for
+    ANY evidence item missing the key, regardless of source.
+    """
+    sess = await _make_session(db_session)
+    await store_authority_text(
+        db_session,
+        source_type="edgar",
+        external_ref="0000320193-24-000123",
+        text=_EDGAR_BODY,
+    )
+    findings = [
+        {
+            "text": "The filing discloses risk factors.",
+            "citations": [{"quote": "Item 1A. Risk Factors", "source": 1}],
+        }
+    ]
+    evidence = [
+        {
+            "n": 1,
+            "kind": "authority",
+            "ref": "0000320193-24-000123",
+            "content": _EDGAR_BODY,
+            "display": "Apple Inc. 10-K",
+            "source": "edgar",
+            # content_kind deliberately absent.
+        }
+    ]
+    out = await build_session_ledger(
+        db_session,
+        session=sess,
+        work_product_text="… Item 1A. Risk Factors …",
+        findings=findings,
+        evidence=evidence,
+        gateway=None,
+    )
+    assert out is not None and out["pass_count"] >= 1
+
+    rows = (
+        (
+            await db_session.execute(
+                select(MessageAuthorityCitation).where(
+                    MessageAuthorityCitation.external_ref == "0000320193-24-000123"
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0].content_kind == "unknown"
+    assert rows[0].content_kind != "statute"

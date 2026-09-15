@@ -49,7 +49,12 @@ from app.config_writer import (
 )
 from app.provider_keys import apply_provider_key, list_provider_keys, revoke_provider_key
 from app.router import derive_routed_inference_tier
-from app.secrets import MASTER_KEY_ENV, ProviderKeyResolver
+from app.secrets import MASTER_KEY_ENV, ProviderKeyResolver, encrypt_value
+from app.tool_provider_keys import (
+    apply_tool_provider,
+    list_tool_provider_status,
+    remove_tool_provider_entry,
+)
 
 require_gateway_key = make_require_gateway_key()
 
@@ -145,22 +150,23 @@ def _alias_to_payload(name: str, alias: ModelAliasConfig) -> dict[str, Any]:
 def _sanitized_config_payload(config: GatewayConfig) -> dict[str, Any]:
     """Build the GET /admin/v1/config payload — secrets stripped.
 
-    What we expose: provider entries (without sensitive fields like
-    ``api_key_env`` *values* — only the variable *name* is safe to
-    show), model_aliases, inference_tiers, tier_policy, cost_tracking
-    rates, anonymization (M2 settings), gateway_auth (without the
-    secret).
+    What we expose: provider and tool_provider entries (without sensitive
+    fields like ``api_key_env`` *values* — only the variable *name* is safe
+    to show), model_aliases, inference_tiers, tier_policy, cost_tracking
+    rates, anonymization (M2 settings), gateway_auth (without the secret).
 
-    What we strip: nothing today — the schema only stores env-var
-    *names*, never values. We keep this helper as the single
-    chokepoint so future fields that *do* hold secrets get scrubbed
-    here in one place.
+    What we strip: ``api_key_encrypted`` from every ``providers`` and
+    ``tool_providers`` entry (D7c). The runtime BYOK/tool-provider admin
+    APIs (Donna #7, Donna #3) write Fernet ciphertext into that field; it is
+    never plaintext, but ciphertext is still key material an admin-config
+    read should not echo. This is the single chokepoint for that strip.
     """
 
     payload = config.model_dump(mode="json")
-    # Defense-in-depth: the schema doesn't put real secrets in this
-    # struct (env-var names only), but if a future field ever does,
-    # stripping it here is the right place. Today this is a no-op.
+    for key in ("providers", "tool_providers"):
+        for entry in payload.get(key, []) or []:
+            if isinstance(entry, dict):
+                entry.pop("api_key_encrypted", None)
     return payload
 
 
@@ -218,6 +224,33 @@ class ProviderKeyRotateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     api_key: str = Field(min_length=1)
+
+
+class ToolProviderSetRequest(BaseModel):
+    """``POST /admin/v1/tool-providers`` body (Donna #3, Task 2).
+
+    Only ``{type, api_key?}`` — base_url/allowlist/egress_tier come from the
+    gateway-owned default registry (``TOOL_PROVIDER_DEFAULTS``), never from
+    the api, so this endpoint can never be used to point egress at an
+    arbitrary host.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    type: str = Field(min_length=1)
+    api_key: str | None = Field(default=None, min_length=1)
+
+
+class ToolProviderPatchRequest(BaseModel):
+    """``PATCH /admin/v1/tool-providers/{type}`` body (Donna #3, Task 2).
+
+    ``enabled: false`` routes to the remove path (D3: there is no
+    present-but-disabled state for a tool provider); an ``api_key`` rotates
+    the runtime key and (re-)enables the entry.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    api_key: str | None = Field(default=None, min_length=1)
+    enabled: bool | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -708,3 +741,167 @@ async def revoke_provider_key_endpoint(
                 details={"provider": provider},
             )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# Donna #3, Task 2: runtime tool-provider (authority-source) management
+# ---------------------------------------------------------------------------
+
+
+@router.get("/tool-providers")
+async def list_tool_providers_endpoint(request: Request) -> dict[str, Any]:
+    """List the secret-safe status of every registered authority-source type.
+
+    One row per key in ``TOOL_PROVIDER_DEFAULTS`` (courtlistener, govinfo,
+    edgar, eurlex) even when not yet configured on disk. Each row is
+    ``{type, name, enabled, has_key, key_required, egress_tier, source}`` —
+    NEVER the ciphertext or a key fragment.
+    """
+
+    config = _config(request)
+    rows = list_tool_provider_status(config, request.app.state.tool_adapters)
+    return {"tool_providers": rows}
+
+
+async def _apply_tool_provider_request(
+    request: Request,
+    *,
+    provider_type: str,
+    plaintext: str | None,
+    enabled: bool,
+) -> dict[str, Any] | JSONResponse:
+    """Shared apply path for the POST (enable) and PATCH (rotate) endpoints.
+
+    Enforces the master-key precondition (400) only when a plaintext key was
+    supplied — enabling a keyless provider (edgar, eurlex) never requires a
+    master key. Holds the tool-provider serialization lock across the whole
+    write -> reload -> swap sequence and maps service-layer errors to the
+    canonical ``GatewayError`` envelope.
+    """
+
+    encrypted_token: str | None = None
+    if plaintext is not None:
+        master_key = _resolved_master_key()
+        if not master_key:
+            return _gateway_error(
+                code="failed_precondition",
+                message=f"runtime key storage requires {MASTER_KEY_ENV} to be set",
+                http_status=status.HTTP_400_BAD_REQUEST,
+                details={"type": provider_type},
+            )
+        encrypted_token = encrypt_value(plaintext, master_key=master_key)
+
+    holder = _holder(request)
+    async with request.app.state.tool_provider_key_lock:
+        try:
+            return await apply_tool_provider(
+                holder=holder,
+                app_state=request.app.state,
+                provider_type=provider_type,
+                encrypted_token=encrypted_token,
+                enabled=enabled,
+            )
+        except ProviderKeyMutationError as exc:
+            return _gateway_error(
+                code=_provider_key_error_code(exc),
+                message=str(exc),
+                http_status=exc.http_status,
+                details={"type": provider_type},
+            )
+        except ConfigReloadError as exc:
+            return _gateway_error(
+                code="invalid_request",
+                message=str(exc),
+                http_status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                details={"type": provider_type},
+            )
+
+
+@router.post("/tool-providers", response_model=None)
+async def enable_tool_provider(
+    request: Request,
+    body: ToolProviderSetRequest,
+) -> dict[str, Any] | JSONResponse:
+    """Enable a registered authority source and hot-apply its adapter.
+
+    ``enabled`` is always ``True`` here (D3): the only callers of this path
+    are "enable" and "rotate", both of which mean "on". base_url/allowlist
+    come from ``TOOL_PROVIDER_DEFAULTS``, never from the request body. 400 if
+    an ``api_key`` was supplied but no master key is set; 404 for an unknown
+    ``type``.
+    """
+
+    return await _apply_tool_provider_request(
+        request, provider_type=body.type, plaintext=body.api_key, enabled=True
+    )
+
+
+async def _delete_tool_provider(
+    request: Request,
+    *,
+    provider_type: str,
+) -> Response | JSONResponse:
+    holder = _holder(request)
+    async with request.app.state.tool_provider_key_lock:
+        try:
+            await remove_tool_provider_entry(
+                holder=holder,
+                app_state=request.app.state,
+                provider_type=provider_type,
+            )
+        except ProviderKeyMutationError as exc:
+            return _gateway_error(
+                code=_provider_key_error_code(exc),
+                message=str(exc),
+                http_status=exc.http_status,
+                details={"type": provider_type},
+            )
+        except ConfigReloadError as exc:
+            return _gateway_error(
+                code="invalid_request",
+                message=str(exc),
+                http_status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                details={"type": provider_type},
+            )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.patch("/tool-providers/{provider_type}", response_model=None)
+async def patch_tool_provider(
+    request: Request,
+    provider_type: str,
+    body: ToolProviderPatchRequest,
+) -> dict[str, Any] | Response:
+    """Rotate a key and/or toggle a registered authority source.
+
+    ``enabled: false`` routes to the same remove path as DELETE (D3: disable
+    == remove entry — there is no present-but-disabled state). Any other
+    body (an ``api_key``, or nothing) applies/rotates and enables. 404 for an
+    unknown ``type``.
+    """
+
+    if body.enabled is False:
+        return await _delete_tool_provider(request, provider_type=provider_type)
+    return await _apply_tool_provider_request(
+        request, provider_type=provider_type, plaintext=body.api_key, enabled=True
+    )
+
+
+@router.delete(
+    "/tool-providers/{provider_type}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+async def disable_tool_provider(
+    request: Request,
+    provider_type: str,
+) -> Response:
+    """Remove a registered authority source and retire its live adapter.
+
+    404 if no entry of that type exists; 409 if the matched entry is
+    env-configured (an operator's ``gateway.yaml`` entry, not runtime-owned).
+    204 on success (per the CLAUDE.md DELETE-204 recipe:
+    ``response_class=Response`` + an explicit empty ``Response`` return).
+    """
+
+    return await _delete_tool_provider(request, provider_type=provider_type)

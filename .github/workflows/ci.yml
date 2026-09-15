@@ -12,6 +12,10 @@ name: CI
 #   - Cypress E2E (heavier; needs a stack-up step + LLM provider keys)
 #   - Coverage gates (no-decrease enforcement)
 #   - Dependency-license check (likely Wave F polish)
+#
+# Runtime boot validation (full compose build + up --wait + soak) lives in
+# stack-smoke.yml and runs on dependency-manifest PRs, pushes to main, and
+# manual dispatch — see issue #283.
 
 on:
   pull_request:
@@ -36,16 +40,23 @@ jobs:
         working-directory: web
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: web/package-lock.json
 
       - name: Install dependencies
+        # Cypress ships a large binary fetched from download.cypress.io on
+        # postinstall. This job runs svelte-check and Vitest only, and no
+        # workflow in the repo invokes Cypress, so the download is pure
+        # risk: a CDN blip reds a PR that never touched web/. Scoped to
+        # this step so a future Cypress job installs the binary normally.
+        env:
+          CYPRESS_INSTALL_BINARY: "0"
         run: npm ci
 
       - name: svelte-check (typecheck — LQ.AI-owned code)
@@ -66,9 +77,11 @@ jobs:
     # Image matches docker-compose.yml: pgvector/pgvector:pg16 carries the
     # pgvector extension binary that migrations require (CREATE EXTENSION
     # IF NOT EXISTS vector). Plain postgres:16-alpine omits it.
+    # Pinned by multi-arch index digest (supply-chain hardening, same as the
+    # action SHA pins); bump the digest when moving to a newer pg16 build.
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:pg16@sha256:ad2e18408bf447f62092a8a5259e7df10505c5a0360bd1a1853ac8b8b0763da2
         env:
           POSTGRES_USER: lq_ai
           POSTGRES_PASSWORD: lq_ai
@@ -87,17 +100,33 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        # No dependency cache: setup-python only caches pip's wheel cache,
+        # which the uv-managed install below never touches. A uv-cache step
+        # is a follow-up once the runner-cache action lands SHA-pinned.
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
-          cache: pip
-          cache-dependency-path: api/pyproject.toml
 
-      - name: Install api package + dev extras
-        run: pip install -e ".[dev]"
+      - name: Install uv
+        # Exact pin so local == CI lockfile semantics; keep in step with the
+        # ghcr.io/astral-sh/uv tag in the Dockerfiles (ADR 0023) and bump
+        # deliberately.
+        run: pip install uv==0.12.0
+
+      - name: uv lock --check (lockfile freshness gate — ADR 0023)
+        # Fails when pyproject.toml has drifted from the committed uv.lock,
+        # so a manifest change can never land without its re-locked tree.
+        run: uv lock --check
+
+      - name: Install api package + dev extras from the lock
+        # --frozen installs exactly the committed uv.lock. The synced venv
+        # goes on PATH so the ruff/mypy/pytest steps below use it as-is.
+        run: |
+          uv sync --frozen --extra dev
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: ruff check (api + scripts via root config)
         # The repo-root ruff.toml excludes web/ and applies to api+gateway+scripts.
@@ -123,17 +152,33 @@ jobs:
         working-directory: gateway
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        # No dependency cache: setup-python only caches pip's wheel cache,
+        # which the uv-managed install below never touches. A uv-cache step
+        # is a follow-up once the runner-cache action lands SHA-pinned.
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
-          cache: pip
-          cache-dependency-path: gateway/pyproject.toml
 
-      - name: Install gateway package + dev extras
-        run: pip install -e ".[dev]"
+      - name: Install uv
+        # Exact pin so local == CI lockfile semantics; keep in step with the
+        # ghcr.io/astral-sh/uv tag in the Dockerfiles (ADR 0023) and bump
+        # deliberately.
+        run: pip install uv==0.12.0
+
+      - name: uv lock --check (lockfile freshness gate — ADR 0023)
+        # Fails when pyproject.toml has drifted from the committed uv.lock,
+        # so a manifest change can never land without its re-locked tree.
+        run: uv lock --check
+
+      - name: Install gateway package + dev extras from the lock
+        # --frozen installs exactly the committed uv.lock. The synced venv
+        # goes on PATH so the ruff/mypy/pytest steps below use it as-is.
+        run: |
+          uv sync --frozen --extra dev
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: ruff check
         working-directory: ${{ github.workspace }}
