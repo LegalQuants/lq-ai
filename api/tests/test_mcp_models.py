@@ -17,5 +17,5 @@ def test_mcp_tool_cache_columns() -> None:
         "enabled",
         "discovered_at",
     }
-    pk = {c.name for c in MCPToolCache.__table__.primary_key.columns}
+    pk = {c.name for c in MCPToolCache.__table__.primary_key}
     assert pk == {"provider_name", "tool_name"}

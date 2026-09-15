@@ -117,7 +117,7 @@ class _FakeGateway:
 
 
 @pytest_asyncio.fixture
-async def seeded_msg(db_session: AsyncSession):
+async def seeded_msg(db_session: AsyncSession) -> tuple[uuid.UUID, uuid.UUID, int, int]:
     """Seed a user + chat + assistant message and a consulted opinion.
 
     Returns (message_id, opinion_id, cluster_id).
@@ -166,7 +166,7 @@ async def _fake_loader(db: AsyncSession, opinion_id: int) -> str:
 @pytest.mark.asyncio
 async def test_accepting_judge_writes_paraphrase_judge_row_and_gate(
     db_session: AsyncSession,
-    seeded_msg,
+    seeded_msg: tuple[uuid.UUID, uuid.UUID, int, int],
 ) -> None:
     """Paraphrased quote + accepting judge -> one paraphrase_judge row.
 
@@ -233,7 +233,7 @@ async def test_accepting_judge_writes_paraphrase_judge_row_and_gate(
 @pytest.mark.asyncio
 async def test_rejecting_judge_writes_no_row(
     db_session: AsyncSession,
-    seeded_msg,
+    seeded_msg: tuple[uuid.UUID, uuid.UUID, int, int],
 ) -> None:
     """Judge rejects all consulted opinions -> no row written, additive-only."""
     message_id, _chat_id, _opinion_id, cluster_id = seeded_msg
@@ -277,7 +277,7 @@ async def test_rejecting_judge_writes_no_row(
 @pytest.mark.asyncio
 async def test_zero_budget_prevents_judge_call(
     db_session: AsyncSession,
-    seeded_msg,
+    seeded_msg: tuple[uuid.UUID, uuid.UUID, int, int],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Budget monkeypatched to Decimal('0') -> judge mock never called, no row."""
@@ -312,7 +312,7 @@ async def test_zero_budget_prevents_judge_call(
 @pytest.mark.asyncio
 async def test_gateway_none_is_verbatim_only(
     db_session: AsyncSession,
-    seeded_msg,
+    seeded_msg: tuple[uuid.UUID, uuid.UUID, int, int],
 ) -> None:
     """gateway=None -> behaves exactly as today: no judge, no paraphrase_judge rows."""
     message_id, _chat_id, _opinion_id, cluster_id = seeded_msg

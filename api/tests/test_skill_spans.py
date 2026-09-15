@@ -7,14 +7,23 @@ but the helper is pure and importable without any infrastructure.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping
 
 import pytest
 from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from opentelemetry.util.types import AttributeValue
 
 from app.api.chats import _emit_skill_spans
+
+
+def _attrs(span: ReadableSpan) -> Mapping[str, AttributeValue]:
+    """Narrow ``span.attributes`` from ``Mapping | None`` for type-checking."""
+    assert span.attributes is not None
+    return span.attributes
+
 
 # ---------------------------------------------------------------------------
 # Shared OTel fixtures
@@ -87,13 +96,14 @@ def test_emits_one_span_per_skill(span_exporter: InMemorySpanExporter) -> None:
     assert len(spans) == 2
     assert all(s.name == "skill.execute" for s in spans)
 
-    slugs = {s.attributes["skill.slug"] for s in spans}
+    slugs = {_attrs(s)["skill.slug"] for s in spans}
     assert slugs == {"nda-review", "msa-review-saas"}
 
     for span in spans:
-        assert span.attributes["project.id"] == str(project_id)
-        assert span.attributes["project.privileged"] is False
-        assert span.attributes["chat.id"] == str(chat_id)
+        attrs = _attrs(span)
+        assert attrs["project.id"] == str(project_id)
+        assert attrs["project.privileged"] is False
+        assert attrs["chat.id"] == str(chat_id)
 
 
 @pytest.mark.unit
@@ -118,11 +128,11 @@ def test_span_carries_version_and_author_from_registry(
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
-    span = spans[0]
-    assert span.attributes["skill.slug"] == "my-skill"
-    assert span.attributes["skill.version"] == "1.2.0"
-    assert span.attributes["skill.author"] == "Jane"
-    assert span.attributes["project.privileged"] is True
+    attrs = _attrs(spans[0])
+    assert attrs["skill.slug"] == "my-skill"
+    assert attrs["skill.version"] == "1.2.0"
+    assert attrs["skill.author"] == "Jane"
+    assert attrs["project.privileged"] is True
 
 
 @pytest.mark.unit
@@ -148,11 +158,11 @@ def test_unknown_skill_omits_version_author(
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
-    span = spans[0]
-    assert span.attributes["skill.slug"] == "unknown-skill"
+    attrs = _attrs(spans[0])
+    assert attrs["skill.slug"] == "unknown-skill"
     # version and author should NOT be in attributes (None → dropped by record_attributes)
-    assert "skill.version" not in span.attributes
-    assert "skill.author" not in span.attributes
+    assert "skill.version" not in attrs
+    assert "skill.author" not in attrs
 
 
 @pytest.mark.unit
@@ -191,12 +201,12 @@ def test_none_registry_emits_span_without_version_author(
 
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
-    span = spans[0]
-    assert span.attributes["skill.slug"] == "nda-review"
-    assert "skill.version" not in span.attributes
-    assert "skill.author" not in span.attributes
-    assert span.attributes["project.id"] == str(project_id)
-    assert span.attributes["chat.id"] == str(chat_id)
+    attrs = _attrs(spans[0])
+    assert attrs["skill.slug"] == "nda-review"
+    assert "skill.version" not in attrs
+    assert "skill.author" not in attrs
+    assert attrs["project.id"] == str(project_id)
+    assert attrs["chat.id"] == str(chat_id)
 
 
 @pytest.mark.unit
@@ -214,4 +224,4 @@ def test_none_project_id_omits_project_id_attribute(
     )
     spans = span_exporter.get_finished_spans()
     assert len(spans) == 1
-    assert "project.id" not in spans[0].attributes
+    assert "project.id" not in _attrs(spans[0])

@@ -20,7 +20,7 @@ import io
 import uuid
 from decimal import Decimal
 
-from openpyxl import load_workbook
+from openpyxl import load_workbook  # type: ignore[import-untyped]
 
 from app.api.tabular import _build_csv, _build_xlsx
 from app.schemas.tabular import (

@@ -11,7 +11,7 @@ Covers:
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 
 import pytest
 import pytest_asyncio
@@ -26,6 +26,7 @@ from app.models.autonomous import AutonomousSession
 from app.models.document import DocumentChunk
 from app.models.user import User
 from app.security import create_access_token, hash_password
+from tests.autonomous.conftest import KbOneFile
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
@@ -35,7 +36,7 @@ pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 # ---------------------------------------------------------------------------
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -103,7 +104,7 @@ def _bearer_for(user: User) -> str:
 
 async def _seed_session_with_ledger(
     db_session: AsyncSession,
-    kb_with_one_indexed_file,
+    kb_with_one_indexed_file: KbOneFile,
     *,
     owner: User,
 ) -> AutonomousSession:
@@ -152,7 +153,7 @@ async def _seed_session_with_ledger(
 async def test_session_ledger_endpoint_returns_entries(
     db_session: AsyncSession,
     client: AsyncClient,
-    kb_with_one_indexed_file,
+    kb_with_one_indexed_file: KbOneFile,
     owner_user: User,
 ) -> None:
     """200 + entries + gate when the session has a built ledger."""
@@ -227,7 +228,7 @@ async def test_session_ledger_endpoint_cross_user_returns_404(
 async def test_session_ledger_endpoint_auditor_cross_user_returns_200_and_audits(
     db_session: AsyncSession,
     client: AsyncClient,
-    kb_with_one_indexed_file,
+    kb_with_one_indexed_file: KbOneFile,
     owner_user: User,
     auditor_user: User,
 ) -> None:
@@ -260,13 +261,14 @@ async def test_session_ledger_endpoint_auditor_cross_user_returns_200_and_audits
     assert row.user_id == auditor_user.id
     assert row.resource_type == "autonomous_session"
     assert row.resource_id == str(sess.id)
+    assert row.details is not None
     assert row.details["viewed_user_id"] == str(owner_user.id)
 
 
 async def test_session_ledger_endpoint_owner_read_not_audited(
     db_session: AsyncSession,
     client: AsyncClient,
-    kb_with_one_indexed_file,
+    kb_with_one_indexed_file: KbOneFile,
     owner_user: User,
 ) -> None:
     """An owner reading their own session ledger writes no audit_log row."""

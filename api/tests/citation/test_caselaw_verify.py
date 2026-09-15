@@ -10,21 +10,23 @@ from app.citation.verification import verify
 OPINION = "Before the quote. The implied covenant of good faith applies here. After."
 
 
-def test_locate_passage_found():
+def test_locate_passage_found() -> None:
     loc = locate_passage("The implied covenant of good faith applies here.", OPINION)
     assert loc is not None
     start, end = loc
     assert OPINION[start:end] == "The implied covenant of good faith applies here."
 
 
-def test_locate_passage_absent_returns_none():
+def test_locate_passage_absent_returns_none() -> None:
     assert locate_passage("a sentence that is not in the opinion", OPINION) is None
 
 
 @pytest.mark.asyncio
-async def test_verify_exact_match_against_opinion():
+async def test_verify_exact_match_against_opinion() -> None:
     passage = "The implied covenant of good faith applies here."
-    start, end = locate_passage(passage, OPINION)
+    loc = locate_passage(passage, OPINION)
+    assert loc is not None
+    start, end = loc
     target = opinion_target(opinion_id=777, text=OPINION)
     candidate = _CaselawCandidate(
         source_offset_start=start,
@@ -38,7 +40,7 @@ async def test_verify_exact_match_against_opinion():
 
 
 @pytest.mark.asyncio
-async def test_invented_quote_not_verified():
+async def test_invented_quote_not_verified() -> None:
     target = opinion_target(opinion_id=777, text=OPINION)
     candidate = _CaselawCandidate(
         source_offset_start=0,

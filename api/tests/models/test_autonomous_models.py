@@ -119,7 +119,7 @@ async def test_session_custom_brake_knobs_round_trip(db_session: AsyncSession) -
 @pytest.mark.integration
 async def test_session_requires_user_id(db_session: AsyncSession) -> None:
     """user_id is NOT NULL — per-user isolation is enforced at the column."""
-    sess = AutonomousSession(user_id=None, trigger_kind="manual")  # type: ignore[arg-type]
+    sess = AutonomousSession(user_id=None, trigger_kind="manual")
     db_session.add(sess)
     with pytest.raises(IntegrityError):
         await db_session.flush()
@@ -267,7 +267,7 @@ async def test_schedule_round_trip(db_session: AsyncSession) -> None:
 
 @pytest.mark.integration
 async def test_schedule_requires_user_id(db_session: AsyncSession) -> None:
-    sched = AutonomousSchedule(user_id=None, cron_expr="0 2 * * *")  # type: ignore[arg-type]
+    sched = AutonomousSchedule(user_id=None, cron_expr="0 2 * * *")
     db_session.add(sched)
     with pytest.raises(IntegrityError):
         await db_session.flush()
@@ -313,7 +313,7 @@ async def test_watch_round_trip(db_session: AsyncSession) -> None:
 async def test_watch_requires_user_id(db_session: AsyncSession) -> None:
     user = await _make_user(db_session)
     kb = await _make_kb(db_session, owner=user)
-    watch = AutonomousWatch(user_id=None, knowledge_base_id=kb.id)  # type: ignore[arg-type]
+    watch = AutonomousWatch(user_id=None, knowledge_base_id=kb.id)
     db_session.add(watch)
     with pytest.raises(IntegrityError):
         await db_session.flush()
@@ -322,7 +322,7 @@ async def test_watch_requires_user_id(db_session: AsyncSession) -> None:
 @pytest.mark.integration
 async def test_watch_requires_knowledge_base_id(db_session: AsyncSession) -> None:
     user = await _make_user(db_session)
-    watch = AutonomousWatch(user_id=user.id, knowledge_base_id=None)  # type: ignore[arg-type]
+    watch = AutonomousWatch(user_id=user.id, knowledge_base_id=None)
     db_session.add(watch)
     with pytest.raises(IntegrityError):
         await db_session.flush()
@@ -388,7 +388,7 @@ async def test_memory_source_session_fk(db_session: AsyncSession) -> None:
 
 @pytest.mark.integration
 async def test_memory_requires_user_id(db_session: AsyncSession) -> None:
-    note = AutonomousMemory(user_id=None, state="proposed", category="x", content="y")  # type: ignore[arg-type]
+    note = AutonomousMemory(user_id=None, state="proposed", category="x", content="y")
     db_session.add(note)
     with pytest.raises(IntegrityError):
         await db_session.flush()
@@ -418,7 +418,7 @@ async def test_precedent_round_trip(db_session: AsyncSession) -> None:
 
 @pytest.mark.integration
 async def test_precedent_requires_user_id(db_session: AsyncSession) -> None:
-    entry = PrecedentEntry(user_id=None, pattern_kind="x", summary="y")  # type: ignore[arg-type]
+    entry = PrecedentEntry(user_id=None, pattern_kind="x", summary="y")
     db_session.add(entry)
     with pytest.raises(IntegrityError):
         await db_session.flush()

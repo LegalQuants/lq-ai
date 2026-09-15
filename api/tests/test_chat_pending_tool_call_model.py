@@ -105,7 +105,7 @@ def test_chat_pending_tool_call_columns() -> None:
 @pytest.mark.unit
 def test_chat_pending_tool_call_pk() -> None:
     """PK is 'id' only (single UUID column)."""
-    pk = {c.name for c in ChatPendingToolCall.__table__.primary_key.columns}
+    pk = {c.name for c in ChatPendingToolCall.__table__.primary_key}
     assert pk == {"id"}
 
 

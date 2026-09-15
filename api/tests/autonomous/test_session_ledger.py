@@ -13,6 +13,7 @@ the terminal session status + audit row commiteable.
 
 import json
 import uuid
+from typing import Any
 
 import pytest
 from sqlalchemy import select
@@ -20,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.autonomous.ledger_bridge import build_session_ledger
 from app.autonomous.nodes import make_delivery_node
+from app.autonomous.state import AutonomousSessionState
 from app.models.audit import AuditLog
 from app.models.autonomous import AutonomousSession
 from app.models.chat import Chat
@@ -27,13 +29,14 @@ from app.models.citation_ledger_entry import CitationLedgerEntry
 from app.models.user import User
 from app.models.work_product_fiduciary_gate import WorkProductFiduciaryGate
 from app.security import hash_password
+from tests.autonomous.conftest import KbOneFile
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
 
 async def test_build_session_ledger_creates_hidden_chat_entries_and_gate(
-    db_session, kb_with_one_indexed_file
-):
+    db_session: AsyncSession, kb_with_one_indexed_file: KbOneFile
+) -> None:
     from app.models.document import DocumentChunk
 
     chunk = (
@@ -106,7 +109,7 @@ async def test_build_session_ledger_creates_hidden_chat_entries_and_gate(
     assert gate.gate_status == verdict["gate_status"]
 
 
-async def test_build_session_ledger_no_citations_returns_none(db_session):
+async def test_build_session_ledger_no_citations_returns_none(db_session: AsyncSession) -> None:
     user = User(
         email="sl2@x.com",
         hashed_password=hash_password("p"),
@@ -162,15 +165,15 @@ async def test_delivery_node_savepoint_isolates_bridge_failure(
     """
 
     async def boom(
-        db,
+        db: AsyncSession,
         *,
-        session,
-        work_product_text,
-        findings,
-        evidence,
-        gateway,
-        judge_model="fast",
-    ):
+        session: AutonomousSession,
+        work_product_text: str,
+        findings: list[dict[str, Any]],
+        evidence: list[dict[str, Any]],
+        gateway: Any,
+        judge_model: str = "fast",
+    ) -> dict[str, Any] | None:
         """Partial write then raise — exercises the SAVEPOINT rollback path."""
         db.add(
             Chat(
@@ -207,8 +210,8 @@ async def test_delivery_node_savepoint_isolates_bridge_failure(
         + "\n```"
     )
 
-    state = {
-        "session_id": running_session_at_delivery.id,
+    state: AutonomousSessionState = {
+        "session_id": str(running_session_at_delivery.id),
         "findings": [],
         "analysis_content": analysis_content,
         "analysis_evidence": [

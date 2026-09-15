@@ -35,6 +35,7 @@ Coverage
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterator
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -57,7 +58,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture(autouse=True)
-def _reset_cost_cache() -> None:
+def _reset_cost_cache() -> Iterator[None]:
     """Reset the process-level provider tier+cost cache before/after each test.
 
     Prevents stale cache state from a preceding test (e.g. one that
@@ -67,7 +68,7 @@ def _reset_cost_cache() -> None:
     from app.tools.governance import _reset_provider_tier_cache_for_tests
 
     _reset_provider_tier_cache_for_tests()
-    yield  # type: ignore[misc]
+    yield
     _reset_provider_tier_cache_for_tests()
 
 

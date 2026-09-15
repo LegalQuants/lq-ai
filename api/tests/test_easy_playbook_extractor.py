@@ -16,10 +16,11 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
+from app.models.document import Document
 from app.playbooks.easy.extractor import (
     DEFAULT_CHARACTER_BUDGET,
     SPAN_OVERLAP_CHARACTERS,
@@ -87,8 +88,10 @@ class _StubDocument:
     normalized_content: str
 
 
-def _make_doc(text: str) -> _StubDocument:
-    return _StubDocument(id=uuid.uuid4(), normalized_content=text)
+def _make_doc(text: str) -> Document:
+    # The extractor only reads ``id`` and ``normalized_content``; the stub
+    # duck-types the ORM model, so cast for the type checker.
+    return cast(Document, _StubDocument(id=uuid.uuid4(), normalized_content=text))
 
 
 # ---------------------------------------------------------------------------

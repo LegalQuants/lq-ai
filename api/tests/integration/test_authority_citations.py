@@ -233,7 +233,7 @@ def _resp_final(text: str) -> ChatCompletionResponse:
 
 
 @pytest_asyncio.fixture
-async def seeded(db_session: AsyncSession):
+async def seeded(db_session: AsyncSession) -> tuple[User, Chat, uuid.UUID]:
     """Seed a user + chat + assistant message; yield (user, chat, message_id)."""
     user = User(
         email=f"auth-cite-{uuid.uuid4().hex[:8]}@example.com",
@@ -297,7 +297,7 @@ async def _run_loop(
 @pytest.mark.asyncio
 async def test_chat_get_authority_verbatim_quote_verifies_and_gates(
     db_session: AsyncSession,
-    seeded,
+    seeded: tuple[User, Chat, uuid.UUID],
     fake_authority_storage: dict[str, bytes],
 ) -> None:
     user, chat, message_id = seeded
@@ -374,7 +374,7 @@ async def test_chat_get_authority_verbatim_quote_verifies_and_gates(
 @pytest.mark.asyncio
 async def test_chat_fabricated_authority_quote_dropped(
     db_session: AsyncSession,
-    seeded,
+    seeded: tuple[User, Chat, uuid.UUID],
     fake_authority_storage: dict[str, bytes],
 ) -> None:
     user, chat, message_id = seeded

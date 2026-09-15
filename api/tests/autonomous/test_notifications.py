@@ -19,7 +19,8 @@ Covers:
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
+from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -42,7 +43,7 @@ from app.security import create_access_token, hash_password
 # ---------------------------------------------------------------------------
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -420,7 +421,7 @@ async def test_notify_handles_missing_user_email_through_handler(
     # Simulate a deleted user: the handler's db.get(User, ...) returns None.
     real_get = db_session.get
 
-    async def _get_none(entity: object, ident: object, *a: object, **k: object):
+    async def _get_none(entity: type[Any], ident: object, *a: Any, **k: Any) -> Any:
         if entity is User:
             return None
         return await real_get(entity, ident, *a, **k)

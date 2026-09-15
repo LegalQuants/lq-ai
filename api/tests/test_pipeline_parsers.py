@@ -17,6 +17,9 @@ canonical text from PyMuPDF.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import NoReturn
+
 import pytest
 
 from app.pipeline.chunker import chunk_document
@@ -212,7 +215,9 @@ def test_parse_pdf_corrupt_input_raises() -> None:
         (_make_two_column_pdf, "two-column"),
     ],
 )
-def test_offset_fidelity_against_fixture_pdfs(fixture_builder, label) -> None:
+def test_offset_fidelity_against_fixture_pdfs(
+    fixture_builder: Callable[[], bytes], label: str
+) -> None:
     """The mandatory contract: every chunk slices back to its content byte-for-byte.
 
     This is the M2 Citation Engine's load-bearing precondition. Run
@@ -263,12 +268,12 @@ def test_parse_pdf_docling_disabled_marks_pymupdf_only() -> None:
 
 
 @pytest.mark.unit
-def test_parse_pdf_docling_failure_falls_through(monkeypatch) -> None:
+def test_parse_pdf_docling_failure_falls_through(monkeypatch: pytest.MonkeyPatch) -> None:
     """When Docling raises, the parser falls through to PyMuPDF-only."""
 
     from app.pipeline import parsers
 
-    def _raise(*args, **kwargs):
+    def _raise(*args: object, **kwargs: object) -> NoReturn:
         raise RuntimeError("simulated Docling crash")
 
     monkeypatch.setattr(parsers, "_run_docling", _raise)

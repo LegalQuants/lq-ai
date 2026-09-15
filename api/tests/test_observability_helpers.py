@@ -56,6 +56,7 @@ def test_record_attributes_drops_none_and_keeps_values(
     with tracer.start_as_current_span("s") as span:
         record_attributes(span, foo="bar", missing=None, count=5)
     (s,) = span_exporter.get_finished_spans()
+    assert s.attributes is not None
     assert s.attributes["foo"] == "bar"
     assert s.attributes["count"] == 5
     assert "missing" not in s.attributes

@@ -17,17 +17,33 @@ draft snippet used ``title`` / ``body_md``.
 
 from __future__ import annotations
 
+from typing import NotRequired, TypedDict
+
 from app.api.user_skills import UserSkillCreate, UserSkillUpdate
 
 
-def _base_payload(**overrides: object) -> dict[str, object]:
-    base: dict[str, object] = {
+class _Payload(TypedDict):
+    slug: str
+    display_name: str
+    description: str
+    body: str
+    source_message_id: NotRequired[str]
+    forked_from: NotRequired[str]
+
+
+def _base_payload(
+    *, source_message_id: str | None = None, forked_from: str | None = None
+) -> _Payload:
+    base: _Payload = {
         "slug": "personal-nda",
         "display_name": "Personal NDA",
         "description": "My NDA workflow",
         "body": "You review NDAs.",
     }
-    base.update(overrides)
+    if source_message_id is not None:
+        base["source_message_id"] = source_message_id
+    if forked_from is not None:
+        base["forked_from"] = forked_from
     return base
 
 

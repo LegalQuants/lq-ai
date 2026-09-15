@@ -3,7 +3,7 @@ from app.autonomous.guard import ToolResult
 from app.autonomous.planner import collect_evidence, summarize_observation
 
 
-def test_caselaw_observation_includes_cluster_id():
+def test_caselaw_observation_includes_cluster_id() -> None:
     result = ToolResult(
         data={
             "results": [
@@ -22,7 +22,7 @@ def test_caselaw_observation_includes_cluster_id():
     assert "42" in s  # cluster_id is shown so the synthesis can cite it
 
 
-def test_collect_evidence_numbers_kb_chunks():
+def test_collect_evidence_numbers_kb_chunks() -> None:
     result = ToolResult(
         data={
             "chunks": [
@@ -42,7 +42,7 @@ def test_collect_evidence_numbers_kb_chunks():
     assert items[0].content == "Confidential Information clause text."
 
 
-def test_collect_evidence_numbers_caselaw():
+def test_collect_evidence_numbers_caselaw() -> None:
     result = ToolResult(
         data={
             "results": [
@@ -60,7 +60,7 @@ def test_collect_evidence_numbers_caselaw():
     assert "held" in items[0].content
 
 
-def test_collect_evidence_empty_on_failure():
+def test_collect_evidence_empty_on_failure() -> None:
     assert (
         collect_evidence(ToolIntent.retrieve_caselaw, ToolResult(data=None, outcome="error"), 1)
         == []

@@ -76,7 +76,8 @@ async def test_on_startup_installs_skill_registry_and_returns_none() -> None:
         return_value=holder,
     ) as mock_install:
         # No exception, no return value.
-        assert await arq_setup.on_startup({}) is None
+        # The return-is-None contract is part of the pinned wiring.
+        assert await arq_setup.on_startup({}) is None  # type: ignore[func-returns-value]
 
     mock_install.assert_called_once()
 

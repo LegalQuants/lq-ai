@@ -26,7 +26,8 @@ See ``docs/architecture.md`` §OBS and
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator
+from collections.abc import Awaitable, Callable, Iterator, MutableMapping
+from typing import Any
 
 import httpx
 import pytest
@@ -121,10 +122,14 @@ async def test_chat_send_produces_single_trace_across_api_and_gateway(
     # --- api half: capture the traceparent the api emits on the wire ---
     wire: dict[str, str] = {}
 
-    async def wire_tap(scope: dict, receive: object, send: object) -> None:  # type: ignore[type-arg]
+    async def wire_tap(
+        scope: MutableMapping[str, Any],
+        receive: Callable[[], Awaitable[MutableMapping[str, Any]]],
+        send: Callable[[MutableMapping[str, Any]], Awaitable[None]],
+    ) -> None:
         wire.update((k.decode(), v.decode()) for k, v in scope["headers"])
-        await send({"type": "http.response.start", "status": 200, "headers": []})  # type: ignore[operator]
-        await send({"type": "http.response.body", "body": b"ok"})  # type: ignore[operator]
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"ok"})
 
     api_transport = AsyncOpenTelemetryTransport(httpx.ASGITransport(app=wire_tap))
     async with httpx.AsyncClient(transport=api_transport, base_url="http://gateway") as api_client:
@@ -171,17 +176,21 @@ async def test_api_outbound_injects_w3c_traceparent(
 
     captured: dict[str, str] = {}
 
-    async def receiver(scope: dict, receive: object, send: object) -> None:  # type: ignore[type-arg]
+    async def receiver(
+        scope: MutableMapping[str, Any],
+        receive: Callable[[], Awaitable[MutableMapping[str, Any]]],
+        send: Callable[[MutableMapping[str, Any]], Awaitable[None]],
+    ) -> None:
         assert scope["type"] == "http"
         captured.update((k.decode(), v.decode()) for k, v in scope["headers"])
         await send(
-            {  # type: ignore[operator]
+            {
                 "type": "http.response.start",
                 "status": 200,
                 "headers": [(b"content-type", b"text/plain")],
             }
         )
-        await send({"type": "http.response.body", "body": b"ok"})  # type: ignore[operator]
+        await send({"type": "http.response.body", "body": b"ok"})
 
     transport = AsyncOpenTelemetryTransport(httpx.ASGITransport(app=receiver))
     tracer = trace.get_tracer("lq-ai-api-test")

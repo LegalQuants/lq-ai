@@ -6,16 +6,16 @@ from app.skills.connectors import resolve_available_connectors, unavailable_tool
 from app.skills.schema import LQAIFrontmatter, SkillFrontmatter, derive_summary
 
 
-def test_frontmatter_parses_tool_usage():
+def test_frontmatter_parses_tool_usage() -> None:
     fm = LQAIFrontmatter.model_validate({"tool_usage": ["courtlistener"]})
     assert fm.tool_usage == ["courtlistener"]
 
 
-def test_frontmatter_tool_usage_absent_is_none():
+def test_frontmatter_tool_usage_absent_is_none() -> None:
     assert LQAIFrontmatter.model_validate({}).tool_usage is None
 
 
-def test_derive_summary_carries_tool_usage():
+def test_derive_summary_carries_tool_usage() -> None:
     front = SkillFrontmatter.model_validate(
         {"name": "x", "description": "d", "lq_ai": {"tool_usage": ["courtlistener"]}}
     )
@@ -23,7 +23,7 @@ def test_derive_summary_carries_tool_usage():
     assert summary.tool_usage == ["courtlistener"]
 
 
-def test_unavailable_pure_function():
+def test_unavailable_pure_function() -> None:
     assert unavailable_tool_usage(None, {"courtlistener"}) == []
     assert unavailable_tool_usage([], {"courtlistener"}) == []
     assert unavailable_tool_usage(["courtlistener"], None) is None  # undeterminable
@@ -33,7 +33,7 @@ def test_unavailable_pure_function():
 
 
 @pytest.mark.asyncio
-async def test_resolve_available_unions_caselaw_and_mcp():
+async def test_resolve_available_unions_caselaw_and_mcp() -> None:
     with (
         patch(
             "app.skills.connectors.get_capabilities",
@@ -49,7 +49,7 @@ async def test_resolve_available_unions_caselaw_and_mcp():
 
 
 @pytest.mark.asyncio
-async def test_resolve_available_none_on_error():
+async def test_resolve_available_none_on_error() -> None:
     with (
         patch(
             "app.skills.connectors.get_capabilities",
@@ -61,7 +61,7 @@ async def test_resolve_available_none_on_error():
 
 
 @pytest.mark.asyncio
-async def test_resolve_available_caselaw_disabled_excludes_courtlistener():
+async def test_resolve_available_caselaw_disabled_excludes_courtlistener() -> None:
     with (
         patch(
             "app.skills.connectors.get_capabilities",

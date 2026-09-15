@@ -10,22 +10,24 @@ from app.citation.treatment_judge import (
     judge_treatment,
     parse_treatment_response,
 )
+from app.schemas.gateway import ChatCompletionRequest
 
 
-def _resp(content: str):
+def _resp(content: str) -> SimpleNamespace:
     return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=content))])
 
 
-def test_prompt_includes_case_and_snippet():
+def test_prompt_includes_case_and_snippet() -> None:
     msgs = build_treatment_judge_prompt(
         cited_case_name="Smith v. Jones", snippet="We overrule Smith."
     )
     assert msgs[0].role == "system" and msgs[1].role == "user"
+    assert msgs[1].content is not None
     assert "Smith v. Jones" in msgs[1].content and "We overrule Smith." in msgs[1].content
 
 
 @pytest.mark.parametrize("cls", TREATMENT_CLASSES)
-def test_parse_accepts_every_class(cls):
+def test_parse_accepts_every_class(cls: str) -> None:
     out = parse_treatment_response(
         _resp(json.dumps({"treatment": cls, "confidence": "high", "justification": "x"}))
     )
@@ -47,18 +49,20 @@ def test_parse_accepts_every_class(cls):
         json.dumps({"treatment": "followed", "confidence": "high"}),  # missing justification
     ],
 )
-def test_parse_returns_none_on_garbage(bad):
+def test_parse_returns_none_on_garbage(bad: str) -> None:
     assert parse_treatment_response(_resp(bad)) is None
 
 
-def test_parse_none_on_no_choices():
+def test_parse_none_on_no_choices() -> None:
     assert parse_treatment_response(SimpleNamespace(choices=[])) is None
 
 
 @pytest.mark.asyncio
-async def test_judge_treatment_swallows_gateway_error():
+async def test_judge_treatment_swallows_gateway_error() -> None:
     class Boom:
-        async def chat_completion(self, request, *, request_id=None):
+        async def chat_completion(
+            self, request: ChatCompletionRequest, *, request_id: str | None = None
+        ) -> SimpleNamespace:
             raise RuntimeError("down")
 
     assert (
@@ -68,11 +72,13 @@ async def test_judge_treatment_swallows_gateway_error():
 
 
 @pytest.mark.asyncio
-async def test_judge_treatment_tags_purpose_and_parses():
-    seen = {}
+async def test_judge_treatment_tags_purpose_and_parses() -> None:
+    seen: dict[str, object] = {}
 
     class GW:
-        async def chat_completion(self, request, *, request_id=None):
+        async def chat_completion(
+            self, request: ChatCompletionRequest, *, request_id: str | None = None
+        ) -> SimpleNamespace:
             seen["purpose"] = request.lq_ai_purpose
             seen["anonymize"] = request.anonymize
             seen["temperature"] = request.temperature

@@ -366,7 +366,7 @@ async def test_executor_persists_failed_status_on_mid_graph_error(
     # Without this commit, rollback() would wipe the row and the re-fetch in the
     # executor's crash handler would return None, skipping the status update.
     await db_session.commit()
-    executor_mod.make_intake_node = _exploding_intake  # type: ignore[assignment]
+    executor_mod.make_intake_node = _exploding_intake
     try:
         gateway = _StubGateway()
         # Should NOT raise — exception is caught and persisted.
@@ -376,7 +376,7 @@ async def test_executor_persists_failed_status_on_mid_graph_error(
             gateway=gateway,  # type: ignore[arg-type]
         )
     finally:
-        executor_mod.make_intake_node = original_make_intake  # type: ignore[assignment]
+        executor_mod.make_intake_node = original_make_intake
 
     # C1b: rollback() detaches the in-memory row; re-fetch by PK to see the
     # committed failed status.
@@ -417,7 +417,7 @@ async def test_executor_persists_failed_status_on_state_dict_error(
 
         return _node
 
-    executor_mod.make_intake_node = _error_state_intake  # type: ignore[assignment]
+    executor_mod.make_intake_node = _error_state_intake
     try:
         gateway = _StubGateway()
         # Should NOT raise — state-dict errors are handled by the executor.
@@ -427,7 +427,7 @@ async def test_executor_persists_failed_status_on_state_dict_error(
             gateway=gateway,  # type: ignore[arg-type]
         )
     finally:
-        executor_mod.make_intake_node = original_make_intake  # type: ignore[assignment]
+        executor_mod.make_intake_node = original_make_intake
 
     await db_session.refresh(session)
     assert session.status == "failed", (
@@ -482,7 +482,7 @@ async def test_executor_rollback_called_on_mid_graph_error(
     # Commit the row into the outer test transaction so the executor's rollback()
     # (C1b) only removes executor-owned changes (not the session row itself).
     await db_session.commit()
-    executor_mod.make_intake_node = _exploding_intake  # type: ignore[assignment]
+    executor_mod.make_intake_node = _exploding_intake
     try:
         gateway = _StubGateway()
         with patch.object(db_session, "rollback", side_effect=_spy_rollback):
@@ -493,7 +493,7 @@ async def test_executor_rollback_called_on_mid_graph_error(
                 gateway=gateway,  # type: ignore[arg-type]
             )
     finally:
-        executor_mod.make_intake_node = original_make_intake  # type: ignore[assignment]
+        executor_mod.make_intake_node = original_make_intake
 
     assert rollback_call_count >= 1, (
         "C1b: executor must call db.rollback() in the crash handler before committing "

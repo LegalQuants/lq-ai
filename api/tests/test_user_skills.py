@@ -27,7 +27,7 @@ the skill registry is injected via ``app.state.skill_registry``
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 
 import pytest
@@ -48,7 +48,7 @@ from app.skills.registry import MutableSkillRegistry
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "skills"
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -241,6 +241,7 @@ async def test_patch_partial_update_writes_audit_row(
         .all()
     )
     assert len(audit) == 1
+    assert audit[0].details is not None
     assert audit[0].details["changed_fields"] == ["display_name"]
 
 
@@ -271,6 +272,7 @@ async def test_patch_version_bump_records_before_and_after_in_audit(
             )
         )
     ).scalar_one()
+    assert audit.details is not None
     assert audit.details["version_before"] == "1.0.0"
     assert audit.details["version_after"] == "1.1.0"
 
@@ -349,6 +351,7 @@ async def test_delete_soft_deletes_and_writes_audit(
             )
         )
     ).scalar_one()
+    assert audit.details is not None
     assert audit.details["slug"] == "personal-nda"
 
 
@@ -510,7 +513,7 @@ async def test_fork_copies_built_in_into_user_scope(
         .scalars()
         .all()
     )
-    assert any(a.details.get("forked_from") == "alpha-test-skill" for a in audit)
+    assert any((a.details or {}).get("forked_from") == "alpha-test-skill" for a in audit)
 
 
 @pytest.mark.integration
@@ -713,6 +716,7 @@ async def test_create_team_scope_skill_as_team_admin_returns_201(
             )
         )
     ).scalar_one()
+    assert audit.details is not None
     assert audit.details["scope"] == "team"
     assert audit.details["team_id"] == str(team.id)
     assert audit.details["team_slug"] == "contracts"
@@ -863,6 +867,7 @@ async def test_patch_team_scope_as_team_admin_succeeds(
             )
         )
     ).scalar_one()
+    assert audit.details is not None
     assert audit.details["scope"] == "team"
     assert audit.details["team_id"] == str(team.id)
 
@@ -917,6 +922,7 @@ async def test_delete_team_scope_as_team_admin_archives_row(
             )
         )
     ).scalar_one()
+    assert audit.details is not None
     assert audit.details["scope"] == "team"
     assert audit.details["team_id"] == str(team.id)
 
