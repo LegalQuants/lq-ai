@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "skill": "action-items-from-client-alert",
+  "fixture": "phased-deadlines",
+  "status": "provisional",
+  "provenance": "Ranges derived from skills/action-items-from-client-alert/SKILL.md (deadline buckets; effective vs. compliance vs. enforcement-discretion dates differentiated; phased deadlines become separate items; every item cites the alert) and test-plan.md Scenario 1 edge cases. NOT observed from a live run; first live run calibrates.",
+  "assertions": {
+    "required_sections": [
+      "Action Items from Client Alert",
+      "Context summary",
+      "Mandatory action items",
+      "Notes on this extraction"
+    ],
+    "metrics": [
+      {
+        "id": "mandatory_buckets",
+        "kind": "section_items",
+        "section": "Mandatory action items",
+        "min": 1,
+        "max": 6
+      },
+      {
+        "id": "phase_dates_preserved",
+        "kind": "regex_count",
+        "pattern": "july 1, 2027|july 1, 2028|january 1, 2028",
+        "min": 2,
+        "max": null
+      },
+      {
+        "id": "rule_section_citations",
+        "kind": "citation_count",
+        "min": 3,
+        "max": null
+      }
+    ],
+    "min_chars": 1200,
+    "max_chars": 30000
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "skill": "skill-creator",
+  "fixture": "elicitation-review-skill",
+  "status": "provisional",
+  "provenance": "Ranges derived from skills/skill-creator/SKILL.md (conversational meta-skill: elicit before drafting — ask operational questions, one at a time; do not produce a skill without a worked example and user confirmation). For an under-specified request the expected structure is a question-bearing elicitation turn, not a SKILL.md artifact. NOT observed from a live run; first live run calibrates.",
+  "assertions": {
+    "required_sections": [],
+    "metrics": [
+      {
+        "id": "asks_questions",
+        "kind": "regex_count",
+        "pattern": "\\?",
+        "min": 1,
+        "max": null
+      },
+      {
+        "id": "no_premature_full_skill_artifact",
+        "kind": "regex_count",
+        "pattern": "## when this skill applies",
+        "min": 0,
+        "max": 0
+      }
+    ],
+    "min_chars": 150,
+    "max_chars": 12000
+  }
+}

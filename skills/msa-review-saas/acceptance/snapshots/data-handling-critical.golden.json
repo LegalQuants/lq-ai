@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "skill": "msa-review-saas",
+  "fixture": "data-handling-critical",
+  "status": "provisional",
+  "provenance": "Ranges derived from skills/msa-review-saas/SKILL.md (Output template) and test-plan.md Scenario 3 (data-handling: AI-training rights without opt-out is critical; missing data-export-on-termination is critical; lack of breach notification is critical; 3-6 material on data handling; widened for a ~2-page fixture that also carries uncapped-customer-liability and one-way-indemnity defects). NOT observed from a live run; first live run calibrates.",
+  "assertions": {
+    "required_sections": [
+      "MSA Review",
+      "Bottom line",
+      "Critical issues",
+      "Recommended next steps",
+      "Items requiring human judgment"
+    ],
+    "metrics": [
+      {
+        "id": "critical_issues",
+        "kind": "section_items",
+        "section": "Critical issues",
+        "min": 1,
+        "max": 6
+      },
+      {
+        "id": "material_issues",
+        "kind": "section_items",
+        "section": "Material issues",
+        "min": 1,
+        "max": 8
+      },
+      {
+        "id": "ai_training_flagged",
+        "kind": "regex_count",
+        "pattern": "train",
+        "min": 1,
+        "max": null
+      },
+      {
+        "id": "clause_citations",
+        "kind": "citation_count",
+        "min": 4,
+        "max": null
+      }
+    ],
+    "min_chars": 1500,
+    "max_chars": 35000
+  }
+}
