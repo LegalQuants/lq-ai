@@ -184,6 +184,29 @@ git tag desktop-vX.Y.Z && git push origin desktop-vX.Y.Z
 > the *image* tag separately (`-f tag=vX.Y.Z`) and point `ref` at `main`. Pushing a `vX.Y.Z` tag from
 > `main` does this for you.
 
+### 4. Record the mutation score (DE-229)
+
+Every release records the most recent nightly mutation-testing scores — the proof that the test
+suite catches real defects, not just that lines execute (PRD §5.8). The nightly workflow is
+non-blocking; this step is where its output becomes a published, per-release number.
+
+```bash
+# (a) Find the latest successful nightly run and pull its per-package score artifacts:
+gh run list -R LegalQuants/lq-ai --workflow=mutation.yml --status=success -L 1
+gh run download <run-id> -R LegalQuants/lq-ai -n mutation-api-<run-id> -n mutation-gateway-<run-id>
+cat mutation-score.json   # one per package: mutation_score_percent + raw counts + commit
+
+# (b) Append a row to the score-history table in docs/quality/mutation-scores.md
+#     (date, release tag, commit, api %, gateway %, source run URL) and land it with the
+#     release PR. NEVER hand-edit a score that didn't come from a nightly artifact.
+
+# (c) Copy the same two percentages into the GitHub release notes for vX.Y.Z.
+```
+
+If no nightly run has succeeded since the last config change, say so in the release notes
+("mutation score: no valid nightly run") rather than reusing a stale number — conservative-posture
+rule: don't overclaim.
+
 ---
 
 ## Image ↔ launcher relationship
@@ -277,6 +300,8 @@ xcrun stapler validate /tmp/LQ.AI-*.dmg     # "The validate action worked!"
 
 ## See also
 
+- [`docs/quality/mutation-scores.md`](quality/mutation-scores.md) — the per-release mutation-score
+  record (step 4 above).
 - [`docs/INSTALL-MAC.md`](INSTALL-MAC.md) — the end-user install guide.
 - [`desktop/VERIFICATION.md`](../desktop/VERIFICATION.md) — the release-time verification protocol.
 - [`docs/lq-ai-macos-launcher-playbook.md`](lq-ai-macos-launcher-playbook.md) — the full playbook this
