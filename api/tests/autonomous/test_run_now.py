@@ -182,6 +182,71 @@ async def test_run_now_defaults_cost_cap_when_omitted(
 
 
 @pytest.mark.asyncio
+async def test_run_now_copies_query_into_params(
+    client: AsyncClient,
+    opted_in_user: User,
+    db_session: AsyncSession,
+) -> None:
+    """A matter description in the body lands in session.params["query"]
+    (item 1.6 — the executor reads it via ``session.params.get("query")``
+    into the ADR-0020 matter loop)."""
+    resp = await client.post(
+        "/api/v1/autonomous/run-now",
+        json={
+            "skill_ref": "nda-review",
+            "query": "Review the Acme NDA for a mutual confidentiality carve-out.",
+        },
+        headers=_bearer(opted_in_user),
+    )
+    assert resp.status_code == 201, resp.text
+    session_id = uuid.UUID(resp.json()["id"])
+    row = (
+        await db_session.execute(
+            select(AutonomousSession).where(AutonomousSession.id == session_id)
+        )
+    ).scalar_one()
+    assert row.params["query"] == "Review the Acme NDA for a mutual confidentiality carve-out."
+
+
+@pytest.mark.asyncio
+async def test_run_now_omitted_query_keeps_params_key_absent(
+    client: AsyncClient,
+    opted_in_user: User,
+    db_session: AsyncSession,
+) -> None:
+    """Omitting query keeps current behavior: no "query" key in params
+    (non-null-subset convention; the executor's ``params.get("query")``
+    then yields None → query-less path)."""
+    resp = await client.post(
+        "/api/v1/autonomous/run-now",
+        json={"skill_ref": "nda-review"},
+        headers=_bearer(opted_in_user),
+    )
+    assert resp.status_code == 201, resp.text
+    session_id = uuid.UUID(resp.json()["id"])
+    row = (
+        await db_session.execute(
+            select(AutonomousSession).where(AutonomousSession.id == session_id)
+        )
+    ).scalar_one()
+    assert "query" not in row.params
+
+
+@pytest.mark.asyncio
+async def test_run_now_rejects_empty_query(
+    client: AsyncClient,
+    opted_in_user: User,
+) -> None:
+    """An empty-string query violates min_length=1 → 422."""
+    resp = await client.post(
+        "/api/v1/autonomous/run-now",
+        json={"skill_ref": "nda-review", "query": ""},
+        headers=_bearer(opted_in_user),
+    )
+    assert resp.status_code == 422, resp.text
+
+
+@pytest.mark.asyncio
 async def test_run_now_requires_exactly_one_target(
     client: AsyncClient,
     opted_in_user: User,
