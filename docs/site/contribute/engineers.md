@@ -4,6 +4,8 @@ description: The build loop, the gates CI runs, DCO sign-off, and where security
 audience: [contributor]
 status: draft
 sources:
+  - .github/workflows/ci.yml
+  - docs/test-strategy.md
   - CONTRIBUTING.md
   - CLAUDE.md
   - .github/CODEOWNERS
@@ -29,7 +31,7 @@ make format-check   # Python ruff format --check
 make test           # Python local-loop suites + Web Vitest
 ```
 
-Current PR CI runs three jobs — API (`uv lock --check`, `ruff check`, `ruff format --check`, `mypy app`, `pytest -q` against a real pgvector Postgres service), Gateway (the same Python gates, `mypy` in `--strict` mode), and Web (`npm run check:lq-ai`, `npm run test:frontend -- --run`). A path-triggered stack-smoke workflow also runs when a change touches dependency manifests, lockfiles, Dockerfiles, compose, or an API migration — it builds every image, boots the full stack, and holds for a soak period to catch boot-time failures the in-process suites miss. Current PR CI does not enforce a coverage threshold or run browser end-to-end tests; a new endpoint still needs unit, integration, and OpenAPI-conformance tests, and a bug fix needs a regression test.
+Current PR CI runs four jobs — API (`uv lock --check`, `ruff check`, `ruff format --check`, `mypy app`, `pytest -n auto -q` against a real pgvector Postgres service, each xdist worker on its own session-scoped disposable database), Gateway (the same Python gates, `mypy` in `--strict` mode, `pytest -q`), Web (`npm run check:lq-ai`, `npm run test:frontend -- --run`), and Release image (`scripts/release-image-check.sh`, the guard in `api/Dockerfile.release` that fails the build unless the `skills/community` submodule's manifests are present). A path-triggered stack-smoke workflow also runs when a change touches dependency manifests, lockfiles, Dockerfiles, compose, or an API migration — it builds every image, boots the full stack, and holds for a soak period to catch boot-time failures the in-process suites miss. Current PR CI does not enforce a coverage threshold or run browser end-to-end tests — the per-surface coverage matrix and the Cypress gap are documented in [`docs/test-strategy.md`](../../test-strategy.md); a new endpoint still needs unit, integration, and OpenAPI-conformance tests, and a bug fix needs a regression test.
 
 ## DCO sign-off
 

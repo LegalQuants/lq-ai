@@ -4,6 +4,7 @@ description: Three named configurations the repository actually supports numbers
 audience: [operator]
 status: draft
 sources:
+  - docs/adr/0026-document-ingestion-parser-and-docling.md
   - README.md
   - docs/INSTALL-MAC.md
   - docker-compose.yml
@@ -37,7 +38,7 @@ Start from Configuration 2's floor, then add:
 
 - **`ollama` container** (`--profile local`) — no separate RAM/CPU minimum is stated in the repository; [`docker-compose.yml`](../../../docker-compose.yml) ships GPU acceleration as an operator-uncommented block (`nvidia-docker`), so a GPU is optional, not required, but neither CPU-only nor GPU throughput is measured anywhere in the canon. Treat this as **not measured** rather than assuming either "works fine" or "needs a GPU."
 - **Model storage** — [`docs/quickstart.md`](../../quickstart.md) describes the `qwen3.5:9b` pull as "a few GB"; that is the only size figure the repository gives for any Ollama model. `local-fast` (Qwen 3.5 4B) and `local-thinking` (Qwen 3.5 9B) are the two aliases `gateway.yaml.example` ships pointed at Ollama — budget disk for whichever tag(s) you pull, on top of Configuration 2's floor.
-- **First-ingestion download** — the ingest worker pulls roughly 700 MB of Docling layout/OCR models from Hugging Face on the first document it processes, cached afterward in the `ingest-hf-cache` / `ingest-easyocr-cache` named volumes (`docker-compose.yml`). This happens regardless of inference mode, but it matters most for an air-gapped plan: pull it while you still have network access.
+- **First-ingestion download** — the ingest worker still pulls roughly 700 MB of Docling layout/OCR models from Hugging Face on the first document it processes (`lq_ai_docling_enabled` defaults to `True` in `api/app/config.py`), cached afterward in the `ingest-hf-cache` / `ingest-easyocr-cache` named volumes (`docker-compose.yml`). It is dead weight: [ADR 0026](../../adr/0026-document-ingestion-parser-and-docling.md) records that Docling has never produced output here and decides its removal, so budget for the download only until that lands. It happens regardless of inference mode, but it matters most for an air-gapped plan: pull it while you still have network access.
 
 See [Air-gapped and local-only inference](air-gapped.md) for the install steps and what the repository can and cannot yet prove about Mode 2's network behavior.
 

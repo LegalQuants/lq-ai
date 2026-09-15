@@ -4,6 +4,7 @@ description: The reference deployment — clone, configure, and run LQ.AI's eigh
 audience: [operator]
 status: draft
 sources:
+  - docs/adr/0026-document-ingestion-parser-and-docling.md
   - README.md
   - docker-compose.yml
   - docs/quickstart.md
@@ -27,7 +28,7 @@ The four required `.env` variables (`POSTGRES_PASSWORD`, `MINIO_ROOT_PASSWORD`, 
 
 ## Where your data lives
 
-Everything the stack writes lands in seven named Compose volumes: `pgdata` (Postgres — chats, projects, the audit log, embeddings), `redisdata`, `miniodata` (uploaded files), `gateway-config` (the live `gateway.yaml`, including anything you set through the admin key screens), `ingest-hf-cache` and `ingest-easyocr-cache` (the ingest-worker's Docling and EasyOCR model caches — "persisting these volumes across `docker compose down` cycles avoids repeated ~700MB model downloads on first ingestion", per ADR 0006, `docker-compose.yml`), and, if you opt into local inference, `ollamadata`. None of these live inside a container — `docker compose down` on its own leaves them intact; only `-v` removes them, and CLAUDE.md's own dev-environment rules flag `down -v` as the thing never to run without a backup first. Treat that list as the scope of your [backup and restore](backup-and-restore.md) plan once you have one.
+Everything the stack writes lands in seven named Compose volumes: `pgdata` (Postgres — chats, projects, the audit log, embeddings), `redisdata`, `miniodata` (uploaded files), `gateway-config` (the live `gateway.yaml`, including anything you set through the admin key screens), `ingest-hf-cache` and `ingest-easyocr-cache` (the ingest-worker's Docling and EasyOCR model caches — "persisting these volumes across `docker compose down` cycles avoids repeated ~700MB model downloads on first ingestion", per ADR 0006, `docker-compose.yml`; [ADR 0026](../../adr/0026-document-ingestion-parser-and-docling.md) has since found that the Docling pass never produced output and decided its removal, so these two volumes go with it), and, if you opt into local inference, `ollamadata`. None of these live inside a container — `docker compose down` on its own leaves them intact; only `-v` removes them, and CLAUDE.md's own dev-environment rules flag `down -v` as the thing never to run without a backup first. Treat that list as the scope of your [backup and restore](backup-and-restore.md) plan once you have one.
 
 If you run two clones of this repository side by side, note that Compose derives its project name from the parent directory — two checkouts both named `lq-ai/` will silently share the volumes above (database, admin user, MinIO objects included), and tearing down one tears down both. Set a distinct `COMPOSE_PROJECT_NAME` in each `.env` to keep them apart.
 
