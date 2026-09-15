@@ -1012,6 +1012,36 @@ components:
         temperature: {type: number, minimum: 0, maximum: 2}
         top_p: {type: number}
         stream: {type: boolean, default: false}
+        # Function/tool calling (PR5b, ADR 0015)
+        tools:
+          type: array
+          maxItems: 64
+          items:
+            type: object
+            additionalProperties: true
+          description: |
+            OpenAI-style tool/function declarations, forwarded to the
+            provider so the model may emit `tool_calls`. Per ADR 0015
+            the backend assembles this as a closed per-turn allowlist
+            (research + operator-enabled MCP tools) — the gateway
+            forwards the declarations but never executes a tool; the
+            eventual tool call re-enters through `/v1/tools/call` where
+            the per-provider egress tier and SSRF allowlist are always
+            enforced. Capped at 64 entries (DE-358) to bound the
+            prompt-multiplication surface.
+        tool_choice:
+          description: |
+            OpenAI-style tool-choice directive: `"auto"`, `"none"`,
+            `"required"`, or a forced-function object
+            (`{"type": "function", "function": {"name": …}}`).
+            Translated per provider (e.g. Anthropic: `required` →
+            `{"type": "any"}`; `none` → tools omitted entirely).
+            Absent means provider default (`auto` when `tools` present).
+          oneOf:
+            - type: string
+              enum: [auto, none, required]
+            - type: object
+              additionalProperties: true
         # LQ.AI extensions
         minimum_inference_tier:
           type: integer
