@@ -3329,6 +3329,8 @@ This subsection operationalizes the §1.9 engineering-discipline posture and the
 
 #### DE-231 — Golden / snapshot testing for built-in skills with model-version regression
 
+> **Status: SHIPPED (provisional snapshots — first live run calibrates).** 30 synthetic fixture/snapshot pairs across all 10 starter skills (`skills/*/acceptance/`), a structural-range harness at `tests/golden/` (keyless-skip by default; `LQ_GOLDEN_RECORD=1` writes observed sidecars), and the nightly `skill-golden.yml` (runs only when provider-key secrets exist — never fakes a run; below-threshold auto-files the release-blocking issue). All ranges derive from SKILL.md output contracts and are machine-enforced as `provisional` until a maintainer live run calibrates them. Multi-model matrix is the documented follow-on.
+
 **Priority:** P1 · **Effort:** M
 
 **Context:** Per §5.8. The LLM-product analog of regression testing. When a model upgrade causes a skill's structural-output score to drop below threshold, the release-blocking issue is auto-filed. The contributor-friendly path is the skill-acceptance-tests mini-PRD at `docs/contribute/mini-prds/skill-acceptance-tests.md`.
