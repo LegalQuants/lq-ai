@@ -323,6 +323,62 @@ def _list_subfolder_files(subfolder: Path) -> list[Path]:
     return out
 
 
+# --- Single-folder scan surface (DE-263 community catalog) -------------------
+
+
+def scan_skills_folder(
+    base: Path | str,
+    *,
+    source: SkillSource = "community",
+) -> tuple[list[SkillRecord], list[str]]:
+    """Scan ONE skills folder and return ``(records, failures)``.
+
+    Public wrapper over the same per-folder walk :func:`load_registry`
+    uses, for callers that want a raw listing of a single corpus rather
+    than the merged registry (the DE-263 community-catalog admin surface
+    scans ``skills/community/skills/`` per request through this).
+
+    Semantics match the registry walk exactly: malformed skills land in
+    ``failures`` (one human-readable string each) instead of raising;
+    frontmatter-name/folder-name mismatches are failures; within-folder
+    duplicate names keep the first occurrence. Records come back sorted
+    by name. A missing/non-directory ``base`` yields ``([], [])`` — an
+    absent community submodule is a first-class state (ADR 0027 §3),
+    not an error.
+    """
+
+    records: dict[str, SkillRecord] = {}
+    failures: list[str] = []
+    base_path = Path(base)
+    if base_path.is_dir():
+        _walk_into(base_path, source=source, records=records, failures=failures, existing=set())
+    return [records[name] for name in sorted(records)], failures
+
+
+def load_skill_folder(folder: Path | str, *, source: SkillSource = "community") -> SkillRecord:
+    """Load a single skill folder; raise :class:`LoaderError` on failure.
+
+    Public wrapper over the per-skill parse used by the registry walk.
+    Unlike :func:`scan_skills_folder` this surfaces the parse failure to
+    the caller — the DE-263 install path needs the error text so a
+    malformed community SKILL.md is rejected with a 422 naming the
+    problem rather than silently vanishing from the catalog.
+
+    Also enforces the frontmatter-name/folder-name match the registry
+    walk enforces, so a skill that would never load into the registry
+    cannot be installed either.
+    """
+
+    folder_path = Path(folder)
+    record = _load_one(folder_path, source=source)
+    if record.name != folder_path.name:
+        raise LoaderError(
+            folder_path.name,
+            f"frontmatter name {record.name!r} does not match folder name {folder_path.name!r}",
+        )
+    return record
+
+
 # --- SIGHUP wiring -----------------------------------------------------------
 
 
@@ -385,4 +441,10 @@ def install_sighup_reload(
     signal.signal(sighup, _handler)
 
 
-__all__ = ["LoaderError", "install_sighup_reload", "load_registry"]
+__all__ = [
+    "LoaderError",
+    "install_sighup_reload",
+    "load_registry",
+    "load_skill_folder",
+    "scan_skills_folder",
+]
