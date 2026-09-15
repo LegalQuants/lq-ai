@@ -68,6 +68,57 @@ def _validate_storage_key_component(param_name: str, value: str) -> None:
         )
 
 
+# Reversible storage-key encoding for external_refs whose canonical form
+# contains chars outside the safe key charset (DE-375).  EUR-Lex treaty and
+# corrigendum CELEX ids carry '/' and '()' (12016E/TXT, 32016R0679R(01));
+# these map to dotted triples that (a) land inside [A-Za-z0-9._-]+ and
+# (b) never occur in a raw ref of any supported source (CELEX, GovInfo
+# package ids, EDGAR accession numbers) — enforced fail-closed below, which
+# makes the encoding injective on its accepted domain.  Identity for refs
+# already in the safe charset, so pre-DE-375 cache rows keep their keys.
+_KEY_ENCODINGS: tuple[tuple[str, str], ...] = (
+    ("/", ".SL."),
+    ("(", ".OP."),
+    (")", ".CP."),
+)
+
+
+def encode_external_ref_key(external_ref: str) -> str:
+    """Encode an external_ref into its object-storage key form (reversible).
+
+    Maps ``/`` -> ``.SL.``, ``(`` -> ``.OP.``, ``)`` -> ``.CP.``; every other
+    char passes through unchanged, so the encoding is the identity for refs
+    already inside the safe key charset.  Raises ValueError (fail-closed,
+    before any encoding) if the raw ref contains a path-traversal sequence
+    (``..``) or one of the encoding triples themselves — neither occurs in a
+    legitimate ref, and rejecting them keeps the encoding reversible and the
+    traversal guard intact.  The result must still pass
+    :func:`_validate_storage_key_component`; callers validate after encoding.
+    """
+    if ".." in external_ref:
+        raise ValueError(
+            f"Invalid external_ref {external_ref!r}: path-traversal sequence '..' detected"
+        )
+    for _raw, token in _KEY_ENCODINGS:
+        if token in external_ref:
+            raise ValueError(
+                f"Invalid external_ref {external_ref!r}: reserved encoding "
+                f"sequence {token!r} detected"
+            )
+    encoded = external_ref
+    for raw, token in _KEY_ENCODINGS:
+        encoded = encoded.replace(raw, token)
+    return encoded
+
+
+def decode_external_ref_key(encoded: str) -> str:
+    """Invert :func:`encode_external_ref_key` (storage key -> raw external_ref)."""
+    decoded = encoded
+    for raw, token in _KEY_ENCODINGS:
+        decoded = decoded.replace(token, raw)
+    return decoded
+
+
 # TTL for cached authority source text: 30 days.
 AUTHORITY_TEXT_TTL = timedelta(days=30)
 
@@ -139,11 +190,18 @@ async def store_authority_text(
     The body is stored raw (not normalized) so that ``load_authority_text``
     can return it verbatim for use with ``authority_target``; the verifier
     normalizes the content internally when needed.
+
+    The storage key uses the encoded external_ref
+    (:func:`encode_external_ref_key`, DE-375) so treaty/corrigendum CELEX
+    ids (``/``, ``()``) become storable; the DB row and every user-visible
+    surface keep the raw external_ref.  Encoding is the identity for refs
+    already in the safe charset, so pre-existing cache rows are unaffected.
     """
     _validate_storage_key_component("source_type", source_type)
-    _validate_storage_key_component("external_ref", external_ref)
+    encoded_ref = encode_external_ref_key(external_ref)
+    _validate_storage_key_component("external_ref", encoded_ref)
 
-    storage_path = f"authority/{source_type}/{external_ref}"
+    storage_path = f"authority/{source_type}/{encoded_ref}"
     await upload_bytes(
         storage_path=storage_path,
         body=text.encode("utf-8"),
@@ -210,9 +268,14 @@ async def load_authority_text(
 
     Reads the body from object storage via the same ``stream_download``
     helper that :mod:`app.research.service` uses for opinion bodies.
+
+    ``external_ref`` is the raw ref (the DB row stores it raw); it is
+    encode-validated here (:func:`encode_external_ref_key`, DE-375) so a
+    hostile ref is rejected before any DB/storage access — the same
+    fail-closed gate as ``store_authority_text``.
     """
     _validate_storage_key_component("source_type", source_type)
-    _validate_storage_key_component("external_ref", external_ref)
+    _validate_storage_key_component("external_ref", encode_external_ref_key(external_ref))
 
     row = (
         await db.execute(
@@ -264,7 +327,9 @@ async def verify_and_persist_authority_citations(
     # Only get_authority-sourced refs carry a cached body; filter to authority
     # content kinds with an external_ref.  EDGAR's "sec_filing" is covered as
     # of WS-E PR2a (DE-371); EUR-Lex's eu_* kinds are covered as of WS-E PR2b
-    # (DE-374) — treaty/corrigendum CELEX handling is still pending (DE-375).
+    # (DE-374), including treaty/corrigendum CELEX ids (DE-375 — they land as
+    # "eu_legislation"/"eu_regulation" and their cache keys are encoded by
+    # encode_external_ref_key).
     # A content kind outside this set is silently not verified (a
     # conservative drop, never a false claim, but it means no ledger row).
     _VERIFIABLE_CONTENT_KINDS = {

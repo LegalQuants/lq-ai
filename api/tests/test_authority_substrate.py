@@ -6,6 +6,10 @@ Covers:
 - load returns None when absent.
 - load returns None when the cached row is stale (past AUTHORITY_TEXT_TTL).
 - _AuthorityCandidate duck-types _CandidateProtocol; verify() passes stage 1/2.
+- encode_external_ref_key/decode_external_ref_key (DE-375): reversible key
+  encoding for treaty/corrigendum CELEX refs, identity for safe refs,
+  fail-closed on traversal/reserved sequences; store/load round-trip for
+  '/' and '()' shapes under the encoded storage key.
 
 Object-storage is backed by the same in-memory fake fixture pattern used in
 tests/test_research_service.py, patching upload_bytes/stream_download at the
@@ -21,9 +25,12 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from app.citation.authority import (
+    _SAFE_KEY_RE,
     AUTHORITY_TEXT_TTL,
     _AuthorityCandidate,
     authority_target,
+    decode_external_ref_key,
+    encode_external_ref_key,
     load_authority_text,
     store_authority_text,
 )
@@ -121,6 +128,89 @@ async def test_load_returns_none_when_stale(db_session, fake_storage) -> None:
         await load_authority_text(db_session, source_type="govinfo", external_ref="USCODE-old")
         is None
     )
+
+
+# ---------------------------------------------------------------------------
+# Storage-key encoding for treaty/corrigendum external_refs (DE-375)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "12016E/TXT",  # treaty full text
+        "12012P/TXT",  # Charter full text
+        "32016R0679R(01)",  # corrigendum
+        "12016M/PRO/02",  # multiple slashes stay reversible
+        "32016R0679",  # already-safe id (identity)
+    ],
+)
+def test_encode_decode_external_ref_round_trips(raw: str) -> None:
+    encoded = encode_external_ref_key(raw)
+    assert decode_external_ref_key(encoded) == raw
+    # Encoded form always lands in the safe key charset — no '/' survives.
+    assert _SAFE_KEY_RE.fullmatch(encoded)
+    assert "/" not in encoded
+
+
+@pytest.mark.parametrize(
+    "safe_ref",
+    [
+        "32016R0679",  # CELEX regulation
+        "USCODE-2022-title15",  # GovInfo package id
+        "0001193125-15-118890",  # EDGAR accession number
+        "CFR-2023-title40",
+    ],
+)
+def test_encode_is_identity_for_safe_refs(safe_ref: str) -> None:
+    """Pre-DE-375 cache rows keep their storage keys: encoding must be the
+    identity for every ref already inside the safe charset."""
+    assert encode_external_ref_key(safe_ref) == safe_ref
+
+
+@pytest.mark.parametrize(
+    "hostile",
+    [
+        "../../etc/passwd",  # traversal — must never become storable via encoding
+        "a..b",  # bare traversal sequence
+        "a.SL.b",  # reserved encoding triple — would break reversibility
+        "a.OP.b",
+        "a.CP.b",
+    ],
+)
+def test_encode_rejects_traversal_and_reserved_sequences(hostile: str) -> None:
+    with pytest.raises(ValueError, match="external_ref"):
+        encode_external_ref_key(hostile)
+
+
+@pytest.mark.asyncio
+async def test_store_then_load_round_trips_treaty_celex(db_session, fake_storage) -> None:
+    """A treaty CELEX ('/' shape, DE-375) stores under the encoded key and
+    loads back by its raw external_ref; the object-store key stays inside
+    authority/<source_type>/ with no extra path segment."""
+    body = "The Union shall be founded on the present Treaty."
+    await store_authority_text(
+        db_session, source_type="eurlex-prod", external_ref="12016E/TXT", text=body
+    )
+    assert list(fake_storage) == ["authority/eurlex-prod/12016E.SL.TXT"]
+    got = await load_authority_text(
+        db_session, source_type="eurlex-prod", external_ref="12016E/TXT"
+    )
+    assert got == body
+
+
+@pytest.mark.asyncio
+async def test_store_then_load_round_trips_corrigendum_celex(db_session, fake_storage) -> None:
+    """A corrigendum CELEX ('()' shape, DE-375) round-trips the same way."""
+    body = "Corrigendum to Regulation (EU) 2016/679."
+    await store_authority_text(
+        db_session, source_type="eurlex-prod", external_ref="32016R0679R(01)", text=body
+    )
+    assert list(fake_storage) == ["authority/eurlex-prod/32016R0679R.OP.01.CP."]
+    got = await load_authority_text(
+        db_session, source_type="eurlex-prod", external_ref="32016R0679R(01)"
+    )
+    assert got == body
 
 
 @pytest.mark.asyncio
