@@ -74,11 +74,11 @@ class _AnalyzerProtocol(Protocol):
 # * ``EMAIL_ADDRESS`` — counsel email, party email.
 # * ``PHONE_NUMBER`` — contact numbers in correspondence.
 # * ``US_BANK_NUMBER`` — bank account numbers that show up in
-#   settlement statements, escrow docs. Surfaces under Presidio's
-#   built-in ``US_BANK_NUMBER`` entity type.
-# * ``LOCATION`` — addresses, courthouses, jurisdictions. Mapped to
-#   ``ADDRESS`` in the pseudonym domain to match the operator's
-#   mental model.
+#   settlement statements, escrow docs. Remapped to the
+#   ``ACCOUNT_NUMBER`` pseudonym domain via :data:`PSEUDONYM_DOMAINS`.
+# * ``LOCATION`` — addresses, courthouses, jurisdictions. Remapped to
+#   the ``ADDRESS`` pseudonym domain via :data:`PSEUDONYM_DOMAINS` to
+#   match the operator's mental model.
 # * Custom entities from this task — ``CASE_NUMBER``,
 #   ``MATTER_NUMBER``.
 ENABLED_DEFAULT_RECOGNIZERS: tuple[str, ...] = (
@@ -123,6 +123,21 @@ DISABLED_DEFAULT_RECOGNIZERS: tuple[str, ...] = (
     "IpRecognizer",
     "MedicalLicenseRecognizer",
 )
+
+# Presidio's entity-type labels don't always match the pseudonym
+# domain operators are promised in ``docs/security/anonymization.md``:
+# a street address is detected as ``LOCATION`` but must substitute as
+# ``ADDRESS_NNNN``, and a bank account is detected as
+# ``US_BANK_NUMBER`` but must substitute as ``ACCOUNT_NUMBER_NNNN``.
+# The remap happens at assign time in
+# :meth:`Anonymizer.pseudonymize_into` so :class:`PseudonymMapper`
+# stays format-generic (operators may override ``assign`` for a
+# salted format — see DE-274). Types absent from this table pass
+# through unchanged.
+PSEUDONYM_DOMAINS: dict[str, str] = {
+    "LOCATION": "ADDRESS",
+    "US_BANK_NUMBER": "ACCOUNT_NUMBER",
+}
 
 
 _analyzer_singleton: AnalyzerEngine | None = None
@@ -248,8 +263,11 @@ class Anonymizer:
 
         Walks the analyzer's spans, resolves overlapping detections to
         the longer span (ties broken by score), then substitutes
-        right-to-left so earlier offsets stay valid. Calling
-        :meth:`PseudonymMapper.assign` for an already-known
+        right-to-left so earlier offsets stay valid. Each span is
+        assigned under its *pseudonym domain*: :data:`PSEUDONYM_DOMAINS`
+        remaps Presidio labels like ``LOCATION`` to the operator-facing
+        ``ADDRESS`` before ``assign``; unlisted types keep their label.
+        Calling :meth:`PseudonymMapper.assign` for an already-known
         ``(entity_type, original)`` reuses the prior pseudonym, so the
         same name across multiple ``pseudonymize_into`` calls on the
         same mapper resolves to the same pseudonym.
@@ -272,7 +290,14 @@ class Anonymizer:
         # stay valid as the text length changes around each splice.
         ordered = sorted(spans, key=lambda s: s.start)
         pseudonyms: list[tuple[Any, str]] = [
-            (span, mapper.assign(span.entity_type, text[span.start : span.end])) for span in ordered
+            (
+                span,
+                mapper.assign(
+                    PSEUDONYM_DOMAINS.get(span.entity_type, span.entity_type),
+                    text[span.start : span.end],
+                ),
+            )
+            for span in ordered
         ]
 
         out = text
