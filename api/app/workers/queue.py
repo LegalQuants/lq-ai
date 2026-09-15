@@ -70,6 +70,13 @@ worker consumes from the same shared queue as Easy Playbook (per
 Decision C-3) and walks the documents x columns grid via the
 LangGraph executor."""
 
+TABULAR_BULK_OP_JOB_NAME = "tabular_bulk_op_job"
+"""DE-304 / ADR 0026 — Tabular bulk operation (redline-per-row report /
+summarize-column memo). Triggered by the API when a user calls
+``POST /api/v1/tabular/executions/{id}/bulk-ops``; the playbook worker
+consumes from the shared queue (Decision C-3). Must match
+:data:`app.tabular.bulk_ops.TABULAR_BULK_OP_JOB_NAME`."""
+
 M3_PLAYBOOK_QUEUE_NAME = "arq:m3a6"
 """Mirror of :data:`app.workers.arq_setup.M3_PLAYBOOK_QUEUE_NAME` (kept
 here to avoid a circular import). Must stay in sync; a discrepancy
@@ -277,6 +284,40 @@ async def enqueue_tabular_execution_job(execution_id: uuid.UUID) -> bool:
             extra={
                 "event": "tabular_execution_enqueue_failed",
                 "execution_id": str(execution_id),
+                "error": str(exc),
+            },
+        )
+        return False
+
+
+async def enqueue_tabular_bulk_op_job(bulk_op_id: uuid.UUID) -> bool:
+    """Enqueue a Tabular bulk-op job onto the shared playbook queue.
+
+    Shares the queue with Easy Playbook + Tabular execution (Decision
+    C-3). Returns True on success, False on transport / import failure
+    (best-effort posture matching the other ``enqueue_*`` helpers).
+    The POST handler logs at WARNING on failure but does NOT roll back
+    the row — the detail view polls regardless, and an operator can
+    re-enqueue manually if the row is stuck at ``pending``.
+    """
+
+    try:
+        pool = await _get_m3a6_pool()
+        await pool.enqueue_job(TABULAR_BULK_OP_JOB_NAME, str(bulk_op_id))
+        log.info(
+            "enqueue_tabular_bulk_op_job: enqueued",
+            extra={
+                "event": "tabular_bulk_op_enqueue",
+                "bulk_op_id": str(bulk_op_id),
+            },
+        )
+        return True
+    except Exception as exc:
+        log.warning(
+            "enqueue_tabular_bulk_op_job: failed; row stays pending",
+            extra={
+                "event": "tabular_bulk_op_enqueue_failed",
+                "bulk_op_id": str(bulk_op_id),
                 "error": str(exc),
             },
         )

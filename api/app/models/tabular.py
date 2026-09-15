@@ -145,3 +145,103 @@ class TabularExecution(Base):
             f"status={self.status!r} docs={len(self.document_ids)} "
             f"cols={len(self.columns)}>"
         )
+
+
+class TabularBulkOp(Base):
+    """One bulk operation over a completed tabular execution — DE-304 / ADR 0026.
+
+    Two kinds in v1 (CHECK-constrained per migration 0066):
+
+    * ``redline_rows`` — one redline-style review memo per parent grid
+      row; the items combine into a redline report on the execution
+      detail page.
+    * ``summarize_column`` — one memo synthesizing a single column
+      across all rows (``params['column_name']`` names the column);
+      results carry one item with ``document_id = null``.
+
+    Lifecycle: ``pending → running → completed | failed``. Per ADR 0026
+    D4, ``completed`` includes batches with per-item failures — item
+    failures are persisted inside ``results.items[*].error`` and never
+    block the batch. ``failed`` is reserved for whole-batch
+    orchestration crashes (``error_text`` populated).
+
+    ``execution_id`` is the causal-linkage column (ADR 0026 D1): the op
+    cannot exist without its parent execution, so the FK cascades on
+    delete. ``params`` is snapshotted at request time (C-1 posture).
+
+    ``results`` JSONB shape::
+
+        {
+            "schema_version": "de304-v1",
+            "items": [
+                {"document_id", "document_name", "status", "output_text", "error", "cost_usd"}
+            ],
+            "summary": {"total_items": N, "failed_items": M},
+        }
+    """
+
+    __tablename__ = "tabular_bulk_ops"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    execution_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "tabular_executions.id",
+            ondelete="CASCADE",
+            name="fk_tabular_bulk_ops_execution_id",
+        ),
+        nullable=False,
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "users.id",
+            ondelete="SET NULL",
+            name="fk_tabular_bulk_ops_user_id",
+        ),
+        nullable=True,
+    )
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        server_default=text("'pending'"),
+    )
+    params: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
+    results: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    confirmed_cost_usd: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 4),
+        nullable=True,
+    )
+    cost_actual_usd: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 4),
+        nullable=True,
+    )
+    error_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<TabularBulkOp id={self.id} execution_id={self.execution_id} "
+            f"kind={self.kind!r} status={self.status!r}>"
+        )

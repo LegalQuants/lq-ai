@@ -10,6 +10,10 @@
 import { getAccessToken } from '../auth/store';
 import { apiRequest, LQ_AI_API_BASE_URL, LQAIApiError } from './client';
 import type {
+	TabularBulkOp,
+	TabularBulkOpCreateRequest,
+	TabularBulkOpPreviewRequest,
+	TabularBulkOpPreviewResponse,
 	TabularExecution,
 	TabularExecutionCreate,
 	TabularExecutionSummary,
@@ -86,6 +90,45 @@ export async function cancelTabularExecution(
 	return apiRequest<TabularExecution>(
 		`/tabular/executions/${encodeURIComponent(executionId)}/cancel`,
 		{ method: 'POST' }
+	);
+}
+
+/**
+ * POST /api/v1/tabular/executions/{id}/bulk-ops/preview-cost —
+ * DE-304 / ADR 0026. Synchronous cost preview for a proposed bulk op;
+ * no row is created. Mirrors {@link previewTabularCost} (Decision
+ * C-5): call before arming the confirmation gate.
+ */
+export async function previewTabularBulkOpCost(
+	executionId: string,
+	body: TabularBulkOpPreviewRequest
+): Promise<TabularBulkOpPreviewResponse> {
+	return apiRequest<TabularBulkOpPreviewResponse>(
+		`/tabular/executions/${encodeURIComponent(executionId)}/bulk-ops/preview-cost`,
+		{
+			method: 'POST',
+			body: body as unknown as Record<string, unknown>
+		}
+	);
+}
+
+/**
+ * POST /api/v1/tabular/executions/{id}/bulk-ops — DE-304 / ADR 0026.
+ * Creates the bulk-op row at `status='pending'` and enqueues the
+ * worker job. Returns 202 + the row; poll
+ * {@link getTabularExecution} — the op appears in its `bulk_ops`
+ * array (the read-side).
+ */
+export async function createTabularBulkOp(
+	executionId: string,
+	body: TabularBulkOpCreateRequest
+): Promise<TabularBulkOp> {
+	return apiRequest<TabularBulkOp>(
+		`/tabular/executions/${encodeURIComponent(executionId)}/bulk-ops`,
+		{
+			method: 'POST',
+			body: body as unknown as Record<string, unknown>
+		}
 	);
 }
 
