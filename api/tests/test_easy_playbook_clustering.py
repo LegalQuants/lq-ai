@@ -70,6 +70,13 @@ def _mk(issue: str, text: str) -> ClauseInput:
     return ClauseInput(document_id=uuid.uuid4(), issue=issue, clause_text=text)
 
 
+def _mk_doc(doc_id: uuid.UUID, issue: str, text: str) -> ClauseInput:
+    """Like :func:`_mk` but with a caller-controlled document id — for
+    tests that pin distinct-document support counting."""
+
+    return ClauseInput(document_id=doc_id, issue=issue, clause_text=text)
+
+
 # ---------------------------------------------------------------------------
 # Pure-Python helpers — exercised first (no async; no stubs needed)
 # ---------------------------------------------------------------------------
@@ -414,6 +421,181 @@ async def test_merged_cluster_canonical_label_is_most_populated() -> None:
     assert len(clusters) == 1
     assert clusters[0].issue_label == "Term"
     assert len(clusters[0].member_clauses) == 4
+
+
+# ---------------------------------------------------------------------------
+# Low-support fold pass (DE-308)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+async def test_low_support_singleton_folds_into_nearest_supported_cluster() -> None:
+    """A single-document group near a supported cluster folds into it.
+
+    "Remedies" is backed by 2 distinct documents (vectors [1,0] each →
+    centroid [1,0]). "Injunctive Relief" is a single-document group at
+    cosine 0.82 to that centroid: below the 0.85 merge threshold (so
+    the label-merge pass leaves it standing) but at/above the 0.80
+    fold floor — the DE-308 gap the fold pass exists for.
+    """
+
+    gateway = _StubEmbeddingGateway(
+        vectors=[
+            [1.0, 0.0],
+            [1.0, 0.0],
+            [0.82, 0.5724],  # unit vector; cosine 0.82 to [1, 0]
+        ],
+    )
+    r0 = _mk("Remedies", "Breach entitles the disclosing party to equitable relief.")
+    r1 = _mk("Remedies", "Money damages are inadequate; injunctions are available.")
+    orphan = _mk("Injunctive Relief", "The parties consent to injunctive relief without bond.")
+    clusters = await cluster_clauses_by_issue(
+        clauses=[r0, r1, orphan],
+        gateway=gateway,  # type: ignore[arg-type]
+    )
+    assert len(clusters) == 1, (
+        f"Expected fold into 1 cluster, got {[c.issue_label for c in clusters]}"
+    )
+    assert clusters[0].issue_label == "Remedies"
+    assert len(clusters[0].member_clauses) == 3
+    # The folded orphan is the farthest member from the modal, so it
+    # surfaces as a fallback-tier candidate — visible, not swallowed.
+    assert clusters[0].neighbor_clauses[0] is orphan
+
+
+@pytest.mark.unit
+async def test_low_support_singleton_below_floor_stays_separate() -> None:
+    """Fail-closed: an outlier singleton stays a standalone position.
+
+    Nearest supported cluster is only cosine 0.5 away — well below the
+    0.80 fold floor. The singleton must NOT be folded (a genuinely
+    distinct position buried inside another cluster would be invisible
+    to the reviewing attorney); it stands as its own cluster instead.
+    """
+
+    gateway = _StubEmbeddingGateway(
+        vectors=[
+            [1.0, 0.0],
+            [1.0, 0.0],
+            [0.5, 0.8660254],  # cosine 0.5 to [1, 0]
+        ],
+    )
+    clauses = [
+        _mk("Remedies", "Equitable relief available."),
+        _mk("Remedies", "Injunctions available without bond."),
+        _mk("Export Control", "Neither party shall export technical data without a license."),
+    ]
+    clusters = await cluster_clauses_by_issue(
+        clauses=clauses,
+        gateway=gateway,  # type: ignore[arg-type]
+    )
+    assert len(clusters) == 2
+    labels = {c.issue_label for c in clusters}
+    assert labels == {"Remedies", "Export Control"}
+
+
+@pytest.mark.unit
+async def test_min_document_support_one_disables_fold() -> None:
+    """``min_document_support=1`` turns the fold pass off entirely."""
+
+    gateway = _StubEmbeddingGateway(
+        vectors=[
+            [1.0, 0.0],
+            [1.0, 0.0],
+            [0.82, 0.5724],
+        ],
+    )
+    clauses = [
+        _mk("Remedies", "Equitable relief available."),
+        _mk("Remedies", "Injunctions available without bond."),
+        _mk("Injunctive Relief", "The parties consent to injunctive relief without bond."),
+    ]
+    clusters = await cluster_clauses_by_issue(
+        clauses=clauses,
+        gateway=gateway,  # type: ignore[arg-type]
+        min_document_support=1,
+    )
+    assert len(clusters) == 2
+
+
+@pytest.mark.unit
+async def test_fold_requires_a_supported_target() -> None:
+    """When every group is low-support (e.g., a tiny corpus), nothing folds.
+
+    Three mutually-distant singletons and no group with 2-document
+    support: there is no supported target to fold into, so all three
+    stand — the pass never merges loose singletons with each other.
+    """
+
+    gateway = _StubEmbeddingGateway(
+        vectors=[
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+        ],
+    )
+    clauses = [
+        _mk("Term", "Three years."),
+        _mk("Governing Law", "Delaware law."),
+        _mk("Audit Rights", "Annual audit."),
+    ]
+    clusters = await cluster_clauses_by_issue(
+        clauses=clauses,
+        gateway=gateway,  # type: ignore[arg-type]
+    )
+    assert len(clusters) == 3
+
+
+@pytest.mark.unit
+async def test_document_support_counts_distinct_documents_not_clauses() -> None:
+    """Two clauses from ONE document are corpus support of 1, not 2.
+
+    Overlapping-span extraction can emit near-duplicate clauses from a
+    single document; those must not let a group masquerade as a
+    corpus-supported position. Here "Term" has 2 clauses but 1 source
+    document → fold candidate; it folds into the 2-document
+    "Term Duration" group (centroid cosine 0.82).
+    """
+
+    same_doc = uuid.uuid4()
+    gateway = _StubEmbeddingGateway(
+        vectors=[
+            [1.0, 0.0],
+            [1.0, 0.0],
+            [0.82, 0.5724],
+            [0.82, 0.5724],
+        ],
+    )
+    clauses = [
+        _mk("Term Duration", "The Agreement lasts two (2) years."),
+        _mk("Term Duration", "This Agreement continues for three (3) years."),
+        _mk_doc(same_doc, "Term", "The term is five (5) years from the Effective Date."),
+        _mk_doc(same_doc, "Term", "…term is five (5) years from the Effective Date. [overlap]"),
+    ]
+    clusters = await cluster_clauses_by_issue(
+        clauses=clauses,
+        gateway=gateway,  # type: ignore[arg-type]
+    )
+    assert len(clusters) == 1
+    assert clusters[0].issue_label == "Term Duration"
+    assert len(clusters[0].member_clauses) == 4
+
+
+@pytest.mark.unit
+async def test_fold_skipped_on_embedding_failure() -> None:
+    """No embeddings → no centroid signal → fold pass is skipped (fail-closed)."""
+
+    gateway = _StubEmbeddingGateway(raise_on_call=ConnectionError("embeddings 503"))
+    clauses = [
+        _mk("Payment Terms", "Net 30."),
+        _mk("Payment Terms", "Net 60."),
+        _mk("Late Fees", "1.5% monthly interest on overdue balances."),
+    ]
+    clusters = await cluster_clauses_by_issue(
+        clauses=clauses,
+        gateway=gateway,  # type: ignore[arg-type]
+    )
+    assert len(clusters) == 2
 
 
 # ---------------------------------------------------------------------------
