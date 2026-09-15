@@ -5055,6 +5055,22 @@ The document-ingestion pipeline (ADR [0006](adr/0006-document-pipeline-architect
 
 Attached-file content is injected into the prompt as a system message (`_format_attached_files_block`, `api/app/api/chats.py`) and then counted against `lq_ai_chat_history_token_budget` although it is not conversation. Raising the budget (6,000 → 64,000 in #504) fixes the symptom: a ~47,000-token case file supplied in turn 1 was silently gone by turn 2 on models with 200k–1M context windows, and nothing in the response said trimming had occurred. The category fix is to give injected document blocks their own budget, or exclude them from the trim, so a document cannot be dropped between turns by a history setting. **Specific scope:** a turn-2 follow-up over a turn-1 attachment retains the document regardless of the history budget; a regression test covers the trim boundary; the history budget's field comment stops describing itself as the document ceiling. Related: #503 item 4, #512 (surfacing `applied_file_ids` so a non-contributing attachment is visible), DE-355.
 
+#### DE-394 — Define dark mode for LQ.AI (palette, coverage, and what "System" resolves to)
+
+**Priority:** P3 · **Effort:** M · **Status (2026-09-15): filed (lands with [PR #280](https://github.com/LegalQuants/lq-ai/pull/280), which carries the stopgap below).**
+
+Dark mode was **deferred, not rejected**. The M1 frontend design spec lists it among the M1 non-goals: "Dark mode (parallel palette specified but light-only at M1)" (`docs/superpowers/specs/2026-05-10-m1-frontend-design.md` §2). The `--lq-*` semantic tokens in `web/src/lib/lq-ai/styles/practice.css` are built to take a second palette, but no dark values exist. The 2026-05-13 and 2026-05-14 handoffs flagged "dark-mode tokens for `practice.css`" as a DE candidate that was never filed; this entry absorbs it. Meanwhile the carried OpenWebUI shell still offers **Dark** and **OLED Dark** in Settings → General, and dark coverage is uneven. Some LQ.AI components (`ChatPanel`, `MessageBubble`) carry a few `dark:` utilities. Others (`CaptureSkillModal`, `AttachKBModal`, `MessageOverflowMenu`) have none. The AliasForm contrast fix went the other way and removed its `dark:` variants to match the light admin chrome (see the AliasForm entry above). Result: a visitor who ends up in dark sees a half-light, half-dark UI. Before PR #280, that happened automatically to anyone on the default **System** theme with OS dark mode on. PR #280 makes `system` resolve to light as a **stopgap** until this entry is picked up. That stopgap is not the intended end state.
+
+Scope when picked up:
+
+- **(a) Palette.** Dark values for every `--lq-*` token, held to a stated contrast bar (WCAG AA 4.5:1 for body text). `web/src/app.css` already records one known miss: the editor placeholder `#676767` is 3.17:1 on the dark canvas.
+- **(b) Coverage.** A sweep of `/lq-ai/*` surfaces and their modals to token-driven colours, so dark coverage is complete rather than incidental. Carried OpenWebUI shell components keep their upstream `dark:` styling.
+- **(c) What `system` resolves to.** Once coverage is complete, System should most likely follow the OS `prefers-color-scheme` again. That means reverting #280's stopgap in its five upstream files (`app.html`, `app.css`, `Flow.svelte`, `General.svelte`, `+layout.svelte`) and removing the carried-patch entry for it in `docs/openwebui-rebase-runbook.md`.
+- **(d) The theme menu in the meantime.** Whether Dark and OLED Dark stay selectable, get an "experimental" label, or are hidden until (a)–(b) land; and whether OLED Dark survives at all.
+- **(e) A guard.** A test or visual check so coverage does not quietly regress through quarterly OpenWebUI refreshes.
+
+Pure `web/` work with no API, DB or gateway surface. The only structural wrinkle is (c): the theme resolution lives in upstream files, so the change is a carried patch under ADR 0001 and the rebase runbook.
+
 ---
 
 ## 10. Appendices
