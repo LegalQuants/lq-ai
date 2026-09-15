@@ -1,0 +1,104 @@
+# LQ.AI reverse-proxy overlay — Traefik v3 with automatic Let's Encrypt TLS.
+#
+# Compose onto the base stack from the REPO ROOT:
+#
+#   docker compose \
+#     -f docker-compose.yml \
+#     -f deploy/reverse-proxy/traefik/docker-compose.proxy.yml \
+#     up -d
+#
+# Requires LQ_AI_FQDN and LQ_AI_ACME_EMAIL in the root .env (see
+# .env.example in this directory). Ports 80 and 443 must be reachable
+# from the internet: 80 for the ACME HTTP-01 challenge and the
+# HTTP→HTTPS redirect, 443 for the site itself.
+#
+# Config style: Traefik's static configuration is passed as command-line
+# flags below (Traefik loads static config from exactly ONE source, and
+# flags are the only source that composes with .env interpolation for the
+# ACME email); the routing rules live as Docker labels on the `web` and
+# `api` services, which this overlay extends.
+
+name: lq-ai
+
+services:
+  traefik:
+    image: traefik:v3
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_started
+      api:
+        condition: service_healthy
+    command:
+      # --- providers: discover routes from container labels only ---
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      # --- entrypoints: 80 redirects to 443 ---
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.websecure.address=:443"
+      # Traefik v3 defaults readTimeout to 60s, which cuts off large
+      # document uploads on slow links; allow up to 10 minutes to read a
+      # client request. (writeTimeout stays 0 = unlimited, so long
+      # streamed LLM generations are never cut off by Traefik.)
+      - "--entrypoints.websecure.transport.respondingTimeouts.readTimeout=600s"
+      # --- ACME (Let's Encrypt), HTTP-01 on port 80 ---
+      - "--certificatesresolvers.letsencrypt.acme.email=${LQ_AI_ACME_EMAIL:?LQ_AI_ACME_EMAIL is required — ACME account email}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      # While iterating, uncomment to use the Let's Encrypt STAGING CA so
+      # failed attempts don't burn production rate limits (staging certs
+      # are not browser-trusted):
+      # - "--certificatesresolvers.letsencrypt.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
+    volumes:
+      # Read-only Docker socket: required for label-based route discovery.
+      # This is privileged access to the Docker API — acceptable on a
+      # single-purpose host; on shared hosts consider a socket proxy.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # acme.json holds the ACME account key and issued certificates.
+      # Losing it forces re-issuance (rate-limited!) — keep this volume.
+      - traefik-letsencrypt:/letsencrypt
+    ports:
+      - "80:80"
+      - "443:443"
+
+  # --- routing labels on the upstream services -------------------------
+  # Rule lengths give the api router higher priority than the web
+  # catch-all automatically; no explicit priorities needed.
+
+  api:
+    labels:
+      - "traefik.enable=true"
+      # LQ.AI backend: /lq-ai-api/v1/* → strip the public prefix, restore
+      # the real /api/v1 mount, forward to api:8000.
+      - "traefik.http.routers.lq-api.rule=Host(`${LQ_AI_FQDN:?LQ_AI_FQDN is required — public DNS name of this host}`) && PathPrefix(`/lq-ai-api/v1`)"
+      - "traefik.http.routers.lq-api.entrypoints=websecure"
+      - "traefik.http.routers.lq-api.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.lq-api.middlewares=lq-api-strip,lq-api-restore"
+      - "traefik.http.middlewares.lq-api-strip.stripprefix.prefixes=/lq-ai-api/v1"
+      - "traefik.http.middlewares.lq-api-restore.addprefix.prefix=/api/v1"
+      - "traefik.http.services.lq-api.loadbalancer.server.port=8000"
+      # Chat responses stream (SSE); flush every write so tokens reach the
+      # browser as generated instead of in 100ms batches.
+      - "traefik.http.services.lq-api.loadbalancer.responseforwarding.flushinterval=-1"
+      # HSTS — enable ONLY after HTTPS has been stable for a while; see
+      # ../README.md ("HSTS"). Attach `lq-hsts` to both routers' middleware
+      # chains when you do.
+      # - "traefik.http.middlewares.lq-hsts.headers.stsSeconds=31536000"
+
+  web:
+    labels:
+      - "traefik.enable=true"
+      # Everything else — OpenWebUI shell, /api/config, its own /api/v1/*,
+      # websockets (upgrades are handled automatically), static bundle.
+      - "traefik.http.routers.lq-web.rule=Host(`${LQ_AI_FQDN:?LQ_AI_FQDN is required — public DNS name of this host}`)"
+      - "traefik.http.routers.lq-web.entrypoints=websecure"
+      - "traefik.http.routers.lq-web.tls.certresolver=letsencrypt"
+      - "traefik.http.services.lq-web.loadbalancer.server.port=8080"
+      # SSE through the web container's own chat API streams too.
+      - "traefik.http.services.lq-web.loadbalancer.responseforwarding.flushinterval=-1"
+
+volumes:
+  traefik-letsencrypt:
