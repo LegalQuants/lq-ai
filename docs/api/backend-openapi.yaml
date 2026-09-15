@@ -2742,6 +2742,10 @@ paths:
         breakdown (Phase C prep doc Decision C-5).
 
         Either ``skill_name`` or ``columns`` is required (not both).
+        ``skill_name`` resolves through the D8.1b stack (DE-297): the
+        caller's user-scope shadow first, then the newest accessible
+        team-scope shadow (columns read from ``frontmatter_extra``),
+        then the live skill registry built-in (``lq_ai.columns``).
         The estimator uses a rolling-average over recent
         ``purpose='tabular_extraction'`` routing-log rows; cold-start
         deployments see the conservative default per-cell cost until
@@ -2758,9 +2762,9 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/TabularPreviewCostResponse'}
         '400':
-          description: Both ``skill_name`` and ``columns`` provided, or skill has no columns.
+          description: Both ``skill_name`` and ``columns`` provided, or skill has no columns / an invalid stored column spec.
         '404':
-          description: ``skill_name`` not found in the live skill registry.
+          description: ``skill_name`` matches neither a user/team shadow nor a registry built-in.
         '422':
           description: Validation error (empty ``document_ids``, malformed column spec, etc.).
         '401':
@@ -2783,6 +2787,11 @@ paths:
         ``document_ids`` (admins bypass). Cross-user / missing /
         soft-deleted documents collapse into 404.
 
+        ``skill_name`` resolves through the D8.1b stack (DE-297):
+        user shadow > team shadow > registry built-in — so a
+        user-authored table-mode skill runs with its own columns,
+        including when it shadows a built-in at the same slug.
+
         Execution completion does NOT mean every cell is correct —
         the result view's per-cell citation drawer is where the
         user-attorney validates extractions before relying on them.
@@ -2798,7 +2807,7 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/TabularExecution'}
         '400':
-          description: Both ``skill_name`` and ``columns`` provided, or skill has no columns.
+          description: Both ``skill_name`` and ``columns`` provided, or skill has no columns / an invalid stored column spec.
         '404':
           description: One or more documents not found / not authorized, or skill not found.
         '422':
@@ -8186,7 +8195,21 @@ components:
         body: {type: string, minLength: 1, maxLength: 200000}
         version: {type: string, default: '1.0.0', maxLength: 50}
         tags: {type: array, items: {type: string}, maxItems: 20}
-        frontmatter_extra: {type: object, additionalProperties: true}
+        frontmatter_extra:
+          type: object
+          additionalProperties: true
+          description: |
+            Arbitrary ``lq_ai:`` extension keys, EXCEPT the table-mode
+            authoring subset (DE-297): when ``output_format`` /
+            ``columns`` / ``minimum_inference_tier`` /
+            ``ensemble_verification`` are present they are validated
+            against the same schema built-in SKILL.md frontmatter
+            parses with — ``output_format: 'table'`` requires a
+            non-empty ``columns`` list, each column needs a non-empty
+            ``name`` + ``query``, and per-column
+            ``minimum_inference_tier`` must be 1–5. 422 with a
+            ``frontmatter_extra is not a valid skill spec: ...`` detail
+            on violation.
         scope:
           type: string
           enum: [user, team]
@@ -8225,7 +8248,14 @@ components:
         body: {type: string, minLength: 1, maxLength: 200000}
         version: {type: string, maxLength: 50}
         tags: {type: array, items: {type: string}, maxItems: 20}
-        frontmatter_extra: {type: object, additionalProperties: true}
+        frontmatter_extra:
+          type: object
+          additionalProperties: true
+          description: |
+            Same table-mode validation as on create (DE-297): the
+            ``output_format`` / ``columns`` / ``minimum_inference_tier``
+            / ``ensemble_verification`` subset must parse as a valid
+            skill spec; 422 otherwise.
         slash_alias:
           type: string
           nullable: true
