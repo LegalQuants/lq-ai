@@ -1,0 +1,25 @@
+---
+/**
+ * Status badge — `draft` or `reviewed`, from the page's frontmatter.
+ *
+ * The word is the information. The colour repeats it and is never the only
+ * carrier (WCAG 1.4.1), and the badge is prefixed by a visually hidden label so
+ * a screen reader hears "Page status: draft" rather than a bare adjective.
+ */
+import type { STATUSES } from '../content.config';
+
+interface Props {
+  status: (typeof STATUSES)[number];
+}
+
+const { status } = Astro.props;
+
+const EXPLANATION: Record<Props['status'], string> = {
+  draft: 'Written, not yet reviewed against its sources.',
+  reviewed: 'Reviewed against the sources named below.',
+};
+---
+
+<span class:list={['lq-status', `lq-status--${status}`]} title={EXPLANATION[status]}>
+  <span class="sr-only">Page status:</span>{status}
+</span>

@@ -1,0 +1,22 @@
+---
+title: Fixture entry hub
+description: The MDX hub fixture — card components, and links written as JSX attributes.
+audience: [agent]
+status: draft
+sources:
+  - README.md
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+An MDX page. Its links live in JSX attributes rather than in Markdown syntax,
+so the transform has to map `href=` as well as `](…)`.
+
+<CardGrid>
+  <LinkCard title="Start" href="start/index.md" description="The fixture namespace hub." />
+  <LinkCard title="Links" href="start/links.md" description="Every link case in one page." />
+</CardGrid>
+
+## Next
+
+- [Start](start/index.md)
