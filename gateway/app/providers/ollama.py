@@ -88,6 +88,7 @@ from app.providers.base import (
     ProviderHealth,
     ProviderHTTPError,
     ProviderNetworkError,
+    ProviderTimeoutError,
     ProviderUnsupportedError,
 )
 from app.providers.openai_schema import (
@@ -108,11 +109,14 @@ from app.secrets import ProviderKeyResolver
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_TIMEOUT_SECONDS = 120.0
+DEFAULT_TIMEOUT_SECONDS = 600.0
 """Default per-request timeout. Ollama generation latency is bounded by
 local hardware — slow CPUs or large models can take well over a minute
-on the first generation after a model load. The default is generous;
-``timeout_s`` on each provider entry overrides per-deployment."""
+on the first generation after a model load, and a single long
+generation on modest hardware can run for many minutes (#535). The
+default matches the other adapters' 600s so the whole request path
+shares one budget; ``timeout_s`` on each provider entry overrides
+per-deployment."""
 
 
 DONE_REASON_MAP: dict[str, FinishReason] = {
@@ -357,6 +361,15 @@ class OllamaAdapter(ProviderAdapter):
                 json=ollama_body,
                 headers=self._auth_headers(),
             )
+        except httpx.TimeoutException as exc:
+            # Our own timeout elapsed — not an upstream failure. Same
+            # distinct class as the Anthropic adapter so the routing log
+            # labels it ``client_timeout:`` rather than ``upstream_error:``.
+            raise ProviderTimeoutError(
+                f"timed out after {self._timeout:g}s waiting for Ollama "
+                "(client-side timeout; raise timeout_s for long generations)",
+                details={"provider": self.name, "timeout_s": self._timeout},
+            ) from exc
         except httpx.HTTPError as exc:
             raise ProviderNetworkError(
                 f"failed to reach Ollama: {type(exc).__name__}",
@@ -658,6 +671,13 @@ async def _ollama_stream_iter(
                     # naturally on EOF. Breaking would skip any
                     # trailing whitespace lines that aiter_lines might
                     # surface.
+    except httpx.TimeoutException as exc:
+        # Our own timeout elapsed mid-stream — see the unary path.
+        raise ProviderTimeoutError(
+            "timed out waiting for Ollama stream "
+            "(client-side timeout; raise timeout_s for long generations)",
+            details={"provider": provider_name},
+        ) from exc
     except httpx.HTTPError as exc:
         raise ProviderNetworkError(
             f"failed to stream from Ollama: {type(exc).__name__}",

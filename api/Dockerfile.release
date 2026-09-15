@@ -4,6 +4,32 @@
 # bake the repo-root skills corpus (bind-mounted in dev) for the self-contained
 # launcher images; built with repo-root context by .github/workflows/release.yml.
 
+# Skills-corpus stage. Stands alone (no dependency install) so the guard below
+# can be exercised in seconds with `docker build --target skills`, which is
+# what scripts/release-image-check.sh and the CI job built on it do. The final
+# stage copies /skills from here verbatim, so what this stage guarantees, the
+# published image carries.
+FROM python:3.12-slim AS skills
+
+# Bake the skills corpus that the dev stack bind-mounts (./skills:/skills:ro),
+# so the published image is self-contained for the zero-checkout macOS launcher.
+COPY skills /skills
+# COPY of an empty directory succeeds silently, so a build from a checkout
+# without submodules produces an image that starts healthy and is simply
+# missing half the corpus. Fail the build instead.
+#
+# "Non-empty" is not enough: the runtime loads community skills from
+# /skills/community/skills/<slug>/SKILL.md (api/app/config.py,
+# community_skills_dir), so a checkout carrying only the submodule's README
+# and LICENSE would pass an emptiness check with zero loadable skills. Assert
+# that at least one manifest exists. If the glob matches nothing, $1 is the
+# literal pattern and `test -f` fails.
+RUN set -- /skills/community/skills/*/SKILL.md; test -f "$1" || { \
+      echo "ERROR: no community skill manifests found under /skills/community/skills/*/SKILL.md - the skills/community submodule was not checked out." >&2; \
+      echo "Run 'git submodule update --init --recursive' before building this image." >&2; \
+      exit 1; \
+    }
+
 FROM python:3.12-slim AS base
 
 # ADR 0023 — dependencies install from the committed uv.lock so the shipped
@@ -39,9 +65,8 @@ COPY api/alembic/ ./alembic/
 COPY api/entrypoint.sh /usr/local/bin/lq-ai-entrypoint
 RUN chmod +x /usr/local/bin/lq-ai-entrypoint
 
-# Bake the skills corpus that the dev stack bind-mounts (./skills:/skills:ro),
-# so the published image is self-contained for the zero-checkout macOS launcher.
-COPY skills /skills
+# The guarded skills corpus from the stage above.
+COPY --from=skills /skills /skills
 ENV LQ_AI_SKILLS_DIR=/skills
 
 EXPOSE 8000

@@ -33,7 +33,7 @@ community contribution per [PRD §9 DE-288](../docs/PRD.md#de-288--slackteams-lq
 | `SLACK_SIGNING_SECRET` | yes | Inbound webhook signature verification |
 | `LQ_AI_BACKEND_URL` | yes | Base URL of the lq-ai api (e.g. `http://api:8000`) |
 | `LQ_AI_BRIDGE_TOKEN` | yes | Shared secret the bridge sends on internal calls to the api |
-| `LQ_AI_BRIDGE_PUBLIC_URL` | yes | Public base URL of the bridge — used to build the OAuth `redirect_uri` Slack calls back to (e.g. `https://lqai.example.com/slack`) |
+| `LQ_AI_BRIDGE_PUBLIC_URL` | yes | Public base URL at which the bridge's routes are reachable, **without** the `/slack` router prefix — the bridge appends `/slack/oauth/callback` itself (e.g. `https://slack-bridge.example.com`; give the bridge its own origin). `https://lqai.example.com/slack` would yield `…/slack/slack/oauth/callback`. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | no | OpenTelemetry exporter — opt-in per PRD §5.7 |
 | `OTEL_SERVICE_NAME` | no | Defaults to `lq-ai-slack-bridge` |
 | `LQ_AI_BRIDGE_LOG_LEVEL` | no | Defaults to `INFO` |

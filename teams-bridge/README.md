@@ -41,7 +41,7 @@ contribution per [PRD §9 DE-288](../docs/PRD.md#de-288--slackteams-lq-slash-com
 | `MICROSOFT_APP_PASSWORD` | yes | Azure AD app client secret |
 | `LQ_AI_BACKEND_URL` | yes | Base URL of the lq-ai api (e.g. `http://api:8000`) |
 | `LQ_AI_BRIDGE_TOKEN` | yes | **Reused** from slack-bridge per M3-D3 decision #2 — same shared secret authenticates both bridges to the api |
-| `LQ_AI_TEAMS_BRIDGE_PUBLIC_URL` | yes | Public base URL of the teams-bridge — used to build the OAuth `redirect_uri` Microsoft calls back to (e.g. `https://lqai.example.com/teams`) |
+| `LQ_AI_TEAMS_BRIDGE_PUBLIC_URL` | yes | Public base URL at which the bridge's routes are reachable, **without** the `/teams` router prefix — the bridge appends `/teams/oauth/callback` itself (e.g. `https://teams-bridge.example.com`; give the bridge its own origin). `https://lqai.example.com/teams` would yield `…/teams/teams/oauth/callback`. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | no | OpenTelemetry exporter — opt-in per PRD §5.7 |
 | `OTEL_SERVICE_NAME` | no | Defaults to `lq-ai-teams-bridge` |
 | `LQ_AI_TEAMS_BRIDGE_LOG_LEVEL` | no | Defaults to `INFO` |

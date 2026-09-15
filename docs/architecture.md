@@ -33,7 +33,7 @@ flowchart TB
             proj["<b>Project Service</b><br/>matter-scoped<br/>containers<br/>privilege flag<br/><i>M1</i>"]
             skill["<b>Skill Service</b><br/>incl. Org Profile<br/>singleton<br/><i>M1</i>"]
             playbook["<b>Playbook + Tabular Service</b><br/>LangGraph workflows:<br/>playbook execute · Easy Playbook ·<br/>tabular multi-doc review<br/><i>M3</i>"]
-            doc["<b>Document Pipeline</b><br/>Docling + PyMuPDF +<br/>Citation Engine<br/>(OCR deferred — DE-320)<br/><i>M2</i>"]
+            doc["<b>Document Pipeline</b><br/>PyMuPDF +<br/>Citation Engine<br/>(OCR deferred — DE-320)<br/><i>M2</i>"]
             knowledge["<b>Knowledge Service</b><br/>pgvector + FTS;<br/>contract-relationship<br/>graph slot (not built)<br/><i>M1</i>"]
             autonomous["<b>Autonomous Layer</b><br/>five-phase executor · cron ·<br/>watches · schedules ·<br/>per-user memory · precedent board<br/><i>runs as arq job on arq-worker</i><br/><i>M4</i>"]
         end

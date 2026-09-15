@@ -995,3 +995,62 @@ async def test_deny_gateway_receives_assistant_turn_before_denial_message(
     assert tool_msg is not None, (
         "No role='tool' denial message found in conversation — denial message was not appended"
     )
+
+
+# ---------------------------------------------------------------------------
+# Issue #503: an empty resumed turn is a failure, not an answer
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_approve_with_empty_loop_final_is_an_error_not_an_empty_success(
+    client: AsyncClient,
+    db_user: User,
+    db_session: AsyncSession,
+) -> None:
+    """If the resumed loop finishes with no text and no error, the resume
+    stream must end in a ``provider_unavailable`` envelope rather than a
+    ``complete`` frame, and the persisted assistant row must carry the same
+    ``error_code`` (the guard runs before persistence — issue #503)."""
+
+    chat_id, pending_id, assistant_message_id = await _create_chat_and_pending(
+        db_session, user=db_user, client=client
+    )
+    spec = _make_tool_spec()
+    empty_final = LoopFinal(
+        text="",
+        usage_prompt=80,
+        usage_completion=0,
+        tier=2,
+        provider="anthropic-prod",
+        model="claude-sonnet-4-6",
+        applied_skills=[],
+        calls_used=1,
+    )
+    tool_result = ToolResult(cost_usd=Decimal("0"), data={"deleted": "abc123"}, outcome="success")
+    allowlist = ChatToolAllowlist(specs={spec.function_name: spec})
+
+    with (
+        patch("app.api.chats.assemble_allowlist", new=AsyncMock(return_value=allowlist)),
+        patch("app.chat.tool_loop.execute_tool", new=AsyncMock(return_value=tool_result)),
+        patch("app.api.chats.run_chat_tool_loop", new=AsyncMock(return_value=empty_final)),
+    ):
+        resp = await client.post(
+            f"/api/v1/chats/{chat_id}/tool-calls/{pending_id}",
+            headers=_h(db_user),
+            json={"decision": "approve"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    frames = _parse_sse_frames(resp.content)
+    assert "complete" not in [f.get("type") for f in frames], frames
+    error_frames = [f for f in frames if "detail" in f]
+    assert len(error_frames) == 1, frames
+    assert error_frames[0]["detail"]["code"] == "provider_unavailable"
+
+    db_session.expire_all()
+    row = await db_session.get(Message, assistant_message_id)
+    assert row is not None
+    assert row.content == ""
+    assert row.error_code == "provider_unavailable"

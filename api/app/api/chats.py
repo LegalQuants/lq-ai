@@ -96,7 +96,15 @@ from app.citation.ledger import (
 from app.clients.gateway import EnsembleConfig, GatewayClient, get_gateway_client
 from app.config import get_settings
 from app.db.session import get_db
-from app.errors import Conflict, InternalError, LQAIError, NotFound, ValidationError
+from app.errors import (
+    CODE_PROVIDER_UNAVAILABLE,
+    Conflict,
+    InternalError,
+    LQAIError,
+    NotFound,
+    ProviderUnavailable,
+    ValidationError,
+)
 from app.knowledge.embed import DEFAULT_EMBEDDING_MODEL, request_embedding_vector
 from app.knowledge.retrieval import HybridSearchResult, hybrid_search
 from app.models.chat import Chat, Message, MessageCitation
@@ -263,6 +271,25 @@ async def _load_history_messages(
 # than aliases — the check that follows is by-value, not by-length, so
 # being a touch permissive here is fine), followed by whitespace.
 _LEADING_SLASH_RE = re.compile(r"^/([a-z0-9-]{1,64})\s")
+
+# ``applied_skills`` provenance marker (ADR 0007 denormalization). The UI
+# appends ``"enhance-prompt"`` to a user message's ``skills[]`` when the
+# composer text came from the Enhance Prompt preview, so
+# ``MessageResponse.is_enhanced`` can be derived from the persisted row.
+# It is a marker, not a skill to assemble: the enhance-prompt skill body is
+# the *expansion* prompt (it asks the model for a YAML expansion of
+# ``raw_input``) and only ever runs through ``POST /api/v1/enhance-prompt``.
+# Forwarding it as ``lq_ai_skills`` prepended that body to every enhanced
+# chat turn and, now that the gateway enforces the corpus's declared
+# required inputs (ADR 0007 §2), would 400 every enhanced send for a
+# missing ``raw_input``. Persist it; never forward it.
+ENHANCE_PROMPT_MARKER = "enhance-prompt"
+
+
+def _gateway_skills(skills: list[str]) -> list[str]:
+    """Skills to forward to the gateway: everything except the provenance marker."""
+
+    return [s for s in skills if s != ENHANCE_PROMPT_MARKER]
 
 
 async def _maybe_resolve_leading_slash(
@@ -1626,7 +1653,10 @@ async def send_message(
     # attachments. The gateway assembles them alongside ``lq_ai_skills``
     # without a backend round-trip; ``effective_skill_inputs`` is the
     # merged-and-flattened map keyed by both slug AND synthesized
-    # inline-skill name.
+    # inline-skill name. ``gateway_skills`` drops the enhance-prompt
+    # provenance marker (see ``ENHANCE_PROMPT_MARKER``); the persisted
+    # user row above keeps it.
+    gateway_skills = _gateway_skills(list(effective_skills))
     gw_request = ChatCompletionRequest(
         model=payload.model,
         messages=gw_messages,
@@ -1635,7 +1665,7 @@ async def send_message(
         lq_ai_chat_id=str(cid),
         lq_ai_message_id=str(assistant_message_id),
         lq_ai_user_id=str(user.id),
-        lq_ai_skills=list(effective_skills),
+        lq_ai_skills=gateway_skills,
         lq_ai_skill_inputs=dict(effective_skill_inputs),
         lq_ai_inline_skills=list(inline_skill_refs),
         lq_ai_file_ids=list(effective_file_ids),
@@ -1654,7 +1684,7 @@ async def send_message(
     # logged and swallowed rather than propagated into the user's request.
     try:
         _emit_skill_spans(
-            list(effective_skills),
+            list(gateway_skills),
             registry=_skill_registry_from_request(request),
             project_id=chat.project_id,
             project_privileged=project_privileged,
@@ -2363,6 +2393,20 @@ async def resume_tool_call(
             yield b"data: [DONE]\n\n"
             return
 
+        # Issue #503 — never present an empty turn as a success. Runs BEFORE
+        # persistence so the stored row and the wire agree (see
+        # ``_empty_turn_error``).
+        if error_envelope is None and not "".join(accumulated).strip():
+            error_code, error_envelope = _empty_turn_error(request_id)
+            log.warning(
+                "chat resume_tool_call produced no content",
+                extra={
+                    "event": "resume_tool_call_empty_completion",
+                    "assistant_message_id": str(assistant_message_id),
+                    "request_id": request_id,
+                },
+            )
+
         # Persist the assistant message (LoopFinal or error path).
         try:
             await _load_visible_chat(db, cid, user.id, include_archived=False)
@@ -2834,6 +2878,32 @@ async def _persist_message_tool_sources(
         ]
     )
     await db.flush()
+
+
+def _empty_turn_error(request_id: str) -> tuple[str, dict[str, Any]]:
+    """Issue #503 — an empty turn is an upstream failure, not an answer.
+
+    A stream that ended with no content and raised nothing used to fall
+    through to the success tail. The client could not tell "the system
+    broke" from "the model had little to say", and for a legal tool that
+    ambiguity is the defect: the operator blames the model. The gateway now
+    emits its own error frame for a contentless stream; this is the
+    belt-and-braces layer for any path that still yields nothing without
+    raising. Both SSE generators call it *before* persisting the assistant
+    row, so the stored ``error_code``, the wire frame, and the history
+    replay exclusion (errored rows are never replayed) all agree.
+
+    Returns ``(error_code, error_envelope)`` for the generator's final
+    frames.
+    """
+
+    envelope = ProviderUnavailable(
+        "The turn completed without producing any content. This is an "
+        "upstream failure, not an empty answer — check the gateway logs "
+        "for this request id.",
+        details={"request_id": request_id},
+    ).to_envelope()
+    return CODE_PROVIDER_UNAVAILABLE, envelope
 
 
 async def _persist_assistant_message(
@@ -3602,6 +3672,22 @@ async def _stream_response(
                     },
                 )
 
+        # Issue #503 — never present an empty turn as a success. Runs BEFORE
+        # persistence so the stored row, the audit row and the wire agree
+        # (see ``_empty_turn_error``).
+        if error_envelope is None and not "".join(accumulated).strip():
+            error_code, error_envelope = _empty_turn_error(request_id)
+            log.warning(
+                "chat send_message produced no content",
+                extra={
+                    "event": "chat_send_message_empty_completion",
+                    "user_id": str(user.id),
+                    "chat_id": str(chat.id),
+                    "assistant_message_id": str(assistant_message_id),
+                    "request_id": request_id,
+                },
+            )
+
         # Persist the assistant row exactly once. Even if everything
         # failed, we record what we got so operators see the full
         # exchange. ``content`` may be empty if the failure happened
@@ -3844,7 +3930,11 @@ async def run_inference_override(
         lq_ai_chat_id=str(chat.id),
         lq_ai_message_id=str(assistant_message_id),
         lq_ai_user_id=str(user.id),
-        lq_ai_skills=list(user_msg.applied_skills or []),
+        # The re-run replays the persisted skill *names*; the message row
+        # stores no skill inputs (DE-390), so a skill whose frontmatter
+        # declares required inputs is refused by the gateway with
+        # ``skill_input_missing`` rather than run without its inputs.
+        lq_ai_skills=_gateway_skills(list(user_msg.applied_skills or [])),
         minimum_inference_tier=None,
         lq_ai_project_minimum_inference_tier=None,
     )

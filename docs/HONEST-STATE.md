@@ -43,7 +43,7 @@ The surface in-house counsel touches every day. Every row is wired end-to-end in
 
 | Capability | Status | Verification |
 |---|---|---|
-| Multi-turn chat with persistent history | M1 | `api/app/api/chats.py`; `web/cypress/e2e/chat.cy.ts` |
+| Multi-turn chat with persistent history | M1 | `api/app/api/chats.py` |
 | Matter (project) workspace with attached files / skills / KBs | M1 | `api/app/api/projects.py`; `web/src/routes/lq-ai/matters/[id]/+page.svelte` |
 | Slash-invoked skills with provenance pill | M1 | `web/cypress/e2e/wave-d2-skill-creator.cy.ts` Test 4 |
 | Built-in starter skills | M1 | `skills/*/SKILL.md` (read every prompt — no hidden instructions) |
@@ -51,7 +51,7 @@ The surface in-house counsel touches every day. Every row is wired end-to-end in
 | Skill capture / wizard authoring / fork / versions tab | M1 | `web/cypress/e2e/wave-d2-skill-creator.cy.ts` Tests 1–6 |
 | Saved Prompts library with one-click "Use in chat" | M1 | `api/app/api/saved_prompts.py`; `web/cypress/e2e/wave-m1-final-surfaces.cy.ts` Test 1 |
 | Knowledge bases — create, attach documents, ingest to `ready` (hybrid BM25 + vector retrieval) | M1 | `api/app/api/knowledge_bases.py`; `api/app/workers/document_pipeline.py` |
-| Ingest formats — **PDF** (PyMuPDF/Docling) and **plain text / Markdown** (`parse_text`, verbatim canonical text → exact-match citations; non-UTF-8 → `decode_error`). DOCX is roadmap. | M1 (PDF); post-v0.5.0 (text/md, DE-332) | `api/app/pipeline/parsers.py`; `api/app/pipeline/ingest.py` |
+| Ingest formats — **PDF** (PyMuPDF) and **plain text / Markdown** (`parse_text`, verbatim canonical text → exact-match citations; non-UTF-8 → `decode_error`). DOCX is roadmap. A Docling dependency shipped alongside PyMuPDF but **has never produced output** (broken since C5); ingestion is PyMuPDF-only and Docling is being removed per ADR 0026. | M1 (PDF); post-v0.5.0 (text/md, DE-332) | `api/app/pipeline/parsers.py`; `api/app/pipeline/ingest.py` |
 | Receipts drawer with per-event provenance | M1 | `api/app/api/chat_receipts.py`; `web/cypress/e2e/wave-m1-final-surfaces.cy.ts` Test 3 |
 | Enhance Prompt (⌘E) | M1 | `api/app/api/enhance_prompt.py` |
 | Audit log of all sensitive actions | M1 | `api/app/audit.py`; admin reads at `/lq-ai/admin/audit-log` |
@@ -275,10 +275,11 @@ Engineering rigor is measurable, not asserted. Test **file** counts below are ve
 
 | Practice | Status | Verification |
 |---|---|---|
-| Backend tests (pytest, live Postgres) | M1–milestone | 233 `test_*.py` files in `api/tests/` (incl. `tests/autonomous/`, `tests/citation/`, `tests/tabular/`; pass count refreshed in CI per the `.github/workflows/ci.yml` API gate); `cd api && DATABASE_URL=… pytest` |
-| Gateway tests (pytest) | M1–milestone | 67 `test_*.py` files in `gateway/tests/`; `cd gateway && pytest` |
-| Frontend unit tests (Vitest) | M1–milestone | 80 `*.test.ts` files in `web/src/`; `cd web && npx vitest run` |
-| Cypress E2E (LQ.AI shell) | M1–milestone | 17 specs in `web/cypress/e2e/` |
+| Documented test strategy + per-surface E2E coverage matrix | shipped (roadmap 4.1) | [`docs/test-strategy.md`](test-strategy.md) — inventory, surface × depth matrix with real spec paths, CI-reality statement, flake + gap registers |
+| Backend tests (pytest, live Postgres) | M1–milestone | 238 `test_*.py` files in `api/tests/` (incl. `tests/autonomous/`, `tests/citation/`, `tests/tabular/`; pass count refreshed in CI per the `.github/workflows/ci.yml` API gate); `cd api && DATABASE_URL=… pytest` |
+| Gateway tests (pytest) | M1–milestone | 74 `test_*.py` files in `gateway/tests/`; `cd gateway && pytest` |
+| Frontend unit tests (Vitest) | M1–milestone | 84 `*.test.ts` files in `web/src/`; `cd web && npx vitest run` |
+| Cypress E2E (LQ.AI shell) | M1–milestone | 13 spec files in `web/cypress/e2e/` (all LQ.AI-authored; not run in CI, see [`docs/test-strategy.md`](test-strategy.md) §2) |
 | Ruff lint + format (Python) | M1–M4 | `.github/workflows/ci.yml`: `ruff check api scripts` + `ruff format --check` |
 | mypy (api standard, gateway strict) | M1–M4 | CI `mypy app` per subsystem |
 | svelte-check (LQ.AI-owned code) | M1–M4 | `cd web && npm run check:lq-ai` (0 errors on `src/{lib,routes}/lq-ai/**`); inherited OpenWebUI debt tracked as DE-262 (§8.1) |

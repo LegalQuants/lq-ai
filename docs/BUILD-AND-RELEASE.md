@@ -117,7 +117,12 @@ Milestones are planning tools; they do not decide the version.
 
 ```bash
 # What has landed since the last release?
-git log "$(git tag --sort=-v:refname | grep -v desktop | head -1)"..main --no-merges --oneline
+#   --merged main: web/ is a fork of OpenWebUI, and rebasing it brought upstream's
+#   own vX.Y.Z tags into this repo (v0.9.2, v0.11.0). They are not reachable from
+#   main, and without this filter they sort above the real last release. release.yml's
+#   breaking-change gate applies the same filter.
+git log "$(git tag --list 'v*.*.*' --merged main --sort=-v:refname \
+             | grep -v '^desktop-' | head -1)"..main --no-merges --oneline
 ```
 
 Read that list and ask one question of each entry: **does a working install need a
