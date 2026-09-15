@@ -1,0 +1,128 @@
+---
+/**
+ * Header override.
+ *
+ * Differences from Starlight's default:
+ *   - the site title is the plain **LQ.AI** text wordmark (the LegalQuants "LQ"
+ *     tile and wordmark are restricted by the brand guidelines and are not used
+ *     here, so there is no logo image at all);
+ *   - the eight namespace hubs are linked directly on wide screens;
+ *   - social icons and the language select are dropped — the site is English
+ *     only and the footer carries the project line.
+ *
+ * Accessibility carried over unchanged: this renders *inside* Starlight's
+ * `<header>` landmark (PageFrame supplies it), so nothing here adds a second
+ * one. The namespace links are a labelled `<nav>`, the current namespace is
+ * marked `aria-current="true"`, and on narrow screens the links are hidden
+ * because Starlight's mobile menu already lists every namespace as a sidebar
+ * group — hiding a duplicate, never the only copy.
+ */
+import Search from 'virtual:starlight/components/Search';
+import ThemeSelect from 'virtual:starlight/components/ThemeSelect';
+import config from 'virtual:starlight/user-config';
+
+import { NAMESPACES, namespaceOf, withBase } from '../namespaces.mjs';
+
+const { id, siteTitleHref } = Astro.locals.starlightRoute;
+const base = import.meta.env.BASE_URL;
+const current = namespaceOf(id);
+
+const shouldRenderSearch =
+  config.pagefind || config.components.Search !== '@astrojs/starlight/components/Search.astro';
+---
+
+<div class="header">
+  <a class="wordmark" href={siteTitleHref} translate="no">LQ.AI</a>
+
+  <nav class="namespaces sl-hidden lg:sl-flex print:hidden" aria-label="Documentation sections">
+    <ul>
+      {
+        NAMESPACES.map((ns) => (
+          <li>
+            <a
+              href={withBase(base, ns.dir)}
+              aria-current={current?.dir === ns.dir ? 'true' : undefined}
+            >
+              {ns.label}
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </nav>
+
+  <div class="search sl-flex print:hidden">{shouldRenderSearch && <Search />}</div>
+
+  <div class="controls sl-flex print:hidden">
+    <ThemeSelect />
+  </div>
+</div>
+
+<style>
+  @layer starlight.core {
+    .header {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: var(--sl-nav-gap);
+      height: 100%;
+    }
+
+    @media (min-width: 72rem) {
+      .header {
+        grid-template-columns: auto auto minmax(0, 1fr) auto;
+      }
+    }
+
+    .wordmark {
+      /* Editorial wordmark: ink, not a link colour, and it never wraps. */
+      font-size: var(--sl-text-h4);
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: var(--sl-color-white);
+      text-decoration: none;
+      white-space: nowrap;
+      padding: 0.25rem;
+      margin: -0.25rem;
+    }
+
+    .namespaces ul {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .namespaces a {
+      display: block;
+      padding: 0.25rem 0;
+      font-size: var(--sl-text-sm);
+      color: var(--sl-color-gray-2);
+      text-decoration: none;
+      /* Reserve the underline's space so hover does not shift the row. */
+      border-bottom: 2px solid transparent;
+    }
+
+    .namespaces a:hover {
+      color: var(--sl-color-white);
+      border-bottom-color: var(--sl-color-hairline-light);
+    }
+
+    .namespaces a[aria-current='true'] {
+      color: var(--sl-color-white);
+      border-bottom-color: var(--lq-accent);
+    }
+
+    .search {
+      min-width: 0;
+      justify-content: flex-end;
+    }
+
+    .controls {
+      align-items: center;
+      gap: 0.5rem;
+    }
+  }
+</style>

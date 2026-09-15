@@ -1,0 +1,137 @@
+---
+/**
+ * Keyboard access for wide tables (WCAG 2.1.1, axe `scrollable-region-focusable`).
+ *
+ * Starlight styles every table in page content as `display: block;
+ * overflow-x: auto`, so a table wider than the content column becomes a
+ * scrollable region. A scroll region that cannot take keyboard focus is
+ * unreachable without a pointer, which axe reports as an error and which is a
+ * real barrier: six pages in the first draft (the two generated `/reference/`
+ * tables, `/operate/logs-and-monitoring/`, and three `/trust/` pages whose
+ * tables arrive through includes) carry one.
+ *
+ * The fix the code blocks got — turn off the scroll by wrapping the content —
+ * is not available here: a table has no reflow of its own, so removing the
+ * scroll container moves the overflow onto the page. So the scroll stays and
+ * becomes reachable instead. Each overflowing table is wrapped in a focusable
+ * labelled region and given its normal `display: table` back, which is the
+ * remediation the rule documents.
+ *
+ * Progressive enhancement: with the script blocked, tables keep Starlight's own
+ * behaviour — scrollable by pointer, which is what they do today.
+ *
+ * Rendered once per page from `Footer.astro`. Astro hoists and bundles the
+ * module, so nothing is inlined into the document and no external request is
+ * made.
+ */
+---
+
+<script>
+  const SELECTOR = '.sl-markdown-content table';
+  const WRAPPER = 'lq-table-scroll';
+
+  /** The nearest heading above the table, so the region has a real name. */
+  function labelFor(el: Element): string {
+    let node: Element | null = el;
+    while (node) {
+      let prev: Element | null = node.previousElementSibling;
+      while (prev) {
+        if (/^H[1-6]$/.test(prev.tagName)) {
+          const text = prev.textContent?.trim();
+          if (text) return `Table: ${text}`;
+        }
+        prev = prev.previousElementSibling;
+      }
+      node = node.parentElement;
+      if (node?.classList.contains('sl-markdown-content')) break;
+    }
+    return 'Table';
+  }
+
+  function wrap(table: HTMLTableElement): HTMLElement {
+    const parent = table.parentElement;
+    if (parent?.classList.contains(WRAPPER)) return parent;
+    const box = document.createElement('div');
+    box.className = WRAPPER;
+    table.replaceWith(box);
+    box.append(table);
+    return box;
+  }
+
+  function sync(): void {
+    for (const table of document.querySelectorAll<HTMLTableElement>(SELECTOR)) {
+      const box = wrap(table);
+      // Measured on the wrapper, which is the element that actually scrolls.
+      if (box.scrollWidth > box.clientWidth + 1) {
+        box.setAttribute('tabindex', '0');
+        box.setAttribute('role', 'region');
+        box.setAttribute('aria-label', labelFor(box));
+      } else {
+        box.removeAttribute('tabindex');
+        box.removeAttribute('role');
+        box.removeAttribute('aria-label');
+      }
+    }
+  }
+
+  sync();
+
+  let pending = 0;
+  addEventListener('resize', () => {
+    cancelAnimationFrame(pending);
+    pending = requestAnimationFrame(sync);
+  });
+
+  // Harmless today (no view transitions); correct if they are ever turned on.
+  document.addEventListener('astro:page-load', sync);
+</script>
+
+<style is:global>
+  /* Deliberately unlayered. Starlight's own `.sl-markdown-content :is(table)`
+     rule — the one that makes every table its own scroll box — is unlayered
+     too, and an unlayered declaration beats every layered one, so a rule in
+     `starlight.core` or `starlight.utils` would lose to it whatever its
+     specificity. */
+  .sl-markdown-content .lq-table-scroll {
+    overflow-x: auto;
+  }
+
+  /* Give the table its normal box back now that the wrapper owns the scroll.
+     `max-width` has to go with it: capped at the wrapper's width the table
+     would squeeze instead of scroll, and the wrapper would never overflow.
+
+     `width: max-content` is what makes the result readable. Left alone, a table
+     inside an `overflow: auto` box is laid out shrink-to-fit against the box,
+     so a table wider than the column falls back to its *minimum* content width:
+     every cell wraps to its longest word, one tall row is set by a cell the
+     reader cannot even see, and the visible columns become short lines beside a
+     column of whitespace. On `/trust/` that turned 14 rows into 150px each and
+     still cut off the last column. Letting the table take its natural width,
+     capped, keeps the rows the height of their content (84px there) and leaves
+     the overflow where it is honest about being — in the scroll. */
+  .sl-markdown-content .lq-table-scroll > table {
+    display: table;
+    width: max-content;
+    min-width: 100%;
+    max-width: var(--lq-table-max-width, 60rem);
+    margin: 0;
+  }
+
+  /* A scroll box needs an edge, or the cut-off column reads as a rendering bug
+     rather than as a table continuing past the column. A hairline is the design
+     language's only boundary device; the class is on the wrapper only while it
+     actually overflows (the script sets `tabindex` on exactly that condition),
+     so a table that fits keeps its plain, borderless setting. Cells carry their
+     own padding, so the box needs none of its own — which also keeps
+     `clientWidth` the measurement the script already made. */
+  .sl-markdown-content .lq-table-scroll[tabindex] {
+    border: 1px solid var(--sl-color-hairline-light);
+    border-radius: var(--lq-radius-md, 0.375rem);
+  }
+
+  .sl-markdown-content .lq-table-scroll:focus-visible {
+    outline: 2px solid var(--sl-color-accent);
+    outline-offset: 3px;
+    border-radius: var(--lq-radius-md, 0.375rem);
+  }
+</style>
