@@ -2,6 +2,11 @@
 // eslint-disable-next-line @typescript-eslint/triple-slash-reference
 /// <reference path="../support/index.d.ts" />
 
+// cypress-axe registers cy.injectAxe() / cy.checkA11y() / cy.configureAxe()
+// for the accessibility gate (DE-232, a11y.cy.ts). The import also pulls in
+// the package's global Cypress.Chainable type augmentations.
+import 'cypress-axe';
+
 export const adminUser = {
 	name: 'Admin User',
 	email: 'admin@example.com',
@@ -85,7 +90,10 @@ before(() => {
 	// upstream-OpenWebUI spec files only.
 	const spec = (Cypress.spec && Cypress.spec.name) || '';
 	const isLqAiSpec =
-		spec.startsWith('wave-') || spec.startsWith('lq-ai-') || /^m\d+-/.test(spec);
+		spec.startsWith('wave-') ||
+		spec.startsWith('lq-ai-') ||
+		spec.startsWith('a11y') ||
+		/^m\d+-/.test(spec);
 	if (!isLqAiSpec) {
 		cy.registerAdmin();
 	}

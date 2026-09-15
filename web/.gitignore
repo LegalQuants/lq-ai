@@ -317,5 +317,6 @@ dist
 # cypress artifacts
 cypress/videos
 cypress/screenshots
+cypress/results
 .vscode/settings.json
 .cptr
