@@ -99,6 +99,8 @@ const TEXT_PAIRS = [
   ['--sl-color-text', '--sl-color-bg-sidebar', 4.5, 'sidebar link on sidebar'],
   ['--sl-color-text', '--sl-color-bg-nav', 4.5, 'body text on nav'],
   ['--sl-color-text', '--sl-color-bg-inline-code', 4.5, 'inline code'],
+  ['--sl-color-text', '--lq-color-control-bg', 4.5, 'search trigger text on the control surface'],
+  ['--sl-color-white', '--lq-color-control-bg', 4.5, 'search trigger text, hovered'],
   ['--sl-color-gray-3', '--sl-color-bg', 4.5, 'muted text on page background'],
   ['--sl-color-gray-3', '--lq-color-surface-raised', 4.5, 'stamp / footer meta on surface'],
   ['--sl-color-text-accent', '--sl-color-bg', 4.5, 'link and eyebrow on page background'],
