@@ -22,7 +22,6 @@
  */
 import Pagination from 'virtual:starlight/components/Pagination';
 
-import ScrollableTables from './ScrollableTables.astro';
 import Stamp from './Stamp.astro';
 import { EDIT_BASE, toDocsSitePath } from '../repo.mjs';
 
@@ -53,9 +52,6 @@ const editHref =
 
   <p class="lq-footer__project">An LQ Labs project · LegalQuants · Apache 2.0</p>
 </footer>
-
-{/* Renders no markup — carries the page's table-keyboard-access script. */}
-<ScrollableTables />
 
 <style>
   @layer starlight.core {

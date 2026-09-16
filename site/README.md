@@ -101,40 +101,16 @@ in full by `npm run check:a11y:review`. There is currently one, on every page:
 the `⌘` glyph in the search box's keyboard-shortcut hint. Its colours are proved
 by `check:contrast` instead.
 
-Two rendering decisions exist to keep the gate green for pages nobody has
-written yet, rather than to fix the pages that exist today:
+One rendering decision exists to keep the gate green for pages nobody has
+written yet, rather than to fix the pages that exist today: **code blocks
+wrap** (`expressiveCode.defaultProps` in `astro.config.mjs`). An overflowing
+`<pre>` is a scroll region no keyboard can reach (`scrollable-region-focusable`,
+WCAG 2.1.1). Wrapping removes the scroll region rather than papering over it.
+Copy-to-clipboard still copies the unwrapped source.
 
-- **Code blocks wrap** (`expressiveCode.defaultProps` in `astro.config.mjs`).
-  An overflowing `<pre>` is a scroll region no keyboard can reach
-  (`scrollable-region-focusable`, WCAG 2.1.1). Wrapping removes the scroll
-  region rather than papering over it. Copy-to-clipboard still copies the
-  unwrapped source.
-- **Wide tables become focusable labelled regions**
-  (`src/components/ScrollableTables.astro`, rendered once per page from the
-  footer). A table cannot reflow, so the scroll has to stay; instead each
-  overflowing table is wrapped in a `role="region"` box with `tabindex="0"` and
-  a label taken from the nearest heading above it. With the script blocked, the
-  table behaves exactly as Starlight ships it.
-
-Three things about that wrapper are design decisions, not accessibility ones,
-and they are in the same file because they only make sense together:
-
-- The table inside it takes `width: max-content`, capped at
-  `--lq-table-max-width` (60rem). Without that, a table wider than the column is
-  laid out shrink-to-fit *against the scroll box*, so it falls back to its
-  minimum content width: every cell wraps to its longest word and the row's
-  height is set by a cell the reader cannot see. On `/trust/` that made 14 rows
-  150px tall each — and still cut off the last column. Letting the table take
-  its natural width keeps those rows at 84px and halves the height of
-  `/reference/configuration/` on a phone.
-- The wrapper takes a hairline border **only while it is actually scrolling**
-  (the rule is on `[tabindex]`, which the script sets on exactly that
-  condition). A cut-off column with no edge beside it reads as a rendering bug;
-  with an edge it reads as a table continuing past the column.
-- Its focus ring is the accent, like every other focus ring on the site.
-
-To change how wide a table may grow, change `--lq-table-max-width` in
-`theme.css`. It is the only number involved.
+Tables no longer need a decision like this one: they are classified into a
+shape that fits the column, rather than scrolled. See
+["Tables" under "How it is built"](#tables).
 
 ## How it is built
 
@@ -206,6 +182,50 @@ keeps the `#_top` id the skip link targets, the header renders inside
 Starlight's own `<header>`, and the namespace nav is a labelled `<nav>` that
 collapses into the existing mobile menu rather than being duplicated.
 
+### Tables
+
+A Markdown table stays a table in its source — GitHub and the `.md` twin both
+still render it as one — but the built page renders it as whichever of three
+shapes actually fits a 632px reading column. The rewrite is
+`scripts/lib/rehype-lq-tables.mjs`, a dependency-free hast transform. Astro 7's
+Markdown processor is Sätteri, not remark/rehype, so `astro.config.mjs` wires it
+through `satteri({ hastPlugins: [rehypeLqTablesSatteri()] })` — the adapter that
+unwraps Sätteri's `raw` comment nodes and applies edits through `ctx.replaceNode`
+— and it runs on every Markdown and MDX table.
+
+The rule, applied to each table in order:
+
+1. An explicit directive wins outright (below).
+2. Two columns become a definition list (`.lq-dl`): a caption naming the two
+   original headers, then a hairline-separated `dt`/`dd` pair per row.
+3. Otherwise, if the table is both short and narrow — every column's longest
+   cell is 36 characters or under, the columns sum to 72 or under, and there
+   are no more than 5 of them — it stays a plain, wrapped `<table>`
+   (`.lq-table`): the minority of tables that are genuinely tabular.
+4. Otherwise it becomes a set of records (`.lq-records`): one `<article>` per
+   row, titled from its first column (a stable, citable `#slug` anchor), its
+   short columns collected into a meta line and its long, prose columns
+   stacked in a body — this is most of the tables in the docs, because most of
+   them are one-row-per-entity data with a paragraph in at least one cell, not
+   a grid.
+
+A writer overrides the classification for one table with an HTML comment
+immediately above it:
+
+```markdown
+<!-- table: grid -->
+<!-- table: dl -->
+<!-- table: records -->
+<!-- table: records key=2 -->
+```
+
+`key=N` (1-based) picks which column becomes a record's title; it defaults to
+the first column. The comment is removed from the rendered page.
+
+**`check:tables`** is the gate: at 1280px and 400px, over every route, it
+asserts nothing inside `.sl-markdown-content` scrolls horizontally and that no
+`[tabindex="0"][role="region"]` scroll wrapper remains — the shapes exist so
+that a table never needs one.
 
 ### The pipeline
 

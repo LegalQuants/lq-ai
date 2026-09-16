@@ -101,15 +101,22 @@ export async function generate(ctx) {
         message: `${relPath} carries no Status line — listed as "no status line in the file"`,
       });
     }
-    return [
-      number,
-      `[${title}](${ctx.blob(relPath, stamp.sha)})`,
-      status ? resolveAdrLinks(ctx, status, stamp.sha) : 'no status line in the file',
-    ];
+    // The status line is one word (Accepted, Proposed, Superseded, …) followed,
+    // in most files, by a date and a note. The word is its own column so the
+    // page can badge it; the rest stays verbatim in a Note column.
+    const split = status ? /^(\w+)\b\s*(.*)$/s.exec(status.trim()) : null;
+    const statusWord = split ? split[1] : 'no status line in the file';
+    const statusNote = split && split[2] ? resolveAdrLinks(ctx, split[2], stamp.sha) : '';
+    return [number, `[${title}](${ctx.blob(relPath, stamp.sha)})`, statusWord, statusNote];
   });
 
   const body = [
-    table(['ADR', 'Decision', 'Status'], rows),
+    // Default classification would key the record on column 1 (the ADR
+    // number); the number is not what a reader scans for, the decision title
+    // is — so the directive overrides the record title to column 2. See
+    // "Known cases to check" in the tables spec.
+    '<!-- table: records key=2 -->',
+    table(['ADR', 'Decision', 'Status', 'Note'], rows),
     '',
     `Each row links the ADR file at the commit this page was checked against, so the status you read here is the status that file carried at that commit. Statuses are rendered exactly as the file states them — an ADR that says "Proposed" is listed as Proposed even where the decision is being followed, because the file is the record.`,
     '',

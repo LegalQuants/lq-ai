@@ -4,9 +4,11 @@ import { fileURLToPath } from 'node:url';
 
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import { satteri } from '@astrojs/markdown-satteri';
 
 import { EDIT_BASE } from './src/repo.mjs';
 import { NAMESPACES } from './src/namespaces.mjs';
+import { rehypeLqTablesSatteri } from './scripts/lib/rehype-lq-tables.mjs';
 /**
  * Deployment target. Both are configuration, never content (ADR 0028): no page
  * source, link rewrite, or generated absolute URL may hard-code `/lq-ai/`.
@@ -49,6 +51,16 @@ export default defineConfig({
   // The machine surface hangs `<route>.md` off the same route strings.
   trailingSlash: 'always',
   build: { format: 'directory' },
+  markdown: {
+    // Astro 7's default Markdown processor. `markdown.rehypePlugins` is not a
+    // config option under it (that option belongs to the legacy
+    // `@astrojs/markdown-remark` processor, not installed here — adding it
+    // would be a new dependency). Sätteri's own extension point is
+    // `hastPlugins`: `rehypeLqTablesSatteri` renders each Markdown table by
+    // its content's shape (definition list / records / grid) instead of as a
+    // generic wide `<table>` — see `scripts/lib/rehype-lq-tables.mjs`.
+    processor: satteri({ hastPlugins: [rehypeLqTablesSatteri()] }),
+  },
   integrations: [
     starlight({
       title: 'LQ.AI',
