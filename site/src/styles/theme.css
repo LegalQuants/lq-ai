@@ -96,6 +96,7 @@
 
   --lq-color-surface-raised: #f9fafb;
   --lq-color-surface-sunken: #f3f4f6;
+  --lq-color-control-bg: #f3f4f6; /* search trigger and similar controls */
   /* One step off the sidebar ground, in whichever direction reads as "lifted"
      in this theme. The sidebar itself is the raised surface in light, so the
      current item cannot also be. */
@@ -185,6 +186,7 @@
 
   --lq-color-surface-raised: #191a1d;
   --lq-color-surface-sunken: #08080a;
+  --lq-color-control-bg: #111114;
   --lq-color-sidebar-current-bg: #191a1d;
 
   /*
@@ -588,6 +590,41 @@ header.header {
 a.site-title {
   color: var(--sl-color-white);
   letter-spacing: -0.01em;
+}
+
+/* ------------------------------------------------------------------ *
+ * Search — a quiet control, not a bar.
+ *
+ * Starlight draws the search trigger 22rem wide and 2.5rem tall with the
+ * strong line and the page ground, so it is the heaviest object in an
+ * otherwise hairline header. Here it is a hairline pill on the control
+ * surface, narrower and a step shorter, with a mono shortcut hint. Starlight's
+ * rules sit in `@layer starlight.core`; this block is unlayered, so it wins.
+ * Below 50rem Starlight shows an icon-only button, which is left alone.
+ * ------------------------------------------------------------------ */
+
+@media (min-width: 50rem) {
+  site-search button[data-open-modal] {
+    max-width: 14rem;
+    height: 2.25rem;
+    border-color: var(--sl-color-hairline-light);
+    border-radius: var(--lq-radius-lg);
+    background-color: var(--lq-color-control-bg);
+    color: var(--sl-color-text);
+  }
+  site-search button[data-open-modal]:hover,
+  site-search button[data-open-modal]:focus-visible {
+    border-color: var(--lq-color-hairline-strong);
+    color: var(--sl-color-white);
+  }
+  site-search button[data-open-modal] > kbd {
+    font-family: var(--sl-font-mono);
+    font-size: var(--sl-text-xs);
+    color: var(--sl-color-gray-3);
+    background-color: var(--sl-color-bg);
+    border: 1px solid var(--sl-color-hairline-light);
+    border-radius: var(--lq-radius-md);
+  }
 }
 
 /*
