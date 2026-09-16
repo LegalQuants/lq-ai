@@ -336,31 +336,214 @@
   border-bottom: 1px solid var(--sl-color-hairline-light);
 }
 
-/*
- * Tables.
+/* ------------------------------------------------------------------ *
+ * Tables → shapes
  *
- * Starlight makes every table its own horizontal scroll box. `ScrollableTables`
- * moves that scroll onto a focusable wrapper (WCAG 2.1.1) and owns the
- * wrapper's presentation; this rule is the fallback for a page whose script has
- * not run yet, and the shared cell styling for both paths.
- *
- * `--lq-table-max-width` is how wide a table may grow inside its scroll box.
- * Without it a wide table is squeezed to its *minimum* content width, every
- * cell wraps to four or five lines, and the reader gets a column of ragged
- * whitespace next to a column that is still cut off. See ScrollableTables.astro.
- */
-:root {
-  --lq-table-max-width: 60rem;
-}
-
-.sl-markdown-content :is(table) {
-  display: block;
-  overflow-x: auto;
-  max-width: 100%;
-}
+ * A Markdown table is source, not layout. `rehype-lq-tables`
+ * (`scripts/lib/rehype-lq-tables.mjs`) classifies every table at build time —
+ * by column count, by how long its cells run, or by an explicit
+ * `<!-- table: … -->` directive — and rewrites it into whichever shape
+ * actually reads in a 632px column: `.lq-dl` for a two-column key→value
+ * table, `.lq-records` for one-row-per-entity data with prose cells, or
+ * `.lq-table` (a plain `<table>`, wrapped) for the minority that is
+ * genuinely tabular and narrow. Nothing below scrolls — the classification
+ * exists so that no table needs to — and the build's tables gate fails if
+ * one still overflows at 1280px or 400px.
+ * ------------------------------------------------------------------ */
 
 .sl-markdown-content :is(th, td) {
   border-color: var(--sl-color-hairline-light);
+}
+
+/*
+ * Grid — the shape that keeps the `<table>` element, for the tables that are
+ * both narrow and genuinely tabular. `display: table` (Starlight's own rule
+ * is `block` plus `overflow-x: auto`) and `table-layout: auto` size columns
+ * to their content instead of shrinking to a scroll box's minimum width;
+ * `overflow-wrap: anywhere` is what keeps one long value from pushing the
+ * table past the reading column instead of wrapping inside it.
+ */
+.lq-table table {
+  display: table;
+  width: auto;
+  max-width: 100%;
+  table-layout: auto;
+  border-collapse: collapse;
+  font-size: var(--sl-text-sm);
+}
+
+.lq-table :is(th, td) {
+  overflow-wrap: anywhere;
+  /* A forced narrow-column break (below) should land on a syllable boundary
+     with a visible hyphen wherever the browser's dictionary allows one,
+     falling back to `overflow-wrap: anywhere`'s bare character break only
+     when hyphenation can't find one — a plain word split reads as broken
+     layout, a hyphenated one reads as considered. */
+  hyphens: auto;
+}
+
+/*
+ * `table-layout: auto` sizes each column to its own min-content width, which
+ * is exactly what makes a genuinely tabular table read well — but a handful
+ * of short, multi-word column headers (e.g. "Setting" / "Type" / "Default")
+ * can still sum past a 400px viewport even though no single cell is wide
+ * enough on its own to trigger `overflow-wrap`. Below the width a reading
+ * column ever gets that narrow, columns share the available width instead
+ * (`table-layout: fixed`) so `overflow-wrap: anywhere` has room to actually
+ * wrap every cell down to the container, not just the widest one.
+ *
+ * An even column split still leaves little room for a table with the
+ * maximum 5 columns the grid classification allows (`Field · Type ·
+ * Required · Default · What it is`, say) — dropping a size, the way a dense
+ * data table already does inside `.lq-table`, buys each column back a few
+ * more characters before a header word has to wrap at all. (Skewing the
+ * split toward one column instead — tried and screenshotted — made every
+ * other column narrower and produced *more* broken words, not fewer; the
+ * table shapes in this generated content don't have a column the CSS could
+ * safely assume is always the long one.)
+ */
+@media (max-width: 30rem) {
+  .lq-table table {
+    width: 100%;
+    table-layout: fixed;
+    font-size: var(--sl-text-xs);
+  }
+}
+
+.lq-table th {
+  color: var(--sl-color-white);
+  text-align: left;
+}
+
+/*
+ * Definition list — the shape for a two-column key→value table. The caption
+ * keeps the two columns' own headers legible once the `<th>` row is gone; it
+ * takes the eyebrow's metrics at the muted tint rather than the accent, since
+ * what is being labelled is the page's own structure, not a link.
+ */
+.lq-dl {
+  margin-block: var(--lq-prose-gap) 0;
+}
+
+.lq-dl__caption {
+  margin: 0 0 0.5rem;
+  font-family: var(--sl-font-mono);
+  font-size: var(--lq-eyebrow-size);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+}
+
+.lq-dl > dl {
+  margin: 0;
+}
+
+.lq-dl__item {
+  padding-block: 0.75rem;
+  border-top: 1px solid var(--sl-color-hairline-light);
+}
+
+.lq-dl__item dt {
+  margin: 0;
+  color: var(--sl-color-white);
+  font-weight: 600;
+}
+
+.lq-dl__item dd {
+  margin: 0.25rem 0 0;
+  color: var(--sl-color-text);
+}
+
+/* Two columns only once the reading column is wide enough to hold a stable
+   label beside a value; narrower than that, the pair reads better stacked. */
+@media (min-width: 50rem) {
+  .lq-dl__item {
+    display: grid;
+    grid-template-columns: minmax(10rem, 16rem) 1fr;
+    gap: 0.5rem 1.5rem;
+  }
+  .lq-dl__item dd {
+    margin-top: 0;
+  }
+}
+
+/* What an empty value cell renders instead of a blank `dd` or
+   `.lq-record__value` — muted rather than absent, so the reader can tell a
+   missing value from a rendering gap. */
+.lq-muted {
+  color: var(--sl-color-gray-3);
+}
+
+/*
+ * Records — the shape for one-row-per-entity data with prose cells. Each row
+ * becomes an `<article>`; its short columns (measured over the whole column,
+ * not the cell) make a wrapped meta line, its long columns a stacked body, in
+ * original column order. The title carries `scroll-margin-top` because its
+ * `id` is a citable anchor (a config setting, an ADR decision) — a reader
+ * following `#slug` should not land under the sticky header.
+ */
+.lq-records {
+  margin-block: var(--lq-prose-gap) 0;
+}
+
+.lq-record {
+  padding-block: 0.75rem;
+  border-top: 1px solid var(--sl-color-hairline-light);
+}
+
+.lq-record__title {
+  margin: 0;
+  color: var(--sl-color-white);
+  font-weight: 600;
+  font-size: var(--sl-text-lg);
+  scroll-margin-top: 5rem;
+}
+
+.lq-record__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
+  margin: 0.35rem 0 0;
+  font-size: var(--sl-text-sm);
+}
+
+.lq-record__label {
+  font-family: var(--sl-font-mono);
+  font-size: var(--lq-eyebrow-size);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+}
+
+/* In the meta line the label sits inline before its value (a space in the
+   markup separates them); in the body it is stacked above a value that runs
+   long enough to need its own line. */
+.lq-record__field--long {
+  margin-top: 0.5rem;
+}
+
+.lq-record__field--long .lq-record__label {
+  display: block;
+}
+
+/* Once the reading column is wide enough, a long field puts its label in a
+   fixed column beside the value — the same two-column rhythm as `.lq-dl` — so
+   a record with two prose fields is three lines tall, not five. */
+@media (min-width: 50rem) {
+  .lq-record__field--long {
+    display: grid;
+    grid-template-columns: 8.5rem minmax(0, 1fr);
+    gap: 0.25rem 1rem;
+    align-items: baseline;
+  }
+  .lq-record__field--long .lq-record__label {
+    padding-top: 0.2em;
+  }
+}
+
+.lq-record__value p {
+  margin: 0;
 }
 
 .sl-markdown-content blockquote {
@@ -429,6 +612,36 @@
   --lq-status-bg: var(--lq-status-reviewed-bg);
   --lq-status-text: var(--lq-status-reviewed-text);
   --lq-status-line: var(--lq-status-reviewed-line);
+}
+
+/* The record-table status words (ADR status, skill status, config rollout).
+   Shipped and accepted read as done, so they take the same green as the
+   `reviewed` badge; partial and proposed read as in motion, so they take the
+   caution amber; scaffold, deferred, superseded, deprecated and rejected all
+   read as "not the live state" and share the `draft` badge's neutral tokens
+   rather than each getting its own. */
+.lq-status--shipped,
+.lq-status--accepted {
+  --lq-status-bg: var(--sl-color-green-low);
+  --lq-status-text: var(--sl-color-green-high);
+  --lq-status-line: var(--sl-color-green);
+}
+
+.lq-status--partial,
+.lq-status--proposed {
+  --lq-status-bg: var(--sl-color-orange-low);
+  --lq-status-text: var(--sl-color-orange-high);
+  --lq-status-line: var(--sl-color-orange);
+}
+
+.lq-status--scaffold,
+.lq-status--deferred,
+.lq-status--superseded,
+.lq-status--deprecated,
+.lq-status--rejected {
+  --lq-status-bg: var(--lq-status-draft-bg);
+  --lq-status-text: var(--lq-status-draft-text);
+  --lq-status-line: var(--lq-status-draft-line);
 }
 
 /* Audience chips — same family, quieter, and plainly not a status. */

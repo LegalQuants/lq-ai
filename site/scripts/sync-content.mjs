@@ -441,7 +441,16 @@ async function main() {
         if (intro.data.title) page.data.title = intro.data.title;
         if (intro.data.description) page.data.description = intro.data.description;
         if (Array.isArray(intro.data.audience)) page.data.audience = intro.data.audience;
-        body = `${mapChunk(intro.content.trim(), path.dirname(introPath))}\n\n${body}`;
+        const introText = mapChunk(intro.content.trim(), path.dirname(introPath));
+        // A hand-written intro may end in its own "## Next". That section
+        // belongs after the generated content, not before it — and it replaces
+        // the generator's generic Next, because the writer's onward links are
+        // the curated ones. Both sections are final in their documents.
+        const NEXT_SECTION = /\n## Next\b[\s\S]*$/;
+        const introNext = introText.match(NEXT_SECTION)?.[0] ?? '';
+        const introHead = introNext ? introText.replace(NEXT_SECTION, '') : introText;
+        const bodyMain = introNext ? body.replace(NEXT_SECTION, '') : body;
+        body = `${introHead}\n\n${bodyMain}${introNext ? `\n${introNext}` : ''}`;
       } else {
         // Not a warning: the brief gives an intro to three generated pages and
         // leaves the rest to stand on their own table. The summary line names

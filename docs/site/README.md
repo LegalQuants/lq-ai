@@ -100,6 +100,18 @@ happens to contain `github.com/LegalQuants/lq-ai/…` is not a hard-coded base a
 
 Do not write any of these by hand.
 
+## Tables
+
+A Markdown table renders as one of three shapes, chosen from its shape rather than
+written by hand: two columns become a definition list, one-row-per-entity data (most
+tables here) becomes a set of records, and a table stays a plain grid only when it is
+both short and narrow enough to fit the column. Write the table normally; if the
+automatic choice is wrong for one table, override it with a directive comment
+immediately above it — `<!-- table: grid -->`, `<!-- table: dl -->`,
+`<!-- table: records -->`, or `<!-- table: records key=2 -->` to title the records from
+a column other than the first (1-based). The Markdown source is unaffected either way,
+so it still reads as a table on GitHub.
+
 ## House rules
 
 - Every page ends with a `## Next` section of one to four onward links.
