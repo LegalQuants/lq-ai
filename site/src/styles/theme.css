@@ -42,6 +42,13 @@
   --sl-line-height: 1.625;
   --sl-line-height-headings: 1.25;
 
+  /* Prose rhythm — applied to `.sl-markdown-content` only, so cards, asides
+     and chrome keep the base size. 17.5px body, 1.7 leading, 1.5rem between
+     paragraphs. */
+  --lq-text-body: 1.09375rem;
+  --lq-leading-body: 1.7;
+  --lq-prose-gap: 1.5rem;
+
   /* Radii */
   --lq-radius-md: 0.375rem;
   --lq-radius-lg: 0.5rem;
@@ -73,13 +80,13 @@
    *
    *   heading  #14181f on #ffffff  17.79:1
    *   ink      #1e2a3a on #ffffff  14.51:1
-   *   body     #4b5563 on #ffffff   7.56:1
+   *   body     #374151 on #ffffff  10.31:1
    *   muted    #6b7280 on #ffffff   4.83:1
    *   faint    #8b919c on #ffffff   3.17:1  (non-text UI only)
    */
   --sl-color-white: #14181f; /* heading text */
   --sl-color-gray-1: #1e2a3a; /* ink: strong text, dark fills */
-  --sl-color-gray-2: #4b5563; /* body text */
+  --sl-color-gray-2: #374151; /* body text */
   --sl-color-gray-3: #6b7280; /* muted text */
   --sl-color-gray-4: #8b919c; /* faint: icons and controls, never prose */
   --sl-color-gray-5: #d1d5db; /* strong line */
@@ -159,7 +166,7 @@
 ::backdrop {
   /*
    *   heading  #f5f6f7 on #0b0e11  17.89:1
-   *   body     #b6b7b9 on #0b0e11   9.64:1  (#f5f6f7 at 73%)
+   *   body     #c9cacc on #0b0e11  11.94:1  (a step above the 73% tint, #b6b7b9)
    *   muted    #858789 on #0b0e11   5.37:1  (52%; 45% measures 4.25:1 — below AA)
    *   faint    #646668 on #0b0e11   3.36:1  (38%; non-text UI only)
    *
@@ -168,7 +175,7 @@
    */
   --sl-color-white: #f5f6f7; /* heading text */
   --sl-color-gray-1: #e4e5e7; /* ink */
-  --sl-color-gray-2: #b6b7b9; /* body text */
+  --sl-color-gray-2: #c9cacc; /* body text */
   --sl-color-gray-3: #858789; /* muted text */
   --sl-color-gray-4: #646668; /* faint: icons and controls, never prose */
   --sl-color-gray-5: #2b333d; /* strong line */
@@ -254,6 +261,50 @@
 .sl-markdown-content :is(h1, h2, h3, h4, h5, h6) {
   font-weight: 600;
   letter-spacing: -0.015em;
+}
+
+/* Balanced headings; never a widowed last word. */
+.lq-page-title h1,
+.sl-markdown-content :is(h1, h2, h3) {
+  text-wrap: balance;
+}
+
+/*
+ * Prose rhythm. Scoped to the reading column so cards, asides, tables and the
+ * chrome keep the base size. Left-aligned, never justified; hyphenation only
+ * where the text asks for it. Starlight's own spacing lives in
+ * `@layer starlight.content`; these rules are unlayered, so they win.
+ */
+.sl-markdown-content {
+  font-size: var(--lq-text-body);
+  line-height: var(--lq-leading-body);
+  text-align: start;
+  hyphens: manual;
+}
+.sl-markdown-content p {
+  margin-bottom: var(--lq-prose-gap);
+  text-wrap: pretty;
+}
+.sl-markdown-content :is(h2, h3, h4) {
+  scroll-margin-top: 5rem;
+}
+.sl-markdown-content h2 {
+  margin-top: 2.5rem;
+}
+.sl-markdown-content h3 {
+  margin-top: 1.75rem;
+}
+.sl-markdown-content h4 {
+  margin-top: 1.5rem;
+}
+.sl-markdown-content :is(ul, ol) li + li {
+  margin-top: 0.35em;
+}
+
+/* Code at a fixed 15px, inline and in blocks (Expressive Code reads
+   `--sl-text-code` for its block font size). */
+:root {
+  --sl-text-code: 0.9375rem;
 }
 
 .sl-markdown-content :is(h2, h3) {
