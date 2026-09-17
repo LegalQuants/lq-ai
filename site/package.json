@@ -1,0 +1,37 @@
+{
+  "name": "lq-ai-docs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "LQ.AI public documentation site (Astro Starlight, ADR 0028).",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "sync": "node scripts/sync-content.mjs",
+    "dev": "npm run sync && astro dev",
+    "build": "npm run sync && astro build && node scripts/postbuild-machine-surface.mjs",
+    "preview": "astro preview",
+    "test": "node --test test/*.test.mjs",
+    "check:links": "node scripts/check-internal-links.mjs",
+    "check:orphans": "node scripts/check-orphans.mjs",
+    "check:tables": "node scripts/check-tables.mjs",
+    "check:a11y": "node scripts/a11y.mjs",
+    "check:a11y:review": "PA11Y_INCLUDE_WARNINGS=1 node scripts/a11y.mjs",
+    "check:contrast": "node scripts/theme-contrast.mjs",
+    "check:docs-links": "python3 ../docs/audits/check_doc_links.py $(find ../docs/site -name README.md -prune -o \\( -name '*.md' -o -name '*.mdx' \\) -print)",
+    "check": "npm test && npm run build && npm run check:links && npm run check:orphans && npm run check:tables && npm run check:contrast && npm run check:a11y && npm run check:docs-links",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "0.42.0",
+    "astro": "7.3.2",
+    "sharp": "0.35.4"
+  },
+  "devDependencies": {
+    "gray-matter": "4.0.3",
+    "pa11y-ci": "4.1.1",
+    "yaml": "2.9.1"
+  }
+}

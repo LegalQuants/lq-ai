@@ -1,0 +1,40 @@
+---
+title: LQ.AI
+description: Self-hosted, open-source AI for in-house legal teams — your infrastructure, your keys, every skill and verification heuristic inspectable.
+audience: [operator, evaluator, contributor, agent]
+status: draft
+sources:
+  - README.md
+  - docs/HONEST-STATE.md
+  - docs/architecture.md
+  - docs/PRD.md
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+LQ.AI is a self-hosted, open-source AI platform for in-house legal teams: it runs on infrastructure you control, against model-provider keys you supply, and every artifact that shapes an answer — the skills, the playbooks, the citation-verification logic — ships as source you can read, fork, and audit rather than a vendor's hidden prompt.
+
+## Where your data goes
+
+The Inference Gateway is the only component that calls out to a model provider; the backend never holds a provider key and never makes an external call of its own. Every request is classified onto one of five Inference Tiers, from fully air-gapped local inference (Tier 1), through customer-hosted cloud inference (Tier 2) and enterprise managed inference with ZDR / no-training commitments (Tier 3), through a standard cloud API (Tier 4) to a consumer or free-tier endpoint (Tier 5), and the routed tier is written to the audit log and shown on the message that used it (README.md, "Architecture"; docs/architecture.md, "Where data lives, in detail"). [The trust centre](trust/index.md) has the full accounting, artifact by artifact, with what each one covers and what stays yours to verify.
+
+In-house work is the focus, not a gate on who you are: the PRD's primary user is "in-house counsel at organizations of any size, from solo General Counsel to enterprise legal departments" (PRD §1.4), and every v1 exclusion is a use case rather than a practitioner type (PRD §1.6). Not sure this is the right tool for your team yet? [Read the disqualifiers](start/is-it-for-you.md) — they are checkable, and they are the place to decide you are out, before you spend more time here.
+
+## Start here, by goal
+
+<CardGrid>
+  <LinkCard title="Start" href="start/index.md" description="Decide whether LQ.AI fits, then get a deployment running." />
+  <LinkCard title="Operate" href="operate/index.md" description="Install, size, back up, upgrade, and recover a deployment." />
+  <LinkCard title="Trust" href="trust/index.md" description="The evidence a security or procurement review asks for." />
+  <LinkCard title="Skills" href="skills/index.md" description="Author, inspect, fork, and test the work product." />
+  <LinkCard title="Deliver" href="deliver/index.md" description="Brand and license a client-facing deployment." />
+  <LinkCard title="Contribute" href="contribute/index.md" description="Engineering and legal-substance contribution tracks." />
+  <LinkCard title="Reference" href="reference/index.md" description="Generated specs: configuration, skill frontmatter, ADR index." />
+  <LinkCard title="Changelog" href="changelog/index.intro.md" description="What shipped in each release, and how to read an upgrade class." />
+</CardGrid>
+
+## Next
+
+- [Is LQ.AI for you?](start/is-it-for-you.md) — checkable disqualifiers
+- [Quickstart](start/quickstart.md) — clone to a citation-grounded result in about 20 minutes
+- [The trust centre](trust/index.md) — for a security or procurement review
