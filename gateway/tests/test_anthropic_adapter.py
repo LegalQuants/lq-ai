@@ -28,6 +28,7 @@ import httpx
 import pytest
 import respx
 
+from app.config import ProviderConfig
 from app.providers import (
     AnthropicAdapter,
     ChatCompletionChunk,
@@ -620,6 +621,107 @@ def test_from_config_succeeds_with_env_set() -> None:
     )
     adapter = AnthropicAdapter.from_config(provider, env={"ANTHROPIC_API_KEY": "sk-ant-x"})
     assert adapter.name == "anthropic-test"
+
+
+# --- #18: per-provider default_max_tokens -------------------------------------
+
+
+def _anthropic_provider_config(**extra: object) -> ProviderConfig:
+    """Build a minimal anthropic ProviderConfig, merging ``extra`` fields."""
+
+    payload: dict[str, object] = {
+        "name": "anthropic-test",
+        "type": "anthropic",
+        "base_url": ANTHROPIC_BASE,
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "tier": 4,
+    }
+    payload.update(extra)
+    return ProviderConfig.model_validate(payload)
+
+
+def _minimal_anthropic_response() -> httpx.Response:
+    return httpx.Response(
+        200,
+        json={
+            "id": "msg_01ABC",
+            "model": "claude-sonnet-4-6",
+            "content": [{"type": "text", "text": "Hello there!"}],
+            "stop_reason": "end_turn",
+            "usage": {"input_tokens": 12, "output_tokens": 5},
+        },
+    )
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_default_max_tokens_from_provider_config_is_honored() -> None:
+    """A provider entry with ``default_max_tokens`` overrides the module
+    constant when the caller omits ``max_tokens`` — and an explicit
+    request value still wins over the configured default."""
+
+    provider = _anthropic_provider_config(default_max_tokens=8192)
+    adapter = AnthropicAdapter.from_config(provider, env={"ANTHROPIC_API_KEY": "sk-ant-x"})
+    route = respx.post(f"{ANTHROPIC_BASE}/v1/messages").mock(
+        side_effect=lambda request: _minimal_anthropic_response()
+    )
+    try:
+        await adapter.chat_completion(_basic_request(), model="claude-sonnet-4-6", stream=False)
+        sent = json.loads(route.calls[-1].request.content)
+        assert sent["max_tokens"] == 8192
+
+        await adapter.chat_completion(
+            _basic_request(max_tokens=256), model="claude-sonnet-4-6", stream=False
+        )
+        sent = json.loads(route.calls[-1].request.content)
+        assert sent["max_tokens"] == 256
+    finally:
+        await adapter.aclose()
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_default_max_tokens_absent_falls_back_to_module_constant() -> None:
+    """Without ``default_max_tokens`` on the provider entry, the adapter
+    sends :data:`DEFAULT_MAX_TOKENS` (16384 — ADR 0027 D1)."""
+
+    provider = _anthropic_provider_config()
+    adapter = AnthropicAdapter.from_config(provider, env={"ANTHROPIC_API_KEY": "sk-ant-x"})
+    route = respx.post(f"{ANTHROPIC_BASE}/v1/messages").mock(
+        return_value=_minimal_anthropic_response()
+    )
+    try:
+        await adapter.chat_completion(_basic_request(), model="claude-sonnet-4-6", stream=False)
+    finally:
+        await adapter.aclose()
+    sent = json.loads(route.calls[-1].request.content)
+    assert sent["max_tokens"] == DEFAULT_MAX_TOKENS == 16384
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("bad", ["lots", 0, -5])
+def test_default_max_tokens_rejects_malformed_values(bad: object) -> None:
+    """A ``default_max_tokens`` that is not a positive integer is a config
+    error surfaced at startup (the same ValueError channel as a missing
+    key), never silently replaced by the module constant."""
+
+    provider = _anthropic_provider_config(default_max_tokens=bad)
+    with pytest.raises(ValueError, match="default_max_tokens"):
+        AnthropicAdapter.from_config(provider, env={"ANTHROPIC_API_KEY": "sk-ant-x"})
+
+
+@pytest.mark.unit
+def test_default_max_tokens_is_not_clamped_to_the_unenforced_ceiling() -> None:
+    """``request_validation.max_max_tokens`` is enforced on no request path
+    (DE-392), so the injected default is not clamped against it: an
+    operator's explicit ``default_max_tokens`` is honoured as written."""
+
+    provider = _anthropic_provider_config(default_max_tokens=200_000)
+    adapter = AnthropicAdapter.from_config(provider, env={"ANTHROPIC_API_KEY": "sk-ant-x"})
+    try:
+        assert adapter._default_max_tokens == 200_000
+    finally:
+        pass
 
 
 # --- PR5b: tools / tool_choice forwarding + tool_use bridging ----------------
