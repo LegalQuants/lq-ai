@@ -141,6 +141,12 @@ from app.schemas.gateway import (
     ChatCompletionRequest,
     InlineSkillRef,
 )
+from app.security.encryption import (
+    MCPEncryptionError,
+    MCPMasterKeyMissing,
+    decrypt_payload_envelope,
+    encrypt_payload_envelope,
+)
 from app.skills.registry import MutableSkillRegistry, SkillRegistry
 from app.workers.queue import enqueue_treatment_derivation_job
 
@@ -2094,8 +2100,22 @@ async def resume_tool_call(
         await db.execute(select(ChatPendingToolCall).where(ChatPendingToolCall.id == claimed_id))
     ).scalar_one()
 
-    # Extract resume state.
-    resume_state: dict = pending.resume_state
+    # Decrypt the envelope-encrypted payload columns (DE-358 item 5).  Fail
+    # closed on a tampered / wrong-key ciphertext: the claim above is already
+    # committed (status="resolved"), so the row can never be replayed, and the
+    # structured 409 never carries ciphertext or payload contents.  Rows
+    # without the envelope marker are legacy plaintext rows and pass through
+    # unchanged (TTL-bounded transition fallback — removable after one
+    # release).
+    try:
+        resume_state: dict = decrypt_payload_envelope(pending.resume_state)
+        tool_call_args: dict = decrypt_payload_envelope(pending.tool_call_args)
+    except (MCPEncryptionError, MCPMasterKeyMissing) as exc:
+        raise Conflict(
+            "pending tool-call payload could not be decrypted; resume denied",
+            details={"pending_call_id": pending_call_id},
+        ) from exc
+
     messages: list[dict] = list(resume_state.get("messages", []))
     calls_used: int = int(resume_state.get("calls_used", 0))
     model: str = str(resume_state.get("model", "smart"))
@@ -2135,7 +2155,7 @@ async def resume_tool_call(
                     "type": "function",
                     "function": {
                         "name": pending.function_name,
-                        "arguments": _json.dumps(dict(pending.tool_call_args)),
+                        "arguments": _json.dumps(dict(tool_call_args)),
                     },
                 }
             ],
@@ -2192,7 +2212,7 @@ async def resume_tool_call(
                         user=user,
                         gateway=gateway,
                         spec=spec,
-                        args=dict(pending.tool_call_args),
+                        args=dict(tool_call_args),
                         cluster_cache={},
                         server_auth_map=server_auth_map,
                         assistant_message_id=assistant_message_id,
@@ -2327,12 +2347,17 @@ async def resume_tool_call(
                     tool=spec2.tool,
                     destructive=spec2.destructive,
                     tier=tier_val2,
-                    tool_call_args=loop_outcome.args,
-                    resume_state={
-                        "messages": loop_outcome.messages,
-                        "calls_used": loop_outcome.calls_used,
-                        "model": model,
-                    },
+                    # DE-358 item 5: payload columns are envelope-encrypted
+                    # at rest under LQ_AI_MCP_MASTER_KEY (fails closed when
+                    # the key is unset — never a plaintext write).
+                    tool_call_args=encrypt_payload_envelope(loop_outcome.args),
+                    resume_state=encrypt_payload_envelope(
+                        {
+                            "messages": loop_outcome.messages,
+                            "calls_used": loop_outcome.calls_used,
+                            "model": model,
+                        }
+                    ),
                     status="pending",
                     expires_at=datetime.now(UTC) + CONFIRM_TTL,
                 )
@@ -3210,12 +3235,17 @@ async def _non_streaming_response(
                 tool=spec.tool,
                 destructive=spec.destructive,
                 tier=tier_val,
-                tool_call_args=outcome.args,
-                resume_state={
-                    "messages": outcome.messages,
-                    "calls_used": outcome.calls_used,
-                    "model": request.model,
-                },
+                # DE-358 item 5: payload columns are envelope-encrypted at
+                # rest under LQ_AI_MCP_MASTER_KEY (fails closed when the key
+                # is unset — never a plaintext write).
+                tool_call_args=encrypt_payload_envelope(outcome.args),
+                resume_state=encrypt_payload_envelope(
+                    {
+                        "messages": outcome.messages,
+                        "calls_used": outcome.calls_used,
+                        "model": request.model,
+                    }
+                ),
                 status="pending",
                 expires_at=datetime.now(UTC) + CONFIRM_TTL,
             )
@@ -3533,12 +3563,18 @@ async def _stream_response(
                         tool=spec.tool,
                         destructive=spec.destructive,
                         tier=tier_val,
-                        tool_call_args=loop_outcome.args,
-                        resume_state={
-                            "messages": loop_outcome.messages,
-                            "calls_used": loop_outcome.calls_used,
-                            "model": request.model,
-                        },
+                        # DE-358 item 5: payload columns are envelope-
+                        # encrypted at rest under LQ_AI_MCP_MASTER_KEY
+                        # (fails closed when the key is unset — never a
+                        # plaintext write).
+                        tool_call_args=encrypt_payload_envelope(loop_outcome.args),
+                        resume_state=encrypt_payload_envelope(
+                            {
+                                "messages": loop_outcome.messages,
+                                "calls_used": loop_outcome.calls_used,
+                                "model": request.model,
+                            }
+                        ),
                         status="pending",
                         expires_at=datetime.now(UTC) + CONFIRM_TTL,
                     )
