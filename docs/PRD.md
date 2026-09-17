@@ -5092,7 +5092,6 @@ Scope when picked up:
 - **(e) A guard.** A test or visual check so coverage does not quietly regress through quarterly OpenWebUI refreshes.
 
 Pure `web/` work with no API, DB or gateway surface. The only structural wrinkle is (c): the theme resolution lives in upstream files, so the change is a carried patch under ADR 0001 and the rebase runbook.
-#### DE-387 — Raise the gateway coverage ratchet from 88% to the documented 90% target
 
 #### DE-395 — Raise the gateway coverage ratchet from 88% to the documented 90% target
 
