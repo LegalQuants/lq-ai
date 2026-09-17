@@ -143,6 +143,7 @@ from app.schemas.gateway import (
 )
 from app.security.encryption import (
     MCPEncryptionError,
+    MCPMasterKeyMissing,
     decrypt_payload_envelope,
     encrypt_payload_envelope,
 )
@@ -2109,7 +2110,7 @@ async def resume_tool_call(
     try:
         resume_state: dict = decrypt_payload_envelope(pending.resume_state)
         tool_call_args: dict = decrypt_payload_envelope(pending.tool_call_args)
-    except MCPEncryptionError as exc:
+    except (MCPEncryptionError, MCPMasterKeyMissing) as exc:
         raise Conflict(
             "pending tool-call payload could not be decrypted; resume denied",
             details={"pending_call_id": pending_call_id},
