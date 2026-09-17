@@ -16,7 +16,7 @@ name: CI
 #   - gateway/: measured 88.94% — below the documented 90% target, so the
 #               gate is a no-decrease ratchet at the measured floor (88,
 #               floored to the integer). Closing the 88→90 gap is tracked
-#               as PRD §9 DE-387.
+#               as PRD §9 DE-395.
 # When coverage rises, bump --cov-fail-under (always at or below a number
 # actually measured — never an aspirational one).#
 # Out of scope (deferred to future waves):
@@ -233,7 +233,7 @@ jobs:
       # Coverage ratchet (roadmap 4.3): measured 88.94% on 2026-07-25
       # (4464/5019 statements) — below the documented 90% target, so the
       # gate holds the measured floor (88) rather than claiming the target.
-      # Delta tracked as PRD §9 DE-387.
+      # Delta tracked as PRD §9 DE-395.
       - name: pytest (coverage gate ≥88%)
         run: pytest -q --cov=app --cov-report=term --cov-fail-under=88
 
