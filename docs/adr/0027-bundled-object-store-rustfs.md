@@ -203,8 +203,9 @@ desktop launcher. Specifically:
 4. **Health and ports.** Probe `GET /health` on the S3 port; keep 9000/9001 and the
    `MINIO_*_HOST_PORT` → `RUSTFS_*_HOST_PORT` rename with the same one-release
    fallback. The container's uid `10001` is respected in Helm via
-   `securityContext.fsGroup` and in compose via a documented one-shot ownership
-   fix for volumes MinIO wrote as root.
+   `securityContext.fsGroup` and in compose via a one-shot init service that
+   fixes ownership of volumes MinIO wrote as root before the store starts (see
+   *Upgrade plan*).
 5. **Migration policy for existing installs** (see *Open questions* 1 for the
    fork the committee is asked to ratify):
    - Snapshot first, always: the `miniodata` volume and a `pg_dump`. The in-place
@@ -241,6 +242,137 @@ measurement above. SeaweedFS is the strongest alternative on governance and is
 named as the fallback should RustFS disappoint; Versity is the fallback if the
 committee later weighs on-disk transparency above erasure coding.
 
+## Upgrade plan for the next minor (v0.8.0)
+
+Under ADR 0025 rule 3 a working install needs a human to touch it for this
+change (re-pull, ownership fix, log check), so the release that carries it is a
+**minor**. `main` is at `0.7.1` with nothing tagged beyond it, so that release is
+**v0.8.0** unless another minor is cut first; the number is computed from `main`
+at tag time, not reserved here. The plan below is what the implementation PR and
+the `docs/releases/v0.8.0.md` note must deliver. The committee's answers to the
+open questions adjust individual steps; they do not restructure the plan.
+
+### What v0.8.0 ships
+
+1. **Image.** `rustfs/rustfs:1.0.0` pinned by tag and multi-arch index digest in
+   `docker-compose.yml`, `docker-compose.release.yml`, and Helm `values.yaml`.
+   MinIO leaves the reference stack.
+2. **Compose.** Service `rustfs` on 9000/9001 with the `/health` probe;
+   `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY` fed from the operator's `.env`, with
+   fallbacks to `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD`; the same fallback for
+   the `*_HOST_PORT` keys; the volume key `miniodata` unchanged. A one-shot init
+   service runs before `rustfs` and sets the volume's ownership to uid/gid
+   `10001`, so the root-owned data MinIO left behind is fixed without an operator
+   command, and a fresh volume is a no-op. The api's default endpoint becomes
+   `http://rustfs:9000`.
+3. **Helm.** The StatefulSet and Service are renamed, the pod gets
+   `fsGroup: 10001`, the readiness probe moves to `/health`, `values.yaml` keys are
+   renamed with the old `minio.*` keys honoured for one minor, and the api
+   deployment's env block is rewritten to the `S3_*` contract (the wiring fix in
+   decision 6). Because that wiring never worked, a Helm install has no data in
+   its MinIO PVC; the chart's upgrade note says to treat it as a fresh install
+   and delete the old claim once confirmed empty. The chart stays "drafted" in
+   HONEST-STATE (DE-327 is untouched).
+4. **Desktop launcher `desktop-v0.8.0`.** Bundles the new release compose;
+   `EXPECTED_SERVICES`, the rendered `.env` keys, the port fields, and the secret
+   pair follow the rename. On an install whose volume already exists, the
+   launcher's first start after the update snapshots the volume into its
+   app-data directory before bringing `rustfs` up, reuses the stored MinIO root
+   pair as the RustFS credentials (required for the in-place read), and shows
+   the object store's import result on its health view. Launcher users never run
+   a docker command.
+5. **Docs.** `docs/releases/v0.8.0.md` with the runbook below at the top;
+   quickstart, README, both `.env` examples; PRD §2.1 / §2.4 diagrams, §6.5
+   backup wording, Appendix B row; `docs/architecture.md`; the threat-model
+   service list; ADR 0005 *Revisions* note; the trust data-residency card label.
+6. **CI.** Stack-smoke green on RustFS. The #303 ingest round-trip lands in the
+   same release if ready, otherwise as a follow-up.
+
+### Sequencing
+
+1. This ADR merges as *Proposed*; the committee call answers the open questions
+   and the Status line flips.
+2. If open question 3 is answered "bridge", a one-line PR pins a frozen MinIO
+   digest so `main` goes green while the implementation is reviewed.
+3. One implementation PR carries items 1–6, labelled `breaking-change` so ADR
+   0025's version-consistency gate knows the next tag must be a minor. It
+   touches no `gateway/` or workflow path unless #303 rides along, in which case
+   the security-review route in CODEOWNERS applies.
+4. **Rehearsals before tagging**, with receipts committed under
+   `docs/research/` as ADR 0026 did: an in-place upgrade of a real `miniodata`
+   volume written by MinIO (from a maintainer machine that still holds the
+   cached image), following the runbook verbatim; and a launcher upgrade on
+   Apple Silicon. The *Evidence* section of this ADR is amended with both
+   results, including anything that failed.
+5. Version strings move together per the v0.7.1 note — `api`, `gateway`, the
+   committed OpenAPI export, then `desktop` and its lockfile — and `v0.8.0` is
+   tagged, followed by `desktop-v0.8.0`.
+6. v0.9.0 removes the `MINIO_*` fallbacks in compose and the `minio.*` keys in
+   Helm, with one release-note line (open question 2).
+
+### Operator runbook (published verbatim in the v0.8.0 note)
+
+**Before anything, on every topology:** take a snapshot of the object-store
+volume and a `pg_dump`. The in-place read is not documented as reversible and the
+MinIO image can no longer be pulled, so the snapshot plus the image still cached
+on the host are the only rollback. Do not prune Docker images until the upgrade
+is verified. Expect a few minutes of downtime; the import itself is quick because
+no bytes move.
+
+**A. Compose, default single-drive volume (in-place).**
+
+1. Stop the stack. Never with the flag that removes volumes.
+2. Archive the `miniodata` volume to a tarball outside Docker; run `pg_dump`;
+   note the cached MinIO image id.
+3. Check out v0.8.0. No `.env` edit is required: the old `MINIO_*` keys still
+   feed the store, and `S3_ACCESS_KEY` / `S3_SECRET_KEY` still default to the
+   same pair. Renaming to `RUSTFS_*` is optional until v0.9.0.
+4. Start only the object store. The init service fixes ownership; RustFS starts,
+   logs `checking for a legacy storage format`, and imports the bucket metadata.
+5. Read the store's log before going further: the import must complete with no
+   bucket-metadata or IAM error, and `/health` must answer 200. A failure here
+   means stop, restore nothing yet, and take path E.
+6. Reconcile: the object count in `lq-ai-files` must equal the number of rows
+   in `files` **including soft-deleted rows** (ADR 0005 keeps their bytes) plus
+   any unexpired export bundles under `exports/`.
+7. Start the rest of the stack; `/ready` must report storage healthy. Upload a
+   document, download it, and run an account export end to end.
+8. Keep the snapshot for at least one release cycle.
+
+Rollback: stop the stack, restore the tarball into the volume, check out the
+previous release, and start it against the cached MinIO image.
+
+**B. Desktop launcher.** Install `desktop-v0.8.0`. On first start the launcher
+snapshots the volume, applies the ownership fix through the init service, starts
+the store, and surfaces the import result; do not proceed past a red object-store
+row. Then the same three checks as A7 from the app. Rollback is the launcher's
+snapshot plus the previous launcher build.
+
+**C. Helm.** Treat as a fresh install: upgrade the chart with the renamed values,
+confirm the old PVC holds no objects, delete it. There is no data to migrate
+because the api was never wired to the chart's store.
+
+**D. External S3-compatible store** (operator set `S3_ENDPOINT_URL` to something
+other than the bundled service). No action. The bundled service can be left
+running empty or disabled, as today.
+
+**E. Multi-drive or distributed MinIO, or a failed in-place import.** Run RustFS
+on a fresh volume beside the old store, mirror `lq-ai-files` with rclone (the
+`minio/mc` image is gone too), verify the count as in A6, point
+`S3_ENDPOINT_URL` at the new store, and retire the old volume after a release
+cycle. No database change: keys are bare UUIDs and `exports/…` paths, and export
+links expire within 24 hours.
+
+### Exit criteria for tagging v0.8.0
+
+- Stack-smoke green on `main` with RustFS, and a hands-on upload → download
+  through the api on the smoke stack.
+- Both rehearsals in sequencing step 4 executed and their receipts committed;
+  the *Evidence* section amended.
+- The v0.8.0 note carries the runbook, with the snapshot-first warning as its
+  first paragraph.
+- The four version strings agree, and the release is labelled a minor.
+
 ## Consequences
 
 **Positive.**
@@ -274,15 +406,20 @@ committee later weighs on-disk transparency above erasure coding.
 
 **Neutral.**
 - The release carrying this is a **minor** under ADR 0025 rule 3: a working
-  install needs a human to touch it (re-pull, ownership fix, log check).
+  install needs a human to touch it (re-pull, ownership fix, log check). The
+  release-level plan, runbook, and exit criteria are in *Upgrade plan for the
+  next minor (v0.8.0)* above.
 - No test in `api/tests/` changes; storage is mocked there. The real-store
   coverage lives in stack-smoke.
 
 **Follow-ups spawned (filed separately; not part of the ADR PR).**
-- Implementation PR: compose ×2, `.env` examples ×2, Helm (templates, values,
-  NOTES, api env fix), desktop launcher (service list, env, ports, secrets,
-  tests), docs listed in decision 7, stack-smoke pass. Closes the operational
-  half of #572's acceptance criteria.
+- Implementation PR, scoped by *What v0.8.0 ships* above: compose ×2, `.env`
+  examples ×2, Helm (templates, values, NOTES, api env fix), desktop launcher
+  (service list, env, ports, secrets, snapshot-on-first-start, tests), docs
+  listed in decision 7, stack-smoke pass. Closes the operational half of #572's
+  acceptance criteria.
+- Two rehearsals with committed receipts before the tag (sequencing step 4),
+  and the `docs/releases/v0.8.0.md` note carrying the runbook.
 - #303: extend the stack-smoke round-trip to assert an upload → download byte
   match through the api, which is the "backend conformance test" #572 asked for
   in the place the project already runs real infrastructure.
