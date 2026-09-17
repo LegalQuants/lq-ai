@@ -1,0 +1,223 @@
+{
+  "classes": {
+    "CASE_NUMBER": {
+      "full_leak_rate": 12.5,
+      "full_leaks": 1,
+      "n": 8,
+      "partial_leak_rate": 0.0,
+      "partial_leaks": 0,
+      "targeted": true
+    },
+    "CREDIT_CARD": {
+      "full_leak_rate": 0.0,
+      "full_leaks": 0,
+      "n": 1,
+      "partial_leak_rate": 0.0,
+      "partial_leaks": 0,
+      "targeted": false
+    },
+    "DATE_OF_BIRTH": {
+      "full_leak_rate": 0.0,
+      "full_leaks": 0,
+      "n": 1,
+      "partial_leak_rate": 0.0,
+      "partial_leaks": 0,
+      "targeted": false
+    },
+    "EIN": {
+      "full_leak_rate": 100.0,
+      "full_leaks": 1,
+      "n": 1,
+      "partial_leak_rate": 0.0,
+      "partial_leaks": 0,
+      "targeted": false
+    },
+    "EMAIL_ADDRESS": {
+      "full_leak_rate": 0.0,
+      "full_leaks": 0,
+      "n": 9,
+      "partial_leak_rate": 11.1,
+      "partial_leaks": 1,
+      "targeted": true
+    },
+    "IBAN_CODE": {
+      "full_leak_rate": 100.0,
+      "full_leaks": 1,
+      "n": 1,
+      "partial_leak_rate": 0.0,
+      "partial_leaks": 0,
+      "targeted": false
+    },
+    "IP_ADDRESS": {
+      "full_leak_rate": 100.0,
+      "full_leaks": 1,
+      "n": 1,
+      "partial_leak_rate": 0.0,
+      "partial_leaks": 0,
+      "targeted": false
+    },
+    "LOCATION": {
+      "full_leak_rate": 0.0,
+      "full_leaks": 0,
+      "n": 10,
+      "partial_leak_rate": 20.0,
+      "partial_leaks": 2,
+      "targeted": true
+    },
+    "MATTER_NUMBER": {
+      "full_leak_rate": 14.3,
+      "full_leaks": 1,
+      "n": 7,
+      "partial_leak_rate": 0.0,
+      "partial_leaks": 0,
+      "targeted": true
+    },
+    "ORGANIZATION": {
+      "full_leak_rate": 100.0,
+      "full_leaks": 10,
+      "n": 10,
+      "partial_leak_rate": 0.0,
+      "partial_leaks": 0,
+      "targeted": true
+    },
+    "PERSON": {
+      "full_leak_rate": 0.0,
+      "full_leaks": 0,
+      "n": 12,
+      "partial_leak_rate": 0.0,
+      "partial_leaks": 0,
+      "targeted": true
+    },
+    "PHONE_NUMBER": {
+      "full_leak_rate": 0.0,
+      "full_leaks": 0,
+      "n": 11,
+      "partial_leak_rate": 0.0,
+      "partial_leaks": 0,
+      "targeted": true
+    },
+    "US_BANK_NUMBER": {
+      "full_leak_rate": 0.0,
+      "full_leaks": 0,
+      "n": 5,
+      "partial_leak_rate": 0.0,
+      "partial_leaks": 0,
+      "targeted": true
+    },
+    "US_DRIVER_LICENSE": {
+      "full_leak_rate": 100.0,
+      "full_leaks": 1,
+      "n": 1,
+      "partial_leak_rate": 0.0,
+      "partial_leaks": 0,
+      "targeted": false
+    },
+    "US_PASSPORT": {
+      "full_leak_rate": 0.0,
+      "full_leaks": 0,
+      "n": 1,
+      "partial_leak_rate": 0.0,
+      "partial_leaks": 0,
+      "targeted": false
+    },
+    "US_SSN": {
+      "full_leak_rate": 100.0,
+      "full_leaks": 1,
+      "n": 1,
+      "partial_leak_rate": 0.0,
+      "partial_leaks": 0,
+      "targeted": false
+    }
+  },
+  "metadata": {
+    "corpus_entries": 71,
+    "corpus_schema_version": 1,
+    "drift_threshold_points": 5.0,
+    "expected_entities": 80,
+    "generated": "2026-07-25",
+    "recognizers": [
+      {
+        "name": "CaseNumberRecognizer",
+        "supported_entities": [
+          "CASE_NUMBER"
+        ]
+      },
+      {
+        "name": "CreditCardRecognizer",
+        "supported_entities": [
+          "CREDIT_CARD"
+        ]
+      },
+      {
+        "name": "DateRecognizer",
+        "supported_entities": [
+          "DATE_TIME"
+        ]
+      },
+      {
+        "name": "EmailRecognizer",
+        "supported_entities": [
+          "EMAIL_ADDRESS"
+        ]
+      },
+      {
+        "name": "MacAddressRecognizer",
+        "supported_entities": [
+          "MAC_ADDRESS"
+        ]
+      },
+      {
+        "name": "MatterNumberRecognizer",
+        "supported_entities": [
+          "MATTER_NUMBER"
+        ]
+      },
+      {
+        "name": "NhsRecognizer",
+        "supported_entities": [
+          "UK_NHS"
+        ]
+      },
+      {
+        "name": "PhoneRecognizer",
+        "supported_entities": [
+          "PHONE_NUMBER"
+        ]
+      },
+      {
+        "name": "SpacyRecognizer",
+        "supported_entities": [
+          "DATE_TIME",
+          "LOCATION",
+          "NRP",
+          "ORGANIZATION",
+          "PERSON"
+        ]
+      },
+      {
+        "name": "UrlRecognizer",
+        "supported_entities": [
+          "URL"
+        ]
+      },
+      {
+        "name": "UsBankRecognizer",
+        "supported_entities": [
+          "US_BANK_NUMBER"
+        ]
+      },
+      {
+        "name": "UsItinRecognizer",
+        "supported_entities": [
+          "US_ITIN"
+        ]
+      }
+    ],
+    "versions": {
+      "en_core_web_lg": "3.8.0",
+      "presidio-analyzer": "2.2.364",
+      "presidio-anonymizer": "2.2.360",
+      "spacy": "3.8.14"
+    }
+  }
+}
