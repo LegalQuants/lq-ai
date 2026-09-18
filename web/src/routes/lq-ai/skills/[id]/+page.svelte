@@ -5,6 +5,7 @@
 	import { skillsApi } from '$lib/lq-ai/api';
 	import type { Skill } from '$lib/lq-ai/types';
 	import { toolUsageNote } from '$lib/lq-ai/skills/toolUsageNote';
+	import { columnsFromContentYaml, normalizeFormat } from '$lib/lq-ai/skills/builtinsBrowser';
 	import SkillDetailTabs from '$lib/lq-ai/components/SkillDetailTabs.svelte';
 	import SkillSourceView from '$lib/lq-ai/components/SkillSourceView.svelte';
 	import SkillTryItTab from '$lib/lq-ai/components/SkillTryItTab.svelte';
@@ -26,6 +27,11 @@
 	) as Tab;
 	// C5 (PR6d) — derive tool-usage note reactively; never blocks UI.
 	$: usageNote = toolUsageNote(skill?.tool_usage, skill?.unavailable_tool_usage);
+	// DE-298 — table-mode skills surface their column spec (parsed from
+	// the frontmatter, where both built-ins and user rows carry it) plus
+	// a CTA into the Tabular Review wizard with this skill preselected.
+	$: isTableSkill = skill !== null && normalizeFormat(skill.output_format) === 'table';
+	$: tableColumns = isTableSkill && skill ? columnsFromContentYaml(skill.content_yaml) : null;
 
 	onMount(async () => {
 		if (!skillName) return;
@@ -57,9 +63,17 @@
 				</p>
 			</div>
 			<div style="display: flex; gap: 8px;">
+				{#if isTableSkill}
+					<a
+						href={`/lq-ai/tabular/new?skill=${encodeURIComponent(skill.name)}`}
+						class="lq-btn-primary"
+						data-testid="lq-ai-skill-use-in-tabular"
+					>Use in Tabular Review</a>
+				{/if}
 				<a
 					href={`/lq-ai/skills/new?fork=${encodeURIComponent(skill.name)}`}
 					class="lq-btn-ghost"
+					data-testid="lq-ai-skill-fork-link"
 					aria-label={`Fork ${skill.title ?? skill.name} as my own`}
 				>🔱 Fork as my own</a>
 				{#if skill.scope !== 'builtin'}
@@ -75,6 +89,34 @@
 				<article class="lq-text-body" style="white-space: pre-wrap;">
 					{skill.description ?? '(no description)'}
 				</article>
+				{#if isTableSkill && tableColumns && tableColumns.length > 0}
+					<!-- DE-298 — read-only column spec for table-mode skills. -->
+					<section class="lq-columns" data-testid="lq-ai-skill-columns">
+						<h2 class="lq-columns-title">Columns ({tableColumns.length})</h2>
+						<p class="lq-columns-hint">
+							Each column runs as a per-document extraction query in a Tabular
+							Review — one grid cell per document per column.
+						</p>
+						<dl class="lq-columns-list">
+							{#each tableColumns as col (col.name)}
+								<div class="lq-columns-row" data-testid="lq-ai-skill-column">
+									<dt>
+										{col.name}
+										{#if col.ensemble_verification !== null}
+											<span class="lq-columns-flag">
+												ensemble: {col.ensemble_verification ? 'on' : 'off'}
+											</span>
+										{/if}
+										{#if col.minimum_inference_tier !== null}
+											<span class="lq-columns-flag">tier ≥ {col.minimum_inference_tier}</span>
+										{/if}
+									</dt>
+									<dd>{col.query}</dd>
+								</div>
+							{/each}
+						</dl>
+					</section>
+				{/if}
 				{#if usageNote.uses.length > 0}
 					<div class="lq-tool-usage" data-testid="skill-tool-usage">
 						<span class="lq-tool-usage-label">Uses:</span> {usageNote.uses.join(', ')}
@@ -132,6 +174,54 @@
 	.lq-btn-ghost:hover {
 		background: var(--lq-accent-soft, #e8f4ec);
 	}
+	/* DE-298 — read-only column spec */
+	.lq-columns {
+		margin-top: var(--lq-space-4, 16px);
+		padding: var(--lq-space-4, 16px);
+		border: 1px solid var(--lq-border, #e5e7eb);
+		border-radius: var(--lq-radius, 6px);
+		background: var(--lq-surface, transparent);
+	}
+	.lq-columns-title {
+		margin: 0;
+		font-size: 15px;
+		font-weight: 600;
+	}
+	.lq-columns-hint {
+		margin: var(--lq-space-1, 4px) 0 0;
+		font-size: 13px;
+		color: var(--lq-text-secondary, #6b7280);
+	}
+	.lq-columns-list {
+		margin: var(--lq-space-3, 12px) 0 0;
+	}
+	.lq-columns-row {
+		padding: var(--lq-space-2, 8px) 0;
+		border-top: 1px solid var(--lq-border, #e5e7eb);
+	}
+	.lq-columns-row dt {
+		font-weight: 600;
+		font-size: 14px;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		flex-wrap: wrap;
+	}
+	.lq-columns-row dd {
+		margin: var(--lq-space-1, 4px) 0 0;
+		font-size: 13px;
+		color: var(--lq-text-secondary, #6b7280);
+		white-space: pre-wrap;
+	}
+	.lq-columns-flag {
+		font-size: 11px;
+		font-weight: 500;
+		padding: 1px 8px;
+		border-radius: 999px;
+		border: 1px solid var(--lq-border, #e5e7eb);
+		color: var(--lq-text-secondary, #6b7280);
+	}
+
 	/* C5 (PR6d) — tool-usage metadata row */
 	.lq-tool-usage {
 		margin-top: var(--lq-space-3, 12px);
