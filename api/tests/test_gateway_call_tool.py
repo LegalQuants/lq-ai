@@ -76,6 +76,7 @@ def test_api_chat_request_carries_tools() -> None:
     assert req.tools[0]["function"]["name"] == "x"  # type: ignore[index]
     assert req.tool_choice == "auto"
 
+
 @pytest.mark.asyncio
 async def test_call_tool_sets_user_token_header() -> None:
     captured: dict[str, str | None] = {}
