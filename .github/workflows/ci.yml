@@ -20,7 +20,8 @@ name: CI
 # When coverage rises, bump --cov-fail-under (always at or below a number
 # actually measured — never an aspirational one).#
 # Out of scope (deferred to future waves):
-#   - Cypress E2E (heavier; needs a stack-up step + LLM provider keys)
+#   - Cypress E2E: the deterministic track runs nightly in e2e.yml (no
+#     provider keys needed); per-PR promotion waits on buildx caching (#283)
 #   - Dependency-license check (likely Wave F polish)
 #
 # Runtime boot validation (full compose build + up --wait + soak) lives in
