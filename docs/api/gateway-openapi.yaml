@@ -1015,7 +1015,6 @@ components:
         # Function/tool calling (PR5b, ADR 0015)
         tools:
           type: array
-          maxItems: 64
           items:
             type: object
             additionalProperties: true
@@ -1025,10 +1024,9 @@ components:
             the backend assembles this as a closed per-turn allowlist
             (research + operator-enabled MCP tools) — the gateway
             forwards the declarations but never executes a tool; the
-            eventual tool call re-enters through `/v1/tools/call` where
+            eventual tool call re-enters through `/v1/tools/{provider}/{tool}` where
             the per-provider egress tier and SSRF allowlist are always
-            enforced. Capped at 64 entries (DE-358) to bound the
-            prompt-multiplication surface.
+            enforced.
         tool_choice:
           description: |
             OpenAI-style tool-choice directive: `"auto"`, `"none"`,

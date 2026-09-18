@@ -167,14 +167,11 @@ class ChatCompletionRequest(BaseModel):
     """
 
     # --- Function/tool calling (PR5b) ---------------------------------------
-    tools: list[dict[str, Any]] | None = Field(default=None, max_length=64)
+    tools: list[dict[str, Any]] | None = None
     """OpenAI-style tool/function declarations. Forwarded to the provider
     so the model may emit ``tool_calls``. The backend assembles a closed
     allowlist per turn (research + operator-enabled MCP tools); the
-    gateway's egress-tier / SSRF guards still gate the eventual call.
-    Capped at 64 entries (DE-358 item 3) to bound the
-    prompt-multiplication surface — mirrors the ``lq_ai_skills`` /
-    ``lq_ai_inline_skills`` cap idiom."""
+    gateway's egress-tier / SSRF guards still gate the eventual call."""
 
     tool_choice: str | dict[str, Any] | None = None
     """OpenAI-style tool_choice (``"auto"`` / ``"none"`` / a forced
