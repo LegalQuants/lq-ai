@@ -166,7 +166,9 @@ Executed 2026-09-17 in a clean sandbox, against the `rustfs-linux-x86_64-musl`
 
 Health probes: `GET /health` → 200 with `{"status":"ok", …}`; `HEAD /health` →
 200; the legacy `GET /minio/health/live` path also answers 200, so the existing
-compose and Helm probes keep working during the transition. Startup logs show
+compose and Helm probes keep answering during the transition. Those are liveness
+probes only — the rehearsal below shows they stay green while the store cannot
+serve a single request; readiness is `GET /health/ready`. Startup logs show
 `checking for a legacy storage format` — the in-place MinIO detection — and,
 on a single drive, `automatic storage class has no parity`, the same
 zero-redundancy posture MinIO's single-drive mode has.
@@ -192,9 +194,16 @@ comparing bytes, size, ETag and content type against the seed-time manifest.
 | **MinIO restarted on the migrated volume** (now holding `.rustfs.sys` and two RustFS-written objects) | starts; **46/46 intact, RustFS-written objects included** |
 | RustFS on a pristine snapshot with the **wrong** secret key | starts healthy, same migration log, no decryption error; bucket and all 45 objects readable with the new pair; the old pair gets 403 |
 | Plain RustFS restart on the migrated volume | nothing left to migrate; 46/46 intact |
+| RustFS run as uid 10001 (the image's user) on the root-owned volume, i.e. an existing install with no ownership fix | process up and `/health` 200, but the store loops on `FileAccessDenied` writing `pool.bin` and **every S3 call returns 503** |
+| Same volume after `chown -R 10001:10001`, still as uid 10001 | 46/46 intact; writes and a delete verified 47/47 |
+| Probe endpoints, stuck vs healthy | `/health`, `/health/live`, `/minio/health/live` 200 in both states; **`/health/ready` 503 while stuck, 200 when healthy** |
 
 RustFS leaves `.minio.sys` in place, adds `.rustfs.sys`, and reads the existing
-per-object `xl.meta` layout without rewriting it. Two consequences for the
+per-object `xl.meta` layout without rewriting it. The image runs as `USER rustfs`
+(uid/gid 10001) and its entrypoint does not fix ownership of existing data — it
+cannot, unprivileged — so the compose init service in the upgrade plan is the
+same pattern RustFS's own compose example uses, and it is load-bearing: without
+it an upgraded install looks alive and serves nothing. Two consequences for the
 decision: the in-place default is measured, not assumed; and the volume stayed
 MinIO-readable afterwards, so the migration is not one-way at this scale, though
 upstream does not document that and one run does not make it a guarantee. The
@@ -204,10 +213,10 @@ only failure mode upstream names (encrypted IAM data, which LQ.AI installs do no
 have).
 
 Not verified here, and recorded as such: a *real* `miniodata` volume with months
-of soft-deleted files (the rehearsal volume is synthetic); the container
-ownership mismatch (both stores ran as one Unix user, so the root-owned-volume /
-uid-10001 problem was not exercised — the compose init service in the upgrade
-plan exists for it); the arm64 image on Apple Silicon; and whether the
+of soft-deleted files (the rehearsal volume is synthetic); the ownership mismatch
+through the actual images (it was reproduced with the binary dropped to uid
+10001, not with Docker mounting an existing named volume into the image); the
+arm64 image on Apple Silicon; and whether the
 migration-error fix [rustfs/rustfs#7652](https://github.com/rustfs/rustfs/pull/7652)
 (merged 2026-09-11, backported 2026-09-13; before the fix, a failed metadata
 import still reported ready — [#7651](https://github.com/rustfs/rustfs/issues/7651))
@@ -236,7 +245,9 @@ desktop launcher. Specifically:
    so an existing `.env` keeps working unedited. The named volume keeps the key
    `miniodata` for this release: renaming it would silently hand every existing
    install an empty store. Its rename is filed as a deferred enhancement.
-4. **Health and ports.** Probe `GET /health` on the S3 port; keep 9000/9001 and the
+4. **Health and ports.** Probe `GET /health/ready` on the S3 port — not `/health`
+   or the legacy `/minio/health/live`, which are liveness-only and stayed 200 in
+   the rehearsal while every S3 call returned 503; keep 9000/9001 and the
    `MINIO_*_HOST_PORT` → `RUSTFS_*_HOST_PORT` rename with the same one-release
    fallback. The container's uid `10001` is respected in Helm via
    `securityContext.fsGroup` and in compose via a one-shot init service that
@@ -295,7 +306,7 @@ open questions adjust individual steps; they do not restructure the plan.
 1. **Image.** `rustfs/rustfs:1.0.0` pinned by tag and multi-arch index digest in
    `docker-compose.yml`, `docker-compose.release.yml`, and Helm `values.yaml`.
    MinIO leaves the reference stack.
-2. **Compose.** Service `rustfs` on 9000/9001 with the `/health` probe;
+2. **Compose.** Service `rustfs` on 9000/9001 with the `/health/ready` probe;
    `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY` fed from the operator's `.env`, with
    fallbacks to `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD`; the same fallback for
    the `*_HOST_PORT` keys; the volume key `miniodata` unchanged. A one-shot init
@@ -304,7 +315,7 @@ open questions adjust individual steps; they do not restructure the plan.
    command, and a fresh volume is a no-op. The api's default endpoint becomes
    `http://rustfs:9000`.
 3. **Helm.** The StatefulSet and Service are renamed, the pod gets
-   `fsGroup: 10001`, the readiness probe moves to `/health`, `values.yaml` keys are
+   `fsGroup: 10001`, the readiness probe moves to `/health/ready`, `values.yaml` keys are
    renamed with the old `minio.*` keys honoured for one minor, and the api
    deployment's env block is rewritten to the `S3_*` contract (the wiring fix in
    decision 6). Because that wiring never worked, a Helm install has no data in
@@ -370,8 +381,9 @@ no bytes move.
 4. Start only the object store. The init service fixes ownership; RustFS starts,
    logs `checking for a legacy storage format`, and imports the bucket metadata.
 5. Read the store's log before going further: the import must complete with no
-   bucket-metadata or IAM error, and `/health` must answer 200. A failure here
-   means stop, restore nothing yet, and take path E.
+   bucket-metadata or IAM error, and `/health/ready` must answer 200 (`/health`
+   answers 200 even when the store cannot write). A failure here means stop,
+   restore nothing yet, and take path E.
 6. Reconcile: the object count in `lq-ai-files` must equal the number of rows
    in `files` **including soft-deleted rows** (ADR 0005 keeps their bytes) plus
    any unexpired export bundles under `exports/`.
@@ -432,9 +444,12 @@ links expire within 24 hours.
   days if it must be repeated; the stack-smoke ingest round-trip (#303) becomes
   the conformance gate; RustFS gets a DE-271 row with SeaweedFS as its named
   fallback.
-- **Ownership mismatch.** The uid-10001 container cannot write a root-owned
-  MinIO volume; the upgrade guide must make the one-shot fix impossible to miss,
-  and the desktop launcher must automate it.
+- **Ownership mismatch, measured.** The uid-10001 container cannot write a
+  root-owned MinIO volume, and the failure is quiet: the process stays up,
+  liveness probes stay green, and every S3 call returns 503. The image does not
+  fix this itself. The compose init service is therefore mandatory, the
+  healthcheck must be `/health/ready`, and the desktop launcher must carry the
+  same init step.
 - **Rollback rests on the snapshot.** Upstream does not document the in-place
   read as reversible; the 2026-09-19 rehearsal found MinIO re-reading the
   migrated volume, RustFS-written objects included, which is encouraging but a
