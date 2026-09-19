@@ -1,0 +1,13 @@
+2026-09-19T09:19:50.278 WARN  Profiling export is enabled but this binary was built without Pyroscope support
+2026-09-19T09:19:50.308 WARN  Error loading CA root certificate: failed to read PEM from file: Permission denied (os error 13) at '/root/.ccr/ca-bundle.crt'
+2026-09-19T09:19:50.308 WARN  bucket target health-check HTTP client could not load system TLS roots (builder error); continuing with an empty trust store — HTTPS target health checks will f
+2026-09-19T09:19:50.330 WARN  Ignoring unknown persisted scalar config key
+2026-09-19T09:19:50.330 WARN  automatic storage class has no parity  {"event": "storage_class_zero_redundancy", "state": "degraded"}
+2026-09-19T09:19:50.345 WARN  SSE-KMS requests are not authorized against the KMS key they name; any identity allowed to write an object may encrypt it under any key, and any identity allowe  {"event": "sse_kms_key_policy_mode"}
+2026-09-19T09:19:50.410 WARN  Ignoring unknown persisted scalar config key
+2026-09-19T09:19:50.423 WARN  Error loading CA root certificate: failed to read PEM from file: Permission denied (os error 13) at '/root/.ccr/ca-bundle.crt'
+2026-09-19T09:19:50.423 WARN  update-check HTTP client could not load system TLS roots (builder error); continuing with an empty trust store
+2026-09-19T09:19:55.426 WARN  Ignoring unknown persisted scalar config key
+2026-09-19T09:20:00.425 WARN  Ignoring unknown persisted scalar config key
+2026-09-19T09:20:05.426 WARN  Ignoring unknown persisted scalar config key
+2026-09-19T09:20:07.436 WARN  Audit system not initialized, cannot stop
