@@ -17,7 +17,7 @@ name: lq-ai
 services:
   nginx:
     # nginx >= 1.25.1 required (the config uses the `http2 on;` directive).
-    image: nginx:1.27-alpine
+    image: nginx:stable-alpine
     restart: unless-stopped
     depends_on:
       # web's first boot can take minutes (model/asset warm-up); don't hold

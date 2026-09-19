@@ -48,8 +48,9 @@ docker compose -f docker-compose.yml -f deploy/reverse-proxy/nginx/docker-compos
 
 # TLS terminates and the web shell answers. With an internal-CA cert, point
 # curl at your CA bundle instead of using -k:
-curl -kI https://<fqdn>/health                       # HTTP/2 200
-curl --cacert /path/to/internal-ca.pem -fI https://<fqdn>/health
+curl -fksS -o /dev/null https://<fqdn>/health && echo "web health: ok"
+curl --cacert /path/to/internal-ca.pem -fsS -o /dev/null \
+  https://<fqdn>/health && echo "web health: ok"
 
 # Path routing to the LQ.AI backend (401 JSON = the /lq-ai-api/v1 → /api/v1
 # rewrite reached api:8000):
@@ -58,8 +59,8 @@ curl -sk -o /dev/null -w '%{http_code}\n' https://<fqdn>/lq-ai-api/v1/skills
 # HTTP→HTTPS redirect:
 curl -sI http://<fqdn>/ | head -1                    # 301
 
-# Full TLS posture scan:
-docker run --rm drwetter/testssl.sh https://<fqdn>
+# Optional full TLS posture scan:
+docker run --rm ghcr.io/testssl/testssl.sh:3.2 https://<fqdn>
 ```
 
 Then open `https://<fqdn>/`, log in, send a chat message, and confirm the

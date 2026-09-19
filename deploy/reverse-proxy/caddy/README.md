@@ -46,10 +46,10 @@ once the recipe works.
 ## Verify
 
 ```bash
-curl -fI https://<fqdn>/health          # 200, no -k needed — publicly trusted cert
+curl -fsS -o /dev/null https://<fqdn>/health && echo "web health: ok"
 curl -s -o /dev/null -w '%{http_code}\n' https://<fqdn>/lq-ai-api/v1/skills   # 401 = api routing works
 curl -sI http://<fqdn>/ | head -1       # 308 redirect to https
-docker run --rm drwetter/testssl.sh https://<fqdn>   # full TLS scan
+docker run --rm ghcr.io/testssl/testssl.sh:3.2 https://<fqdn>   # optional full TLS scan
 ```
 
 Then open `https://<fqdn>/`, log in, send a chat message, and confirm the

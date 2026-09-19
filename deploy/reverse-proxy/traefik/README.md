@@ -1,10 +1,9 @@
-# Traefik recipe — automatic HTTPS with Let's Encrypt, label-based routing
+# Traefik recipe — automatic HTTPS with Let's Encrypt, file-provider routing
 
 Traefik v3 in front of LQ.AI with automatic certificate issuance and renewal.
-Routing rules are **Docker labels** on the `web` and `api` services (added by
-the overlay), which is the natural fit if you already operate Traefik or plan
-to move to Kubernetes later — the label rules port directly to Ingress
-annotations when the Helm chart (DE-030) lands.
+Routing rules are declared in an explicit dynamic configuration file. Traefik
+therefore needs no access to `/var/run/docker.sock` and cannot inspect or
+control other containers through the Docker API.
 
 Shared context — upstream topology, the `/lq-ai-api/v1` prefix, streaming and
 HSTS guidance — is in [`../README.md`](../README.md).
@@ -47,10 +46,10 @@ to production, also clear the staged state:
 ## Verify
 
 ```bash
-curl -fI https://<fqdn>/health          # 200, no -k needed — publicly trusted cert
+curl -fsS -o /dev/null https://<fqdn>/health && echo "web health: ok"
 curl -s -o /dev/null -w '%{http_code}\n' https://<fqdn>/lq-ai-api/v1/skills   # 401 = api routing works
 curl -sI http://<fqdn>/ | head -1       # 30x redirect to https
-docker run --rm drwetter/testssl.sh https://<fqdn>   # full TLS scan
+docker run --rm ghcr.io/testssl/testssl.sh:3.2 https://<fqdn>   # optional full TLS scan
 ```
 
 Then open `https://<fqdn>/`, log in, send a chat message, and confirm the
@@ -79,9 +78,8 @@ internet-facing host.
 - Renewal failures (port 80 closed, DNS moved) appear in the Traefik logs
   while the old cert keeps serving until expiry — watch
   `docker compose logs traefik | grep -i acme` or monitor expiry externally.
-- **Docker socket:** Traefik mounts `/var/run/docker.sock` read-only for label
-  discovery. That is privileged access to the Docker API; on hosts running
-  anything besides this stack, front it with a socket proxy.
+- The dynamic routing file is mounted read-only. No Docker socket, privileged
+  mode, or host networking is required.
 
 ## Variations
 
@@ -102,11 +100,14 @@ internet-facing host.
 ```
 deploy/reverse-proxy/traefik/
 ├── README.md                 # this file
-├── docker-compose.proxy.yml  # Traefik service (static config as flags) + routing labels on web/api
+├── docker-compose.proxy.yml  # Traefik service and static flags
+├── dynamic/
+│   └── lq-ai.yml              # routers, middleware, and upstream services
 └── .env.example              # LQ_AI_FQDN, LQ_AI_ACME_EMAIL (append to root .env)
 ```
 
-*Why no `traefik.yml`?* Traefik loads its static configuration from exactly
-one source (file, flags, or env), and a static-config **file** cannot
-interpolate the operator's `.env` values. Flags in the overlay keep the whole
-recipe parameterized by the same root `.env` as the rest of the stack.
+*Why are there flags and a YAML file?* Entry points and the ACME resolver are
+static configuration, supplied as flags. Routers and services are dynamic
+configuration, supplied through the file provider. The dynamic file uses
+Traefik's supported Go-template `env` function for `LQ_AI_FQDN`; Compose passes
+the value from the same root `.env` as the rest of the stack.
