@@ -272,7 +272,8 @@ desktop launcher. Specifically:
    - **In-place** for the default single-drive Compose and desktop installs,
      driven by the migration tool (decision 8): `plan` reports the volume,
      its layout and the snapshot it will take; `apply` snapshots, fixes
-     ownership and records the ledger row; the store starts and imports;
+     ownership, writes the marker and journals the step; the store starts and
+     imports;
      `verify` checks `/health/ready`, reconciles the object count against the
      `files` table including soft-deleted rows plus unexpired export bundles,
      and compares object digests against `files.hash_sha256`. Credentials stay
@@ -339,12 +340,12 @@ open questions adjust individual steps; they do not restructure the plan.
    volume key `miniodata` unchanged. A one-shot init service runs before
    `rustfs`: on an empty volume or an already-migrated one it sets ownership to
    uid/gid `10001` and exits; on a volume that holds `.minio.sys` but no
-   `.rustfs.sys` and no migration marker it **refuses**, logs "existing MinIO
+   `.rustfs.sys` and no marker in the ops volume it **refuses**, logs "existing MinIO
    volume detected — run the migration tool first", and `rustfs` does not start.
    `LQ_AI_OPS_UNATTENDED=1` skips the marker check for operators with their own
    backups, and is logged. A `migrate` service under the `ops` profile (api
-   image, the object-store volume and a snapshots volume mounted) is the tool's
-   home; it never runs as part of a plain `up`. The api's default endpoint
+   image, the object-store volume and the `lq-ai-ops` volume mounted) is the
+   tool's home; it never runs as part of a plain `up`. The api's default endpoint
    becomes `http://rustfs:9000`.
 3. **Helm.** The StatefulSet and Service are renamed, the pod gets
    `fsGroup: 10001`, the readiness probe moves to `/health/ready`, `values.yaml` keys are
@@ -363,8 +364,8 @@ open questions adjust individual steps; they do not restructure the plan.
    directory and the space needed, and asks once; then it runs `apply`, brings
    the store up, runs `verify`, and only then starts the rest. A failed `plan`
    or `verify` stops there with the receipt on screen and a rollback button.
-   The ledger is visible on the health view. Launcher users never run a docker
-   command. This is the concern that makes the tool mandatory: the launcher has
+   The journal is visible on the health view. Launcher users never run a
+   docker command. This is the concern that makes the tool mandatory: the launcher has
    no other way to sequence stop → snapshot → fix → start → verify.
 5. **Docs.** `docs/releases/v0.8.0.md` with the runbook below at the top;
    quickstart, README, both `.env` examples; PRD §2.1 / §2.4 diagrams, §6.5
@@ -373,10 +374,12 @@ open questions adjust individual steps; they do not restructure the plan.
 6. **CI.** Stack-smoke green on RustFS. The #303 ingest round-trip lands in the
    same release if ready, otherwise as a follow-up.
 7. **The migration framework and migration `0001`** (ADR 0028): the `ops`
-   profile service, the ledger table and its alembic revision, the `plan` /
-   `apply` / `verify` / `rollback` commands, the `/ready` ledger field, the
-   admin read endpoint, the fixture MinIO volume, and the stack-smoke run that
-   applies `0001` to it.
+   profile service, the `lq-ai-ops` volume holding the journal and the
+   markers, the `plan` / `apply` / `verify` / `status` / `rollback` commands,
+   the launcher flow with the image-tag pin ADR 0025 decision 2 requires, the
+   fixture MinIO volume, and the stack-smoke run that applies `0001` to it.
+   The Postgres read-model of the journal and the admin endpoint are deferred
+   (ADR 0028 decision 11); nothing in this item needs an alembic revision.
 
 ### Sequencing
 
@@ -384,8 +387,9 @@ open questions adjust individual steps; they do not restructure the plan.
    and the Status line flips.
 2. If open question 3 is answered "bridge", a one-line PR pins a frozen MinIO
    digest so `main` goes green while the implementation is reviewed.
-3. The framework lands first (ADR 0028's PR: registry, ledger, CLI, compose
-   profile, tests, with `plan` reporting nothing pending on a fresh stack).
+3. The framework lands first (ADR 0028's PR: registry, the ops volume with
+   journal and markers, CLI, compose profile, tests, with `plan` reporting
+   nothing pending on a fresh stack).
    One implementation PR then carries items 1–7, labelled `breaking-change` so
    ADR 0025's version-consistency gate knows the next tag must be a minor. It
    touches no `gateway/` path; the stack-smoke workflow change for the fixture
@@ -406,7 +410,8 @@ open questions adjust individual steps; they do not restructure the plan.
    for the rest of 0.x. They are free, and an operator on 0.7.x when 0.9.0 or
    0.10.0 ships must land on the same path as one upgrading to 0.8.0: `migrate
    plan` detects the MinIO volume from its contents, not from a version number,
-   so the tool, not the shims, is what makes skip-version upgrades safe. When a
+   and reconciles what it finds against its journal (ADR 0028 decision 3), so
+   the tool, not the shims, is what makes skip-version upgrades safe. When a
    later release wants the shims gone, that release's `plan` flags stale `.env`
    keys and the removal gets its own release-note line (open question 2).
 
@@ -427,8 +432,8 @@ downtime; the import itself is quick because no bytes move.
    v0.8.0.
 2. `migrate plan` — reports the MinIO volume, its layout, object count and
    size, the snapshot destination and free space, and what `apply` will do.
-3. `migrate apply` — snapshots the volume, fixes ownership, records the ledger
-   row and the marker the init service looks for.
+3. `migrate apply` — snapshots the volume, fixes ownership, writes the marker
+   the init service looks for, and journals the step.
 4. `docker compose up -d` — the store imports on first start; the api waits on
    `/health/ready`.
 5. `migrate verify` — readiness, object count against `files` including
