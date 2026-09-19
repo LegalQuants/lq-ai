@@ -5,10 +5,13 @@
 **Owner:** Maintainer team (houfu)
 **Origin:** Issue [LegalQuants/lq-ai#572](https://github.com/LegalQuants/lq-ai/issues/572)
 *"Replace archived MinIO with a maintained S3-compatible backend"* (2026-09-13),
-reframed as this ADR's tracking issue. Grounded in a verification run executed on
-2026-09-17: the api's real storage module (`api/app/storage.py`, unmodified) driven
+reframed as this ADR's tracking issue. Grounded in two executed runs: on
+2026-09-17 the api's real storage module (`api/app/storage.py`, unmodified) driven
 against a RustFS 1.0.0 binary with the api's pinned `aioboto3` / `botocore`
-versions. Receipts are summarised under *Evidence* below.
+versions; on 2026-09-19 an in-place rehearsal in which RustFS 1.0.0 took over a
+volume written by MinIO `RELEASE.2025-10-15`, preserved with receipts in
+[`docs/research/2026-09-19-rustfs-dropin-rehearsal.md`](../research/2026-09-19-rustfs-dropin-rehearsal.md).
+Both are summarised under *Evidence* below.
 
 **Relates to:** ADR [0005](0005-file-storage-soft-delete-and-key-scheme.md) (the
 object-key scheme; written in MinIO vocabulary), ADR
@@ -168,15 +171,48 @@ compose and Helm probes keep working during the transition. Startup logs show
 on a single drive, `automatic storage class has no parity`, the same
 zero-redundancy posture MinIO's single-drive mode has.
 
-Not verified here, and recorded as such: an in-place migration of a real
-`miniodata` volume (no MinIO binary or image was obtainable from this sandbox),
-the arm64 image on Apple Silicon, and whether the migration-error fix
-[rustfs/rustfs#7652](https://github.com/rustfs/rustfs/pull/7652) (merged
-2026-09-11, backported 2026-09-13; before the fix, a failed metadata import
-still reported ready — [#7651](https://github.com/rustfs/rustfs/issues/7651))
-is inside the `1.0.0` tag. The implementation PR's stack-smoke run and the
-upgrade guide's log check cover the first and third; the desktop launcher's
-verification run covers the second.
+### In-place rehearsal on a MinIO-written volume (2026-09-19)
+
+Method, receipts and caveats are in
+[`docs/research/2026-09-19-rustfs-dropin-rehearsal.md`](../research/2026-09-19-rustfs-dropin-rehearsal.md).
+In short: MinIO `RELEASE.2025-10-15T17-29-55Z` (the last community release, built
+from the archived source because no image is pullable) wrote a single-drive
+volume of 45 objects shaped like the real key space — 41 bare-UUID documents from
+12 B to 20 MiB across PDF, DOCX and text types, one empty object, two
+`exports/…zip` bundles, all through the api's `stream_upload` / `upload_bytes` so
+ETags carry the multipart part-count suffix. RustFS 1.0.0 was then started on
+that same directory with the same root credentials, and every later step
+listed the bucket and read every object back through `stream_download`,
+comparing bytes, size, ETag and content type against the seed-time manifest.
+
+| Phase | Result |
+|---|---|
+| RustFS first start on the MinIO volume, same credentials | log: `checking for a legacy storage format` → `Migrated format from MinIO config` → `Migrated compatible server config` → `Migrated bucket metadata: lq-ai-files` → `IAM migration complete`; **45/45 intact**, the 20 MiB object's `-3` multipart ETag included |
+| Writes and a delete through RustFS on that volume | 46/46 intact |
+| **MinIO restarted on the migrated volume** (now holding `.rustfs.sys` and two RustFS-written objects) | starts; **46/46 intact, RustFS-written objects included** |
+| RustFS on a pristine snapshot with the **wrong** secret key | starts healthy, same migration log, no decryption error; bucket and all 45 objects readable with the new pair; the old pair gets 403 |
+| Plain RustFS restart on the migrated volume | nothing left to migrate; 46/46 intact |
+
+RustFS leaves `.minio.sys` in place, adds `.rustfs.sys`, and reads the existing
+per-object `xl.meta` layout without rewriting it. Two consequences for the
+decision: the in-place default is measured, not assumed; and the volume stayed
+MinIO-readable afterwards, so the migration is not one-way at this scale, though
+upstream does not document that and one run does not make it a guarantee. The
+wrong-credentials result means an operator who changes the root pair keeps their
+objects; matching the pair stays in the guide because it is free and removes the
+only failure mode upstream names (encrypted IAM data, which LQ.AI installs do not
+have).
+
+Not verified here, and recorded as such: a *real* `miniodata` volume with months
+of soft-deleted files (the rehearsal volume is synthetic); the container
+ownership mismatch (both stores ran as one Unix user, so the root-owned-volume /
+uid-10001 problem was not exercised — the compose init service in the upgrade
+plan exists for it); the arm64 image on Apple Silicon; and whether the
+migration-error fix [rustfs/rustfs#7652](https://github.com/rustfs/rustfs/pull/7652)
+(merged 2026-09-11, backported 2026-09-13; before the fix, a failed metadata
+import still reported ready — [#7651](https://github.com/rustfs/rustfs/issues/7651))
+is inside the `1.0.0` tag. The rehearsals in the upgrade plan and the upgrade
+guide's log check cover these.
 
 ## Decision
 
@@ -208,9 +244,11 @@ desktop launcher. Specifically:
    *Upgrade plan*).
 5. **Migration policy for existing installs** (see *Open questions* 1 for the
    fork the committee is asked to ratify):
-   - Snapshot first, always: the `miniodata` volume and a `pg_dump`. The in-place
-     read is not documented as reversible, and the old image cannot be re-pulled,
-     so the snapshot plus the locally cached MinIO image are the only rollback.
+   - Snapshot first, always: the `miniodata` volume and a `pg_dump`. Upstream
+     does not document the in-place read as reversible (the 2026-09-19 rehearsal
+     found MinIO could re-read the migrated volume, but that is one run), and
+     the old image cannot be re-pulled, so the snapshot plus the locally cached
+     MinIO image are the only guaranteed rollback.
    - **In-place** for the default single-drive Compose and desktop installs:
      same volume, RustFS credentials set to the exact MinIO root pair, ownership
      fixed, RustFS started alone, startup log checked for the legacy-format
@@ -299,11 +337,13 @@ open questions adjust individual steps; they do not restructure the plan.
    touches no `gateway/` or workflow path unless #303 rides along, in which case
    the security-review route in CODEOWNERS applies.
 4. **Rehearsals before tagging**, with receipts committed under
-   `docs/research/` as ADR 0026 did: an in-place upgrade of a real `miniodata`
-   volume written by MinIO (from a maintainer machine that still holds the
-   cached image), following the runbook verbatim; and a launcher upgrade on
-   Apple Silicon. The *Evidence* section of this ADR is amended with both
-   results, including anything that failed.
+   `docs/research/` as ADR 0026 did. The synthetic in-place rehearsal is done
+   and committed (*Evidence*). Two remain: an in-place upgrade of a *real*
+   `miniodata` volume written by MinIO (from a maintainer machine that still
+   holds the cached image), following the runbook verbatim and exercising the
+   ownership fix through the container images; and a launcher upgrade on Apple
+   Silicon. The *Evidence* section of this ADR is amended with both results,
+   including anything that failed.
 5. Version strings move together per the v0.7.1 note — `api`, `gateway`, the
    committed OpenAPI export, then `desktop` and its lockfile — and `v0.8.0` is
    tagged, followed by `desktop-v0.8.0`.
@@ -395,7 +435,10 @@ links expire within 24 hours.
 - **Ownership mismatch.** The uid-10001 container cannot write a root-owned
   MinIO volume; the upgrade guide must make the one-shot fix impossible to miss,
   and the desktop launcher must automate it.
-- **One-way migration with no upstream rollback image.** The snapshot-first rule
+- **Rollback rests on the snapshot.** Upstream does not document the in-place
+  read as reversible; the 2026-09-19 rehearsal found MinIO re-reading the
+  migrated volume, RustFS-written objects included, which is encouraging but a
+  single synthetic run. With no MinIO image to re-pull, the snapshot-first rule
   is load-bearing, and the guide must say so in its first line.
 - **Single-drive RustFS cannot grow in place** into a multi-drive pool (RustFS
   documents this explicitly); growth means a fresh deployment and an S3 copy.
@@ -453,8 +496,10 @@ links expire within 24 hours.
    volume rather than reusing the MinIO one. This ADR proposes in-place as the
    documented default for the single-drive topology, with snapshot-first and an
    S3-copy fallback, because it preserves the operator surface and avoids a
-   double-storage window on small hosts. Ratify, or make the S3 copy the default
-   and in-place the documented alternative.
+   double-storage window on small hosts. The 2026-09-19 rehearsal (*Evidence*)
+   supports it: the in-place read preserved every object's bytes, ETag and
+   content type, and the volume stayed MinIO-readable afterwards. Ratify, or
+   make the S3 copy the default and in-place the documented alternative.
 2. **Compatibility window.** Keep the `MINIO_ROOT_*` and `MINIO_*_HOST_PORT`
    fallbacks for one minor release (proposed), or cut over in the same release
    with a required `.env` edit.
@@ -472,6 +517,10 @@ links expire within 24 hours.
 - **Breakage evidence:** stack-smoke
   [run 34919920153](https://github.com/houfu/lq-ai/actions/runs/34919920153)
   (2026-09-15, `main`).
+- **Rehearsal research and receipts:**
+  [`docs/research/2026-09-19-rustfs-dropin-rehearsal.md`](../research/2026-09-19-rustfs-dropin-rehearsal.md)
+  and `docs/research/2026-09-19-rustfs-dropin-receipts/` (driver scripts, the
+  verified manifest, MinIO's `format.json`, log excerpts).
 - **RustFS:** [repository](https://github.com/rustfs/rustfs);
   [1.0.0 release](https://github.com/rustfs/rustfs/releases/tag/1.0.0);
   in-place MinIO read [#4358](https://github.com/rustfs/rustfs/pull/4358);
