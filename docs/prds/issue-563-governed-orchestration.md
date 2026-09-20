@@ -1,6 +1,6 @@
 # PRD: Governed orchestration and optional skill capabilities
 
-**Status:** Proposed; local implementation available for review, release pending.
+**Status:** Accepted design; local implementation available for review, release pending.
 **Tracks:** [#563](https://github.com/LegalQuants/lq-ai/issues/563).
 [ADR 0035](../adr/0035-governed-orchestration-run-tree.md) records the architecture;
 the [research note](../research/issue-563-harness-research.md) explains its evidence.
@@ -57,8 +57,8 @@ code; they establish no live-provider or legal-quality claim.
 
 ## Release conditions
 
-- **Maintainers:** record ADR ratification before publishing code and review the
-  shared runtime update under [#524](https://github.com/LegalQuants/lq-ai/issues/524).
+- **Maintainers:** review the shared runtime update under
+  [#524](https://github.com/LegalQuants/lq-ai/issues/524) before release.
 - **Security reviewers and operators:** record approval for exact scripts,
   dependencies and images; complete R7 acceptance; approve production executor
   separation and operational data handling before helper enablement.

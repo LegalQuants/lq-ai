@@ -516,15 +516,16 @@ This is the single most differentiated capability in the product. Specified in d
 
 ### 3.4 Skill Library and Skill Creator
 
-**Proposed optional extension, not shipped:**
+**Accepted optional extension, not shipped:**
 [ADR 0035 D8b–D8d](adr/0035-governed-orchestration-run-tree.md#d8b--optional-persistent-skill-workspaces)
 specifies persistent skill workspaces and reviewed, installed Python helpers.
 Skills opt in separately to storage and execution. Generated-code execution is
 excluded; exact executable review, isolated jobs and protection against indirect
 disclosure through helper output or persisted reuse are required. The
 [capability summary](plans/issue-563-skill-capabilities.md) describes local behavior
-and pending security gates. ADR ratification and implementation publication remain
-pending; the M1 status below is unchanged by this proposal.
+and pending security gates. ADR 0035 was ratified on 2026-09-20, so implementation
+publication may proceed; the M1 status below remains unchanged until the release
+conditions are met.
 
 **M1 status:** Shipped. The Skill Library (browse built-in, user, and team scopes), Skill Creator (capture / wizard / fork), skill versions tab, per-version audit, Try-It sandbox, and slash-invoked skills with provenance pill are all wired end-to-end in Wave D.2. An operator can verify at `api/app/api/skills.py`; Cypress E2E coverage is in `web/cypress/e2e/wave-d2-skill-creator.cy.ts` (Tests 1–6). Skill script execution (`scripts/`) and autonomous skill self-improvement are deferred (M4). See [HONEST-STATE.md §1](HONEST-STATE.md#1-conversational-and-workspace-surface).
 
@@ -885,7 +886,7 @@ The scope-as-shipped is narrower than the original "ensemble runs on the whole a
 
 ### 3.10 Autonomous Layer (M4)
 
-**Proposed extension, not shipped:** [ADR 0035 — Governed orchestration](adr/0035-governed-orchestration-run-tree.md)
+**Accepted extension, not shipped:** [ADR 0035 — Governed orchestration](adr/0035-governed-orchestration-run-tree.md)
 records the revised [#563](https://github.com/LegalQuants/lq-ai/issues/563) design:
 user approval of one topic batch before parallel child runs, inherited authority,
 durable recovery, shared accounted budgets and an inspectable run tree. The first
@@ -895,8 +896,9 @@ LangGraph for continuation, arq for scheduling and LQ-owned governance records;
 the [feature PRD](prds/issue-563-governed-orchestration.md) defines requirements,
 acceptance criteria and release conditions. Optional skill storage
 and bundled helpers follow D8b–D8d, including the new confidentiality gates. The
-implementation branch stays local until ratification; this proposal does not
-change the M4 status below.
+implementation may now be published for review; production acceptance and the
+remaining release conditions still apply. This decision does not change the M4
+status below.
 
 **M4 status: SHIPPED.** The opt-in background executor runs real in-loop work end-to-end. The five-phase LangGraph state machine (intake → analysis → drafting → ethics_review → delivery) lives in `api/app/autonomous/executor.py` (`run_autonomous_session`) + `nodes.py`; every external action routes through the single `guarded_tool_call` chokepoint (`api/app/autonomous/guard.py`) enforcing R5 (external halt + idle watchdog → `SessionHalted`), R6 (`PHASE_GRANTS` phase-gated tool grants → `ToolNotGranted`), and R4 (per-session **and** per-trigger cost cap → `CostCapReached`). The four primitives ship: watches (`api/app/autonomous/watch_trigger.py`, table `autonomous_watches` — migration `0039`), schedules (`api/app/autonomous/cron.py`, table `autonomous_schedules`), per-user memory (`autonomous_memory`), and the precedent board (`precedent_entries` — migration `0039`; `project_context_proposals` — migration `0041`). Honest per-session receipts carry `terminal_reason` (completed / cost_cap_reached / external_halt) via `api/app/autonomous/receipt.py` (`build_receipt` / `build_receipt_safe`). The layer is per-user opt-in, off by default (`User.autonomous_enabled` — migration `0044`), with a full web dashboard at `web/src/routes/lq-ai/autonomous/`. Migration head at M4 close is `0045`. See [HONEST-STATE.md §5](HONEST-STATE.md#5-m4--autonomous-layer-shipped). As of M4 close the **Contract Repository auto-relationship graph** (§3.16) and the MCP-client subsystem (§8.5) remained deferred; the **MCP-client subsystem subsequently shipped** in the legal-research + connectors milestone (#158–#193 — see [DE-200](#de-200--mcp-client-subsystem-in-the-lq-ai-backend) and [HONEST-STATE.md §5.5](HONEST-STATE.md)), while the contract relationship graph remains deferred.
 
@@ -3896,7 +3898,8 @@ Lavern is the closest public prior art for several LQ.AI roadmap commitments tha
 would make this validation a prerequisite for shipping its first multi-agent
 profile. It specifies the backend location, strict task/authority separation,
 current resource checks and metadata-only database audit in place of the older
-alternatives below. Ratification is pending; this DE is not marked implemented.
+alternatives below. ADR 0035 was ratified on 2026-09-20; this DE remains
+unimplemented until the accepted design's release conditions are met.
 
 **Priority:** P1 if M4 ships multi-agent autonomous flows / P2 if M4 ships single-agent only · **Effort:** M
 
@@ -4375,7 +4378,7 @@ records the updated failure surface: 12 typing errors across three executors,
 with CI stopping before pytest. The historical counts and runtime-compatibility
 assumption below are not verification of a modern lock. [ADR 0035](adr/0035-governed-orchestration-run-tree.md)
 keeps this migration separately reviewable and requires a reviewed, tested
-runtime baseline before activating the proposed durable LangGraph execution.
+runtime baseline before activating the accepted durable LangGraph execution.
 
 **Priority:** P3 · **Effort:** S
 

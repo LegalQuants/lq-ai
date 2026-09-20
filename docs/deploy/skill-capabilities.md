@@ -1,13 +1,14 @@
 # Optional skill storage and bundled helpers
 
-Local #563 implementation, awaiting the existing ADR/publication gates. Both
+Local #563 implementation, awaiting the remaining release and security gates. Both
 capabilities are disabled by default. Enabling storage does not enable scripts.
 
 **Draft operator notes:** this documentation PR publishes the design and local
 evidence, not migration 0071, the runner, images or the deployment overlay. The
 commands below describe the separate unpublished implementation and cannot enable
 these capabilities on this branch. Production script enablement additionally
-requires the pending [ADR D8c/D8d confidentiality gates](../adr/0035-governed-orchestration-run-tree.md#d8d--confidentiality-must-survive-compromised-helper-output).
+requires the [ADR D8c/D8d confidentiality gates](../adr/0035-governed-orchestration-run-tree.md#d8d--confidentiality-must-survive-compromised-helper-output),
+which remain pending after ratification.
 
 ## Persistent workspaces
 
