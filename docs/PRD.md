@@ -1224,17 +1224,21 @@ providers:
   anthropic:
     api_key_env: ANTHROPIC_API_KEY
     base_url: https://api.anthropic.com
-    timeout_s: 60
+    # Optional operator escape hatches (ADR 0027 D2). Defaults: timeout_s 600
+    # on every adapter; default_max_tokens 16384 (Anthropic requires
+    # max_tokens; an explicit request value always wins).
+    # timeout_s: 600
+    # default_max_tokens: 16384
     rate_limit:
       requests_per_minute: 1000
       tokens_per_minute: 200000
   openai:
     api_key_env: OPENAI_API_KEY
     base_url: https://api.openai.com/v1
-    timeout_s: 60
+    # timeout_s: 600
   ollama:
     base_url: http://ollama:11434
-    timeout_s: 300
+    # timeout_s: 600
 
 models:
   # Operator-defined model registry
@@ -5076,6 +5080,12 @@ Attached-file content is injected into the prompt as a system message (`_format_
 **Priority:** P2 · **Effort:** S · **Status (2026-09-13): filed.** Credit: @sergiomaldo (#317 first tried to honour the ceiling); #504 review finding F-2.
 
 `request_validation.max_max_tokens` is declared in the gateway config schema (`gateway/app/config.py`), documented as 16384 in `gateway.yaml.example`, and enforced on no request path — neither on an explicit request `max_tokens` nor on the Anthropic adapter's injected default. #317's clamp of the injected default was dropped because it compared against a freshly constructed `RequestValidationConfig()` rather than the operator's loaded value (the adapter factories receive only a `ProviderConfig`). ADR 0027 D1 keeps the injected default at the documented ceiling instead. **Specific scope:** decide enforce-or-remove. If enforce: thread `request_validation` into `build_adapter` / the request validator, reject an explicit `max_tokens` above the ceiling with `invalid_request`, clamp the injected default against the loaded value with a startup log line, and test both; if remove: delete the field from the schema and the example so operators stop reading a cap that does not exist. Related: ADR 0027 D5, #317, #489.
+
+#### DE-393 — Per-request / per-use-case timeout
+
+**Priority:** P3 · **Effort:** M · **Status (2026-09-13): filed with ADR 0027.**
+
+Timeout has no per-request path: it is fixed per provider (`timeout_s`, default 600s per ADR 0027 D1) and per deployment on the api hop (`LQ_AI_GATEWAY_TIMEOUT_SECONDS`, default 900s). `max_tokens` is already tunable per request, so the "tune by use case at the call site" position (#489, ADR 0027 D2) is half built. A skill run, playbook step or long drafting job that knows it will run for many minutes cannot ask for more than the deployment default, and a chat turn cannot ask for less. **Specific scope:** a bounded per-request timeout (or per-tier defaults) carried from the api's callers through the gateway to the adapter, capped by the operator's `timeout_s`; the api hop must remain the loosest (ADR 0027 D4); a test that a per-request value above the operator cap is clamped and logged. Do not build until a caller needs it. Related: #489, #318, #535, DE-392.
 
 #### DE-394 — Define dark mode for LQ.AI (palette, coverage, and what "System" resolves to)
 
