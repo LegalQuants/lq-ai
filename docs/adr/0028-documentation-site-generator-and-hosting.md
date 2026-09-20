@@ -1,6 +1,6 @@
 # ADR 0028 — Documentation-site generator and hosting: Astro Starlight on GitHub Pages
 
-**Status:** Proposed (2026-09-14) — for the weekly call
+**Status:** Accepted (2026-09-20) — committee-ratified at the weekly call
 **Date:** 2026-09-14
 **Owner:** Maintainer team (houfu)
 **Origin:** The documentation-site mini-PRD (PR #511) records the stack as
@@ -209,6 +209,7 @@ PR #511 (documentation-site mini-PRD) · lq-ai-community minutes
 [2026-08-09](https://github.com/LegalQuants/lq-ai-community/blob/main/meetings/2026-08-09-weekly/notes.md)
 and
 [2026-08-16](https://github.com/LegalQuants/lq-ai-community/blob/main/meetings/2026-08-16-weekly/notes.md)
+· committee [minutes, 2026-09-20](https://github.com/LegalQuants/lq-ai-community/blob/main/meetings/2026-09-20-weekly/notes.md)
 · [Material for MkDocs end of life](https://github.com/squidfunk/mkdocs-material/issues/8523)
 · [Zensical `llms.txt` request](https://github.com/zensical/zensical/issues/252)
 · [Docusaurus 3.10](https://docusaurus.io/blog/releases/3.10)
