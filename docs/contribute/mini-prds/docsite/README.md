@@ -2,11 +2,11 @@
 
 | | |
 |---|---|
-| **Status** | **Proposed.** Needs one committee acceptance: ADR 0028 (stack and hosting). Everything else is settled by an existing ADR or listed under [Open questions](#open-questions) with the default the site proceeds on. |
+| **Status** | **Ready for implementation.** ADR 0028 (stack and hosting) was accepted by the committee on 2026-09-20. The remaining items are listed under [Open questions](#open-questions) with the default the site proceeds on. |
 | **Effort** | **L overall, deliberately divisible** — 22 independently claimable S/M items across six contributor profiles (Annex C). The launch-gating subset is ~26 pages, of which ~15 are curation of existing repo files. |
 | **Contributor profile** | Varies by section: DevOps (operations), compliance/security professional (trust centre), practising lawyer (skills, licensing), technical writer (contribute, orientation), frontend engineer (site infrastructure). Per-item profiles in Annex C. |
 | **Review** | Maintainer review by default. Content stays in this repository, so CODEOWNERS routing for security, compliance and skills paths applies as it does today. |
-| **Depends on / relates to** | ADR [0001](../../../adr/0001-openwebui-fork-pin.md) (branding clause — spawned item 1), ADR [0022](../../../adr/0022-committee-governance-and-meeting-records.md), ADR [0024](../../../adr/0024-jurisdiction-and-practice-area-expansion.md) (contribution routing), ADR [0025](../../../adr/0025-release-versioning-and-pipeline-ordering.md) (upgrade classes); **ADR 0031** (headless / API-only use: acknowledged, not supported — PR #564) sets what the site does not document; **ADR 0028** (documentation-site generator and hosting — proposed) sets the stack; the open anonymization item ([2026-07-26 minutes](https://github.com/LegalQuants/lq-ai-community/blob/main/meetings/2026-07-26-weekly/notes.md), PR #439) — **holds one trust-centre page**; mini-PRDs [#1](../procurement-readiness-pack.md), [#3](../skill-acceptance-tests.md), [#5](../air-gap-install-verification.md), [#7](../reverse-proxy-tls-deployment-recipes.md), [#8](../community-skill-installer-ui.md); DE-386; issues #490, #495, #503. |
+| **Depends on / relates to** | ADR [0001](../../../adr/0001-openwebui-fork-pin.md) (branding clause — spawned item 1), ADR [0022](../../../adr/0022-committee-governance-and-meeting-records.md), ADR [0024](../../../adr/0024-jurisdiction-and-practice-area-expansion.md) (contribution routing), ADR [0025](../../../adr/0025-release-versioning-and-pipeline-ordering.md) (upgrade classes); **ADR 0031** (headless / API-only use: acknowledged, not supported — PR #564) sets what the site does not document; **ADR 0028** (documentation-site generator and hosting — accepted 2026-09-20) sets the stack; the open anonymization item ([2026-07-26 minutes](https://github.com/LegalQuants/lq-ai-community/blob/main/meetings/2026-07-26-weekly/notes.md), PR #439) — **holds one trust-centre page**; mini-PRDs [#1](../procurement-readiness-pack.md), [#3](../skill-acceptance-tests.md), [#5](../air-gap-install-verification.md), [#7](../reverse-proxy-tls-deployment-recipes.md), [#8](../community-skill-installer-ui.md); DE-386; issues #490, #495, #503. |
 
 **Annexes** (siblings of this file):
 [**A — Quality rules and failure tests**](annex-a-quality-rules.md) *(core rules are community-authored and land under their author's name)* ·
@@ -17,7 +17,7 @@
 
 ## What this is
 
-A public documentation site for LQ.AI: an audience-indexed façade over canonical repo files, built with **Astro/Starlight and hosted on GitHub Pages** (ADR 0028, proposed), with **content living in this repository** and the site building from the same tree — so every page's "checked against" stamp is the file's own git history. Latest-version-only until 1.0, with per-page status badges. It curates and routes; it does not fork content the repo already holds.
+A public documentation site for LQ.AI: an audience-indexed façade over canonical repo files, built with **Astro/Starlight and hosted on GitHub Pages** (ADR 0028, accepted 2026-09-20), with **content living in this repository** and the site building from the same tree — so every page's "checked against" stamp is the file's own git history. Latest-version-only until 1.0, with per-page status badges. It curates and routes; it does not fork content the repo already holds.
 
 ## The goal
 
@@ -141,4 +141,4 @@ The journey evidence skews toward the issue tracker — readers who file issues 
 
 ---
 
-*Drafted 2026-08-12 against `main` @ `e9d57763` (v0.7.0). Revised 2026-09-14: scope aligned to ADR 0031 (one headless page, no `/build/`); stack recorded in ADR 0028; committee decisions reduced to open questions with defaults.*
+*Drafted 2026-08-12 against `main` @ `e9d57763` (v0.7.0). Revised 2026-09-14: scope aligned to ADR 0031 (one headless page, no `/build/`); stack recorded in ADR 0028; committee decisions reduced to open questions with defaults. Revised 2026-09-20: ADR 0028 accepted and the implementation gate cleared.*
