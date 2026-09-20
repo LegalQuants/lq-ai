@@ -104,7 +104,7 @@ Coverage target is 80% across `api/` and `gateway/`. Current PR CI does not enfo
 
 Bug fixes include a regression test. New API endpoints include unit tests for handler logic, integration tests for the endpoint, and OpenAPI schema-conformance tests.
 
-Detailed test strategy in [docs/test-strategy.md](docs/test-strategy.md) (M1 deliverable).
+Detailed test strategy — including the per-surface E2E coverage matrix and the honest statement of what CI runs today — in [docs/test-strategy.md](docs/test-strategy.md).
 
 ---
 

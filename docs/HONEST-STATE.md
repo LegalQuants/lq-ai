@@ -43,7 +43,7 @@ The surface in-house counsel touches every day. Every row is wired end-to-end in
 
 | Capability | Status | Verification |
 |---|---|---|
-| Multi-turn chat with persistent history | M1 | `api/app/api/chats.py`; `web/cypress/e2e/chat.cy.ts` |
+| Multi-turn chat with persistent history | M1 | `api/app/api/chats.py` |
 | Matter (project) workspace with attached files / skills / KBs | M1 | `api/app/api/projects.py`; `web/src/routes/lq-ai/matters/[id]/+page.svelte` |
 | Slash-invoked skills with provenance pill | M1 | `web/cypress/e2e/wave-d2-skill-creator.cy.ts` Test 4 |
 | Built-in starter skills | M1 | `skills/*/SKILL.md` (read every prompt — no hidden instructions) |
@@ -275,14 +275,15 @@ Engineering rigor is measurable, not asserted. Test **file** counts below are ve
 
 | Practice | Status | Verification |
 |---|---|---|
-| Backend tests (pytest, live Postgres) | M1–milestone | 233 `test_*.py` files in `api/tests/` (incl. `tests/autonomous/`, `tests/citation/`, `tests/tabular/`; pass count refreshed in CI per the `.github/workflows/ci.yml` API gate); `cd api && DATABASE_URL=… pytest` |
-| Gateway tests (pytest) | M1–milestone | 67 `test_*.py` files in `gateway/tests/`; `cd gateway && pytest` |
-| Frontend unit tests (Vitest) | M1–milestone | 80 `*.test.ts` files in `web/src/`; `cd web && npx vitest run` |
-| Cypress E2E (LQ.AI shell) | M1–milestone | 17 specs in `web/cypress/e2e/` |
+| Documented test strategy + per-surface E2E coverage matrix | shipped (roadmap 4.1) | [`docs/test-strategy.md`](test-strategy.md) — inventory, surface × depth matrix with real spec paths, CI-reality statement, flake + gap registers |
+| Backend tests (pytest, live Postgres) | M1–milestone | 238 `test_*.py` files in `api/tests/` (incl. `tests/autonomous/`, `tests/citation/`, `tests/tabular/`; pass count refreshed in CI per the `.github/workflows/ci.yml` API gate); `cd api && DATABASE_URL=… pytest` |
+| Gateway tests (pytest) | M1–milestone | 74 `test_*.py` files in `gateway/tests/`; `cd gateway && pytest` |
+| Frontend unit tests (Vitest) | M1–milestone | 84 `*.test.ts` files in `web/src/`; `cd web && npx vitest run` |
+| Cypress E2E (LQ.AI shell) | M1–milestone | 13 spec files in `web/cypress/e2e/` (all LQ.AI-authored; not run in CI, see [`docs/test-strategy.md`](test-strategy.md) §2) |
 | Ruff lint + format (Python) | M1–M4 | `.github/workflows/ci.yml`: `ruff check api scripts` + `ruff format --check` |
 | mypy (api standard, gateway strict) | M1–M4 | CI `mypy app` per subsystem |
 | svelte-check (LQ.AI-owned code) | M1–M4 | `cd web && npm run check:lq-ai` (0 errors on `src/{lib,routes}/lq-ai/**`); inherited OpenWebUI debt tracked as DE-262 (§8.1) |
-| Coverage gate (target 80% api / 90% gateway) | not enforced | CI runs pytest but does not fail below threshold |
+| Coverage gate (target 80% api / 90% gateway) | enforced — api at the 80% target; gateway as a no-decrease ratchet at 88% (target not yet met; delta = DE-395) | CI pytest runs with `--cov-fail-under` (`.github/workflows/ci.yml`). Measured 2026-07-25: api 81.49% (12242/15023 stmts) → gated at the 80% target; gateway 88.94% (4464/5019 stmts) → gated at the measured floor of 88%, not the 90% target |
 | Mutation / property-based testing, eval harness, Cypress-in-CI | not yet | On the engineering-discipline roadmap |
 | OpenSSF Scorecard / Best Practices Badge | not yet (community-friendly) | mini-PRDs at `docs/contribute/mini-prds/` |
 | SLSA-3 provenance / Sigstore-signed images / SBOM per release | committed | `docs/security/releases/README.md` |

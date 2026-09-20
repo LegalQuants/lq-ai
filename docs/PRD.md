@@ -2124,6 +2124,8 @@ Entries are tagged with priority (P1 = should be addressed in v1.5; P2 = good fo
 
 #### DE-265 — In-app "unverified citation" badging until Citation Engine ships
 
+**Status:** ✅ RESOLVED (M2). Superseded by the shipped Citation Engine (§3.3, "M2 status: SHIPPED") — verified spans render with per-stage verification metadata and unverified citations render greyed with an explicit `[unverified]` marker, so the interim M1 badge is no longer needed.
+
 **Priority:** P1 · **Effort:** S · **Target milestone:** M1 polish or M2 with Citation Engine
 
 **Context:** M1 ships the Citation Engine architectural slot but not the byte-level verification pipeline (`docs/HONEST-STATE.md` §3.1). Without an explicit in-app indicator, users may see model-generated text resembling a citation and assume it has been verified against source material when it has not. The HONEST-STATE doc is upfront about the gap; the chat UI is not.
@@ -2133,6 +2135,8 @@ Entries are tagged with priority (P1 = should be addressed in v1.5; P2 = good fo
 **Acceptance criteria:** Citation-like spans show the badge in M1 chat output; the badge is keyboard-focusable and screen-reader-accessible (`role="status"` or `aria-label` + tooltip pattern); Cypress E2E exercises the badge on at least one starter-skill output that historically produces citation-like text.
 
 #### DE-272 — Admin AliasForm: model dropdown autocomplete population
+
+**Status:** ✅ RESOLVED. `web/src/routes/lq-ai/admin/models/+page.svelte` builds the `providerModels` map from live per-provider model discovery (`listModels`) and passes it to `AliasForm`, whose `<datalist>` autocomplete now surfaces real per-provider choices; the field stays free-text-editable.
 
 **Priority:** P2 · **Effort:** S
 
@@ -2860,6 +2864,8 @@ The failure mode is structurally bad: a deployment misconfiguration (missing env
 
 #### DE-277 — Citation extractor: fallback to document scan on chunk-boundary miss
 
+**Status:** ✅ RESOLVED (M3-0.2, pre-M3 hardening). `extract_citations` (`api/app/citation/extraction.py`) falls back to a full-document scan when the chunk-local search misses, with the option-(b) `citation_chunk_mismatch` warning for observability; the pinned chunk-boundary test flipped (`api/tests/citation/test_chunk_boundary.py`).
+
 **Priority:** P3 · **Effort:** S
 
 **Context:** Surfaced during the M2-D4 edge-case sweep. The Citation Engine's extractor (`app/citation/extraction.py::extract_citations`) locates each quote by calling `_locate_in_chunk(quote, chunk.content)` against the single chunk the model cited via `(Source: [N])`. If the quote spans the boundary between two adjacent retrieved chunks — i.e., the quote is present in `documents.normalized_content` but in neither chunk's individual content — the locator returns `None` and the candidate is dropped silently. No row is persisted; the M2-C2 UI renders the marker as "unverified" (red) even though the underlying document text matches.
@@ -3563,6 +3569,8 @@ This subsection operationalizes the §1.9 engineering-discipline posture and the
 
 #### DE-254 — Cypress shared helpers extracted to `support/`
 
+**Status:** ✅ RESOLVED (2026-05-14, `fa06929`). Shared helpers extracted to `web/cypress/support/lq-ai-helpers.ts` (plain function exports; the file header documents the DE) and the three specs import from it.
+
 **Priority:** P2 · **Effort:** S
 
 **Context:** Wave 8 cleanup. The Cypress LQ.AI specs (`wave-d1-power-features`, `wave-d2-skill-creator`, `wave-m1-final-surfaces`) currently duplicate setup helpers (login, KB create, skill fork, etc.) inline. As specs accumulate, the duplication accumulates with them; the next spec should be able to import helpers rather than reproduce them.
@@ -3573,6 +3581,8 @@ This subsection operationalizes the §1.9 engineering-discipline posture and the
 
 #### DE-255 — Add `responseTimeout: 90000` to `cypress.config.ts`
 
+**Status:** ✅ RESOLVED (2026-05-14, `5b8deab`). `responseTimeout: 90000` set in `web/cypress.config.ts` with an inline comment naming the failure mode (KB-attach / ingest round-trips exceeding the 5s default).
+
 **Priority:** P2 · **Effort:** S
 
 **Context:** Wave 8 cleanup. KB-attach interactions and document ingestion can exceed the Cypress default response timeout under realistic conditions; intermittent flakes have surfaced. The fix is a one-line config change with a documented rationale.
@@ -3582,6 +3592,8 @@ This subsection operationalizes the §1.9 engineering-discipline posture and the
 **Acceptance criteria:** Configuration committed; intermittent timeout-related Cypress flakes are eliminated across three consecutive nightly runs.
 
 #### DE-256 — KB attach interceptor added to `wave-m1-final-surfaces.cy.ts` Test 2
+
+**Status:** ✅ RESOLVED (2026-05-14, `d444722` + `e4822a2`). `web/cypress/e2e/wave-m1-final-surfaces.cy.ts` intercepts the KB-attach POST (`**/knowledge-bases/**/files` as `kbAttach`) and asserts the 204 No Content response.
 
 **Priority:** P2 · **Effort:** S
 
@@ -3632,6 +3644,8 @@ This subsection operationalizes the §1.9 engineering-discipline posture and the
 **Acceptance criteria:** Duplicates do not render; existing single-event behavior is unchanged; unit test passes.
 
 #### DE-261 — `api/client.ts` `errorFor` swallows string-shaped FastAPI detail bodies
+
+**Status:** ✅ RESOLVED (2026-05-14, `1f99fd8`). `errorFor` now surfaces the string-shaped `{ "detail": "string" }` body; all three FastAPI detail shapes are covered by a DE-261-named unit test in `web/src/lib/lq-ai/__tests__/api-client.test.ts`.
 
 **Priority:** P1 · **Effort:** S
 
@@ -4196,6 +4210,8 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 #### DE-306 — Fresh-install host-port collision needs prominent quickstart callout (M3-E1 finding F2)
 
+**Status:** ✅ RESOLVED. `docs/quickstart.md` carries the port-collision callout beside the `docker compose up` step (with the `POSTGRES_HOST_PORT=15432` remap example) plus a dedicated "address already in use" troubleshooting section.
+
 **Priority:** P3 (documentation; `.env.example` already documents the remap) · **Effort:** S (~30 min, folds into M3-E2 docs)
 
 **Context:** On a macOS dev box already running a host PostgreSQL (Homebrew / Postgres.app on `:5432`), a fresh `docker compose up` fails to bind (`address already in use`) and the stack never comes up. `.env.example` documents the `POSTGRES_HOST_PORT=15432` remap inline, but a developer following the "I just cloned the repo" path hits the failure before reading that comment. M3-E1 itself had to remap to 15432 to proceed.
@@ -4521,6 +4537,8 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 #### DE-333 — Dedupe correlated artifact storage-failure warn findings
 
+**Status: Shipped (post-v0.7.1).** The drafting node's artifact dispatch loop (`api/app/autonomous/nodes.py`) records `storage_error` outcomes and emits after the loop: one failure keeps the per-artifact `warn` message; two or more emit one aggregated `warn` finding naming every failed artifact and carrying their distinct error messages, because the per-attempt `emit_artifact` audit rows record the outcome but not the error. It aggregates every storage failure in the pass rather than detecting correlation. The per-attempt audit rows are otherwise unchanged. Test: `api/tests/autonomous/test_executor_real_work.py::test_drafting_multiple_storage_errors_emit_one_aggregated_warn`.
+
 **Priority:** P3 · **Effort:** S
 
 **Context:** When an opted-in autonomous run emits N artifacts and object storage (MinIO) is down, the drafting node's dispatch loop produces one `storage_error` result — and therefore one `warn` finding — per artifact: N near-identical "artifact could not be stored" findings for a single underlying outage. A natural bound already exists (the artifact list comes from a single analysis response, so N is limited by the response token budget), and each finding is individually honest, so this is noise rather than harm — which is why it was deferred rather than absorbed into the Donna-#8 work.
@@ -4765,7 +4783,7 @@ So the single longest phase (image pull) has neither a stream nor a poll. The re
 2. **OpenAPI documentation of `tools`/`tool_choice`.** `docs/api/gateway-openapi.yaml` `ChatCompletionRequest` forwards both fields but documents neither (a "documentation is part of the change" gap).
 3. **`tools` count cap.** No cap today on the gateway or api boundary; the PRs proposed 64. Cheap defense-in-depth on the prompt-multiplication surface — add as a `Field(max_length=...)` / `maxItems:` bound on `main`'s existing fields (not the full typed-model rewrite the PRs carried).
 4. **Granular `tool_choice` unit tests.** `main`'s adapter handles `auto`/`required`/`none`/forced-function/no-params modes but the tests exercise only `auto` + round-trip. Add per-mode coverage (note `main` emits `{"type":"auto"}` where the PR omitted the field — adapt assertions to `main`'s behavior).
-5. **Encryption-at-rest for the pending-tool-call resume payload.** `main` stores `resume_state`/`tool_call_args` on `chat_pending_tool_call` as plaintext JSONB (intentional — same sensitivity class as `messages.content`). The PR encrypted the bundled payload with Fernet (`MCPTokenEncryptor`). Optional defense-in-depth hardening to weigh against the schema/operability cost (the api process would need `LQ_AI_MCP_MASTER_KEY`).
+5. **Encryption-at-rest for the pending-tool-call resume payload.** `main` stores `resume_state`/`tool_call_args` on `chat_pending_tool_call` as plaintext JSONB (intentional — same sensitivity class as `messages.content`). The PR encrypted the bundled payload with Fernet (`MCPTokenEncryptor`). Optional defense-in-depth hardening to weigh against the schema/operability cost (the api process would need `LQ_AI_MCP_MASTER_KEY`). Status: shipped — envelope-encrypted under `LQ_AI_MCP_MASTER_KEY` (no schema change; legacy plaintext rows readable for one release, TTL-bounded).
 6. **Api-side per-chat tier ceiling.** `main`'s chat loop passes `max_allowed_tier=None` to `execute_mcp_tool` (relies on the gateway's per-provider `egress_tier` + SSRF allowlist — always enforced). Deriving an *additional* api-side ceiling from the chat/skill tier is defense-in-depth, not a bypass fix. Already flagged in-code; captured here so it has a tracking home.
 
 ---
@@ -5057,11 +5075,39 @@ The document-ingestion pipeline (ADR [0006](adr/0006-document-pipeline-architect
 
 Attached-file content is injected into the prompt as a system message (`_format_attached_files_block`, `api/app/api/chats.py`) and then counted against `lq_ai_chat_history_token_budget` although it is not conversation. Raising the budget (6,000 → 64,000 in #504) fixes the symptom: a ~47,000-token case file supplied in turn 1 was silently gone by turn 2 on models with 200k–1M context windows, and nothing in the response said trimming had occurred. The category fix is to give injected document blocks their own budget, or exclude them from the trim, so a document cannot be dropped between turns by a history setting. **Specific scope:** a turn-2 follow-up over a turn-1 attachment retains the document regardless of the history budget; a regression test covers the trim boundary; the history budget's field comment stops describing itself as the document ceiling. Related: #503 item 4, #512 (surfacing `applied_file_ids` so a non-contributing attachment is visible), DE-355.
 
+#### DE-392 — Enforce or remove `request_validation.max_max_tokens`
+
+**Priority:** P2 · **Effort:** S · **Status (2026-09-13): filed.** Credit: @sergiomaldo (#317 first tried to honour the ceiling); #504 review finding F-2.
+
+`request_validation.max_max_tokens` is declared in the gateway config schema (`gateway/app/config.py`), documented as 16384 in `gateway.yaml.example`, and enforced on no request path — neither on an explicit request `max_tokens` nor on the Anthropic adapter's injected default. #317's clamp of the injected default was dropped because it compared against a freshly constructed `RequestValidationConfig()` rather than the operator's loaded value (the adapter factories receive only a `ProviderConfig`). ADR 0027 D1 keeps the injected default at the documented ceiling instead. **Specific scope:** decide enforce-or-remove. If enforce: thread `request_validation` into `build_adapter` / the request validator, reject an explicit `max_tokens` above the ceiling with `invalid_request`, clamp the injected default against the loaded value with a startup log line, and test both; if remove: delete the field from the schema and the example so operators stop reading a cap that does not exist. Related: ADR 0027 D5, #317, #489.
+
 #### DE-393 — Per-request / per-use-case timeout
 
 **Priority:** P3 · **Effort:** M · **Status (2026-09-13): filed with ADR 0027.**
 
 Timeout has no per-request path: it is fixed per provider (`timeout_s`, default 600s per ADR 0027 D1) and per deployment on the api hop (`LQ_AI_GATEWAY_TIMEOUT_SECONDS`, default 900s). `max_tokens` is already tunable per request, so the "tune by use case at the call site" position (#489, ADR 0027 D2) is half built. A skill run, playbook step or long drafting job that knows it will run for many minutes cannot ask for more than the deployment default, and a chat turn cannot ask for less. **Specific scope:** a bounded per-request timeout (or per-tier defaults) carried from the api's callers through the gateway to the adapter, capped by the operator's `timeout_s`; the api hop must remain the loosest (ADR 0027 D4); a test that a per-request value above the operator cap is clamped and logged. Do not build until a caller needs it. Related: #489, #318, #535, DE-392.
+
+#### DE-394 — Define dark mode for LQ.AI (palette, coverage, and what "System" resolves to)
+
+**Priority:** P3 · **Effort:** M · **Status (2026-09-15): filed (lands with [PR #280](https://github.com/LegalQuants/lq-ai/pull/280), which carries the stopgap below).**
+
+Dark mode was **deferred, not rejected**. The M1 frontend design spec lists it among the M1 non-goals: "Dark mode (parallel palette specified but light-only at M1)" (`docs/superpowers/specs/2026-05-10-m1-frontend-design.md` §2). The `--lq-*` semantic tokens in `web/src/lib/lq-ai/styles/practice.css` are built to take a second palette, but no dark values exist. The 2026-05-13 and 2026-05-14 handoffs flagged "dark-mode tokens for `practice.css`" as a DE candidate that was never filed; this entry absorbs it. Meanwhile the carried OpenWebUI shell still offers **Dark** and **OLED Dark** in Settings → General, and dark coverage is uneven. Some LQ.AI components (`ChatPanel`, `MessageBubble`) carry a few `dark:` utilities. Others (`CaptureSkillModal`, `AttachKBModal`, `MessageOverflowMenu`) have none. The AliasForm contrast fix went the other way and removed its `dark:` variants to match the light admin chrome (see the AliasForm entry above). Result: a visitor who ends up in dark sees a half-light, half-dark UI. Before PR #280, that happened automatically to anyone on the default **System** theme with OS dark mode on. PR #280 makes `system` resolve to light as a **stopgap** until this entry is picked up. That stopgap is not the intended end state.
+
+Scope when picked up:
+
+- **(a) Palette.** Dark values for every `--lq-*` token, held to a stated contrast bar (WCAG AA 4.5:1 for body text). `web/src/app.css` already records one known miss: the editor placeholder `#676767` is 3.17:1 on the dark canvas.
+- **(b) Coverage.** A sweep of `/lq-ai/*` surfaces and their modals to token-driven colours, so dark coverage is complete rather than incidental. Carried OpenWebUI shell components keep their upstream `dark:` styling.
+- **(c) What `system` resolves to.** Once coverage is complete, System should most likely follow the OS `prefers-color-scheme` again. That means reverting #280's stopgap in its five upstream files (`app.html`, `app.css`, `Flow.svelte`, `General.svelte`, `+layout.svelte`) and removing the carried-patch entry for it in `docs/openwebui-rebase-runbook.md`.
+- **(d) The theme menu in the meantime.** Whether Dark and OLED Dark stay selectable, get an "experimental" label, or are hidden until (a)–(b) land; and whether OLED Dark survives at all.
+- **(e) A guard.** A test or visual check so coverage does not quietly regress through quarterly OpenWebUI refreshes.
+
+Pure `web/` work with no API, DB or gateway surface. The only structural wrinkle is (c): the theme resolution lives in upstream files, so the change is a carried patch under ADR 0001 and the rebase runbook.
+
+#### DE-395 — Raise the gateway coverage ratchet from 88% to the documented 90% target
+
+**Priority:** P3 · **Effort:** S · **Status (2026-07-25): filed (roadmap 4.3 — coverage gate).**
+
+Roadmap 4.3 wired `--cov-fail-under` coverage gates into CI (`.github/workflows/ci.yml`), set — per the ratchet-don't-aspire pattern in the engineering-discipline testing survey — at *measured* coverage, not the documented targets. Measured 2026-07-25: **api 81.49%** (12242/15023 statements) — clears the documented 80% target, so the api gate enforces the target itself (`--cov-fail-under=80`), no delta. **Gateway 88.94%** (4464/5019 statements) — below the documented 90% target, so the gateway gate is a no-decrease ratchet at the measured floor (`--cov-fail-under=88`; floored to the integer because coverage.py compares the exact value, so a gate of 89 would fail today's 88.94%). DE-395 closes the gateway 88→90 gap. The uncovered mass is concentrated (per-module, same run): `app/cli.py` 0%, `app/db.py` 71%, `app/config_writer.py` 75%, `app/providers/tool/mcp.py` 75%, `app/observability.py` 76%, `app/main.py` 80%, `app/providers/tool/govinfo.py` 84%, `app/tool_egress_log.py` 84%. Plan: test the untested `cli.py` entry points and the `config_writer` error branches first (those two alone are ~105 of the 555 missed statements), re-measure, and bump the ci.yml floor to each newly measured integer (88 → 89 → 90) rather than jumping; when 90 is measured, flip the gateway row in HONEST-STATE §8 from "ratchet" to "at target" and close this DE. Raising the *targets* themselves (e.g. api beyond 80) is out of scope here.
 
 ---
 

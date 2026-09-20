@@ -61,6 +61,7 @@ In scope:
 
 - Resolving the six conflicts so the tree builds and boots.
 - Re-asserting our existing ADR-mandated deviations (§6) — these already exist; we are preserving them, not adding to them.
+- Re-asserting the carried patches listed in §6.1 — same posture: keep ours, do not extend.
 - Preserving existing LQ.AI capability that upstream's changes would otherwise remove (§5.2).
 - Verifying the result (§7, §8) and disclosing what changed (§9).
 
@@ -391,7 +392,7 @@ grep -rhoE "from '\\\$lib/[^']+'" web/src/lib/lq-ai web/src/routes/lq-ai | grep 
 
 **Now the four things that are coupled anyway.**
 
-**1. Our shell inherits upstream files we never touch.** `src/routes/+layout.svelte` changed **+362/−123** and `src/app.css` changed **+141**, and because we do not modify either, both are clean take-theirs with no conflict. Every `/lq-ai` route nests inside that root layout ([ADR 0009](adr/0009-web-lq-ai-shell-coexistence.md)), and our `practice.css`/`typography.css` layer onto that app CSS. A "redesigned interface" release rewriting the layout our shell hangs off is the single most likely source of post-merge visual and behavioural surprise, and git will say nothing about it. Read both diffs deliberately.
+**1. Our shell inherits upstream files we never touch.** `src/routes/+layout.svelte` changed **+362/−123** and `src/app.css` changed **+141**, and because we do not modify either, both are clean take-theirs with no conflict. (True at v0.11.0. Since #280 we carry a small theme patch in both; see §6.1.) Every `/lq-ai` route nests inside that root layout ([ADR 0009](adr/0009-web-lq-ai-shell-coexistence.md)), and our `practice.css`/`typography.css` layer onto that app CSS. A "redesigned interface" release rewriting the layout our shell hangs off is the single most likely source of post-merge visual and behavioural surprise, and git will say nothing about it. Read both diffs deliberately.
 
 **2. The e2e suite has an upstream-DOM dependency our own specs inherit.** Our 13 LQ.AI specs assert on our own `data-testid="lq-ai-*"` hooks and are decoupled — but they log in through the shared `cy.session` helper in `cypress/support/e2e.ts`, which drives *upstream's* auth form and waits on `#chat-search`, then dismisses upstream's changelog modal by its button text. So every spec is transitively coupled to upstream's markup through one file — and that file is one of the six conflicts.
 
@@ -471,6 +472,21 @@ grep -rn "utils\.mcp\.client\|utils/mcp/client" web/backend/
 **Re-run the tag-side check each quarter.** If a future release adds a *third* importer, or moves the import into a file we do not otherwise modify, that is a genuine decision point — re-adding upstream's client to satisfy an import would quietly cross ADR 0014's boundary. Stop and raise it.
 
 Note that ADR 0014 is enforced in **two** places, not one: this module, and the MCP type toggle in `src/lib/components/AddToolServerModal.svelte` (§5.4). The second one auto-merges silently. Check both.
+
+### 6.1 Carried patch: the `system` theme resolves to light (#280, DE-394)
+
+Since [#280](https://github.com/LegalQuants/lq-ai/pull/280), five upstream files carry a small patch: `src/app.html`, `src/app.css`, `src/lib/components/chat/Overview/Flow.svelte`, `src/lib/components/chat/Settings/General.svelte` and `src/routes/+layout.svelte`. Upstream resolves the `system` theme from the OS `prefers-color-scheme`; we resolve it to light, because LQ.AI's dark styling is partial and an OS-dark visitor got a half-light, half-dark UI.
+
+**Keep ours, and expect it to be silent.** Taking upstream's version of any of the five restores the OS lookup without a conflict marker, and no test or CI check notices. After resolving, confirm:
+
+```bash
+git grep -n "prefers-color-scheme" web/src
+# must print nothing
+```
+
+If upstream has added a new `prefers-color-scheme` site elsewhere, it belongs to the same patch: strip it the same way.
+
+**This is a stopgap, not a design.** [PRD §9 DE-394](PRD.md#de-394--define-dark-mode-for-lqai-palette-coverage-and-what-system-resolves-to) tracks defining dark mode properly; when it lands, `system` should most likely follow the OS again. At that point, drop this subsection and take theirs.
 
 ---
 
