@@ -1,6 +1,6 @@
 # ADR 0027 — Request budgets and timeouts: sane defaults, per-request tuning, operator escape hatches
 
-**Status:** Proposed (2026-09-13) — for the weekly call
+**Status:** Accepted (2026-09-20) — committee-ratified at the weekly call
 **Date:** 2026-09-13
 **Owner:** Maintainer team (houfu)
 **Origin:** Issue #489 (the position put up for challenge on 2026-08-04) and the four
@@ -140,4 +140,5 @@ further.
 ## References
 
 Issue #489 (position) · issue #503 · PRs #317, #318, #504, #535 · issue #512 and
-DE-355 (the rest of the honest-documents train) · ADR 0003 · ADR 0025
+DE-355 (the rest of the honest-documents train) · ADR 0003 · ADR 0025 · committee
+[minutes, 2026-09-20](https://github.com/LegalQuants/lq-ai-community/blob/main/meetings/2026-09-20-weekly/notes.md)
