@@ -410,7 +410,7 @@ open questions adjust individual steps; they do not restructure the plan.
    for the rest of 0.x. They are free, and an operator on 0.7.x when 0.9.0 or
    0.10.0 ships must land on the same path as one upgrading to 0.8.0: `migrate
    plan` detects the MinIO volume from its contents, not from a version number,
-   and reconciles what it finds against its journal (ADR 0028 decision 3), so
+   and reconciles what it finds against its journal (ADR 0028 decision 2), so
    the tool, not the shims, is what makes skip-version upgrades safe. When a
    later release wants the shims gone, that release's `plan` flags stale `.env`
    keys and the removal gets its own release-note line (open question 2).
