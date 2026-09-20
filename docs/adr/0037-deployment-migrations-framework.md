@@ -1,10 +1,9 @@
-# ADR 0028 — Deployment migrations: a journal for stack state, first used by the object-store swap
+# ADR 0037 — Deployment migrations: a journal for stack state, first used by the object-store swap
 
-**Status:** Proposed (2026-09-19; revised 2026-09-20 after maintainer review) —
-for committee decision alongside ADR 0027
-**Date:** 2026-09-19
+**Status:** Accepted (2026-09-20) — committee-ratified alongside ADR 0036
+**Date:** 2026-09-19 · **Decision date:** 2026-09-20
 **Owner:** Maintainer team (houfu)
-**Origin:** ADR [0027](0027-bundled-object-store-rustfs.md) decision 8. The
+**Origin:** ADR [0036](0036-bundled-object-store-rustfs.md) decision 8. The
 MinIO → RustFS swap needs a pre-upgrade snapshot that must not be taken blind, a
 detection step that works for an install skipping releases, a loud refusal
 instead of the quiet 503 measured in the 2026-09-19 rehearsal, and a
@@ -63,7 +62,7 @@ file.
 | Launcher configuration | encrypted config blob plus a chmod-600 `.env` in the app-data directory | launcher (first-run wizard; the master-key backfill in `desktop/src/main/store.ts`) | nothing — one bespoke, unrecorded migration exists | no; the image-tag pin (decision 7) is the first change here |
 | Job queue and cache | `redisdata` volume, append-only | arq workers, api cache | n/a — transient by design | no |
 | Model caches | `ingest-hf-cache`, `ingest-easyocr-cache`; `ollamadata` on the dev profile | ingest worker; Ollama | n/a — re-downloadable | no |
-| Operator environment | `.env` on the host; Helm values | operator | release notes | no; `0001` needs no `.env` edit (ADR 0027 decision 3) |
+| Operator environment | `.env` on the host; Helm values | operator | release notes | no; `0001` needs no `.env` edit (ADR 0036 decision 3) |
 | The web shell's own database | `webui.db` inside the `web` container — **no volume is mounted** by either compose file or the web Dockerfile | OpenWebUI | nothing; lost on every container recreate | no — nothing durable belongs there (auth is delegated to the api, chats live in Postgres); DE-335 covers the wedge it can cause |
 | Schema | `pgdata` | api entrypoint | `alembic_version` | no — alembic's job; the tool reads the revision only to enforce the floor |
 
@@ -267,7 +266,7 @@ same image and mounts, gated by a values flag because a hook cannot ask.
 
 ### 6. Enforcement without the tool
 
-The one-shot init service in front of `rustfs` (ADR 0027 plan item 2) reads the
+The one-shot init service in front of `rustfs` (ADR 0036 plan item 2) reads the
 volume and the ops volume: empty, or already migrated with a marker for its
 deployment id → fix ownership to uid/gid `10001` and exit 0; `.minio.sys`
 present, `.rustfs.sys` absent, no marker → exit 1 with "existing MinIO volume
@@ -329,15 +328,14 @@ small committed MinIO fixture volume (a handful of objects with their
 `migrate plan` on the fresh stack must exit 0 with nothing pending; a second
 boot seeds the fixture into `miniodata`, runs `plan → apply → up → verify`.
 That is the in-place rehearsal executed in CI on every compose change, which
-the ADR 0027 exit criteria require.
+the ADR 0036 exit criteria require.
 
 ### 11. Not in this release
 
 The Postgres read-model, admin page and `/ready` field; a version field for the
 launcher config blob and for `gateway.yaml`; a volume for the web shell's
 sqlite (DE-335 decides whether it should have one at all); snapshot pruning;
-migration `0002` (the `miniodata` key rename); the Helm Job if open question 3
-says so.
+migration `0002` (the `miniodata` key rename).
 
 ## Consequences
 
@@ -369,23 +367,23 @@ and they multiply across Compose, launcher, Helm and external S3 times every
 from-version. Runbooks survive as the rendered output of `plan` for a given
 install, and for actions outside the stack.
 
-## Open questions (for the committee call)
+## Ratified resolutions (2026-09-20)
 
-1. **Snapshot destination:** default into the `lq-ai-ops` volume (proposed) or
-   require a host path on Compose as the launcher already does.
-2. **Retention:** whether `apply` prunes older snapshots, or `status` only
-   reports them and pruning is manual.
-3. **Helm scope for v0.8.0:** ship the pre-upgrade Job now, or document `plan`
-   as manual until a chart release needs it (Helm has no data to migrate).
-4. **Names:** `ops` profile, `migrate` service, `lq-ai-ops` volume,
-   `app.ops.migrate` module.
-5. **Floor:** v0.3.0 as proposed, or v0.4.0 (the first release with notes).
-6. **The launcher image-tag pin:** in the ADR 0028 implementation PR, or its
-   own PR under ADR 0025 landing first.
+1. **Snapshot destination:** default to the `lq-ai-ops` volume on Compose;
+   retain the host-path override and the launcher's app-data bind mount.
+2. **Retention:** `apply` does not prune snapshots. `status` reports them and
+   pruning remains a deliberate operator action.
+3. **Helm scope for v0.8.0:** ship the gated pre-upgrade Job now so all three
+   deployment shapes use the same implementation, even though existing Helm
+   installs have no MinIO data to migrate.
+4. **Names:** accept `ops`, `migrate`, `lq-ai-ops` and `app.ops.migrate`.
+5. **Floor:** v0.3.0.
+6. **Launcher image-tag pin:** land it as its own ADR 0025 follow-up before the
+   launcher migration flow.
 
 ## Cross-references
 
-- ADR [0027](0027-bundled-object-store-rustfs.md) — decision 8, upgrade plan
+- ADR [0036](0036-bundled-object-store-rustfs.md) — decision 8, upgrade plan
   items 2, 4 and 7, runbook A and B, exit criteria.
 - Rehearsal research:
   [`docs/research/2026-09-19-rustfs-dropin-rehearsal.md`](../research/2026-09-19-rustfs-dropin-rehearsal.md)
@@ -401,3 +399,4 @@ install, and for actions outside the stack.
   (the `latest` default), `docker-compose.yml`, `docker-compose.release.yml`,
   `deploy/helm/lq-ai/`.
 - DE-033, DE-271, DE-335.
+- Committee [minutes, 2026-09-20](https://github.com/LegalQuants/lq-ai-community/blob/main/meetings/2026-09-20-weekly/notes.md).

@@ -1,7 +1,7 @@
-# ADR 0027 — Bundled object store: replace archived MinIO with RustFS; keep the api S3-generic
+# ADR 0036 — Bundled object store: replace archived MinIO with RustFS; keep the api S3-generic
 
-**Status:** Proposed (2026-09-17) — for committee decision at the next weekly call
-**Date:** 2026-09-17
+**Status:** Accepted (2026-09-20) — committee-ratified at the weekly call
+**Date:** 2026-09-17 · **Decision date:** 2026-09-20
 **Owner:** Maintainer team (houfu)
 **Origin:** Issue [LegalQuants/lq-ai#572](https://github.com/LegalQuants/lq-ai/issues/572)
 *"Replace archived MinIO with a maintained S3-compatible backend"* (2026-09-13),
@@ -253,7 +253,7 @@ desktop launcher. Specifically:
    in the upgrade plan). The named volume keeps the key `miniodata`: renaming it
    would silently hand every existing install an empty store. Its rename is
    filed as a deferred enhancement and will be the second migration under ADR
-   0028.
+   0037.
 4. **Health and ports.** Probe `GET /health/ready` on the S3 port — not `/health`
    or the legacy `/minio/health/live`, which are liveness-only and stayed 200 in
    the rehearsal while every S3 call returned 503; keep 9000/9001 and the
@@ -262,8 +262,7 @@ desktop launcher. Specifically:
    `securityContext.fsGroup` and in compose via a one-shot init service that
    fixes ownership of volumes MinIO wrote as root before the store starts (see
    *Upgrade plan*).
-5. **Migration policy for existing installs** (see *Open questions* 1 for the
-   fork the committee is asked to ratify):
+5. **Migration policy for existing installs** (see *Ratified resolutions* 1):
    - Snapshot first, always: the `miniodata` volume and a `pg_dump`. Upstream
      does not document the in-place read as reversible (the 2026-09-19 rehearsal
      found MinIO could re-read the migrated volume, but that is one run), and
@@ -295,7 +294,7 @@ desktop launcher. Specifically:
    that carries the change, with the upgrade guide above.
 
 8. **A migration tool carries the upgrade, under the framework in ADR
-   [0028](0028-deployment-migrations-framework.md).** An earlier draft of this
+   [0037](0037-deployment-migrations-framework.md).** An earlier draft of this
    ADR held that compose YAML alone could carry the migration. The rehearsal
    reversed that on four points that YAML cannot do: take a judgment call on
    the snapshot (free space, destination, size — a 50 GB volume must not be
@@ -325,8 +324,8 @@ change (re-pull, ownership fix, log check), so the release that carries it is a
 **minor**. `main` is at `0.7.1` with nothing tagged beyond it, so that release is
 **v0.8.0** unless another minor is cut first; the number is computed from `main`
 at tag time, not reserved here. The plan below is what the implementation PR and
-the `docs/releases/v0.8.0.md` note must deliver. The committee's answers to the
-open questions adjust individual steps; they do not restructure the plan.
+the `docs/releases/v0.8.0.md` note must deliver. The committee's ratified
+resolutions below settle the remaining implementation choices.
 
 ### What v0.8.0 ships
 
@@ -358,7 +357,7 @@ open questions adjust individual steps; they do not restructure the plan.
 4. **Desktop launcher `desktop-v0.8.0`.** Bundles the new release compose;
    `EXPECTED_SERVICES`, the rendered `.env` keys, the port fields, and the secret
    pair follow the rename, and the stored MinIO root pair is reused as the
-   RustFS credentials. The launcher gains the migration flow ADR 0028
+   RustFS credentials. The launcher gains the migration flow ADR 0037
    specifies: on every start it runs `migrate plan`; when something is pending
    it shows what will happen, the snapshot destination under its app-data
    directory and the space needed, and asks once; then it runs `apply`, brings
@@ -373,21 +372,21 @@ open questions adjust individual steps; they do not restructure the plan.
    service list; ADR 0005 *Revisions* note; the trust data-residency card label.
 6. **CI.** Stack-smoke green on RustFS. The #303 ingest round-trip lands in the
    same release if ready, otherwise as a follow-up.
-7. **The migration framework and migration `0001`** (ADR 0028): the `ops`
+7. **The migration framework and migration `0001`** (ADR 0037): the `ops`
    profile service, the `lq-ai-ops` volume holding the journal and the
    markers, the `plan` / `apply` / `verify` / `status` / `rollback` commands,
    the launcher flow with the image-tag pin ADR 0025 decision 2 requires, the
    fixture MinIO volume, and the stack-smoke run that applies `0001` to it.
    The Postgres read-model of the journal and the admin endpoint are deferred
-   (ADR 0028 decision 11); nothing in this item needs an alembic revision.
+   (ADR 0037 decision 11); nothing in this item needs an alembic revision.
 
 ### Sequencing
 
-1. This ADR merges as *Proposed*; the committee call answers the open questions
-   and the Status line flips.
-2. If open question 3 is answered "bridge", a one-line PR pins a frozen MinIO
-   digest so `main` goes green while the implementation is reviewed.
-3. The framework lands first (ADR 0028's PR: registry, the ops volume with
+1. This ADR and ADR 0037 merge as *Accepted*, recording the committee's
+   2026-09-20 decision and the resolutions below.
+2. No frozen-MinIO bridge lands. The replacement implementation is next, and
+   the broken stack-smoke run remains visible until that implementation merges.
+3. The framework lands first (ADR 0037's PR: registry, the ops volume with
    journal and markers, CLI, compose profile, tests, with `plan` reporting
    nothing pending on a fresh stack).
    One implementation PR then carries items 1–7, labelled `breaking-change` so
@@ -410,10 +409,10 @@ open questions adjust individual steps; they do not restructure the plan.
    for the rest of 0.x. They are free, and an operator on 0.7.x when 0.9.0 or
    0.10.0 ships must land on the same path as one upgrading to 0.8.0: `migrate
    plan` detects the MinIO volume from its contents, not from a version number,
-   and reconciles what it finds against its journal (ADR 0028 decision 2), so
+   and reconciles what it finds against its journal (ADR 0037 decision 2), so
    the tool, not the shims, is what makes skip-version upgrades safe. When a
    later release wants the shims gone, that release's `plan` flags stale `.env`
-   keys and the removal gets its own release-note line (open question 2).
+   keys and the removal gets its own release-note line (ratified resolution 2).
 
 ### Operator runbook (published verbatim in the v0.8.0 note)
 
@@ -531,7 +530,7 @@ links expire within 24 hours.
   acceptance criteria.
 - Two rehearsals with committed receipts before the tag (sequencing step 4),
   and the `docs/releases/v0.8.0.md` note carrying the runbook.
-- ADR [0028](0028-deployment-migrations-framework.md), the deployment-migration
+- ADR [0037](0037-deployment-migrations-framework.md), the deployment-migration
   framework, and migration `0001` under it; the launcher's migration flow.
 - #303: extend the stack-smoke round-trip to assert an upload → download byte
   match through the api, which is the "backend conformance test" #572 asked for
@@ -560,26 +559,16 @@ links expire within 24 hours.
 - **No bundled store.** Rejected on driver 3; the option remains available to
   any operator via `S3_ENDPOINT_URL`, as today.
 
-## Open questions (for the committee call)
+## Ratified resolutions (2026-09-20)
 
-1. **Primary migration path.** Issue #572 recommended an S3 copy onto a fresh
-   volume rather than reusing the MinIO one. This ADR proposes in-place as the
-   documented default for the single-drive topology, with snapshot-first and an
-   S3-copy fallback, because it preserves the operator surface and avoids a
-   double-storage window on small hosts. The 2026-09-19 rehearsal (*Evidence*)
-   supports it: the in-place read preserved every object's bytes, ETag and
-   content type, and the volume stayed MinIO-readable afterwards. Ratify, or
-   make the S3 copy the default and in-place the documented alternative.
-2. **Compatibility window.** Keep the `MINIO_*` env fallbacks, the `minio`
-   network alias and the Helm `minio.*` keys for the rest of 0.x (proposed):
-   skip-version upgrades are real, the shims are free, and the migration tool
-   rather than the shims is what makes a pre-0.8.0 install safe to upgrade to
-   any later release. Ratify, or name the release that drops them.
-3. **CI bridge.** Whether to land a frozen-MinIO digest pin first to unbreak
-   stack-smoke on `main` while the implementation PR is reviewed, or accept the
-   red run until it merges.
-4. **Conformance test placement.** stack-smoke via #303 (proposed), or an
-   additional `integration`-marked api test job with a RustFS service container.
+1. **Primary migration path:** in-place for the single-drive topology,
+   snapshot-first, with S3 copy as the fallback.
+2. **Compatibility window:** retain the `MINIO_*` env fallbacks, the `minio`
+   network alias and the Helm `minio.*` keys for the rest of 0.x.
+3. **CI bridge:** do not land a frozen-MinIO bridge; proceed directly to the
+   replacement implementation and keep the failing stack-smoke result visible.
+4. **Conformance test placement:** extend stack-smoke through #303; do not add
+   a second RustFS-backed api integration job.
 
 ## Cross-references
 
@@ -603,11 +592,11 @@ links expire within 24 hours.
   [SeaweedFS trailing-checksum support](https://github.com/seaweedfs/seaweedfs/pull/6539).
 - **In-repo:** ADR [0005](0005-file-storage-soft-delete-and-key-scheme.md), ADR
   [0025](0025-release-versioning-and-pipeline-ordering.md), ADR
-  [0028](0028-deployment-migrations-framework.md) (the migration framework this
+  [0037](0037-deployment-migrations-framework.md) (the migration framework this
   upgrade is the first user of), `api/app/storage.py`,
   `docker-compose.yml`, `docker-compose.release.yml`,
   `deploy/helm/lq-ai/templates/statefulset-minio.yaml`,
   `deploy/helm/lq-ai/templates/deployment-api.yaml`, `desktop/src/core/types.ts`,
   PRD §2.1, §2.4, §6.5, Appendix B, DE-033, DE-271.
-- Committee minutes (lq-ai-community), once published, for the ratification and
-  the answers to the open questions above.
+- Committee [minutes, 2026-09-20](https://github.com/LegalQuants/lq-ai-community/blob/main/meetings/2026-09-20-weekly/notes.md)
+  for the ratification and resolutions above.

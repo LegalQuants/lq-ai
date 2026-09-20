@@ -1,13 +1,13 @@
 # Research — Is RustFS 1.0.0 a drop-in for the MinIO volume LQ.AI installs already have?
 
-**Preserved research, committed to inform ADR [0027](../adr/0027-bundled-object-store-rustfs.md)
+**Preserved research, committed to inform ADR [0036](../adr/0036-bundled-object-store-rustfs.md)
 (bundled object store: MinIO → RustFS) and the v0.8.0 upgrade guide.**
 
 **Status:** executed 2026-09-17 (API surface) and 2026-09-19 (in-place volume rehearsal),
 against canon `8a29c23` (`api/app/storage.py` blob `8791e0c2f95f`, unmodified). Receipts in
 [`2026-09-19-rustfs-dropin-receipts/`](2026-09-19-rustfs-dropin-receipts/).
 
-**Question.** ADR 0027 proposes reading each existing install's `miniodata` volume in place
+**Question.** ADR 0036 proposes reading each existing install's `miniodata` volume in place
 with RustFS rather than copying objects over S3. Two things had to be true for that to be
 safe: the api's S3 client must work unchanged against RustFS, and RustFS must read a volume
 that MinIO's single-drive mode wrote — including the objects' bytes, ETags and content types
@@ -56,11 +56,11 @@ existing objects.
 
 - The api needs no code change: its entire S3 surface, with the checksum defaults of the
   pinned botocore, works against RustFS 1.0.0.
-- The in-place read that ADR 0027 proposes as the default path works on exactly the layout
+- The in-place read that ADR 0036 proposes as the default path works on exactly the layout
   every LQ.AI install has (`xl-single`), preserving bytes, ETags and content types, and
   RustFS keeps working across its own restarts on that volume.
 - **The volume stays MinIO-readable after RustFS has migrated it and written to it.** ADR
-  0027 was drafted assuming the migration was one-way; at this scale it was not. The
+  0036 was drafted assuming the migration was one-way; at this scale it was not. The
   snapshot-first rule stays, because upstream does not document reversibility and this is
   one run, but the rollback story is stronger than the ADR assumed.
 - Changing the root credentials at the same time does not lose objects. RustFS's IAM
@@ -75,7 +75,7 @@ existing objects.
   ships a separate `volume-permission-helper` container running `chown -R 10001:10001`.
   Run as uid 10001 on the root-owned MinIO volume, RustFS stays up, answers 200 on
   `/health`, and returns 503 to every S3 call. A recursive chown fixes it completely. The
-  compose init service in ADR 0027's upgrade plan is therefore load-bearing, not
+  compose init service in ADR 0036's upgrade plan is therefore load-bearing, not
   belt-and-braces.
 - **Readiness must be probed on `/health/ready`.** `/health`, `/health/live` and the legacy
   `/minio/health/live` are liveness probes and stayed green through the stuck state above;
