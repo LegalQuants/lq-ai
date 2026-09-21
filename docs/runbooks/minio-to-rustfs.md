@@ -123,7 +123,9 @@ If an operator deliberately wired and used the old claim:
 3. Set `migrations.enabled=true` and
    `migrations.objectStoreClaim=<old-claim-name>` for the upgrade.
 4. The gated pre-upgrade Job runs the same migration implementation with
-   `apply --yes`; enabling it is the explicit confirmation.
+   `apply --yes`; enabling it is the explicit confirmation. The upgraded
+   RustFS StatefulSet then mounts that same, migrated claim rather than creating
+   a new data claim under its new StatefulSet name.
 5. After RustFS is ready, run `verify` from the target API image and inspect the
    journal before retiring the old release.
 

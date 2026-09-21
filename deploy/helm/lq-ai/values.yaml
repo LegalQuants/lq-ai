@@ -58,6 +58,8 @@ minio:
 
 # Deployment-migration Helm hook (ADR 0037). Existing Helm installs were not
 # wired to their bundled MinIO, so this is opt-in and normally remains false.
+# When enabled, objectStoreClaim is both migrated in place by the hook and
+# mounted by the RustFS StatefulSet after the upgrade.
 migrations:
   enabled: false
   objectStoreClaim: ""

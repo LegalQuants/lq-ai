@@ -1,3 +1,4 @@
+{{- $useMigratedClaim := and .Values.migrations.enabled .Values.migrations.objectStoreClaim -}}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -54,6 +55,15 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 10
             failureThreshold: 12
+{{ if $useMigratedClaim }}
+      volumes:
+        - name: miniodata
+          persistentVolumeClaim:
+            # Migration 0001 is in-place: RustFS must mount the claim the hook
+            # just migrated, not a fresh claim derived from its new StatefulSet name.
+            claimName: {{ .Values.migrations.objectStoreClaim | quote }}
+{{ end }}
+{{ if not $useMigratedClaim }}
   volumeClaimTemplates:
     - metadata:
         # Deliberately retain the historical data-volume vocabulary in v0.x.
@@ -67,3 +77,4 @@ spec:
         resources:
           requests:
             storage: {{ default .Values.minio.storage .Values.objectStore.storage }}
+{{ end }}
