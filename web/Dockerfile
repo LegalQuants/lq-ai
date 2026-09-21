@@ -46,7 +46,10 @@ WORKDIR /app
 RUN apk add --no-cache git
 
 COPY package.json package-lock.json ./
-RUN npm ci --force
+# The frontend image uses onnxruntime-web in the browser, not the CUDA execution
+# provider from onnxruntime-node. Its postinstall otherwise downloads the Linux
+# GPU bundle from GitHub, making CPU-only builds depend on a large unused asset.
+RUN ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm ci --force
 
 COPY . .
 ENV APP_BUILD_HASH=${BUILD_HASH}
