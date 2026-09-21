@@ -94,7 +94,8 @@ evaluation against the GA release and records the decision the issue asked for.
 ### A. RustFS (Apache-2.0, Rust)
 
 Single binary, single container, `/data` volume, S3 on 9000, console on 9001,
-credentials via `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY`. Erasure-coded on-disk
+with image-native credentials via `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY`.
+Erasure-coded on-disk
 format modelled on MinIO's; **reads MinIO's erasure-coded and single-drive
 (`xl` / `xl-single`) layouts in place** since
 [rustfs/rustfs#4358](https://github.com/rustfs/rustfs/pull/4358) (merged
@@ -238,16 +239,19 @@ desktop launcher. Specifically:
    plus the multi-arch index digest), and bump deliberately. The release compose
    currently pulls an unpinned `latest`; that ends here. Issue #301's docker
    Dependabot ecosystem is the mechanism for future bumps.
-3. **Naming and compatibility shims.** The compose service becomes `rustfs`, the
-   api's default endpoint `http://rustfs:9000`. The `rustfs` service also carries
-   the Docker network alias `minio`: the shipped `.env.example` writes
-   `S3_ENDPOINT_URL=http://minio:9000` as an explicit line, so every dev-stack
-   `.env` copied from it has the old hostname baked in, and without the alias
-   those installs would boot with storage silently degraded. Operator-facing
-   credential keys become `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY`; the compose
-   files fall back to the old `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` values,
-   and to the old `MINIO_*_HOST_PORT` keys, so an existing `.env` keeps working
-   unedited. **These shims stay for the rest of 0.x**, not for one release:
+3. **Naming and compatibility shims.** The compose service becomes `rustfs`,
+   while the api's vendor-neutral default endpoint is
+   `http://object-store:9000`. The `rustfs` service carries both the canonical
+   Docker network alias `object-store` and the compatibility alias `minio`:
+   older `.env.example` files wrote `S3_ENDPOINT_URL=http://minio:9000`
+   explicitly, and without the legacy alias those installs would boot with
+   storage silently degraded. Operator-facing
+   keys become the vendor-neutral `OBJECT_STORE_ACCESS_KEY` /
+   `OBJECT_STORE_SECRET_KEY`; Compose maps these internally to RustFS's native
+   process variables. The compose files fall back to the old `MINIO_ROOT_USER`
+   / `MINIO_ROOT_PASSWORD` values, and to the old `MINIO_*_HOST_PORT` keys, so
+   an existing `.env` keeps working unedited. **These shims stay for the rest
+   of 0.x**, not for one release:
    operators skip versions, the shims cost nothing, and removing them would only
    convert a skipped release into a broken install (see *Compatibility window*
    in the upgrade plan). The named volume keeps the key `miniodata`: renaming it
@@ -257,7 +261,7 @@ desktop launcher. Specifically:
 4. **Health and ports.** Probe `GET /health/ready` on the S3 port — not `/health`
    or the legacy `/minio/health/live`, which are liveness-only and stayed 200 in
    the rehearsal while every S3 call returned 503; keep 9000/9001 and the
-   `MINIO_*_HOST_PORT` → `RUSTFS_*_HOST_PORT` rename with the same 0.x-long
+   `MINIO_*_HOST_PORT` → `OBJECT_STORE_*_HOST_PORT` rename with the same 0.x-long
    fallback. The container's uid `10001` is respected in Helm via
    `securityContext.fsGroup` and in compose via a one-shot init service that
    fixes ownership of volumes MinIO wrote as root before the store starts (see
@@ -332,11 +336,14 @@ resolutions below settle the remaining implementation choices.
 1. **Image.** `rustfs/rustfs:1.0.0` pinned by tag and multi-arch index digest in
    `docker-compose.yml`, `docker-compose.release.yml`, and Helm `values.yaml`.
    MinIO leaves the reference stack.
-2. **Compose.** Service `rustfs` on 9000/9001 with the `/health/ready` probe and
-   the network alias `minio`; `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY` fed from
-   the operator's `.env`, with fallbacks to `MINIO_ROOT_USER` /
-   `MINIO_ROOT_PASSWORD`; the same fallback for the `*_HOST_PORT` keys; the
-   volume key `miniodata` unchanged. A one-shot init service runs before
+2. **Compose.** Service `rustfs` on 9000/9001 with the `/health/ready` probe,
+   canonical network alias `object-store`, and compatibility alias `minio`;
+   image-native `RUSTFS_ACCESS_KEY` /
+   `RUSTFS_SECRET_KEY` fed from vendor-neutral `OBJECT_STORE_ACCESS_KEY` /
+   `OBJECT_STORE_SECRET_KEY` in the operator's `.env`, with fallbacks to
+   `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD`; the same fallback for the
+   `*_HOST_PORT` keys; the volume key `miniodata` unchanged. A one-shot init
+   service runs before
    `rustfs`: on an empty volume or an already-migrated one it sets ownership to
    uid/gid `10001` and exits; on a volume that holds `.minio.sys` but no
    `.rustfs.sys` and no marker in the ops volume it **refuses**, logs "existing MinIO
@@ -345,10 +352,12 @@ resolutions below settle the remaining implementation choices.
    backups, and is logged. A `migrate` service under the `ops` profile (api
    image, the object-store volume and the `lq-ai-ops` volume mounted) is the
    tool's home; it never runs as part of a plain `up`. The api's default endpoint
-   becomes `http://rustfs:9000`.
+   becomes `http://object-store:9000`.
 3. **Helm.** The StatefulSet and Service are renamed, the pod gets
-   `fsGroup: 10001`, the readiness probe moves to `/health/ready`, `values.yaml` keys are
-   renamed with the old `minio.*` keys honoured for one minor, and the api
+   `fsGroup: 10001`, the readiness probe moves to `/health/ready`, canonical
+   Helm values move to `objectStore.*` with the old `minio.*` keys honoured
+   through at least v0.10.0 and, per ratified resolution 2, for the rest of
+   0.x, and the api
    deployment's env block is rewritten to the `S3_*` contract (the wiring fix in
    decision 6). Because that wiring never worked, a Helm install has no data in
    its MinIO PVC; the chart's upgrade note says to treat it as a fresh install
@@ -366,10 +375,11 @@ resolutions below settle the remaining implementation choices.
    The journal is visible on the health view. Launcher users never run a
    docker command. This is the concern that makes the tool mandatory: the launcher has
    no other way to sequence stop → snapshot → fix → start → verify.
-5. **Docs.** `docs/releases/v0.8.0.md` with the runbook below at the top;
-   quickstart, README, both `.env` examples; PRD §2.1 / §2.4 diagrams, §6.5
-   backup wording, Appendix B row; `docs/architecture.md`; the threat-model
-   service list; ADR 0005 *Revisions* note; the trust data-residency card label.
+5. **Docs.** The stable runbook at `docs/runbooks/minio-to-rustfs.md`, linked
+   prominently from `docs/releases/v0.8.0.md`; quickstart, README, both `.env`
+   examples; PRD §2.1 / §2.4 diagrams, §6.5 backup wording, Appendix B row;
+   `docs/architecture.md`; the threat-model service list; ADR 0005 *Revisions*
+   note; the trust data-residency card label.
 6. **CI.** Stack-smoke green on RustFS. The #303 ingest round-trip lands in the
    same release if ready, otherwise as a follow-up.
 7. **The migration framework and migration `0001`** (ADR 0037): the `ops`
@@ -414,7 +424,12 @@ resolutions below settle the remaining implementation choices.
    later release wants the shims gone, that release's `plan` flags stale `.env`
    keys and the removal gets its own release-note line (ratified resolution 2).
 
-### Operator runbook (published verbatim in the v0.8.0 note)
+### Operator runbook
+
+The maintained operator procedure is
+[`docs/runbooks/minio-to-rustfs.md`](../runbooks/minio-to-rustfs.md). The
+v0.8.0 note links to it rather than duplicating a second copy that can drift.
+The original ratification text follows as the decision record.
 
 **Before anything, on every topology:** take a `pg_dump`, as for any minor. The
 object-store snapshot is taken by the migration tool, which refuses to proceed
@@ -470,8 +485,8 @@ links expire within 24 hours.
   through the api on the smoke stack.
 - Both rehearsals in sequencing step 4 executed and their receipts committed;
   the *Evidence* section amended.
-- The v0.8.0 note carries the runbook, with the snapshot-first warning as its
-  first paragraph.
+- The v0.8.0 note links prominently to the stable runbook, whose first
+  operational instruction is the snapshot-first warning.
 - The four version strings agree, and the release is labelled a minor.
 - `migrate plan` on the fresh smoke stack reports nothing pending, and
   `plan → apply → up → verify` passes against the fixture MinIO volume in
@@ -529,7 +544,7 @@ links expire within 24 hours.
   listed in decision 7, stack-smoke pass. Closes the operational half of #572's
   acceptance criteria.
 - Two rehearsals with committed receipts before the tag (sequencing step 4),
-  and the `docs/releases/v0.8.0.md` note carrying the runbook.
+  and the `docs/releases/v0.8.0.md` note linking the stable runbook.
 - ADR [0037](0037-deployment-migrations-framework.md), the deployment-migration
   framework, and migration `0001` under it; the launcher's migration flow.
 - #303: extend the stack-smoke round-trip to assert an upload → download byte

@@ -202,7 +202,7 @@ async def _check_gateway() -> bool:
 
 @app.get("/ready", tags=["meta"])
 async def ready() -> JSONResponse:
-    """Readiness probe — returns 200 when DB + Redis + MinIO + gateway are reachable.
+    """Readiness probe — returns 200 when DB + Redis + S3 storage + gateway are reachable.
 
     Per K8s readiness convention: this answers "can I serve user requests?"
     Returns 200 with per-dependency `ok: true` when everything is up.

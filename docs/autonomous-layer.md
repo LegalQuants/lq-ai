@@ -415,7 +415,7 @@ the previous tick's memo. Query-mode retrieval and chat RAG deliberately
 shape.
 
 **Honest fallbacks.** A run with no target KB skips persistence and
-emits one `info` finding saying why; a storage (MinIO) failure writes
+emits one `info` finding saying why; an object-storage failure writes
 **no** DB rows and emits one `warn` finding per failed artifact
 (correlated-failure dedupe is deferred as DE-333). The delivery
 notification's payload carries `artifact_count` next to

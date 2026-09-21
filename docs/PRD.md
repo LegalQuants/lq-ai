@@ -203,7 +203,7 @@ Detailed testing and quality engineering commitments are in §5.8; reliability a
                 ┌─────────────────────┼─────────────────────┐
                 ▼                     ▼                     ▼
         ┌──────────────┐      ┌──────────────┐      ┌──────────────┐
-        │ PostgreSQL   │      │    Redis     │      │   MinIO /    │
+        │ PostgreSQL   │      │    Redis     │      │   RustFS /   │
         │ + pgvector   │      │  (sessions,  │      │   S3-compat  │
         │              │      │   queues,    │      │   (files)    │
         │ App data,    │      │   pubsub)    │      │              │
@@ -261,7 +261,7 @@ Operator's Environment
 │   ├── lq-ai-gateway (Inference Gateway, port 8001)
 │   ├── postgres (with pgvector)
 │   ├── redis
-│   └── minio (or S3-compatible)
+│   └── rustfs (or an operator-supplied S3-compatible service)
 └── Outbound HTTPS to cloud LLM providers
     ├── Anthropic API (operator's key)
     ├── OpenAI API (operator's key)
@@ -279,7 +279,7 @@ Operator's Environment
 │   ├── ollama (with locally-pulled models)
 │   ├── postgres (with pgvector)
 │   ├── redis
-│   ├── minio
+│   ├── rustfs
 │   └── paddleocr-vl (replaces Mistral OCR API)
 └── No outbound network required
 ```
@@ -904,7 +904,7 @@ status below.
 
 **Post-v0.4.0 additions (#133/#135/#138/#139; migration head now `0047`).**
 - **Findings persistence (#135).** The `emit_finding` chokepoint now writes durable rows to `autonomous_findings` (migration `0046`), read back via `GET /autonomous/sessions/{id}/findings`. `GET /autonomous/memory` accepts a `?source_session_id=` filter to narrow to the memories a given session proposed (precedents are excluded — they are recurrence-aggregated, not session-scoped).
-- **Document-grade artifacts (#138).** An opt-in `emit_artifacts` flag (default **off**) on schedules, watches, and run-now requests lets the drafting phase dispatch an `emit_artifact` chokepoint intent that direct-writes a **real** Knowledge Base document (MinIO upload-first; a File reaches `ready` with a Document and chunks; the KB attach is direct, bypassing the watch-fire path so a run cannot loop on its own output, and mode-3 since-retrieval excludes artifact files so they do not echo back). Artifacts are referenced in `autonomous_artifacts` (migration `0047`; **session CASCADE / file SET NULL** — the document deliberately outlives the session), listed via `GET /autonomous/sessions/{id}/artifacts` (owner-gated, stable `created_at, id` order), and counted in the completion notification payload (`artifact_count`). Markdown/plain only — no PDF/DOCX (md/txt ingest is [§9 DE-332](#9-deferred-enhancements-and-identified-future-work); storage-failure finding dedupe is [§9 DE-333](#9-deferred-enhancements-and-identified-future-work)).
+- **Document-grade artifacts (#138).** An opt-in `emit_artifacts` flag (default **off**) on schedules, watches, and run-now requests lets the drafting phase dispatch an `emit_artifact` chokepoint intent that direct-writes a **real** Knowledge Base document (object-storage upload-first; a File reaches `ready` with a Document and chunks; the KB attach is direct, bypassing the watch-fire path so a run cannot loop on its own output, and mode-3 since-retrieval excludes artifact files so they do not echo back). Artifacts are referenced in `autonomous_artifacts` (migration `0047`; **session CASCADE / file SET NULL** — the document deliberately outlives the session), listed via `GET /autonomous/sessions/{id}/artifacts` (owner-gated, stable `created_at, id` order), and counted in the completion notification payload (`artifact_count`). Markdown/plain only — no PDF/DOCX (md/txt ingest is [§9 DE-332](#9-deferred-enhancements-and-identified-future-work); storage-failure finding dedupe is [§9 DE-333](#9-deferred-enhancements-and-identified-future-work)).
 - **Matter binding (#133).** Schedules and watches accept a `project_id` (set at create and reassignable via PATCH, including clear-to-null). Project ownership is validated at all five assignment sites (create-schedule, create-watch, run-now, and the two PATCH handlers) — this closed a pre-existing IDOR where `project_id` was assigned without an ownership check.
 - **Retrieval ownership scoping (#288 AG-01).** The autonomous chokepoint's `retrieve_chunks` now verifies the session owner owns the model-supplied `kb_id`/`file_id` before any retrieval, mirroring the HTTP surface's visibility predicates (owner scope + `archived_at`/`deleted_at IS NULL`); foreign or unknown ids fail closed with a 404-shaped error. Closes a cross-user read reachable via prompt-injected planner args.
 - **Worker-side skill registry (#139).** The arq-worker now installs the skill registry at startup from the same `app/skills/bootstrap.py::install_skill_registry` the api uses (see §3.4 / HONEST-STATE §9).
@@ -1571,7 +1571,7 @@ PRD §5.4 commits to observability and §5.3 to audit logging. This section adds
 
 **Disaster recovery test cadence.** The reference deployment recipes ship with a documented DR procedure (backup restore, secret rotation, key rotation, failover to a secondary region). The procedure is exercised quarterly against a clean test environment by the LegalQuants-managed-service operations function (when that function exists), with the test report published. The DR procedure is operator-runnable for any self-hosted deployment. **Status: deferred (see §9 DE entry — Disaster recovery test cadence). The Docker Compose deployment is documented at M1; the Helm chart is drafted (see `deploy/helm/` per `docs/HONEST-STATE.md` §7); a tested DR procedure is on the roadmap.**
 
-**Runbooks for every operational task.** Every operational task an operator might perform (deploying, upgrading, rotating credentials, responding to a security advisory, recovering from a corrupted vector index, migrating to a different inference provider, ingesting a backlog of documents) ships with a runbook in `docs/runbooks/`. Runbooks include estimated time, prerequisites, the exact commands, success-verification steps, and rollback procedure. This is the operational-maturity signal that lets a procurement security team check the box on "the vendor has documented operational procedures" — for an OSS project, the runbooks are the evidence. **Status: deferred. `ls docs/` shows no `runbooks/` directory at M1; the directory and the first runbooks are on the engineering-discipline roadmap (see §9 DE entry — Runbooks for operational tasks).**
+**Runbooks for every operational task.** Every operational task an operator might perform (deploying, upgrading, rotating credentials, responding to a security advisory, recovering from a corrupted vector index, migrating to a different inference provider, ingesting a backlog of documents) ships with a runbook in `docs/runbooks/`. Runbooks include estimated time, prerequisites, the exact commands, success-verification steps, and rollback procedure. This is the operational-maturity signal that lets a procurement security team check the box on "the vendor has documented operational procedures" — for an OSS project, the runbooks are the evidence. **Status: partial. [`docs/runbooks/minio-to-rustfs.md`](runbooks/minio-to-rustfs.md) is the first operator runbook; the broader set remains on the engineering-discipline roadmap (see §9 DE entry — Runbooks for operational tasks).**
 
 **Public status page for hosted artifacts.** When LegalQuants ships hosted artifacts (the project's hosted demo, the docs site, the container registry, the managed-service offering), each is tracked on a public status page with documented severity definitions and incident-response procedures. **Status: deferred. No hosted artifacts published yet at M1 — the project ships as software the operator runs; the status page lands with the first hosted artifact.**
 
@@ -1614,11 +1614,14 @@ services:
     image: redis:7-alpine
     volumes: ["redisdata:/data"]
 
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
+  rustfs:
+    image: rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff
+    environment:
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY}
     volumes: ["miniodata:/data"]
-    env_file: .env.minio
+    env_file: .env
 
   # --- Mode 2 (local inference) profile ---
   ollama:
@@ -1705,7 +1708,10 @@ Next steps shown in the web UI:
 
 ### 6.5 Backup and Restore
 
-- Documented `pg_dump` + MinIO snapshot recipe.
+- Documented `pg_dump` + object-store snapshot recipe. ADR 0037's migration
+  tool creates, hashes and journals the object-store snapshot for deployment
+  migrations; [`docs/runbooks/minio-to-rustfs.md`](runbooks/minio-to-rustfs.md)
+  is the first operator runbook and the release notes link to it.
 - Reference cron job for nightly backups.
 - Restore tested in CI.
 - **Backup encryption** is a deferred enhancement (per §9 Security and Compliance): backup bundles are unencrypted by default in v1; operators are responsible for encrypting backup volumes at rest at the infrastructure level. A configurable backup-encryption-with-rotation path is on the roadmap.
@@ -2261,7 +2267,7 @@ Entries are tagged with priority (P1 = should be addressed in v1.5; P2 = good fo
 
 **Context:** PRD §6.5 references documented backup recipe and tested restore. Tooling not yet provided.
 
-**Specific scope:** CLI tool that runs `pg_dump` plus MinIO snapshot, generates a versioned backup bundle, and a corresponding restore tool that handles version migration if needed.
+**Specific scope:** Build on ADR 0037's shipped, SHA-256-journalled object-store snapshots with a CLI that also runs `pg_dump`, produces a versioned backup bundle, and restores it across supported release migrations.
 
 **Acceptance criteria:** Backup-restore round-trip tested in CI; documented procedure for upgrade-with-restore.
 
@@ -2682,7 +2688,7 @@ This subsection consolidates security and compliance enhancements deferred from 
 
 **Priority:** P1 · **Effort:** M
 
-**Context:** PRD §6.5 specifies pg_dump + MinIO snapshot backups. Production-grade backup requires encryption at rest with separate keys from the live deployment, key rotation, and restore-with-key-rotation testing.
+**Context:** PRD §6.5 specifies pg_dump + object-store snapshot backups. ADR 0037 ships the snapshot and receipt half; production-grade backup still requires encryption at rest with separate keys from the live deployment, key rotation, and restore-with-key-rotation testing.
 
 **Specific scope:** Backup CLI tool encrypts bundles with operator-provided KMS key; restore tool handles key-rotation scenarios; documented key-management procedure.
 
@@ -3478,7 +3484,7 @@ This subsection operationalizes the §1.9 engineering-discipline posture and the
 
 **Context:** For high-assurance deployments where the operator wants to assert "no plaintext traffic anywhere in the deployment," this closes the gap.
 
-**Specific scope:** Configure mTLS for service-to-service traffic in the reference Docker Compose and the Helm chart: api ↔ gateway, api ↔ postgres, api ↔ redis, api ↔ minio. Certificate issuance via cert-manager (Kubernetes) or step-ca (Compose). Documented at `docs/security/internal-mtls.md`.
+**Specific scope:** Configure mTLS for service-to-service traffic in the reference Docker Compose and the Helm chart: api ↔ gateway, api ↔ postgres, api ↔ redis, api ↔ the bundled RustFS/S3 object store. Certificate issuance via cert-manager (Kubernetes) or step-ca (Compose). Documented at `docs/security/internal-mtls.md`.
 
 **Acceptance criteria:** mTLS configurable via a documented flag in `docker-compose.yml` and the Helm chart; reference deployment is tested with mTLS on; the path is documented for operator-side customization.
 
@@ -3731,7 +3737,7 @@ This subsection operationalizes the §1.9 engineering-discipline posture and the
 **Specific scope:** Three-part change.
 
 1. **Bundle the PDFs in the api image** — move `docs/quickstart/sample-ndas/*.pdf` into a path the api container can read at startup (e.g., `api/seed/sample-ndas/`).
-2. **First-run bootstrap seed** — analogous to the M3-A5 built-in-playbook seed migrations (0032 + 0033). On first-run bootstrap (or a new admin-triggered endpoint `POST /api/v1/admin/seed/sample-ndas`), the api: (a) creates a system-managed knowledge base named "Sample NDAs (for testing)" owned by a dedicated `__samples__` user OR by every admin's user_id; (b) uploads each PDF to MinIO under that owner; (c) runs the C5 parse pipeline synchronously so `document_id` is set before the endpoint returns; (d) emits an audit row.
+2. **First-run bootstrap seed** — analogous to the M3-A5 built-in-playbook seed migrations (0032 + 0033). On first-run bootstrap (or a new admin-triggered endpoint `POST /api/v1/admin/seed/sample-ndas`), the api: (a) creates a system-managed knowledge base named "Sample NDAs (for testing)" owned by a dedicated `__samples__` user OR by every admin's user_id; (b) uploads each PDF to S3-compatible object storage under that owner; (c) runs the C5 parse pipeline synchronously so `document_id` is set before the endpoint returns; (d) emits an audit row.
 3. **Wizard UI affordance** — when the wizard's Step 1 dropzone is empty AND the operator has a "Sample NDAs" KB attached to their library, render a "Try with sample NDAs" CTA that pre-populates `selectedFiles` (or `uploadedFiles`) with the 5 sample documents — single click, no upload step required, jumps straight to the polling step.
 
 **Acceptance criteria:** On a fresh-install stack with the api container's seed step enabled, an admin who logs in and opens the Easy Playbook wizard sees the "Try with sample NDAs" CTA; clicking it kicks off a generation against the 5 bundled documents without any manual upload; the resulting draft surfaces the 5 variant axes documented in `docs/quickstart/sample-ndas/README.md` as distinct positions. The seeded KB is also visible in the operator's KB list as a system-managed entry (distinguished UI badge so it's clear it's not user-uploaded). Operators in production who don't want the sample KB can disable the seed via an env var or an admin-UI toggle.
@@ -4249,7 +4255,7 @@ Two bulk operations as originally written in the M3-C4 spec:
 **Context:** On a macOS dev box already running a host PostgreSQL (Homebrew / Postgres.app on `:5432`), a fresh `docker compose up` fails to bind (`address already in use`) and the stack never comes up. `.env.example` documents the `POSTGRES_HOST_PORT=15432` remap inline, but a developer following the "I just cloned the repo" path hits the failure before reading that comment. M3-E1 itself had to remap to 15432 to proceed.
 
 **Specific scope:**
-- `docs/quickstart.md` "I just cloned the repo" onboarding path gets an explicit "if you already run a local Postgres/Redis/MinIO, remap the `*_HOST_PORT` vars" step near the `docker compose up` instruction, with the 15432 example.
+- `docs/quickstart.md` "I just cloned the repo" onboarding path gets an explicit "if you already run local Postgres/Redis/RustFS services, remap the `*_HOST_PORT` vars" step near the `docker compose up` instruction, with the 15432 example.
 - Optionally: a preflight note that the stack binds 127.0.0.1:{5432,6379,9000,9001,8000,8001,3000} by default.
 
 **When to ship:** Folds naturally into M3-E2 documentation finalization.
@@ -4580,7 +4586,7 @@ runtime baseline before activating the accepted durable LangGraph execution.
 
 **Priority:** P3 · **Effort:** S
 
-**Context:** When an opted-in autonomous run emits N artifacts and object storage (MinIO) is down, the drafting node's dispatch loop produces one `storage_error` result — and therefore one `warn` finding — per artifact: N near-identical "artifact could not be stored" findings for a single underlying outage. A natural bound already exists (the artifact list comes from a single analysis response, so N is limited by the response token budget), and each finding is individually honest, so this is noise rather than harm — which is why it was deferred rather than absorbed into the Donna-#8 work.
+**Context:** When an opted-in autonomous run emits N artifacts and object storage is down, the drafting node's dispatch loop produces one `storage_error` result — and therefore one `warn` finding — per artifact: N near-identical "artifact could not be stored" findings for a single underlying outage. A natural bound already exists (the artifact list comes from a single analysis response, so N is limited by the response token budget), and each finding is individually honest, so this is noise rather than harm — which is why it was deferred rather than absorbed into the Donna-#8 work.
 
 **Specific scope:** In the drafting node's artifact dispatch loop (`api/app/autonomous/nodes.py`), collapse consecutive/correlated `storage_error` outcomes into one `warn` finding that names the count and the artifact names (e.g. "3 artifacts could not be stored — object storage unavailable"), instead of one finding per failure. Keep the per-artifact audit `tool_call` rows untouched (the receipt should still show every attempted dispatch); only the user-facing finding is deduplicated. Add a test with ≥2 failing artifacts asserting exactly one warn finding.
 
@@ -5188,6 +5194,7 @@ Roadmap 4.3 wired `--cov-fail-under` coverage gates into CI (`.github/workflows/
 | FastAPI | MIT | Backend framework |
 | LangGraph | MIT | Agent runtime |
 | pgvector | PostgreSQL License | Vector store |
+| RustFS | Apache 2.0 | Bundled S3-compatible object store; pinned 1.0.0 image (ADR 0036) |
 | Docling | MIT | Dead integration — never produced output; removal pending (ADR 0026) |
 | PyMuPDF | AGPL-3.0 | Server-side only, not redistributed |
 | Mistral OCR | Paid API | Optional, fallback |
@@ -5246,7 +5253,7 @@ This appendix addresses common objections an information-security or legal-opera
 
 #### Objection: "Where is LQ.AI's data residency?"
 
-**Response.** LQ.AI does not have a data residency, because LQ.AI does not have data. The operator chooses where to deploy LQ.AI; the data lives in the operator's environment (the Postgres database, MinIO/S3, audit log volumes the operator provisions). The only data that potentially leaves the operator's environment is the inference request to the configured cloud LLM provider, and the operator chooses that provider and the provider's region. The Provider Compliance Matrix (`docs/compliance/provider-compliance-matrix.md`) documents each supported provider's data-residency options. For an EU-only deployment, the operator deploys to EU infrastructure, configures the Inference Gateway to route only to EU-resident provider endpoints (Anthropic EU, AWS Bedrock eu-west-X, Azure OpenAI EU regions, Google Vertex AI EU regions), or runs Tier 1 / Tier 2 inference where no provider call leaves the operator's environment.
+**Response.** LQ.AI does not have a data residency, because LQ.AI does not have data. The operator chooses where to deploy LQ.AI; the data lives in the operator's environment (the Postgres database, RustFS/S3, audit log volumes the operator provisions). The only data that potentially leaves the operator's environment is the inference request to the configured cloud LLM provider, and the operator chooses that provider and the provider's region. The Provider Compliance Matrix (`docs/compliance/provider-compliance-matrix.md`) documents each supported provider's data-residency options. For an EU-only deployment, the operator deploys to EU infrastructure, configures the Inference Gateway to route only to EU-resident provider endpoints (Anthropic EU, AWS Bedrock eu-west-X, Azure OpenAI EU regions, Google Vertex AI EU regions), or runs Tier 1 / Tier 2 inference where no provider call leaves the operator's environment.
 
 #### Objection: "Does the AI provider train on our data?"
 
@@ -5318,7 +5325,7 @@ This appendix addresses common objections an information-security or legal-opera
 
 #### Objection: "What is your reliability story for a production deployment?"
 
-**Response.** Per §5.9: published Service Level Objectives and the corresponding Service Level Indicators for a reference deployment with documented measurement methodology (API availability target 99.9% monthly; p99 latency by capability; inference-fallback success rate; audit-log durability); a documented error budget policy; public postmortems within 14 days for any incidents in LegalQuants-operated infrastructure; quarterly disaster-recovery test cadence with published reports for LegalQuants-managed environments; runbooks in `docs/runbooks/` for every operational task. Performance regression with historical tracking (per §5.8 and §9 DE entry — Performance regression) proves no PR materially regresses production behavior. **M1 status:** the OpenTelemetry instrumentation (§5.4) and the audit log (§5.3) are in place at M1; the SLO catalog, the error budget policy, the runbook directory, and the postmortem template are deferred per §9. The reliability commitments are structural — they describe how the project handles production maturation rather than asserting it has been reached.
+**Response.** Per §5.9: published Service Level Objectives and the corresponding Service Level Indicators for a reference deployment with documented measurement methodology (API availability target 99.9% monthly; p99 latency by capability; inference-fallback success rate; audit-log durability); a documented error budget policy; public postmortems within 14 days for any incidents in LegalQuants-operated infrastructure; quarterly disaster-recovery test cadence with published reports for LegalQuants-managed environments; runbooks in `docs/runbooks/` for every operational task. Performance regression with historical tracking (per §5.8 and §9 DE entry — Performance regression) proves no PR materially regresses production behavior. **Current status:** the OpenTelemetry instrumentation (§5.4), audit log (§5.3), and first operator runbook (`docs/runbooks/minio-to-rustfs.md`) are in place; the SLO catalog, error budget policy, broader runbook set, and postmortem template remain deferred per §9. The reliability commitments are structural — they describe how the project handles production maturation rather than asserting it has been reached.
 
 #### Objection: "What if LegalQuants disappears?"
 

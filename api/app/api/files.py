@@ -3,7 +3,7 @@
 Surface (per ``docs/api/backend-openapi.yaml``):
 
 * ``POST   /api/v1/files``               — multipart upload; streams body to
-  MinIO, computes SHA-256, persists metadata with
+  object storage, computes SHA-256, persists metadata with
   ``ingestion_status='pending'`` and returns the canonical ``File`` shape.
 * ``GET    /api/v1/files/{file_id}``     — file metadata; 404 if missing or
   owned by a different user (per-user isolation; we return 404 rather
@@ -12,7 +12,7 @@ Surface (per ``docs/api/backend-openapi.yaml``):
   original bytes; ``Content-Disposition: attachment; filename=...`` with
   RFC 5987-encoded ``filename*`` for non-ASCII filenames.
 * ``DELETE /api/v1/files/{file_id}``     — soft-delete (sets ``deleted_at``);
-  the MinIO bytes outlive the soft-delete per ADR 0005. The endpoint is
+  the object-store bytes outlive the soft-delete per ADR 0005. The endpoint is
   idempotent: deleting an already-soft-deleted file (or a file that
   never existed) returns 404.
 
@@ -170,7 +170,7 @@ async def _upload_file_stream(
     status_code=status.HTTP_201_CREATED,
     summary="Upload a file",
     description=(
-        "Streaming multipart upload. The body is streamed to MinIO without "
+        "Streaming multipart upload. The body is streamed to S3-compatible storage without "
         "ever loading the whole file into memory; a SHA-256 is computed as "
         "bytes flow past, and metadata is persisted with "
         "`ingestion_status='pending'`. The document pipeline (Task C5) "
@@ -192,29 +192,29 @@ async def upload_file(
                 "Optional UUID of a project to attach this file to. The "
                 "caller must own the project; cross-user or unknown ids "
                 "return 422 (the upload is rejected before bytes touch "
-                "MinIO)."
+                "the object store)."
             ),
         ),
     ] = None,
 ) -> FileMetadata:
-    """Stream the upload to MinIO; persist metadata; return the ``File`` shape.
+    """Stream the upload to object storage; persist metadata; return the ``File`` shape.
 
     Order of operations:
 
     1. **Validate ``project_id``** if supplied. The form field is parsed
        as a UUID; the project must exist, be owned by the caller, and
        not be archived. Failures here return 422 *before* any bytes
-       touch MinIO so a bad project_id doesn't leak into orphan storage.
+       touch object storage so a bad project_id doesn't leak into orphan storage.
     2. **Pre-allocate the file_id** locally so we know the storage path
-       before touching MinIO. (Per ADR 0005 the storage key is the bare
+       before touching object storage. (Per ADR 0005 the storage key is the bare
        UUID.)
-    3. **Stream the upload to MinIO** via ``stream_upload``. This raises
+    3. **Stream the upload to object storage** via ``stream_upload``. This raises
        :class:`PayloadTooLarge` if the streamed byte count exceeds the
        configured cap; on any other exception, the multipart upload is
        aborted (no orphan parts left behind).
     4. **Insert the row** in ``files`` with the streamed size and SHA-256.
        If the insert fails (e.g., the user has been deleted between
-       auth and now), we hard-delete the just-uploaded MinIO object so
+       auth and now), we hard-delete the just-uploaded object-store object so
        we don't leak orphaned bytes.
     5. **Return the ``FileMetadata``** matching the OpenAPI ``File`` schema.
     """
@@ -317,13 +317,13 @@ async def upload_file(
         await db.commit()
     except IntegrityError:
         # Failed to persist after the bytes were uploaded. Clean up the
-        # MinIO object so we don't leak orphaned storage.
+        # object-store object so we don't leak orphaned storage.
         await db.rollback()
         try:
             await delete_object(storage_path=storage_path)
         except Exception:
             log.warning(
-                "Failed to clean up MinIO object after row-insert failure",
+                "Failed to clean up object-store object after row-insert failure",
                 extra={
                     "event": "file_upload_cleanup_failed",
                     "storage_path": storage_path,
@@ -407,7 +407,7 @@ async def get_file_content(
     user: ActiveUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> StreamingResponse:
-    """Stream the original bytes from MinIO with the right headers.
+    """Stream the original bytes from object storage with the right headers.
 
     Headers set:
     * ``Content-Type``: from the stored ``mime_type``.
@@ -444,7 +444,7 @@ async def get_file_content(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Soft-delete a file",
     description=(
-        "Sets `deleted_at` on the row; the MinIO object is left in place "
+        "Sets `deleted_at` on the row; the object-store object is left in place "
         "and reaped later by D6 (per-user export+delete) or a future GC "
         "sweep, per `docs/adr/0005-file-storage-soft-delete-and-key-scheme.md`. "
         "Idempotent: deleting an already-soft-deleted file or a missing "

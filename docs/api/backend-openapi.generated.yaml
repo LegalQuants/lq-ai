@@ -1372,7 +1372,7 @@ components:
           - type: 'null'
           description: Optional UUID of a project to attach this file to. The caller
             must own the project; cross-user or unknown ids return 422 (the upload
-            is rejected before bytes touch MinIO).
+            is rejected before bytes touch the object store).
           title: Project Id
       required:
       - file
@@ -10373,11 +10373,11 @@ paths:
       - enhance-prompt
   /api/v1/files:
     post:
-      description: 'Streaming multipart upload. The body is streamed to MinIO without
-        ever loading the whole file into memory; a SHA-256 is computed as bytes flow
-        past, and metadata is persisted with `ingestion_status=''pending''`. The document
-        pipeline (Task C5) picks the row up asynchronously and flips status through
-        `processing` → `ready` (or `failed`).
+      description: 'Streaming multipart upload. The body is streamed to S3-compatible
+        storage without ever loading the whole file into memory; a SHA-256 is computed
+        as bytes flow past, and metadata is persisted with `ingestion_status=''pending''`.
+        The document pipeline (Task C5) picks the row up asynchronously and flips
+        status through `processing` → `ready` (or `failed`).
 
 
         Per-request size limit: `LQ_AI_MAX_UPLOAD_SIZE_MB` (default 100). Exceeding
@@ -10409,10 +10409,10 @@ paths:
       - files
   /api/v1/files/{file_id}:
     delete:
-      description: 'Sets `deleted_at` on the row; the MinIO object is left in place
-        and reaped later by D6 (per-user export+delete) or a future GC sweep, per
-        `docs/adr/0005-file-storage-soft-delete-and-key-scheme.md`. Idempotent: deleting
-        an already-soft-deleted file or a missing file returns 404.'
+      description: 'Sets `deleted_at` on the row; the object-store object is left
+        in place and reaped later by D6 (per-user export+delete) or a future GC sweep,
+        per `docs/adr/0005-file-storage-soft-delete-and-key-scheme.md`. Idempotent:
+        deleting an already-soft-deleted file or a missing file returns 404.'
       operationId: delete_file_api_v1_files__file_id__delete
       parameters:
       - in: path
@@ -10474,7 +10474,7 @@ paths:
       - files
   /api/v1/files/{file_id}/content:
     get:
-      description: "Stream the original bytes from MinIO with the right headers.\n\
+      description: "Stream the original bytes from object storage with the right headers.\n\
         \nHeaders set:\n* ``Content-Type``: from the stored ``mime_type``.\n* ``Content-Length``:\
         \ from the stored ``size_bytes``.\n* ``Content-Disposition``: ``attachment;\
         \ filename=\"...\"`` with an\n  RFC 5987 ``filename*`` for non-ASCII filenames.\n\
@@ -13625,7 +13625,7 @@ paths:
 
         arq worker job, and returns 202. The worker runs the ZIP build +
 
-        MinIO upload out-of-band.
+        object-store upload out-of-band.
 
 
         Re-calling while a queued/processing job exists is allowed —
@@ -13794,7 +13794,7 @@ paths:
       - meta
   /ready:
     get:
-      description: 'Readiness probe — returns 200 when DB + Redis + MinIO + gateway
+      description: 'Readiness probe — returns 200 when DB + Redis + S3 storage + gateway
         are reachable.
 
 

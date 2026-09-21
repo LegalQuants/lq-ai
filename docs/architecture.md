@@ -57,7 +57,7 @@ flowchart TB
         direction LR
         postgres["<b>PostgreSQL + pgvector</b><br/>app data · vectors · FTS<br/>privilege-aware audit log<br/>work-product attribution"]
         redis["<b>Redis</b><br/>sessions · queues<br/>pubsub"]
-        minio["<b>MinIO / S3-compatible</b><br/>file storage"]
+        objectstore["<b>RustFS / S3-compatible</b><br/>file storage"]
     end
 
     %% =========================================
@@ -134,7 +134,7 @@ flowchart TB
     knowledge --> postgres
     autonomous --> postgres
     api --> redis
-    doc --> minio
+    doc --> objectstore
     api -->|audit log| postgres
 
     %% =========================================
@@ -143,7 +143,7 @@ flowchart TB
     redis -->|"dequeue jobs"| worker
     worker -->|"inference"| gateway
     worker -->|"results / chunks"| postgres
-    worker --> minio
+    worker --> objectstore
 
     %% =========================================
     %%   EDGES — gateway to providers
@@ -197,7 +197,7 @@ flowchart TB
 
 The architecture is shaped by three commitments:
 
-**Self-hosted, with the customer's keys, in the customer's environment.** Storage (Postgres + Redis + MinIO/S3) lives entirely in the operator's environment; the application services run alongside; the only data that potentially leaves the operator's environment is the inference call to the configured provider. There is no LegalQuants-side SaaS holding customer data — by design, no telemetry is emitted by default, and what telemetry the operator opts into contains no content. (See [PRD §5.7 No Telemetry by Default](PRD.md#57-no-telemetry-by-default).)
+**Self-hosted, with the customer's keys, in the customer's environment.** Storage (Postgres + Redis + RustFS/S3) lives entirely in the operator's environment; the application services run alongside; the only data that potentially leaves the operator's environment is the inference call to the configured provider. There is no LegalQuants-side SaaS holding customer data — by design, no telemetry is emitted by default, and what telemetry the operator opts into contains no content. (See [PRD §5.7 No Telemetry by Default](PRD.md#57-no-telemetry-by-default).)
 
 **The Inference Gateway is the security boundary.** It is the single component holding privileged provider API keys and the only egress path for customer prompts. We build it in-house in ~3,000 lines of focused Python rather than adopting LiteLLM (whose security history includes proxy auth bypasses and SSRF in document loaders) — for an open-source project where users may run with our defaults, that surface area is unacceptable. Every request passes through Auth → Router → Rate Limit → Tier Derivation → Anonymization (M2) → Provider Adapters → Cost Tracker → Telemetry, and is annotated with the derived Inference Tier (1–5) before leaving. Skills and Projects can refuse to run below their declared minimum tier. (See [PRD §4 The LQ.AI Inference Gateway](PRD.md#4-the-lq-ai-inference-gateway) and [§4.7 Anonymization Layer](PRD.md#47-anonymization-layer-m2).)
 
@@ -359,7 +359,7 @@ A frequent procurement question: *where does customer data actually live?* The a
 |---|---|---|
 | User identity / accounts | PostgreSQL | No |
 | Chat history (prompts, responses, citations) | PostgreSQL | No (but the prompt content travels through the Inference Gateway to the configured provider; see below) |
-| Files (uploaded documents) | MinIO / S3-compatible | No |
+| Files (uploaded documents) | RustFS / S3-compatible | No |
 | Document chunks (post-ingestion) | PostgreSQL (pgvector + FTS) | No |
 | Skills, Playbooks, Organization Profile | PostgreSQL | No |
 | Project context documents | PostgreSQL | No |

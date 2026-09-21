@@ -1,18 +1,28 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { join } from 'node:path'
 import { composeBaseArgs, logsArgs } from '../core/compose'
 import { resolvePorts } from '../core/ports'
 import { generateSecrets } from '../core/secrets'
 import { DEFAULT_PORTS } from '../core/types'
 import type { LauncherConfig } from '../core/config'
-import { loadConfig, saveConfig, writeEnvFile, clearConfig, ensureMasterKey } from './store'
+import {
+	loadConfig,
+	saveConfig,
+	writeEnvFile,
+	clearConfig,
+	ensureMasterKey,
+	ensureObjectStoreConfig
+} from './store'
 import { composeFilePath, envPath, PROJECT_NAME } from './paths'
 import {
 	snapshot,
-	startStack,
+	startStackWithMigrations,
 	stopStack,
 	resetStack,
 	runAdminFixture,
+	migrationStatus,
+	rollbackMigration,
+	type MigrationPlan,
 	type StackSnapshot
 } from './orchestrator'
 import { streamDocker } from './runner'
@@ -20,8 +30,14 @@ import { isPortFreeSync } from './netcheck'
 
 let win: BrowserWindow | null = null
 
+declare const __LQ_AI_RELEASE_IMAGE_TAG__: string
+
 /** Compose base args, including the app-data --env-file so the generated .env is used. */
-const base = (): string[] => [...composeBaseArgs(composeFilePath(), PROJECT_NAME), '--env-file', envPath()]
+const base = (): string[] => [
+	...composeBaseArgs(composeFilePath(), PROJECT_NAME),
+	'--env-file',
+	envPath()
+]
 
 interface WizardInput {
 	adminEmail: string
@@ -54,10 +70,39 @@ async function waitHealthy(b: string[], timeoutMs = 600_000): Promise<void> {
 		if (snap.state === 'HEALTHY') return
 		if (snap.state === 'FAILED') throw new Error('Stack failed to start; see logs.')
 		if (snap.state === 'NO_ENGINE')
-			throw new Error(snap.engineMessage ?? "Docker isn't running. Start Docker Desktop and try again.")
+			throw new Error(
+				snap.engineMessage ?? "Docker isn't running. Start Docker Desktop and try again."
+			)
 		await new Promise((r) => setTimeout(r, 4000))
 	}
 	throw new Error('Timed out waiting for the stack to become healthy.')
+}
+
+async function confirmMigration(plan: MigrationPlan): Promise<boolean> {
+	const facts = plan.detection.facts ?? {}
+	const size =
+		typeof facts.volume_bytes === 'number' ? `${facts.volume_bytes} bytes` : 'unknown size'
+	const count =
+		typeof facts.object_count === 'number' ? `${facts.object_count} objects` : 'unknown count'
+	const snapshotSpace = plan.checks?.find((check) => check.name === 'snapshot-space')?.message
+	const result = await dialog.showMessageBox(win!, {
+		type: 'warning',
+		title: plan.title ?? 'LQ.AI storage upgrade',
+		message: 'LQ.AI must snapshot and migrate its object store before it can start.',
+		detail: `${plan.reason}\n\nDetected: ${count}, ${size}.\nSnapshot: ${snapshotSpace ?? 'destination availability unknown'}.\nThe snapshot is retained until you remove it.`,
+		buttons: ['Snapshot and continue', 'Cancel'],
+		defaultId: 0,
+		cancelId: 1,
+		noLink: true
+	})
+	return result.response === 0
+}
+
+async function startWithMigrations(b: string[]): Promise<void> {
+	const result = await startStackWithMigrations(b, process.env, confirmMigration, (message) =>
+		win?.webContents.send('stack:log', `[migration] ${message}`)
+	)
+	if (result.code !== 0) throw new Error(result.stderr || 'Stack start was cancelled.')
 }
 
 ipcMain.handle('config:isFirstRun', () => loadConfig() === null)
@@ -70,21 +115,28 @@ ipcMain.handle('wizard:complete', async (_e, input: WizardInput) => {
 		// Optional provider key: must be a single token if present (renderEnv drops malformed
 		// values defensively, but reject here so a bad paste surfaces as a clear error).
 		const providerKey =
-			typeof input.providerKey === 'string' && input.providerKey.trim() ? input.providerKey.trim() : undefined
+			typeof input.providerKey === 'string' && input.providerKey.trim()
+				? input.providerKey.trim()
+				: undefined
 		if (providerKey && /\s/.test(providerKey)) {
-			return { ok: false, error: 'Provider key contains whitespace — paste just the key.' }
+			return {
+				ok: false,
+				error: 'Provider key contains whitespace — paste just the key.'
+			}
 		}
 		// Anthropic + OpenAI keys both start with "sk-"; reject other shapes so a wrong
 		// paste isn't silently written as OPENAI_API_KEY (providerKeyVar's default branch).
 		if (providerKey && !providerKey.startsWith('sk-')) {
-			return { ok: false, error: 'That key should start with "sk-" (Anthropic or OpenAI).' }
+			return {
+				ok: false,
+				error: 'That key should start with "sk-" (Anthropic or OpenAI).'
+			}
 		}
 		const cfg: LauncherConfig = {
 			secrets: generateSecrets(),
 			ports: resolvePorts(DEFAULT_PORTS, isPortFreeSync),
-			// Default to the floating "latest" tag for now; Kevin pins a real version
-			// (e.g. v0.4.0) when cutting a release. Namespace is overridable for forks/mirrors.
-			imageTag: 'latest',
+			// Release builds bake desktop-vX.Y.Z -> vX.Y.Z; local builds retain latest.
+			imageTag: __LQ_AI_RELEASE_IMAGE_TAG__,
 			imageNamespace: 'legalquants',
 			adminEmail: input.adminEmail,
 			providerKey
@@ -102,7 +154,7 @@ ipcMain.handle('wizard:complete', async (_e, input: WizardInput) => {
 		// the wizard only runs on first-run (no persisted config), wiping volumes
 		// here is safe and guarantees fresh secrets meet a fresh postgres init.
 		await resetStack(b)
-		await startStack(b, process.env)
+		await startWithMigrations(b)
 		await waitHealthy(b)
 		const admin = await runAdminFixture(b, input.adminEmail, input.adminPassword)
 		if (admin.code !== 0) {
@@ -121,7 +173,25 @@ ipcMain.handle('wizard:complete', async (_e, input: WizardInput) => {
 })
 
 ipcMain.handle('stack:status', () => snapshot(base()))
-ipcMain.handle('stack:start', () => startStack(base(), process.env))
+ipcMain.handle('stack:start', () => startWithMigrations(base()))
+ipcMain.handle('stack:migrationStatus', () => migrationStatus(base(), process.env))
+ipcMain.handle('stack:rollbackMigration', async () => {
+	const confirmation = await dialog.showMessageBox(win!, {
+		type: 'warning',
+		title: 'Roll back object-store migration',
+		message: 'Stop LQ.AI and restore the latest journalled MinIO snapshot?',
+		detail:
+			'This replaces the current object-store volume. Afterward, install the previous LQ.AI release and start it with the cached MinIO image.',
+		buttons: ['Restore snapshot', 'Cancel'],
+		defaultId: 1,
+		cancelId: 1,
+		noLink: true
+	})
+	if (confirmation.response !== 0) {
+		return { code: 50, stdout: '', stderr: 'Rollback cancelled.' }
+	}
+	return rollbackMigration(base(), process.env)
+})
 ipcMain.handle('stack:stop', () => stopStack(base()))
 ipcMain.handle('stack:openWeb', () => {
 	const cfg = loadConfig()
@@ -145,6 +215,7 @@ ipcMain.handle('engine:installDocker', () =>
 )
 
 app.whenReady().then(() => {
+	ensureObjectStoreConfig(__LQ_AI_RELEASE_IMAGE_TAG__)
 	// Backfill the BYOK master key into installs that predate it, before the
 	// renderer can trigger a stack start (no-op on first run / already-migrated).
 	ensureMasterKey()

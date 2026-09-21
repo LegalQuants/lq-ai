@@ -38,6 +38,7 @@ on:
       - web/package-lock.json
       - "**/Dockerfile"
       - docker-compose.yml
+      - api/app/ops/**
       # A migration runs on api boot (alembic upgrade head) — the header of
       # scripts/stack-smoke.sh lists a new migration as a reason to run this.
       - api/alembic/versions/**
