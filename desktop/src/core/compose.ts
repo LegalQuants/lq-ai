@@ -37,9 +37,16 @@ export const migrationArgs = (
 	'migrate',
 	...command
 ]
-export const downArgs = (base: string[]): string[] => [...base, 'down']
+// Remove containers for services renamed by a launcher update (for example,
+// MinIO → RustFS). Named volumes remain intact because this deliberately omits -v.
+export const downArgs = (base: string[]): string[] => [...base, 'down', '--remove-orphans']
 /** `down -v` — also removes volumes. Used by Reset to wipe all data for a fresh setup. */
-export const downVArgs = (base: string[]): string[] => [...base, 'down', '-v']
+export const downVArgs = (base: string[]): string[] => [
+	...base,
+	'down',
+	'-v',
+	'--remove-orphans'
+]
 export const logsArgs = (base: string[], service: string): string[] => [
 	...base,
 	'logs',

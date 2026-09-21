@@ -162,7 +162,7 @@ describe('rollbackMigration', () => {
 			return { code: 0, stdout: '{}', stderr: '' }
 		}
 		await rollbackMigration(base, {}, runner)
-		expect(calls[0]).toEqual([...base, 'down'])
+		expect(calls[0]).toEqual([...base, 'down', '--remove-orphans'])
 		expect(calls[1]).toContain('--no-deps')
 		expect(calls[1]).toContain('rollback')
 	})
