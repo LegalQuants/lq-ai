@@ -77,6 +77,7 @@ ProviderType = Literal[
     "cohere",
     "azure_openai",
     "bedrock",
+    "bedrock_mantle",
     "ollama",
     "vllm",
     "openai_compatible",
