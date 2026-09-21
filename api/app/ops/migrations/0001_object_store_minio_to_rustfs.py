@@ -7,10 +7,9 @@ import hashlib
 import os
 import shutil
 import socket
+import ssl
 import tarfile
 import time
-import urllib.error
-import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -310,12 +309,34 @@ def _s3_credentials() -> tuple[str | None, str | None]:
 
 
 def _readiness_check(endpoint: str) -> Check:
+    parsed = urlparse(endpoint)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return Check("rustfs-ready", False, f"invalid S3 endpoint: {endpoint!r}")
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    path = f"{parsed.path.rstrip('/')}/health/ready"
+    host = parsed.hostname
+    host_header = host if parsed.port is None else f"{host}:{port}"
+
+    def probe(connection: socket.socket) -> int:
+        request = f"GET {path} HTTP/1.1\r\nHost: {host_header}\r\nConnection: close\r\n\r\n"
+        connection.sendall(request.encode("ascii"))
+        status_line = connection.makefile("rb").readline(4096).decode("iso-8859-1")
+        parts = status_line.split(maxsplit=2)
+        if len(parts) < 2 or not parts[1].isdigit():
+            raise OSError(f"invalid HTTP status line: {status_line.rstrip()!r}")
+        return int(parts[1])
+
     url = f"{endpoint.rstrip('/')}/health/ready"
     try:
-        with urllib.request.urlopen(url, timeout=5) as response:
-            passed = response.status == 200
-            return Check("rustfs-ready", passed, f"GET {url} returned {response.status}")
-    except (OSError, urllib.error.URLError) as exc:
+        with socket.create_connection((host, port), timeout=5) as raw_connection:
+            if parsed.scheme == "https":
+                context = ssl.create_default_context()
+                with context.wrap_socket(raw_connection, server_hostname=host) as connection:
+                    status = probe(connection)
+            else:
+                status = probe(raw_connection)
+        return Check("rustfs-ready", status == 200, f"GET {url} returned {status}")
+    except (OSError, UnicodeError, ValueError) as exc:
         return Check("rustfs-ready", False, f"GET {url} failed: {exc}")
 
 

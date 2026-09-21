@@ -56,8 +56,14 @@ def run_gate(paths: OpsPaths) -> str:
     return f"{message}; object-store ownership set to {uid}:{gid}"
 
 
+def _validate_environment() -> None:
+    if not os.environ.get("OBJECT_STORE_SECRET_KEY"):
+        raise RuntimeError("OBJECT_STORE_SECRET_KEY or legacy MINIO_ROOT_PASSWORD is required")
+
+
 def main() -> None:
     try:
+        _validate_environment()
         print(run_gate(OpsPaths.from_environment()))
     except Exception as exc:
         print(str(exc), file=sys.stderr)

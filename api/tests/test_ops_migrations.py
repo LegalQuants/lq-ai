@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from app.ops.gate import run_gate
+from app.ops.gate import _validate_environment, run_gate
 from app.ops.models import JournalEntry, Marker
 from app.ops.state import (
     COMPONENT,
@@ -98,6 +98,17 @@ def test_s3_credentials_prefer_client_then_generic_store_then_legacy(
     monkeypatch.setenv("S3_ACCESS_KEY", "client-user")
     monkeypatch.setenv("S3_SECRET_KEY", "client-secret")
     assert migration._s3_credentials() == ("client-user", "client-secret")
+
+
+def test_gate_requires_translated_object_store_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OBJECT_STORE_SECRET_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="legacy MINIO_ROOT_PASSWORD"):
+        _validate_environment()
+
+    monkeypatch.setenv("OBJECT_STORE_SECRET_KEY", "translated-secret")
+    _validate_environment()
 
 
 def test_detects_supported_minio_volume_and_metrics(tmp_path: Path) -> None:
