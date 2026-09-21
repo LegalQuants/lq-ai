@@ -12,7 +12,7 @@
 #   curl -O https://raw.githubusercontent.com/LegalQuants/lq-ai/main/docker-compose.release.yml
 #   curl -o .env https://raw.githubusercontent.com/LegalQuants/lq-ai/main/.env.release.example
 #   # edit .env: set the required secrets (LQ_AI_GATEWAY_KEY, JWT_SECRET,
-#   # POSTGRES_PASSWORD, MINIO_ROOT_PASSWORD) and optionally LQ_AI_IMAGE_TAG.
+#   # POSTGRES_PASSWORD, OBJECT_STORE_SECRET_KEY) and optionally LQ_AI_IMAGE_TAG.
 #   docker compose -f docker-compose.release.yml up -d
 #
 # Provider keys (OPENAI_API_KEY, ANTHROPIC_API_KEY, …) are OPTIONAL: the
@@ -25,7 +25,7 @@
 # every command AND shift the host ports in .env (see .env.release.example) so the
 # two stacks coexist without project-name or port collisions.
 #
-# Core services: postgres, redis, minio, gateway, api, ingest-worker,
+# Core services: postgres, redis, rustfs, gateway, api, ingest-worker,
 # arq-worker, web, plus a reverse proxy. No ollama, no slack/teams bridges
 # (launcher decision L-2; bridges need OAuth and defeat zero-config). The
 # image namespace is overridable via LQ_AI_IMAGE_NAMESPACE so forks/mirrors
@@ -79,23 +79,72 @@ services:
       timeout: 3s
       retries: 10
 
-  minio:
-    image: minio/minio:latest
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
+  rustfs-init:
+    image: ghcr.io/${LQ_AI_IMAGE_NAMESPACE:-legalquants}/lq-ai-api:${LQ_AI_IMAGE_TAG:-latest}
+    restart: "no"
+    entrypoint: ["python", "-m", "app.ops.gate"]
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-lq_ai}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+      LQ_AI_OBJECTSTORE_DIR: /lq-ai/volumes/objectstore
+      LQ_AI_OPS_DIR: /lq-ai/ops
+      LQ_AI_OPS_UNATTENDED: ${LQ_AI_OPS_UNATTENDED:-0}
+    volumes:
+      - miniodata:/lq-ai/volumes/objectstore
+      - ${LQ_AI_OPS_SOURCE:-lq-ai-ops}:/lq-ai/ops:ro
+
+  rustfs:
+    image: rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff
+    restart: unless-stopped
+    depends_on:
+      rustfs-init:
+        condition: service_completed_successfully
+    environment:
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+      RUSTFS_CONSOLE_ENABLE: "true"
+      # RustFS requires vendor-specific process variable names. Operators use
+      # the vendor-neutral OBJECT_STORE_* contract; MINIO_* is the 0.x shim.
+      RUSTFS_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY:-${MINIO_ROOT_USER:-lq_ai}}
+      RUSTFS_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY:-${MINIO_ROOT_PASSWORD:?OBJECT_STORE_SECRET_KEY or MINIO_ROOT_PASSWORD is required}}
     volumes:
       - miniodata:/data
     ports:
-      - "${MINIO_BIND_ADDR:-127.0.0.1}:${MINIO_API_HOST_PORT:-9000}:9000"
-      - "${MINIO_BIND_ADDR:-127.0.0.1}:${MINIO_CONSOLE_HOST_PORT:-9001}:9001"
+      - "${OBJECT_STORE_BIND_ADDR:-${MINIO_BIND_ADDR:-127.0.0.1}}:${OBJECT_STORE_API_HOST_PORT:-${MINIO_API_HOST_PORT:-9000}}:9000"
+      - "${OBJECT_STORE_BIND_ADDR:-${MINIO_BIND_ADDR:-127.0.0.1}}:${OBJECT_STORE_CONSOLE_HOST_PORT:-${MINIO_CONSOLE_HOST_PORT:-9001}}:9001"
+    networks:
+      default:
+        # object-store is canonical; minio is the compatibility alias for old .env files.
+        aliases: [object-store, minio]
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/health/ready || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 6
+      retries: 12
+      start_period: 20s
+
+  migrate:
+    profiles: ["ops"]
+    image: ghcr.io/${LQ_AI_IMAGE_NAMESPACE:-legalquants}/lq-ai-api:${LQ_AI_IMAGE_TAG:-latest}
+    user: "0:0"
+    entrypoint: ["python", "-m", "app.ops.migrate"]
+    command: ["status"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-lq_ai}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-lq_ai}}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://object-store:9000}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-${OBJECT_STORE_ACCESS_KEY:-${MINIO_ROOT_USER:-lq_ai}}}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-${OBJECT_STORE_SECRET_KEY:-${MINIO_ROOT_PASSWORD}}}
+      S3_BUCKET: ${S3_BUCKET:-lq-ai-files}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      LQ_AI_OBJECTSTORE_DIR: /lq-ai/volumes/objectstore
+      LQ_AI_OPS_DIR: /lq-ai/ops
+      LQ_AI_SNAPSHOT_DIR: ${LQ_AI_SNAPSHOT_DIR:-/lq-ai/ops/snapshots}
+      LQ_AI_OPS_ACTOR: ${LQ_AI_OPS_ACTOR:-cli}
+    volumes:
+      - miniodata:/lq-ai/volumes/objectstore
+      - ${LQ_AI_OPS_SOURCE:-lq-ai-ops}:/lq-ai/ops
 
   # ============================================================
   # Application services (pre-built GHCR images — no build:)
@@ -164,16 +213,16 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
+      rustfs:
         condition: service_healthy
       gateway:
         condition: service_healthy
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-lq_ai}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-lq_ai}}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-${MINIO_ROOT_USER:-lq_ai}}
-      S3_SECRET_KEY: ${S3_SECRET_KEY:-${MINIO_ROOT_PASSWORD}}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://object-store:9000}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-${OBJECT_STORE_ACCESS_KEY:-${MINIO_ROOT_USER:-lq_ai}}}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-${OBJECT_STORE_SECRET_KEY:-${MINIO_ROOT_PASSWORD}}}
       S3_BUCKET: ${S3_BUCKET:-lq-ai-files}
       S3_REGION: ${S3_REGION:-us-east-1}
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
@@ -217,7 +266,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
+      rustfs:
         condition: service_healthy
       api:
         condition: service_healthy
@@ -225,9 +274,9 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-lq_ai}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-lq_ai}}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       LQ_AI_SKIP_MIGRATIONS: "1"
-      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-${MINIO_ROOT_USER:-lq_ai}}
-      S3_SECRET_KEY: ${S3_SECRET_KEY:-${MINIO_ROOT_PASSWORD}}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://object-store:9000}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-${OBJECT_STORE_ACCESS_KEY:-${MINIO_ROOT_USER:-lq_ai}}}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-${OBJECT_STORE_SECRET_KEY:-${MINIO_ROOT_PASSWORD}}}
       S3_BUCKET: ${S3_BUCKET:-lq-ai-files}
       S3_REGION: ${S3_REGION:-us-east-1}
       LQ_AI_INGEST_WORKER_CONCURRENCY: ${LQ_AI_INGEST_WORKER_CONCURRENCY:-2}
@@ -353,6 +402,7 @@ volumes:
   pgdata:
   redisdata:
   miniodata:
+  lq-ai-ops:
   # D0.5 — writable directory for the gateway's runtime gateway.yaml,
   # seeded from the BAKED example on first boot by the gateway entrypoint.
   gateway-config:

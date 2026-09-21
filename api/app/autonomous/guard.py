@@ -990,7 +990,7 @@ async def _handle_emit_artifact(
             cost_usd=Decimal("0"), outcome="skipped", data={"skipped": "no_target_kb"}
         )
     # Parse BEFORE the upload: a malformed kb_id must fail here, not at the
-    # KB-attach insert after the bytes have already landed in MinIO (orphan).
+    # KB-attach insert after the bytes have already landed in object storage (orphan).
     kb_uuid = uuid.UUID(str(kb_id))
     # Ownership gate, on the same reasoning and at the same spot. The id came
     # from ``session.params`` — copied there by schedule/watch/run-now from
@@ -1028,7 +1028,7 @@ async def _handle_emit_artifact(
     # ── upload FIRST — no DB rows on storage failure ─────────────────────
     # Mirrors the gateway_error honesty pattern: an artifact the user
     # cannot download must never appear as a File row. A failed-late
-    # orphan MinIO object is acceptable — the same non-reaped class as
+    # orphan object-store object is acceptable — the same non-reaped class as
     # ADR 0005's soft-deleted file bytes.
     try:
         await upload_bytes(storage_path=str(file_id), body=body, content_type=mime)

@@ -57,10 +57,10 @@ class Settings(BaseSettings):
         description="Redis URL used for sessions, queues, and rate limits.",
     )
 
-    # ----- MinIO / S3 -----
+    # ----- S3-compatible object storage -----
     s3_endpoint_url: str = Field(
         default="http://localhost:9000",
-        description="S3-compatible endpoint URL (MinIO in Compose; S3 in prod).",
+        description="S3-compatible endpoint URL (RustFS in Compose; operator-supplied S3 allowed).",
     )
     s3_access_key: str = Field(default="", description="S3 access key.")
     s3_secret_key: str = Field(default="", description="S3 secret key.")

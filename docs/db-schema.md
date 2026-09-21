@@ -98,7 +98,7 @@ CREATE INDEX idx_user_sessions_expires ON user_sessions(expires_at);
 ### `user_export_jobs`
 
 Per-user GDPR Article 20 export job, tracked from queued → processing →
-completed/failed. The actual ZIP bytes live in MinIO under
+completed/failed. The actual ZIP bytes live in S3-compatible object storage under
 `storage_key`; the table itself is a job-state ledger that
 `POST /users/me/export` writes to and the worker mutates.
 
@@ -120,7 +120,7 @@ CREATE INDEX idx_user_export_jobs_expires ON user_export_jobs (expires_at) WHERE
 ```
 
 `expires_at` is set to `now() + 7 days` when the worker completes; an
-hourly GC cron clears `storage_key` (and deletes the MinIO bytes) once
+hourly GC cron clears `storage_key` (and deletes the object-store bytes) once
 that timestamp passes. The row itself is retained so status polling
 remains deterministic for a recently-deleted bundle.
 
@@ -848,7 +848,7 @@ CREATE TRIGGER trg_organization_profile_updated_at
 
 ### `files`
 
-Original uploaded files; the bytes themselves live in object storage (MinIO/S3).
+Original uploaded files; the bytes themselves live in S3-compatible object storage.
 
 ```sql
 CREATE TABLE files (

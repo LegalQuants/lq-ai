@@ -5,7 +5,7 @@
 D6 lands the GDPR Article 17 / 20 surface:
 
 * `POST /api/v1/users/me/export` queues an export job; the worker
-  builds a ZIP of the user's data and uploads it to MinIO. Returns
+  builds a ZIP of the user's data and uploads it to object storage. Returns
   202 with `{job_id, status}`.
 * `GET  /api/v1/users/me/export/{job_id}` polls a job. When complete,
   returns a presigned download URL good for 24 hours.
@@ -403,7 +403,7 @@ async def export_me(
 
     Inserts a `user_export_jobs` row with status='queued', enqueues the
     arq worker job, and returns 202. The worker runs the ZIP build +
-    MinIO upload out-of-band.
+    object-store upload out-of-band.
 
     Re-calling while a queued/processing job exists is allowed —
     operators may want a fresh export after deleting some content.

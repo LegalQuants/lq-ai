@@ -184,3 +184,12 @@ Considered for "operators see filenames in MinIO." Rejected because:
 - `api/app/api/files.py` — handlers.
 - `docs/db-schema.md` — already documents `files.deleted_at`; this
   ADR is the rationale for using it the way C4 does.
+
+## Revisions
+
+- **2026-09-21 — ADR 0036 operationalisation.** The bundled implementation is
+  now RustFS rather than MinIO. This ADR's key scheme, soft-delete semantics,
+  and S3 contract are unchanged; occurrences of “MinIO” above describe the
+  original implementation and should be read as “the S3-compatible object
+  store.” The historical `miniodata` volume key remains through 0.x so an
+  upgrade cannot silently attach an empty volume.

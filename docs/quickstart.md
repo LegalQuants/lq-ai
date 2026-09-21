@@ -51,7 +51,7 @@ Then start the stack:
 docker compose up -d
 ```
 
-First run pulls images across the eight always-on services — `postgres`, `redis`, `minio`, `gateway`, `api`, `ingest-worker`, `arq-worker`, `web` (the `ingest-worker` and `arq-worker` background workers run unconditionally; the local-Ollama (`--profile local`) and Slack/Teams (`--profile slack` / `--profile teams`) services are opt-in Compose profiles). On a reasonable connection this takes 2–4 minutes. Subsequent runs reuse the images and start in seconds.
+First run pulls images across the eight always-on services — `postgres`, `redis`, `rustfs`, `gateway`, `api`, `ingest-worker`, `arq-worker`, `web` (the `ingest-worker` and `arq-worker` background workers run unconditionally; the local-Ollama (`--profile local`) and Slack/Teams (`--profile slack` / `--profile teams`) services are opt-in Compose profiles). On a reasonable connection this takes 2–4 minutes. Subsequent runs reuse the images and start in seconds.
 
 When the stack is up, you should see something like this in the API container's logs:
 
@@ -277,9 +277,9 @@ The Slack and Teams intake bridges are **opt-in** Compose profiles. To bring the
 docker compose --profile slack --profile teams up -d --build
 ```
 
-You should see ten healthy services: `api`, `gateway`, `web`, `postgres`, `redis`, `minio`, `arq-worker`, `ingest-worker`, `slack-bridge`, `teams-bridge`. (Omit the `--profile` flags to skip the bridges — see the [intake-bridges doc](intake-bridges.md) for what the bridges need before they're useful, and note that a real Slack/Teams OAuth round-trip has not yet been exercised end-to-end — [DE-312](PRD.md#9-deferred-enhancements-and-identified-future-work).)
+You should see ten healthy services: `api`, `gateway`, `web`, `postgres`, `redis`, `rustfs`, `arq-worker`, `ingest-worker`, `slack-bridge`, `teams-bridge`. (Omit the `--profile` flags to skip the bridges — see the [intake-bridges doc](intake-bridges.md) for what the bridges need before they're useful, and note that a real Slack/Teams OAuth round-trip has not yet been exercised end-to-end — [DE-312](PRD.md#9-deferred-enhancements-and-identified-future-work).)
 
-> **Port already in use?** If `docker compose up` fails with `address already in use` on `5432` (or `6379` / `9000`), you already run a host Postgres/Redis/MinIO. Remap the host-side port in `.env` — e.g. `POSTGRES_HOST_PORT=15432` — and re-run. The stack's internal traffic stays on the default ports; only the host mapping shifts. See [Troubleshooting](#docker-compose-up-fails-with-address-already-in-use).
+> **Port already in use?** If `docker compose up` fails with `address already in use` on `5432` (or `6379` / `9000`), you already run a host Postgres/Redis/S3 service. Remap the host-side port in `.env` — e.g. `POSTGRES_HOST_PORT=15432` — and re-run. The stack's internal traffic stays on the default ports; only the host mapping shifts. See [Troubleshooting](#docker-compose-up-fails-with-address-already-in-use).
 
 Confirm the migration head is current:
 
@@ -381,14 +381,14 @@ First-run image pulls are typically the slow step. Verify with `docker compose l
 
 ### `docker compose up` fails with "address already in use"
 
-If startup fails with `ports are not available: ... bind: address already in use` on `5432` (Postgres), `6379` (Redis), or `9000`/`9001` (MinIO), you already have a host service holding that port — commonly a Homebrew/Postgres.app Postgres on `5432`. Remap the host-side port in `.env` and re-run:
+If startup fails with `ports are not available: ... bind: address already in use` on `5432` (Postgres), `6379` (Redis), or `9000`/`9001` (RustFS), you already have a host service holding that port — commonly a Homebrew/Postgres.app Postgres on `5432`. Remap the host-side port in `.env` and re-run:
 
 ```bash
 # .env — host-side mapping only; the stack's internal traffic stays on 5432
 POSTGRES_HOST_PORT=15432
 ```
 
-The application services reach Postgres over the Docker network at `postgres:5432` regardless, so remapping the host port has no effect on the running stack — it only changes how you reach it with host tooling (`psql -h localhost -p 15432`). The same pattern applies to `REDIS_HOST_PORT` / `MINIO_API_HOST_PORT` / `MINIO_CONSOLE_HOST_PORT`.
+The application services reach Postgres over the Docker network at `postgres:5432` regardless, so remapping the host port has no effect on the running stack — it only changes how you reach it with host tooling (`psql -h localhost -p 15432`). The same pattern applies to `REDIS_HOST_PORT` / `OBJECT_STORE_API_HOST_PORT` / `OBJECT_STORE_CONSOLE_HOST_PORT`.
 
 ### "First-run admin password" doesn't appear in logs
 
