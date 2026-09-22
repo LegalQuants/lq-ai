@@ -118,6 +118,42 @@ class ProviderNetworkError(ProviderAdapterError):
     code = "provider_unavailable"
 
 
+class ProviderTimeoutError(ProviderNetworkError):
+    """The *gateway's own* request timeout elapsed (``httpx.TimeoutException``).
+
+    Distinct from an upstream 5xx: the provider may be perfectly healthy
+    and mid-generation — we gave up waiting. Inherits ``code``
+    (``provider_unavailable``) so the wire contract and HTTP mapping are
+    unchanged (503, same as any network failure); the routing-log
+    ``refusal_reason`` builder reads ``isinstance(..., ProviderTimeoutError)``
+    to label these rows ``client_timeout:...`` so operators can tell a
+    too-tight ``timeout_s`` from a genuine provider outage. Mirrors the
+    :class:`app.providers.ollama.ProviderModelNotFound` approach of a
+    distinct class rather than a new error-code enum entry.
+    """
+
+
+class ProviderEmptyResponseError(ProviderAdapterError):
+    """The provider accepted the request and returned no usable content.
+
+    Distinct from :class:`ProviderNetworkError` — we *did* reach the
+    provider and it *did* respond; it simply produced nothing. Issue #503:
+    on the streaming path this used to fall through to the success tail,
+    so an upstream that emitted zero content bytes was indistinguishable
+    from a model that had nothing to say. Callers reading an empty answer
+    blamed the model.
+
+    Carries the existing ``provider_unavailable`` wire code deliberately:
+    the cross-subsystem error-code enum (ADR 0003, verified by
+    ``tests/test_error_code_contract.py``) is a contract, and this failure
+    is already covered by that code's documented meaning ("upstream
+    provider is not reachable, returned 5xx, or has no adapter"). A new
+    class gives the internal precision without changing the wire surface.
+    """
+
+    code = "provider_unavailable"
+
+
 class ProviderUnsupportedError(ProviderAdapterError):
     """The adapter does not support this operation.
 

@@ -61,7 +61,7 @@ embeddings) and from the ingest-completion hook."""
 EXPORT_USER_DATA_JOB_NAME = "export_user_data_job"
 """D6 — GDPR Article 20 export job. Triggered by the API when a user
 calls ``POST /api/v1/users/me/export``; the worker assembles the ZIP
-and writes it to MinIO under ``exports/<user_id>/<job_id>.zip``."""
+and writes it to object storage under ``exports/<user_id>/<job_id>.zip``."""
 
 EASY_PLAYBOOK_JOB_NAME = "easy_playbook_generation_job"
 """M3-A6 Phase 5 — Easy Playbook generation pipeline. Triggered by

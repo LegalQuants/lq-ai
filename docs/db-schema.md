@@ -98,7 +98,7 @@ CREATE INDEX idx_user_sessions_expires ON user_sessions(expires_at);
 ### `user_export_jobs`
 
 Per-user GDPR Article 20 export job, tracked from queued → processing →
-completed/failed. The actual ZIP bytes live in MinIO under
+completed/failed. The actual ZIP bytes live in S3-compatible object storage under
 `storage_key`; the table itself is a job-state ledger that
 `POST /users/me/export` writes to and the worker mutates.
 
@@ -120,7 +120,7 @@ CREATE INDEX idx_user_export_jobs_expires ON user_export_jobs (expires_at) WHERE
 ```
 
 `expires_at` is set to `now() + 7 days` when the worker completes; an
-hourly GC cron clears `storage_key` (and deletes the MinIO bytes) once
+hourly GC cron clears `storage_key` (and deletes the object-store bytes) once
 that timestamp passes. The row itself is retained so status polling
 remains deterministic for a recently-deleted bundle.
 
@@ -848,7 +848,7 @@ CREATE TRIGGER trg_organization_profile_updated_at
 
 ### `files`
 
-Original uploaded files; the bytes themselves live in object storage (MinIO/S3).
+Original uploaded files; the bytes themselves live in S3-compatible object storage.
 
 ```sql
 CREATE TABLE files (
@@ -1760,13 +1760,13 @@ CREATE INDEX idx_autonomous_sessions_user_created ON autonomous_sessions(user_id
 CREATE INDEX idx_autonomous_sessions_active ON autonomous_sessions(halt_state, last_activity_at) WHERE status = 'running';
 ```
 
-### Governed orchestration records (0067, local implementation)
+### Governed orchestration records (0067–0070)
 
-These private tables support proposed ADR 0035. The local implementation connects
+These private tables implement accepted ADR 0035. The implementation connects
 them to the closed demonstration API and arq worker; live research remains disabled.
 The authoritative governance DDL is
 [`0067_orchestration_governance.py`](../api/alembic/versions/0067_orchestration_governance.py);
-the [lifecycle and transaction contract](plans/issue-563-durable-governance.md)
+the [lifecycle and transaction contract](adr/0035-governed-orchestration-run-tree.md#d5--durable-admission-short-transactions-and-explicit-uncertain-effects)
 defines allowed transitions and remaining integration gates.
 
 `autonomous_sessions` gains immutable tree identity. Depth-zero roots have no
@@ -1802,7 +1802,7 @@ authority, preserves generation/accounting/activity, and atomically audits actua
 extensions as `orchestration.claim_renewed`. Downgrade refuses owned accounts and
 preserves receipts/reservations once drained. Drain and rebuild all API workers
 together; old writers do not maintain the new constraint. See the
-[lease renewal evidence](plans/issue-563-lease-renewal.md).
+[lease renewal tests](../api/tests/autonomous/orchestration/test_leases.py).
 
 The internal `recover_expired_claims` transaction drains expired account ownership
 without requiring current execution permission. It advances each generation,
@@ -1811,7 +1811,7 @@ atomically across the root's affected accounts. Clean accounts preserve lifecycl
 progress and receipts; pending effects or orphaned reservations keep funds and
 mark the root uncertain. Live accounts are skipped. This also supplies cleanup
 for expired idle accounts before 0068 downgrade; no additional migration is
-needed. See [recovery evidence](plans/issue-563-expired-claim-recovery.md).
+needed. See [recovery tests](../api/tests/autonomous/orchestration/test_guard_recovery.py).
 
 The private `expire_root` operation validates the stored current plan and compares
 its deadline with database time under the root lock. At/past that deadline, clean
@@ -1820,14 +1820,14 @@ accounting remains `uncertain`, including unowned accounts; clean prior terminal
 outcomes are preserved. Claim cleanup and `orchestration.root_expired` or
 `orchestration.deadline_uncertain` audits share one transaction. It changes no
 legacy session status/phase, budget or receipt schema. See
-[root deadline evidence](plans/issue-563-root-deadline.md).
+[root deadline tests](../api/tests/autonomous/orchestration/test_deadlines.py).
 
 The internal recovery sweep discovers only root IDs, using UUID pagination with
 existing root/account indexes available, then closes discovery before invoking independent
 claim/deadline transactions. Its caller-carried scan cursor is not persisted in
 these tables and does not represent execution continuation. Page limits and
 per-stage timeouts bound work; there is no migration or new authority record.
-See [recovery sweep evidence](plans/issue-563-recovery-sweep.md).
+See [recovery sweep tests](../api/tests/autonomous/orchestration/test_watchdog.py).
 
 Migration **0069** creates the separate `orchestration_checkpoints` schema for
 the pinned Postgres saver 3.1.2: `checkpoint_migrations` (versions 0–9),

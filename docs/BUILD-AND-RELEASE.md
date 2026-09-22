@@ -190,13 +190,12 @@ git tag desktop-vX.Y.Z && git push origin desktop-vX.Y.Z
 
 - The launcher renders an `.env` at runtime and runs `docker-compose.release.yml` under its own compose
   project (`lq-ai-desktop`), pulling `ghcr.io/${LQ_AI_IMAGE_NAMESPACE:-legalquants}/lq-ai-<svc>:${LQ_AI_IMAGE_TAG}`.
-- **`LQ_AI_IMAGE_TAG`** pins the image version the launcher runs. The launcher config persists a tag
-  — **today the shipped default is `latest`** (`desktop/src/main/index.ts`), so a fresh install floats
-  to the newest published images rather than the set the `.dmg` was verified against. ADR 0025
-  decides that each `desktop-vX.Y.Z` should instead record the `vX.Y.Z` it ships against; changing
-  the default is tracked with that work. A hand-run stack pins it in `.env`
-  ([`.env.release.example`](../.env.release.example)). Pin to a released `vX.Y.Z` for reproducibility;
-  `latest` follows the newest published images.
+- **`LQ_AI_IMAGE_TAG`** pins the image version the launcher runs. The desktop release workflow
+  converts `desktop-vX.Y.Z` to `vX.Y.Z` and bakes it into the main process at build time. New installs
+  persist that exact tag; each launcher upgrade aligns the encrypted config and generated `.env` to
+  its baked release tag. Local developer builds retain `latest`. This implements ADR 0025 decision 2
+  and gives ADR 0037's migration walk a known target. A hand-run stack pins the same value in
+  [`.env.release.example`](../.env.release.example).
 - **`LQ_AI_IMAGE_NAMESPACE`** (default `legalquants`) overrides the GHCR namespace for forks/mirrors
   that publish `lq-ai-{api,gateway,web}` elsewhere — set it in `.env` (hand-run) so the compose pulls
   from your namespace.

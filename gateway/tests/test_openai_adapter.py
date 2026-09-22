@@ -21,6 +21,7 @@ from app.providers import (
     ProviderAuthError,
     ProviderHTTPError,
     ProviderNetworkError,
+    ProviderTimeoutError,
 )
 from app.providers.openai_schema import (
     ChatCompletionMessage,
@@ -894,3 +895,60 @@ async def test_chat_completion_forwards_tools_and_tool_choice_to_openai() -> Non
     # Regression pin: tools/tool_choice must appear in the upstream body.
     assert "tools" in sent and sent["tools"][0]["function"]["name"] == "get_time"
     assert sent["tool_choice"] == "auto"
+
+
+# --- #318 follow-through: client timeouts are labelled, not "upstream" -------
+
+
+@pytest.mark.unit
+async def test_chat_completion_client_timeout_raises_provider_timeout_error() -> None:
+    """A client-side timeout raises :class:`ProviderTimeoutError` — a
+    :class:`ProviderNetworkError` subclass (wire code unchanged) that the
+    routing log labels ``client_timeout:`` rather than ``upstream_error:``,
+    exactly as the Anthropic adapter does."""
+
+    with respx.mock(base_url="https://api.openai.com/v1") as router:
+        router.post("/chat/completions").mock(side_effect=httpx.ReadTimeout("read timed out"))
+        client = httpx.AsyncClient(base_url="https://api.openai.com/v1")
+        try:
+            adapter = OpenAIAdapter(
+                name="openai-prod",
+                base_url="https://api.openai.com/v1",
+                api_key="sk-test",
+                client=client,
+            )
+            with pytest.raises(ProviderTimeoutError) as excinfo:
+                await adapter.chat_completion(_basic_chat_request(), model="gpt-4o", stream=False)
+        finally:
+            await client.aclose()
+    exc = excinfo.value
+    assert isinstance(exc, ProviderNetworkError)
+    assert exc.code == "provider_unavailable"
+    assert "client-side timeout" in exc.message
+    assert exc.details["timeout_s"] == adapter._timeout
+
+
+@pytest.mark.unit
+async def test_streaming_client_timeout_raises_provider_timeout_error() -> None:
+    """The streaming path labels a client-side timeout the same way."""
+
+    with respx.mock(base_url="https://api.openai.com/v1") as router:
+        router.post("/chat/completions").mock(side_effect=httpx.ReadTimeout("read timed out"))
+        client = httpx.AsyncClient(base_url="https://api.openai.com/v1")
+        try:
+            adapter = OpenAIAdapter(
+                name="openai-prod",
+                base_url="https://api.openai.com/v1",
+                api_key="sk-test",
+                client=client,
+            )
+            stream = await adapter.chat_completion(
+                _basic_chat_request(stream=True), model="gpt-4o", stream=True
+            )
+            assert not isinstance(stream, ChatCompletionResponse)
+            with pytest.raises(ProviderTimeoutError) as excinfo:
+                async for _chunk in stream:
+                    pass
+        finally:
+            await client.aclose()
+    assert "client-side timeout" in excinfo.value.message

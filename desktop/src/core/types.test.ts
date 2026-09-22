@@ -6,7 +6,7 @@ describe('core constants', () => {
 		expect(EXPECTED_SERVICES).toEqual([
 			'postgres',
 			'redis',
-			'minio',
+			'rustfs',
 			'gateway',
 			'api',
 			'ingest-worker',
@@ -27,8 +27,8 @@ describe('core constants', () => {
 			gateway: 18021,
 			postgres: 25442,
 			redis: 26389,
-			minioApi: 29020,
-			minioConsole: 29021
+			objectStoreApi: 29020,
+			objectStoreConsole: 29021
 		})
 	})
 })

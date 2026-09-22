@@ -166,6 +166,10 @@ dev = [
     # Alembic migration run. Dev-extra only; not in the runtime SBOM.
     # Used by PyPI's Warehouse on the same stack (SQLAlchemy + Alembic + Postgres).
     "pytest-xdist>=3.5",
+    # Coverage gate (roadmap 4.3). Enforced in CI via --cov-fail-under=80 —
+    # the documented target, which measured coverage clears (81.49% on
+    # 2026-07-25). See .github/workflows/ci.yml.
+    "pytest-cov>=7.1",
     "httpx>=0.27",
     # Pinned exactly: ruff's formatter output changes across releases, so an
     # unpinned floor let CI (which resolves latest) drift ahead of dev venvs

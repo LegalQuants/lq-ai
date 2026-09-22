@@ -14,7 +14,7 @@ Per PRD §5.3:
   required.
 * Inference routing-log entries follow the same pattern (``ON DELETE
   SET NULL`` on ``inference_routing_log.user_id``).
-* MinIO bytes for the user's files (active and soft-deleted) are
+* Object-store bytes for the user's files (active and soft-deleted) are
   hard-deleted; the user's right-to-erasure includes prior soft-deletes.
 * Per-user error: log + continue. One stuck user must not block the
   rest of the batch.

@@ -6,6 +6,16 @@ The audience is anyone authoring a skill containing legal substance: practicing 
 
 For the contribution process (claim, draft, attest, review, merge), see [`skills/CONTRIBUTING.md`](../skills/CONTRIBUTING.md). This guide focuses on **how to author the skill itself** — what goes in `SKILL.md`, what goes in `reference/`, what goes in `examples/`, and what conventions the project expects.
 
+**Optional capabilities, disabled by default:**
+[ADR 0035 D8b–D8d](adr/0035-governed-orchestration-run-tree.md#d8b--optional-persistent-skill-workspaces)
+adds persistent skill workspaces and installed Python helpers. Bundled scripts
+require security review of their exact code, dependencies and runtime image in
+addition to any legal-content review. Helpers must treat supplied and saved text
+as data and preserve its restrictions through subsequent agent calls. General
+generated-code execution remains excluded. The [capability summary](plans/issue-563-skill-capabilities.md)
+describes the implementation and pending security gates. Production helper
+enablement requires those gates to be completed.
+
 ---
 
 ## Skill anatomy
@@ -28,7 +38,7 @@ my-skill/
 
 `SKILL.md` is the operational instruction the model executes when the skill is attached to a chat. Everything in `SKILL.md` becomes part of the prompt; everything in `reference/` is optionally surfaced when the skill's workflow references it. `examples/` are documentation for users and reviewers; they do not become part of the prompt by default.
 
-**Optional execution (#563, local implementation).** Declared `scripts/` helpers
+**Optional execution (#563).** Declared `scripts/` helpers
 can run through the private bundled-helper broker when an operator enables their
 exact installed version. Merely including a script does not enable execution.
 Generated-code execution is unsupported. The next section describes the optional

@@ -1197,8 +1197,16 @@ async def _handle_emit_artifact(
             cost_usd=Decimal("0"), outcome="skipped", data={"skipped": "no_target_kb"}
         )
     # Parse BEFORE the upload: a malformed kb_id must fail here, not at the
-    # KB-attach insert after the bytes have already landed in MinIO (orphan).
+    # KB-attach insert after the bytes have already landed in object storage (orphan).
     kb_uuid = uuid.UUID(str(kb_id))
+    # Ownership gate, on the same reasoning and at the same spot. The id came
+    # from ``session.params`` — copied there by schedule/watch/run-now from
+    # caller input — so the session owner must actually own the target KB
+    # (and it must not be archived) before any byte is uploaded. This is the
+    # write-path twin of the ``retrieve_chunks`` gate (#288, AG-01): a
+    # foreign id raises ``ValueError`` and the executor fails the session
+    # closed rather than attaching a file to another user's knowledge base.
+    await _assert_kb_owned(db, kb_uuid, session.user_id)
 
     # ── extract + sanitize (inner keys are LLM-emitted) ──────────────────
     # Strip NUL bytes: "\u0000" is valid JSON (LLM-emittable) but Postgres
@@ -1227,7 +1235,7 @@ async def _handle_emit_artifact(
     # ── upload FIRST — no DB rows on storage failure ─────────────────────
     # Mirrors the gateway_error honesty pattern: an artifact the user
     # cannot download must never appear as a File row. A failed-late
-    # orphan MinIO object is acceptable — the same non-reaped class as
+    # orphan object-store object is acceptable — the same non-reaped class as
     # ADR 0005's soft-deleted file bytes.
     try:
         await upload_bytes(storage_path=str(file_id), body=body, content_type=mime)

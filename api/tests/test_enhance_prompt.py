@@ -458,3 +458,38 @@ async def test_enhance_prompt_table_check_constraint_skip_requires_reason(
     with pytest.raises(IntegrityError):
         await db_session.flush()
     await db_session.rollback()
+
+
+# ---------------------------------------------------------------------------
+# Required-input binding (ADR 0007 §2)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+async def test_enhance_prompt_binds_raw_input_as_skill_input(
+    db_session: AsyncSession, caller: User
+) -> None:
+    """``raw_input`` is bound via ``lq_ai_skill_inputs`` so gateway enforcement passes.
+
+    The skill declares ``raw_input`` as required under ``lq_ai.inputs``; the
+    gateway refuses an attach that does not bind it. The YAML user turn is
+    still sent as the skill's working input.
+    """
+
+    gateway = _mock_gateway(YAML_EXPANSION)
+    try:
+        async with _client_with(db_session=db_session, gateway_mock=gateway) as client:
+            resp = await client.post(
+                "/api/v1/enhance-prompt",
+                headers=_bearer(caller),
+                json={"raw_input": "review this NDA"},
+            )
+    finally:
+        _cleanup()
+
+    assert resp.status_code == 200, resp.text
+    sent = gateway.chat_completion.call_args.args[0]
+    assert sent.lq_ai_skills == ["enhance-prompt"]
+    assert sent.lq_ai_skill_inputs == {"enhance-prompt": {"raw_input": "review this NDA"}}
+    assert sent.messages[0].role == "user"
+    assert "raw_input: review this NDA" in sent.messages[0].content

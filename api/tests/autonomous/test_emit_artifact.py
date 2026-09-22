@@ -558,3 +558,149 @@ async def test_emit_artifact_does_not_fire_watches(
 
     watch_spy.assert_not_called()
     assert await _count(db_session, AutonomousSession) == sessions_before
+
+
+# ---------------------------------------------------------------------------
+# Target-KB ownership gate on the write path (F2, rips4w advisory 2026-08-25)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+async def test_emit_artifact_rejects_foreign_kb_before_upload(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A session whose owner does not own ``params["kb_id"]`` cannot write.
+
+    Write-path twin of ``test_retrieve_chunks_rejects_foreign_kb_id``: the
+    target id is caller-supplied (schedule / watch / run-now copy it into the
+    session params), so ownership is re-checked at emit time. The gate sits
+    next to the ``uuid.UUID`` parse, BEFORE the object-storage upload, so a
+    rejection leaves no orphan object and no rows — and it raises (fail
+    closed) rather than returning a skip the drafting node would explain
+    away.
+    """
+    upload_calls = _stub_storage(monkeypatch)
+    _stub_embed(monkeypatch)
+
+    owner = await _make_user(db_session)
+    intruder = await _make_user(db_session)
+    kb = await _make_kb(db_session, owner=owner)
+    sess = await _make_session(
+        db_session, user=intruder, params={"kb_id": str(kb.id), "emit_artifacts": True}
+    )
+    before = await _all_counts(db_session)
+
+    with pytest.raises(ValueError, match="not accessible"):
+        await guarded_tool_call(
+            sess,
+            ToolIntent.emit_artifact,
+            {"artifact": {"name": "memo.md", "content": "# Planted memo"}},
+            db_session,
+            _StubGateway(),
+        )
+
+    assert upload_calls == []
+    assert await _all_counts(db_session) == before
+    attached = (
+        (
+            await db_session.execute(
+                select(KnowledgeBaseFile).where(KnowledgeBaseFile.kb_id == kb.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert attached == []
+
+
+@pytest.mark.integration
+async def test_emit_artifact_rejects_archived_kb_before_upload(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An archived target — even the owner's own — is unreachable, matching
+    the HTTP surface (``_load_visible_kb``) and the retrieval gate."""
+    upload_calls = _stub_storage(monkeypatch)
+    _stub_embed(monkeypatch)
+
+    user = await _make_user(db_session)
+    kb = await _make_kb(db_session, owner=user)
+    kb.archived_at = datetime.now(UTC)
+    await db_session.flush()
+    sess = await _make_session(
+        db_session, user=user, params={"kb_id": str(kb.id), "emit_artifacts": True}
+    )
+    before = await _all_counts(db_session)
+
+    with pytest.raises(ValueError, match="not accessible"):
+        await guarded_tool_call(
+            sess,
+            ToolIntent.emit_artifact,
+            {"artifact": {"name": "memo.md", "content": "# Memo"}},
+            db_session,
+            _StubGateway(),
+        )
+
+    assert upload_calls == []
+    assert await _all_counts(db_session) == before
+
+
+@pytest.mark.integration
+async def test_drafting_node_fails_closed_on_foreign_target_kb(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reachability pin: the drafting node does NOT swallow the write-gate.
+
+    Today every route into the artifact loop has already ownership-checked
+    the same ``kb_id`` at intake, and the routes that skip that check
+    short-circuit before drafting — incidental control flow that nobody wrote
+    as a security control. This test pins the property that matters if any
+    of that is refactored: with a foreign target in ``session.params`` and a
+    structured analysis that emits an artifact, the drafting node raises
+    (there is deliberately no try/except around artifact emission), nothing
+    is uploaded, and nothing is attached to the foreign KB. The executor's
+    crash handler then marks the session ``failed`` — the fail-closed shape
+    pinned by ``test_executor_skeleton.py``.
+    """
+    from app.autonomous.nodes import make_drafting_node
+
+    upload_calls = _stub_storage(monkeypatch)
+    _stub_embed(monkeypatch)
+
+    owner = await _make_user(db_session)
+    intruder = await _make_user(db_session)
+    kb = await _make_kb(db_session, owner=owner)
+    # ``current_phase`` left at intake: the node runs the transition itself
+    # (mirrors the ``running_session_at_drafting`` conftest fixture).
+    sess = await _make_session(
+        db_session,
+        user=intruder,
+        phase="intake",
+        params={"kb_id": str(kb.id), "emit_artifacts": True},
+    )
+    state: dict[str, Any] = {
+        "session_id": str(sess.id),
+        "analysis_content": (
+            "```json\n{"
+            '"findings": [], "suggested_memories": [], "suggested_precedents": [], '
+            '"privilege_concerns": [], "scope_concerns": [], '
+            '"artifacts": [{"name": "memo.md", "content_md": "# Planted memo"}]'
+            "}\n```"
+        ),
+        "analysis_outcome": "success",
+    }
+    node = make_drafting_node(db_session, _StubGateway())
+
+    with pytest.raises(ValueError, match="not accessible"):
+        await node(state)  # type: ignore[arg-type]
+
+    assert upload_calls == []
+    attached = (
+        (
+            await db_session.execute(
+                select(KnowledgeBaseFile).where(KnowledgeBaseFile.kb_id == kb.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert attached == []

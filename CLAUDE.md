@@ -104,7 +104,7 @@ Coverage target is 80% across `api/` and `gateway/`. Current PR CI does not enfo
 
 Bug fixes include a regression test. New API endpoints include unit tests for handler logic, integration tests for the endpoint, and OpenAPI schema-conformance tests.
 
-Detailed test strategy in [docs/test-strategy.md](docs/test-strategy.md) (M1 deliverable).
+Detailed test strategy — including the per-surface E2E coverage matrix and the honest statement of what CI runs today — in [docs/test-strategy.md](docs/test-strategy.md).
 
 ---
 
@@ -273,7 +273,7 @@ When you need to find something quickly:
 | Frontend dev loop (HMR) | [web/docs/frontend-dev.md](web/docs/frontend-dev.md) |
 | What's already implemented | Existing code in `api/`, `gateway/`, `web/` |
 | What's deferred | [docs/PRD.md §9](docs/PRD.md#9-deferred-enhancements-and-identified-future-work) |
-| Contributor-pickup mini-PRDs | [docs/proposals/](docs/proposals/) |
+| Contributor-pickup mini-PRDs | [docs/contribute/mini-prds/](docs/contribute/mini-prds/) |
 | Security policy | [SECURITY.md](SECURITY.md) |
 | Conduct policy | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) |
 

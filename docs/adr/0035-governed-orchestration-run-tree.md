@@ -1,7 +1,7 @@
 # ADR 0035 — Governed orchestration on the autonomous executor
 
-**Status:** Proposed; ratification pending.
-**Date:** 2026-09-12 · **Updated:** 2026-09-14
+**Status:** Accepted (2026-09-20) — committee-ratified at the weekly call.
+**Date:** 2026-09-12 · **Updated:** 2026-09-20
 **Tracks:** [Issue #563](https://github.com/LegalQuants/lq-ai/issues/563)
 
 ## Context
@@ -16,7 +16,7 @@ collection and synthesis with sample findings. Substantive research quality and
 additional verification are outside that demonstration's scope; existing
 governance and honest evidence status remain mandatory.
 
-## Proposed decision
+## Decision
 
 Extend the existing autonomous executor with a governed run tree. Use LangGraph
 for continuation, arq for scheduling and LQ-owned Postgres records for governance.
@@ -199,8 +199,10 @@ choice without claiming measured performance or maintenance superiority.
 This decision amends [ADR 0013 D1](0013-autonomous-layer-design-influences.md),
 [ADR 0020 D2/D4/D7](0020-governed-agentic-legal-matter-sessions.md) and
 [ADR 0016 P5](0016-transparency-and-governance-invariants.md) only as specified here.
-**Ratifiers and decision date: pending.** Implementation publication remains held
-until explicit ratification; production enablement is a separate gate.
+**Ratifier and decision date:** LQAI Committee, 2026-09-20
+([minutes](https://github.com/LegalQuants/lq-ai-community/blob/main/meetings/2026-09-20-weekly/notes.md)).
+Ratification clears the ADR publication hold; production enablement remains a
+separate gate.
 
 Before production adoption, review the runtime migration under
 [#524](https://github.com/LegalQuants/lq-ai/issues/524) and the integration evidence
@@ -222,5 +224,5 @@ source comparisons and experiment limits, with links to the full assessment. The
 requirements, acceptance criteria and release conditions. The
 [skill capability summary](../plans/issue-563-skill-capabilities.md) and
 [draft operator notes](../deploy/skill-capabilities.md) describe behavior and
-operational limits. These documents do not constitute ratification or shipped
-capability.
+operational limits. They are supporting evidence for this accepted decision,
+not evidence of shipped capability.

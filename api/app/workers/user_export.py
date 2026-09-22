@@ -1,7 +1,7 @@
 """User-data export worker — Task D6 (GDPR Article 20).
 
 Builds a ZIP archive of every piece of data the LQ.AI backend stores
-about one user, uploads it to MinIO under
+about one user, uploads it to object storage under
 ``exports/<user_id>/<job_id>.zip``, and updates the
 :class:`UserExportJob` row with the resulting key + 7-day expiry.
 
@@ -504,7 +504,7 @@ async def export_gc_job(ctx: dict[str, Any]) -> dict[str, Any]:
 async def build_export_zip_for_test(session: AsyncSession, user: User) -> bytes:
     """Test-only entry point that returns raw ZIP bytes.
 
-    Tests that don't need MinIO can call this and inspect the archive
+    Tests that don't need object storage can call this and inspect the archive
     directly via :mod:`zipfile` rather than spinning up arq.
     """
 

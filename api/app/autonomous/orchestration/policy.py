@@ -1,4 +1,4 @@
-"""Current, local authority checks for the proposed ADR 0035 pilot.
+"""Current, local authority checks for the accepted ADR 0035 pilot.
 
 The caller supplies the operator's current snapshot, never model-authored data.
 There is no default enabled policy and no gateway/cache I/O under store locks.

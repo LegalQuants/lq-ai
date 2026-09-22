@@ -43,13 +43,13 @@ The surface in-house counsel touches every day. Every row is wired end-to-end in
 
 | Capability | Status | Verification |
 |---|---|---|
-| Multi-turn chat with persistent history | M1 | `api/app/api/chats.py`; `web/cypress/e2e/chat.cy.ts` |
+| Multi-turn chat with persistent history | M1 | `api/app/api/chats.py` |
 | Matter (project) workspace with attached files / skills / KBs | M1 | `api/app/api/projects.py`; `web/src/routes/lq-ai/matters/[id]/+page.svelte` |
 | Slash-invoked skills with provenance pill | M1 | `web/cypress/e2e/wave-d2-skill-creator.cy.ts` Test 4 |
 | Built-in starter skills | M1 | `skills/*/SKILL.md` (read every prompt — no hidden instructions) |
 | Community skill catalog via [`LegalQuants/lq-skills`](https://github.com/LegalQuants/lq-skills) submodule | M1 (opt-in) | `skills/community/` is a git submodule, **empty until initialized** — run `git submodule update --init --remote skills/community` to populate it. The loader walks built-in + community paths with built-in winning on slug collision (`api/app/skills/loader.py`); on a fresh clone with no submodule checkout there are no community skills. |
 | Skill capture / wizard authoring / fork / versions tab | M1 | `web/cypress/e2e/wave-d2-skill-creator.cy.ts` Tests 1–6 |
-| Optional skill persistence and installed bundled Python helpers | #563 local implementation; disabled by default, pending ADR/publication | Owner/matter/skill/version storage with explicit read/write, inspection/export/reset; named reviewed scripts run through an isolated private broker. Generated-code execution is excluded. [Contract and evidence](plans/issue-563-skill-capabilities.md), [runtime limits and supported paths](deploy/skill-capabilities.md). |
+| Optional skill persistence and installed bundled Python helpers | #563 implementation under review; disabled by default, release/security gates pending | Owner/matter/skill/version storage with explicit read/write, inspection/export/reset; named reviewed scripts run through an isolated private broker. Generated-code execution is excluded. [Contract and evidence](plans/issue-563-skill-capabilities.md), [runtime limits and supported paths](deploy/skill-capabilities.md). |
 | Saved Prompts library with one-click "Use in chat" | M1 | `api/app/api/saved_prompts.py`; `web/cypress/e2e/wave-m1-final-surfaces.cy.ts` Test 1 |
 | Knowledge bases — create, attach documents, ingest to `ready` (hybrid BM25 + vector retrieval) | M1 | `api/app/api/knowledge_bases.py`; `api/app/workers/document_pipeline.py` |
 | Ingest formats — **PDF** (PyMuPDF) and **plain text / Markdown** (`parse_text`, verbatim canonical text → exact-match citations; non-UTF-8 → `decode_error`). DOCX is roadmap. A Docling dependency shipped alongside PyMuPDF but **has never produced output** (broken since C5); ingestion is PyMuPDF-only and Docling is being removed per ADR 0026. | M1 (PDF); post-v0.5.0 (text/md, DE-332) | `api/app/pipeline/parsers.py`; `api/app/pipeline/ingest.py` |
@@ -180,7 +180,7 @@ An opt-in background executor that does real in-loop agentic work under hard bra
 | In-app notifications (durable; best-effort email transport) | M4 | `/autonomous/notifications/*`; table `autonomous_notifications` (migration `0040`) |
 | Per-user opt-in (off by default) | M4 | `User.autonomous_enabled` (migration `0044`); spawn paths + mutate endpoints gated |
 | Findings persistence (`autonomous_findings` written at the `emit_finding` chokepoint; `GET /autonomous/sessions/{id}/findings`; `?source_session_id=` filter on `GET /autonomous/memory`, precedents excluded — recurrence-aggregated) | post-v0.4.0 (#135) | `api/app/api/autonomous.py`; table `autonomous_findings` (migration `0046`) |
-| Document-grade artifacts (opt-in `emit_artifacts`, default OFF; drafting `emit_artifact` chokepoint direct-writes a real KB document — MinIO upload-first, File `ready` + Document + chunks, direct KB attach bypassing watch-fire so no loop; markdown/plain only; `GET /autonomous/sessions/{id}/artifacts`, owner-gated; notification payload `artifact_count`) | post-v0.4.0 (#138) | `api/app/autonomous/guard.py` (`_handle_emit_artifact`), `api/app/api/autonomous.py`; table `autonomous_artifacts` (migration `0047`, session CASCADE / file SET NULL — the document outlives the session) |
+| Document-grade artifacts (opt-in `emit_artifacts`, default OFF; drafting `emit_artifact` chokepoint direct-writes a real KB document — object-storage upload-first, File `ready` + Document + chunks, direct KB attach bypassing watch-fire so no loop; markdown/plain only; `GET /autonomous/sessions/{id}/artifacts`, owner-gated; notification payload `artifact_count`) | post-v0.4.0 (#138) | `api/app/autonomous/guard.py` (`_handle_emit_artifact`), `api/app/api/autonomous.py`; table `autonomous_artifacts` (migration `0047`, session CASCADE / file SET NULL — the document outlives the session) |
 | Matter binding on schedules/watches (`project_id` accepted on create + PATCH incl. clear-to-null; ownership validated at all five assignment sites — create_schedule/create_watch/run-now/two PATCHes — closing a pre-existing IDOR) | post-v0.4.0 (#133) | `api/app/api/autonomous.py` |
 | Retrieval ownership scoping (`retrieve_chunks` verifies the session owner owns the model-supplied `kb_id`/`file_id` before retrieval; mirrors the HTTP visibility predicates (owner scope + `archived_at`/`deleted_at IS NULL`); foreign or unknown ids fail closed with a 404-shaped error, closing a cross-user read reachable via prompt-injected planner args) | post-v0.4.0 (#288 AG-01) | `api/app/autonomous/guard.py` |
 | Worker-side skill registry (shared `app/skills/bootstrap.py::install_skill_registry` from both the api lifespan and the arq-worker `on_startup`; uniform fail-fast on a missing/unreadable skills dir; arq-worker mounts `./skills:/skills:ro` + `LQ_AI_SKILLS_DIR`; SIGHUP reload stays api-only) | post-v0.4.0 (#139) | `api/app/skills/bootstrap.py`; `api/app/workers/arq_setup.py`; `docker-compose.yml` (arq-worker volume) |
@@ -276,14 +276,15 @@ Engineering rigor is measurable, not asserted. Test **file** counts below are ve
 
 | Practice | Status | Verification |
 |---|---|---|
-| Backend tests (pytest, live Postgres) | M1–milestone | 233 `test_*.py` files in `api/tests/` (incl. `tests/autonomous/`, `tests/citation/`, `tests/tabular/`; pass count refreshed in CI per the `.github/workflows/ci.yml` API gate); `cd api && DATABASE_URL=… pytest` |
-| Gateway tests (pytest) | M1–milestone | 67 `test_*.py` files in `gateway/tests/`; `cd gateway && pytest` |
-| Frontend unit tests (Vitest) | M1–milestone | 80 `*.test.ts` files in `web/src/`; `cd web && npx vitest run` |
-| Cypress E2E (LQ.AI shell) | M1–milestone | 17 specs in `web/cypress/e2e/` |
+| Documented test strategy + per-surface E2E coverage matrix | shipped (roadmap 4.1) | [`docs/test-strategy.md`](test-strategy.md) — inventory, surface × depth matrix with real spec paths, CI-reality statement, flake + gap registers |
+| Backend tests (pytest, live Postgres) | M1–milestone | 238 `test_*.py` files in `api/tests/` (incl. `tests/autonomous/`, `tests/citation/`, `tests/tabular/`; pass count refreshed in CI per the `.github/workflows/ci.yml` API gate); `cd api && DATABASE_URL=… pytest` |
+| Gateway tests (pytest) | M1–milestone | 74 `test_*.py` files in `gateway/tests/`; `cd gateway && pytest` |
+| Frontend unit tests (Vitest) | M1–milestone | 84 `*.test.ts` files in `web/src/`; `cd web && npx vitest run` |
+| Cypress E2E (LQ.AI shell) | M1–milestone | 13 spec files in `web/cypress/e2e/` (all LQ.AI-authored; not run in CI, see [`docs/test-strategy.md`](test-strategy.md) §2) |
 | Ruff lint + format (Python) | M1–M4 | `.github/workflows/ci.yml`: `ruff check api scripts` + `ruff format --check` |
 | mypy (api standard, gateway strict) | M1–M4 | CI `mypy app` per subsystem |
 | svelte-check (LQ.AI-owned code) | M1–M4 | `cd web && npm run check:lq-ai` (0 errors on `src/{lib,routes}/lq-ai/**`); inherited OpenWebUI debt tracked as DE-262 (§8.1) |
-| Coverage gate (target 80% api / 90% gateway) | not enforced | CI runs pytest but does not fail below threshold |
+| Coverage gate (target 80% api / 90% gateway) | enforced — api at the 80% target; gateway as a no-decrease ratchet at 88% (target not yet met; delta = DE-395) | CI pytest runs with `--cov-fail-under` (`.github/workflows/ci.yml`). Measured 2026-07-25: api 81.49% (12242/15023 stmts) → gated at the 80% target; gateway 88.94% (4464/5019 stmts) → gated at the measured floor of 88%, not the 90% target |
 | Mutation / property-based testing, eval harness, Cypress-in-CI | not yet | On the engineering-discipline roadmap |
 | OpenSSF Scorecard / Best Practices Badge | not yet (community-friendly) | mini-PRDs at `docs/contribute/mini-prds/` |
 | SLSA-3 provenance / Sigstore-signed images / SBOM per release | committed | `docs/security/releases/README.md` |
@@ -299,13 +300,13 @@ The web frontend is a fork of OpenWebUI (ADR 0001). `npm run check` (full scope)
 
 | Surface | Status | Verification |
 |---|---|---|
-| Docker Compose reference deployment | M1–M4 | [`docker-compose.yml`](../docker-compose.yml) — always-on: postgres, redis, minio, gateway, api, ingest-worker, arq-worker, web |
+| Docker Compose reference deployment | M1–M4 + ADR 0036/0037 operations | [`docker-compose.yml`](../docker-compose.yml) — always-on: postgres, redis, rustfs, gateway, api, ingest-worker, arq-worker, web; the opt-in `ops` profile hosts the journaled migration CLI |
 | Local-only profile (Ollama) | M1 | `docker compose --profile local up` — adds the Ollama sidecar. Scanned-PDF OCR / PaddleOCR is not implemented (DE-320); the prior placeholder sidecar was removed. |
 | Slack / Teams bridge profiles | M3 | `docker compose --profile slack up` / `--profile teams up` |
 | Worker skill-registry bootstrap (operator-visible change, #139) | post-v0.4.0 | The api now **fails fast** on a missing/unreadable skills dir at startup (it previously logged a warning and booted with an empty registry); the arq-worker mounts `./skills:/skills:ro` and installs the same registry. `api/app/skills/bootstrap.py`; `docker-compose.yml` |
 | Helm chart for Kubernetes | drafted | [`deploy/helm/lq-ai/`](../deploy/helm/lq-ai/) (worker-migration parity with the compose single-migrator fix is a community item — DE-327) |
 | OpenTelemetry instrumentation (traces + metrics + domain spans) | M1 baseline + M3 domain spans + M4 autonomous spans | [`docs/observability.md`](observability.md) |
-| Reverse-proxy/TLS recipes · backup tooling · runbooks · SLOs · status page · postmortem · DR cadence | not yet | mini-PRDs / deferred |
+| Reverse-proxy/TLS recipes · backup tooling · complete runbook set · SLOs · status page · postmortem · DR cadence | partial — MinIO→RustFS migration runbook shipped; broader set not yet | `docs/runbooks/minio-to-rustfs.md`; mini-PRDs / deferred |
 
 ---
 

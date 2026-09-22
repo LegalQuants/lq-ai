@@ -18,20 +18,25 @@ nothing in this module persists it.
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
+from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
 
 __all__ = [
     "BRIDGE_MASTER_KEY_ENV",
     "MCP_MASTER_KEY_ENV",
+    "PAYLOAD_ENVELOPE_MARKER",
     "BridgeEncryptionError",
     "BridgeMasterKeyMissing",
     "BridgeTokenEncryptor",
     "MCPEncryptionError",
     "MCPMasterKeyMissing",
     "MCPTokenEncryptor",
+    "decrypt_payload_envelope",
+    "encrypt_payload_envelope",
     "generate_master_key",
 ]
 
@@ -209,3 +214,78 @@ class MCPTokenEncryptor:
                 f"MCP ciphertext does not decrypt under {MCP_MASTER_KEY_ENV}. "
                 f"Wrong master key, or the token was generated with a different one."
             ) from exc
+
+
+# --- JSONB payload envelope (DE-358 item 5) ----------------------------------
+# Envelope encryption for sensitive JSONB columns (chat_pending_tool_call's
+# ``tool_call_args`` / ``resume_state``): the payload dict is serialized to
+# JSON, Fernet-encrypted under LQ_AI_MCP_MASTER_KEY, and stored inside the
+# existing JSONB column as {"_lq_ai_enc": 1, "token": "<fernet-token>"} —
+# no schema change, no migration.
+
+PAYLOAD_ENVELOPE_MARKER = "_lq_ai_enc"
+"""Key that marks a stored JSONB dict as an encrypted payload envelope."""
+
+_PAYLOAD_ENVELOPE_VERSION = 1
+
+
+def encrypt_payload_envelope(
+    payload: dict[str, Any],
+    *,
+    encryptor: MCPTokenEncryptor | None = None,
+) -> dict[str, Any]:
+    """Wrap *payload* in an encrypted envelope dict for JSONB storage.
+
+    Serializes *payload* to compact JSON and encrypts it with the MCP
+    master key (:data:`MCP_MASTER_KEY_ENV`).  Raises
+    :class:`MCPMasterKeyMissing` when the key is unset — the persist
+    path MUST fail closed rather than fall back to a plaintext write.
+
+    ``encryptor`` lets tests inject a hermetic key; production callers
+    omit it and the key is read from the environment.
+    """
+    enc = encryptor if encryptor is not None else MCPTokenEncryptor.from_environ()
+    token = enc.encrypt(json.dumps(payload, separators=(",", ":")))
+    return {PAYLOAD_ENVELOPE_MARKER: _PAYLOAD_ENVELOPE_VERSION, "token": token.decode("ascii")}
+
+
+def decrypt_payload_envelope(
+    stored: dict[str, Any],
+    *,
+    encryptor: MCPTokenEncryptor | None = None,
+) -> dict[str, Any]:
+    """Unwrap a stored JSONB dict written by :func:`encrypt_payload_envelope`.
+
+    A dict without the :data:`PAYLOAD_ENVELOPE_MARKER` key is a legacy
+    plaintext payload and is returned as-is.  (Transition fallback:
+    pending-tool-call rows carry a ~15-minute TTL, so plaintext rows age
+    out within minutes of the deploy that introduced the envelope; this
+    fallback can be removed after one release.)
+
+    Raises :class:`MCPEncryptionError` when the envelope is malformed or
+    the token does not decrypt (tampered ciphertext / wrong master key)
+    — the error message never contains the ciphertext or any payload
+    contents.  Raises :class:`MCPMasterKeyMissing` when the master key
+    is unset while an envelope is present.
+    """
+    if PAYLOAD_ENVELOPE_MARKER not in stored:
+        # Legacy plaintext row — remove this fallback after one release.
+        return dict(stored)
+
+    token = stored.get("token")
+    if not isinstance(token, str) or not token:
+        raise MCPEncryptionError("payload envelope is malformed (missing or non-string token).")
+
+    enc = encryptor if encryptor is not None else MCPTokenEncryptor.from_environ()
+    try:
+        token_bytes = token.encode("ascii")
+    except UnicodeEncodeError as exc:
+        raise MCPEncryptionError("payload envelope token is not ASCII.") from exc
+    plaintext = enc.decrypt(token_bytes)
+    try:
+        parsed = json.loads(plaintext)
+    except ValueError as exc:
+        raise MCPEncryptionError("payload envelope decrypted to invalid JSON.") from exc
+    if not isinstance(parsed, dict):
+        raise MCPEncryptionError("payload envelope decrypted to a non-object JSON value.")
+    return parsed

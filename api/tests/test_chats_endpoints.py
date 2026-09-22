@@ -999,3 +999,66 @@ async def test_session_owned_chat_excluded_from_list(
     titles = {c["title"] for c in resp.json()["items"]}
     assert "Visible" in titles
     assert "Session" not in titles  # session-owned chat is hidden from the list
+
+
+# ---------------------------------------------------------------------------
+# Issue #503: an empty turn is a failure, not an answer
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_streaming_empty_turn_is_an_error_not_an_empty_success(
+    client: AsyncClient,
+    db_user: User,
+    db_session: AsyncSession,
+) -> None:
+    """A gateway stream that ends without a single content delta and without
+    an error frame must not be presented as a success (issue #503).
+
+    The wire must carry the ``provider_unavailable`` envelope and no
+    ``complete`` frame, and — because the guard fires *before* persistence —
+    the stored assistant row must carry the same ``error_code`` so history
+    replay (which excludes errored rows) never feeds the phantom turn back.
+    """
+
+    chat = Chat(owner_id=db_user.id, title="x")
+    db_session.add(chat)
+    await db_session.flush()
+    token = _bearer_for(db_user)
+
+    respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200, content="data: [DONE]\n\n", headers={"content-type": "text/event-stream"}
+        )
+    )
+
+    async with client.stream(
+        "POST",
+        f"/api/v1/chats/{chat.id}/messages",
+        json={"content": "hi", "stream": True},
+        headers={"Authorization": f"Bearer {token}"},
+    ) as resp:
+        assert resp.status_code == 200
+        events: list[dict[str, object]] = []
+        async for line in resp.aiter_lines():
+            line = line.strip()
+            if not line:
+                continue
+            if line == "data: [DONE]":
+                break
+            events.append(_json.loads(line[len("data:") :].strip()))
+
+    assert not [e for e in events if e.get("type") == "complete"], events
+    error_events = [e for e in events if "detail" in e]
+    assert len(error_events) == 1, events
+    detail = error_events[0]["detail"]
+    assert isinstance(detail, dict)
+    assert detail["code"] == "provider_unavailable"
+
+    rows = await db_session.execute(
+        select(Message).where(Message.chat_id == chat.id, Message.role == "assistant")
+    )
+    asst = rows.scalar_one()
+    assert asst.content == ""
+    assert asst.error_code == "provider_unavailable"

@@ -574,12 +574,6 @@ html.high-contrast.dark .ProseMirror p.is-editor-empty:first-child::before {
 	}
 }
 
-@media (prefers-color-scheme: dark) {
-	.ProseMirror p.is-editor-empty:first-child::before {
-		color: #757575;
-	}
-}
-
 .ai-autocompletion::after {
 	color: #a0a0a0;
 
