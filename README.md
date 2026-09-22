@@ -6,6 +6,13 @@
 [![PRD](https://img.shields.io/badge/PRD-v0.2-green.svg)](docs/PRD.md)
 [![Status](https://img.shields.io/badge/Status-Pre--Release-orange.svg)](#project-status)
 [![SLSA 3](https://img.shields.io/badge/SLSA-Level%203-green)](https://slsa.dev) [![Security Policy](https://img.shields.io/badge/Security-Policy-blue)](./SECURITY.md)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/LegalQuants/lq-ai/badge)](https://scorecard.dev/viewer/?uri=github.com/LegalQuants/lq-ai)
+<!-- OpenSSF Best Practices badge — PLACEHOLDER. The numeric project ID only
+     exists after a maintainer registers the project at
+     https://www.bestpractices.dev (see docs/security/best-practices-criteria.md,
+     maintainer step M2). Once awarded, uncomment and replace <BP_PROJECT_ID>:
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/<BP_PROJECT_ID>/badge)](https://www.bestpractices.dev/projects/<BP_PROJECT_ID>)
+-->
 
 LQ.AI is a self-hosted AI platform purpose-built for legal teams. It delivers conversational chat with persistent history and matter-scoped projects, character-verifiable citations against source documents (M2's four-stage Citation Engine), a privacy-preserving anonymization layer for cloud inference (M2), reusable workflow skills authored in the open [agentskills.io / Anthropic Claude Skills](https://github.com/anthropics/skills) format, and a curated library of starter skills for the everyday work lawyers actually do — running on a laptop, an internal server, or a cloud VM, against the customer's choice of model (Anthropic, OpenAI, Azure OpenAI, or local Ollama out of the box), with zero license fees.
 
