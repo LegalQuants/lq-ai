@@ -25,7 +25,7 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 
 class TriggerKind(StrEnum):
@@ -207,16 +207,17 @@ class AutonomousManualRunRequest(BaseModel):
     resulting receipt — before arming it as a schedule or watch. Exactly
     one of ``playbook_id`` / ``skill_ref`` must be set (the agent runs an
     existing artifact; custom-task authoring is out of scope for Phase 1).
-    ``target_kb_id`` and ``project_id`` are optional scope. ``max_cost_usd``
-    is the per-run cap (NULL = fall back to
-    ``settings.autonomous_default_max_cost_usd`` at spawn time, so R4 always
-    trips). ``emit_artifacts`` opts the run in to document-grade artifacts
+    ``target_kb_id`` is optional scope; ``project_id`` is optional only for
+    runs without a query. ``max_cost_usd`` is the per-run cap (NULL = fall
+    back to ``settings.autonomous_default_max_cost_usd`` at spawn time, so
+    R4 always trips). ``emit_artifacts`` opts the run in to document-grade artifacts
     (Donna ask #8) — a manual run has no schedule/watch row to inherit the
     flag from, so the request body IS the opt-in source; defaults off,
     matching the schedule/watch column default.
 
     ``query`` (item 1.6 — matter intake) is an optional free-text matter
-    description. When present it lands in ``session.params["query"]`` and
+    description. When present, an owned ``project_id`` is required (ADR-0020
+    D3). The trimmed description lands in ``session.params["query"]`` and
     the executor routes the session through the ADR-0020 matter loop
     (planner goal = the description); when omitted the session stays on
     the existing query-less path — no behavior change for current
@@ -227,15 +228,23 @@ class AutonomousManualRunRequest(BaseModel):
     playbook_id: uuid.UUID | None = None
     skill_ref: str | None = None
     target_kb_id: uuid.UUID | None = None
-    project_id: uuid.UUID | None = None
+    project_id: uuid.UUID | None = Field(
+        default=None,
+        description="Optional for query-less runs; required and owned when query is supplied.",
+    )
     max_cost_usd: Decimal | None = None
     emit_artifacts: bool = False
-    query: Annotated[str, StringConstraints(min_length=1, max_length=10_000)] | None = None
+    query: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=10_000)]
+        | None
+    ) = None
 
     @model_validator(mode="after")
     def _exactly_one_target(self) -> AutonomousManualRunRequest:
         if (self.playbook_id is None) == (self.skill_ref is None):
             raise ValueError("exactly one of playbook_id or skill_ref must be set")
+        if self.query is not None and self.project_id is None:
+            raise ValueError("project_id is required when query is supplied")
         return self
 
 

@@ -20,7 +20,7 @@ function baseForm(overrides: Partial<IntakeFormState> = {}): IntakeFormState {
 		skillRef: 'nda-review',
 		playbookId: '',
 		kbId: '',
-		projectId: '',
+		projectId: 'proj-1',
 		maxCostUsd: '',
 		...overrides
 	};
@@ -33,7 +33,7 @@ function baseForm(overrides: Partial<IntakeFormState> = {}): IntakeFormState {
 describe('validateIntakeForm', () => {
 	it('accepts a description + skill target', () => {
 		const errors = validateIntakeForm(baseForm());
-		expect(errors).toEqual({ query: null, target: null });
+		expect(errors).toEqual({ query: null, target: null, project: null });
 		expect(isIntakeFormValid(errors)).toBe(true);
 	});
 
@@ -59,6 +59,12 @@ describe('validateIntakeForm', () => {
 		expect(isIntakeFormValid(errors)).toBe(false);
 	});
 
+	it('requires a matter / project for the described run', () => {
+		const errors = validateIntakeForm(baseForm({ projectId: '' }));
+		expect(errors.project).toContain('Select a matter / project');
+		expect(isIntakeFormValid(errors)).toBe(false);
+	});
+
 	it('requires a playbook when targetKind=playbook', () => {
 		const missing = validateIntakeForm(baseForm({ targetKind: 'playbook', playbookId: '' }));
 		expect(missing.target).toBeTruthy();
@@ -69,10 +75,11 @@ describe('validateIntakeForm', () => {
 		expect(chosen.target).toBeNull();
 	});
 
-	it('reports both errors independently', () => {
-		const errors = validateIntakeForm(baseForm({ query: '', skillRef: '' }));
+	it('reports all errors independently', () => {
+		const errors = validateIntakeForm(baseForm({ query: '', skillRef: '', projectId: '' }));
 		expect(errors.query).toBeTruthy();
 		expect(errors.target).toBeTruthy();
+		expect(errors.project).toBeTruthy();
 	});
 });
 
@@ -81,9 +88,13 @@ describe('validateIntakeForm', () => {
 // ---------------------------------------------------------------------------
 
 describe('buildIntakeRunRequest', () => {
-	it('builds a minimal skill-targeted body: trimmed query + skill_ref only', () => {
+	it('builds a minimal skill-targeted body with trimmed query and project', () => {
 		const body = buildIntakeRunRequest(baseForm({ query: '  Review the NDA.  ' }));
-		expect(body).toEqual({ query: 'Review the NDA.', skill_ref: 'nda-review' });
+		expect(body).toEqual({
+			query: 'Review the NDA.',
+			skill_ref: 'nda-review',
+			project_id: 'proj-1'
+		});
 	});
 
 	it('uses playbook_id (not skill_ref) when targetKind=playbook', () => {
@@ -94,7 +105,7 @@ describe('buildIntakeRunRequest', () => {
 		expect(body).not.toHaveProperty('skill_ref');
 	});
 
-	it('includes optional scope fields only when set', () => {
+	it('includes optional knowledge base and cost cap only when set', () => {
 		const body = buildIntakeRunRequest(
 			baseForm({ kbId: 'kb-1', projectId: 'proj-1', maxCostUsd: ' 1.50 ' })
 		);
@@ -107,7 +118,12 @@ describe('buildIntakeRunRequest', () => {
 	it('omits blank optional fields entirely (non-null-subset convention)', () => {
 		const body = buildIntakeRunRequest(baseForm());
 		expect(body).not.toHaveProperty('target_kb_id');
-		expect(body).not.toHaveProperty('project_id');
+		expect(body.project_id).toBe('proj-1');
 		expect(body).not.toHaveProperty('max_cost_usd');
+	});
+
+	it('preserves a zero cost cap as a string', () => {
+		const body = buildIntakeRunRequest(baseForm({ maxCostUsd: '0' }));
+		expect(body.max_cost_usd).toBe('0');
 	});
 });

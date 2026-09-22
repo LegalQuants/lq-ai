@@ -1327,7 +1327,8 @@ async def create_schedule(
         ) from exc
 
     # Validate matter ownership — a non-null project_id the caller doesn't own
-    # is rejected 404 (id-probing-safe). NULL = no matter; no check needed.
+    # is rejected 404 (id-probing-safe). NULL is allowed only for query-less
+    # runs, as enforced by AutonomousManualRunRequest.
     if body.project_id is not None:
         await _load_owned_project(db, project_id=body.project_id, user_id=user.id)
 
@@ -1435,7 +1436,7 @@ async def _spawn_manual_session(
     responses={
         201: {"description": "Session spawned"},
         403: {"description": "Autonomous layer not enabled for this user"},
-        422: {"description": "Invalid target (need exactly one of playbook_id/skill_ref)"},
+        422: {"description": "Invalid target or missing project_id for a query"},
         404: {"description": "Referenced project not found"},
         401: {"description": "Not authenticated"},
     },

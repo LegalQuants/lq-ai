@@ -2,16 +2,21 @@
  * Item 1.6 — Matter-intake E2E: describe → session → receipt.
  *
  * Intercept-based (deterministic; no real seed data), mirroring
- * m4-autonomous.cy.ts. Two scenarios:
+ * m4-autonomous.cy.ts. Six scenarios:
  *
  *   1. Describe → session → receipt — fill the matter description, pick a
  *      skill, submit; POST /autonomous/run-now carries `query`; the app
  *      navigates to the session receipt page.
  *   2. Validation — submitting without a description surfaces the inline
  *      field error and does NOT fire the run-now endpoint.
+ *   3. A project is required for a described run.
+ *   4. Project loading failure blocks submission and offers Retry.
+ *   5. An empty project list links to matter creation.
+ *   6. Edited, cleared, and zero cost caps serialize correctly.
  *
  * Auth strategy: lq_ai_auth in localStorage + intercepted /users/me and
- * preferences, exactly as in m4-autonomous.cy.ts.
+ * preferences, exactly as in m4-autonomous.cy.ts. The shared WebUI layout's
+ * config and session endpoints are intercepted too.
  *
  * Run:
  *   docker compose up -d
@@ -21,6 +26,7 @@
 /// <reference types="cypress" />
 
 const SESSION_ID = 'sess-0016-aaaa-bbbb-cccc-dddddddddddd';
+const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 const MATTER_QUERY =
 	'Review the Acme NDA for a mutual confidentiality carve-out and flag survival terms longer than 3 years.';
 
@@ -38,7 +44,7 @@ const mockUser = {
 const mockSession = {
 	id: SESSION_ID,
 	user_id: 'u1',
-	project_id: null,
+	project_id: PROJECT_ID,
 	trigger_kind: 'manual' as const,
 	trigger_ref: null,
 	current_phase: 'intake' as const,
@@ -74,6 +80,8 @@ const mockReceipt = {
 };
 
 function setAuthStorage(win: Window): void {
+	win.localStorage.setItem('token', 'fake-token-1-6');
+	win.localStorage.setItem('locale', 'en-US');
 	win.localStorage.setItem(
 		'lq_ai_auth',
 		JSON.stringify({
@@ -97,6 +105,15 @@ function setAuthStorage(win: Window): void {
 }
 
 function interceptBaseRequests(): void {
+	// The shared OpenWebUI layout also needs its own bootstrap endpoints.
+	cy.intercept('GET', '**/api/config', {
+		statusCode: 200,
+		body: { name: 'LQ.AI', features: { enable_websocket: false } }
+	}).as('getBackendConfig');
+	cy.intercept('GET', '**/api/v1/auths/', {
+		statusCode: 200,
+		body: { id: 'u1', name: 'Admin', email: 'admin@lq.ai', role: 'admin' }
+	}).as('getWebuiUser');
 	cy.intercept('GET', '**/api/v1/users/me', { statusCode: 200, body: mockUser }).as('getMe');
 	cy.intercept('GET', '**/api/v1/admin/bootstrap-status', {
 		statusCode: 200,
@@ -136,7 +153,10 @@ function interceptBaseRequests(): void {
 	}).as('listSkills');
 	cy.intercept('GET', '**/api/v1/playbooks**', { statusCode: 200, body: [] }).as('listPlaybooks');
 	cy.intercept('GET', '**/api/v1/knowledge-bases**', { statusCode: 200, body: [] }).as('listKbs');
-	cy.intercept('GET', '**/api/v1/projects**', { statusCode: 200, body: [] }).as('listProjects');
+	cy.intercept('GET', '**/api/v1/projects**', {
+		statusCode: 200,
+		body: [{ id: PROJECT_ID, name: 'Acme NDA', slug: 'acme-nda' }]
+	}).as('listProjects');
 }
 
 describe('Item 1.6 — Matter intake: describe → session → receipt', () => {
@@ -168,6 +188,7 @@ describe('Item 1.6 — Matter intake: describe → session → receipt', () => {
 
 		// Skill is the default target — pick the seeded skill.
 		cy.get('select[aria-label="Select skill"]', { timeout: 10000 }).select('nda-review');
+		cy.get('#matter-project').select(PROJECT_ID);
 
 		// Submit.
 		cy.contains('button', 'Run on this matter').click();
@@ -175,7 +196,8 @@ describe('Item 1.6 — Matter intake: describe → session → receipt', () => {
 		// The run-now body carries the matter description as `query`.
 		cy.wait('@runNow').its('request.body').should('deep.include', {
 			query: MATTER_QUERY,
-			skill_ref: 'nda-review'
+			skill_ref: 'nda-review',
+			project_id: PROJECT_ID
 		});
 
 		// On 201 the app navigates to the new session's receipt (plan trace).
@@ -197,6 +219,7 @@ describe('Item 1.6 — Matter intake: describe → session → receipt', () => {
 
 		// Pick a skill but leave the description blank.
 		cy.get('select[aria-label="Select skill"]', { timeout: 10000 }).select('nda-review');
+		cy.get('#matter-project').select(PROJECT_ID);
 		cy.contains('button', 'Run on this matter').click();
 
 		// Inline field error on the description; endpoint never fired.
@@ -205,5 +228,66 @@ describe('Item 1.6 — Matter intake: describe → session → receipt', () => {
 		cy.then(() => {
 			expect(runNowCalled).to.equal(false);
 		});
+	});
+
+	it('requires a matter / project before sending a described run', () => {
+		let runNowCalled = false;
+		cy.intercept('POST', '**/api/v1/autonomous/run-now', () => {
+			runNowCalled = true;
+		});
+		cy.visit('/lq-ai/autonomous/matters', { onBeforeLoad: setAuthStorage });
+		cy.get('#matter-query').type(MATTER_QUERY);
+		cy.get('select[aria-label="Select skill"]').select('nda-review');
+		cy.contains('button', 'Run on this matter').click();
+		cy.get('#matter-project').should('have.attr', 'aria-invalid', 'true');
+		cy.get('[role="alert"]').should('contain', 'Select a matter / project');
+		cy.then(() => expect(runNowCalled).to.equal(false));
+	});
+
+	it('blocks submission when projects fail to load and offers Retry', () => {
+		cy.intercept('GET', '**/api/v1/projects**', { statusCode: 503, body: {} }).as('projectsFailed');
+		cy.visit('/lq-ai/autonomous/matters', { onBeforeLoad: setAuthStorage });
+		cy.wait('@projectsFailed');
+		cy.contains('[role="alert"]', 'Could not load matters / projects').should('exist');
+		cy.contains('button', 'Run on this matter').should('be.disabled');
+		cy.intercept('GET', '**/api/v1/projects**', {
+			statusCode: 200,
+			body: [{ id: PROJECT_ID, name: 'Acme NDA', slug: 'acme-nda' }]
+		}).as('projectsRetried');
+		cy.contains('button', 'Retry').click();
+		cy.wait('@projectsRetried');
+		cy.get('#matter-project').should('exist');
+		cy.contains('button', 'Run on this matter').should('not.be.disabled');
+	});
+
+	it('links to matter creation when the loaded project list is empty', () => {
+		cy.intercept('GET', '**/api/v1/projects**', { statusCode: 200, body: [] }).as('projectsEmpty');
+		cy.visit('/lq-ai/autonomous/matters', { onBeforeLoad: setAuthStorage });
+		cy.wait('@projectsEmpty');
+		cy.contains('a', 'Go to matters / projects').should('have.attr', 'href', '/lq-ai/matters');
+		cy.contains('button', 'Run on this matter').should('be.disabled');
+	});
+
+	it('serializes edited, cleared, and zero cost caps correctly', () => {
+		cy.intercept('POST', '**/api/v1/autonomous/run-now', {
+			statusCode: 500,
+			body: { detail: 'Test keeps the form open' }
+		}).as('runNow');
+		cy.visit('/lq-ai/autonomous/matters', { onBeforeLoad: setAuthStorage });
+		cy.get('#matter-query').type(MATTER_QUERY);
+		cy.get('select[aria-label="Select skill"]').select('nda-review');
+		cy.get('#matter-project').select(PROJECT_ID);
+
+		cy.get('#matter-cost-cap').type('1.25');
+		cy.contains('button', 'Run on this matter').click();
+		cy.wait('@runNow').its('request.body.max_cost_usd').should('eq', '1.25');
+
+		cy.get('#matter-cost-cap').clear();
+		cy.contains('button', 'Run on this matter').click();
+		cy.wait('@runNow').its('request.body').should('not.have.property', 'max_cost_usd');
+
+		cy.get('#matter-cost-cap').type('0');
+		cy.contains('button', 'Run on this matter').click();
+		cy.wait('@runNow').its('request.body.max_cost_usd').should('eq', '0');
 	});
 });

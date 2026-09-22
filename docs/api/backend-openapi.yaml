@@ -6700,19 +6700,25 @@ components:
         Request body for ``POST /autonomous/run-now``.  Spawns one
         ``trigger_kind='manual'`` session.  Exactly one of ``playbook_id``
         / ``skill_ref`` must be set (zero or both → 422).  ``target_kb_id``
-        / ``project_id`` are optional scope.  ``max_cost_usd`` is the
+        is optional scope. ``project_id`` is optional for query-less runs
+        and required when ``query`` is supplied. ``max_cost_usd`` is the
         per-run cap (NULL → fall back to the config default).  A manual
         run has no schedule/watch row to inherit ``emit_artifacts`` from,
         so this body IS the opt-in source.  ``query`` (item 1.6 — matter
         intake) is an optional free-text matter description; when present
-        it lands in ``session.params["query"]`` and the executor routes
+        it is trimmed, requires an owned project, lands in
+        ``session.params["query"]``, and the executor routes
         the run through the ADR-0020 matter loop, when omitted the
         query-less path is unchanged.
       properties:
         playbook_id: {type: string, format: uuid, nullable: true}
         skill_ref: {type: string, nullable: true}
         target_kb_id: {type: string, format: uuid, nullable: true}
-        project_id: {type: string, format: uuid, nullable: true}
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Required when query is supplied; must identify an owned project.
         max_cost_usd: {type: string, nullable: true}
         emit_artifacts:
           type: boolean
@@ -6726,10 +6732,11 @@ components:
           minLength: 1
           maxLength: 10000
           description: |
-            Optional free-text matter description (item 1.6). Copied into
-            ``session.params["query"]`` so the executor runs the ADR-0020
-            matter loop with this as the goal. Omitted → key absent →
-            existing query-less behavior.
+            Optional free-text matter description (item 1.6). Whitespace is
+            stripped; blank text is rejected. Requires an owned project_id.
+            Copied into ``session.params["query"]`` so the executor runs the
+            ADR-0020 matter loop with this as the goal. Omitted or null keeps
+            the existing query-less behavior.
 
     AutonomousScheduleListResponse:
       type: object

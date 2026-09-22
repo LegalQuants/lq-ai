@@ -26,17 +26,18 @@ export interface IntakeFormState {
 export interface IntakeFormErrors {
 	query: string | null;
 	target: string | null;
+	project: string | null;
 }
 
 /**
- * Validate the intake form. Returns per-field errors; both null ⇔ valid
+ * Validate the intake form. Returns per-field errors; all null ⇔ valid
  * (see isIntakeFormValid). The description is required on THIS page —
  * the API keeps `query` optional, but a matter-intake submission without
  * a description would silently fall back to the query-less path, which
  * is not what the user asked for.
  */
 export function validateIntakeForm(form: IntakeFormState): IntakeFormErrors {
-	const errors: IntakeFormErrors = { query: null, target: null };
+	const errors: IntakeFormErrors = { query: null, target: null, project: null };
 
 	const trimmed = form.query.trim();
 	if (!trimmed) {
@@ -50,20 +51,24 @@ export function validateIntakeForm(form: IntakeFormState): IntakeFormErrors {
 	} else if (form.targetKind === 'playbook' && !form.playbookId) {
 		errors.target = 'Select a playbook, or switch to the Skill target.';
 	}
+	if (!form.projectId) {
+		errors.project = 'Select a matter / project for this run.';
+	}
 
 	return errors;
 }
 
 /** True when validateIntakeForm produced no field errors. */
 export function isIntakeFormValid(errors: IntakeFormErrors): boolean {
-	return errors.query === null && errors.target === null;
+	return errors.query === null && errors.target === null && errors.project === null;
 }
 
 /**
  * Build the POST /autonomous/run-now body from a validated form.
  *
- * Optional fields are OMITTED when blank (the API's non-null-subset
- * convention); the description is trimmed. `max_cost_usd` stays a string
+ * Optional KB and cost fields are OMITTED when blank (the API's non-null-subset
+ * convention); the required project is always sent. The description is
+ * trimmed. `max_cost_usd` stays a string
  * (Decimal-as-string on the wire, matching the schedules form).
  */
 export function buildIntakeRunRequest(form: IntakeFormState): ManualRunRequest {
@@ -73,7 +78,7 @@ export function buildIntakeRunRequest(form: IntakeFormState): ManualRunRequest {
 			? { skill_ref: form.skillRef }
 			: { playbook_id: form.playbookId }),
 		...(form.kbId ? { target_kb_id: form.kbId } : {}),
-		...(form.projectId ? { project_id: form.projectId } : {}),
+		project_id: form.projectId,
 		...(form.maxCostUsd.trim() !== '' ? { max_cost_usd: form.maxCostUsd.trim() } : {})
 	};
 }

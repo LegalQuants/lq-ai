@@ -7,7 +7,7 @@
 	 * optional `query` field. The description lands in
 	 * session.params["query"], which the executor reads into the ADR-0020
 	 * matter loop as the planner goal. On 201 we redirect to the session
-	 * detail page, which already renders the plan trace and live receipt.
+	 * detail page, which renders the plan trace and receipt.
 	 *
 	 * Structure mirrors the run-now modal on ../+page.svelte (picker
 	 * Promise.allSettled load, LQAIApiError handling, goto on success);
@@ -44,11 +44,12 @@
 	let formPlaybookId = '';
 	let formKbId = '';
 	let formProjectId = '';
-	let formMaxCostUsd = '';
+	let formMaxCostUsd: number | undefined;
 
 	let submitting = false;
 	let queryError: string | null = null;
 	let targetError: string | null = null;
+	let projectError: string | null = null;
 	let submitError: string | null = null;
 
 	// Picker lists (loaded on mount)
@@ -56,6 +57,7 @@
 	let skillSummaries: SkillSummary[] = [];
 	let kbs: KnowledgeBase[] = [];
 	let projects: Project[] = [];
+	let projectsAvailable = false;
 	let pickerLoading = false;
 	let pickerError: string | null = null;
 
@@ -66,6 +68,7 @@
 	async function loadPickerData(): Promise<void> {
 		pickerLoading = true;
 		pickerError = null;
+		projectsAvailable = false;
 		try {
 			const [pb, sk, kb, pr] = await Promise.allSettled([
 				playbooksApi.listPlaybooks(),
@@ -76,7 +79,12 @@
 			if (pb.status === 'fulfilled') playbooks = pb.value;
 			if (sk.status === 'fulfilled') skillSummaries = sk.value;
 			if (kb.status === 'fulfilled') kbs = kb.value;
-			if (pr.status === 'fulfilled') projects = pr.value;
+			if (pr.status === 'fulfilled') {
+				projects = pr.value;
+				projectsAvailable = true;
+			} else {
+				projects = [];
+			}
 			// If all failed, surface a brief error; partial failure is silently degraded.
 			if ([pb, sk, kb, pr].every((r) => r.status === 'rejected')) {
 				pickerError = 'Could not load picker data. Check your connection.';
@@ -94,17 +102,19 @@
 			playbookId: formPlaybookId,
 			kbId: formKbId,
 			projectId: formProjectId,
-			maxCostUsd: formMaxCostUsd
+			maxCostUsd: String(formMaxCostUsd ?? '')
 		};
 	}
 
 	async function handleSubmit(): Promise<void> {
+		if (submitting || pickerLoading || !projectsAvailable || projects.length === 0) return;
 		submitError = null;
 
 		const form = currentFormState();
 		const errors = validateIntakeForm(form);
 		queryError = errors.query;
 		targetError = errors.target;
+		projectError = errors.project;
 		if (!isIntakeFormValid(errors)) return;
 
 		submitting = true;
@@ -129,10 +139,10 @@
 	<header class="page-header">
 		<h1 class="lq-text-page-h">Describe your matter</h1>
 		<p class="page-intro">
-			Describe what you need done and pick the skill or playbook to run. LQVern runs once, plans
-			against your description, and stops at the cost cap (R4). You are redirected to the session's
-			receipt — review the plan trace and findings there; nothing is applied anywhere on your
-			behalf.
+			Describe what you need done and pick the skill or playbook that guides the analysis. LQVern
+			runs once, plans against your description, and stops at the cost cap (R4). You are redirected
+			to the session's receipt — review the plan trace and findings there; nothing is applied
+			anywhere on your behalf.
 		</p>
 	</header>
 
@@ -229,25 +239,36 @@
 			{/if}
 		</div>
 
-		<!-- Optional matter / project -->
+		<!-- Required matter / project (ADR-0020 D3) -->
 		<div class="intake-field">
 			<label class="intake-label" for="matter-project">
-				Matter / project <span class="intake-optional">(optional)</span>
+				Matter / project <span class="intake-required" aria-hidden="true">*</span>
 			</label>
 			{#if pickerLoading}
 				<p class="picker-loading">Loading projects…</p>
+			{:else if !projectsAvailable}
+				<p class="picker-error" role="alert">Could not load matters / projects.</p>
+				<button type="button" class="intake-btn-retry" on:click={loadPickerData}>Retry</button>
+			{:else if projects.length === 0}
+				<p class="picker-error">Create a matter / project before starting a run.</p>
+				<a href="/lq-ai/matters">Go to matters / projects</a>
 			{:else}
 				<select
 					id="matter-project"
 					class="intake-select"
+					class:intake-input--error={!!projectError}
 					bind:value={formProjectId}
 					disabled={submitting}
+					aria-invalid={projectError ? 'true' : undefined}
 				>
-					<option value="">— None —</option>
+					<option value="">Select a matter / project</option>
 					{#each projects as proj (proj.id)}
 						<option value={proj.id}>{proj.name}</option>
 					{/each}
 				</select>
+			{/if}
+			{#if projectError}
+				<p class="intake-field-error" role="alert">{projectError}</p>
 			{/if}
 		</div>
 
@@ -267,8 +288,8 @@
 				</select>
 			{/if}
 			<p class="intake-hint">
-				The documents the run retrieves from. Without one, the run has only your description to work
-				with.
+				Select a knowledge base to associate with this run. Automatic retrieval from the selected
+				knowledge base is not yet supported for matter intake.
 			</p>
 		</div>
 
@@ -301,7 +322,11 @@
 		{/if}
 
 		<div class="intake-actions">
-			<button type="submit" class="intake-btn-primary" disabled={submitting}>
+			<button
+				type="submit"
+				class="intake-btn-primary"
+				disabled={submitting || pickerLoading || !projectsAvailable || projects.length === 0}
+			>
 				{submitting ? 'Starting run…' : 'Run on this matter'}
 			</button>
 		</div>
@@ -437,6 +462,16 @@
 		font-size: 13px;
 		color: var(--lq-error);
 		margin: 0;
+	}
+
+	.intake-btn-retry {
+		align-self: flex-start;
+		color: var(--lq-accent);
+		background: transparent;
+		border: 1px solid var(--lq-border);
+		border-radius: var(--lq-radius);
+		padding: var(--lq-space-1) var(--lq-space-2);
+		cursor: pointer;
 	}
 
 	.submit-error {
