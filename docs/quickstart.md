@@ -6,7 +6,7 @@ This is the long-form quickstart. The README has the 5-line version; this docume
 
 If you run into trouble, the [Troubleshooting](#troubleshooting) section at the end covers the most common gotchas. If your gotcha isn't there, file a GitHub issue with the `quickstart` label and we'll add it.
 
-Everything below runs in Docker containers on your machine. The Inference Gateway is the only component that talks to the outside world — inference requests, and, if an operator enables them, case-law/research and connector (MCP) tool calls; tool connectors are off by default (`docs/HONEST-STATE.md` §5.5). The initial `docker compose up` also pulls container images, so that step needs an internet connection even though the rest of the demo doesn't.
+Everything below runs in Docker containers on your machine. The Inference Gateway is the only component that talks to the outside world — inference requests, and, if an operator enables them, case-law/research and connector (MCP) tool calls; tool connectors are off by default (`docs/HONEST-STATE.md` §5.5). The initial `docker compose up` also pulls (and, for the application images, builds) container images, so that step needs an internet connection — as does the rest of the demo in Mode 1 (see "Before you start" below); only Mode 2 ([Troubleshooting → "I want to use Mode 2"](#i-want-to-use-mode-2-local-ollama-instead)) runs offline after setup.
 
 ---
 
@@ -61,9 +61,9 @@ Then start the stack:
 docker compose up -d
 ```
 
-First run brings up the eight always-on services — `postgres`, `redis`, `rustfs`, `gateway`, `api`, `ingest-worker`, `arq-worker`, `web` (the `ingest-worker` and `arq-worker` background workers run unconditionally; the local-Ollama (`--profile local`) and Slack/Teams (`--profile slack` / `--profile teams`) services are opt-in Compose profiles) — plus two one-shot init containers, `rustfs-init` and `migrate`, that exit once they finish. `postgres`, `redis` and `rustfs` are pulled; `gateway`, `api`, `web` and the workers are **built** from the checkout, so the first start does real build work, not just downloads. How long it takes depends on your hardware, Docker build cache and network speed. Subsequent runs reuse the images and start in seconds.
+First run brings up the eight always-on services — `postgres`, `redis`, `rustfs`, `gateway`, `api`, `ingest-worker`, `arq-worker`, `web` (the `ingest-worker` and `arq-worker` background workers run unconditionally; the local-Ollama (`--profile local`) and Slack/Teams (`--profile slack` / `--profile teams`) services are opt-in Compose profiles) — plus one one-shot init container, `rustfs-init`, that exits once it finishes. `postgres`, `redis` and `rustfs` are pulled; `gateway`, `api`, `web` and the workers are **built** from the checkout, so the first start does real build work, not just downloads. How long it takes depends on your hardware, Docker build cache and network speed. Subsequent runs reuse the images and start in seconds. Database migrations run automatically too, but inside the `api` container's own startup (`alembic upgrade head`) rather than as a separate container; a standalone `migrate` service also exists, gated behind `--profile ops`, but that's an on-demand ops tool for the MinIO→RustFS storage migration (`docker compose --profile ops run --rm migrate ...`) — not something a first `docker compose up` starts.
 
-Confirm the stack is up with `docker compose ps` — the long-running services should be `Up` (those with health checks report `healthy`; the two init containers show as exited). The entry points are then:
+Confirm the stack is up with `docker compose ps` — the long-running services should be `Up` (those with health checks report `healthy`; the init container shows as exited). The entry points are then:
 
 - LQ.AI shell: <http://localhost:3000/lq-ai>
 - API documentation: <http://localhost:8000/docs>
@@ -87,7 +87,7 @@ Open <http://localhost:3000/lq-ai> in your browser. The LQ.AI chat shell lives a
 
 > **Admin tip — Settings → Models.** Once signed in as an admin you'll see a **Settings** link in the top-right of the LQ.AI shell. It opens the model alias editor (D0.5) at `/lq-ai/admin/models`, where you can edit the `smart` / `fast` / `budget` / `local` / `embedding` aliases without restarting the gateway. Edits write `gateway.yaml` atomically and hot-reload the gateway in process; in-flight requests finish on the prior config and the next request picks up the new mapping. See [ADR 0010](adr/0010-gateway-config-hot-reload.md) for the full design.
 
-After the password change you land on the LQ.AI home page (`/lq-ai`). There is no separate setup wizard: the home page shows a **Getting started** checklist of five items that tick off as you do them — **Log in & rotate password**, **Run a skill on a document**, **Try Enhance Prompt**, **Attach a knowledge base**, and **Save a prompt as a skill** — and it disappears once all five are done. This walkthrough covers the first two. The deployment-level setup below (profile, tier policy, MFA) is not on that checklist and is done where each item says. Four items, in order, none blocking:
+After the password change you land on the LQ.AI home page (`/lq-ai`). There is no separate setup wizard: the home page shows a **Getting started** checklist of five items that tick off as you do them — **Log in & rotate password**, **Run a skill on a document**, **Try Enhance Prompt**, **Attach a knowledge base**, and **Save a prompt as a skill** — and it disappears once all five are done. This walkthrough covers the first two, with an optional detour into the third (Enhance Prompt) at Step 4. The deployment-level setup below (profile, tier policy, MFA) is not on that checklist and is done where each item says. Four items, in order, none blocking:
 
 ### Setup item 1: Create your Organization Profile
 
