@@ -268,6 +268,8 @@ docker compose --profile local up -d
 
 In this mode, inference runs entirely on the local host via Ollama. The Inference Gateway is the only egress point in the stack — verify in `gateway/app/router.py`. Provider keys are used only inside the Gateway (runtime-managed keys are encrypted at rest per `gateway/app/secrets.py`; keys set in `.env` stay in `.env`); the API service never stores them.
 
+Before you blame the model, check which Ollama the gateway is actually pointed at — inside the gateway container, `localhost` is the container, not your machine. `OLLAMA_BASE_URL` picks the target: `http://ollama:11434` reaches this Compose sidecar and is what `gateway.yaml.example` falls back to when the variable is unset, but `.env.example` ships `OLLAMA_BASE_URL=http://host.docker.internal:11434` by default, so a `.env` copied from it points at Ollama on the host until you switch that line for `--profile local`. `host.docker.internal` is a Docker Desktop convenience; `docker-compose.yml` adds no `extra_hosts` mapping for it, so on plain Linux Docker Engine either add one yourself or point at the host's private-range IP directly — the gateway's egress policy accepts plaintext `http` to loopback and RFC1918 addresses as well as these named hosts (`gateway/app/providers/base_url_policy.py`). Either way, starting the profile brings up an empty Ollama and pulls no models on its own.
+
 ---
 
 ### Troubleshooting
