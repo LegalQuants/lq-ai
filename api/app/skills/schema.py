@@ -68,8 +68,9 @@ class ColumnSpec(BaseModel):
     Citation Engine cascade (ensemble verification). Overrides the
     skill-level field when both are set. ``None`` means 'inherit from
     skill / project / deployment default'. Stage 4 only runs when the
-    gateway's ``citation_engine.ensemble_verification.judge_models``
-    list is configured; it defaults to empty, which disables Stage 4
+    gateway's ``judge_models`` list (in the
+    ``citation_engine.ensemble_verification`` block) is configured; it
+    defaults to empty, which disables Stage 4
     regardless of this flag."""
 
     minimum_inference_tier: int | None = Field(
@@ -147,8 +148,8 @@ class LQAIFrontmatter(BaseModel):
         "Per M2-D1, OR'd against the chat's project ensemble flag and the "
         "gateway's deployment default. None means 'no opinion' (treated as "
         "false at the OR site). Stage 4 only runs when the gateway's "
-        "citation_engine.ensemble_verification.judge_models list is "
-        "configured; it defaults to empty, which disables Stage 4 even when "
+        "judge_models list (in the citation_engine.ensemble_verification "
+        "block) is configured; it defaults to empty, which disables Stage 4 even when "
         "this flag is true.",
     )
 
