@@ -16,7 +16,7 @@ LQ.AI takes contributions from two different kinds of work, and the two run thro
 
 The split exists because the two kinds of review answer different questions. Maintainer review on the engineering track asks whether the change does what it claims, is tested, and follows the project's conventions. Attorney review on the legal-substance track asks whether the skill's patterns, severity calibrations, and recommended language reflect reasonable practice — a question an engineer reviewer, however careful, is not positioned to answer alone. Both tracks still land in the same pull-request process and both are gated on the same Code of Conduct.
 
-Start with whichever describes what you want to work on. If neither is obvious yet, [the contribution board](board.md) lists specific, scoped items with an effort estimate and a contributor profile attached to each — several fit a first-time contributor with no prior context on the codebase.
+Start with whichever describes what you want to work on. If neither is obvious yet, [the contribution board](../../contribute/EASIEST-CONTRIBUTIONS.md) lists specific, scoped items with an effort estimate and a contributor profile attached to each — several fit a first-time contributor with no prior context on the codebase.
 
 ## The engineering track
 
@@ -34,7 +34,7 @@ The five steps — claim, draft, attest, review, merge — are unchanged whether
 
 ## Next
 
-- [On-ramp for lawyers](lawyers.md)
-- [On-ramp for engineers](engineers.md)
-- [On-ramp for compliance and procurement professionals](compliance-professionals.md)
-- [Point a coding agent at the repository](coding-agents.md)
+- [On-ramp for lawyers](../../../skills/CONTRIBUTING.md)
+- [On-ramp for engineers](../../../CONTRIBUTING.md)
+- [On-ramp for compliance and procurement professionals](../../contribute/compliance-professionals.md)
+- [Point a coding agent at the repository](../../contribute/coding-agent-onboarding.md)

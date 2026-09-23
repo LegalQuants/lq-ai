@@ -59,6 +59,41 @@ All writes go through one helper — `app.audit.audit_action()` in [api/app/audi
 - **Database-layer:** Postgres WAL provides crash-consistency. Operators with stricter durability requirements run Postgres with `synchronous_commit=on` (the default in our chart).
 - **Tamper detection (not in M1):** chained hashes (each row commits a hash over `(prev_hash, current_row)`) would let operators detect after-the-fact tampering. Not in M1; tracked as a deferred enhancement (file via operator request — see PRD §9). Operators needing this today can use Postgres logical replication to a write-once destination.
 
+> [!CAUTION]
+> **Silent failure** — Append-only is enforced by the application, not by the database: no api code path issues `UPDATE` or `DELETE` against `audit_log`, but Postgres does not reject one issued outside the application (a direct database session, a misconfigured migration, an operator with superuser access). Absent the optional trigger above or the tamper-detection mitigations planned for a later milestone, a row altered directly in the database leaves no signal — the WAL and crash-consistency guarantees above protect against crashes, not against a privileged actor editing the table directly.
+
+This is the structural answer to a question a closed-source SaaS product cannot give you: you can evidence, to your client or your regulator, every occasion on which their material was sent to a model provider — not as an assertion, but as a query you run yourself against your own database.
+
+## Matter-scoped evidence for a specific model call or citation
+
+The workflows above answer "what happened to a given user or privileged resource." A narrower
+question — "what did the assistant read and verify for this specific matter" — is answered by two
+tables that are not part of `audit_log` itself: `citation_ledger_entry`, indexed on `project_id`
+(one row per turn per source the assistant actually read, referencing exactly one of a KB-document
+citation, a case-law citation, or a tool-retrieved source, and holding no content of its own — a
+metadata index only, see [docs/db-schema.md](../db-schema.md)); and `inference_routing_log`, which
+records the provider, model, and routed tier for every inference call and carries a `chat_id`.
+
+```sql
+-- Every source the assistant read and verified for one matter
+SELECT chat_id, message_id, source_kind, verification_status, confidence, provider, retrieved_at
+FROM citation_ledger_entry
+WHERE project_id = '<matter-uuid>'
+ORDER BY created_at;
+
+-- Every model call made inside that matter's chats
+SELECT r.timestamp, r.routed_provider, r.routed_model, r.routed_inference_tier, r.anonymization_applied
+FROM inference_routing_log r
+JOIN chats c ON c.id = r.chat_id
+WHERE c.project_id = '<matter-uuid>'
+ORDER BY r.timestamp;
+```
+
+Neither query returns the content of what was read or said — `citation_ledger_entry` is metadata
+only, and `inference_routing_log` never carries message bodies — but together they produce a
+matter-scoped record of every model call and every citation verification an insurer's inquiry, a
+malpractice review, or an internal audit would ask for, without reconstructing it by hand.
+
 ## Operator workflows
 
 ### Investigating an incident

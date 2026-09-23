@@ -27,12 +27,12 @@ A shape marked **not tried** has no page below because nothing in the repository
 
 ## The recipes
 
-- **[Caddy + Tailscale](caddy-tailscale.md)** — a private, tailnet-only URL with auto-renewing HTTPS and no public DNS or open inbound ports.
-- **[tailnet-Ollama](tailnet-ollama.md)** — the gateway reaching a local-inference model on a separate GPU host over your tailnet, HTTPS-only by the gateway's own egress policy.
-- **[Observability](observability.md)** — wiring a traces/metrics backend, self-hosted or against an existing SaaS collector.
+- **[Caddy + Tailscale](../../../../deploy/caddy-tailscale/README.md)** — a private, tailnet-only URL with auto-renewing HTTPS and no public DNS or open inbound ports.
+- **[tailnet-Ollama](../../../../deploy/tailnet-ollama/README.md)** — the gateway reaching a local-inference model on a separate GPU host over your tailnet, HTTPS-only by the gateway's own egress policy.
+- **[Observability](../../../../deploy/observability/README.md)** — wiring a traces/metrics backend, self-hosted or against an existing SaaS collector.
 
 ## Next
 
 - [Operate](../index.md)
-- [Air-gapped and local-only inference](../air-gapped.md)
-- [Reverse proxy and TLS](../reverse-proxy-tls.md)
+- [Air-gapped and local-only inference](../../../operate/air-gapped.md)
+- [Reverse proxy and TLS](../../../operate/reverse-proxy-tls.md)

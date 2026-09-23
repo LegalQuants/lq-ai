@@ -4,7 +4,7 @@ so. Each release page states its upgrade class: **patch** releases need nothing 
 take them blind; **minor** releases may need something from you before the upgrade works —
 read the notes first. That split, and what qualifies as "needs something," is
 [ADR 0025](../../adr/0025-release-versioning-and-pipeline-ordering.md)'s rule, carried in
-full on [Release versioning](../reference/versioning.md).
+full on [Release versioning](../../adr/0025-release-versioning-and-pipeline-ordering.md).
 
 **This list is incomplete, and it says so per release.** Structured release notes —
 the upgrade class, the operator-action list, migration status — exist today for three
@@ -23,11 +23,11 @@ The desktop launcher versions independently — `desktop-vX.Y.Z` is its own vers
 restatement of an image tag, because the launcher ships launcher-only fixes with no backend
 change. ADR 0025 decides that each desktop release should also record which image set it
 ships against; that is not yet implemented, and the launcher still defaults to the floating
-`latest` tag. See [Release versioning](../reference/versioning.md).
+`latest` tag. See [Release versioning](../../adr/0025-release-versioning-and-pipeline-ordering.md).
 
 ## Next
 
-- [Release versioning](../reference/versioning.md) — what patch and minor commit to, in
+- [Release versioning](../../adr/0025-release-versioning-and-pipeline-ordering.md) — what patch and minor commit to, in
   the ADR's own words.
-- [Upgrade](../operate/upgrade.md) — the runbook for taking one.
+- [Upgrade](../../operate/upgrade.md) — the runbook for taking one.
 - [Reference](../reference/index.md) — the generated material behind these pages.

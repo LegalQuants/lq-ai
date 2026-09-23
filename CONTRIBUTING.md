@@ -308,6 +308,8 @@ The project includes safe-harbor language committing not to pursue legal action 
 
 For security-affecting *changes* (not vulnerabilities — changes you want to propose to the project that have security implications), file a normal PR but flag the security implications in the description and tag a maintainer for direct review. Examples: changes to authentication flows, audit logging, the Inference Gateway's tier-derivation logic, the Anonymization Layer, encryption configuration, supply-chain artifacts.
 
+[`.github/CODEOWNERS`](.github/CODEOWNERS) auto-routes four paths to the project's security reviewers in addition to the maintainer team, and a PR touching any of them is held until security review approves it: `gateway/**` (the Inference Gateway, the project's only component holding privileged provider API keys), `docs/security/**`, `.github/workflows/**`, and `SECURITY.md`. Routing is by path only — if your change touches authentication, authorization, audit logging, or cryptographic implementations somewhere else in the tree, say so in the PR description and request security review yourself; nothing routes those automatically.
+
 ---
 
 ## Documentation expectations

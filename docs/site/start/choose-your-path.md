@@ -13,15 +13,15 @@ You do not need to read this site in order, and you do not need to read all of i
 
 | Your goal | Start here |
 |---|---|
-| Decide whether LQ.AI is worth trying | [Is LQ.AI for you?](is-it-for-you.md) |
-| Get a deployment running today | [Quickstart](quickstart.md) |
+| Decide whether LQ.AI is worth trying | [Is LQ.AI for you?](../../start/is-it-for-you.md) |
+| Get a deployment running today | [Quickstart](../../quickstart.md) |
 | Install on a specific topology (macOS, Docker Compose, Kubernetes, air-gapped, behind a reverse proxy) | [Operate](../operate/index.md) |
 | Run it day to day: back up, upgrade, rotate a leaked key, recover from a failure | [Operate](../operate/index.md) |
 | Convince a security or procurement reviewer | [Trust](../trust/index.md) |
 | Understand or write a skill, or judge whether to trust one | [Skills](../skills/index.md) |
 | Package a client-facing, branded deployment | [Deliver](../deliver/index.md) |
 | Contribute code, a skill, or a review | [Contribute](../contribute/index.md) |
-| Point a coding agent at the repository | [Coding agents](../contribute/coding-agents.md) |
+| Point a coding agent at the repository | [Coding agents](../../contribute/coding-agent-onboarding.md) |
 | Look up a generated spec: configuration keys, skill frontmatter, the ADR index | [Reference](../reference/index.md) |
 | Find out what changed in a release | [Changelog](../changelog/index.intro.md) |
 
@@ -31,5 +31,5 @@ If your goal isn't on this list, the eight top-level namespaces (Start, Operate,
 
 ## Next
 
-- [What it touches](what-it-touches.md) — if you haven't installed yet
-- [Where help lives](where-help-lives.md) — for day-to-day product questions once it's running
+- [What it touches](../../start/what-it-touches.md) — if you haven't installed yet
+- [Where help lives](../../start/where-help-lives.md) — for day-to-day product questions once it's running

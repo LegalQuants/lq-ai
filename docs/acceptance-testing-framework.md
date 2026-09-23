@@ -47,7 +47,7 @@ For skills shipped with the project (the M1 starter skills), maintainers will ru
 
 ## Test plan template
 
-Every per-skill test plan follows this structure. The template lives at `skills/_test-plan-template.md` and serves as the starting point for any new skill's test plan.
+Every per-skill test plan follows this structure, intended to live at `skills/_test-plan-template.md` as the starting point for any new skill's test plan. **That file is not present in the repository as of the checked commit** — use an existing plan such as [`skills/nda-review/test-plan.md`](../skills/nda-review/test-plan.md) as the template instead; its structure (summary, corpus requirements, scenarios, pass criteria) is the one every shipped test plan below follows.
 
 ```markdown
 # Acceptance Test Plan — <skill name> v<version>
@@ -271,16 +271,16 @@ Each M1 starter skill has its test plan in the skill's folder:
 
 | Skill | Test plan location |
 |---|---|
-| NDA Review | [`skills/nda-review/test-plan.md`](nda-review/test-plan.md) |
-| MSA Review — SaaS | [`skills/msa-review-saas/test-plan.md`](msa-review-saas/test-plan.md) |
-| MSA Review — Commercial Purchase | [`skills/msa-review-commercial-purchase/test-plan.md`](msa-review-commercial-purchase/test-plan.md) |
-| DPA Checklist Review | [`skills/dpa-checklist-review/test-plan.md`](dpa-checklist-review/test-plan.md) |
-| Vendor Privacy Policy First Pass | [`skills/vendor-privacy-policy-first-pass/test-plan.md`](vendor-privacy-policy-first-pass/test-plan.md) |
-| Contract QA | [`skills/contract-qa/test-plan.md`](contract-qa/test-plan.md) |
-| Action Items from Client Alert | [`skills/action-items-from-client-alert/test-plan.md`](action-items-from-client-alert/test-plan.md) |
-| Comms Improver | [`skills/comms-improver/test-plan.md`](comms-improver/test-plan.md) |
-| Enhance Prompt | [`skills/enhance-prompt/test-plan.md`](enhance-prompt/test-plan.md) |
-| Skill Creator | [`skills/skill-creator/test-plan.md`](skill-creator/test-plan.md) |
+| NDA Review | [`skills/nda-review/test-plan.md`](../skills/nda-review/test-plan.md) |
+| MSA Review — SaaS | [`skills/msa-review-saas/test-plan.md`](../skills/msa-review-saas/test-plan.md) |
+| MSA Review — Commercial Purchase | [`skills/msa-review-commercial-purchase/test-plan.md`](../skills/msa-review-commercial-purchase/test-plan.md) |
+| DPA Checklist Review | [`skills/dpa-checklist-review/test-plan.md`](../skills/dpa-checklist-review/test-plan.md) |
+| Vendor Privacy Policy First Pass | [`skills/vendor-privacy-policy-first-pass/test-plan.md`](../skills/vendor-privacy-policy-first-pass/test-plan.md) |
+| Contract QA | [`skills/contract-qa/test-plan.md`](../skills/contract-qa/test-plan.md) |
+| Action Items from Client Alert | [`skills/action-items-from-client-alert/test-plan.md`](../skills/action-items-from-client-alert/test-plan.md) |
+| Comms Improver | [`skills/comms-improver/test-plan.md`](../skills/comms-improver/test-plan.md) |
+| Enhance Prompt | [`skills/enhance-prompt/test-plan.md`](../skills/enhance-prompt/test-plan.md) |
+| Skill Creator | [`skills/skill-creator/test-plan.md`](../skills/skill-creator/test-plan.md) |
 
 For new skills, the contributor drafts a test plan following the template above as part of the skill PR.
 

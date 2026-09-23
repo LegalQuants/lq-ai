@@ -18,7 +18,7 @@ the note precisely so that doesn't happen.
 
 Where a jurisdiction or practice area has no skill against it yet, the page
 says so plainly rather than leaving a silent gap, and points at
-[Where skills live](where-skills-live.md) for the contribution route — most
+[Where skills live](../../skills/where-skills-live.md) for the contribution route — most
 jurisdiction- and practice-area-specific work goes to the community
 [`lq-skills`](https://github.com/LegalQuants/lq-skills) repository, not this
 one. Scope notes and their sources are maintained in
@@ -28,6 +28,6 @@ canon.
 
 ## Next
 
-- [Where skills live](where-skills-live.md)
+- [Where skills live](../../skills/where-skills-live.md)
 - [Skill catalogue](catalogue.intro.md)
-- [Author your first skill](author-your-first-skill.md)
+- [Author your first skill](../../skills/author-your-first-skill.md)

@@ -11,7 +11,7 @@ misread as "unattested". An attestation is
 not a warranty of legal correctness for every use — it is a named practicing
 attorney certifying the same care they apply to their own work product, at
 the version attested, and it is re-made when the skill's substance changes.
-Read [The attestation bar](attestation.md) before relying on any row here.
+Read [The attestation bar](../../../skills/CONTRIBUTING.md) before relying on any row here.
 **Tier floor** shows a skill's `minimum_inference_tier` where one is
 declared, and is blank where a skill sets no minimum. A blank cell means the
 skill's frontmatter does not record that field — `skill-creator` carries no
@@ -21,10 +21,10 @@ skill's frontmatter does not record that field — `skill-creator` carries no
 `skills/` directory — 30+ additional skills in the
 [`LegalQuants/lq-skills`](https://github.com/LegalQuants/lq-skills) community
 repository are not indexed on this site yet; browse it directly, or read
-[Where skills live](where-skills-live.md) for how the two repositories relate.
+[Where skills live](../../skills/where-skills-live.md) for how the two repositories relate.
 
 ## Next
 
-- [The attestation bar](attestation.md)
-- [Where skills live](where-skills-live.md)
+- [The attestation bar](../../../skills/CONTRIBUTING.md)
+- [Where skills live](../../skills/where-skills-live.md)
 - [Coverage by jurisdiction and practice area](coverage.intro.md)

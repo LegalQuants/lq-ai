@@ -298,6 +298,12 @@ The most common Mac collision is `POSTGRES_HOST_PORT=5432` against a Homebrew Po
 
 ---
 
+### Where your data lives
+
+Everything the stack writes lands in named Compose volumes — none of them live inside a container, so `docker compose down` on its own leaves them intact; only `-v` removes them, and this repository's own dev-environment rules flag `down -v` as the thing never to run without a backup first. For what each volume holds, why `miniodata` keeps its name after the RustFS swap, and how to back it up, see [Backup and restore](docs/operate/backup-and-restore.md).
+
+---
+
 ### How to verify what this project says about itself
 
 The trust model for a self-hosted, open-source project is that every claim terminates in code you can read. Here are the five most important verification paths:

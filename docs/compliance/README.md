@@ -52,6 +52,24 @@ Controls where the project's response is in-development. As M1 and M2 ship,
 open items resolve.
 ```
 
+## Planned, not published: three named community-contribution targets
+
+Three mappings that would matter most to an AI-governance or AppSec reviewer specifically are
+scoped as open community-contribution items and do not exist as documents yet — each has a mini-PRD
+describing exactly what the finished document would contain, but no `docs/compliance/*.md` file
+behind it today:
+
+- **NIST AI RMF 1.0 Profile** (AI 100-1 plus the Generative AI Profile, AI 600-1) — the framework a
+  federal or federal-adjacent AI-governance reviewer looks for first. See the
+  [mini-PRD](../contribute/mini-prds/nist-ai-rmf-profile.md) for the planned structure.
+- **OWASP Top 10 for LLM Applications mapping** — the de facto framework an AppSec reviewer asks for
+  when blessing an LLM-touching tool. See the
+  [mini-PRD](../contribute/mini-prds/owasp-llm-top10-mapping.md).
+- **OpenSSF Scorecard and Best Practices Badge** — an independently-computed, continuously-updated
+  engineering-discipline signal (branch protection, signed releases, dependency automation, and
+  similar, scored 0–10) rather than a written mapping document, plus a self-attested Best Practices
+  Badge. See the [mini-PRD](../contribute/mini-prds/openssf-scorecard-and-badges.md).
+
 ## Related procurement-readiness materials
 
 - [PRD §1.8 Security Posture](../PRD.md#18-security-posture) — the underlying philosophy.

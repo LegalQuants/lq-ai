@@ -22,7 +22,7 @@ about the commercial and licensing surface of delivering a *branded* deployment.
 
 ## What ships here today
 
-Only one page: [branding and licensing obligations](branding-and-licensing.md). It answers
+Only one page: [branding and licensing obligations](../../adr/0001-openwebui-fork-pin.md). It answers
 the question that has an actual answer in the repository right now — what the upstream
 license lets you do with LQ.AI's chrome, and where the line sits.
 
@@ -46,19 +46,19 @@ deployment-wide totals — see `docs/api/backend-openapi.yaml`. Refused calls ar
 from the aggregation by default. Beyond that, the nearest honest answers live scattered
 across [the trust centre](../trust/index.md) (what is measured and evidenced),
 [Operate](../operate/index.md) (what is actually running and how you back it up), and
-[Published gaps](../trust/published-gaps.md) (what is explicitly not built). None of those
+[Published gaps](../../HONEST-STATE.md) (what is explicitly not built). None of those
 is a substitute for a readiness matrix; treat this paragraph as a pointer, not an answer.
 
 ## Forking as a multi-tenant SaaS
 
-LQ.AI's own code is Apache 2.0 (see [branding and licensing](branding-and-licensing.md)),
+LQ.AI's own code is Apache 2.0 (see [branding and licensing](../../adr/0001-openwebui-fork-pin.md)),
 and Apache 2.0 does not prohibit running a fork as a hosted, multi-tenant service. That
 makes a fork-based SaaS offering **legal** — for LQ.AI's own code. The web client is not
 Apache 2.0: `web/LICENSE` clause 4 binds *any* deployment or distribution, and a
 multi-tenant service is the likeliest way to pass its fifty-end-user / rolling-30-day
 threshold. Above the line you keep OpenWebUI's branding alongside yours, or you hold
 written permission or an enterprise license from OpenWebUI. Read
-[branding and licensing obligations](branding-and-licensing.md) before you price the
+[branding and licensing obligations](../../adr/0001-openwebui-fork-pin.md) before you price the
 offering. A fork-based SaaS offering is not, however, something this project
 builds or supports: the Inference Gateway's key model assumes one operator holding
 provider keys for their own deployment, and billing individual end users to their own
@@ -69,7 +69,7 @@ a real gap, not a hidden feature.
 
 ## Next
 
-- [Branding and licensing obligations](branding-and-licensing.md) — the page that ships today.
+- [Branding and licensing obligations](../../adr/0001-openwebui-fork-pin.md) — the page that ships today.
 - [Trust centre](../trust/index.md) — what you can already hand a client's security or
   procurement team.
 - [Operate](../operate/index.md) — what actually runs, and how to back it up before you

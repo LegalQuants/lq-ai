@@ -22,6 +22,28 @@ Go to the **latest desktop release** on the
 [LQ.AI Releases page](https://github.com/LegalQuants/lq-ai/releases) and download the
 **`LQ.AI-<version>-arm64.dmg`**.
 
+## Verify what you downloaded
+
+Before you drag the app to Applications: the app is signed and notarized by Apple
+(Developer ID: Tucuxi, Inc.) — see step 2 below — and that is checkable rather than
+merely asserted. This is the same check the maintainer runs by hand against the
+published artifact ([`docs/BUILD-AND-RELEASE.md`](BUILD-AND-RELEASE.md) records it
+precisely because a green CI run is not proof the shipped `.dmg` is signed and
+stapled):
+
+```bash
+gh release download desktop-vX.Y.Z -R LegalQuants/lq-ai -p '*.dmg' -D /tmp --clobber
+spctl -a -vvv -t open --context context:primary-signature /tmp/LQ.AI-*.dmg
+#   want: accepted / source=Notarized Developer ID / origin=Developer ID Application: Tucuxi, Inc. (MC8BT9Z8GD)
+xcrun stapler validate /tmp/LQ.AI-*.dmg     # "The validate action worked!"
+```
+
+A `Rejected` or an unstapled result means you downloaded something other than the
+official release artifact — stop and get the file again from the
+[Releases page](https://github.com/LegalQuants/lq-ai/releases) rather than
+proceeding. Most people can skip this and rely on macOS Gatekeeper's own check in
+step 2; run it yourself if you want the same proof the release maintainer checks.
+
 ## 2. Install
 
 Double-click the downloaded `.dmg`. A window opens — **drag the LQ.AI icon onto the Applications
@@ -163,6 +185,33 @@ chmod-600 `.env`). The bundled compose file is at
   ```
 
 ---
+
+## When this isn't the right install
+
+The app wraps `docker-compose.release.yml`, which runs the same eight services as
+the Docker Compose install plus a ninth, `proxy` (`lq-ai-proxy`), that puts the web
+shell and the api on one origin and owns the user-facing port. That means the two
+installs share most of their operational surface underneath — the same data in
+Postgres/RustFS, the same reset-admin-password `docker compose exec` escape hatch
+above — but the release stack fronts everything through that proxy instead of
+exposing `web` directly. If you outgrow the app — you want to run on Linux, put a
+real domain in front of it, or edit `gateway.yaml` directly — see "Prefer the
+command line?" below, plus
+[docs/operate/reverse-proxy-tls.md](operate/reverse-proxy-tls.md) for putting a
+stable URL in front of either install path.
+
+Two things worth knowing before you rely on this for anything beyond evaluation:
+the launcher's shipped default pins the image tag to `latest` rather than the
+specific release the `.dmg` was verified against, so a fresh install can float to
+newer images than the one you checked with `spctl` and `stapler` above
+([`docs/BUILD-AND-RELEASE.md`](BUILD-AND-RELEASE.md)); and app data splits across
+two places — the launcher's own state (an encrypted `config.enc` plus a chmod-600
+`.env`) lives at `~/Library/Application Support/lq-ai-desktop/` (above), while the
+chats, files and audit log live in the Docker named volumes the launcher's compose
+project creates (`pgdata`, `redisdata`, `miniodata`, `lq-ai-ops`, `gateway-config`,
+`ingest-hf-cache`, `ingest-easyocr-cache` — `docker-compose.release.yml`), which
+Docker holds, not that directory. A backup plan for this install path has to cover
+both.
 
 ## Prefer the command line?
 

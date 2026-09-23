@@ -58,6 +58,21 @@ After a fix ships, we publish:
 - Social engineering attacks on LegalQuants employees or community members.
 - Theoretical attacks without a demonstrable exploit path against the project's threat model.
 
+## Judging whether a finding needs the private path
+
+This policy does not itself state a rule for the harder question a reporter with real findings has
+to answer alone: is *this specific* finding safe to work on in the open, or does it need the private
+path above? The project's only full security audit to date (#288, 22 findings) is the only precedent:
+its findings were remediated in public PRs, and [the v0.7.0 release notes](docs/releases/v0.7.0.md)
+record that "none is exploitable by a raw external attacker in the shipped default (every service
+binds to `127.0.0.1`)." Reading that precedent generally: **if a finding requires access an attacker
+cannot get in the deployment's shipped default configuration — an unexposed local port, a credential
+the operator already holds, a network position the shipped topology doesn't grant — public review is
+usually safer and faster than a private report sitting in a queue.** If a finding is exploitable by
+an attacker who has only what the shipped default exposes, use the private, coordinated path above.
+When you are not sure which side of the line a finding falls on, the private path is the conservative
+default.
+
 ## What we will not do
 
 - We will not pursue legal action against good-faith security researchers who follow this policy.

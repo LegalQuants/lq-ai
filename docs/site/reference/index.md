@@ -24,7 +24,7 @@ reads, which the page's own commit stamp names.
 | Configuration reference | [`api/app/config.py`](../../../api/app/config.py), `gateway/app/config.py` (the Pydantic settings models: field, type, default, description) plus [`gateway.yaml.example`](../../../gateway.yaml.example) and [`mcp.yaml.example`](../../../mcp.yaml.example) reproduced verbatim with their comments | Every environment variable and config-file key an operator can set, in one table, instead of grepping three files |
 | Skill frontmatter schema | the loader's Pydantic schema, [`api/app/skills/schema.py`](../../../api/app/skills/schema.py) | The exact fields a `SKILL.md` frontmatter block can carry — for anyone authoring a skill |
 | ADR index | every file under `docs/adr/` | Every architecture decision record with its real, current status line — including ones that have drifted, which is deliberate: a stale status here is a bug to file, not a reason to hide the table |
-| [Release versioning](versioning.md) | [ADR 0025](../../adr/0025-release-versioning-and-pipeline-ordering.md) | What a version bump means before you take it — curated, not generated, because the ADR's own words are the clearest statement of the policy |
+| [Release versioning](../../adr/0025-release-versioning-and-pipeline-ordering.md) | [ADR 0025](../../adr/0025-release-versioning-and-pipeline-ordering.md) | What a version bump means before you take it — curated, not generated, because the ADR's own words are the clearest statement of the policy |
 
 The first three rows are built by scripts, not by a writer; there is no `docs/site/`
 source page behind them to link to directly, so the table above links to the code they
@@ -38,7 +38,7 @@ not as a broken link.
 
 ## Next
 
-- [Release versioning](versioning.md) — start here if you're deciding whether to take an
+- [Release versioning](../../adr/0025-release-versioning-and-pipeline-ordering.md) — start here if you're deciding whether to take an
   upgrade.
 - [Changelog](../changelog/index.intro.md) — per-release detail that cites the versioning
   policy on this page.

@@ -22,23 +22,23 @@ This section covers what a skill is, how to write one, how to test it before you
 rely on it, where a new skill should live, and what the attestation on a
 legal-substance skill actually promises.
 
-- [What a skill is](what-a-skill-is.md) — the anatomy of a `SKILL.md`: what goes
+- [What a skill is](../../skill-authoring-guide.md) — the anatomy of a `SKILL.md`: what goes
   in frontmatter, what goes in the body, and what becomes part of the model's
   prompt.
-- [Author your first skill](author-your-first-skill.md) — write one by hand
+- [Author your first skill](../../skills/author-your-first-skill.md) — write one by hand
   following the authoring guide, or build it in conversation with the Skill
   Creator, using NDA Review as the worked example.
-- [Your prompt files are already skills](your-prompt-files-are-skills.md) — the
+- [Your prompt files are already skills](../../skills/your-prompt-files-are-skills.md) — the
   fastest way in if you already have prompts you reuse by hand.
-- [Test your skill before sharing it](test-your-skill.md) — the structural-vs-
+- [Test your skill before sharing it](../../acceptance-testing-framework.md) — the structural-vs-
   calibration test-plan pattern every first-party skill follows, and what
   "acceptance-tested" does and does not mean today.
-- [Where skills live](where-skills-live.md) — personal, team-shared, or
+- [Where skills live](../../skills/where-skills-live.md) — personal, team-shared, or
   upstream, and which upstream, for jurisdiction- or practice-area-specific
   work.
-- [The attestation bar](attestation.md) — what a legal-substance skill's
+- [The attestation bar](../../../skills/CONTRIBUTING.md) — what a legal-substance skill's
   attestation covers, who can make it, and how it decays.
-- [Playbooks](playbooks.md) — the related artifact that codifies an
+- [Playbooks](../../playbooks.md) — the related artifact that codifies an
   organization's standard and fallback positions, rather than a workflow.
 - [Skill catalogue](catalogue.intro.md) — every first-party skill in one table:
   practice area, jurisdiction, version, author, attestation.
@@ -47,5 +47,5 @@ legal-substance skill actually promises.
 
 ## Next
 
-- [What a skill is](what-a-skill-is.md)
+- [What a skill is](../../skill-authoring-guide.md)
 - [Skill catalogue](catalogue.intro.md)
