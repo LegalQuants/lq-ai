@@ -96,15 +96,15 @@ Full conventions in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Testing
 
-Coverage target is 80% across `api/` and `gateway/`. CI enforces no-decrease.
+Coverage target is 80% across `api/` and `gateway/`. Current PR CI does not enforce a coverage threshold or no-decrease rule.
 
 - **Unit tests** — fast, no external deps. `pytest` in each subsystem's `tests/` folder.
 - **Integration tests** — run against real Postgres in Docker. Provider integration gated behind `pytest -m provider`.
-- **End-to-end tests** — Playwright against a deployed stack. Runs on every PR.
+- **End-to-end tests** — browser end-to-end coverage is not part of the current PR workflow.
 
 Bug fixes include a regression test. New API endpoints include unit tests for handler logic, integration tests for the endpoint, and OpenAPI schema-conformance tests.
 
-Detailed test strategy in [docs/test-strategy.md](docs/test-strategy.md) (M1 deliverable).
+Detailed test strategy — including the per-surface E2E coverage matrix and the honest statement of what CI runs today — in [docs/test-strategy.md](docs/test-strategy.md).
 
 ---
 
@@ -182,7 +182,9 @@ Run this for every non-trivial change — it is battle-tested across M1–M4 and
 2. **Surface the forks** — if the task hides an architectural / product / authz decision, a scope expansion, or a deferral, stop and put the options (with a recommendation) to the maintainer. Don't decide unilaterally.
 3. **Build in reviewed increments** — independent tasks, each: implement → spec-compliance review → code-quality review → fix → re-review. (The `superpowers:subagent-driven-development` skill encodes this.)
 4. **Run the gates yourself** — evidence before claims (see Testing + the collision guards below).
-5. **Ship** — `git commit -s` + the co-author trailer, push **both** remotes (`origin` + `tucuxi`, kept identical on `main`), open the PR, watch CI, merge per the gating rule, report the squash SHA.
+5. **Ship** — external contributors commit with DCO, push the branch only to their own fork,
+   open a PR, and respond to CI and review; they never self-merge. Authorized maintainers
+   handle merges and any upstream/mirror synchronization.
 
 The full step-by-step, including merge-gating and dev-environment rules, is in the [cold-start guide](docs/contribute/coding-agent-onboarding.md).
 
@@ -271,7 +273,7 @@ When you need to find something quickly:
 | Frontend dev loop (HMR) | [web/docs/frontend-dev.md](web/docs/frontend-dev.md) |
 | What's already implemented | Existing code in `api/`, `gateway/`, `web/` |
 | What's deferred | [docs/PRD.md §9](docs/PRD.md#9-deferred-enhancements-and-identified-future-work) |
-| Contributor-pickup mini-PRDs | [docs/proposals/](docs/proposals/) |
+| Contributor-pickup mini-PRDs | [docs/contribute/mini-prds/](docs/contribute/mini-prds/) |
 | Security policy | [SECURITY.md](SECURITY.md) |
 | Conduct policy | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) |
 

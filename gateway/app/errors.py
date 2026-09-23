@@ -150,7 +150,13 @@ class InvalidModel(LQAIError):
 
 
 class ProviderUnavailable(LQAIError):
-    """Upstream provider is not reachable, returned 5xx, or has no adapter.
+    """Upstream provider is not reachable, returned 5xx, has no adapter, or
+    accepted the request and returned no content.
+
+    The last case is :class:`app.providers.base.ProviderEmptyResponseError`
+    (issue #503): the provider answered and produced nothing, which the
+    client must not read as a thin answer. It reuses this wire code rather
+    than adding to the cross-subsystem enum (ADR 0003).
 
     The handler picks 502 for upstream-induced and 503 for adapter-not-
     instantiated; the class default is 502 and the route can override.

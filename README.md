@@ -60,7 +60,7 @@ The chat UI renders citations as four visual states: green (exact / tolerant mat
 
 **Audit log.** Append-only `audit_log` table records every state-changing action with first-class columns for `privilege_marked`, `privilege_basis`, `routed_inference_tier`, `routed_provider`, plus a JSONB `details` field for action-specific context. Admin-gated `GET /admin/audit-log` endpoint supports filtering by user, resource, action, privilege, tier, and timestamp range; paginated for large windows. Privileged-matter compliance evidence is one query: `?privilege_marked=true&from_timestamp=...&to_timestamp=...`. Cross-references to the gateway's `inference_routing_log` (which records `anonymization_applied`, latency, cost estimate, and request correlation id) via `request_id` for end-to-end pipeline audit. See [`docs/procurement/sig-lite.md`](docs/procurement/sig-lite.md) for the procurement-team-facing audit posture.
 
-**Files / Knowledge Bases.** Persistent collections of documents accessible across chats. Hybrid retrieval combining vector similarity (text-embedding-3-small or operator-configured embedding model via pgvector) with Postgres full-text search; the per-KB `hybrid_alpha` slider tunes the vector/FTS weight at retrieval time. Document ingestion uses Docling for layout-aware parsing of complex PDFs (multi-column, tables, footnotes) with PyMuPDF as the fast path for simpler documents. (Scanned-PDF OCR is not yet implemented — the pipeline parses text-bearing PDFs only and sets `was_ocrd=false`; OCR is tracked as DE-320.) Character-level offsets land in `documents.normalized_content` for the Citation Engine to verify against. KB-attached chats automatically retrieve before each turn, prepend a citation-formatted context block, and write a `📎 KB retrieval` audit row visible in Receipts.
+**Files / Knowledge Bases.** Persistent collections of documents accessible across chats. Hybrid retrieval combining vector similarity (text-embedding-3-small or operator-configured embedding model via pgvector) with Postgres full-text search; the per-KB `hybrid_alpha` slider tunes the vector/FTS weight at retrieval time. Document ingestion uses PyMuPDF to parse text-bearing PDFs into a character stream. (Scanned-PDF OCR is not yet implemented — the pipeline parses text-bearing PDFs only and sets `was_ocrd=false`; OCR is tracked as DE-320.) Character-level offsets land in `documents.normalized_content` for the Citation Engine to verify against. KB-attached chats automatically retrieve before each turn, prepend a citation-formatted context block, and write a `📎 KB retrieval` audit row visible in Receipts.
 
 **Enhance Prompt.** A prompt-rewriting skill that runs as an optional pre-step. You type a short, natural-language question; Enhance Prompt expands it into a structured legal prompt (role, jurisdiction, audience, scope, output format, constraints, citation expectations) and shows you the expanded version before submission. The skill itself is inspectable — you can read the SKILL.md driving the enhancement at any time.
 
@@ -175,17 +175,21 @@ cp .env.example .env
 Open `.env` and set the four required secrets (the file explains each one):
 
 - `POSTGRES_PASSWORD` — any long random string
-- `MINIO_ROOT_PASSWORD` — any long random string
+- `OBJECT_STORE_SECRET_KEY` — any long random string
 - `LQ_AI_GATEWAY_KEY` — any long random string
 - `JWT_SECRET` — any long random string
 
 Generate all four at once, labelled and ready to paste into `.env`:
 
 ```bash
-python3 -c 'import secrets; [print(f"{name}={secrets.token_urlsafe(32)}") for name in ("POSTGRES_PASSWORD","MINIO_ROOT_PASSWORD","LQ_AI_GATEWAY_KEY","JWT_SECRET")]'
+python3 -c 'import secrets; [print(f"{name}={secrets.token_urlsafe(32)}") for name in ("POSTGRES_PASSWORD","OBJECT_STORE_SECRET_KEY","LQ_AI_GATEWAY_KEY","JWT_SECRET")]'
 ```
 
 Provider API keys (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) are optional at this step. The stack starts without any; inference calls return "no provider configured" until you add at least one. Two paths add a key: set it in `.env` and restart the gateway, or — once `LQ_AI_GATEWAY_MASTER_KEY` is configured — add it at runtime through the admin provider-keys surface (`/api/v1/admin/provider-keys`), which encrypts the key into `gateway.yaml` and hot-applies it to the live gateway with no restart.
+
+Upgrading an installation that used the bundled MinIO service? Follow the
+[MinIO to RustFS migration runbook](docs/runbooks/minio-to-rustfs.md) before
+starting the new stack.
 
 ### Step 2 — Start the stack
 
@@ -193,7 +197,7 @@ Provider API keys (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) are optional at this s
 docker compose up -d
 ```
 
-Eight services start: postgres, redis, minio, gateway, api, ingest-worker, arq-worker, web. The api container runs `alembic upgrade head` automatically as the first step of its entrypoint, so a fresh deployment lands a fully-migrated schema before uvicorn accepts traffic (the arq-worker and ingest-worker skip migrations and wait for the api to be healthy). Wait ~60 seconds for healthchecks, then confirm:
+Eight services start: postgres, redis, rustfs, gateway, api, ingest-worker, arq-worker, web. The api container runs `alembic upgrade head` automatically as the first step of its entrypoint, so a fresh deployment lands a fully-migrated schema before uvicorn accepts traffic (the arq-worker and ingest-worker skip migrations and wait for the api to be healthy). Wait ~60 seconds for healthchecks, then confirm:
 
 ```bash
 docker compose ps   # all 8 services should show "healthy" or "running"
@@ -284,13 +288,13 @@ WEB_HOST_PORT=3000         # change if another web app (Next.js dev, etc.) holds
 API_HOST_PORT=8000         # change if a host service (Django, FastAPI) holds :8000
 GATEWAY_HOST_PORT=8001     # change if another service holds :8001
 REDIS_HOST_PORT=6379       # change if a host redis holds :6379
-MINIO_API_HOST_PORT=9000   # change if another service holds :9000
-MINIO_CONSOLE_HOST_PORT=9001  # change if Portainer/Console holds :9001
+OBJECT_STORE_API_HOST_PORT=9000   # change if another service holds :9000
+OBJECT_STORE_CONSOLE_HOST_PORT=9001  # change if Portainer/Console holds :9001
 ```
 
 The most common Mac collision is `POSTGRES_HOST_PORT=5432` against a Homebrew Postgres. Either set `POSTGRES_HOST_PORT=15432` in your `.env` (the compose stack's internal traffic still uses 5432; services talk to each other unchanged — only the host-side mapping shifts), or stop the host postgres first (`brew services stop postgresql@<version>` on macOS).
 
-**Two clones of this repo sharing data** — Docker Compose derives its project name from the parent directory's basename. Two clones at `lq-ai/` will reuse each other's named volumes (`lq-ai_pgdata` etc.) — including the database, admin user, and MinIO objects — and `docker compose down` in one will tear down the shared stack. To isolate two parallel clones, set `COMPOSE_PROJECT_NAME` in each clone's `.env` to a unique name (e.g. `COMPOSE_PROJECT_NAME=lq-ai-dev` and `COMPOSE_PROJECT_NAME=lq-ai-prod-candidate`).
+**Two clones of this repo sharing data** — Docker Compose derives its project name from the parent directory's basename. Two clones at `lq-ai/` will reuse each other's named volumes (`lq-ai_pgdata` etc.) — including the database, admin user, and object-store data — and `docker compose down` in one will tear down the shared stack. To isolate two parallel clones, set `COMPOSE_PROJECT_NAME` in each clone's `.env` to a unique name (e.g. `COMPOSE_PROJECT_NAME=lq-ai-dev` and `COMPOSE_PROJECT_NAME=lq-ai-prod-candidate`).
 
 ---
 
@@ -318,7 +322,7 @@ The trust model for a self-hosted, open-source project is that every claim termi
 
 ## Architecture
 
-LQ.AI is a fork of [OpenWebUI](https://github.com/open-webui/open-webui) for the chat UI, plus a FastAPI backend, a custom-built Inference Gateway (~3,000 lines of Python that we own end-to-end for security reasons), [LangGraph](https://github.com/langchain-ai/langgraph) for stateful agent workflows, [Docling](https://github.com/DS4SD/docling) + [PyMuPDF](https://github.com/pymupdf/PyMuPDF) for document parsing with character-level offsets, and PostgreSQL with [pgvector](https://github.com/pgvector/pgvector) for unified storage of application data, vectors, and full-text indexes. Optional [Langfuse](https://github.com/langfuse/langfuse) for LLM-specific observability; OpenTelemetry throughout.
+LQ.AI is a fork of [OpenWebUI](https://github.com/open-webui/open-webui) for the chat UI, plus a FastAPI backend, a custom-built Inference Gateway (~3,000 lines of Python that we own end-to-end for security reasons), [LangGraph](https://github.com/langchain-ai/langgraph) for stateful agent workflows, [PyMuPDF](https://github.com/pymupdf/PyMuPDF) for document parsing with character-level offsets, and PostgreSQL with [pgvector](https://github.com/pgvector/pgvector) for unified storage of application data, vectors, and full-text indexes. Optional [Langfuse](https://github.com/langfuse/langfuse) for LLM-specific observability; OpenTelemetry throughout.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -336,10 +340,10 @@ LQ.AI is a fork of [OpenWebUI](https://github.com/open-webui/open-webui) for the
 ┌─────────────┐ ┌─────────────┐ ┌───────────┐ ┌────────────┐
 │ Inference   │ │   Skill     │ │  Document │ │ Knowledge  │
 │  Gateway    │ │  Service    │ │  Pipeline │ │  Service   │
-│ (multi-     │ │  (skills,   │ │ (Docling+ │ │  (pgvector │
-│  provider,  │ │  Org Profile│ │  PyMuPDF, │ │  + FTS)    │
-│  tier-aware,│ │  singleton) │ │  Citation │ │            │
-│  anonym.    │ │             │ │  Engine)  │ │            │
+│ (multi-     │ │  (skills,   │ │ (PyMuPDF, │ │  (pgvector │
+│  provider,  │ │  Org Profile│ │  Citation │ │  + FTS)    │
+│  tier-aware,│ │  singleton) │ │  Engine)  │ │            │
+│  anonym.    │ │             │ │           │ │            │
 │  middleware)│ │             │ │           │ │            │
 └──────┬──────┘ └──────┬──────┘ └─────┬─────┘ └────┬───────┘
        │               │              │            │
@@ -348,7 +352,7 @@ LQ.AI is a fork of [OpenWebUI](https://github.com/open-webui/open-webui) for the
        ┌──────────────────────┼─────────────────────┐
        ▼                      ▼                     ▼
 ┌──────────────┐      ┌──────────────┐      ┌──────────────┐
-│ PostgreSQL   │      │    Redis     │      │   MinIO /    │
+│ PostgreSQL   │      │    Redis     │      │   RustFS /   │
 │ + pgvector   │      │  (sessions,  │      │   S3-compat  │
 │              │      │   queues)    │      │   (files)    │
 └──────────────┘      └──────────────┘      └──────────────┘
@@ -494,7 +498,7 @@ For security disclosures, see [`SECURITY.md`](SECURITY.md). The disclosure proce
 - [`docs/contribute/EASIEST-CONTRIBUTIONS.md`](docs/contribute/EASIEST-CONTRIBUTIONS.md) — curated short-cycle contributions with mini-PRDs.
 - [`docs/skill-authoring-guide.md`](docs/skill-authoring-guide.md) — how to write a high-quality skill.
 - [`docs/playbooks.md`](docs/playbooks.md) — how Playbooks work and how to write one.
-- [`deploy/`](deploy/) — deployment recipes (Helm chart, Caddy/Tailscale, observability stack); see also [`docs/INSTALL-MAC.md`](docs/INSTALL-MAC.md) for a from-scratch macOS install.
+- [`deploy/`](deploy/) — deployment recipes (Helm chart, [reverse-proxy + TLS recipes](deploy/reverse-proxy/) for Caddy/Traefik/nginx, Caddy/Tailscale, observability stack); see also [`docs/INSTALL-MAC.md`](docs/INSTALL-MAC.md) for a from-scratch macOS install.
 - [`docs/compliance/`](docs/compliance/) — Compliance Alignment Pack.
 - [`docs/security/`](docs/security/) — security artifacts (SBOM, threat model, supply-chain transparency).
 - [`docs/procurement/`](docs/procurement/) — procurement-readiness templates (SIG Lite, CAIQ).
@@ -507,7 +511,7 @@ LQ.AI builds on substantial open-source work. The most consequential dependencie
 
 - [OpenWebUI](https://github.com/open-webui/open-webui) — chat UI shell.
 - [LangGraph](https://github.com/langchain-ai/langgraph) — agent runtime.
-- [Docling](https://github.com/DS4SD/docling) and [PyMuPDF](https://github.com/pymupdf/PyMuPDF) — document parsing.
+- [PyMuPDF](https://github.com/pymupdf/PyMuPDF) — document parsing.
 - [pgvector](https://github.com/pgvector/pgvector) — vector storage in PostgreSQL.
 - [Anthropic Claude Skills](https://github.com/anthropics/skills) — the agentskills.io format the project adopts as its skill substrate.
 - [OpenTelemetry](https://opentelemetry.io/) — observability.

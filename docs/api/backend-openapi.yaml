@@ -332,7 +332,7 @@ paths:
       description: |
         Bearer-authenticated. Returns the current status of the export
         job. When `status=completed` and the bundle has not yet expired,
-        `download_url` is a presigned MinIO URL valid for 24 hours. A
+        `download_url` is a presigned S3-compatible URL valid for 24 hours. A
         404 covers both "no such job" and "job belongs to another user"
         (does not leak existence cross-user).
       parameters:
@@ -919,6 +919,11 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Chat'}
+        '404':
+          description: Project (if `project_id` was provided) not found.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
 
   /api/v1/chats/{chat_id}:
     parameters:
@@ -1957,7 +1962,7 @@ paths:
       tags: [files]
       summary: Upload a file
       description: |
-        Streaming multipart upload. The body is streamed to MinIO without
+        Streaming multipart upload. The body is streamed to S3-compatible storage without
         loading the whole file into memory; a SHA-256 is computed as bytes
         flow past, and metadata is persisted with `ingestion_status='pending'`.
         The document pipeline (Task C5) picks the row up asynchronously
@@ -2048,7 +2053,7 @@ paths:
       tags: [files]
       summary: Soft-delete a file
       description: |
-        Sets `deleted_at` on the row; the MinIO object is left in place
+        Sets `deleted_at` on the row; the object-store object is left in place
         and reaped later by D6 (per-user export+delete) or a future GC
         sweep, per `docs/adr/0005-file-storage-soft-delete-and-key-scheme.md`.
         Idempotent: deleting an already-soft-deleted or missing file
@@ -3865,7 +3870,10 @@ paths:
         '404':
           description: Chat or pending tool-call not found (id-probing-safe)
         '409':
-          description: Tool-call already resolved or confirmation expired
+          description: >-
+            Tool-call already resolved or confirmation expired, or the
+            encrypted resume payload could not be decrypted (DE-358 item 5 —
+            the row is consumed and the resume is denied; never replayable)
 
   # ============================================================
   # M3-D1 — slack-bridge persistence surface

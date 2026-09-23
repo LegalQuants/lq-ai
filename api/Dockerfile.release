@@ -4,18 +4,59 @@
 # bake the repo-root skills corpus (bind-mounted in dev) for the self-contained
 # launcher images; built with repo-root context by .github/workflows/release.yml.
 
+# Skills-corpus stage. Stands alone (no dependency install) so the guard below
+# can be exercised in seconds with `docker build --target skills`, which is
+# what scripts/release-image-check.sh and the CI job built on it do. The final
+# stage copies /skills from here verbatim, so what this stage guarantees, the
+# published image carries.
+FROM python:3.12-slim AS skills
+
+# Bake the skills corpus that the dev stack bind-mounts (./skills:/skills:ro),
+# so the published image is self-contained for the zero-checkout macOS launcher.
+COPY skills /skills
+# COPY of an empty directory succeeds silently, so a build from a checkout
+# without submodules produces an image that starts healthy and is simply
+# missing half the corpus. Fail the build instead.
+#
+# "Non-empty" is not enough: the runtime loads community skills from
+# /skills/community/skills/<slug>/SKILL.md (api/app/config.py,
+# community_skills_dir), so a checkout carrying only the submodule's README
+# and LICENSE would pass an emptiness check with zero loadable skills. Assert
+# that at least one manifest exists. If the glob matches nothing, $1 is the
+# literal pattern and `test -f` fails.
+RUN set -- /skills/community/skills/*/SKILL.md; test -f "$1" || { \
+      echo "ERROR: no community skill manifests found under /skills/community/skills/*/SKILL.md - the skills/community submodule was not checked out." >&2; \
+      echo "Run 'git submodule update --init --recursive' before building this image." >&2; \
+      exit 1; \
+    }
+
 FROM python:3.12-slim AS base
+
+# ADR 0023 — dependencies install from the committed uv.lock so the shipped
+# tree is exactly the reviewed tree. The uv binary is copied from the
+# version-tagged upstream image (same tag-pin posture as python:3.12-slim);
+# bump the tag deliberately alongside the lockfile toolchain.
+COPY --from=ghcr.io/astral-sh/uv:0.12.0 /uv /uvx /usr/local/bin/
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    UV_NO_CACHE=1 \
+    UV_PYTHON_DOWNLOADS=never
 
 WORKDIR /app
 
-# Install runtime deps from pyproject.toml (no dev extras in the image)
-COPY api/pyproject.toml api/README.md ./
-RUN pip install --no-cache-dir .
+# Install runtime deps from the lockfile (no dev extras in the image).
+# `uv sync --frozen` refuses to re-resolve: the build fails if uv.lock is
+# missing or stale rather than silently shipping an unreviewed tree.
+# `--no-install-project` installs dependencies only — the app/ source is
+# COPY'd in below and imported from /app, matching the previous
+# metadata-only `pip install .` behavior.
+COPY api/pyproject.toml api/README.md api/uv.lock ./
+RUN uv sync --frozen --no-install-project
+
+# Put the locked venv first on PATH so the entrypoint's alembic + uvicorn
+# resolve to the synced environment.
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Copy application code, migration files, and the entrypoint script
 COPY api/app/ ./app/
@@ -24,9 +65,8 @@ COPY api/alembic/ ./alembic/
 COPY api/entrypoint.sh /usr/local/bin/lq-ai-entrypoint
 RUN chmod +x /usr/local/bin/lq-ai-entrypoint
 
-# Bake the skills corpus that the dev stack bind-mounts (./skills:/skills:ro),
-# so the published image is self-contained for the zero-checkout macOS launcher.
-COPY skills /skills
+# The guarded skills corpus from the stage above.
+COPY --from=skills /skills /skills
 ENV LQ_AI_SKILLS_DIR=/skills
 
 EXPOSE 8000

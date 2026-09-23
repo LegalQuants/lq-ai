@@ -98,7 +98,7 @@ CREATE INDEX idx_user_sessions_expires ON user_sessions(expires_at);
 ### `user_export_jobs`
 
 Per-user GDPR Article 20 export job, tracked from queued → processing →
-completed/failed. The actual ZIP bytes live in MinIO under
+completed/failed. The actual ZIP bytes live in S3-compatible object storage under
 `storage_key`; the table itself is a job-state ledger that
 `POST /users/me/export` writes to and the worker mutates.
 
@@ -120,7 +120,7 @@ CREATE INDEX idx_user_export_jobs_expires ON user_export_jobs (expires_at) WHERE
 ```
 
 `expires_at` is set to `now() + 7 days` when the worker completes; an
-hourly GC cron clears `storage_key` (and deletes the MinIO bytes) once
+hourly GC cron clears `storage_key` (and deletes the object-store bytes) once
 that timestamp passes. The row itself is retained so status polling
 remains deterministic for a recently-deleted bundle.
 
@@ -848,7 +848,7 @@ CREATE TRIGGER trg_organization_profile_updated_at
 
 ### `files`
 
-Original uploaded files; the bytes themselves live in object storage (MinIO/S3).
+Original uploaded files; the bytes themselves live in S3-compatible object storage.
 
 ```sql
 CREATE TABLE files (
@@ -883,10 +883,10 @@ CREATE TABLE documents (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     file_id             UUID NOT NULL UNIQUE REFERENCES files(id) ON DELETE CASCADE,
     parser              TEXT NOT NULL,  -- 'docling+pymupdf', 'pymupdf', 'pymupdf-only'
-    parser_version      TEXT,            -- e.g. 'pymupdf=1.24.0; docling=1.16.0'
+    parser_version      TEXT,            -- e.g. 'pymupdf=1.24.0'
     page_count          INTEGER,
     character_count     INTEGER,
-    structured_content  JSONB,            -- Docling's structured representation; M2 reads
+    structured_content  JSONB,            -- reserved structured sidecar; currently unused (no reader). See ADR 0026.
     normalized_content  TEXT NOT NULL DEFAULT '',  -- M2-A1 (migration 0024); see below
     was_ocrd            BOOLEAN NOT NULL DEFAULT FALSE,  -- M2-A1 (migration 0024); see below
     ingest_status       TEXT NOT NULL DEFAULT 'ok'    -- M3-0.3 (migration 0030); see below
@@ -907,7 +907,10 @@ CREATE INDEX idx_documents_ingest_status ON documents(ingest_status)
 Per ADR 0006, the `parser` column carries the cascade outcome:
 `docling+pymupdf` (both succeeded), `pymupdf` (Docling fell through),
 or `pymupdf-only` (Docling intentionally disabled via
-`LQ_AI_DOCLING_ENABLED=false`).
+`LQ_AI_DOCLING_ENABLED=false`). **In practice `docling+pymupdf` has never
+occurred** — the Docling pass has never been operational (broken since C5),
+so every row is `pymupdf`; Docling is being removed per ADR 0026, after which
+the value set collapses to PyMuPDF-only.
 
 Per M2-A1 (migration 0024), `normalized_content` carries the full,
 canonical PyMuPDF text stream — the source the M2 Citation Engine

@@ -96,7 +96,15 @@ from app.citation.ledger import (
 from app.clients.gateway import EnsembleConfig, GatewayClient, get_gateway_client
 from app.config import get_settings
 from app.db.session import get_db
-from app.errors import Conflict, InternalError, LQAIError, NotFound, ValidationError
+from app.errors import (
+    CODE_PROVIDER_UNAVAILABLE,
+    Conflict,
+    InternalError,
+    LQAIError,
+    NotFound,
+    ProviderUnavailable,
+    ValidationError,
+)
 from app.knowledge.embed import DEFAULT_EMBEDDING_MODEL, request_embedding_vector
 from app.knowledge.retrieval import HybridSearchResult, hybrid_search
 from app.models.chat import Chat, Message, MessageCitation
@@ -132,6 +140,12 @@ from app.schemas.gateway import (
     ChatCompletionMessage,
     ChatCompletionRequest,
     InlineSkillRef,
+)
+from app.security.encryption import (
+    MCPEncryptionError,
+    MCPMasterKeyMissing,
+    decrypt_payload_envelope,
+    encrypt_payload_envelope,
 )
 from app.skills.registry import MutableSkillRegistry, SkillRegistry
 from app.workers.queue import enqueue_treatment_derivation_job
@@ -264,6 +278,25 @@ async def _load_history_messages(
 # being a touch permissive here is fine), followed by whitespace.
 _LEADING_SLASH_RE = re.compile(r"^/([a-z0-9-]{1,64})\s")
 
+# ``applied_skills`` provenance marker (ADR 0007 denormalization). The UI
+# appends ``"enhance-prompt"`` to a user message's ``skills[]`` when the
+# composer text came from the Enhance Prompt preview, so
+# ``MessageResponse.is_enhanced`` can be derived from the persisted row.
+# It is a marker, not a skill to assemble: the enhance-prompt skill body is
+# the *expansion* prompt (it asks the model for a YAML expansion of
+# ``raw_input``) and only ever runs through ``POST /api/v1/enhance-prompt``.
+# Forwarding it as ``lq_ai_skills`` prepended that body to every enhanced
+# chat turn and, now that the gateway enforces the corpus's declared
+# required inputs (ADR 0007 §2), would 400 every enhanced send for a
+# missing ``raw_input``. Persist it; never forward it.
+ENHANCE_PROMPT_MARKER = "enhance-prompt"
+
+
+def _gateway_skills(skills: list[str]) -> list[str]:
+    """Skills to forward to the gateway: everything except the provenance marker."""
+
+    return [s for s in skills if s != ENHANCE_PROMPT_MARKER]
+
 
 async def _maybe_resolve_leading_slash(
     request: Request, db: AsyncSession, user: User, content: str
@@ -349,6 +382,36 @@ async def _load_visible_chat(
         raise NotFound(
             f"Chat {chat_id} not found.",
             details={"chat_id": str(chat_id)},
+        )
+    return row
+
+
+async def _load_visible_project_for_chat(
+    db: AsyncSession,
+    project_id: uuid.UUID,
+    owner_id: uuid.UUID,
+) -> Project:
+    """Validate that ``project_id`` is owned by the caller before accepting it
+    as a chat's project association; 404 on miss / cross-user / archived.
+
+    Mirrors :func:`app.api.knowledge_bases._load_visible_project_for_kb`.
+    Inlined here rather than imported to keep the chat surface free of a
+    reverse dependency on the projects router module — it is a one-statement
+    SELECT. Without this guard a caller can bind a chat to another user's
+    project id and, on ``send_message``, pull that project's attached
+    knowledge-base content into the response and out to the LLM provider.
+    """
+
+    stmt = select(Project).where(
+        Project.id == project_id,
+        Project.owner_id == owner_id,
+        Project.archived_at.is_(None),
+    )
+    row = (await db.execute(stmt)).scalar_one_or_none()
+    if row is None:
+        raise NotFound(
+            f"Project {project_id} not found.",
+            details={"project_id": str(project_id)},
         )
     return row
 
@@ -587,6 +650,9 @@ async def create_chat(
     user: ActiveUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ChatResponse:
+    if payload.project_id is not None:
+        await _load_visible_project_for_chat(db, payload.project_id, user.id)
+
     chat = Chat(
         owner_id=user.id,
         project_id=payload.project_id,
@@ -1035,7 +1101,13 @@ async def _retrieve_kb_context_for_chat(
         return [], []
 
     # Load KB rows (for hybrid_alpha per KB). One SELECT for the set.
-    kb_stmt = select(KnowledgeBase).where(KnowledgeBase.id.in_(kb_ids))
+    # Defense-in-depth: scope to the chat owner so a stale or foreign
+    # ``project_id`` (see _load_visible_project_for_chat) can never surface
+    # another user's KB content, even if one slipped past chat creation.
+    kb_stmt = select(KnowledgeBase).where(
+        KnowledgeBase.id.in_(kb_ids),
+        KnowledgeBase.owner_id == chat.owner_id,
+    )
     kb_rows = (await db.execute(kb_stmt)).scalars().all()
 
     # Embed the query once (reused across every KB). Mirrors the
@@ -1587,7 +1659,10 @@ async def send_message(
     # attachments. The gateway assembles them alongside ``lq_ai_skills``
     # without a backend round-trip; ``effective_skill_inputs`` is the
     # merged-and-flattened map keyed by both slug AND synthesized
-    # inline-skill name.
+    # inline-skill name. ``gateway_skills`` drops the enhance-prompt
+    # provenance marker (see ``ENHANCE_PROMPT_MARKER``); the persisted
+    # user row above keeps it.
+    gateway_skills = _gateway_skills(list(effective_skills))
     gw_request = ChatCompletionRequest(
         model=payload.model,
         messages=gw_messages,
@@ -1596,7 +1671,7 @@ async def send_message(
         lq_ai_chat_id=str(cid),
         lq_ai_message_id=str(assistant_message_id),
         lq_ai_user_id=str(user.id),
-        lq_ai_skills=list(effective_skills),
+        lq_ai_skills=gateway_skills,
         lq_ai_skill_inputs=dict(effective_skill_inputs),
         lq_ai_inline_skills=list(inline_skill_refs),
         lq_ai_file_ids=list(effective_file_ids),
@@ -1615,7 +1690,7 @@ async def send_message(
     # logged and swallowed rather than propagated into the user's request.
     try:
         _emit_skill_spans(
-            list(effective_skills),
+            list(gateway_skills),
             registry=_skill_registry_from_request(request),
             project_id=chat.project_id,
             project_privileged=project_privileged,
@@ -2025,8 +2100,22 @@ async def resume_tool_call(
         await db.execute(select(ChatPendingToolCall).where(ChatPendingToolCall.id == claimed_id))
     ).scalar_one()
 
-    # Extract resume state.
-    resume_state: dict = pending.resume_state
+    # Decrypt the envelope-encrypted payload columns (DE-358 item 5).  Fail
+    # closed on a tampered / wrong-key ciphertext: the claim above is already
+    # committed (status="resolved"), so the row can never be replayed, and the
+    # structured 409 never carries ciphertext or payload contents.  Rows
+    # without the envelope marker are legacy plaintext rows and pass through
+    # unchanged (TTL-bounded transition fallback — removable after one
+    # release).
+    try:
+        resume_state: dict = decrypt_payload_envelope(pending.resume_state)
+        tool_call_args: dict = decrypt_payload_envelope(pending.tool_call_args)
+    except (MCPEncryptionError, MCPMasterKeyMissing) as exc:
+        raise Conflict(
+            "pending tool-call payload could not be decrypted; resume denied",
+            details={"pending_call_id": pending_call_id},
+        ) from exc
+
     messages: list[dict] = list(resume_state.get("messages", []))
     calls_used: int = int(resume_state.get("calls_used", 0))
     model: str = str(resume_state.get("model", "smart"))
@@ -2066,7 +2155,7 @@ async def resume_tool_call(
                     "type": "function",
                     "function": {
                         "name": pending.function_name,
-                        "arguments": _json.dumps(dict(pending.tool_call_args)),
+                        "arguments": _json.dumps(dict(tool_call_args)),
                     },
                 }
             ],
@@ -2123,7 +2212,7 @@ async def resume_tool_call(
                         user=user,
                         gateway=gateway,
                         spec=spec,
-                        args=dict(pending.tool_call_args),
+                        args=dict(tool_call_args),
                         cluster_cache={},
                         server_auth_map=server_auth_map,
                         assistant_message_id=assistant_message_id,
@@ -2258,12 +2347,17 @@ async def resume_tool_call(
                     tool=spec2.tool,
                     destructive=spec2.destructive,
                     tier=tier_val2,
-                    tool_call_args=loop_outcome.args,
-                    resume_state={
-                        "messages": loop_outcome.messages,
-                        "calls_used": loop_outcome.calls_used,
-                        "model": model,
-                    },
+                    # DE-358 item 5: payload columns are envelope-encrypted
+                    # at rest under LQ_AI_MCP_MASTER_KEY (fails closed when
+                    # the key is unset — never a plaintext write).
+                    tool_call_args=encrypt_payload_envelope(loop_outcome.args),
+                    resume_state=encrypt_payload_envelope(
+                        {
+                            "messages": loop_outcome.messages,
+                            "calls_used": loop_outcome.calls_used,
+                            "model": model,
+                        }
+                    ),
                     status="pending",
                     expires_at=datetime.now(UTC) + CONFIRM_TTL,
                 )
@@ -2323,6 +2417,20 @@ async def resume_tool_call(
             yield (f"data: {_json.dumps(mcp_frame2, separators=(',', ':'))}\n\n".encode())
             yield b"data: [DONE]\n\n"
             return
+
+        # Issue #503 — never present an empty turn as a success. Runs BEFORE
+        # persistence so the stored row and the wire agree (see
+        # ``_empty_turn_error``).
+        if error_envelope is None and not "".join(accumulated).strip():
+            error_code, error_envelope = _empty_turn_error(request_id)
+            log.warning(
+                "chat resume_tool_call produced no content",
+                extra={
+                    "event": "resume_tool_call_empty_completion",
+                    "assistant_message_id": str(assistant_message_id),
+                    "request_id": request_id,
+                },
+            )
 
         # Persist the assistant message (LoopFinal or error path).
         try:
@@ -2797,6 +2905,32 @@ async def _persist_message_tool_sources(
     await db.flush()
 
 
+def _empty_turn_error(request_id: str) -> tuple[str, dict[str, Any]]:
+    """Issue #503 — an empty turn is an upstream failure, not an answer.
+
+    A stream that ended with no content and raised nothing used to fall
+    through to the success tail. The client could not tell "the system
+    broke" from "the model had little to say", and for a legal tool that
+    ambiguity is the defect: the operator blames the model. The gateway now
+    emits its own error frame for a contentless stream; this is the
+    belt-and-braces layer for any path that still yields nothing without
+    raising. Both SSE generators call it *before* persisting the assistant
+    row, so the stored ``error_code``, the wire frame, and the history
+    replay exclusion (errored rows are never replayed) all agree.
+
+    Returns ``(error_code, error_envelope)`` for the generator's final
+    frames.
+    """
+
+    envelope = ProviderUnavailable(
+        "The turn completed without producing any content. This is an "
+        "upstream failure, not an empty answer — check the gateway logs "
+        "for this request id.",
+        details={"request_id": request_id},
+    ).to_envelope()
+    return CODE_PROVIDER_UNAVAILABLE, envelope
+
+
 async def _persist_assistant_message(
     db: AsyncSession,
     *,
@@ -3101,12 +3235,17 @@ async def _non_streaming_response(
                 tool=spec.tool,
                 destructive=spec.destructive,
                 tier=tier_val,
-                tool_call_args=outcome.args,
-                resume_state={
-                    "messages": outcome.messages,
-                    "calls_used": outcome.calls_used,
-                    "model": request.model,
-                },
+                # DE-358 item 5: payload columns are envelope-encrypted at
+                # rest under LQ_AI_MCP_MASTER_KEY (fails closed when the key
+                # is unset — never a plaintext write).
+                tool_call_args=encrypt_payload_envelope(outcome.args),
+                resume_state=encrypt_payload_envelope(
+                    {
+                        "messages": outcome.messages,
+                        "calls_used": outcome.calls_used,
+                        "model": request.model,
+                    }
+                ),
                 status="pending",
                 expires_at=datetime.now(UTC) + CONFIRM_TTL,
             )
@@ -3424,12 +3563,18 @@ async def _stream_response(
                         tool=spec.tool,
                         destructive=spec.destructive,
                         tier=tier_val,
-                        tool_call_args=loop_outcome.args,
-                        resume_state={
-                            "messages": loop_outcome.messages,
-                            "calls_used": loop_outcome.calls_used,
-                            "model": request.model,
-                        },
+                        # DE-358 item 5: payload columns are envelope-
+                        # encrypted at rest under LQ_AI_MCP_MASTER_KEY
+                        # (fails closed when the key is unset — never a
+                        # plaintext write).
+                        tool_call_args=encrypt_payload_envelope(loop_outcome.args),
+                        resume_state=encrypt_payload_envelope(
+                            {
+                                "messages": loop_outcome.messages,
+                                "calls_used": loop_outcome.calls_used,
+                                "model": request.model,
+                            }
+                        ),
                         status="pending",
                         expires_at=datetime.now(UTC) + CONFIRM_TTL,
                     )
@@ -3562,6 +3707,22 @@ async def _stream_response(
                         "error_code": error_code,
                     },
                 )
+
+        # Issue #503 — never present an empty turn as a success. Runs BEFORE
+        # persistence so the stored row, the audit row and the wire agree
+        # (see ``_empty_turn_error``).
+        if error_envelope is None and not "".join(accumulated).strip():
+            error_code, error_envelope = _empty_turn_error(request_id)
+            log.warning(
+                "chat send_message produced no content",
+                extra={
+                    "event": "chat_send_message_empty_completion",
+                    "user_id": str(user.id),
+                    "chat_id": str(chat.id),
+                    "assistant_message_id": str(assistant_message_id),
+                    "request_id": request_id,
+                },
+            )
 
         # Persist the assistant row exactly once. Even if everything
         # failed, we record what we got so operators see the full
@@ -3805,7 +3966,11 @@ async def run_inference_override(
         lq_ai_chat_id=str(chat.id),
         lq_ai_message_id=str(assistant_message_id),
         lq_ai_user_id=str(user.id),
-        lq_ai_skills=list(user_msg.applied_skills or []),
+        # The re-run replays the persisted skill *names*; the message row
+        # stores no skill inputs (DE-390), so a skill whose frontmatter
+        # declares required inputs is refused by the gateway with
+        # ``skill_input_missing`` rather than run without its inputs.
+        lq_ai_skills=_gateway_skills(list(user_msg.applied_skills or [])),
         minimum_inference_tier=None,
         lq_ai_project_minimum_inference_tier=None,
     )

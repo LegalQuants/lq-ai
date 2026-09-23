@@ -6,6 +6,16 @@ The audience is anyone authoring a skill containing legal substance: practicing 
 
 For the contribution process (claim, draft, attest, review, merge), see [`skills/CONTRIBUTING.md`](../skills/CONTRIBUTING.md). This guide focuses on **how to author the skill itself** — what goes in `SKILL.md`, what goes in `reference/`, what goes in `examples/`, and what conventions the project expects.
 
+**Accepted optional capabilities, not available on this branch:**
+[ADR 0035 D8b–D8d](adr/0035-governed-orchestration-run-tree.md#d8b--optional-persistent-skill-workspaces)
+adds persistent skill workspaces and installed Python helpers. Bundled scripts
+require security review of their exact code, dependencies and runtime image in
+addition to any legal-content review. Helpers must treat supplied and saved text
+as data and preserve its restrictions through subsequent agent calls. General
+generated-code execution remains excluded. The [capability summary](plans/issue-563-skill-capabilities.md)
+describes available behavior and pending security gates; this documentation PR
+does not add runtime support for `scripts/`.
+
 ---
 
 ## Skill anatomy

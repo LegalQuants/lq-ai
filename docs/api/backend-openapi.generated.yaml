@@ -1388,8 +1388,8 @@ components:
     Body_upload_file_api_v1_files_post:
       properties:
         file:
+          contentMediaType: application/octet-stream
           description: The file to upload.
-          format: binary
           title: File
           type: string
         project_id:
@@ -1398,7 +1398,7 @@ components:
           - type: 'null'
           description: Optional UUID of a project to attach this file to. The caller
             must own the project; cross-user or unknown ids return 422 (the upload
-            is rejected before bytes touch MinIO).
+            is rejected before bytes touch the object store).
           title: Project Id
       required:
       - file
@@ -6343,6 +6343,11 @@ components:
       type: object
     ValidationError:
       properties:
+        ctx:
+          title: Context
+          type: object
+        input:
+          title: Input
         loc:
           items:
             anyOf:
@@ -6509,7 +6514,7 @@ info:
     until then, all endpoints under /api/v1 return 501 with a structured 'not implemented'
     body that names the implementing task.
   title: LQ.AI Backend API
-  version: 0.6.1
+  version: 0.7.1
 openapi: 3.1.0
 paths:
   /api/v1/admin/aliases:
@@ -8833,7 +8838,7 @@ paths:
         '403':
           description: Autonomous layer not enabled for this user
         '404':
-          description: Referenced project not found
+          description: Referenced project, playbook, or knowledge base not found
         '422':
           description: Invalid target or missing project_id for a query
       security:
@@ -8907,7 +8912,13 @@ paths:
 
         ``next_run_at = next_run_after(cron_expr, now(UTC))`` so the
 
-        dispatcher''s first eligible tick can pick it up.  Returns the created
+        dispatcher''s first eligible tick can pick it up.  Non-null FK targets
+
+        are validated (DE-322): ``project_id`` and ``target_kb_id`` must be
+
+        owned by the caller; ``playbook_id`` must be visible to the caller
+
+        (own or built-in) — otherwise 404.  Returns the created
 
         :class:`~app.schemas.autonomous.AutonomousScheduleRead` (201).
 
@@ -8930,7 +8941,7 @@ paths:
         '401':
           description: Not authenticated
         '404':
-          description: Referenced project not found
+          description: Referenced project, playbook, or knowledge base not found
         '422':
           description: Invalid cron expression
       security:
@@ -9030,7 +9041,8 @@ paths:
         '401':
           description: Not authenticated
         '404':
-          description: Schedule or referenced project not found
+          description: Schedule, referenced project, playbook, or knowledge base not
+            found
         '422':
           description: Invalid cron expression
       security:
@@ -9502,7 +9514,11 @@ paths:
 
         returns 404 (conservative per-user isolation; KB-sharing is out of
 
-        scope). Creates the watch row. Returns the created
+        scope). A non-null ``playbook_id`` must be visible to the caller
+
+        (own or built-in; DE-322) — otherwise 404. Creates the watch row.
+
+        Returns the created
 
         :class:`~app.schemas.autonomous.AutonomousWatchRead` (201).
 
@@ -9525,7 +9541,8 @@ paths:
         '401':
           description: Not authenticated
         '404':
-          description: Target knowledge base or referenced project not found
+          description: Target knowledge base, referenced project, or playbook not
+            found
         '422':
           content:
             application/json:
@@ -9631,7 +9648,7 @@ paths:
         '401':
           description: Not authenticated
         '404':
-          description: Watch or referenced project not found
+          description: Watch, referenced project, or playbook not found
         '422':
           content:
             application/json:
@@ -10382,11 +10399,11 @@ paths:
       - enhance-prompt
   /api/v1/files:
     post:
-      description: 'Streaming multipart upload. The body is streamed to MinIO without
-        ever loading the whole file into memory; a SHA-256 is computed as bytes flow
-        past, and metadata is persisted with `ingestion_status=''pending''`. The document
-        pipeline (Task C5) picks the row up asynchronously and flips status through
-        `processing` → `ready` (or `failed`).
+      description: 'Streaming multipart upload. The body is streamed to S3-compatible
+        storage without ever loading the whole file into memory; a SHA-256 is computed
+        as bytes flow past, and metadata is persisted with `ingestion_status=''pending''`.
+        The document pipeline (Task C5) picks the row up asynchronously and flips
+        status through `processing` → `ready` (or `failed`).
 
 
         Per-request size limit: `LQ_AI_MAX_UPLOAD_SIZE_MB` (default 100). Exceeding
@@ -10418,10 +10435,10 @@ paths:
       - files
   /api/v1/files/{file_id}:
     delete:
-      description: 'Sets `deleted_at` on the row; the MinIO object is left in place
-        and reaped later by D6 (per-user export+delete) or a future GC sweep, per
-        `docs/adr/0005-file-storage-soft-delete-and-key-scheme.md`. Idempotent: deleting
-        an already-soft-deleted file or a missing file returns 404.'
+      description: 'Sets `deleted_at` on the row; the object-store object is left
+        in place and reaped later by D6 (per-user export+delete) or a future GC sweep,
+        per `docs/adr/0005-file-storage-soft-delete-and-key-scheme.md`. Idempotent:
+        deleting an already-soft-deleted file or a missing file returns 404.'
       operationId: delete_file_api_v1_files__file_id__delete
       parameters:
       - in: path
@@ -10483,7 +10500,7 @@ paths:
       - files
   /api/v1/files/{file_id}/content:
     get:
-      description: "Stream the original bytes from MinIO with the right headers.\n\
+      description: "Stream the original bytes from object storage with the right headers.\n\
         \nHeaders set:\n* ``Content-Type``: from the stored ``mime_type``.\n* ``Content-Length``:\
         \ from the stored ``size_bytes``.\n* ``Content-Disposition``: ``attachment;\
         \ filename=\"...\"`` with an\n  RFC 5987 ``filename*`` for non-ASCII filenames.\n\
@@ -13634,7 +13651,7 @@ paths:
 
         arq worker job, and returns 202. The worker runs the ZIP build +
 
-        MinIO upload out-of-band.
+        object-store upload out-of-band.
 
 
         Re-calling while a queued/processing job exists is allowed —
@@ -13803,7 +13820,7 @@ paths:
       - meta
   /ready:
     get:
-      description: 'Readiness probe — returns 200 when DB + Redis + MinIO + gateway
+      description: 'Readiness probe — returns 200 when DB + Redis + S3 storage + gateway
         are reachable.
 
 

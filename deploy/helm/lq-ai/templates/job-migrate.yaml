@@ -1,0 +1,58 @@
+{{- if .Values.migrations.enabled }}
+{{- if not .Values.migrations.objectStoreClaim }}
+{{- fail "migrations.objectStoreClaim is required when migrations.enabled=true" }}
+{{- end }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "lq-ai.fullname" . }}-migrate-{{ .Release.Revision }}
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        {{- include "lq-ai.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: "{{ .Values.image.registry }}/{{ .Values.image.owner }}/lq-ai-api:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "-m", "app.ops.migrate", "--actor", "helm-job"]
+          # Enabling the hook is the operator's explicit confirmation. apply
+          # runs plan/preflight internally and is a no-op when nothing applies.
+          args: ["apply", "--yes", "--json"]
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.passwordSecretRef.name }}
+                  key: {{ .Values.postgres.passwordSecretRef.key }}
+            - name: DATABASE_URL
+              value: "postgresql+asyncpg://{{ .Values.postgres.user }}:$(POSTGRES_PASSWORD)@{{ include "lq-ai.fullname" . }}-postgres:5432/{{ .Values.postgres.database }}"
+            - name: LQ_AI_OBJECTSTORE_DIR
+              value: /lq-ai/volumes/objectstore
+            - name: LQ_AI_OPS_DIR
+              value: /lq-ai/ops
+            # During a pre-upgrade hook the old MinIO Service still exists.
+            # Refuse unless the operator has scaled it down as the runbook says.
+            - name: S3_ENDPOINT_URL
+              value: "http://{{ include "lq-ai.fullname" . }}-minio:9000"
+          volumeMounts:
+            - name: objectstore
+              mountPath: /lq-ai/volumes/objectstore
+            - name: ops
+              mountPath: /lq-ai/ops
+      volumes:
+        - name: objectstore
+          persistentVolumeClaim:
+            claimName: {{ .Values.migrations.objectStoreClaim }}
+        - name: ops
+          persistentVolumeClaim:
+            claimName: {{ include "lq-ai.fullname" . }}-ops
+{{- end }}

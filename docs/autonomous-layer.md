@@ -209,6 +209,16 @@ a Project's context is a separate, user-authorized proposal lifecycle).
 `run_skill` / `run_playbook` route through the gateway with
 `anonymize=True` by default (the autonomous flow may carry privileged
 context).
+`retrieve_chunks` additionally verifies target ownership before dispatch:
+every model-supplied `kb_id`/`file_id` must belong to the session's
+owner (archived and soft-deleted targets excluded), and query mode
+requires `kb_id`; foreign or unknown ids fail closed with a
+not-found-shaped error (#288, AG-01). `emit_artifact` applies the same
+ownership predicate on the **write** path: the session's target KB
+(`session.params["kb_id"]`) must belong to the session owner and not be
+archived, checked before any byte is uploaded — a foreign target fails
+the session closed rather than attaching a file to another user's
+knowledge base.
 
 ---
 
@@ -300,6 +310,16 @@ handlers): a caller can only bind a schedule/watch to a project they own.
 This closed a pre-existing **IDOR** where `project_id` was assigned
 without an ownership check, which had let a caller reference another
 user's project id.
+
+**Target-KB binding.** The same rule applies to `target_kb_id` on
+schedules and run-now (and to `knowledge_base_id` on watches): a non-null
+id is validated at every assignment site (`create_schedule`, the schedule
+`PATCH`, run-now, and `create_watch`) against the caller's own,
+non-archived knowledge bases — a foreign, unknown, or archived id is
+rejected 404, and an explicit null on `PATCH` clears the target. The
+dispatcher copies the persisted id into `params["kb_id"]` unchanged, so
+the assignment-time check and the emit-time check in `emit_artifact`
+are the two halves of one gate.
 
 ### Per-user memory (proposed → kept / dismissed)
 
@@ -395,7 +415,7 @@ the previous tick's memo. Query-mode retrieval and chat RAG deliberately
 shape.
 
 **Honest fallbacks.** A run with no target KB skips persistence and
-emits one `info` finding saying why; a storage (MinIO) failure writes
+emits one `info` finding saying why; an object-storage failure writes
 **no** DB rows and emits one `warn` finding per failed artifact
 (correlated-failure dedupe is deferred as DE-333). The delivery
 notification's payload carries `artifact_count` next to

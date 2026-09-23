@@ -5,9 +5,9 @@
 # build or boot time: a dependency bump, a Dockerfile or docker-compose.yml
 # edit, a new migration.
 #
-# What it does: builds every default-profile image, boots the full compose
-# stack, waits for every healthcheck, probes the api/gateway/web health
-# endpoints and the ingest worker's lazily-imported dependencies (docling),
+# What it does: builds every default-profile image, proves a fresh stack has no
+# deployment migration pending, boots the full compose stack, probes health and
+# lazily imported dependencies, performs an api upload/download byte match,
 # holds for a soak period, and fails if any container restarted.
 #
 # What it does NOT do: perform inference or exercise features. No provider
@@ -80,7 +80,8 @@ if [ ! -f .env ]; then
   echo "stack-smoke: no .env found — writing dummy secrets (boot-only; no provider keys needed)"
   cat > .env <<'EOF'
 POSTGRES_PASSWORD=ci-smoke-postgres
-MINIO_ROOT_PASSWORD=ci-smoke-minio-password
+OBJECT_STORE_SECRET_KEY=ci-smoke-object-store-password
+OBJECT_STORE_ACCESS_KEY=lq_ai
 LQ_AI_GATEWAY_KEY=ci-smoke-gateway-key
 JWT_SECRET=ci-smoke-jwt-secret-0123456789abcdef0123456789abcdef
 EOF
@@ -98,6 +99,10 @@ docker compose build gateway web
 docker compose build api
 docker tag lq-ai-api:latest lq-ai-ingest-worker:latest
 docker tag lq-ai-api:latest lq-ai-arq-worker:latest
+
+PHASE="fresh migration plan"
+echo "stack-smoke: asserting the fresh object-store volume has no migration pending"
+docker compose --profile ops run --rm migrate plan --json
 
 # --wait blocks until every default-profile service reports healthy (all
 # of them define healthchecks) and fails if any container exits or never
@@ -124,6 +129,29 @@ curl -fsS http://127.0.0.1:3000/health; echo
 PHASE="lazy-import probes"
 echo "stack-smoke: probing lazily-imported dependencies"
 docker compose exec -T ingest-worker python -c "from docling.document_converter import DocumentConverter; print('docling import OK')"
+
+PHASE="object-store api round trip"
+echo "stack-smoke: uploading and downloading bytes through the api"
+docker compose exec -T api python -m app.cli reset-admin-password \
+  --email admin@lq.ai \
+  --password 'Stack-Smoke-RustFS-Pw1!' \
+  --no-force-change
+SMOKE_TOKEN=$(curl -fsS http://127.0.0.1:8000/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@lq.ai","password":"Stack-Smoke-RustFS-Pw1!"}' \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
+SMOKE_UPLOAD=$(mktemp)
+SMOKE_DOWNLOAD=$(mktemp)
+printf 'LQ.AI RustFS stack-smoke byte match\n' > "$SMOKE_UPLOAD"
+SMOKE_FILE_ID=$(curl -fsS http://127.0.0.1:8000/api/v1/files \
+  -H "Authorization: Bearer ${SMOKE_TOKEN}" \
+  -F "file=@${SMOKE_UPLOAD};type=text/plain;filename=rustfs-smoke.txt" \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+curl -fsS "http://127.0.0.1:8000/api/v1/files/${SMOKE_FILE_ID}/content" \
+  -H "Authorization: Bearer ${SMOKE_TOKEN}" \
+  -o "$SMOKE_DOWNLOAD"
+cmp "$SMOKE_UPLOAD" "$SMOKE_DOWNLOAD"
+rm -f "$SMOKE_UPLOAD" "$SMOKE_DOWNLOAD"
 
 # Healthchecks can flicker healthy on a crash-looping service; hold long
 # enough for a loop to show up as restarts.

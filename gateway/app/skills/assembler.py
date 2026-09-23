@@ -198,6 +198,14 @@ def extract_required_inputs(skill: Skill) -> list[str]:
 
     inputs = parsed.get("inputs")
     if not isinstance(inputs, dict):
+        # The shipped corpus nests the block under ``lq_ai:`` (the
+        # authoring-guide convention, and what every built-in SKILL.md
+        # does); the C2-era code read the top level only, so required-
+        # input enforcement never fired for any built-in skill. Check
+        # both spellings, as ``consumes_organization_profile`` does.
+        nested = parsed.get("lq_ai")
+        inputs = nested.get("inputs") if isinstance(nested, dict) else None
+    if not isinstance(inputs, dict):
         return []
 
     required = inputs.get("required") or []

@@ -20,6 +20,7 @@ options, so an invocation bug surfaces with an actionable failure.
 
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -46,6 +47,7 @@ async def test_retrieve_chunks_query_path_unchanged(
             "top_k": 4,
         },
         db=db_session,
+        owner_id=kb_with_one_indexed_file.owner_id,
     )
     assert "summary" in result.data
     assert "chunks" in result.data
@@ -83,6 +85,7 @@ async def test_retrieve_chunks_by_file_id(
             "file_id": str(kb_with_one_indexed_file.file_id),
         },
         db=db_session,
+        owner_id=kb_with_one_indexed_file.owner_id,
     )
     assert result.data["summary"]["chunk_count"] > 0
     for chunk in result.data["chunks"]:
@@ -111,6 +114,7 @@ async def test_retrieve_chunks_since_scope(
             "since": cutoff.isoformat(),
         },
         db=db_session,
+        owner_id=kb_with_old_and_new_files.owner_id,
     )
     returned_file_ids = {c["file_id"] for c in result.data["chunks"]}
     assert str(kb_with_old_and_new_files.new_file_id) in returned_file_ids
@@ -135,6 +139,7 @@ async def test_retrieve_chunks_since_accepts_aware_datetime(
             "since": cutoff,
         },
         db=db_session,
+        owner_id=kb_with_old_and_new_files.owner_id,
     )
     returned_file_ids = {c["file_id"] for c in result.data["chunks"]}
     assert str(kb_with_old_and_new_files.new_file_id) in returned_file_ids
@@ -152,7 +157,7 @@ async def test_retrieve_chunks_no_mode_raises_actionable_error(
     empty result, not a generic KeyError.
     """
     with pytest.raises(ValueError) as excinfo:
-        await _handle_retrieve_chunks({}, db=db_session)
+        await _handle_retrieve_chunks({}, db=db_session, owner_id=uuid.uuid4())
     message = str(excinfo.value)
     assert "query" in message
     assert "file_id" in message
@@ -174,6 +179,7 @@ async def test_retrieve_chunks_since_rejects_naive_datetime(
                 "since": naive_dt,
             },
             db=db_session,
+            owner_id=kb_with_old_and_new_files.owner_id,
         )
     with pytest.raises(ValueError, match="timezone-aware"):
         await _handle_retrieve_chunks(
@@ -182,4 +188,127 @@ async def test_retrieve_chunks_since_rejects_naive_datetime(
                 "since": "2026-05-27T12:00:00",  # naive ISO string (no offset)
             },
             db=db_session,
+            owner_id=kb_with_old_and_new_files.owner_id,
+        )
+
+
+async def test_retrieve_chunks_rejects_foreign_kb_id(
+    db_session: AsyncSession, kb_with_one_indexed_file: KbOneFile
+) -> None:
+    """IDOR regression (#288, AG-01): a session whose owner does not own the
+    model-supplied ``kb_id`` cannot retrieve its chunks, in any mode.
+
+    The autonomous planner's args are model-controlled and prompt-injectable,
+    so a foreign ``kb_id``/``file_id`` must be rejected before ``hybrid_search``
+    (which scopes only by id and trusts the handler for ownership).
+    """
+    intruder = uuid.uuid4()  # not the KB's owner
+
+    # Mode 1 (query)
+    with pytest.raises(ValueError, match="not accessible"):
+        await _handle_retrieve_chunks(
+            {
+                "kb_id": str(kb_with_one_indexed_file.kb_id),
+                "query": "confidential",
+                "alpha": 1.0,
+            },
+            db=db_session,
+            owner_id=intruder,
+        )
+
+    # Mode 2 (file_id)
+    with pytest.raises(ValueError, match="not accessible"):
+        await _handle_retrieve_chunks(
+            {"file_id": str(kb_with_one_indexed_file.file_id)},
+            db=db_session,
+            owner_id=intruder,
+        )
+
+    # Mode 3 (since + kb_id)
+    cutoff = datetime.now(UTC) - timedelta(minutes=5)
+    with pytest.raises(ValueError, match="not accessible"):
+        await _handle_retrieve_chunks(
+            {
+                "kb_id": str(kb_with_one_indexed_file.kb_id),
+                "since": cutoff.isoformat(),
+            },
+            db=db_session,
+            owner_id=intruder,
+        )
+
+
+async def test_query_mode_without_kb_id_fails_closed(
+    db_session: AsyncSession,
+) -> None:
+    """A ``query``-mode call with no ``kb_id`` is refused BY THE OWNERSHIP GATE.
+
+    Regression pin (#288, AG-01): the first cut skipped ``_assert_kb_owned``
+    when ``kb_id`` was absent and let the downstream handler complain instead.
+    That made the ownership check conditional on the model supplying the very
+    field being checked. The gate must be the thing that refuses.
+    """
+    with pytest.raises(ValueError, match="requires `kb_id`"):
+        await _handle_retrieve_chunks(
+            {"query": "confidential", "alpha": 1.0},
+            db=db_session,
+            owner_id=uuid.uuid4(),
+        )
+
+
+async def test_retrieve_chunks_rejects_soft_deleted_file(
+    db_session: AsyncSession, kb_with_one_indexed_file: KbOneFile
+) -> None:
+    """A tombstoned file is unreachable even for its own owner.
+
+    Mirrors ``app.api.files._load_visible_file``, which filters
+    ``deleted_at IS NULL``: the autonomous path must not resurrect content the
+    HTTP surface treats as deleted.
+    """
+    from sqlalchemy import update
+
+    from app.models.file import File as FileModel
+
+    await db_session.execute(
+        update(FileModel)
+        .where(FileModel.id == kb_with_one_indexed_file.file_id)
+        .values(deleted_at=datetime.now(UTC))
+    )
+    await db_session.flush()
+
+    with pytest.raises(ValueError, match="not accessible"):
+        await _handle_retrieve_chunks(
+            {"file_id": str(kb_with_one_indexed_file.file_id)},
+            db=db_session,
+            owner_id=kb_with_one_indexed_file.owner_id,
+        )
+
+
+async def test_retrieve_chunks_rejects_archived_kb(
+    db_session: AsyncSession, kb_with_one_indexed_file: KbOneFile
+) -> None:
+    """An archived KB is unreachable even for its owner.
+
+    Mirrors ``app.api.knowledge_bases._load_visible_kb``, which filters
+    ``archived_at IS NULL`` unless archived rows are explicitly requested.
+    """
+    from sqlalchemy import update
+
+    from app.models.knowledge import KnowledgeBase
+
+    await db_session.execute(
+        update(KnowledgeBase)
+        .where(KnowledgeBase.id == kb_with_one_indexed_file.kb_id)
+        .values(archived_at=datetime.now(UTC))
+    )
+    await db_session.flush()
+
+    with pytest.raises(ValueError, match="not accessible"):
+        await _handle_retrieve_chunks(
+            {
+                "kb_id": str(kb_with_one_indexed_file.kb_id),
+                "query": "confidential",
+                "alpha": 1.0,
+            },
+            db=db_session,
+            owner_id=kb_with_one_indexed_file.owner_id,
         )

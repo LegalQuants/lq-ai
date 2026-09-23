@@ -21,6 +21,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LogLevel = Literal["debug", "info", "warning", "warn", "error", "critical"]
 
+# Published development default for the JWT signing secret. Refused at startup
+# outside dev mode (see ``assert_production_secrets``) so a deployment can never
+# silently ship with a public signing key.
+DEV_JWT_SECRET = "dev-jwt-secret-change-me"
+
 
 class Settings(BaseSettings):
     """Backend API configuration.
@@ -52,10 +57,10 @@ class Settings(BaseSettings):
         description="Redis URL used for sessions, queues, and rate limits.",
     )
 
-    # ----- MinIO / S3 -----
+    # ----- S3-compatible object storage -----
     s3_endpoint_url: str = Field(
         default="http://localhost:9000",
-        description="S3-compatible endpoint URL (MinIO in Compose; S3 in prod).",
+        description="S3-compatible endpoint URL (RustFS in Compose; operator-supplied S3 allowed).",
     )
     s3_access_key: str = Field(default="", description="S3 access key.")
     s3_secret_key: str = Field(default="", description="S3 secret key.")
@@ -155,13 +160,19 @@ class Settings(BaseSettings):
     # on long-context models can raise the budget; set it to 0 to disable
     # history replay entirely (revert to single-turn requests).
     lq_ai_chat_history_token_budget: int = Field(
-        default=6_000,
+        default=64_000,
         ge=0,
         description=(
             "Approximate token budget (~4 chars/token) for prior chat turns "
             "replayed to the model. 0 disables multi-turn history."
         ),
     )
+    # Raised from 6,000 (issue #503): at 6k a ~47,000-token case file supplied
+    # in turn 1 was silently gone by turn 2, on models whose context windows
+    # are 200k-1M, and nothing in the response said trimming had occurred.
+    # This raises a ceiling; the category fix — not counting injected
+    # attached-document blocks (``_format_attached_files_block``) against the
+    # *chat-history* budget at all — is DE-391.
     lq_ai_chat_history_max_messages: int = Field(
         default=20,
         ge=0,
@@ -173,7 +184,7 @@ class Settings(BaseSettings):
 
     # ----- JWT (per ADR 0002 — backend owns auth) -----
     jwt_secret: str = Field(
-        default="dev-jwt-secret-change-me",
+        default=DEV_JWT_SECRET,
         description="Signing secret for JWT access and refresh tokens.",
     )
     jwt_access_token_ttl_seconds: int = Field(
@@ -470,6 +481,27 @@ def get_settings() -> Settings:
     monkeypatching environment variables.
     """
     return Settings()
+
+
+def assert_production_secrets(settings: Settings) -> None:
+    """Fail closed at startup if a known development default is used in prod.
+
+    Called from the app lifespan startup gate (``app.main.lifespan``), NOT as a
+    Settings validator — construction with the published defaults must stay
+    valid so ``test_config`` and any Settings() in tests keep working. The
+    guard fires only when the process actually starts serving.
+
+    ``jwt_secret`` signs and verifies every access/MFA token; shipping the
+    published default (``DEV_JWT_SECRET``) lets an attacker forge a token for
+    any user. Refuse to boot unless the operator sets a real secret, or opts
+    into ``LQ_AI_DEV_MODE`` for local development.
+    """
+    if settings.jwt_secret == DEV_JWT_SECRET and not settings.lq_ai_dev_mode:
+        raise RuntimeError(
+            "Refusing to start: JWT_SECRET is the published development default "
+            f"({DEV_JWT_SECRET!r}). Set JWT_SECRET to a strong random secret, or "
+            "set LQ_AI_DEV_MODE=true for local development."
+        )
 
 
 def is_allowed_return_url(url: str, settings: Settings) -> bool:

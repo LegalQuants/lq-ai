@@ -1,0 +1,80 @@
+{{- $useMigratedClaim := and .Values.migrations.enabled .Values.migrations.objectStoreClaim -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "lq-ai.fullname" . }}-rustfs
+  labels:
+    {{- include "lq-ai.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rustfs
+spec:
+  serviceName: {{ include "lq-ai.fullname" . }}-rustfs
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "lq-ai.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: rustfs
+  template:
+    metadata:
+      labels:
+        {{- include "lq-ai.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: rustfs
+    spec:
+      securityContext:
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: rustfs
+          image: {{ .Values.objectStore.image }}
+          imagePullPolicy: {{ .Values.objectStore.pullPolicy }}
+          ports:
+            - { name: api, containerPort: 9000 }
+            - { name: console, containerPort: 9001 }
+          env:
+            - name: RUSTFS_VOLUMES
+              value: /data
+            - name: RUSTFS_ADDRESS
+              value: 0.0.0.0:9000
+            - name: RUSTFS_CONSOLE_ADDRESS
+              value: 0.0.0.0:9001
+            - name: RUSTFS_CONSOLE_ENABLE
+              value: "true"
+            - name: RUSTFS_ACCESS_KEY
+              value: {{ default .Values.minio.rootUser .Values.objectStore.rootUser | quote }}
+            - name: RUSTFS_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ default .Values.minio.rootPasswordSecretRef.name .Values.objectStore.rootPasswordSecretRef.name }}
+                  key: {{ default .Values.minio.rootPasswordSecretRef.key .Values.objectStore.rootPasswordSecretRef.key }}
+          volumeMounts:
+            - name: miniodata
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: api
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 12
+{{ if $useMigratedClaim }}
+      volumes:
+        - name: miniodata
+          persistentVolumeClaim:
+            # Migration 0001 is in-place: RustFS must mount the claim the hook
+            # just migrated, not a fresh claim derived from its new StatefulSet name.
+            claimName: {{ .Values.migrations.objectStoreClaim | quote }}
+{{ end }}
+{{ if not $useMigratedClaim }}
+  volumeClaimTemplates:
+    - metadata:
+        # Deliberately retain the historical data-volume vocabulary in v0.x.
+        name: miniodata
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- $storageClass := default .Values.minio.storageClass .Values.objectStore.storageClass }}
+        {{- if $storageClass }}
+        storageClassName: {{ $storageClass | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ default .Values.minio.storage .Values.objectStore.storage }}
+{{ end }}

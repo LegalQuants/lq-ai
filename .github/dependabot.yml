@@ -1,28 +1,95 @@
 version: 2
 updates:
-  - package-ecosystem: pip
+  # ADR 0023 — api/ and gateway/ run the uv ecosystem (pyproject.toml +
+  # uv.lock), so updates arrive as lock-pinned version bumps with concrete
+  # name+version diffs rather than range widenings. The cooldown holds a
+  # bump until the release is at least 7 days old — the release-age posture
+  # dependency review already applies by hand at the security boundary.
+  #
+  # Grouping is a merge-throughput measure, not a review shortcut. CI gates
+  # lock freshness with `uv lock --check` (ADR 0023), so a lockfile admits
+  # one write at a time: N separate PRs against the same lock must merge
+  # strictly serially, each waiting a full CI cycle after a rebase. One
+  # grouped PR is one lock write.
+  #
+  # Three things stay deliberately ungrouped:
+  #   - security updates — `applies-to: version-updates` scopes the group,
+  #     so an advisory fix is never queued behind routine hygiene;
+  #   - majors — omitted from `update-types`, since each needs its own read.
+  #   - langgraph — excluded by name from api-minor-patch. The two above are
+  #     policy classes; this one is a package, and it is here because the
+  #     majors rule cannot reach it. langgraph is pre-1.0, so its breaking
+  #     releases ship as 0.x *minors*: within the group the highest version
+  #     an allowed "minor" reaches is 0.6.x, which re-types StateGraph and
+  #     fails mypy [call-overload] across all three executors. That bump has
+  #     been opened and closed unmerged five times (#68, #176, #482, #520,
+  #     #544) — the fix is in our code, not in the pin. docling and mcp get
+  #     their own read for free by being post-1.0; langgraph needs the
+  #     exclusion to get the same treatment. Lift at DE-319 (#524).
+  - package-ecosystem: uv
     directory: /api
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     labels: ["dependencies", "api"]
+    groups:
+      api-minor-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        exclude-patterns: ["langgraph"]
+        update-types: ["minor", "patch"]
 
-  - package-ecosystem: pip
+  - package-ecosystem: uv
     directory: /gateway
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     labels: ["dependencies", "gateway"]
+    groups:
+      gateway-minor-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
+  # web/ is a vendored OpenWebUI fork pinned by ADR 0001, so its npm pins are
+  # upstream's rather than ours. Routine currency arrives with the quarterly
+  # rebase (#498), which brings upstream's own newer pins with it — a version
+  # bump raised between refreshes is superseded before it can be reviewed.
+  # That is not hypothetical: #459, #460, #473, #474, #475 and #533 all closed
+  # unmerged for exactly this reason.
+  #
+  # `open-pull-requests-limit: 0` disables *version* updates for this ecosystem.
+  # Dependabot **security** updates are unaffected by that limit, so an advisory
+  # against a web/ package still opens a PR — which is the coverage we want, and
+  # matches ADR 0001's "or earlier if an upstream security fix lands that affects
+  # us" clause. The entry is kept rather than deleted so the manifest stays
+  # registered and security PRs keep carrying the `web` label.
+  #
+  # `cooldown` is omitted because it is documented as version-updates-only, and
+  # the `web-minor-patch` group because it was scoped `applies-to:
+  # version-updates`. Neither reached security updates, so dropping them changes
+  # nothing for the one update class this block still produces — and leaving
+  # security bumps ungrouped matches the posture the uv blocks above set out.
   - package-ecosystem: npm
     directory: /web
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     labels: ["dependencies", "web"]
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     labels: ["dependencies", "ci"]
+    groups:
+      actions-minor-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
