@@ -20,6 +20,15 @@ production distribution" means for that proxy. All four share the same upstream
 routing shape (path-based split between `web` and `api`, the gateway left off the
 proxy — see below).
 
+OpenWebUI's embedded backend and LQ.AI's API are separate services on that split, so
+a homepage that loads only proves `/` reached `web`. Check a streamed chat answer
+before trusting a new proxy — the shared smoke checks in
+[`deploy/reverse-proxy/README.md`](../../deploy/reverse-proxy/README.md#smoke-checks-all-recipes)
+(health, the api's 401 on `/lq-ai-api/v1/skills`, the `/ws/socket.io/` probe, and
+streaming) are what show both `/api/v1` namespaces landed on the right service. Try a
+document upload too — nginx caps body size explicitly (`client_max_body_size`) while
+Caddy and Traefik don't by default — even though it isn't one of the scripted checks.
+
 > [!CAUTION]
 > **Silent failure** — `docker run --rm ghcr.io/testssl/testssl.sh:3.2 https://<fqdn>`
 > and each recipe's smoke checks confirm the proxy is *working*; none of them are a

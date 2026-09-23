@@ -45,12 +45,14 @@ shapes:
     source: deploy/caddy-tailscale/README.md
 
   - topology: Reverse proxy + TLS, public domain (Caddy, Traefik, or nginx with a public certificate)
-    status: not tried
-    recipe: null
-    source: docs/contribute/mini-prds/reverse-proxy-tls-deployment-recipes.md
+    status: recipe published
+    recipe: reverse-proxy-tls/
+    source: deploy/reverse-proxy/README.md
     notes: >-
-      mini-PRD open for contribution as of the checked commit; no recipe
-      exists in this repository yet.
+      Caddy, Traefik and nginx overlays under deploy/reverse-proxy/, labelled
+      by their README as reference configurations rather than a supported
+      production distribution; not deployed against a public domain for
+      this site.
 
   - topology: Remote GPU host running Ollama, reached over a tailnet
     status: recipe published
