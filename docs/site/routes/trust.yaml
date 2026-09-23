@@ -44,7 +44,7 @@
 - route: trust/supply-chain
   source: docs/security/releases/README.md
   title: Supply chain
-  description: How to verify that a specific LQ.AI release's images are authentic, what the SBOM tells you, dependency-update cadence, and the SLSA-provenance claim this page corrects rather than repeats.
+  description: How to verify that a specific LQ.AI release's images are authentic, what the SBOM tells you, dependency-update cadence, and which releases carry SLSA Build Level 3 provenance.
   audience: [evaluator, operator]
   status: draft
   sources: [docs/security/dependencies.md, docs/security/cryptography.md, docs/BUILD-AND-RELEASE.md, README.md, .github/workflows/release.yml]

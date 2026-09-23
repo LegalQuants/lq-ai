@@ -28,15 +28,15 @@ a claim on this site and the codebase ever disagree, the codebase is canonical; 
 | [Audit & evidence](../security/audit-logging.md) — the audit-write invariant | `api/app/audit.py` — one function, `audit_action()`, is the only writer; read it to confirm the transaction boundary claim. |
 | [Audit & evidence](../security/audit-logging.md) — the matter-scoped queries | Run the two `SELECT` statements on that page's source against a migrated database — the schema they reference is [`docs/db-schema.md`](../db-schema.md)'s `citation_ledger_entry` and `inference_routing_log` tables. |
 | [Supply chain](../security/releases/README.md) — image signing | `cosign verify --certificate-identity-regexp "https://github.com/legalquants/lq-ai" --certificate-oidc-issuer https://token.actions.githubusercontent.com ghcr.io/legalquants/lq-ai-api:vX.Y.Z` |
-| [Supply chain](../security/releases/README.md) — the missing SLSA step | `grep -n "attest-build-provenance" .github/workflows/release.yml` — no match, as of the checked commit. |
+| [Supply chain](../security/releases/README.md) — SLSA build provenance | `gh attestation verify oci://ghcr.io/legalquants/lq-ai-api:vX.Y.Z --owner legalquants --signer-workflow LegalQuants/lq-ai/.github/workflows/build-image.yml` — Build Level 3, for releases after v0.7.1. For v0.7.1 and earlier, drop `--signer-workflow`: those carry Build Level 2 provenance signed by `release.yml`. |
 | [Published gaps](../HONEST-STATE.md) — the test-file counts | `find api/tests -name 'test_*.py' | wc -l` and the equivalent for `gateway/tests/` and `web/src` — compare against the counts named in HONEST-STATE §8. |
 | [Governance](../../GOVERNANCE.md) | Compare `GOVERNANCE.md`'s header line against [ADR 0022](../adr/0022-committee-governance-and-meeting-records.md)'s `Status: Accepted` line. |
 | [Continuity](continuity.md) — where data lives | `grep -A5 "^volumes:" docker-compose.yml` — lists `pgdata`, `redisdata`, `miniodata` and `ollamadata` as named, operator-controlled volumes. |
 
 ## What "verify" means for a claim about *absence*
 
-Several claims on this site — the missing SLSA-provenance step, the un-shipped NIST/OWASP mappings,
-the desktop signing bottleneck — are claims that something does *not* exist. Those are verified the
+Several claims on this site — the un-shipped NIST/OWASP mappings, the desktop signing
+bottleneck — are claims that something does *not* exist. Those are verified the
 same way: `grep` for the thing that would exist if the claim were false, and confirm it isn't there.
 A negative result from a specific, named search is evidence; an absence you have to take on trust is
 not, and this site tries not to ask for the second kind.
