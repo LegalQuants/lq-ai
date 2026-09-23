@@ -12,12 +12,12 @@ No runbooks directory covering this existed in the repository before this page, 
 | `redisdata` | The arq job queue and rate-limit counters | Nothing durable — in-flight background jobs, not history |
 | `ollamadata`, `ingest-hf-cache`, `ingest-easyocr-cache` | Downloaded model weights and layout/OCR models | Nothing you can't re-pull; costs bandwidth and time, not data |
 
-The first three are the ones a restore actually depends on. The last three are caches — recreate them by re-pulling, not by restoring.
+The first three are the ones a restore actually depends on. The last three are caches — recreate them by re-pulling, not by restoring. `redisdata` sits between the two: nothing durable is lost, but recovery differs by job type. A fresh `ingest-worker` start re-sweeps files stuck at `pending`/`processing` and re-enqueues them automatically (`api/app/workers/document_pipeline.py`'s `on_startup` sweep), so document ingestion self-heals. Easy Playbook generation, Tabular Review execution and Autonomous Session jobs don't have that sweep (`api/app/workers/queue.py`) — if their enqueue was lost with Redis, the row stays at its last status and an operator has to re-enqueue it by hand.
 
 The bundled object store is [RustFS](../adr/0036-bundled-object-store-rustfs.md), not MinIO — MinIO's image became unavailable and the project replaced it (ADR 0036). The compose service is named `rustfs`, but the volume is still named `miniodata` for continuity, and the S3-compatible client tooling below (`mc`) still works against it unchanged, since RustFS speaks the same S3 API on the same port. If you're upgrading an existing bundled-store deployment from a MinIO-era release, that migration is its own procedure — see [Upgrade](upgrade.md#operator-action-releases).
 
 > [!CAUTION]
-> **Silent failure** — The `LQ_AI_GATEWAY_MASTER_KEY` that decrypts every `api_key_encrypted` token in `gateway-config` is **not stored in any volume** — it lives only in the gateway process's environment (`docker-compose.yml`, `docker-compose.release.yml`). Back up the `gateway-config` volume without also backing up this value separately, and you've backed up ciphertext you cannot decrypt. [`docs/security/encrypted-keys.md`](../security/encrypted-keys.md) is explicit: *"There is no recovery"* for a lost master key — the only path back is re-issuing every provider key at the upstream provider. Store `LQ_AI_GATEWAY_MASTER_KEY` in your secrets vault, independently of any volume snapshot, the same way you'd store it for [rotating a leaked key](rotate-a-leaked-key.md).
+> **Silent failure** — The `LQ_AI_GATEWAY_MASTER_KEY` that decrypts every `api_key_encrypted` token in `gateway-config` is **not stored in any volume**, but it is on the host somewhere: both compose files read it from the `LQ_AI_GATEWAY_MASTER_KEY` environment variable (`docker-compose.yml`, `docker-compose.release.yml`), which normally comes from a `.env` file next to the compose file — or, for the macOS desktop app, its own `.env` under the app's per-user application-support directory, not the repo checkout (see [Install on Mac](../INSTALL-MAC.md)). Back up the `gateway-config` volume without also backing up this value separately, and you've backed up ciphertext you cannot decrypt. [`docs/security/encrypted-keys.md`](../security/encrypted-keys.md) is explicit: *"There is no recovery"* for a lost master key — the only path back is re-issuing every provider key at the upstream provider. Store `LQ_AI_GATEWAY_MASTER_KEY` in your secrets vault, independently of any volume snapshot, the same way you'd store it for [rotating a leaked key](rotate-a-leaked-key.md).
 
 > [!NOTE]
 > **Professional duty** — `pgdata` holds the audit log and every chat a privileged matter produced — this is client-confidential material by construction, not an incidental side effect of backing it up. Wherever your backup lands (a snapshot service, an offsite volume, a second disk), it inherits the same confidentiality obligation the live deployment carries. `privilege_marked` rows in `audit_log` ([`docs/security/audit-logging.md`](../security/audit-logging.md)) mark which rows that applies to most directly, but the whole database is in scope — deciding who may read a backup, and under what encryption, is a call for whoever is responsible for those matters.
@@ -44,19 +44,21 @@ Run from the host, with the stack up (a hot backup of `pgdata` via `pg_dump` is 
    docker run --rm -v <project>_gateway-config:/from -v "$PWD":/to alpine \
      tar czf /to/gateway-config-$(date +%Y-%m-%d).tar.gz -C /from .
    ```
-4. **The master key** — confirm it's already in your secrets vault (see the caution above). Nothing to copy from the host; there's nothing on the host to copy.
+4. **The master key** — it isn't in any volume, but it is on the host: copy `LQ_AI_GATEWAY_MASTER_KEY` out of wherever the gateway's environment gets it — the `.env` file next to your compose file, the secrets manager that populates it, or, for the desktop app, its own `.env` in the app's per-user data directory — into your secrets vault (see the caution above).
 
 ## Restore
 
-1. Bring up a fresh stack with the **same** `LQ_AI_GATEWAY_MASTER_KEY` you saved in step 4 above — set it in `.env` before the gateway container ever starts.
+Storage first, then the app: bring up only the volumes and services the restore itself needs, put the restored state into them, and only then start the gateway, api and workers — starting them early lets the api migrate an empty database and lets the gateway seed a fresh `gateway.yaml`, either of which then has to be undone by hand.
+
+1. Set the target's `.env` with the **same** `LQ_AI_GATEWAY_MASTER_KEY` you saved in step 4 above, before any container starts. Then bring up only the storage this restore needs and nothing else yet: `docker compose up -d postgres` (add `rustfs` to that command too if you're restoring the object store with `mc mirror` rather than a raw volume snapshot).
 2. Restore Postgres into the fresh `postgres` container:
    ```bash
    docker compose exec -T postgres pg_restore -U lq_ai -d lq_ai --clean --if-exists \
      < lq-ai-postgres-2026-09-01.dump
    ```
-3. Restore the object-store bucket (`mc mirror` in the reverse direction, or extract the volume snapshot into a fresh `miniodata` volume before first boot).
+3. Restore the object-store bucket (`mc mirror` in the reverse direction against the `rustfs` you started in step 1, or extract the volume snapshot into a fresh `miniodata` volume before `rustfs` itself starts).
 4. Restore the `gateway-config` tarball into a fresh `gateway-config` volume before the gateway container starts, so it doesn't re-seed from `gateway.yaml.example` instead.
-5. Bring the stack up: `docker compose up -d`.
+5. Only once Postgres, the object store and the gateway config are restored, start the rest of the stack: `docker compose up -d`.
 6. **Verify, don't assume.** Confirm the migration head matches what you expect (`docker compose exec api alembic current`), sign in, open a chat that existed before the incident, and confirm its history and any citations render. If provider keys were runtime-managed, open **Admin → Provider keys** and confirm each shows `configured` rather than a decrypt failure — a wrong or missing master key surfaces as `DecryptError` at adapter-build time per [`docs/security/encrypted-keys.md`](../security/encrypted-keys.md#verifying-the-setup), not as a restore error.
 
 This is the general shape the compose volumes support, not a tested, ready-to-run script — file an issue (or contribute one) if you build a backup script from this and want it in the repository for the next operator.
