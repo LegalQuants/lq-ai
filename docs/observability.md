@@ -298,6 +298,11 @@ Structured logs are emitted by both services. **Log-trace correlation (injecting
 Until DE-300 lands, pivoting from a span in Tempo or Honeycomb to the logs for that
 request requires matching on timestamp + `service.name` manually.
 
+Before attributing a timeout in the logs to the model, check which layer timed out: the gateway's
+provider adapters (Anthropic, OpenAI and Ollama) default to 600 s, but the api's own client to the
+gateway waits 60 s and its streaming call inherits that. See
+[Something is wrong](operate/something-is-wrong.md#silent-degrade) for both layers.
+
 ---
 
 ## 3. Deployment recipes

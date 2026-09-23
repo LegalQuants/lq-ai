@@ -97,7 +97,7 @@ OLLAMA_BASE_URL=https://<host>.<tailnet>.ts.net
 
 *Example:* `OLLAMA_BASE_URL=https://gpu-box.example.ts.net`
 
-Set this in the environment used by the gateway, then recreate or restart the gateway so that it loads the new value.
+Set this in the environment used by the gateway, then recreate the gateway (`docker compose up -d --force-recreate gateway`) so that it loads the new value. A plain `docker compose restart gateway` keeps the environment the container was created with.
 
 ### 4. Verify the Connection
 
@@ -164,8 +164,8 @@ Regardless of the mechanism used, a remote Ollama endpoint should always be conf
 ### Generalizing this rule
 
 Step 3 above is explicit that setting `OLLAMA_BASE_URL` isn't enough on its own —
-you have to recreate or restart the gateway so the new value actually loads; an
-env-var edit with no restart leaves the gateway dispatching against whatever
+you have to recreate the gateway so the new value actually loads (a plain restart
+keeps the old environment); an env-var edit with no recreate leaves the gateway dispatching against whatever
 `base_url` it resolved at its last start. If step 4's `curl` succeeds against the
 tailnet endpoint but a chat routed through the gateway still fails, that's the most
 likely gap to check first. The next is DNS: step 4 runs on the gateway *host*, but
