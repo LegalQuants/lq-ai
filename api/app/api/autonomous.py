@@ -1410,7 +1410,8 @@ async def create_schedule(
         ) from exc
 
     # Validate matter ownership — a non-null project_id the caller doesn't own
-    # is rejected 404 (id-probing-safe). NULL = no matter; no check needed.
+    # is rejected 404 (id-probing-safe). NULL is allowed only for query-less
+    # runs, as enforced by AutonomousManualRunRequest.
     if body.project_id is not None:
         await _load_owned_project(db, project_id=body.project_id, user_id=user.id)
 
@@ -1466,7 +1467,8 @@ async def _spawn_manual_session(
     ``params`` carrying only the non-null target keys (plus
     ``emit_artifacts`` — set to ``True`` only when the request body opted
     in; Donna ask #8 — a manual run has no schedule/watch row, so the
-    body carries the flag), sets a non-null ``max_cost_usd`` (per-run cap
+    body carries the flag; plus ``query`` — the optional matter
+    description, item 1.6), sets a non-null ``max_cost_usd`` (per-run cap
     or the config default so R4 always arms), flushes to obtain the id,
     then best-effort enqueues. The five-phase executor + R4/R5/R6 brakes
     + receipt are unchanged.
@@ -1475,7 +1477,8 @@ async def _spawn_manual_session(
     settings = get_settings()
 
     # Validate matter ownership — a non-null project_id the caller doesn't own
-    # is rejected 404 (id-probing-safe). NULL = no matter; no check needed.
+    # is rejected 404 (id-probing-safe). NULL is allowed only for query-less
+    # runs, as enforced by AutonomousManualRunRequest.
     if body.project_id is not None:
         await _load_owned_project(db, project_id=body.project_id, user_id=user.id)
 
@@ -1497,6 +1500,13 @@ async def _spawn_manual_session(
         # Opt-in (Donna ask #8) — non-null-subset convention: the key is
         # present iff the caller opted in.
         params["emit_artifacts"] = True
+    if body.query is not None:
+        # Matter intake (item 1.6) — the free-text matter description the
+        # executor reads via ``session.params.get("query")`` into the
+        # ADR-0020 matter loop. Non-null-subset convention: key present
+        # iff the caller supplied a description; absent keeps the
+        # query-less path unchanged.
+        params["query"] = body.query
 
     session = AutonomousSession(
         user_id=user.id,
@@ -1524,7 +1534,7 @@ async def _spawn_manual_session(
     responses={
         201: {"description": "Session spawned"},
         403: {"description": "Autonomous layer not enabled for this user"},
-        422: {"description": "Invalid target (need exactly one of playbook_id/skill_ref)"},
+        422: {"description": "Invalid target or missing project_id for a query"},
         404: {"description": "Referenced project, playbook, or knowledge base not found"},
         401: {"description": "Not authenticated"},
     },

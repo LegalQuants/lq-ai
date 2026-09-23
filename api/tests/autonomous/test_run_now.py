@@ -23,13 +23,14 @@ from unittest.mock import AsyncMock
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.api.autonomous as autonomous_api
 from app.db.session import get_db
 from app.main import app
 from app.models.autonomous import AutonomousSession
+from app.models.project import Project
 from app.models.user import User
 from app.security import create_access_token, hash_password
 
@@ -88,6 +89,18 @@ async def opted_in_user(db_session: AsyncSession) -> User:
 @pytest_asyncio.fixture
 async def plain_user(db_session: AsyncSession) -> User:
     return await _make_user(db_session, autonomous_enabled=False)
+
+
+@pytest_asyncio.fixture
+async def owned_project(db_session: AsyncSession, opted_in_user: User) -> Project:
+    project = Project(
+        owner_id=opted_in_user.id,
+        name="Acme NDA",
+        slug=f"acme-nda-{uuid.uuid4().hex[:8]}",
+    )
+    db_session.add(project)
+    await db_session.flush()
+    return project
 
 
 @pytest.mark.asyncio
@@ -179,6 +192,101 @@ async def test_run_now_defaults_cost_cap_when_omitted(
         )
     ).scalar_one()
     assert row.max_cost_usd is not None
+
+
+@pytest.mark.asyncio
+async def test_run_now_copies_query_into_params(
+    client: AsyncClient,
+    opted_in_user: User,
+    owned_project: Project,
+    db_session: AsyncSession,
+) -> None:
+    """A matter description in the body lands in session.params["query"]
+    (item 1.6 — the executor reads it via ``session.params.get("query")``
+    into the ADR-0020 matter loop)."""
+    resp = await client.post(
+        "/api/v1/autonomous/run-now",
+        json={
+            "skill_ref": "nda-review",
+            "project_id": str(owned_project.id),
+            "query": "  Review the Acme NDA for a mutual confidentiality carve-out.  ",
+        },
+        headers=_bearer(opted_in_user),
+    )
+    assert resp.status_code == 201, resp.text
+    session_id = uuid.UUID(resp.json()["id"])
+    row = (
+        await db_session.execute(
+            select(AutonomousSession).where(AutonomousSession.id == session_id)
+        )
+    ).scalar_one()
+    assert row.params["query"] == "Review the Acme NDA for a mutual confidentiality carve-out."
+    assert row.project_id == owned_project.id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("query_field", [{}, {"query": None}], ids=["omitted", "null"])
+async def test_run_now_omitted_query_keeps_params_key_absent(
+    client: AsyncClient,
+    opted_in_user: User,
+    db_session: AsyncSession,
+    query_field: dict[str, None],
+) -> None:
+    """Omitting query keeps current behavior: no "query" key in params
+    (non-null-subset convention; the executor's ``params.get("query")``
+    then yields None → query-less path)."""
+    resp = await client.post(
+        "/api/v1/autonomous/run-now",
+        json={"skill_ref": "nda-review", **query_field},
+        headers=_bearer(opted_in_user),
+    )
+    assert resp.status_code == 201, resp.text
+    session_id = uuid.UUID(resp.json()["id"])
+    row = (
+        await db_session.execute(
+            select(AutonomousSession).where(AutonomousSession.id == session_id)
+        )
+    ).scalar_one()
+    assert "query" not in row.params
+    assert row.project_id is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("query", ["", " \n\t "])
+async def test_run_now_rejects_empty_query(
+    client: AsyncClient,
+    opted_in_user: User,
+    owned_project: Project,
+    db_session: AsyncSession,
+    query: str,
+) -> None:
+    """An empty or whitespace-only query violates min_length=1 after stripping."""
+    before = await db_session.scalar(select(func.count(AutonomousSession.id)))
+    resp = await client.post(
+        "/api/v1/autonomous/run-now",
+        json={"skill_ref": "nda-review", "project_id": str(owned_project.id), "query": query},
+        headers=_bearer(opted_in_user),
+    )
+    assert resp.status_code == 422, resp.text
+    assert await db_session.scalar(select(func.count(AutonomousSession.id))) == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("project_field", [{}, {"project_id": None}], ids=["omitted", "null"])
+async def test_run_now_query_requires_project_without_spawning_session(
+    client: AsyncClient,
+    opted_in_user: User,
+    db_session: AsyncSession,
+    project_field: dict[str, None],
+) -> None:
+    before = await db_session.scalar(select(func.count(AutonomousSession.id)))
+    resp = await client.post(
+        "/api/v1/autonomous/run-now",
+        json={"skill_ref": "nda-review", "query": "Review the NDA", **project_field},
+        headers=_bearer(opted_in_user),
+    )
+    assert resp.status_code == 422, resp.text
+    assert await db_session.scalar(select(func.count(AutonomousSession.id))) == before
 
 
 @pytest.mark.asyncio
