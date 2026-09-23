@@ -162,7 +162,7 @@ this span — tracked at [DE-317](PRD.md#de-317--inferencedispatch-span-on-the-s
 
 | Attribute | Description |
 |---|---|
-| `inference.provider` | Provider name: `anthropic`, `openai`, `azure_openai`, `ollama` |
+| `inference.provider` | The provider's configured `name` from `gateway.yaml` (for example `anthropic-prod`, `ollama-local`) — the operator-chosen entry name, not the adapter `type` |
 | `inference.model` | Model ID as sent to the provider |
 | `inference.tier` | Routed inference tier (1–5) |
 | `inference.outcome` | `success`, `provider_error`, `network_error`, or `unavailable` (the last when no adapter could be instantiated). The `provider_error` / `network_error` labels come from `outcome_label_from_error` in `gateway/app/router.py`; `unavailable` is set on the `NoAdapterAvailableError` path in `gateway/app/api/inference.py`. |
@@ -229,9 +229,14 @@ The autonomous spans also write audit rows — see [§2.4 — Audit actions](#au
 ### Metrics
 
 Prometheus metrics are served by the api (`:8000/metrics`) and gateway
-(`:8001/metrics`). These endpoints are always on but are reachable only inside the
-Compose network (or wherever the operator's reverse proxy routes them) — they are
-not exposed on a public interface by default.
+(`:8001/metrics`). These endpoints are always on and carry no authentication (the
+gateway's key check is attached to its `/v1` routers, not to `/metrics`). They are
+not container-internal: `docker-compose.yml` publishes both services on the host's
+loopback interface by default (`127.0.0.1:8000`, `127.0.0.1:8001`), so any process on
+the Docker host can scrape them. They stay off other interfaces unless the operator
+changes `API_BIND_ADDR` / `GATEWAY_BIND_ADDR` or routes them through a reverse proxy;
+the shipped proxy recipes forward only `/lq-ai-api/v1/*` to the api, so `/metrics` is
+not on the proxied path unless added.
 
 | Metric | Type | Labels | Description |
 |---|---|---|---|
@@ -255,7 +260,9 @@ a `tier_below_minimum` gateway error **without** incrementing this counter. Trea
 ### Audit actions
 
 The M4 Autonomous Layer writes structured audit rows to the `audit_log` table for
-every session lifecycle event, distinct from OTel spans. All autonomous-session
+session lifecycle events, distinct from OTel spans. Coverage is not complete: the
+`started` action is reserved but never written at session creation (see the known
+gap below). All autonomous-session
 writes flow through `autonomous_audit` (`api/app/autonomous/audit.py`), which
 stamps a canonical `autonomous_session.<event>` action and gates the `details`
 dict to counts, type labels, IDs, costs, and enums — **never raw entity values**.
@@ -354,9 +361,11 @@ or a per-signal endpoint is set, **no traces leave the deployment.** The OTel SD
 present in the service images but the TracerProvider is never initialized, and spans
 are silently dropped.
 
-Prometheus `/metrics` is always on. It is served on the internal Docker network only
-(`:8000` for api, `:8001` for gateway); the operator's reverse proxy or a scrape
-configuration inside the Compose network is required to reach it. The metrics
+Prometheus `/metrics` is always on and unauthenticated. With the default Compose
+bindings it is reachable from the Docker host's loopback interface (`127.0.0.1:8000`
+for api, `127.0.0.1:8001` for gateway) as well as from inside the Compose network;
+reaching it from anywhere else requires the operator to rebind the port or route it
+through a reverse proxy. The metrics
 endpoint does not emit data to any external destination — it is a pull surface, not
 a push surface.
 
