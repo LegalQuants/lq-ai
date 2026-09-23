@@ -13,10 +13,13 @@ than running a fixed form — what triggers the skill, what document or
 input it needs, what the workflow actually checks, what it should refuse
 — and drafts the `SKILL.md` for you once it has enough to work with. Its
 stated posture: "You hold the format. The user holds the legal
-expertise." It will not invent a jurisdiction-specific rule or a severity
-calibration you haven't given it; if it needs a substantive position you
-haven't stated, it asks rather than guesses. That's deliberate — the same
-conservative posture every shipped skill follows.
+expertise." Its instructions tell it not to invent a jurisdiction-specific
+rule or a severity calibration you haven't given it, and to ask rather than
+guess when it needs a substantive position you haven't stated. That's
+deliberate — the same conservative posture every shipped skill follows —
+but it is an instruction to the model, not a guarantee about its output:
+read the drafted `SKILL.md` for any position you did not supply before you
+rely on it.
 
 ## Write it by hand
 
@@ -77,6 +80,15 @@ perspective; everything else is optional and, per the guide's own test,
 changes the *substance* of the analysis rather than only the report's
 formatting (`deal_type` recalibrates which provisions get scrutiny;
 `jurisdiction` shifts the governing-law assumptions).
+
+One caveat on the `document` input: its description names the formats the
+skill is written for, not what the upload path accepts. As of the checked
+commit, ingestion parses PDFs whose text it can extract (nothing is OCR'd,
+and encrypted PDFs are refused) and UTF-8 plain text or Markdown; a DOCX
+upload is marked `failed` with `unsupported_type`
+([`api/app/pipeline/parsers.py`](../../api/app/pipeline/parsers.py)). Write
+your own input descriptions as skill intent, and don't read them as an
+upload-format guarantee.
 
 The body of `SKILL.md` follows a consistent structure across the M1
 starter skills, documented as ten sections in the
