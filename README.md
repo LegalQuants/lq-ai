@@ -5,7 +5,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![PRD](https://img.shields.io/badge/PRD-v0.2-green.svg)](docs/PRD.md)
 [![Status](https://img.shields.io/badge/Status-Pre--Release-orange.svg)](#project-status)
-[![SLSA 3](https://img.shields.io/badge/SLSA-Level%203-green)](https://slsa.dev) [![Security Policy](https://img.shields.io/badge/Security-Policy-blue)](./SECURITY.md)
+[![SLSA 3](https://img.shields.io/badge/SLSA-Level%203-green)](docs/security/releases/README.md#verify-the-slsa-build-provenance) [![Security Policy](https://img.shields.io/badge/Security-Policy-blue)](./SECURITY.md)
 
 LQ.AI is a self-hosted AI platform purpose-built for legal teams. It delivers conversational chat with persistent history and matter-scoped projects, character-verifiable citations against source documents (M2's four-stage Citation Engine), a privacy-preserving anonymization layer for cloud inference (M2), reusable workflow skills authored in the open [agentskills.io / Anthropic Claude Skills](https://github.com/anthropics/skills) format, and a curated library of starter skills for the everyday work lawyers actually do — running on a laptop, an internal server, or a cloud VM, against the customer's choice of model (Anthropic, OpenAI, Azure OpenAI, or local Ollama out of the box), with zero license fees.
 
@@ -369,9 +369,11 @@ For more, see [PRD §1.5 Deployment Modes and the Inference Choice Spectrum](doc
 
 ## Security
 
-LQ.AI ships with SLSA Level 3 build provenance, sigstore-signed
-container images, and a Software Bill of Materials (SBOM) with every
-release. See [`docs/security/`](docs/security/) for the threat model,
+LQ.AI ships with SLSA build provenance, sigstore-signed container
+images, and a Software Bill of Materials (SBOM) with every release. The
+provenance is SLSA Build Level 3 (produced by an isolated reusable
+workflow) from the first release after v0.7.1; earlier releases carry
+Build Level 2 provenance. See [`docs/security/`](docs/security/) for the threat model,
 cryptography reference, audit-logging policy, and dependency-management
 posture. Verify a release: [`docs/security/releases/README.md`](docs/security/releases/README.md).
 
@@ -383,7 +385,7 @@ LQ.AI's security posture is structurally different from closed-source commercial
 
 - **The operator chooses the deployment's posture.** LQ.AI does not run a SaaS that holds your data on our infrastructure; you run it on yours. The most consequential security decisions — where the deployment lives, what inference provider it routes to, how the audit log is retained, who has access — are yours, and the application makes the implications of each decision explicit.
 - **The Inference Choice Spectrum is the central security trade-off.** Inference is where customer data leaves the deployment, if it does. The five-tier spectrum maps the choice across local-only inference (Tier 1), customer-hosted cloud inference (Tier 2), enterprise managed inference with ZDR / no-training commitments (Tier 3), standard cloud API (Tier 4), and consumer or free tier (Tier 5). Tier 3 is recommended for most pragmatic enterprise deployments. Tier 1 is recommended for the most sensitive privileged work.
-- **Transparency replaces opacity.** Every release ships with an SBOM (Software Bill of Materials), signed container images (Sigstore/cosign), SLSA-3 build provenance attestations, a published threat model, and alignment documentation for SOC 2, ISO 27001, ISO 42001, GDPR, HIPAA, and FedRAMP — mapping our design choices to each framework's controls. Where LQ.AI does not yet match a specific commercial competitor's control, it is named on the public deferred-enhancements list with a roadmap.
+- **Transparency replaces opacity.** Every release ships with an SBOM (Software Bill of Materials), signed container images (Sigstore/cosign), SLSA build provenance attestations (Build Level 3 from the first release after v0.7.1), a published threat model, and alignment documentation for SOC 2, ISO 27001, ISO 42001, GDPR, HIPAA, and FedRAMP — mapping our design choices to each framework's controls. Where LQ.AI does not yet match a specific commercial competitor's control, it is named on the public deferred-enhancements list with a roadmap.
 
 For procurement reviews, see:
 
