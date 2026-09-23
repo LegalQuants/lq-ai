@@ -30,7 +30,6 @@ rolled back to the prior bytes on a best-effort basis.
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request, Response, status
@@ -49,7 +48,7 @@ from app.config_writer import (
 )
 from app.provider_keys import apply_provider_key, list_provider_keys, revoke_provider_key
 from app.router import derive_routed_inference_tier
-from app.secrets import MASTER_KEY_ENV, ProviderKeyResolver, encrypt_value
+from app.secrets import MASTER_KEY_ENV, ProviderKeyResolver, encrypt_value, resolve_secret
 from app.tool_provider_keys import (
     apply_tool_provider,
     list_tool_provider_status,
@@ -574,12 +573,13 @@ def _provider_key_error_code(exc: ProviderKeyMutationError) -> str:
 def _resolved_master_key() -> str | None:
     """Return the bound gateway master key, or ``None`` if unset.
 
-    Runtime (encrypted-at-rest) key storage is impossible without it; the
-    write endpoints fail fast with 400 when it's absent rather than writing
-    an unencryptable key.
+    Reads ``LQ_AI_GATEWAY_MASTER_KEY`` / ``LQ_AI_GATEWAY_MASTER_KEY_FILE``
+    via :func:`app.secrets.resolve_secret`. Runtime (encrypted-at-rest)
+    key storage is impossible without it; the write endpoints fail fast
+    with 400 when it's absent rather than writing an unencryptable key.
     """
 
-    return os.environ.get(MASTER_KEY_ENV) or None
+    return resolve_secret(MASTER_KEY_ENV)
 
 
 @router.get("/provider-keys")

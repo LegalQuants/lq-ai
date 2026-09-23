@@ -191,10 +191,7 @@ class OpenAIAdapter(ProviderAdapter):
             )
         if key_resolver is None:
             env_lookup = env if env is not None else dict(os.environ)
-            key_resolver = ProviderKeyResolver(
-                master_key=env_lookup.get("LQ_AI_GATEWAY_MASTER_KEY") or None,
-                env=env_lookup,
-            )
+            key_resolver = ProviderKeyResolver.from_env_dict(env_lookup)
         # OPENAI_API_KEY default applies only when neither encrypted nor
         # env-named source is set; openai_compatible local servers may
         # legitimately have no key at all.

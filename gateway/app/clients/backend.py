@@ -496,17 +496,19 @@ def configure_backend_client(
 ) -> BackendClient:
     """Construct (or reconstruct) the process-global backend client.
 
-    Reads ``LQ_AI_API_URL`` and ``LQ_AI_GATEWAY_KEY`` from the
-    environment when arguments are not supplied. Returns the new
-    instance and stores it as the process-global handle. Callers that
-    need to swap out an existing client should call
-    :func:`close_backend_client` first.
+    Reads ``LQ_AI_API_URL`` and ``LQ_AI_GATEWAY_KEY`` (or
+    ``LQ_AI_GATEWAY_KEY_FILE``) from the environment when arguments are
+    not supplied. Returns the new instance and stores it as the
+    process-global handle. Callers that need to swap out an existing
+    client should call :func:`close_backend_client` first.
     """
 
     global _client
 
+    from app.secrets import resolve_secret
+
     resolved_url = base_url or os.environ.get(ENV_API_URL) or DEFAULT_API_URL
-    resolved_key = gateway_key if gateway_key is not None else os.environ.get(ENV_GATEWAY_KEY, "")
+    resolved_key = gateway_key if gateway_key is not None else resolve_secret(ENV_GATEWAY_KEY) or ""
     if cache_ttl_seconds is None:
         env_ttl = os.environ.get(ENV_CACHE_TTL)
         cache_ttl_seconds = float(env_ttl) if env_ttl else DEFAULT_CACHE_TTL_SECONDS

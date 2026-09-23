@@ -60,6 +60,69 @@ Deployment-target equivalents:
 
 The master key lives in the gateway process; the api/ and web/ services don't need it.
 
+### File-mounted delivery (`*_FILE`)
+
+Every gateway secret `NAME` may instead be delivered as `NAME_FILE=<path>`
+(#590, GW-06). This covers `LQ_AI_GATEWAY_MASTER_KEY`, `LQ_AI_GATEWAY_KEY`
+(or whatever `gateway_auth.api_key_env` names), and any provider/tool-provider
+`api_key_env` target (e.g. `ANTHROPIC_API_KEY_FILE`, `COURTLISTENER_API_TOKEN_FILE`).
+The `api/` service honors `LQ_AI_GATEWAY_KEY_FILE` for the same shared secret
+so mixed env/file deployments keep authenticating.
+
+```bash
+# Docker Compose (Swarm-style secrets block — values are paths, not secrets)
+# compose file excerpt (illustrative; replace CHANGEME paths with yours):
+# secrets:
+#   gateway_master_key:
+#     file: ./secrets/gateway_master_key.txt
+# services:
+#   gateway:
+#     secrets:
+#       - source: gateway_master_key
+#         target: /run/secrets/gateway_master_key
+#         mode: 0400
+#     environment:
+#       LQ_AI_GATEWAY_MASTER_KEY_FILE: /run/secrets/gateway_master_key
+```
+
+```yaml
+# Kubernetes (external-secrets-operator or sealed-secret mounted as a file)
+# env:
+#   - name: LQ_AI_GATEWAY_MASTER_KEY_FILE
+#     value: /var/run/secrets/lq-ai/gateway_master_key
+```
+
+```ini
+# systemd (credential passing — no secret in the unit file)
+# [Service]
+# LoadCredential=gateway_master_key:/etc/lq-ai/secrets/gateway_master_key
+# Environment=LQ_AI_GATEWAY_MASTER_KEY_FILE=%d/gateway_master_key
+```
+
+Rules:
+
+* Set `NAME` **or** `NAME_FILE`, never both — both set fails at startup with a
+  `SecretSourceConflict` naming the variable (never the value).
+* Files are UTF-8 text, stripped of surrounding whitespace (a trailing newline
+  from Vault/agent templates is fine). Missing, unreadable, directory, or
+  empty-after-strip files fail clearly (`SecretFileError` naming var + path).
+  Master/gateway-key failures are fatal; a bad provider-key file skips that
+  provider with a warning (same as a missing env key) so unrelated providers
+  keep serving.
+* Permissions: store files `0400`/`0600` owned by the service user. A
+  group/world-readable file logs a warning but still loads (warn-only by design
+  so sloppy dev mounts do not hard-fail production boot).
+* Env-only deployments keep working unchanged — to migrate, mount the file,
+  set `*_FILE`, unset the plaintext var, restart.
+
+Remaining exposure (even with files): the plaintext still lives in the gateway
+process heap for the duration of adapter calls; `docker inspect` / Compose
+`environment:` entries, `/proc/<pid>/environ`, core dumps, and host-root or
+`CAP_SYS_PTRACE` container inspection can all recover it. File delivery shrinks
+the `.env`-in-backup-snapshot surface — it does not make secrets unreadable to
+host root. Keep mount paths `0400`, restrict which UIDs can `docker exec`, and
+prefer a secret manager as the file source rather than a checked-in file.
+
 ---
 
 ## Encrypting each provider key

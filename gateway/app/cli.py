@@ -16,10 +16,9 @@ in shell history. See ``docs/security/`` (M1) for operator workflow.
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 
-from app.secrets import MASTER_KEY_ENV, encrypt_value, generate_master_key
+from app.secrets import MASTER_KEY_ENV, encrypt_value, generate_master_key, resolve_secret
 
 
 def _cmd_generate_master_key(_args: argparse.Namespace) -> int:
@@ -27,19 +26,24 @@ def _cmd_generate_master_key(_args: argparse.Namespace) -> int:
     print(key)
     print(
         f"\n# Set this in your environment so the gateway can decrypt "
-        f"`api_key_encrypted` values:\n#   export {MASTER_KEY_ENV}={key}\n",
+        f"`api_key_encrypted` values:\n#   export {MASTER_KEY_ENV}={key}\n"
+        f"# or mount it as a file and set {MASTER_KEY_ENV}_FILE to its path.\n",
         file=sys.stderr,
     )
     return 0
 
 
 def _cmd_encrypt_key(args: argparse.Namespace) -> int:
-    master_key = os.environ.get(MASTER_KEY_ENV) or ""
+    try:
+        master_key = resolve_secret(MASTER_KEY_ENV)
+    except (RuntimeError, OSError) as exc:
+        print(f"error: cannot resolve {MASTER_KEY_ENV}: {exc}", file=sys.stderr)
+        return 2
     if not master_key:
         print(
             f"error: {MASTER_KEY_ENV} is not set. Run `python -m app.cli "
-            f"generate-master-key` first, export the result, then re-run "
-            f"this command.",
+            f"generate-master-key` first, export the result (or mount it via "
+            f"{MASTER_KEY_ENV}_FILE), then re-run this command.",
             file=sys.stderr,
         )
         return 2
