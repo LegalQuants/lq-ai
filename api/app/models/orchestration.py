@@ -1,7 +1,6 @@
 """Private governance records for ADR 0035; no graph continuation cursor.
 
-Migrations 0067 and 0068 own governance; 0069 owns the isolated checkpoint schema.
-Migration 0070 adds session-owned working files.
+Migration 0067 owns governance, isolated checkpoints and session working files.
 Content-bearing snapshots/results stay in application records, not audit details
 or framework traces. Owner-scoped demonstration routes expose bounded views.
 The store owns short transactions and the effect adapter owns external I/O.

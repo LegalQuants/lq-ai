@@ -1760,7 +1760,7 @@ CREATE INDEX idx_autonomous_sessions_user_created ON autonomous_sessions(user_id
 CREATE INDEX idx_autonomous_sessions_active ON autonomous_sessions(halt_state, last_activity_at) WHERE status = 'running';
 ```
 
-### Governed orchestration records (0067–0070)
+### Governed orchestration records (0067)
 
 These private tables implement accepted ADR 0035. The implementation connects
 them to the closed demonstration API and arq worker; live research remains disabled.
@@ -1782,7 +1782,7 @@ cascades children. Existing single-session status/phase enums are unchanged.
 | `orchestration_roots` | `session_id` PK/FK; `owner_id`, `project_id`, unique `plan_id`; `current_revision`, nullable `admitted_revision`; `status`, `stop_reason`, created/updated timestamps | One active root per owner, including approval/child waits and uncertainty. Deferred composite FK binds current revision to a stored plan. An admitted revision equals the current revision and prevents recreating a deleted batch. |
 | `orchestration_plans` | PK `(root_id, revision)`; `plan_hash`, private JSONB `snapshot`, `status`, nullable JSONB `approval`, creation timestamp | Positive revision; SHA-256 digest shape; proposed/approved/rejected/superseded states. Approved requires consent. Superseding retains prior consent for inspection; never edits old snapshot content. |
 | `orchestration_admissions` | `session_id` PK/FK; `root_id`, `revision`, `dispatch_id`, `child_order`, creation timestamp | FK to stored plan; unique `(root, revision, dispatch)` and `(root, revision, order)`. Approval, child sessions, fixed allocations and admission audit are serialized by the root transaction. |
-| `orchestration_accounts` | `session_id` PK/FK; `root_id`; `allocation_usd NUMERIC(10,4)`, `spent_usd/reserved_usd NUMERIC(14,4)`; generation, worker UUID, lease expiry, fixed attempt deadline (0068) | Nonnegative amounts/generation. Worker, lease and attempt deadline are all set or all null; lease cannot exceed attempt deadline. Larger spent field records observed overruns honestly; admission enforces available allocation in a locked transaction. |
+| `orchestration_accounts` | `session_id` PK/FK; `root_id`; `allocation_usd NUMERIC(10,4)`, `spent_usd/reserved_usd NUMERIC(14,4)`; generation, worker UUID, lease expiry, fixed attempt deadline | Nonnegative amounts/generation. Worker, lease and attempt deadline are all set or all null; lease cannot exceed attempt deadline. Larger spent field records observed overruns honestly; admission enforces available allocation in a locked transaction. |
 | `orchestration_effects` | PK `(session_id, effect_key)`; request hash, phase, intent, generation, status; reservation, nullable charge/result/completion time, creation timestamp | One admitted/uncertain effect per run. Bounded stable effect key and digest shape. Completed requires charge/result/time. Result JSONB is private content; audit does not contain it. Uncertain effects retain reservations. |
 
 The internal `release_claim` transaction clears account worker/lease fields and
@@ -1793,15 +1793,13 @@ remains possible after execution permission is revoked and preserves consent,
 root lifecycle and accounting. A replacement claim rechecks current authority.
 No new columns or migration are needed for this operation.
 
-Migration **0068** adds `attempt_deadline TIMESTAMPTZ` to each account. New claims
+The schema includes `attempt_deadline TIMESTAMPTZ` on each account. New claims
 fix it to the earlier of the approved root deadline and claim time plus the
-approved attempt timeout; renewable `lease_until` cannot exceed it. Existing
-claims backfill to their current lease expiry, without extra authority. Release
+approved attempt timeout; renewable `lease_until` cannot exceed it. Release
 and uncertainty recovery clear both timestamps. `renew_claim` revalidates current
 authority, preserves generation/accounting/activity, and atomically audits actual
-extensions as `orchestration.claim_renewed`. Downgrade refuses owned accounts and
-preserves receipts/reservations once drained. Drain and rebuild all API workers
-together; old writers do not maintain the new constraint. See the
+extensions as `orchestration.claim_renewed`. Downgrade refuses retained runs and
+preserves legacy sessions once drained. Rebuild all API workers together. See the
 [lease renewal tests](../api/tests/autonomous/orchestration/test_leases.py).
 
 The internal `recover_expired_claims` transaction drains expired account ownership
@@ -1810,7 +1808,7 @@ clears worker/lease/attempt fields and records `orchestration.claim_expired`
 atomically across the root's affected accounts. Clean accounts preserve lifecycle,
 progress and receipts; pending effects or orphaned reservations keep funds and
 mark the root uncertain. Live accounts are skipped. This also supplies cleanup
-for expired idle accounts before 0068 downgrade; no additional migration is
+for expired idle accounts before a schema downgrade; no additional migration is
 needed. See [recovery tests](../api/tests/autonomous/orchestration/test_guard_recovery.py).
 
 The private `expire_root` operation validates the stored current plan and compares
@@ -1829,7 +1827,7 @@ these tables and does not represent execution continuation. Page limits and
 per-stage timeouts bound work; there is no migration or new authority record.
 See [recovery sweep tests](../api/tests/autonomous/orchestration/test_watchdog.py).
 
-Migration **0069** creates the separate `orchestration_checkpoints` schema for
+Revision **0067** also creates the separate `orchestration_checkpoints` schema for
 the pinned Postgres saver 3.1.2: `checkpoint_migrations` (versions 0–9),
 `checkpoints`, `checkpoint_blobs` and `checkpoint_writes`. The three content tables
 retain the saver's composite primary keys and add generated `session_id UUID`
@@ -1847,7 +1845,7 @@ account admission enforce root/deployment child limits. Approval and child waits
 release worker ownership. The legacy idle watchdog excludes governed trees;
 their dedicated sweep handles leases, deadlines and lost arq wakeups.
 
-Migration **0070** adds `orchestration_files`, keyed by `(session_id, name)`.
+The same revision adds `orchestration_files`, keyed by `(session_id, name)`.
 `session_id` references the run's `orchestration_accounts` row with `ON DELETE
 CASCADE`. Columns hold bounded UTF-8 `content`, `revision` (1–32), SHA-256 `digest`,
 `size_bytes`, `shared` and `updated_at`. Database checks restrict names and content
@@ -1866,7 +1864,7 @@ root's admitted marker; recovery refuses to recreate an incomplete batch.
 Downgrade refuses to drop this schema while roots/children exist, requiring an
 explicit drain/export/removal procedure. No automatic loss of receipts is allowed.
 
-### Optional persistent skill workspaces (0071, local implementation)
+### Optional persistent skill workspaces (0068, local implementation)
 
 These tables are independent of the run tree and LangGraph checkpoints.
 
@@ -1886,7 +1884,7 @@ transaction. File reads do not inject data into future prompts automatically.
 Run/chat deletion does not remove these rows. Skill disablement/removal preserves
 them for owner inspection/export/reset. Project archival blocks tool access but
 retains inspection. Account export includes `skill_workspaces.json`. Migration
-0071 refuses downgrade while any workspace remains: export and intentionally
+0068 refuses downgrade while any workspace remains: export and intentionally
 clear retained work first. See [capability evidence](plans/issue-563-skill-capabilities.md).
 
 ### `autonomous_schedules` (M4)

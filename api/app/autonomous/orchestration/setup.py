@@ -1,6 +1,6 @@
 """Checkpoint readiness check: python -m app.autonomous.orchestration.setup.
 
-Run before enabling the demo, after migration 0069. This read-only command does
+Run before enabling the demo, after migration 0067. This read-only command does
 not create tables, users, plans, approvals or provider calls.
 """
 

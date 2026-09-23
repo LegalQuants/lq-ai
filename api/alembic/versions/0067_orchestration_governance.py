@@ -1,11 +1,11 @@
-"""Private run tree, approval, admission, budget and effect records (ADR 0035).
+"""Governed run tree, checkpoints and working files (ADR 0035).
 
 Revision ID: 0067
 Revises: 0066
 
-No public routes or workers are enabled. Downgrade refuses when orchestration
-records exist: drain/export first; never silently erase receipts or flatten an
-executed tree. Legacy-only databases can upgrade/downgrade without data loss.
+No public routes or workers are enabled. Downgrade refuses retained runs,
+checkpoints or files: drain/export first. Legacy-only databases can round-trip
+without data loss. New installations receive the final schema in one revision.
 """
 
 from alembic import op
@@ -85,8 +85,13 @@ def upgrade() -> None:
           spent_usd numeric(14,4) NOT NULL DEFAULT 0 CHECK (spent_usd >= 0),
           reserved_usd numeric(14,4) NOT NULL DEFAULT 0 CHECK (reserved_usd >= 0),
           generation bigint NOT NULL DEFAULT 0 CHECK (generation >= 0),
-          worker_id uuid, lease_until timestamptz,
-          CHECK ((worker_id IS NULL) = (lease_until IS NULL))
+          worker_id uuid, lease_until timestamptz, attempt_deadline timestamptz,
+          CHECK ((worker_id IS NULL) = (lease_until IS NULL)),
+          CONSTRAINT ck_orchestration_attempt_lease CHECK (
+            (worker_id IS NULL AND attempt_deadline IS NULL)
+            OR (worker_id IS NOT NULL AND attempt_deadline IS NOT NULL
+                AND lease_until <= attempt_deadline)
+          )
         );
         CREATE INDEX ix_orchestration_accounts_root ON orchestration_accounts(root_id);
         CREATE TABLE orchestration_effects (
@@ -144,16 +149,90 @@ def upgrade() -> None:
           FOR EACH ROW EXECUTE FUNCTION enforce_autonomous_tree();
     """)
 
+    op.execute("CREATE SCHEMA orchestration_checkpoints")
+    op.execute(
+        "CREATE TABLE orchestration_checkpoints.checkpoint_migrations (v INTEGER PRIMARY KEY)"
+    )
+    op.execute("""CREATE TABLE orchestration_checkpoints.checkpoints (
+        thread_id TEXT NOT NULL,
+        checkpoint_ns TEXT NOT NULL DEFAULT '',
+        checkpoint_id TEXT NOT NULL,
+        parent_checkpoint_id TEXT,
+        type TEXT,
+        checkpoint JSONB NOT NULL,
+        metadata JSONB NOT NULL DEFAULT '{}',
+        session_id UUID GENERATED ALWAYS AS (thread_id::uuid) STORED
+            REFERENCES public.autonomous_sessions(id) ON DELETE CASCADE,
+        PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id)
+    )""")
+    op.execute("""CREATE TABLE orchestration_checkpoints.checkpoint_blobs (
+        thread_id TEXT NOT NULL,
+        checkpoint_ns TEXT NOT NULL DEFAULT '',
+        channel TEXT NOT NULL,
+        version TEXT NOT NULL,
+        type TEXT,
+        blob BYTEA,
+        session_id UUID GENERATED ALWAYS AS (thread_id::uuid) STORED
+            REFERENCES public.autonomous_sessions(id) ON DELETE CASCADE,
+        PRIMARY KEY (thread_id, checkpoint_ns, channel, version)
+    )""")
+    op.execute("""CREATE TABLE orchestration_checkpoints.checkpoint_writes (
+        thread_id TEXT NOT NULL,
+        checkpoint_ns TEXT NOT NULL DEFAULT '',
+        checkpoint_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        idx INTEGER NOT NULL,
+        channel TEXT NOT NULL,
+        type TEXT,
+        blob BYTEA NOT NULL,
+        task_path TEXT NOT NULL DEFAULT '',
+        session_id UUID GENERATED ALWAYS AS (thread_id::uuid) STORED
+            REFERENCES public.autonomous_sessions(id) ON DELETE CASCADE,
+        PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
+    )""")
+    for table in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
+        op.execute(
+            f"CREATE INDEX {table}_thread_id_idx ON orchestration_checkpoints.{table}(thread_id)"
+        )
+        op.execute(
+            f"CREATE INDEX {table}_session_id_idx ON orchestration_checkpoints.{table}(session_id)"
+        )
+    op.execute(
+        "INSERT INTO orchestration_checkpoints.checkpoint_migrations SELECT generate_series(0, 9)"
+    )
+
+    op.execute("""CREATE TABLE orchestration_files (
+        session_id UUID NOT NULL REFERENCES orchestration_accounts(session_id) ON DELETE CASCADE,
+        name TEXT NOT NULL CHECK (name ~ '^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,95}$'),
+        content TEXT NOT NULL CHECK (octet_length(content) <= 65536),
+        revision INTEGER NOT NULL CHECK (revision BETWEEN 1 AND 32),
+        digest TEXT NOT NULL CHECK (digest ~ '^[0-9a-f]{64}$'),
+        size_bytes INTEGER NOT NULL CHECK (size_bytes = octet_length(content)),
+        shared BOOLEAN NOT NULL DEFAULT false,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (session_id, name)
+    )""")
+
 
 def downgrade() -> None:
     op.execute("""
         DO $$ BEGIN
-          IF EXISTS (SELECT 1 FROM orchestration_roots) OR EXISTS (
-            SELECT 1 FROM autonomous_sessions WHERE parent_session_id IS NOT NULL
-          ) THEN
+          IF EXISTS (SELECT 1 FROM orchestration_roots)
+             OR EXISTS (SELECT 1 FROM autonomous_sessions WHERE parent_session_id IS NOT NULL)
+             OR EXISTS (SELECT 1 FROM orchestration_files)
+             OR EXISTS (SELECT 1 FROM orchestration_checkpoints.checkpoints)
+             OR EXISTS (SELECT 1 FROM orchestration_checkpoints.checkpoint_blobs)
+             OR EXISTS (SELECT 1 FROM orchestration_checkpoints.checkpoint_writes)
+          THEN
             RAISE EXCEPTION '0067 downgrade requires draining and exporting orchestration records first';
           END IF;
         END $$;
+        DROP TABLE orchestration_files;
+        DROP TABLE orchestration_checkpoints.checkpoint_writes;
+        DROP TABLE orchestration_checkpoints.checkpoint_blobs;
+        DROP TABLE orchestration_checkpoints.checkpoints;
+        DROP TABLE orchestration_checkpoints.checkpoint_migrations;
+        DROP SCHEMA orchestration_checkpoints;
         DROP TRIGGER autonomous_tree_identity ON autonomous_sessions;
         DROP FUNCTION enforce_autonomous_tree();
         DROP TABLE orchestration_effects;

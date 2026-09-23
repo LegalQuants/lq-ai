@@ -58,7 +58,7 @@ class CheckpointRuntime:
                 )
             ).fetchone()
             if row is None or row["version"] != 9 or row["workspace"] is None:
-                raise ValidationError(message="Orchestration migrations 0069 and 0070 are required")
+                raise ValidationError(message="Orchestration migration 0067 is required")
 
     @asynccontextmanager
     async def acquire(

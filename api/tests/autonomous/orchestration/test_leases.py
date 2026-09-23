@@ -8,7 +8,8 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text, update
+from sqlalchemy.exc import DBAPIError
 
 from app.autonomous.enums import ToolIntent
 from app.autonomous.orchestration.store import WorkerClaim
@@ -67,6 +68,23 @@ async def leased(env):
     )
     env.claim = await env.store.claim(env.root_id, env.root_id, worker_id=uuid4(), seconds=30)
     return env
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "attempt_deadline=NULL",
+        "lease_until=attempt_deadline+interval '1 second'",
+        "worker_id=NULL,lease_until=NULL",
+    ],
+)
+async def test_database_rejects_partial_or_extended_worker_claim(ready, mutation):
+    with pytest.raises(DBAPIError, match="ck_orchestration_attempt_lease"):
+        async with ready.factory.begin() as db:
+            await db.execute(
+                text(f"UPDATE orchestration_accounts SET {mutation} WHERE session_id=:session"),
+                {"session": ready.root_id},
+            )
 
 
 @pytest.mark.parametrize("child_run", [False, True])

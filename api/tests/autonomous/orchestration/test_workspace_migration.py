@@ -1,4 +1,4 @@
-"""0070 preserves prior runs and refuses to discard retained work."""
+"""The combined orchestration downgrade refuses to discard retained run files."""
 
 import asyncio
 import os
@@ -13,7 +13,6 @@ from sqlalchemy.exc import DBAPIError
 from tests.autonomous.orchestration.test_executor import approve, demonstration as demonstration
 
 from app.autonomous.enums import ToolIntent
-from app.errors import ValidationError
 from app.models.autonomous import AutonomousSession
 from app.models.orchestration import OrchestrationFile
 from app.schemas.autonomous import Phase
@@ -42,18 +41,10 @@ async def migrate(url, engine, direction, revision):
         await engine.dispose()
 
 
-async def test_workspace_upgrade_downgrade_preserves_history(
+async def test_orchestration_downgrade_refuses_retained_files(
     demonstration, test_engine, test_db_url
 ):
     env = demonstration
-    await migrate(test_db_url, test_engine, "downgrade", "0069")
-    try:
-        with pytest.raises(ValidationError, match="0070"):
-            await env.checkpoints.setup()
-    finally:
-        await migrate(test_db_url, test_engine, "upgrade", "head")
-    async with env.factory() as db:
-        assert await db.get(AutonomousSession, env.root_id) is not None
     await approve(env)
     await env.executor.run_one(env.root_id, env.root_id)
     claim = await env.store.claim(env.root_id, env.children[0], worker_id=uuid4(), seconds=60)
@@ -67,12 +58,12 @@ async def test_workspace_upgrade_downgrade_preserves_history(
     )
     await env.store.release_claim(claim)
     with pytest.raises(DBAPIError, match="draining and exporting"):
-        await migrate(test_db_url, test_engine, "downgrade", "0069")
+        await migrate(test_db_url, test_engine, "downgrade", "0066")
     async with env.factory.begin() as db:
         assert (
             await db.get(OrchestrationFile, (env.children[0], "notes.md"))
         ).content == "Retained work"
         await db.execute(delete(AutonomousSession).where(AutonomousSession.id == env.root_id))
         assert not await db.scalar(select(OrchestrationFile.session_id))
-    await migrate(test_db_url, test_engine, "downgrade", "0069")
+    await migrate(test_db_url, test_engine, "downgrade", "0066")
     await migrate(test_db_url, test_engine, "upgrade", "head")

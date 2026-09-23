@@ -1,13 +1,13 @@
 """Persistent, optional owner/project/skill workspaces.
 
-Revision ID: 0071
-Revises: 0070
+Revision ID: 0068
+Revises: 0067
 """
 
 from alembic import op
 
-revision = "0071"
-down_revision = "0070"
+revision = "0068"
+down_revision = "0067"
 branch_labels = None
 depends_on = None
 

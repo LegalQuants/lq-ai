@@ -1,4 +1,4 @@
-"""0069 up/down and non-lossy deletion behavior in a separate disposable DB."""
+"""Combined 0067 checkpoint upgrade and non-lossy downgrade in a disposable DB."""
 
 import asyncio
 import os
@@ -13,7 +13,7 @@ from sqlalchemy.exc import DBAPIError
 
 
 def exercise(source_url):
-    name = f"lq_ai_test_0069_{uuid4().hex[:10]}"
+    name = f"lq_ai_test_checkpoint_{uuid4().hex[:10]}"
     base = source_url.replace("postgresql+asyncpg://", "postgresql://", 1).rsplit("/", 1)[0]
     admin = create_engine(f"{base}/postgres", isolation_level="AUTOCOMMIT")
     target = create_engine(f"{base}/{name}")
@@ -25,7 +25,7 @@ def exercise(source_url):
         with admin.connect() as db:
             db.execute(text(f'CREATE DATABASE "{name}"'))
         os.environ["DATABASE_URL"] = f"{base}/{name}"
-        command.upgrade(config, "0068")
+        command.upgrade(config, "0066")
         with target.begin() as db:
             db.execute(
                 text(
@@ -39,8 +39,8 @@ def exercise(source_url):
                 ),
                 {"id": session, "owner": owner},
             )
-        command.upgrade(config, "0069")
-        command.downgrade(config, "0068")
+        command.upgrade(config, "0067")
+        command.downgrade(config, "0066")
         with target.connect() as db:
             assert (
                 db.scalar(
@@ -48,7 +48,7 @@ def exercise(source_url):
                 )
                 == 1
             )
-        command.upgrade(config, "0069")
+        command.upgrade(config, "0067")
         with target.begin() as db:
             db.execute(
                 text(
@@ -69,16 +69,16 @@ def exercise(source_url):
                 {"thread": str(session)},
             )
         with pytest.raises(DBAPIError, match="draining and exporting"):
-            command.downgrade(config, "0068")
+            command.downgrade(config, "0066")
         with target.begin() as db:
-            assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0069"
+            assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0067"
             db.execute(text("DELETE FROM users WHERE id=:id"), {"id": owner})
             for table in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
                 assert (
                     db.scalar(text(f"SELECT count(*) FROM orchestration_checkpoints.{table}")) == 0
                 )
-        command.downgrade(config, "0068")
-        command.upgrade(config, "0069")
+        command.downgrade(config, "0066")
+        command.upgrade(config, "0067")
     finally:
         if old_url is None:
             os.environ.pop("DATABASE_URL", None)

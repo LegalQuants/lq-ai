@@ -135,7 +135,7 @@ dependencies = [
     "langgraph>=1,<2",
     # ADR 0035 demonstration: the previously tested saver is now a runtime
     # dependency. It stays dormant unless the operator enables the demo and
-    # applies checkpoint migration 0069. Existing executors retain
+    # applies orchestration migration 0067. Existing executors retain
     # their checkpoint-free behavior; psycopg2 remains the migration driver.
     "langgraph-checkpoint-postgres==3.1.2",
     "psycopg[binary]>=3.2,<4",

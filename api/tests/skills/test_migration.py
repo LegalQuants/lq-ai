@@ -17,7 +17,7 @@ async def test_migration_preserves_users_and_refuses_retained_work(test_engine, 
     async with factory.begin() as db:
         db.add(owner)
     try:
-        await migrate(test_db_url, test_engine, "downgrade", "0070")
+        await migrate(test_db_url, test_engine, "downgrade", "0067")
         await migrate(test_db_url, test_engine, "upgrade", "head")
         async with factory.begin() as db:
             assert await db.get(User, owner.id)
@@ -32,7 +32,7 @@ async def test_migration_preserves_users_and_refuses_retained_work(test_engine, 
                 )
             )
         with pytest.raises(DBAPIError, match="exporting and clearing"):
-            await migrate(test_db_url, test_engine, "downgrade", "0070")
+            await migrate(test_db_url, test_engine, "downgrade", "0067")
         async with factory.begin() as db:
             assert await db.scalar(
                 select(SkillWorkspace.id).where(SkillWorkspace.owner_id == owner.id)
