@@ -1,6 +1,6 @@
 # Rotate a leaked provider key
 
-A provider API key leaked — committed to a public repo, pasted somewhere it shouldn't have been, or only suspected of exposure. This page assumes the key itself, not the gateway's master key, is what's compromised; if you suspect the `LQ_AI_GATEWAY_MASTER_KEY` itself was exposed, that's the [master-key rotation](../security/encrypted-keys.md#master-key-rotation) procedure instead — a bigger job, covered in full there.
+A provider API key leaked — committed to a public repo, pasted somewhere it shouldn't have been, or only suspected of exposure. This page assumes the key itself, not the gateway's master key, is what's compromised; if you suspect the `LQ_AI_GATEWAY_MASTER_KEY` itself was exposed, that's the [master-key rotation](../security/encrypted-keys.md#master-key-rotation) procedure instead — a bigger job, covered in full there. Tool-provider (research-source) credentials are encrypted under the same master key, so a master-key rotation invalidates their tokens too — re-encrypt each `tool_providers[].api_key_encrypted` entry the same way; the linked procedure doesn't yet walk through that step explicitly, so budget the extra loop yourself.
 
 ## 1. Revoke at the upstream provider — first, before anything else here
 
@@ -17,13 +17,15 @@ Generate a fresh key from the provider, then get it into `gateway.yaml`:
   curl -X DELETE http://localhost:8000/api/v1/admin/provider-keys/<provider> \
     -H "Authorization: Bearer <admin-jwt>"
 
-  # confirm the swap took (also step 2's own confirmation, below)
-  curl -s http://localhost:8001/admin/v1/providers/health | jq '.providers[] | {name, ok}'
+  # confirm the gateway's view of the key (also step 2's own confirmation, below)
+  curl -s http://localhost:8000/api/v1/admin/provider-keys \
+    -H "Authorization: Bearer <admin-jwt>" \
+    | jq '.provider_keys[] | {provider, configured, last4, source}'
   ```
 - **If the provider still uses `api_key_env`** (plaintext env-var form), update the value in your secrets store and recreate the gateway container so it picks up the new environment.
-- **If you manage `api_key_encrypted` by hand**, re-run `python -m app.cli encrypt-key --provider <name>` under the existing master key and paste the new token into `gateway.yaml`, then trigger a [config hot-reload](../adr/0010-gateway-config-hot-reload.md) rather than waiting for a full restart.
+- **If you manage `api_key_encrypted` by hand**, re-run `python -m app.cli encrypt-key --provider <name>` under the existing master key (it prompts for the key, or reads it from stdin — don't pass it as a command argument) and paste the new token into `gateway.yaml`. A provider entry takes `api_key_env` *or* `api_key_encrypted`, never both — the config loader rejects the entry otherwise — so drop `api_key_env` if you are converting one. Then recreate the gateway container: a [config hot-reload](../adr/0010-gateway-config-hot-reload.md) (SIGHUP) re-reads `gateway.yaml` but does not rebuild provider adapters — only gateway startup and the runtime provider-key endpoints do — so a hand-pasted token takes effect on the next gateway start, not on reload.
 
-Either way, confirm the swap took: `curl -s http://localhost:8001/admin/v1/providers/health | jq '.providers[] | {name, ok}'` should show `ok: true` for the provider you rotated.
+Either way, confirm the swap took with the provider-key status list — `GET /api/v1/admin/provider-keys` with an admin token (the `curl` above), or **Admin → Provider keys**. Each row is `{provider, type, configured, last4, source}`: the rotated provider should show `configured: true`, a `last4` matching the new key, and `source: runtime` if you used the runtime surface (a runtime set or rotate writes `api_key_encrypted` and clears `api_key_env`, so an env-sourced provider flips to `runtime`). Be clear about what that proves: `configured` means the gateway built an adapter from a key it could resolve — presence, not provider acceptance. The gateway's `GET /admin/v1/providers/health` is a `501` stub as of the checked commit, so there is no health probe that exercises the key upstream; the only check of acceptance is a real request — send one message routed to that provider and confirm it isn't refused with a provider authentication error.
 
 ## 3. Find the blast radius — one query
 
@@ -47,4 +49,4 @@ This is a read against your own deployment's audit trail — it tells you what *
 
 ## 4. Confirm
 
-Re-run the blast-radius query with a `WHERE l.timestamp >= now()` filter — it should return nothing further once step 2's rotation has taken effect, since new requests route through the replaced key. Watch the provider's own dashboard for any activity you didn't originate, for as long as your provider's exposure window suggests is prudent.
+Record the moment step 2 completed as a UTC timestamp (`inference_routing_log.timestamp` is `TIMESTAMPTZ`), and re-run the blast-radius query with `AND l.timestamp >= '<rotation time, UTC>'` in place of the exposure-time filter — a fixed value, not `now()`, which advances on every run and hides exactly the window you are trying to inspect. Read the result carefully: rows after the rotation are *not* evidence the old key is still in use. `routed_provider` is the provider's config name, which does not change on rotation, and no routing-log column records which key served a request — so post-rotation rows are simply new traffic through the replacement key, and the log cannot tell the two apart. What the log does bound is your own exposure: the window from first exposure to rotation in the step 3 query. Whether the *old* key is still being used anywhere is only visible on the provider's side — its per-key usage or activity view — so watch that for any activity you didn't originate, for as long as your provider's exposure window suggests is prudent.
