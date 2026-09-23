@@ -68,6 +68,27 @@ code; they establish no live-provider or legal-quality claim.
 Capabilities remain disabled by default. Production enablement is a separate
 decision; no release date is committed.
 
+## Proposed real orchestration profile (ADR 0038 pending)
+
+The first released orchestration profile should let an owner approve and monitor
+one bounded batch of **real skill-backed child work**. An operator enables that
+profile; the current sample workflow remains an acceptance fixture, not the
+only work the switch can run. An owner supplies an active project and goal,
+reviews one to four proposed tasks, and selects approved installed skills and
+explicitly authorized matter resources. Research is one canonical example, not
+the only child profile. The application supplies the model route, grants, data restrictions, budget and
+deadline for exact-plan approval. Children run independently, share bounded
+results with the root, and never gain authority from task text or sibling output.
+
+Acceptance requires selected-document/KB checks, project-policy propagation,
+DE-294 handoff validation, real gateway-backed child and root execution,
+observable progress, halt, partial results, recovery and honest evidence status.
+The existing disabled-by-default operator switch must enable this profile after
+those gates pass. Optional persistent storage and bundled helpers remain
+separate. This expansion does not authorize recursive delegation or generated
+code. Until ADR 0038 is ratified, the accepted first-profile scope above remains
+the sample demonstration.
+
 Behavior details: [demonstration](../plans/issue-563-demonstration.md),
 [run files](../plans/issue-563-workspace.md),
 [skill capabilities](../plans/issue-563-skill-capabilities.md).

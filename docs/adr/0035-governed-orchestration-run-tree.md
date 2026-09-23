@@ -4,6 +4,8 @@
 **Date:** 2026-09-12 · **Updated:** 2026-09-20
 **Tracks:** [Issue #563](https://github.com/LegalQuants/lq-ai/issues/563)
 
+**Proposed amendment:** [ADR 0038](0038-skill-backed-orchestration-profile.md) would replace this decision’s sample-only first profile with bounded real skill-backed work. Until ratified, the first-profile scope below remains in force.
+
 ## Context
 
 LQ.AI needs parallel agent work that can pause for approval, survive interruption
