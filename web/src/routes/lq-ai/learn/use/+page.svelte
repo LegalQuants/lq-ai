@@ -382,10 +382,10 @@
 
 		<!-- 14 -->
 		<section class="lq-use-section" data-testid="lq-ai-learn-use-section-word-addin">
-			<h2 class="lq-section-h">14. Word add-in (plumbing only at v0.3.0)</h2>
+			<h2 class="lq-section-h">14. Word add-in (scaffold only)</h2>
 			<p class="lq-text-body">
 				The Microsoft Word add-in is an Office.js task pane that installs against your own deployment.
-				At v0.3.0, only the plumbing has shipped: an admin generates a per-deployment manifest, the
+				So far, only the plumbing has shipped: an admin generates a per-deployment manifest, the
 				operator sideloads the unsigned manifest (Microsoft 365 warns about the unsigned package —
 				expected), the pane completes OAuth against the deployment, and a version handshake confirms
 				compatibility. The in-pane feature surface — chat, skills, playbooks — is deferred (DE-287),
