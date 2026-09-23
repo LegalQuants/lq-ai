@@ -1,10 +1,10 @@
 # LQ.AI Governance
 
-> **Status:** Proposed. This document codifies how the LQ.AI project is governed
+> **Status:** Adopted. This document codifies how the LQ.AI project is governed
 > during its current phase. It was drafted by houfu (Ang Hou Fu) following the
-> committee call of 2026-07-19 and is adopted when the PR introducing it is approved
-> by the committee. The decision record behind it is
-> [ADR 0022](docs/adr/0022-committee-governance-and-meeting-records.md).
+> committee call of 2026-07-19 and was adopted alongside
+> [ADR 0022](docs/adr/0022-committee-governance-and-meeting-records.md), which the
+> committee accepted at the 2026-07-26 weekly call (merged as PR #311).
 
 ## Background
 
