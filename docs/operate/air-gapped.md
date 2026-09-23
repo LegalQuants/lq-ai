@@ -6,12 +6,31 @@ once the images and models are on the host. This page is the install step plus a
 honest account of what's actually been verified about that claim.
 
 > [!CAUTION]
-> **Silent failure** — Document ingestion and knowledge-base search do not run
-> locally. The default `embedding` alias in `gateway.yaml.example` points at OpenAI
-> `text-embedding-3-small`; with no OpenAI key reachable, embedding calls fail and
-> ingestion/search break with no in-app signal (PRD DE-355). Repoint the `embedding`
-> alias at a local model whose dimension matches the `document_chunks.embedding`
-> column, or accept chat-only operation.
+> **Silent failure** — Chat and document search have separate model settings. Text
+> extraction and chunking run locally in `ingest-worker` — plain text and Markdown
+> need no model at all, PDF goes through PyMuPDF (`api/app/pipeline/parsers.py`) —
+> and the file reports `ready` as soon as that step finishes
+> (`api/app/pipeline/ingest.py`). Embedding is a separate job queued afterwards
+> (`api/app/workers/document_pipeline.py`) that goes through the gateway's
+> `embedding` alias, which `gateway.yaml.example` points at OpenAI
+> `text-embedding-3-small`. The Ollama adapter's `embeddings` method raises
+> `ProviderUnsupportedError` (`gateway/app/providers/ollama.py`), so no local
+> embedding path ships as of the checked commit (PRD DE-355). With no OpenAI key
+> reachable, a `ready` file has no vectors: the vector side of hybrid search can't
+> see it, but search doesn't come up empty — the KB query API and chat RAG both
+> catch the query-embedding failure and fall back to full-text (keyword) search
+> (`api/app/api/knowledge_bases.py:756-774`, `api/app/api/chats.py:1119-1136`), and
+> Postgres FTS matches a chunk whether or not it has a vector
+> (`api/app/knowledge/retrieval.py:231-246`). What's lost is semantic ranking, not
+> search itself. The upload's own status doesn't reflect the embed failure either;
+> it's recorded on the document's `ingest_status` (`embed_failed`, or `partial`) in
+> the knowledge-base document listing (`api/app/knowledge/embed.py`,
+> `api/app/schemas/knowledge.py`). Repointing the alias at a local model needs an
+> embedding-capable adapter, a model whose dimension matches the 1536-wide
+> `document_chunks.embedding` column (or a column migration), and re-embedding
+> whatever was ingested before the change — only
+> chunks with no vector are ever embedded (`api/app/knowledge/embed.py`). Otherwise,
+> accept chat-only operation.
 
 > [!NOTE]
 > **Professional duty** — Choosing Mode 2 for a matter is a confidentiality decision,
@@ -46,6 +65,11 @@ docker compose exec ollama ollama pull qwen3.5:9b
 `gateway.yaml.example` ships `local-fast` (`qwen3.5:4b-nvfp4`) and `local-thinking`
 (`qwen3.5:9b`) aliases routed at `http://ollama:11434`; repoint either alias and pull
 the matching tag if you want a different model ([`docs/quickstart.md`](../quickstart.md)).
+`docker compose exec ollama ollama list` shows what the sidecar already holds —
+compare the tags against the aliases in your `gateway.yaml`. Both local aliases ship
+with `fallback: []`; keep it that way for any alias an air-gapped deployment routes
+to, so a missing local model fails visibly instead of falling through to a cloud
+target.
 
 ## Egress inventory
 
@@ -70,17 +94,28 @@ OCR models from Hugging Face, unless they're already cached in the `ingest-hf-ca
 nothing, since [ADR 0026](../adr/0026-document-ingestion-parser-and-docling.md)
 records that Docling has never returned output in this codebase and decides its
 removal; until that removal lands, `lq_ai_docling_enabled` (`api/app/config.py`)
-still defaults to `True`. On a fresh install that download can outrun the ingestion
-job's five-minute timeout, leaving the file stuck in `processing` with no visible
-error ([PRD §9, DE-351](../PRD.md#de-351--first-run-document-ingestion-times-out-on-the-docling-model-download-and-the-file-is-left-stuck-in-processing)).
+still defaults to `True`. On a fresh install that download can outrun the parse
+budget — `LQ_AI_DOCLING_TIMEOUT_SECONDS`, 300 s by default (`api/app/config.py`,
+`docker-compose.yml`). [PRD §9, DE-351](../PRD.md#de-351--first-run-document-ingestion-times-out-on-the-docling-model-download-and-the-file-is-left-stuck-in-processing)
+records the original defect, a file left in `processing` with no error; as of the
+checked commit the parse runs under a soft timeout that marks the file `failed` with
+`ingestion_error` set to `ingestion_timeout` and says to retry once the models are
+cached (`api/app/pipeline/ingest.py`), and the download carries on in the
+background, so the retry succeeds. Only PDFs take this path: plain text and Markdown
+uploads skip the parser thread entirely (`api/app/pipeline/ingest.py`), so a `.md`
+upload warms nothing. Setting `LQ_AI_DOCLING_ENABLED=false` on `ingest-worker`
+(`docker-compose.yml` passes it through; recreate the worker after changing it)
+skips the Docling pass and its download at no cost, since ADR 0026 records the pass
+never produced output — PyMuPDF still needs extractable text, and this adds no OCR:
+scanned and encrypted PDFs remain unsupported (`api/app/pipeline/parsers.py`).
 Second: `--profile local` brings up an empty `ollama` container — the model pull
 (several GB, [`docs/quickstart.md`](../quickstart.md)) is the operator's own
 responsibility and is not part of any image or volume this repository ships. If
-you're building a genuinely offline install, ingest at least one document and pull
-your Ollama model while you still have network access — before you cut the
-connection — so both are cached, and budget for both downloads in whatever
-image-mirroring plan you're using to get the container images onto the isolated
-network in the first place.
+you're building a genuinely offline install, ingest at least one PDF (if you leave
+Docling enabled) and pull your Ollama model while you still have network access —
+before you cut the connection — so both are cached, and budget for both downloads in
+whatever image-mirroring plan you're using to get the container images onto the
+isolated network in the first place.
 
 ## Related: a remote GPU host is not the same as air-gapped
 
