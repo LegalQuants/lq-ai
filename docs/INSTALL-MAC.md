@@ -83,8 +83,10 @@ minutes the first time only — and shows live progress (e.g. *"5/8 services rea
 > all — but chat can't answer until a key is present, either from this field or added in-app (step 5).
 
 > **Note:** those first-run downloads are LQ.AI's **document-reading models** (search, highlighting,
-> OCR) — not the chat AI. You don't have to wait for them to finish to sign in; they keep loading in
-> the background and only matter when you upload documents.
+> document structure) — not the chat AI. You don't have to wait for them to finish to sign in; they
+> keep loading in the background and only matter when you upload documents. They do not add OCR:
+> LQ.AI reads the text layer of a PDF, so a scanned or image-only PDF with no extractable text is
+> not yet supported.
 
 ## 4. Log in
 
@@ -183,6 +185,9 @@ chmod-600 `.env`). The bundled compose file is at
     -p lq-ai-desktop --env-file "$HOME/Library/Application Support/lq-ai-desktop/.env" \
     exec -T api python -m app.cli reset-admin-password --email admin@lq.ai --password 'YourNewPass123!' --no-force-change
   ```
+  Replace `'YourNewPass123!'` with your own password. Leave out `--password … --no-force-change` to
+  have it generate a temporary password and print it; you'll be asked to change it at your next
+  login.
 
 ---
 
