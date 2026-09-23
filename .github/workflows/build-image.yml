@@ -1,0 +1,126 @@
+name: Build release image
+
+# Builds one multi-arch LQ.AI service image, pushes it to GHCR, and attaches SLSA
+# build provenance. Called once per service by release.yml's build-backend and
+# build-frontend stages (ADR 0025).
+#
+# Why a reusable workflow and not a composite action: SLSA v1.0 Build Level 3
+# requires the provenance to be produced by an isolated builder that the calling
+# workflow cannot tamper with. A composite action runs inside the caller's job, so
+# the attestation's signer is release.yml itself (Build L2). As a reusable
+# workflow, the build and attest-build-provenance run in their own job and the
+# attestation is signed with this file's identity, which verifiers pin:
+#
+#   gh attestation verify oci://ghcr.io/legalquants/lq-ai-<service>:<tag> \
+#     --owner legalquants \
+#     --signer-workflow LegalQuants/lq-ai/.github/workflows/build-image.yml
+#
+# See docs/security/releases/README.md. This replaces the
+# .github/actions/build-push-image composite action introduced in #487.
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        description: Service name; becomes the lq-ai-<service> image name.
+        type: string
+        required: true
+      context:
+        description: Docker build context.
+        type: string
+        required: true
+      file:
+        description: Dockerfile path.
+        type: string
+        required: true
+      build_args:
+        description: Optional newline-separated KEY=VALUE build args.
+        type: string
+        required: false
+        default: ""
+      tag:
+        description: Image tag to publish (e.g. v1.2.3 or dryrun-abc1234).
+        type: string
+        required: true
+      push:
+        description: '"true" to push and attest; "false" for a build-only dry run.'
+        type: string
+        required: true
+      submodules:
+        description: Passed to actions/checkout; "recursive" for images that bake the skills/community submodule.
+        type: string
+        required: false
+        default: "false"
+      registry:
+        description: Container registry host.
+        type: string
+        required: false
+        default: ghcr.io
+      image_owner:
+        description: Registry namespace.
+        type: string
+        required: false
+        default: legalquants
+    outputs:
+      digest:
+        description: Digest of the built image.
+        value: ${{ jobs.build.outputs.digest }}
+
+permissions: {}
+
+jobs:
+  build:
+    name: Build and attest ${{ inputs.service }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write       # push to GHCR
+      id-token: write       # sigstore signing of the provenance attestation
+      attestations: write   # actions/attest-build-provenance
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: ${{ inputs.submodules }}
+
+      - name: Set up QEMU
+        # Enables cross-platform (linux/arm64) builds on the amd64 runner.
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Login to GHCR
+        if: inputs.push == 'true'
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ${{ inputs.registry }}
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.file }}
+          # Only the web entry sets build_args; for api/gateway/proxy this resolves
+          # to empty (no stray build-arg).
+          build-args: ${{ inputs.build_args }}
+          platforms: linux/amd64,linux/arm64
+          push: ${{ inputs.push == 'true' }}
+          tags: |
+            ${{ inputs.registry }}/${{ inputs.image_owner }}/lq-ai-${{ inputs.service }}:${{ inputs.tag }}
+            ${{ inputs.registry }}/${{ inputs.image_owner }}/lq-ai-${{ inputs.service }}:latest
+          provenance: false   # SLSA provenance is attached below via attest-build-provenance
+          sbom: false         # SBOM is attached by release.yml's sbom job via anchore/sbom-action
+
+      - name: Generate SLSA build provenance
+        if: inputs.push == 'true'
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-name: ${{ inputs.registry }}/${{ inputs.image_owner }}/lq-ai-${{ inputs.service }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
