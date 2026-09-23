@@ -72,6 +72,22 @@ run dev`, then browsing to `:5173` rather than `:8080` or `:3000`. Before shippi
 frontend change, build the production image at least once and click through it there —
 Vite dev and the static-adapter build can diverge.
 
+Concretely, the one-time setup is two values. In the root `.env`,
+`LQ_AI_CORS_ORIGINS=http://localhost:3000,http://localhost:5173`, then recreate `api`
+(`docker compose up -d api`) so the container picks up the new value. In `web/.env`
+(create the file if needed), `PUBLIC_LQ_AI_API_BASE_URL=http://localhost:8000/api/v1`,
+because Vite only reads env files from `web/`, never the repository root. Each has its
+own failure mode: without the `web` container republished on `:8080`, `npm run dev`
+starts but the SPA redirects to its "Backend Required" error page, because dev mode
+hard-codes the embedded backend at `<hostname>:8080`; without `web/.env`, the client
+falls back to a relative `/api/v1`, which resolves against `:5173` and 404s. Two things
+the Vite loop does not cover: a change under `web/backend/` (OpenWebUI's embedded
+backend, not LQ.AI's `api/`) still needs `docker compose build web`, and `npm run dev`
+fetches Pyodide artifacts into `web/static/pyodide` before starting — a one-time cost
+per checkout, not per restart. To return to the fully dockerized stack, stop Vite and
+run `docker compose up -d web` without the override; `.env`'s default
+`WEB_HOST_PORT=3000` takes over.
+
 When deliberately changing a Web dependency, use `npm install <package>` (or `npm
 uninstall`) and commit both `web/package.json` and `web/package-lock.json`; use `npm ci`
 for ordinary setup.

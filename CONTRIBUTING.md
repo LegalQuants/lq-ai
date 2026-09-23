@@ -97,8 +97,10 @@ For features not on the deferred-enhancements list, please file an issue describ
 
 1. **Fork the repository** and create a branch from `main`. Branch names should describe the work: `feat/saved-prompts`, `fix/citation-engine-empty-result`, `docs/clarify-tier-config`.
 2. **Make your changes** following the code style and testing requirements below.
-3. **Add or update tests** covering the change. Pytest coverage target is 80%, but
-   current PR CI does not enforce a coverage threshold or no-decrease rule.
+3. **Add or update tests** covering the change. PR CI enforces coverage as a
+   ratchet (`.github/workflows/ci.yml`): `--cov-fail-under=80` for `api/` and
+   `--cov-fail-under=88` for `gateway/`, each pinned at or below the measured
+   figure so a PR that lowers coverage fails.
 4. **Update documentation** — the PRD, README, skill-authoring guide, or capability docs as relevant. If your change affects user-facing behavior, the docs need to reflect it.
 5. **Sign your commits** per the DCO requirement (see [Sign-off](#sign-off-developer-certificate-of-origin) below). PRs without DCO sign-off cannot be merged.
 6. **Open the PR** with a description that explains what changed, why, and how to verify. Link to any relevant issue or DE-### entry in the PRD.
@@ -195,9 +197,11 @@ The project takes testing seriously because the substantive correctness of the l
 
 ### Coverage target
 
-Pytest coverage target is **80%** across `api/` and `gateway/`. Current PR CI does
-not enforce a coverage threshold or no-decrease rule. New code should be covered
-by tests; bug fixes should include a regression test that fails before the fix
+Pytest coverage target is **80%** for `api/` and **90%** for `gateway/` (`docs/PRD.md`, coverage gates). PR CI enforces it
+as a ratchet (`.github/workflows/ci.yml`): `--cov-fail-under=80` for `api/` and
+`--cov-fail-under=88` for `gateway/`, each pinned at or below the measured
+figure so a PR that lowers coverage fails. New code should be covered by
+tests; bug fixes should include a regression test that fails before the fix
 and passes after.
 
 ### Test categories
@@ -208,7 +212,9 @@ and passes after.
 - **Provider-integration tests** — marked `provider` and require provider API
   keys. They are not a separate current PR CI job; run them locally when a change
   specifically affects provider integration and credentials are available.
-- **End-to-end tests** — browser end-to-end coverage is not part of the current PR workflow.
+- **End-to-end tests** — the deterministic Cypress track runs nightly and on
+  manual dispatch (`.github/workflows/e2e.yml`), not on every PR; the
+  live-model track stays gated behind `CYPRESS_LLM=1`, which CI never sets.
 - **Fuzzing** — continuous fuzzing is not part of the current PR workflow.
 
 ### Release image skills-corpus check
@@ -239,7 +245,7 @@ CI runs it (`.github/workflows/stack-smoke.yml`) on PRs that touch dependency ma
 Notes for local runs:
 
 - **No provider API keys are needed** — nothing in the smoke performs inference. If you have no `.env`, the script writes one with dummy secrets; an existing `.env` is respected.
-- It operates on the same compose project as your dev stack and recreates the containers (`--force-recreate`) so the restart-count assertion starts from zero. Named volumes (Postgres data, MinIO objects, model caches) are untouched. As always, never `docker compose down -v`.
+- It operates on the same compose project as your dev stack and recreates the containers (`--force-recreate`) so the restart-count assertion starts from zero. Named volumes (Postgres data, object-store files, model caches) are untouched. As always, never `docker compose down -v`.
 - A cold build needs roughly 25 GB of free disk and 20–30 minutes (the api image pulls docling/torch); warm rebuilds are much faster.
 - Tune with `SOAK_SECONDS` (default 75) and `WAIT_TIMEOUT` (default 900) environment variables.
 - **On failure** the script reports which phase failed (build / boot / probes / soak), each container's state (exit code, OOM kill, restart count), the last healthcheck probe outputs, disk space, and the last 60 log lines per service; full compose logs land in `stack-smoke-logs/` (gitignored). CI additionally uploads that directory as a workflow artifact and writes the state dump to the job summary.
@@ -265,10 +271,10 @@ applicable, so `pytest --strict-markers` rejects typos:
 | Marker | Purpose | Default behavior |
 |---|---|---|
 | `unit` | Pure unit, no I/O | Included in current PR pytest jobs |
-| `integration` | Hits Postgres, Redis, MinIO, or the Gateway | Included in current PR pytest jobs; API CI supplies pgvector Postgres |
+| `integration` | Hits Postgres, Redis, the object store (RustFS), or the Gateway | Included in current PR pytest jobs; API CI supplies pgvector Postgres |
 | `provider` | Hits a real LLM provider; requires API key | Run intentionally with credentials; no dedicated current PR job |
 | `slow` | Takes > 5s; usually integration with realistic data | Skipped by `make test`; current PR pytest has no marker filter |
-| `e2e` | Browser end-to-end (currently declared for API only) | Not run by the current PR workflow |
+| `e2e` | Browser end-to-end (currently declared for API only) | Unused — no tests carry it; its "Playwright" label is stale and predates the actual E2E tool, Cypress (see `docs/test-strategy.md`) |
 
 `pytest -m "not provider and not slow"` is the local-loop default; `make test` runs this.
 
