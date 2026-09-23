@@ -130,6 +130,12 @@ describe('links', () => {
     assert.match(page, /\[the fixture guide\]\(\/lq-ai\/start\/curation\/\)/);
   });
 
+  it('sends a link to a route-manifest source straight to its route', () => {
+    // `route-mapped/basic.md` has no docs/site wrapper at all — it is registered
+    // in the link-rewrite table directly from the route manifest.
+    assert.match(page, /\[the manifest basic page\]\(\/lq-ai\/operate\/manifest-basic\/\)/);
+  });
+
   it('keeps the repository URL when the link carries an anchor', () => {
     assert.match(
       page,
@@ -312,6 +318,145 @@ describe('generators', () => {
     for (const route of releases) {
       assert.ok(/^[a-z0-9][a-z0-9/-]*$/.test(route), `"${route}" is not slug-shaped`);
     }
+  });
+});
+
+describe('route manifests', () => {
+  it('maps an entry to its route with no docs/site wrapper', () => {
+    const routes = manifest.pages.map((page) => page.route);
+    assert.ok(routes.includes('operate/manifest-basic'));
+    assert.ok(routes.includes('operate/manifest-slice'));
+    const page = manifest.pages.find((entry) => entry.route === 'operate/manifest-basic');
+    assert.equal(page.kind, 'mapped');
+    assert.equal(page.description, 'A fixture page mapped straight from its canonical source, with no docs/site wrapper.');
+  });
+
+  it('reads every routes/*.yaml file, not just one', () => {
+    // example.yaml declares operate/manifest-basic; more.yaml declares
+    // operate/manifest-slice. Both are in the manifest built above.
+    const routes = manifest.pages.map((page) => page.route);
+    assert.ok(routes.includes('operate/manifest-basic'));
+    assert.ok(routes.includes('operate/manifest-slice'));
+  });
+
+  it('defaults the title to the source’s first H1 when the entry has none', () => {
+    const page = manifest.pages.find((entry) => entry.route === 'operate/manifest-basic');
+    assert.equal(page.title, 'Manifest basic page');
+  });
+
+  it('uses the entry’s own title over the source’s H1', () => {
+    const page = manifest.pages.find((entry) => entry.route === 'operate/manifest-slice');
+    assert.equal(page.title, 'Sliced fixture page');
+  });
+
+  it('rewrites links relative to the source file’s own directory', () => {
+    const page = contentOf('operate/manifest-basic');
+    assert.match(
+      page,
+      new RegExp(`\\[the nested note\\]\\(${BLOB}[^)]+/site/test/fixtures/repo/nested/deep\\.md\\)`)
+    );
+    assert.match(page, /!\[launcher home screen\]\(\/lq-ai\/_repo\/docs\/images\/launcher-home\.png\)/);
+  });
+
+  it('converts a GitHub alert to a Starlight aside', () => {
+    const page = contentOf('operate/manifest-basic');
+    assert.match(page, /^:::danger\[Silent failure\]$/m);
+    assert.ok(page.includes('a control that fails without telling anyone is worse'));
+    assert.ok(!page.includes('[!CAUTION]'));
+  });
+
+  it('slices the body between the from/to headings, to exclusive', () => {
+    const page = contentOf('operate/manifest-slice');
+    assert.ok(page.includes('This is the only paragraph that should survive the slice.'));
+    assert.ok(!page.includes('Intro paragraph that'));
+    assert.ok(!page.includes('Everything from here on must be excluded'));
+  });
+
+  it('renders next: as a trailing "## Next" list, using each target’s title', () => {
+    const page = contentOf('operate/manifest-basic');
+    assert.match(page, /## Next\n\n- \[Sliced fixture page\]\(\/lq-ai\/operate\/manifest-slice\/\)\n- \[Fixture link cases\]\(\/lq-ai\/start\/links\/\)/);
+  });
+
+  it('writes the manifest entry’s frontmatter, including the stamp', () => {
+    const page = contentOf('operate/manifest-basic');
+    assert.match(page, /audience:\n\s+- operator/);
+    assert.match(page, /status: draft/);
+    assert.match(page, /checkedAgainst:\n\s+sha: /);
+    assert.match(page, /sourceFiles:\n\s+- site\/test\/fixtures\/repo\/route-mapped\/basic\.md/);
+  });
+});
+
+describe('route manifests: validation', () => {
+  const failing = (tree) => {
+    try {
+      execFileSync(process.execPath, [path.join(SITE_ROOT, 'scripts', 'sync-content.mjs')], {
+        cwd: SITE_ROOT,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          DOCS_SITE_DIR: path.join(SITE_ROOT, 'test', 'fixtures', tree),
+          SYNC_OUT_ROOT: mkdtempSync(path.join(os.tmpdir(), 'lq-ai-docs-routes-fail-')),
+          SITE_BASE: BASE,
+        },
+      });
+      return undefined;
+    } catch (error) {
+      return `${error.stdout ?? ''}${error.stderr ?? ''}`;
+    }
+  };
+
+  let output;
+  before(() => {
+    output = failing('broken-routes');
+  });
+
+  it('fails the sync at all', () => {
+    assert.ok(output, 'the sync exited 0 on a manifest full of violations');
+  });
+
+  it('fails on a missing required key', () => {
+    assert.match(output, /"broken\/missing-source" is missing required key\(s\): source/);
+  });
+
+  it('fails on an unknown key', () => {
+    assert.match(output, /"broken\/unknown-key" has unknown key\(s\): wat/);
+  });
+
+  it('fails on a missing description', () => {
+    assert.match(output, /"broken\/missing-description" is missing required key\(s\): description/);
+  });
+
+  it('fails when the source does not exist', () => {
+    assert.match(
+      output,
+      /entry "broken\/missing-file": source "docs\/does-not-exist-manifest-fixture\.md" does not exist in the repository/
+    );
+  });
+
+  it('fails when the source is under docs/site/', () => {
+    assert.match(
+      output,
+      /entry "broken\/under-docs-site": source ".*" is under docs\/site\//
+    );
+  });
+
+  it('fails on a duplicate route, across two different manifest files', () => {
+    assert.match(output, /route "broken\/duplicate-route" is already mapped, by .*routes\/a\.yaml/);
+  });
+
+  it('fails when a source is mapped by more than one route', () => {
+    assert.match(
+      output,
+      /source ".*extra-b\.md" is already mapped to a route, by .*routes\/a\.yaml/
+    );
+  });
+
+  it('fails when a route collides with a docs/site page', () => {
+    assert.match(output, /route "start" collides with an existing docs\/site page/);
+  });
+
+  it('fails when a next: target is not a known route', () => {
+    assert.match(output, /entry "broken\/bad-next": next: "nowhere\/at-all" is not a known route/);
   });
 });
 

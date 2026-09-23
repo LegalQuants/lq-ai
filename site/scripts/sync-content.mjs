@@ -59,7 +59,17 @@ import {
 import { head, stampFor } from './lib/git.mjs';
 import { blobUrl, createResolver, mapLinks, treeUrl } from './lib/links.mjs';
 import { expandIncludes, includedFiles } from './lib/includes.mjs';
-import { parsePage, plainCheckboxes, serializePage } from './lib/markdown.mjs';
+import {
+  convertGithubAlerts,
+  dropFirstH1,
+  firstH1,
+  parsePage,
+  plainCheckboxes,
+  serializePage,
+  sliceBetweenHeadings,
+  stripFrontmatter,
+} from './lib/markdown.mjs';
+import { loadRouteManifests, ROUTES_DIRNAME } from './lib/routes.mjs';
 import { NAMESPACES } from '../src/namespaces.mjs';
 
 import * as adrIndex from './gen-adr-index.mjs';
@@ -274,11 +284,115 @@ async function main() {
     }
   }
 
-  const pages = [...authored, ...generated];
+  // 2b. Route manifests — a page whose body is a plain Markdown file at its
+  // canonical repository path, with no docs/site wrapper at all (ADR 0028
+  // decision 3; the docs-site mini-PRD's "it curates and routes; it does not
+  // fork content the repo already holds"). `loadRouteManifests` validates
+  // everything it can see on its own — a missing or unknown key, a missing
+  // description, a source that does not exist or sits under `docs/site/`, a
+  // duplicate route, a source mapped twice; what is left needs the rest of
+  // the route table, which is what the loop below checks as it builds each
+  // page.
+  const routesDir = path.join(DOCS_SITE_DIR, ROUTES_DIRNAME);
+  const routeEntries = loadRouteManifests({ routesDir, report });
+  const knownRoutes = new Set([...authored, ...generated].map((page) => page.route));
+
+  const mapped = [];
+  for (const entry of routeEntries) {
+    const where = { page: entry.file, line: entry.line };
+
+    if (knownRoutes.has(entry.route)) {
+      report({
+        level: 'error',
+        ...where,
+        message: `route "${entry.route}" collides with an existing docs/site page`,
+      });
+      continue;
+    }
+
+    const sourceAbs = path.resolve(REPO_ROOT, entry.source);
+    const stripped = stripFrontmatter(readFileSync(sourceAbs, 'utf8'));
+    const derivedTitle = entry.title ?? firstH1(stripped);
+    if (!derivedTitle) {
+      report({
+        level: 'error',
+        ...where,
+        message: `entry "${entry.route}" has no \`title\` and its source "${entry.source}" has no H1 to default it from`,
+      });
+    }
+
+    let body = dropFirstH1(stripped);
+    if (entry.from || entry.to) {
+      const sliced = sliceBetweenHeadings(body, entry.from, entry.to);
+      if (!sliced.ok) {
+        const wanted = sliced.missing === 'from' ? entry.from : entry.to;
+        report({
+          level: 'error',
+          ...where,
+          message: `entry "${entry.route}": heading ${sliced.missing}="${wanted}" is not in "${entry.source}"`,
+        });
+      } else {
+        body = sliced.text;
+      }
+    }
+    body = convertGithubAlerts(body);
+
+    const relPath = `${entry.route}.md`;
+    // Only keys the entry actually set: an `undefined` value survives into
+    // YAML frontmatter as nothing serialisable, and gray-matter throws on it.
+    const data = {
+      title: derivedTitle ?? entry.route,
+      status: entry.status ?? 'draft',
+      sources: entry.sources,
+    };
+    if (entry.description !== undefined) data.description = entry.description;
+    if (entry.audience !== undefined) data.audience = entry.audience;
+    if (entry.sidebar !== undefined) data.sidebar = entry.sidebar;
+
+    mapped.push({
+      kind: 'mapped',
+      relPath,
+      route: routeFor(relPath),
+      sourcePath: entry.source,
+      baseDir: path.dirname(sourceAbs),
+      manifestFile: entry.file,
+      nextRoutes: entry.next,
+      data,
+      body,
+    });
+    knownRoutes.add(entry.route);
+  }
+
+  // `next:` may point forward to an entry read later in this same loop (or in
+  // a later routes/*.yaml file), so it can only be checked once every route —
+  // authored, generated and mapped — is known.
+  for (const page of mapped) {
+    for (const target of page.nextRoutes) {
+      if (!knownRoutes.has(target)) {
+        report({
+          level: 'error',
+          page: page.manifestFile,
+          line: 1,
+          message: `entry "${page.route}": next: "${target}" is not a known route`,
+        });
+      }
+    }
+  }
+
+  const pages = [...authored, ...generated, ...mapped];
+  const titleByRoute = new Map(pages.map((page) => [page.route, page.data.title]));
 
   // 3. Route maps.
   const routeByRepoPath = new Map();
   for (const page of pages) {
+    // A mapped page's body *is* a repository file outside `docs/site/` — that
+    // is the whole point of the route manifest — so it is the file a writer
+    // actually links to, and it is registered directly rather than under a
+    // notional docs/site path that does not exist.
+    if (page.kind === 'mapped') {
+      routeByRepoPath.set(page.sourcePath, page.route);
+      continue;
+    }
     // A generated page has no file under `docs/site/`, but a writer still links
     // to it as one (`../changelog/index.md`), so its notional path is in the map
     // alongside the real ones.
@@ -398,7 +512,7 @@ async function main() {
     // body lifted out of a repository file — a release page is
     // `docs/releases/v0.7.0.md`, whose links are relative to that directory and
     // are named by `linkBaseDir`.
-    const mapsOwnBody = page.kind === 'authored' || Boolean(page.linkBaseDir);
+    const mapsOwnBody = page.kind === 'authored' || page.kind === 'mapped' || Boolean(page.linkBaseDir);
     let body = mapsOwnBody ? mapChunk(page.body, page.baseDir) : page.body;
 
     // 4c. Includes, resolving their links from the included file's directory.
@@ -462,6 +576,19 @@ async function main() {
     // 4f. A GFM task list becomes a plain one: an unlabelled disabled checkbox
     // fails the accessibility gate, and the reader could never tick it anyway.
     body = plainCheckboxes(body);
+
+    // 4f2. A route-manifest entry's own onward links. Written as routes in the
+    // manifest, not as Markdown links in the source, because the titles have
+    // to come from whatever page each route actually resolved to — a writer
+    // names `operate/upgrade`, not "Upgrade" spelled out and hoped to match.
+    if (page.kind === 'mapped' && page.nextRoutes?.length) {
+      const items = page.nextRoutes
+        .filter((target) => titleByRoute.has(target))
+        .map((target) => `- [${titleByRoute.get(target)}](${withBase(target)})`);
+      if (items.length) {
+        body = `${body.trimEnd()}\n\n## Next\n\n${items.join('\n')}\n`;
+      }
+    }
 
     // 4g. Frontmatter the build owns.
     const data = { ...page.data };
@@ -584,9 +711,10 @@ function printReport({ manifest, assets, skipped, missingIntros, startedAt }) {
   }
 
   const authored = manifest.filter((entry) => entry.kind === 'authored').length;
-  const generated = manifest.length - authored;
+  const mapped = manifest.filter((entry) => entry.kind === 'mapped').length;
+  const generated = manifest.length - authored - mapped;
   console.log(
-    `sync: ${manifest.length} page(s) — ${authored} authored, ${generated} generated; ` +
+    `sync: ${manifest.length} page(s) — ${authored} authored, ${mapped} mapped, ${generated} generated; ` +
       `${assets.size} image(s) copied; ${Date.now() - startedAt}ms`
   );
 }

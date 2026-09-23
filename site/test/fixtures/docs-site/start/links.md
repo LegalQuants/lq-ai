@@ -15,6 +15,7 @@ Each bullet is one branch of the link table in `scripts/lib/links.mjs`.
 - The entry hub, which is MDX: [home](../index.mdx)
 - A generated page, reached through its intro file: [ADR index](../reference/adr-index.intro.md)
 - The primary source of a site page: [the fixture guide](../../repo/guide.md)
+- A route-manifest source, mapped with no docs/site wrapper: [the manifest basic page](../../repo/route-mapped/basic.md)
 - The same file with an anchor, which keeps its repository URL: [the install section](../../repo/guide.md#install)
 - Any other repository file: [the project README](../../../../../README.md)
 - A repository directory: [the ADR folder](../../../../../docs/adr)

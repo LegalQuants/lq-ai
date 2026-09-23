@@ -1,0 +1,51 @@
+# Every entry here is deliberately invalid, one violation each, so the sync
+# failure-mode tests can assert each message by itself. Sources are shared
+# fixture files under site/test/fixtures/repo/ — never a file under this
+# tree's own docs/site/, which would itself trip the "source under docs/site/"
+# check for every other entry that reuses it.
+
+# a. missing required key (source)
+- route: broken/missing-source
+  description: Entry missing its required source key.
+
+# c. missing description
+- route: broken/missing-description
+  source: site/test/fixtures/repo/guide.md
+
+# b. unknown key
+- route: broken/unknown-key
+  source: site/test/fixtures/repo/hub-source.md
+  description: Entry carrying a key the schema does not define.
+  wat: not a real field
+
+# d. source not found
+- route: broken/missing-file
+  source: docs/does-not-exist-manifest-fixture.md
+  description: Entry whose source file is not in the repository.
+
+# e. source under docs/site/
+- route: broken/under-docs-site
+  source: site/test/fixtures/broken-routes/start/index.md
+  description: Entry whose source is itself under docs/site/, which ADR 0028 decision 3 forbids.
+
+# f. duplicate route — the second half is in b.yaml, in a different file, to
+# prove the sync reads (and cross-checks) every routes/*.yaml file together.
+- route: broken/duplicate-route
+  source: site/test/fixtures/repo/route-mapped/sliced.md
+  description: The first entry claiming this route.
+
+# g. source mapped twice — the second half is also in b.yaml.
+- route: broken/first-claim
+  source: site/test/fixtures/repo/route-mapped/extra-b.md
+  description: The first entry mapping this source file.
+
+# h. route colliding with a docs/site page (start/index.md, above, is route "start")
+- route: start
+  source: site/test/fixtures/repo/nested/deep.md
+  description: Entry whose route collides with an authored docs/site page.
+
+# i. next target that is not a known route
+- route: broken/bad-next
+  source: site/test/fixtures/repo/route-mapped/basic.md
+  description: Entry whose next list names a route nothing maps.
+  next: [nowhere/at-all]

@@ -20,8 +20,9 @@
     "check:a11y": "node scripts/a11y.mjs",
     "check:a11y:review": "PA11Y_INCLUDE_WARNINGS=1 node scripts/a11y.mjs",
     "check:contrast": "node scripts/theme-contrast.mjs",
-    "check:docs-links": "python3 ../docs/audits/check_doc_links.py $(find ../docs/site -name README.md -prune -o \\( -name '*.md' -o -name '*.mdx' \\) -print)",
-    "check": "npm test && npm run build && npm run check:links && npm run check:orphans && npm run check:tables && npm run check:contrast && npm run check:a11y && npm run check:docs-links",
+    "check:docs-links": "python3 ../docs/audits/check_doc_links.py $(find ../docs/site -name README.md -prune -o \\( -name '*.md' -o -name '*.mdx' \\) -print) $(node scripts/list-manifest-sources.mjs)",
+    "check:single-source": "node scripts/check-single-source.mjs",
+    "check": "npm test && npm run check:single-source && npm run build && npm run check:links && npm run check:orphans && npm run check:tables && npm run check:contrast && npm run check:a11y && npm run check:docs-links",
     "astro": "astro"
   },
   "dependencies": {

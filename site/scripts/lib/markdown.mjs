@@ -211,6 +211,81 @@ export function plainCheckboxes(text) {
     .join('\n');
 }
 
+/**
+ * GitHub alert syntax → a Starlight aside.
+ *
+ * A canonical repository file has to render as a callout on GitHub too
+ * (Starlight's `:::type[]` directive means nothing there), so the house rule
+ * is the alert form GitHub itself renders:
+ *
+ *     > [!CAUTION]
+ *     > **Silent failure** — a control that fails without telling anyone is
+ *     > worse than one that fails loudly.
+ *
+ * This turns it into `:::caution[Silent failure]\n…\n:::` for the built page.
+ * The leading bold phrase in the blockquote's first line becomes the aside's
+ * title, exactly as `:::type[Title]` would have named it by hand; a block with
+ * no bold lead keeps the aside's default title for its type.
+ *
+ * Fence-aware — a code sample that *shows* the alert syntax is left alone —
+ * and only a blockquote whose very first line is the `[!TYPE]` marker is
+ * converted, so an ordinary quote that happens to contain those five words is
+ * never mistaken for one.
+ */
+const ALERT_TYPES = {
+  NOTE: 'note',
+  TIP: 'tip',
+  IMPORTANT: 'note',
+  WARNING: 'caution',
+  CAUTION: 'danger',
+};
+
+const ALERT_MARKER = /^(\s*)>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*$/;
+const BLOCKQUOTE_LINE = /^\s*>/;
+const BOLD_LEAD = /^\*\*(.+?)\*\*\s*(?:[—–-]\s*)?(.*)$/;
+
+export function convertGithubAlerts(text) {
+  const lines = scanLines(text);
+  const out = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const entry = lines[i];
+    const marker = !entry.inFence && ALERT_MARKER.exec(entry.line);
+    if (!marker) {
+      out.push(entry.line);
+      i += 1;
+      continue;
+    }
+
+    const indent = marker[1];
+    const aside = ALERT_TYPES[marker[2]];
+    const body = [];
+    let j = i + 1;
+    while (j < lines.length && !lines[j].inFence && BLOCKQUOTE_LINE.test(lines[j].line)) {
+      body.push(lines[j].line.replace(BLOCKQUOTE_LINE, '').replace(/^ /, ''));
+      j += 1;
+    }
+
+    let title;
+    if (body.length) {
+      const bold = BOLD_LEAD.exec(body[0]);
+      if (bold) {
+        title = bold[1];
+        body[0] = bold[2];
+        if (!body[0]) body.shift();
+      }
+    }
+
+    out.push(`${indent}${title ? `:::${aside}[${title}]` : `:::${aside}`}`);
+    out.push(...body.map((line) => `${indent}${line}`));
+    out.push(`${indent}:::`);
+    i = j;
+  }
+
+  return out.join('\n');
+}
+
 /** Escape a cell so a pipe or newline in source text cannot break a table. */
 export const cell = (value) => {
   const text = value == null || value === '' ? '' : String(value);

@@ -4,10 +4,17 @@ This directory builds the public documentation site. It holds **configuration,
 theme, the transform and the generators, and never a committed copy of a page**
 (ADR 0028 decision 3).
 
-Pages live in [`../docs/site/`](../docs/site/README.md). That file is the
-authoring contract: where a page goes, what its frontmatter means, how includes
-and links work, and the house rules. Read it before writing a page. Nothing in
-`src/content/docs/` is committed — `npm run sync` regenerates it.
+A page's own Markdown lives at its **canonical repository location** — under
+`docs/`, or wherever else the repository already keeps it — with no
+Starlight frontmatter at all; a **route manifest**
+(`docs/site/routes/*.yaml`) maps it onto a URL. `docs/site/` itself holds
+only navigation and a generated page's companions: the entry hub, namespace
+hubs, `start/choose-your-path.md`, `*.intro.md` files, `_data/`, and the
+manifests. [`../docs/site/README.md`](../docs/site/README.md) is the
+authoring contract: where a page's Markdown goes, the manifest schema,
+alerts, `## Next`, and when a file belongs under `docs/site/` at all. Read it
+before writing a page. Nothing in `src/content/docs/` is committed —
+`npm run sync` regenerates it.
 
 You do not need Node installed to contribute a page. CI builds the site.
 
@@ -32,17 +39,19 @@ starts a real browser for the accessibility pass.
 
 | Script | What it does |
 |---|---|
-| `sync` | Rebuilds `src/content/docs/` (and `public/_repo/`) from `docs/site/` plus the generators. Fails on a missing include or a link that resolves nowhere. |
+| `sync` | Rebuilds `src/content/docs/` (and `public/_repo/`) from `docs/site/`, every `docs/site/routes/*.yaml` route manifest, and the generators. Fails on a missing include, a link that resolves nowhere, or an invalid manifest entry. |
 | `dev` | `sync`, then Astro's dev server. |
 | `build` | `sync`, then `astro build`, then the machine surface (`.md` per route, `llms.txt`, `llms-full.txt`). |
 | `test` | `node --test test/*.test.mjs` — the transform and the machine surface, run against the fixture tree in `test/fixtures/`. |
 | `preview` | Serves `dist/` — Astro 7 runs this as a background daemon (`astro preview stop`, `status`, `logs`). |
 | `check:links` | Every internal `href` in `dist/` resolves to a built file or its `.md` twin. |
 | `check:orphans` | Every page in the collection is reachable from the sidebar. No orphans. |
+| `check:tables` | At 1280px and 400px, over every route, nothing inside the prose scrolls horizontally. |
+| `check:single-source` | `docs/site/` holds only navigation and generated-page companions, and no route-manifest `source:` sits under `docs/site/` — one Markdown source per page (ADR 0028 decision 3). |
 | `check:contrast` | Measures the theme's colour tokens against their WCAG 2.1 AA floors, in both themes. Fails on any pair below its floor. |
 | `check:a11y` | pa11y-ci with the axe runner, `WCAG2AA`, over every route in `dist/`, against a real `astro preview` server. |
 | `check:a11y:review` | The same run with axe's "needs review" findings included. Not a gate — see below. |
-| `check:docs-links` | `docs/audits/check_doc_links.py` over every page under `docs/site/**`, so the page sources also work as plain Markdown on GitHub. `docs/site/README.md` is excluded: it is the authoring contract, not a page, and its link table shows illustrative paths that resolve nowhere on purpose. |
+| `check:docs-links` | `docs/audits/check_doc_links.py` over every page under `docs/site/**` and every route-manifest `source:` file, so a page's Markdown also works as-is on GitHub, wherever it lives. `docs/site/README.md` is excluded: it is the authoring contract, not a page, and its link table shows illustrative paths that resolve nowhere on purpose. |
 | `check` | `test`, `build`, and every gate above. What CI runs. |
 
 One tool sits outside the table because it is not a gate:
@@ -391,10 +400,13 @@ each refusal exits non-zero and names the page and the line.
 
 ## Adding a page
 
-Write it in `docs/site/<namespace>/<slug>.md` and follow
-[the authoring contract](../docs/site/README.md). It appears in the sidebar and
-in the machine surface on the next `npm run sync` — there is nothing to register
-here.
+Write plain Markdown at the file's canonical repository location, add an
+entry to a `docs/site/routes/*.yaml` route manifest, and follow
+[the authoring contract](../docs/site/README.md) for the entry's fields. It
+appears in the sidebar and in the machine surface on the next `npm run sync`
+— there is nothing to register here. A hub page (`docs/site/index.mdx`,
+`docs/site/<namespace>/index.md`) is still written directly under
+`docs/site/`, with its own frontmatter, exactly as before.
 
 ## CI
 
