@@ -6,6 +6,13 @@ under **Autonomous sessions → Orchestration demo**, behind an operator setting
 See the [feature PRD](../prds/issue-563-governed-orchestration.md) for requirements
 and release status.
 
+After migration 0067, an operator can set `LQ_AI_ORCHESTRATION_DEMO_ENABLED=true`
+in the development or release Compose environment and restart the API and arq
+worker. Both services receive the flag and a shared child-capacity limit of two
+unless `LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN` overrides it. The flag enables
+only this sample workflow; live providers, persistent skill workspaces and
+bundled helpers remain separate capabilities.
+
 ## User-visible behavior
 
 - Select an owned active project and one to four topics. Review the plan, scope
