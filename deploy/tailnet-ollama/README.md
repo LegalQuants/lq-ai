@@ -145,8 +145,10 @@ host '100.x.y.z' must use https
 
 This refusal is intentional. The egress guard prevents LLM prompts from being sent over plaintext HTTP to a remote host. HTTPS is required for remote destinations, so the supported tailnet configuration uses the Tailscale `*.ts.net` hostname instead.
 
-For egress policy details, see
-[ADR 0014 — Gateway egress boundary](../../docs/adr/0014-gateway-egress-boundary-for-tool-providers.md).
+For the policy that governs this specific refusal — the LLM provider `base_url`
+rule — see
+[`base_url_policy.py`](../../gateway/app/providers/base_url_policy.py). (ADR
+0014, referenced below, covers the separate tool-provider egress guard.)
 
 ---
 
@@ -166,13 +168,32 @@ you have to recreate or restart the gateway so the new value actually loads; an
 env-var edit with no restart leaves the gateway dispatching against whatever
 `base_url` it resolved at its last start. If step 4's `curl` succeeds against the
 tailnet endpoint but a chat routed through the gateway still fails, that's the most
-likely gap to check first.
+likely gap to check first. The next is DNS: step 4 runs on the gateway *host*, but
+the gateway itself runs in a container, and it's the container that has to resolve
+the `*.ts.net` name. The gateway image ships no `curl`, so test from inside it with
+Python:
 
-This refusal is not specific to Ollama. Any remote inference or tool-provider host
-reached over plaintext HTTP gets the same refusal unless it's on the guard's small
-local allowlist. Once you've seen the reasoning here, the same shape applies to a
-remote vLLM host, a self-hosted OpenAI-compatible server, or any other non-local
-`base_url` you point the gateway at.
+```bash
+docker compose exec gateway python -c "import urllib.request; print(urllib.request.urlopen('https://<host>.<tailnet>.ts.net/api/tags').status)"
+```
+
+A `200` here means the gateway's own network can reach Ollama; a resolution error
+means the container isn't seeing MagicDNS even though the host is.
+
+This refusal is one instance of a wider rule worth internalizing rather than
+memorizing per-recipe, with one boundary to keep in mind: it is the *LLM provider*
+rule ([`base_url_policy.py`](../../gateway/app/providers/base_url_policy.py)). Any
+inference host reached over plaintext HTTP gets the same refusal unless it's on the
+guard's small local allowlist, so once you've seen the reasoning here the same shape
+applies to a remote vLLM host, a self-hosted OpenAI-compatible server, or any other
+non-local `base_url` you point the gateway at. Tool providers — the research sources
+and MCP servers declared under `tool_providers:` — go through a separate, stricter
+guard ([`tool/egress.py`](../../gateway/app/providers/tool/egress.py)): HTTPS is
+required with no local exception at all, the host must be on that provider's
+allowlist, and every address the host resolves to must be public. A tailnet-hosted
+MCP server is refused under that guard even over HTTPS, because its `*.ts.net` name
+resolves to a `100.64.0.0/10` address; this recipe is for Ollama and other LLM
+providers only.
 
 ---
 
