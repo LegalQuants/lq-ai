@@ -238,7 +238,7 @@ Inference Gateway:  http://localhost:8001/docs
 
 After login you land on the LQ.AI home. Three good starting points:
 
-- Click **Learn** in the top bar to take the interactive tour — twenty-three playgrounds walk through the architecture, the request lifecycle, the tier system, what the model sees, where your data lives, and how to author a skill. This is the fastest orientation for both evaluators and new contributors. (`http://localhost:3000/lq-ai/learn`)
+- Click **Learn** in the top bar to take the interactive tour — a set of playgrounds (the count grows with releases) walks through the architecture, the request lifecycle, the tier system, what the model sees, where your data lives, and how to author a skill. This is the fastest orientation for both evaluators and new contributors. (`http://localhost:3000/lq-ai/learn`)
 - Click **Skills** to browse the 10 built-in skills. Each is inspectable: click any skill to read the `SKILL.md` driving it.
 - Click **+ New matter** to create your first project workspace and attach a document to try a skill against.
 
@@ -248,7 +248,7 @@ After login you land on the LQ.AI home. Three good starting points:
 
 LQ.AI ships with four provider adapters: **Anthropic** (Claude), **OpenAI** (GPT models + text-embedding-3-*), **Azure OpenAI** (M2-E1 — unblocks Azure-tenant enterprise deployments via the operator's existing Azure agreement), and **Ollama** (local). Any OpenAI-compatible local endpoint (vLLM, llama.cpp wrappers, LM Studio) works through the OpenAI adapter with a custom `base_url`. Google Vertex AI and AWS Bedrock adapters are on the deferred-enhancement list (DE-034 / DE-035) and welcome community contribution — see [docs/HONEST-STATE.md](docs/HONEST-STATE.md) for the current shipped-vs-deferred catalog.
 
-Multiple providers can run in parallel: operators declare `model_aliases` in `gateway.yaml` that resolve to specific provider+model pairs with fallback chains. A request for `smart` might primary-route to `anthropic-prod/claude-opus-4-7` and fall back to `vertex-anthropic/claude-opus-4-7@anthropic` on failure; the routing log captures which target actually handled the request. Provider keys are encrypted at rest in the gateway (Fernet AES-128-CBC + HMAC-SHA256 per `gateway/app/secrets.py`); the api/ service never sees them — defense-in-depth around the highest-value secret in the deployment.
+Multiple providers can run in parallel: operators declare `model_aliases` in `gateway.yaml` that resolve to specific provider+model pairs with fallback chains. A request for `smart` might primary-route to `anthropic-prod/claude-opus-4-7` and fall back to `openai-prod/gpt-5` on failure; the routing log captures which target actually handled the request. Only the gateway uses provider keys (for outbound provider authentication); the api/ service never stores them. A key entered through the admin provider-keys surface passes through the backend to the gateway once and is then encrypted at rest in `gateway.yaml` (Fernet AES-128-CBC + HMAC-SHA256 per `gateway/app/secrets.py`). A key configured in `.env` (including one written by the desktop first-run wizard) stays in `.env` as plaintext, and switching that provider to a runtime key does not remove the older `.env` copy — the defense-in-depth around the highest-value secret in the deployment still depends on how the operator handles `.env`.
 
 ### Enabling legal-research connectors (case-law / MCP) — operator opt-in
 
@@ -256,7 +256,7 @@ External tool connectors (CourtListener case-law, MCP servers) are **off by defa
 
 1. In `.env`, set `COURTLISTENER_API_TOKEN` to a token from [courtlistener.com/help/api](https://www.courtlistener.com/help/api/) (the `docker-compose.yml` gateway service forwards this variable into the gateway container).
 2. In `gateway.yaml`, uncomment the `tool_providers:` → `courtlistener-prod` block (the template is in [`gateway.yaml.example`](gateway.yaml.example); `api_key_env: COURTLISTENER_API_TOKEN`).
-3. Restart the gateway: `docker compose up -d gateway`. Confirm with `curl -s localhost:8000/api/v1/research/capabilities` → `"enabled": true`.
+3. Recreate the gateway so it picks up the new `.env` value: `docker compose up -d --force-recreate gateway` (a plain `docker compose restart` keeps the container's old environment). Confirm as a signed-in user — the capabilities route requires a bearer token (from `POST /api/v1/auth/login`): `curl -s -H "Authorization: Bearer $TOKEN" localhost:8000/api/v1/research/capabilities` → `"enabled": true`. An unauthenticated call returns `401`, which is not a research-setup failure.
 
 Once enabled, case-law lookups run through the governed chat tool-loop (every call tier-gated, audited to `tool_egress_log` as counts/types only, and surfaced to the user as "Sources consulted" provenance). MCP connectors follow the same opt-in pattern (register via the `/api/v1/admin/mcp` surface + per-user OAuth). See [HONEST-STATE.md §5.5](docs/HONEST-STATE.md).
 
@@ -266,7 +266,7 @@ For a **fully air-gapped deployment** (no outbound network calls), start the sta
 docker compose --profile local up -d
 ```
 
-In this mode, inference runs entirely on the local host via Ollama. The Inference Gateway is the only egress point in the stack — verify in `gateway/app/router.py`. Provider keys live only inside the Gateway, encrypted at rest (`gateway/app/secrets.py`); the API service never sees them.
+In this mode, inference runs entirely on the local host via Ollama. The Inference Gateway is the only egress point in the stack — verify in `gateway/app/router.py`. Provider keys are used only inside the Gateway (runtime-managed keys are encrypted at rest per `gateway/app/secrets.py`; keys set in `.env` stay in `.env`); the API service never stores them.
 
 ---
 
@@ -278,7 +278,7 @@ In this mode, inference runs entirely on the local host via Ollama. The Inferenc
 
 **Login rejected / password not accepted** — re-run step 3 (the reset command is idempotent). Confirm you are using the login URL `http://localhost:3000/lq-ai/login`, not `http://localhost:3000`.
 
-**Inference returns "no provider configured"** — add at least one provider key. Either set it in `.env` (e.g., `ANTHROPIC_API_KEY=sk-...`) and `docker compose restart gateway` (the gateway reads environment provider keys at startup), or, with `LQ_AI_GATEWAY_MASTER_KEY` set, add it at runtime via the admin provider-keys surface (`/api/v1/admin/provider-keys`), which hot-applies without a restart.
+**Inference returns "no provider configured"** — add at least one provider key. Either set it in `.env` (e.g., `ANTHROPIC_API_KEY=sk-...`) and recreate the gateway with `docker compose up -d --force-recreate gateway` — the gateway reads environment provider keys at startup, and a plain `docker compose restart gateway` keeps the container's old environment, so the new value never arrives. This only takes effect if the provider's `gateway.yaml` entry still uses `api_key_env` (an entry already switched to an encrypted runtime key ignores the environment variable). The same recreate step applies to any other forwarded environment value, such as `OLLAMA_BASE_URL`. Or, with `LQ_AI_GATEWAY_MASTER_KEY` set, add it at runtime via the admin provider-keys surface (`/api/v1/admin/provider-keys`), which hot-applies without a restart.
 
 **A host port is already in use** (`bind: address already in use`) — every host-side port the stack uses is configurable via a `*_HOST_PORT` variable in `.env` (the compose file reads them; see `docker-compose.yml`). Override the colliding port and `docker compose up -d` again. The defaults shipped in `.env.example`:
 
@@ -294,7 +294,7 @@ OBJECT_STORE_CONSOLE_HOST_PORT=9001  # change if Portainer/Console holds :9001
 
 The most common Mac collision is `POSTGRES_HOST_PORT=5432` against a Homebrew Postgres. Either set `POSTGRES_HOST_PORT=15432` in your `.env` (the compose stack's internal traffic still uses 5432; services talk to each other unchanged — only the host-side mapping shifts), or stop the host postgres first (`brew services stop postgresql@<version>` on macOS).
 
-**Two clones of this repo sharing data** — Docker Compose derives its project name from the parent directory's basename. Two clones at `lq-ai/` will reuse each other's named volumes (`lq-ai_pgdata` etc.) — including the database, admin user, and object-store data — and `docker compose down` in one will tear down the shared stack. To isolate two parallel clones, set `COMPOSE_PROJECT_NAME` in each clone's `.env` to a unique name (e.g. `COMPOSE_PROJECT_NAME=lq-ai-dev` and `COMPOSE_PROJECT_NAME=lq-ai-prod-candidate`).
+**Two clones of this repo sharing data** — `docker-compose.yml` sets the project name explicitly (`name: lq-ai`), so Compose does not derive it from the checkout folder: two clones will reuse each other's containers and named volumes (`lq-ai_pgdata` etc.) whatever their folders are called — including the database, admin user, and object-store data — and `docker compose down` in one will tear down the shared stack. To isolate two parallel clones, set `COMPOSE_PROJECT_NAME` in each clone's `.env` to a unique name (e.g. `COMPOSE_PROJECT_NAME=lq-ai-dev` and `COMPOSE_PROJECT_NAME=lq-ai-prod-candidate`), or pass `-p <name>` on every command; both override the file's `name:`. Give each clone its own host ports too if they run at the same time.
 
 ---
 
@@ -312,13 +312,13 @@ The trust model for a self-hosted, open-source project is that every claim termi
 - **Inference Gateway:** `gateway/app/router.py` — the only egress point, the security boundary, the place where routing decisions are made and logged.
 - **Audit log writer:** `api/app/audit.py` — what gets written to the `audit_log` table, and for which actions.
 - **Honest catalog:** [`docs/HONEST-STATE.md`](docs/HONEST-STATE.md) — the shipped-vs-deferred table with a verification path for every row. If you find a discrepancy between this document and the code, the code is canonical.
-- **Interactive architecture tour:** Navigate to `http://localhost:3000/lq-ai/learn` after logging in. The twenty-three playgrounds each point at the relevant source files for that topic.
+- **Interactive architecture tour:** Navigate to `http://localhost:3000/lq-ai/learn` after logging in. Each playground points at the relevant source files for that topic.
 
 ---
 
 ### First steps after login
 
-**The Learn page is the guided tour.** New users and procurement evaluators start at `http://localhost:3000/lq-ai/learn`. Twenty-three interactive playgrounds walk through the architecture, the full request lifecycle, the five-tier inference model, what the model actually sees (and what it doesn't), where data lives, and how to author your own skill. Each playground links to the relevant source file.
+**The Learn page is the guided tour.** New users and procurement evaluators start at `http://localhost:3000/lq-ai/learn`. Its interactive playgrounds walk through the architecture, the full request lifecycle, the five-tier inference model, what the model actually sees (and what it doesn't), where data lives, and how to author your own skill. Each playground links to the relevant source file.
 
 **The honest catalog.** [`docs/HONEST-STATE.md`](docs/HONEST-STATE.md) names what is shipped, what is deferred, and how to verify each. We publish this because the verification path for an open-source product terminates in code, not in claims. If anything in this README is inconsistent with what the code does, please [open an issue](https://github.com/LegalQuants/lq-ai/issues) — the code is canonical.
 
@@ -364,7 +364,7 @@ LQ.AI is a fork of [OpenWebUI](https://github.com/open-webui/open-webui) for the
 └──────────────┘      └──────────────┘      └──────────────┘
 
 LLM PROVIDERS (any combination, configured by operator):
-  Cloud:  Anthropic │ OpenAI │ Google Vertex │ Cohere │ Azure │ Bedrock
+  Cloud:  Anthropic │ OpenAI │ Azure OpenAI   (Vertex / Bedrock: deferred, DE-034 / DE-035)
   Local:  Ollama │ vLLM │ llama.cpp │ any OpenAI-compatible endpoint
 ```
 
