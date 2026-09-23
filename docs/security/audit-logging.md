@@ -6,10 +6,10 @@
 
 Each audit event is a row in the `audit_log` table (see [docs/db-schema.md §audit_log](../db-schema.md) for the schema). Columns:
 
-- `id` — UUID v7 primary key; time-ordered so the natural row order matches event order.
+- `id` — UUID primary key, defaulted by `gen_random_uuid()` (random UUIDv4; **not** time-ordered). Do not infer chronology from the primary key: order by `timestamp`, adding `id` as a stable tie-breaker for repeatable display — a tie-breaker gives a deterministic order but does not reconstruct true event order when timestamps tie.
 - `timestamp` — `TIMESTAMPTZ`, server-clock; default `now()` at insert.
 - `user_id` — actor; FK to `users.id` with `ON DELETE SET NULL` so user deletion preserves the row but anonymises the actor.
-- `action` — verb-form event string (e.g. `chat.message_sent`, `project.create`); the canonical event-type field.
+- `action` — verb-form event string (e.g. `chat.message_sent`, `kb.created`); the canonical event-type field.
 - `resource_type` — noun the action was performed on (e.g. `chat`, `project`, `skill`).
 - `resource_id` — stringified identifier of the affected resource, typically a UUID; nullable for actions with no concrete subject.
 - `privilege_marked` — `BOOLEAN`, true when the action affects a project flagged privileged; first-class column (not buried in `details`) so operator queries do not require JSONB scans.
@@ -21,13 +21,13 @@ Each audit event is a row in the `audit_log` table (see [docs/db-schema.md §aud
 - `request_id` — correlation id from `X-Request-ID`; cross-references gateway logs and structured app logs.
 - `details` — JSONB payload for action-specific fields (e.g. `{"name": "...", "privileged": true}`); queryable but not indexed by default.
 
-Logged events at M1 (verified against actual `action=` literals emitted by `api/app/`; 42 distinct strings across 53 call sites):
+Logged events (verified against `action=` literals emitted by `api/app/`; the list below is the M1 baseline plus the later additions called out inline and is not exhaustive — later milestones add further families such as the M4 `autonomous_session.*` events, so run `grep -rn 'action="' api/app` for the current full set):
 
 - **Authentication & session:** `user.login`, `user.login_failed`, `user.login_mfa_challenged`, `user.logout`, `user.session_refreshed`, `user.session_refresh_failed`.
 - **MFA lifecycle:** `user.mfa_setup_initiated`, `user.mfa_enabled`, `user.mfa_enable_failed`, `user.mfa_disabled`, `user.mfa_disable_failed`, `user.mfa_verify_failed`.
 - **Password & credentials:** `user.password_changed`, `user.password_change_failed`.
 - **Account lifecycle:** `user.role_updated`, `user.preferences_updated`, `user.deletion_scheduled`, `user.deletion_cancelled`, `user.export_requested`.
-- **Project:** `project.create`.
+- **Project:** `project.knowledge_base_attached`, `project.knowledge_base_detached`. Project creation itself is **not** audited: the create handler commits the row and writes a structured service log line (`event=project_created`) but does not call `audit_action()`; `project.create` appears only as the docstring example in `api/app/audit.py`.
 - **Chat:** `chat.message_sent`.
 - **Skills (user-scoped):** `user_skill.created`, `user_skill.updated`, `user_skill.deleted`.
 - **Files:** `file.uploaded`, `file.deleted`.
@@ -35,20 +35,21 @@ Logged events at M1 (verified against actual `action=` literals emitted by `api/
 - **Saved prompts:** `saved_prompt.create`, `saved_prompt.update`, `saved_prompt.delete`.
 - **Teams:** `team.created`, `team.updated`, `team.deleted`, `team.member_added`, `team.member_removed`, `team.member_role_changed`.
 - **Admin / organization:** `organization_profile.updated`, `tier_policy.updated`.
+- **Privileged cross-user reads ("audit the auditor"):** `auditor.ledger_viewed`, `auditor.sources_viewed`, `auditor.citations_viewed`, `auditor.session_ledger_viewed`, `auditor.receipts_viewed`, `auditor.receipts_exported` — written when an admin/auditor reads another user's data; `details.viewed_user_id` records whose data was read.
 
-All writes go through one helper — `app.audit.audit_action()` in [api/app/audit.py](../../api/app/audit.py) — so every row populates `privilege_marked` / `privilege_basis` consistently and captures `ip_address` / `user_agent` / `request_id` uniformly when a `Request` is available.
+All writes go through one helper — `app.audit.audit_action()` in [api/app/audit.py](../../api/app/audit.py) — so every row populates `privilege_marked` / `privilege_basis` consistently and captures `ip_address` / `user_agent` / `request_id` uniformly when a `Request` is available. The `auditor.*` rows go through the closed-enum wrapper `app.auditor_audit.auditor_audit()`, which calls the same helper.
 
 ## What is NOT logged
 
 - **Plaintext message content.** `chat.message_sent` records the chat and message ids in `details`, not the message body. Inference-routing has its own table (`inference_routing_log`) with provider, model, token counts and latency — also without message content, per PRD §4.
 - **Provider API responses.** Same reasoning; the gateway records routing metadata only.
 - **Cryptographic material.** `JWT_SECRET`, master keys, the field-level encryption keys, and provider API keys are never logged — see [encrypted-keys.md](encrypted-keys.md) for the key-handling contract.
-- **Read traffic.** M1 audits state-changing actions (PRD §5.3). Read endpoints are not audited unless they touch privileged data via the inference path, in which case the routing decision lands in `inference_routing_log`.
+- **Ordinary read traffic.** M1 audits state-changing actions (PRD §5.3); a user reading their own data is not audited. The exception is privileged cross-user reads: when an admin/auditor reads another user's ledger, sources, citations, session ledger or receipts, the handler writes an `auditor.*` row (listed above) and commits it explicitly. Inference routing decisions land in `inference_routing_log` regardless.
 
 ## Retention
 
 - **Default retention:** audit rows are never automatically deleted at M1. Operators with regulatory retention requirements (e.g. SOC 2 expects ≥1 year; some jurisdictions require longer) can rely on the default-retain posture.
-- **User deletion behaviour:** when a user is deleted, the FK `audit_log.user_id` is `ON DELETE SET NULL`, so the audit row persists but the actor reference is anonymised. The state-change history remains queryable by `resource_type` / `resource_id` / `details`. The user-data export worker (`api/app/workers/user_export.py`) bundles a user's own audit rows into their export under `audit_log.json` before deletion executes.
+- **User deletion behaviour:** when a user is deleted, the FK `audit_log.user_id` is `ON DELETE SET NULL`, so the audit row persists but the actor reference is anonymised. The state-change history remains queryable by `resource_type` / `resource_id` / `details`. The user-data export worker (`api/app/workers/user_export.py`) includes the rows where the user is the actor in their export under `audit_log.json`, but export and deletion are separate jobs: `POST /users/me/export` queues an export, `POST /users/me/delete` schedules deletion after the grace period, and the deletion worker (`api/app/workers/user_deletion.py`) neither triggers nor waits for an export — it also deletes any stored export bundles for that user. There is no guarantee that a deletion is preceded by a completed export; a user who wants their audit rows must request and download the export before the scheduled deletion runs.
 - **Operator-controlled archival:** operators can `pg_dump --table=audit_log` to long-term storage on a schedule of their choosing. No first-class export workflow in M1; we may add one if operator demand surfaces.
 - **Manual purge:** operators with privacy-driven purge requirements (e.g. GDPR right-to-erasure) can DELETE specific rows by `user_id` directly. A future enhancement may add a `redact_user(user_id)` CLI command that NULLs the actor and PII-bearing `details` fields per user (tracked as a deferred enhancement; file via operator request — see PRD §9).
 
