@@ -31,7 +31,7 @@ permissions:
   contents: read
   packages: write
   id-token: write       # required for sigstore keyless signing (T3) + SLSA attestations (T2)
-  attestations: write   # required for actions/attest-build-provenance (T2)
+  attestations: write   # required for actions/attest-build-provenance in build-image.yml (T2)
 
 env:
   REGISTRY: ghcr.io
@@ -225,7 +225,11 @@ jobs:
   build-backend:
     name: Build ${{ matrix.service }}
     needs: [setup, version-consistency]
-    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
     strategy:
       # A failed api build should stop the in-flight gateway build rather than
       # let half a backend publish under the tag. See the limitation note above.
@@ -236,25 +240,21 @@ jobs:
             file: api/Dockerfile.release
           - service: gateway
             file: gateway/Dockerfile.release
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          # api/Dockerfile.release bakes the skills corpus, and half of it lives
-          # in the skills/community submodule. Without this the published image
-          # ships an empty /skills/community.
-          submodules: recursive
-
-      - name: Build and push ${{ matrix.service }}
-        uses: ./.github/actions/build-push-image
-        with:
-          service: ${{ matrix.service }}
-          context: .
-          file: ${{ matrix.file }}
-          tag: ${{ needs.setup.outputs.tag }}
-          push: ${{ needs.setup.outputs.push }}
-          registry: ${{ env.REGISTRY }}
-          image_owner: ${{ env.IMAGE_OWNER }}
+    # A reusable workflow, not a composite action, so the SLSA provenance is
+    # signed by build-image.yml as an isolated builder (Build L3). registry and
+    # image_owner fall back to that workflow's defaults (ghcr.io / legalquants):
+    # the env context is not available in a reusable-workflow call's `with:`.
+    uses: ./.github/workflows/build-image.yml
+    with:
+      service: ${{ matrix.service }}
+      context: .
+      file: ${{ matrix.file }}
+      tag: ${{ needs.setup.outputs.tag }}
+      push: ${{ needs.setup.outputs.push }}
+      # api/Dockerfile.release bakes the skills corpus, and half of it lives
+      # in the skills/community submodule. Without this the published image
+      # ships an empty /skills/community.
+      submodules: recursive
 
   # TODO (ADR 0025 decision 4, deliberately not implemented here): a backend
   # verification gate between build-backend and build-frontend — migrations plus
@@ -269,7 +269,11 @@ jobs:
   build-frontend:
     name: Build ${{ matrix.service }}
     needs: [setup, build-backend]
-    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
     strategy:
       fail-fast: true
       matrix:
@@ -288,21 +292,14 @@ jobs:
           - service: proxy
             context: ./proxy
             file: proxy/Dockerfile
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Build and push ${{ matrix.service }}
-        uses: ./.github/actions/build-push-image
-        with:
-          service: ${{ matrix.service }}
-          context: ${{ matrix.context }}
-          file: ${{ matrix.file }}
-          build_args: ${{ matrix.build_args }}
-          tag: ${{ needs.setup.outputs.tag }}
-          push: ${{ needs.setup.outputs.push }}
-          registry: ${{ env.REGISTRY }}
-          image_owner: ${{ env.IMAGE_OWNER }}
+    uses: ./.github/workflows/build-image.yml
+    with:
+      service: ${{ matrix.service }}
+      context: ${{ matrix.context }}
+      file: ${{ matrix.file }}
+      build_args: ${{ matrix.build_args }}
+      tag: ${{ needs.setup.outputs.tag }}
+      push: ${{ needs.setup.outputs.push }}
 
   sbom:
     name: SBOM ${{ matrix.service }}

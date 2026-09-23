@@ -45,20 +45,23 @@ grype sbom:./api.spdx.json
 
 ## Verify the SLSA build provenance
 
-SLSA provenance is attached via GitHub's attestations service. Verify with the `gh` CLI:
+SLSA provenance is attached via GitHub's attestations service by `actions/attest-build-provenance`, which runs in `.github/workflows/build-image.yml`. That is a reusable workflow that `release.yml` calls once per service. Verify with the `gh` CLI, pinning the builder:
 
 ```bash
 gh attestation verify \
-  oci://ghcr.io/legalquants/lq-ai-api:v0.1.0 \
-  --owner legalquants
+  oci://ghcr.io/legalquants/lq-ai-api:<tag> \
+  --owner legalquants \
+  --signer-workflow LegalQuants/lq-ai/.github/workflows/build-image.yml
 ```
 
-A successful run prints the workflow path (`.github/workflows/release.yml`), the trigger event (tag push), and the input commit SHA — proving the image was built from that exact source by that exact workflow.
+A successful run prints the signer workflow (`build-image.yml`), the calling workflow (`release.yml`), the trigger event (tag push), and the input commit SHA. Together these show the image was built from that exact source by that exact workflow.
+
+**SLSA level, and which releases it covers.** The `--signer-workflow` pin is what makes this SLSA v1.0 **Build Level 3**. The provenance is signed by an isolated reusable workflow that the calling workflow cannot tamper with ([GitHub's guidance](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-and-reusable-workflows-to-achieve-slsa-v1-build-level-3)). Releases up to and including **v0.7.1** also carry a provenance attestation, but it was generated inside `release.yml`'s own jobs, so it is signed by `release.yml` and is Build Level 2. For those tags, drop `--signer-workflow` (or pin `--signer-workflow LegalQuants/lq-ai/.github/workflows/release.yml`). Build Level 3 applies from the first release after v0.7.1.
 
 ## What the verification proves
 
 - **Image authenticity:** the signature was produced by a process holding a short-lived Fulcio cert bound to the LegalQuants workflow OIDC identity. An attacker who obtained access to the registry but not to the workflow's OIDC identity cannot produce a valid signature.
-- **Image provenance:** the SLSA attestation pins the image to a specific commit SHA + workflow + builder. An attacker who modified the source after the fact cannot reproduce the attestation without re-running the workflow (which would produce a new, distinct attestation with a new timestamp).
+- **Image provenance:** the SLSA attestation pins the image to a specific commit SHA + workflow + builder (the isolated `build-image.yml` reusable workflow, for releases after v0.7.1). An attacker who modified the source after the fact cannot reproduce the attestation without re-running the workflow (which would produce a new, distinct attestation with a new timestamp).
 - **Dependency snapshot:** the SBOM lists every dependency at build time. An attacker who substituted a dependency post-build cannot match the SBOM hash.
 
 ## What the verification does NOT prove
