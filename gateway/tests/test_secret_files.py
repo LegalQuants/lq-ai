@@ -29,9 +29,9 @@ def test_resolve_secret_unset_returns_none() -> None:
 @pytest.mark.unit
 def test_resolve_secret_file_only_strips_newline(tmp_path) -> None:
     secret_file = tmp_path / "key.txt"
-    secret_file.write_text("super-secret-value\n", encoding="utf-8")
+    secret_file.write_text("dummy-secret-value\n", encoding="utf-8")
     out = resolve_secret("MY_KEY", {"MY_KEY_FILE": str(secret_file)})
-    assert out == "super-secret-value"
+    assert out == "dummy-secret-value"
 
 
 @pytest.mark.unit
@@ -74,30 +74,30 @@ def test_resolve_secret_empty_file_raises(tmp_path) -> None:
 @pytest.mark.unit
 def test_resolve_secret_world_readable_warns_but_loads(tmp_path, caplog) -> None:
     secret_file = tmp_path / "key.txt"
-    secret_file.write_text("warn-secret", encoding="utf-8")
+    secret_file.write_text("dummy-warn-value", encoding="utf-8")
     os.chmod(secret_file, 0o644)
     with caplog.at_level(logging.WARNING, logger="app.secrets"):
         out = resolve_secret("MY_KEY", {"MY_KEY_FILE": str(secret_file)})
-    assert out == "warn-secret"
+    assert out == "dummy-warn-value"
     assert any("group/world-accessible" in r.message for r in caplog.records)
-    assert not any("warn-secret" in r.message for r in caplog.records)
+    assert not any("dummy-warn-value" in r.message for r in caplog.records)
 
 
 @pytest.mark.unit
 def test_resolve_secret_error_never_contains_value(tmp_path) -> None:
     secret_file = tmp_path / "key.txt"
-    secret_file.write_text("s3cr3t-payload-xyz", encoding="utf-8")
-    assert secret_file.read_text().strip() == "s3cr3t-payload-xyz"
+    secret_file.write_text("dummy-payload-value", encoding="utf-8")
+    assert secret_file.read_text().strip() == "dummy-payload-value"
     missing = tmp_path / "missing.txt"
     with pytest.raises(SecretFileError) as excinfo:
         resolve_secret("OTHER_KEY", {"OTHER_KEY_FILE": str(missing)})
-    assert "s3cr3t-payload-xyz" not in str(excinfo.value)
+    assert "dummy-payload-value" not in str(excinfo.value)
 
 
 @pytest.mark.unit
 def test_provider_resolver_reads_file_key(tmp_path) -> None:
     secret_file = tmp_path / "anthropic.txt"
-    secret_file.write_text("sk-ant-file-key\n", encoding="utf-8")
+    secret_file.write_text("test-provider-file-key\n", encoding="utf-8")
     resolver = ProviderKeyResolver(
         master_key=None, env={"ANTHROPIC_API_KEY_FILE": str(secret_file)}
     )
@@ -106,7 +106,7 @@ def test_provider_resolver_reads_file_key(tmp_path) -> None:
         api_key_env="ANTHROPIC_API_KEY",
         api_key_encrypted=None,
     )
-    assert out == "sk-ant-file-key"
+    assert out == "test-provider-file-key"
 
 
 @pytest.mark.unit
