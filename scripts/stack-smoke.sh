@@ -123,12 +123,24 @@ curl -fsS http://127.0.0.1:8000/health; echo
 curl -fsS http://127.0.0.1:8001/health; echo
 curl -fsS http://127.0.0.1:3000/health; echo
 
-# The ingest worker defers docling imports into job functions (see
-# api/app/workers/document_pipeline.py), so a broken docling survives
-# boot. Import it explicitly.
+# Several production paths defer third-party imports into request or job
+# handlers, so a broken dependency can survive boot. Import each deferred
+# dependency explicitly without constructing clients or starting work.
 PHASE="lazy-import probes"
 echo "stack-smoke: probing lazily-imported dependencies"
-docker compose exec -T ingest-worker python -c "from docling.document_converter import DocumentConverter; print('docling import OK')"
+docker compose exec -T ingest-worker python -c "import fitz; print('fitz import OK')"
+docker compose exec -T ingest-worker python -c "from docling.datamodel.base_models import DocumentStream; from docling.document_converter import DocumentConverter; print('docling import OK')"
+docker compose exec -T ingest-worker python -c "import tiktoken; print('tiktoken import OK')"
+docker compose exec -T api python -c "from openpyxl import Workbook; from openpyxl.comments import Comment; print('openpyxl import OK')"
+docker compose exec -T gateway python -c "from mcp import ClientSession; from mcp.client.streamable_http import streamablehttp_client; print('mcp import OK')"
+docker compose exec -T api python -c "from opentelemetry.sdk.resources import Resource; from opentelemetry.sdk.trace import TracerProvider; from opentelemetry.sdk.trace.export import BatchSpanProcessor; print('opentelemetry sdk import OK')"
+docker compose exec -T api python -c "from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter; print('opentelemetry exporter import OK')"
+docker compose exec -T api python -c "from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor; print('opentelemetry fastapi import OK')"
+docker compose exec -T api python -c "from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor; print('opentelemetry httpx import OK')"
+docker compose exec -T gateway python -c "from opentelemetry.sdk.resources import Resource; from opentelemetry.sdk.trace import TracerProvider; from opentelemetry.sdk.trace.export import BatchSpanProcessor; print('opentelemetry sdk import OK')"
+docker compose exec -T gateway python -c "from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter; print('opentelemetry exporter import OK')"
+docker compose exec -T gateway python -c "from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor; print('opentelemetry fastapi import OK')"
+docker compose exec -T gateway python -c "from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor; print('opentelemetry httpx import OK')"
 
 PHASE="object-store api round trip"
 echo "stack-smoke: uploading and downloading bytes through the api"
