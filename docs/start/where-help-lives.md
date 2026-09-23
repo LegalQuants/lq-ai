@@ -4,7 +4,7 @@ This site is not the help desk for a running deployment. If your question is "ho
 
 ## The in-app Learn surface is the front door
 
-Once a deployment is running, the **Learn** tab in the top navigation is an interactive tour: twenty-three playgrounds walk through the architecture, the full request lifecycle, the five-tier inference model, what the model actually sees, where data lives, and how to author a skill — each one linking straight to the source file that implements what it shows (README "First steps after login"). That is deliberate: end-user help sits next to the product it explains, versioned with the release that ships it, rather than duplicated on a separate site that can drift out of sync.
+Once a deployment is running, the **Learn** tab in the top navigation is an interactive tour: a set of playgrounds — the count grows with releases, so this page does not fix it — walks through the architecture, the full request lifecycle, the five-tier inference model, what the model actually sees, where data lives, and how to author a skill, each one linking straight to the source file that implements what it shows (README "First steps after login"). Most of the current set is under **Learn → How It Works**, with the skill-authoring one under **How to Build**. That is deliberate: end-user help sits next to the product it explains, versioned with the release that ships it, rather than duplicated on a separate site that can drift out of sync.
 
 This site does not attempt to duplicate that surface. If you're looking for a walkthrough of a feature and you're already signed in, check Learn before searching here.
 

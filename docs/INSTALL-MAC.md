@@ -38,11 +38,18 @@ spctl -a -vvv -t open --context context:primary-signature /tmp/LQ.AI-*.dmg
 xcrun stapler validate /tmp/LQ.AI-*.dmg     # "The validate action worked!"
 ```
 
-A `Rejected` or an unstapled result means you downloaded something other than the
-official release artifact — stop and get the file again from the
-[Releases page](https://github.com/LegalQuants/lq-ai/releases) rather than
-proceeding. Most people can skip this and rely on macOS Gatekeeper's own check in
-step 2; run it yourself if you want the same proof the release maintainer checks.
+A `Rejected` verdict, or a `stapler validate` that doesn't report success, tells
+you that the file in front of you is not the signed and stapled artifact the
+maintainer verified — it doesn't by itself say why. The cause can sit on either
+side: an altered or incomplete download, or a release that shipped without one of
+the two steps ([`docs/BUILD-AND-RELEASE.md`](BUILD-AND-RELEASE.md) records that a
+`.dmg` needs both the signature and the staple). Don't proceed past a failed check:
+download the file again from the
+[Releases page](https://github.com/LegalQuants/lq-ai/releases), re-run both
+commands, and if it still fails, treat it as a release problem to report rather
+than a warning to click through. Most people can skip this and rely on macOS
+Gatekeeper's own check in step 2; run it yourself if you want the same proof the
+release maintainer checks.
 
 ## 2. Install
 
@@ -199,17 +206,29 @@ shell and the api on one origin and owns the user-facing port. That means the tw
 installs share most of their operational surface underneath — the same data in
 Postgres/RustFS, the same reset-admin-password `docker compose exec` escape hatch
 above — but the release stack fronts everything through that proxy instead of
-exposing `web` directly. If you outgrow the app — you want to run on Linux, put a
-real domain in front of it, or edit `gateway.yaml` directly — see "Prefer the
-command line?" below, plus
+exposing `web` directly. Either form of that command also revokes the account's
+active sessions — keep a generated password private; `--email` is only needed to
+disambiguate when more than one admin account exists, since the CLI otherwise
+targets the sole existing admin regardless of its address (`api/app/cli.py`).
+The data itself is untouched either way, unlike the launcher's **Reset…** control
+above, which erases the stack's volumes and re-runs first-time setup. If you
+outgrow the app — you want to run on Linux, put a real domain in front of it, or
+edit `gateway.yaml` directly — see "Prefer the command line?" below, plus
 [docs/operate/reverse-proxy-tls.md](operate/reverse-proxy-tls.md) for putting a
 stable URL in front of either install path.
 
-Two things worth knowing before you rely on this for anything beyond evaluation:
-the launcher's shipped default pins the image tag to `latest` rather than the
-specific release the `.dmg` was verified against, so a fresh install can float to
-newer images than the one you checked with `spctl` and `stapler` above
-([`docs/BUILD-AND-RELEASE.md`](BUILD-AND-RELEASE.md)); and app data splits across
+Two things worth knowing before you rely on this for anything beyond evaluation.
+First, the app and the engine are two release lines. A release build of the
+launcher bakes in the engine image tag matching its own version
+(`desktop-vX.Y.Z` → `LQ_AI_IMAGE_TAG=vX.Y.Z`), writes it into the generated
+`.env`, and realigns it on each launcher upgrade; only a locally built launcher
+falls back to `latest` ([`docs/BUILD-AND-RELEASE.md`](BUILD-AND-RELEASE.md)). But
+the `spctl` and `stapler` checks above vouch for the `.dmg` only — not for the
+api, gateway, web and proxy images it then pulls, which the release compose file
+references by tag rather than by digest (`docker-compose.release.yml`). When you
+report a problem or need a repeatable install, record the launcher version and the
+`LQ_AI_IMAGE_TAG` from that `.env` together, and the image digests Docker resolved
+it to if you need byte-for-byte reproducibility. Second, app data splits across
 two places — the launcher's own state (an encrypted `config.enc` plus a chmod-600
 `.env`) lives at `~/Library/Application Support/lq-ai-desktop/` (above), while the
 chats, files and audit log live in the Docker named volumes the launcher's compose
