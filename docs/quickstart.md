@@ -15,10 +15,12 @@ Everything below runs in Docker containers on your machine. The Inference Gatewa
 You need three things:
 
 1. **Docker Desktop** (or compatible runtime) installed and running. Docker Engine 24+ on Linux works as well. Verify with `docker info`.
-2. **Either** a cloud LLM provider API key (Anthropic, OpenAI, Google Vertex, Cohere, Azure OpenAI, or AWS Bedrock — at least one), **or** a local Ollama setup if you want to run fully offline (Mode 2). For the quickstart we use Mode 1 with a cloud key because it's faster to set up; Mode 2 is the same flow with `--profile local`.
-3. **About 15 minutes**. Most of that is waiting for Docker images to pull on the first run; subsequent runs are seconds.
+2. **Either** an API key for a cloud LLM provider the shipped gateway can actually talk to — Anthropic, OpenAI (or any OpenAI-compatible endpoint), or Azure OpenAI — **or** a local Ollama setup if you want to run fully offline (Mode 2). `gateway.yaml.example` also carries example entries for Google Vertex and AWS Bedrock, but no adapter ships for those provider types yet, so a key for them will not route anything. For the quickstart we use Mode 1 with a cloud key because it's faster to set up; Mode 2 starts with `docker compose --profile local up -d` and then needs a model pulled and a local alias selected — see [Mode 2](#i-want-to-use-mode-2-local-ollama-instead) under Troubleshooting.
+3. **About 15 minutes** once the stack is up. The first `docker compose up` itself takes longer: a source checkout **builds** the application images (`api`, `gateway`, `web` and the workers) as well as pulling the infrastructure images, so allow time and disk space for both. Subsequent runs reuse the images and start in seconds.
 
-What you don't need: an internet connection during the demo (after the initial `docker compose up`); any pre-existing legal AI experience; a working knowledge of LangGraph, OpenWebUI, or any of the other components.
+What you don't need: any pre-existing legal AI experience; a working knowledge of LangGraph, OpenWebUI, or any of the other components.
+
+What you **do** need in Mode 1 is a network connection for the whole demo, not just the initial `docker compose up`: every chat request goes to the cloud provider, and the default `embedding` alias (used for knowledge-base search) is cloud-backed too. Only Mode 2 — images pulled, a local model downloaded, and every alias you use pointed at it — runs offline.
 
 ---
 
@@ -30,7 +32,16 @@ cd lq-ai
 cp .env.example .env
 ```
 
-Open `.env` in your editor. The relevant lines for the quickstart:
+Open `.env` in your editor. Four secrets are **required** and ship empty — the stack will not come up while any of them is blank. Set each to a separate random value (the comments in `.env.example` give a one-liner for generating them):
+
+```bash
+POSTGRES_PASSWORD=
+OBJECT_STORE_SECRET_KEY=   # root secret for the bundled object store (legacy name MINIO_ROOT_PASSWORD is still accepted)
+LQ_AI_GATEWAY_KEY=
+JWT_SECRET=
+```
+
+Then the provider key. The relevant lines for the quickstart:
 
 ```bash
 # Anthropic (recommended for quickstart — Claude is what the starter skills are calibrated to)
@@ -38,12 +49,9 @@ ANTHROPIC_API_KEY=sk-ant-...your-key-here...
 
 # OR OpenAI
 # OPENAI_API_KEY=sk-...your-key-here...
-
-# Optional but recommended: pin to a specific model alias for reproducibility
-LQ_AI_DEFAULT_MODEL=smart  # resolves to claude-opus-4-7 by default
 ```
 
-Set at least one provider key. The starter skills are model-agnostic but were drafted and calibrated against Anthropic's Claude family; if you use a different provider, output will be similar in shape but may differ in calibration nuance.
+Set at least one provider key. There is no `.env` switch for the default model: chats default to the `smart` alias (`claude-opus-4-7` in the shipped `gateway.yaml.example`), and you choose another model or alias in the chat's model picker, or repoint the alias under **Settings → Models** once signed in. The starter skills are model-agnostic but were drafted and calibrated against Anthropic's Claude family; if you use a different provider, output will be similar in shape but may differ in calibration nuance.
 
 > Provider keys are not limited to `.env`. Once `LQ_AI_GATEWAY_MASTER_KEY` is set, an admin can add, rotate, and revoke keys at runtime through the admin provider-keys surface (`/api/v1/admin/provider-keys`), which encrypts the key into `gateway.yaml` and hot-applies it to the live gateway — no restart. The `.env` path here is the simplest for a first run; the runtime path is the operator-facing way to manage keys after the stack is up. See [`gateway.yaml.example`](../gateway.yaml.example).
 
@@ -53,18 +61,15 @@ Then start the stack:
 docker compose up -d
 ```
 
-First run pulls images across the eight always-on services — `postgres`, `redis`, `rustfs`, `gateway`, `api`, `ingest-worker`, `arq-worker`, `web` (the `ingest-worker` and `arq-worker` background workers run unconditionally; the local-Ollama (`--profile local`) and Slack/Teams (`--profile slack` / `--profile teams`) services are opt-in Compose profiles). On a reasonable connection this takes 2–4 minutes. Subsequent runs reuse the images and start in seconds.
+First run brings up the eight always-on services — `postgres`, `redis`, `rustfs`, `gateway`, `api`, `ingest-worker`, `arq-worker`, `web` (the `ingest-worker` and `arq-worker` background workers run unconditionally; the local-Ollama (`--profile local`) and Slack/Teams (`--profile slack` / `--profile teams`) services are opt-in Compose profiles) — plus two one-shot init containers, `rustfs-init` and `migrate`, that exit once they finish. `postgres`, `redis` and `rustfs` are pulled; `gateway`, `api`, `web` and the workers are **built** from the checkout, so the first start does real build work, not just downloads. How long it takes depends on your hardware, Docker build cache and network speed. Subsequent runs reuse the images and start in seconds.
 
-When the stack is up, you should see something like this in the API container's logs:
+Confirm the stack is up with `docker compose ps` — the long-running services should be `Up` (those with health checks report `healthy`; the two init containers show as exited). The entry points are then:
 
-```
-✓ LQ.AI is ready at http://localhost:3000
-✓ First-run admin account: see logs for password
-✓ API documentation: http://localhost:8000/docs
-✓ Inference Gateway: http://localhost:8001/docs
-```
+- LQ.AI shell: <http://localhost:3000/lq-ai>
+- API documentation: <http://localhost:8000/docs>
+- Inference Gateway: <http://localhost:8001/docs>
 
-The first-run admin password is printed once in the API container's logs. Find it with:
+The first-run admin password is printed once in the API container's logs, on a line beginning `First-run admin password`. Find it with:
 
 ```bash
 docker compose logs api | grep "First-run admin password"
@@ -76,17 +81,17 @@ Save the password. You'll use it momentarily.
 
 ## Step 2 — First-run setup
 
-Open <http://localhost:3000/lq-ai> in your browser. The LQ.AI chat shell lives at `/lq-ai` per [ADR 0009](adr/0009-web-lq-ai-shell-coexistence.md); the upstream OpenWebUI shell at `/` is preserved untouched and is not the canonical experience for this quickstart. Sign in with email `admin@lq.ai` (the default — configurable via `LQ_AI_FIRST_RUN_ADMIN_EMAIL`) and the password from the previous step. The first time you sign in, you're prompted to set a permanent password; do so.
+Open <http://localhost:3000/lq-ai> in your browser. The LQ.AI chat shell lives at `/lq-ai` per [ADR 0009](adr/0009-web-lq-ai-shell-coexistence.md); the upstream OpenWebUI shell at `/` is preserved untouched and is not the canonical experience for this quickstart. Sign in with email `admin@lq.ai` and the password from the previous step. (The address comes from the backend setting `FIRST_RUN_ADMIN_EMAIL`, read only on the very first boot. The shipped `docker-compose.yml` does not pass that variable into the `api` container, and the container does not read your `.env`, so setting it in `.env` alone has no effect — to change it, add `FIRST_RUN_ADMIN_EMAIL` to the `api` service's `environment:` block, e.g. in a `docker-compose.override.yml`, before the first `docker compose up`.) The first time you sign in, you're prompted to set a permanent password; do so.
 
 > **Forgot to copy the bootstrap password?** Type any password and submit. If the deployment is still in fresh-install state, the login screen surfaces an inline hint with the exact `docker compose logs` command above and a one-click copy button (M3-0.1 / DE-283). The hint hides itself automatically once you've set your permanent password.
 
 > **Admin tip — Settings → Models.** Once signed in as an admin you'll see a **Settings** link in the top-right of the LQ.AI shell. It opens the model alias editor (D0.5) at `/lq-ai/admin/models`, where you can edit the `smart` / `fast` / `budget` / `local` / `embedding` aliases without restarting the gateway. Edits write `gateway.yaml` atomically and hot-reload the gateway in process; in-flight requests finish on the prior config and the next request picks up the new mapping. See [ADR 0010](adr/0010-gateway-config-hot-reload.md) for the full design.
 
-You then land on the first-run setup checklist. Four steps, in order, none blocking:
+After the password change you land on the LQ.AI home page (`/lq-ai`). There is no separate setup wizard: the home page shows a **Getting started** checklist of five items that tick off as you do them — **Log in & rotate password**, **Run a skill on a document**, **Try Enhance Prompt**, **Attach a knowledge base**, and **Save a prompt as a skill** — and it disappears once all five are done. This walkthrough covers the first two. The deployment-level setup below (profile, tier policy, MFA) is not on that checklist and is done where each item says. Four items, in order, none blocking:
 
 ### Setup item 1: Create your Organization Profile
 
-Click **Create Organization Profile** (or **Skip and create later** if you want to come back). The profile is a markdown document at the deployment level capturing your team's voice, jurisdiction, industry, standard positions, and escalation thresholds. Skills draw on it as context; without it, every skill has to relearn the org from scratch every time, and outputs feel generic.
+The LQ.AI shell has no profile editor page yet; an admin sets the profile through the API — `PUT /api/v1/organization-profile` with a JSON body `{"content_md": "..."}` (try it from <http://localhost:8000/docs>, signed in as the admin) — and you can skip this and come back later. The profile is a markdown document at the deployment level capturing your team's voice, jurisdiction, industry, standard positions, and escalation thresholds. Skills draw on it as context; without it, every skill has to relearn the org from scratch every time, and outputs feel generic.
 
 For the demo, the simplest version is fine. A starter Profile looks like this:
 
@@ -118,13 +123,13 @@ professional services.
 - Any data breach affecting > 1,000 records → escalate to GC and Privacy Officer.
 ```
 
-Paste it into the editor and click **Save**. The Profile is now a singleton skill that prepends to every other skill's prompt unless explicitly disabled. You can read it (and edit it, and fork it) like any other skill — there is no hidden layer.
+Send it as `content_md`. The Profile is stored separately from the skills catalogue; at request time the gateway prepends it once to the assembled prompt whenever at least one attached skill has not opted out (`use_organization_profile: false` in the skill's frontmatter), and with no skills attached it is not inserted through this path. You can read it back with `GET /api/v1/organization-profile` and edit it at will — there is no hidden layer.
 
 ### Setup item 2: Configure Inference Tier policy
 
-Click **Configure Tier Policy**. By default the deployment allows Tiers 1–4 and warns on Tier 4. For the quickstart, leave the defaults — your cloud LLM provider running under your standard commercial API terms is most likely Tier 4, and the warning surfaces transparently in the chat UI rather than blocking.
+There is no tier-policy page in the shell; the policy lives in the gateway's `tier_policy` block (`gateway.yaml`), and an admin can read or adjust it via `GET` / `PATCH /api/v1/admin/tier-policy`. By default the deployment allows Tiers 1–4 and warns on Tier 4. For the quickstart, leave the defaults — your cloud LLM provider running under your standard commercial API terms is most likely Tier 4, and the warning surfaces transparently in the chat UI rather than blocking.
 
-If your provider account has enterprise terms with ZDR (zero data retention), you can configure that provider as Tier 3 in the gateway YAML and the badge will reflect Tier 3 going forward. The Provider Compliance Matrix at `docs/compliance/provider-compliance-matrix.md` documents which providers support which tiers under which agreements.
+If your provider account has enterprise terms with ZDR (zero data retention), you can configure that provider as Tier 3 in the gateway YAML and the badge will reflect Tier 3 going forward. The per-provider compliance matrix the PRD describes has not been written yet — `docs/compliance/` currently holds only a [README](compliance/README.md) stating the pack's scope and status — so check your provider's actual agreement before assigning a tier.
 
 ### Setup item 3: Optionally enable MFA
 
@@ -132,7 +137,7 @@ Recommended for any deployment handling client-confidential data; skippable for 
 
 ### Setup item 4: Create your first Project and try a starter skill
 
-Click **Create First Project**. This is where the demo begins.
+Open **Matters** in the sidebar (`/lq-ai/matters`) and click **+ New matter** — the shell calls Projects "matters". This is where the demo begins.
 
 ---
 
@@ -151,9 +156,9 @@ For the quickstart, create a Project for the demo NDA:
   Standard counterparty evaluation; no specific data-handling concerns
   flagged at this stage.
   ```
-- **Privileged flag:** off for the quickstart. (For privileged matters, this flag forces minimum Inference Tier and marks every chat in the Project as privileged in the audit log. See [PRD §3.11](PRD.md#311-projects-m1) for the full mechanics.)
+- **Privileged flag:** off for the quickstart. (For privileged matters, ticking **Attorney-client privileged** requires you to also set a minimum Inference Tier floor — the form will not submit without one — and marks every chat in the Project as privileged in the audit log. See [PRD §3.11](PRD.md#311-projects-m1) for the full mechanics.)
 
-Click **Create Project**. You're now in the Project view, with a chat sidebar scoped to this Project on the left and the context document visible on the right.
+Click **Create matter**. You're now in the Project view, with a chat sidebar scoped to this Project on the left and the context document visible on the right.
 
 ---
 
@@ -252,8 +257,8 @@ Click the **Tier** badge in the top-right corner of the chat header. A panel ope
 
 If you want to verify against the audit log, navigate to **Admin → Audit Log** and search for your chat ID. You'll see entries for each message with `routed_inference_tier` populated. M2 added two more audit signals visible in the same view:
 
-- **`anonymization_applied: true`** — the gateway's Anonymization Layer (M2-B3) substituted detected entities with pseudonyms before forwarding to the model provider. The audit row records that pseudonymization happened; the pseudonym table itself is held only in process memory for the request duration and never persists. If `anonymization_applied: false`, the request bypassed the middleware (typically because the request was a Citation Engine judge call with `lq_ai_purpose: 'judge_paraphrase'` or the deployment has anonymization disabled in `gateway.yaml`). See [`docs/security/anonymization.md`](security/anonymization.md) for the full mechanism and the honest validation-posture note.
-- **`privilege_marked: true` + `privilege_basis: <reason>`** — the chat sat in a privileged matter (Project with `privileged: true`); the tier floor enforcement bumped routing to Tier ≥ 3 and the audit log records both the privilege state and which signal triggered it (project flag, skill frontmatter, or admin override). Pinned end-to-end by `api/tests/test_chat_citations.py::test_chat_send_privileged_project_full_audit_trail`.
+- **`anonymization_applied: true`** — the gateway's Anonymization Layer (M2-B3) substituted detected entities with pseudonyms before forwarding to the model provider. The audit row records that pseudonymization happened; the pseudonym table itself is held only in process memory for the request duration and never persists. If `anonymization_applied: false`, the request bypassed the middleware (typically because the request was a Citation Engine judge call with `lq_ai_purpose: 'judge_paraphrase'`, the chat sits in a privileged Project, or the deployment has anonymization disabled in `gateway.yaml`). Disabled is the shipped default — `anonymization.enabled: false` in `gateway.yaml.example` — so on a fresh quickstart install expect `false` until you opt in. See [`docs/security/anonymization.md`](security/anonymization.md) for the full mechanism and the honest validation-posture note.
+- **`privilege_marked: true` + `privilege_basis: <project name>`** — the chat sat in a privileged matter (Project with `privileged: true`). Marking a Project privileged does not pick a tier by itself: the Project's own `minimum_inference_tier` (mandatory whenever `privileged: true`) travels with the request as a tier floor, and the gateway refuses any route to a weaker — that is, *higher*-numbered — tier with `403 tier_below_minimum`. A floor of 2 allows Tiers 1–2; a floor of 1 allows Tier 1 only. The audit row records the privilege state and the project it came from. Pinned end-to-end by `api/tests/test_chat_citations.py::test_chat_send_privileged_project_full_audit_trail`.
 
 If your team's matter requires a tier floor (e.g., privileged matters require Tier 1 or 2), you can:
 
@@ -379,7 +384,7 @@ The fastest way to make LQ.AI better for your practice is to fork a skill, fix t
 
 ### `docker compose up` hangs on first run
 
-First-run image pulls are typically the slow step. Verify with `docker compose logs -f` — if you see images downloading, it's working. If logs are silent, check Docker Desktop is running and `docker info` succeeds.
+First-run image pulls and the application-image builds are the slow steps. Verify with the build output in your terminal and `docker compose logs -f` — if images are downloading or build steps are progressing, it's working. If logs are silent, check Docker Desktop is running and `docker info` succeeds.
 
 ### `docker compose up` fails with "address already in use"
 
@@ -394,15 +399,19 @@ The application services reach Postgres over the Docker network at `postgres:543
 
 ### "First-run admin password" doesn't appear in logs
 
-The password is printed on the API container's first start. If you missed it, reset with:
+The password is printed on the API container's first start. If you missed it, reset it without touching any data:
 
 ```bash
-docker compose down -v   # WARNING: this destroys local data; only use on first run
+docker compose exec api python -m app.cli reset-admin-password
+```
+
+The CLI prints the new password and sets `must_change_password=true` on the user, so they will be forced to set a fresh password on the next login. This works on a fresh install and an established deployment alike. Only if you explicitly want a clean slate on a brand-new install, wiping the volumes re-runs the bootstrap:
+
+```bash
+docker compose down -v   # WARNING: this destroys ALL local data; never use on an established deployment
 docker compose up -d
 docker compose logs api | grep "First-run admin password"
 ```
-
-For an established deployment, the admin password is reset via `docker compose exec api python -m app.cli reset-admin-password`. The CLI prints the new password and sets `must_change_password=true` on the user, so they will be forced to set a fresh password on the next login.
 
 ### Chat returns "no model configured"
 
@@ -418,19 +427,24 @@ You configured `allowed_tiers_global` to disallow Tier 4 in setup item 2; either
 
 ### "I want to use Mode 2 (local Ollama) instead"
 
-Replace `docker compose up -d` with `docker compose --profile local up -d`. The local profile starts an `ollama` container alongside the rest of the stack; pull a model into it once with `docker compose exec ollama ollama pull qwen3.5:9b` (a few GB) before the first inference call. The gateway-side wiring is automatic — `gateway.yaml.example` ships with `local-fast` (Qwen 3.5 4B) and `local-thinking` (Qwen 3.5 9B) aliases that route to the local Ollama service at `http://ollama:11434`. Operators are free to repoint either alias at any model the local Ollama can serve; change `gateway.yaml.example` accordingly and pull the corresponding tag.
+Replace `docker compose up -d` with `docker compose --profile local up -d`. The local profile does one thing: it starts an `ollama` container alongside the rest of the stack. Pull a model into it once with `docker compose exec ollama ollama pull qwen3.5:9b` (a few GB) before the first inference call.
+
+Starting the container does not move your chats onto it. `gateway.yaml.example` ships three Tier-1 aliases that route to the local Ollama service at `http://ollama:11434` — `local` and `local-thinking` (both `qwen3.5:9b`) and `local-fast` (`qwen3.5:4b-nvfp4`, a different tag you must pull separately if you want that alias) — but the default `smart` / `fast` / `budget` aliases still point at the cloud providers, and the `embedding` alias points at OpenAI (the Ollama adapter does not serve embeddings yet, so knowledge-base search stays cloud-backed in this configuration). To run a chat locally, pick a `local-*` alias in the chat's model picker, or repoint `smart` at `ollama-local` under **Settings → Models** and drop its cloud fallbacks.
+
+Repointing an alias at a different local model means editing the *live* `gateway.yaml`, not `gateway.yaml.example`: on the first boot the gateway entrypoint copies the example into the `gateway-config` volume (as `/etc/lq-ai/gateway.yaml`) only if no `gateway.yaml` is there yet, and after that the example is never read again. Use **Settings → Models** (which hot-applies), or edit the file inside the volume and `docker compose restart gateway`; recreating the container does not overwrite the saved file. Editing `gateway.yaml.example` only takes effect if you do it before the very first start. Either way, pull the corresponding tag.
 
 To exercise the local path with `curl`:
 
 ```bash
-# After the stack is up, the local-fast alias dispatches to Ollama at Tier 1.
+# After the stack is up and qwen3.5:9b is pulled, the local-thinking alias
+# dispatches to Ollama at Tier 1. (local-fast expects qwen3.5:4b-nvfp4 instead.)
 curl -X POST http://localhost:8001/v1/chat/completions \
   -H "X-LQ-AI-Gateway-Key: ${LQ_AI_GATEWAY_KEY}" \
   -H "content-type: application/json" \
-  -d '{"model": "local-fast", "messages": [{"role": "user", "content": "hello"}]}'
+  -d '{"model": "local-thinking", "messages": [{"role": "user", "content": "hello"}]}'
 ```
 
-Operators running Ollama on the host (rather than in the Compose stack) set `OLLAMA_BASE_URL=http://host.docker.internal:11434` in their `.env` and skip `--profile local` when running compose. Mode 2 is the air-gap-capable mode; once images are pulled and models are downloaded, the deployment runs without internet.
+Operators running Ollama on the host (rather than in the Compose stack) set `OLLAMA_BASE_URL=http://host.docker.internal:11434` in their `.env` and skip `--profile local` when running compose. Mode 2 is the air-gap-capable mode; once images are pulled, models are downloaded, and every alias you use (including `embedding`, if you use knowledge bases) points at a local provider, the deployment runs without internet. Nothing in the profile itself blocks egress — if you need that guarantee, isolate the network at the deployment layer.
 
 The starter skills run against the local model with calibration nuance that differs from the cloud Tier 4 path — expect different (typically slightly less polished) output than Claude / GPT-4. Refer to PRD §1.5.2 for the tier semantics.
 
