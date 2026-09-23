@@ -67,15 +67,20 @@ class ColumnSpec(BaseModel):
     """When ``True``, this column's cells route through Stage 4 of the
     Citation Engine cascade (ensemble verification). Overrides the
     skill-level field when both are set. ``None`` means 'inherit from
-    skill / project / deployment default'."""
+    skill / project / deployment default'. Stage 4 only runs when the
+    gateway's ``citation_engine.ensemble_verification.judge_models``
+    list is configured; it defaults to empty, which disables Stage 4
+    regardless of this flag."""
 
     minimum_inference_tier: int | None = Field(
         default=None,
         ge=1,
         le=5,
         description="Per-column tier floor (1-5). Overrides the skill-level "
-        "tier floor when both are set. High-stakes columns can demand Tier 4+ "
-        "while routine columns route Tier 1.",
+        "tier floor when both are set. Lower numbers are stricter (PRD "
+        "§1.5.2): a floor of N allows Tier N and any lower-numbered tier and "
+        "refuses higher-numbered ones. High-stakes columns can demand Tier 1 "
+        "or 2 while routine columns leave the floor unset.",
     )
 
 
@@ -141,7 +146,10 @@ class LQAIFrontmatter(BaseModel):
         "verification) for citations produced from chats using this skill. "
         "Per M2-D1, OR'd against the chat's project ensemble flag and the "
         "gateway's deployment default. None means 'no opinion' (treated as "
-        "false at the OR site).",
+        "false at the OR site). Stage 4 only runs when the gateway's "
+        "citation_engine.ensemble_verification.judge_models list is "
+        "configured; it defaults to empty, which disables Stage 4 even when "
+        "this flag is true.",
     )
 
     use_organization_profile: bool | None = None
