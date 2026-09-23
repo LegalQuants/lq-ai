@@ -51,7 +51,7 @@ Run from the host, with the stack up (a hot backup of `pgdata` via `pg_dump` is 
 Storage first, then the app: bring up only the volumes and services the restore itself needs, put the restored state into them, and only then start the gateway, api and workers — starting them early lets the api migrate an empty database and lets the gateway seed a fresh `gateway.yaml`, either of which then has to be undone by hand.
 
 1. Set the target's `.env` with the **same** `LQ_AI_GATEWAY_MASTER_KEY` you saved in step 4 above, before any container starts. Then bring up only the storage this restore needs and nothing else yet: `docker compose up -d postgres` (add `rustfs` to that command too if you're restoring the object store with `mc mirror` rather than a raw volume snapshot).
-2. Restore Postgres into the fresh `postgres` container:
+2. Restore Postgres into the fresh `postgres` container. `--clean` drops and replaces the objects in the target database, so run this only against the empty recovery installation, never the one you are running:
    ```bash
    docker compose exec -T postgres pg_restore -U lq_ai -d lq_ai --clean --if-exists \
      < lq-ai-postgres-2026-09-01.dump
