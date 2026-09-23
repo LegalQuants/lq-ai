@@ -65,8 +65,8 @@ providers and establish no live-provider or legal-quality claim.
 - **Real matter use:** complete selected-document/KB intake and project-policy
   propagation, including DE-294, before enabling real sources and inference.
 
-Capabilities remain disabled by default. Production enablement is a separate
-decision; no release date is committed.
+Capabilities remain disabled by default. The sample demonstration is targeted
+for 0.8.0; production enablement remains a separate decision.
 
 Behavior details: [demonstration](../plans/issue-563-demonstration.md),
 [run files](../plans/issue-563-workspace.md),
