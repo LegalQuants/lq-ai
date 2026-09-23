@@ -85,7 +85,10 @@ before(() => {
 	// upstream-OpenWebUI spec files only.
 	const spec = (Cypress.spec && Cypress.spec.name) || '';
 	const isLqAiSpec =
-		spec.startsWith('wave-') || spec.startsWith('lq-ai-') || /^m\d+-/.test(spec);
+		spec.startsWith('wave-') ||
+		spec.startsWith('lq-ai-') ||
+		spec.startsWith('matter-intake') ||
+		/^m\d+-/.test(spec);
 	if (!isLqAiSpec) {
 		cy.registerAdmin();
 	}

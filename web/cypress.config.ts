@@ -41,6 +41,7 @@ const DETERMINISTIC_SPECS = [
 	'cypress/e2e/m4-autonomous.cy.ts',
 	'cypress/e2e/lq-ai-orchestration-demo.cy.ts',
 	'cypress/e2e/lq-ai-skill-workspaces.cy.ts',
+	'cypress/e2e/matter-intake.cy.ts',
 	// Live-backend but LLM-free — real login as the seeded admin; create
 	// throwaway matters/chats; message/citation payloads are mocked.
 	'cypress/e2e/m2-c2-citation-states.cy.ts',
