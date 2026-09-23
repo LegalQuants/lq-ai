@@ -1,19 +1,18 @@
-# ADR 0038 — Skill-backed orchestration as the first user-facing profile
+# ADR 0038 — Real skill-backed orchestration after the demonstration
 
 **Status:** Proposed (2026-09-23)
-**Amends:** [ADR 0035](0035-governed-orchestration-run-tree.md) first-profile scope and activation; retains its run-tree, authority, budget and execution decisions.
+**Extends:** [ADR 0035](0035-governed-orchestration-run-tree.md) after its sample first profile; retains its run-tree, authority, budget and execution decisions.
 **Tracks:** [#563](https://github.com/LegalQuants/lq-ai/issues/563)
 
 ## Context
 
-ADR 0035 approved a governed run tree but limited its first profile to sample
-findings. That validates coordination without letting an owner use approved skills
-to do the work being coordinated. Issue #563's user-facing capability is the
-approval, parallel work and monitoring flow applied to real, bounded tasks.
+ADR 0035 approved a governed run tree with a sample first profile, suitable
+for the 0.8.0 demonstration. That validates coordination, while a later profile
+can apply approval, parallel work and monitoring to real, bounded tasks.
 
 ## Decision
 
-The first operator-enabled profile runs **installed, approved skills** in one
+A subsequent operator-enabled profile runs **installed, approved skills** in one
 manual batch of one to four child sessions. The owner supplies an active
 project and goal; a bounded planning step proposes tasks for review. The owner
 selects authorized documents or KBs and available source access. The application
@@ -28,13 +27,12 @@ results with the root, which synthesizes them through the same governed path.
 The owner can inspect progress, receipts, partial results and retained files,
 or halt further work. The limits and recovery semantics in ADR 0035 remain.
 
-The operator's orchestration switch enables this real profile. Deterministic
-sample responses remain test fixtures and may be offered as a clearly labelled
-example, but they are not the only executable path behind that switch.
-Research is a canonical example, not an exclusive child profile. Optional
-persistent workspaces and bundled helpers retain their separate enablement and
-security gates. This decision does not permit recursive delegation, arbitrary
-tools, generated code or unreviewed skills.
+The 0.8.0 demonstration switch remains sample-only. The real profile requires
+separate operator enablement so an upgrade cannot silently widen what an
+existing flag permits. Research is a canonical example, not an exclusive child
+profile. Optional persistent workspaces and bundled helpers retain their
+separate enablement and security gates. This decision does not permit
+recursive delegation, arbitrary tools, generated code or unreviewed skills.
 
 Before the real profile is enabled, selected-document and KB authorization,
 project-policy propagation and cross-agent handoff validation (DE-294) must be
@@ -46,7 +44,7 @@ application rechecks current authority and data restrictions at each effect.
 
 | Alternative | Reason not selected |
 |---|---|
-| Keep the sample-only profile as the user-facing feature | It demonstrates coordination but cannot perform an owner's approved work. |
+| Stop at the 0.8.0 sample profile | It demonstrates coordination but cannot perform an owner's approved work. |
 | Allow open-ended agents to choose skills, tools or sources | Task prose would become authority and defeat the approved-scope boundary. |
 | Move orchestration to a separate harness service | It would duplicate the existing governance path without solving authorization. |
 

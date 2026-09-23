@@ -65,29 +65,29 @@ code; they establish no live-provider or legal-quality claim.
 - **Real matter use:** complete selected-document/KB intake and project-policy
   propagation, including DE-294, before enabling real sources and inference.
 
-Capabilities remain disabled by default. Production enablement is a separate
-decision; no release date is committed.
+Capabilities remain disabled by default. The sample demonstration is targeted
+for 0.8.0; production enablement remains a separate decision.
 
-## Proposed real orchestration profile (ADR 0038 pending)
+## Proposed later real orchestration profile (ADR 0038 pending)
 
-The first released orchestration profile should let an owner approve and monitor
-one bounded batch of **real skill-backed child work**. An operator enables that
-profile; the current sample workflow remains an acceptance fixture, not the
-only work the switch can run. An owner supplies an active project and goal,
-reviews one to four proposed tasks, and selects approved installed skills and
-explicitly authorized matter resources. Research is one canonical example, not
-the only child profile. The application supplies the model route, grants, data restrictions, budget and
-deadline for exact-plan approval. Children run independently, share bounded
-results with the root, and never gain authority from task text or sibling output.
+The 0.8.0 profile demonstrates approval, parallel work and monitoring with
+sample findings. A later operator-enabled profile should apply that flow to one
+bounded batch of **real skill-backed child work**. An owner supplies an active
+project and goal, reviews one to four proposed tasks, and selects approved
+installed skills and explicitly authorized matter resources. Research is one
+canonical example, not the only child profile. The application supplies the
+model route, grants, data restrictions, budget and deadline for exact-plan
+approval. Children run independently, share bounded results with the root, and
+never gain authority from task text or sibling output.
 
 Acceptance requires selected-document/KB checks, project-policy propagation,
 DE-294 handoff validation, real gateway-backed child and root execution,
 observable progress, halt, partial results, recovery and honest evidence status.
-The existing disabled-by-default operator switch must enable this profile after
-those gates pass. Optional persistent storage and bundled helpers remain
-separate. This expansion does not authorize recursive delegation or generated
-code. Until ADR 0038 is ratified, the accepted first-profile scope above remains
-the sample demonstration.
+A separate operator opt-in must enable this later profile after those gates
+pass; the 0.8.0 demo flag remains sample-only. Optional persistent storage and
+bundled helpers remain separate. This expansion does not authorize recursive
+delegation or generated code. Until ADR 0038 is ratified, the accepted
+first-profile scope above remains the sample demonstration.
 
 Behavior details: [demonstration](../plans/issue-563-demonstration.md),
 [run files](../plans/issue-563-workspace.md),
