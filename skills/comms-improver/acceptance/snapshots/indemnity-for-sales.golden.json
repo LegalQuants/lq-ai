@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "skill": "comms-improver",
+  "fixture": "indemnity-for-sales",
+  "status": "provisional",
+  "provenance": "Ranges derived from skills/comms-improver/SKILL.md (Output: fixed sections Rewritten text / What was changed / Terms simplified or preserved / Preservation-of-meaning concerns / Suggested follow-ups; explanation substantially shorter than the rewrite) and test-plan.md Scenario 3 (sales audience: operationally usable, no invented permissions). NOT observed from a live run; first live run calibrates.",
+  "assertions": {
+    "required_sections": [
+      "Comms Improver",
+      "Rewritten text",
+      "What was changed",
+      "Preservation-of-meaning concerns"
+    ],
+    "metrics": [
+      {
+        "id": "changes_explained",
+        "kind": "section_items",
+        "section": "What was changed",
+        "min": 1,
+        "max": 10
+      },
+      {
+        "id": "escalation_mentioned",
+        "kind": "regex_count",
+        "pattern": "escalat|loop in|check with legal|ask legal",
+        "min": 1,
+        "max": null
+      }
+    ],
+    "min_chars": 800,
+    "max_chars": 20000
+  }
+}
