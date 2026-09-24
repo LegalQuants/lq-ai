@@ -179,10 +179,10 @@ async def test_update_user_role_admin_to_member_writes_audit(
     )
     # Two updates (promote + demote) → two audit rows.
     assert len(audit) == 2
-    assert {
-        (row.details["before"]["role"], row.details["after"]["role"])
-        for row in audit
-    } == {("member", "admin"), ("admin", "member")}
+    assert {(row.details["before"]["role"], row.details["after"]["role"]) for row in audit} == {
+        ("member", "admin"),
+        ("admin", "member"),
+    }
 
 
 @pytest.mark.integration
