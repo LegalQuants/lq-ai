@@ -4,6 +4,10 @@
 
 For a per-capability shipped-vs-deferred catalog with verification paths, see [HONEST-STATE.md](HONEST-STATE.md).
 
+## In short
+
+A browser, the Word add-in, or a Slack/Teams bridge sends requests to the API, which manages matters, chats, skills, and other records. When a request needs a model, the API calls the Inference Gateway — the single service that selects a provider, applies tier and privacy rules, and holds every privileged provider API key. Storage (PostgreSQL, Redis, RustFS/S3-compatible) lives entirely inside the operator's environment; two background worker processes (`ingest-worker` for document processing, `arq-worker` for Playbook, Tabular Review, and Autonomous Layer jobs) do the async work. The Word add-in and the Slack/Teams bridge are shipped as plumbing, with parts of their feature surface still deferred — a box in the diagram is not proof a workflow is finished. `Mn` tags describe milestones, not guarantees; [HONEST-STATE.md](HONEST-STATE.md) is the authoritative shipped-vs-deferred record.
+
 ---
 
 ## System diagram
