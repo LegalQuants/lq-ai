@@ -6,6 +6,17 @@
 
 ---
 
+## In short
+
+An optional gateway feature swaps names, organizations, emails, phone numbers, bank numbers, locations, and case/matter numbers for labels before a chat or skill request reaches an AI model, then restores them in the response. It ships off by default.
+
+- **When it runs.** The example config turns it on for tiers 3-5 and leaves Tier 1 (local) inference out; it also always skips privileged chats and retrieved source documents.
+- **What it can miss.** It only redacts entities it detects; recall and precision on real legal documents haven't been measured, so treat this as a mitigation, not a guarantee. Several identifier types (Social Security, passport, driver's license, IBAN, IP, cryptocurrency, medical license numbers) aren't recognized by default.
+- **What the status flag means.** A logged "ran" status means the pass executed, not that anything was found and replaced.
+- **If a miss is unacceptable**, route that matter to Tier 1 instead.
+
+---
+
 ## What's validated vs what's unvalidated
 
 This section exists because LQ.AI's [founding transparency principle](../PRD.md#13-transparency-as-a-founding-principle) requires us to be explicit about where this layer has been measured and where it has not — so practicing attorneys can make informed professional judgments about confidentiality posture per matter.
