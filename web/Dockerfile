@@ -63,7 +63,7 @@ RUN printf 'PUBLIC_LQ_AI_API_BASE_URL=%s\n' "${PUBLIC_LQ_AI_API_BASE_URL}" > .en
 
 ######## WebUI backend ########
 # LQ.AI: Digest-pinned for reproducible builds (#301). Bump the tag and digest together.
-FROM python:3.11-slim-bookworm@sha256:a36c24f9cbdf4fd0f52d67f0823eeac19c2028c637cecc392d97f980d4fec56b AS base
+FROM python:3.14-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56 AS base
 
 # Use args
 ARG USE_CUDA
