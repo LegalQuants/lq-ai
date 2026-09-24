@@ -8,6 +8,7 @@ The Compliance Alignment Pack is a set of documents mapping LQ.AI's design, arch
 
 | Framework | Status | Document |
 |---|---|---|
+| **NIST AI RMF 1.0** (AI 100-1) + **Generative AI Profile** (AI 600-1) | Drafted — self-assessment, pending AI-governance-professional review | [`nist-ai-rmf-profile.md`](nist-ai-rmf-profile.md) |
 | **SOC 2 (Type II)** — Trust Services Criteria | Stub | `soc2-alignment.md` (M1) |
 | **ISO/IEC 27001:2022** — Information Security Management | Stub | `iso27001-alignment.md` (M1) |
 | **ISO/IEC 42001:2023** — AI Management Systems | Stub | `iso42001-alignment.md` (M2) |
@@ -16,6 +17,8 @@ The Compliance Alignment Pack is a set of documents mapping LQ.AI's design, arch
 | **FedRAMP Moderate** | Stub | `fedramp-alignment.md` (M2) |
 
 Each document follows a consistent format: control reference, applicability to LQ.AI deployments, the project's design or operational response, and pointers to the relevant PRD sections, code modules, or operational guidance.
+
+The NIST AI RMF profile is the first shipped document in the pack. It extends the format below with a per-row **ownership class** (structural-in-code / operator-configured / operator-only / shared / residual / out-of-scope) and a per-row **evidence path** into the repository (or an explicit "no evidence yet" state with the deferral reference); subsequent alignment documents adopt the same two columns.
 
 ## Format
 
