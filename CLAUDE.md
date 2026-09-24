@@ -133,7 +133,7 @@ These paths require security review per [.github/CODEOWNERS](.github/CODEOWNERS)
 - `.github/workflows/**` — CI; supply-chain attack surface.
 - Any change touching authentication, authorization, audit logging, or cryptographic implementations.
 
-If you are working in any of these areas, your PR is auto-routed to security reviewers and held until they approve.
+If you are working in any of these areas, your PR is routed by CODEOWNERS to the maintainer team and reviewed against the security-path checklist. Note the honest limit: the project has no separate security team yet, so "security review" here means maintainer review with that checklist applied. A dedicated security team returns to CODEOWNERS when it is staffed (see [ADR 0034](docs/adr/0034-review-capacity-and-reviewer-roles.md)).
 
 **Vulnerabilities** are not contributed via PR. They go through the disclosure process in [SECURITY.md](SECURITY.md).
 

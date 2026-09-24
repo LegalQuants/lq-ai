@@ -51,6 +51,109 @@ Items that touch the Inference Gateway, authentication, audit logging, or crypto
 
 ---
 
+## Path to 1.0
+
+> **Canon:** [ADR 0029](adr/0029-definition-of-1.0.md) defines 1.0;
+> [ADR 0030](adr/0030-pacing-1.0-preconditions-and-named-trains.md) paces it. This section is a
+> navigation aid — where a row here disagrees with an ADR, the ADR wins.
+
+**What 1.0 is.** An operator-trust milestone with a short feature-completion list, not a feature
+milestone:
+
+> At 1.0, every surface an operator can reach is either complete or explicitly labeled
+> experimental, and every promise the documentation makes is either enforced in CI or verifiable
+> by the operator.
+
+**What 1.0 is not.** It is not dated. The 2026-09 member survey declined to set a date until the
+review-capacity constraint is addressed, so [ADR 0030](adr/0030-pacing-1.0-preconditions-and-named-trains.md)
+replaced the date with three measurable preconditions and a dated checkpoint at the first
+committee call of 2027. **Criteria govern the tag; preconditions govern the date.** On current
+arithmetic the earliest possible tag is May 2027 — an earliest, not a target.
+
+### The gate
+
+| Row | Gate |
+|---|---|
+| **F1** | Matter-intake UI for governed agentic matter sessions |
+| **F2** | Slack/Teams `/lq` + `/lq ask` flows (DE-288), verified live (DE-312) |
+| **F3** | Word add-in slice — skills on selection/document with tracked-changes redlines ([ADR 0032](adr/0032-word-add-in-1.0-slice.md)) |
+| **H1** | All seven open Medium findings of #288 closed |
+| **H2** | Every open Low/Info finding closed or risk-accepted in writing ([register](security/risk-acceptance-register.md)) |
+| **H3** | M4-D2 acceptance lap complete |
+| **D1** | Coverage gate enforced in CI |
+| **D2** | Cypress deterministic track runs on PRs touching `web/` |
+| **D3** | `docs/test-strategy.md` exists with the E2E coverage matrix |
+| **D4** | Acceptance tests run for the 10 starter skills against a real corpus (DE-051/DE-236) |
+| **P1** | Procurement-Readiness Pack (SIG Lite + CAIQ Lite + cover letter) |
+| **R1** | Desktop launcher defaults to a pinned image set |
+| **R2** | Docs reconciliation at tag time |
+| **R3** | Post-1.0 version semantics published |
+
+**Cut from the gate:** Contract Repository (PRD §3.16) — re-scoped to post-1.0 by ADR 0029
+decision 7 (survey: 0 keep · 6 cut · 3 blank).
+
+### The three preconditions for setting a date
+
+1. **Bus factor ≥ 2** — a second maintainer with merge *and* security-review authority, active
+   ≥ 1 quarter, measured as activity rather than team membership.
+2. **An attorney pool ≥ 2**, with at least one completed D4 acceptance batch behind it.
+3. **Median PR first-response < 7 days**, sustained for a quarter.
+
+[ADR 0034](adr/0034-review-capacity-and-reviewer-roles.md) is the machinery that makes these
+reachable — the trusted-reviewer rung, published promotion criteria, the attorney pool, and a
+review SLA that is measured rather than merely asserted. **Review help is the highest-value
+contribution to this project right now.**
+
+### The four trains
+
+Named milestones with target months, decoupled from version numbers — ADR 0025 computes
+`vX.Y.Z` from what lands on `main`, so a train promises a theme and a date, never a number.
+**Dates hold, content moves:** a train ships what is green on its date; what is not rolls forward
+visibly.
+
+| Train | Due | Theme | Carries |
+|---|---|---|---|
+| **Enforced** | 2026-10-31 | What the docs promise, CI enforces | D1, D2, D3, P1, F1, F2, R1; H1 fix shapes decided; first D4 batch; the ratification series on `main` |
+| **Honest Documents** | 2026-12-31 | Documents never fail silently | [ADR 0033](adr/0033-document-pipeline-honesty-and-ocr.md) — the honesty audit, OCR T1+T2 (DE-320/DE-387), the local embedding path (DE-355), chat attachments; remaining Mediums; the F3 lane decision |
+| *(checkpoint)* | first committee call of 2027 | Preconditions read against measured data | Met → the committee sets the date. Unmet → narrower scope or slower trains, decided publicly |
+| **First Run** | 2027-02-28 | The first run doesn't fight you | Lite mode (DE-388), the docs site, the F3 build if owned, desktop first-run, D4 batches 2–3, SSO/OIDC scoping (DE-390) |
+| **Candidate** | 2027-04-30 | The acceptance lap | H3, R2, the H2 register complete, D4 complete, every F row green or labeled experimental |
+
+**Capacity, honestly.** The kept gate is 90–145 person-days; the vote-sequenced additions add
+≈ 30–55 more; observed throughput is ≈ 16 person-days/month, maintainer-only. The trains hold
+their dates only with a second reviewer and one or two champion-carried lanes — which is precisely
+what the preconditions require and ADR 0034 recruits for. Absent that, trains ship thinner, on
+time, and say so.
+
+## After 1.0
+
+Ordering recorded by [ADR 0029](adr/0029-definition-of-1.0.md) from the member survey's post-1.0
+column, so that "post-1.0" is a queue rather than a wastebasket:
+
+| Votes | Item |
+|---|---|
+| 6 | Evaluation harness (DE-237) |
+| 6 | Per-framework compliance packs (SOC 2, ISO 27001, ISO 42001, GDPR, HIPAA, FedRAMP) |
+| 5 | DOCX tracked changes ([ADR 0017](adr/0017-docx-ingest-via-pandoc.md) governs; #272, #315) |
+| 5 | Email intake |
+| 5 | Principles-as-tests / review assistance (DE-391) |
+| 5 | Jurisdiction packs ([ADR 0024](adr/0024-jurisdiction-and-practice-area-expansion.md)) |
+| 5 | Practice-management connectors (#529) |
+| 4 | The full Word add-in surface (DE-287 beyond the F3 slice) |
+| 4 | Litigation carve-in |
+
+**Proposal-first, not scheduled:** Matter Memory (survey: 5 for 1.0, 2 post-1.0) goes to a
+mini-PRD in `docs/proposals/` before any ADR, because shipping it means amending
+[ADR 0013](adr/0013-autonomous-layer-design-influences.md) D5 — the accepted rule that the
+agent may *propose* promoting a precedent into a Project's context but never writes Project
+context directly. Five votes on an XL hypothesis mean "take this seriously," not "start coding."
+
+**Not on the roadmap:** Contract Repository (PRD §3.16) — post-1.0, no owner, not scheduled;
+headless/API-only support — acknowledged but not supported
+([ADR 0031](adr/0031-headless-api-only-use.md)), with two named revisit triggers.
+
+---
+
 ## 1. Active milestone work — fiduciary-grade milestone punch list + M4 close-out
 
 M4 (the Autonomous Layer), the legal-research + connectors (MCP) milestone that shipped after it, and the fiduciary-grade agentic legal work milestone that shipped after that — the Citation Ledger + fiduciary gate, governed agentic matter sessions, three free authority sources (GovInfo, SEC EDGAR, EUR-Lex), and the validity/treatment layer (ADR [0018](adr/0018-citation-ledger-and-fiduciary-grade-output.md)–[0021](adr/0021-content-source-registry-and-free-source-expansion.md)) — have all shipped. See [HONEST-STATE.md §5.6](HONEST-STATE.md#56-fiduciary-grade-agentic-legal-work-gateway-brokered-shipped-after-legal-research--mcp) for the shipped catalog and its honest caveats. What remains open: the fiduciary-grade milestone's own punch list (the EUR-Lex and chat/autonomous-parity DEs below, plus a dedicated matter-intake UI), the M4 acceptance lap, and the Contract Repository capability that lives alongside the Autonomous Layer in M4 scope.
@@ -349,7 +452,7 @@ These appear in PRD §9 but the project does not currently plan to implement the
 
 1. Find an item that matches your skills and bandwidth using the labels above.
 2. Open a GitHub issue with the item ID (e.g., "DE-103" or "1.3 Contract Repository") as the title.
-3. Comment "I'd like to take this." A maintainer responds within ~7 days.
+3. Comment "I'd like to take this." A maintainer responds per the target in [Review timelines](../CONTRIBUTING.md#review-timelines).
 4. Follow the source mini-PRD (where one exists) or the PRD §9 entry for scope + acceptance criteria.
 5. Engineering process: [`CONTRIBUTING.md`](../CONTRIBUTING.md). Skill content: [`skills/CONTRIBUTING.md`](../skills/CONTRIBUTING.md) — the practicing-attorney attestation applies.
 

@@ -102,7 +102,7 @@ For features not on the deferred-enhancements list, please file an issue describ
 4. **Update documentation** — the PRD, README, skill-authoring guide, or capability docs as relevant. If your change affects user-facing behavior, the docs need to reflect it.
 5. **Sign your commits** per the DCO requirement (see [Sign-off](#sign-off-developer-certificate-of-origin) below). PRs without DCO sign-off cannot be merged.
 6. **Open the PR** with a description that explains what changed, why, and how to verify. Link to any relevant issue or DE-### entry in the PRD.
-7. **Respond to review** — maintainers will review within ~5 business days for most PRs, faster for security or bug fixes. Substantive review feedback usually requires changes; small style nits can be deferred to follow-ups.
+7. **Respond to review** — see [Review timelines](#review-timelines) for what to expect and how the queue is prioritized. Substantive review feedback usually requires changes; small style nits can be deferred to follow-ups.
 8. **Current PR CI must pass** — API runs `uv lock --check`, `ruff check`, and
    `ruff format --check` for `api/` and `scripts/`, `mypy app`, and
    `pytest -n auto -q` with pgvector Postgres (each xdist worker gets its own
@@ -389,10 +389,45 @@ Reviewers will look for:
 Reviewers are also expected to be:
 
 - **Constructive** — feedback is about the work, not the contributor. Suggest specific changes rather than abstract complaints.
-- **Timely** — initial review within 5 business days for most PRs; follow-up review within 2 days. Communicate if you cannot meet that timeline.
+- **Timely** — work the queue in the published order and communicate when you cannot meet the current target. See [Review timelines](#review-timelines); the target is stated alongside the measured median rather than on its own.
 - **Decisive** — approve, request changes, or comment with a specific question. Do not leave PRs in limbo.
 
-If a PR has been waiting for review longer than the timeline above, please ping a maintainer in the PR or in `#contributors` on Discord.
+If a PR has been waiting longer than the current target, ping a maintainer on the PR itself, or raise it in GitHub Discussions.
+
+---
+
+## Review timelines
+
+Review capacity is this project's binding constraint, and this section states it honestly rather
+than publishing a target the project does not meet. Adopted by
+[ADR 0034](docs/adr/0034-review-capacity-and-reviewer-roles.md).
+
+**The target.** First substantive maintainer response within **7 days** of a PR being opened,
+faster for security fixes and small bug fixes with regression tests.
+
+**The measurement.** The median time to first response is measured over all PRs opened in the
+period, excluding automated dependency bumps, and published at the committee's checkpoints
+alongside the target. When the measured median exceeds the target, the number is published anyway
+— that is the point of measuring it. Sustaining a median under 7 days for a quarter is one of the
+three preconditions for setting a 1.0 date
+([ADR 0030](docs/adr/0030-pacing-1.0-preconditions-and-named-trains.md)).
+
+**Review slots.** Maintainers work the open queue in a recurring weekly block, in this priority
+order:
+
+1. Ratification documents (ADRs and governance amendments awaiting the committee).
+2. PRs on the 1.0 gate, labelled `road-to-1.0`.
+3. Follow-ups for contributors who have volunteered for a lane, and attorney acceptance runs.
+4. Everything else, oldest first.
+
+If your PR sits outside these and has waited, say so on the thread — an unreviewed PR that nobody
+has flagged is easy to lose.
+
+**Helping with the constraint.** Review help is the most valuable contribution to this project
+right now. [GOVERNANCE.md](GOVERNANCE.md#roles) describes the **trusted reviewer** rung — review
+authority without merge authority — and
+[GOVERNANCE.md](GOVERNANCE.md#becoming-a-maintainer) publishes the criteria for promotion to
+maintainer. Both are open; nominations go through any maintainer.
 
 ---
 
@@ -412,7 +447,7 @@ By contributing to LQ.AI, you agree that your contributions will be licensed und
 
 ## Questions?
 
-- **General questions** → GitHub Discussions or `#contributors` on Discord.
+- **General questions** → GitHub Discussions.
 - **Bug reports** → GitHub Issues with the `bug` label and a reproduction case.
 - **Feature requests** → GitHub Issues with the `enhancement` label; reference the [PRD §9 Deferred Enhancements](docs/PRD.md#9-deferred-enhancements-and-identified-future-work) entry if one exists.
 - **Security** → security@legalquants.com (see [`SECURITY.md`](SECURITY.md)).
