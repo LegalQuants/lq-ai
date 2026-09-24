@@ -65,10 +65,14 @@ from app.audit import audit_action
 from app.clients.gateway import GatewayClient, get_gateway_client
 from app.db.session import get_db
 from app.models.document import Document, DocumentChunk
-from app.models.tabular import TabularExecution
+from app.models.tabular import TabularBulkOp, TabularExecution
 from app.schemas.tabular import (
     Citation,
     ColumnSpec,
+    TabularBulkOpPreviewRequest,
+    TabularBulkOpPreviewResponse,
+    TabularBulkOpRequest,
+    TabularBulkOpResponse,
     TabularExecutionCreate,
     TabularExecutionResponse,
     TabularExecutionSummary,
@@ -77,8 +81,9 @@ from app.schemas.tabular import (
     TabularResults,
 )
 from app.skills.registry import MutableSkillRegistry
+from app.tabular.bulk_ops import estimate_bulk_op_cost
 from app.tabular.cost import estimate_tabular_execution_cost
-from app.workers.queue import enqueue_tabular_execution_job
+from app.workers.queue import enqueue_tabular_bulk_op_job, enqueue_tabular_execution_job
 
 logger = logging.getLogger(__name__)
 
@@ -481,6 +486,183 @@ async def cancel_tabular_execution(
 
 
 # ---------------------------------------------------------------------------
+# Bulk operations (DE-304 / ADR 0026)
+# ---------------------------------------------------------------------------
+
+
+def _bulk_op_grid_row_count(row: TabularExecution) -> int:
+    """Number of grid rows in the execution's persisted results."""
+
+    rows = (row.results or {}).get("rows")
+    return len(rows) if isinstance(rows, list) else 0
+
+
+async def _load_bulk_op_target(
+    db: AsyncSession,
+    *,
+    execution_id: uuid.UUID,
+    user: ActiveUser,
+) -> TabularExecution:
+    """Load + validate the parent execution for a bulk op.
+
+    Ownership follows :func:`_load_caller_execution` (missing /
+    cross-user / soft-deleted collapse into 404). The execution must be
+    ``status='completed'`` — bulk-operating a partial grid would
+    mislead (same 409 posture as export; ADR 0026 D2).
+    """
+
+    row = await _load_caller_execution(db, execution_id=execution_id, user=user)
+    if row.status != "completed":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"execution must be in status='completed' for bulk operations "
+                f"(current status: {row.status!r})"
+            ),
+        )
+    return row
+
+
+def _validate_bulk_op_params(
+    row: TabularExecution,
+    *,
+    kind: str,
+    column_name: str | None,
+) -> dict[str, str | None]:
+    """Validate op parameters against the execution's snapshotted spec.
+
+    ``summarize_column`` requires ``column_name`` to name a column of
+    the *snapshotted* spec (Decision C-1: the op targets what was
+    actually run, not what the skill currently says). Returns the
+    ``params`` payload to snapshot onto the bulk-op row.
+    """
+
+    if kind != "summarize_column":
+        return {}
+    known = {str(col.get("name")) for col in row.columns}
+    if not column_name or column_name not in known:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"summarize_column requires column_name to be one of the "
+                f"execution's columns (got {column_name!r})"
+            ),
+        )
+    return {"column_name": column_name}
+
+
+@router.post(
+    "/tabular/executions/{execution_id}/bulk-ops/preview-cost",
+    response_model=TabularBulkOpPreviewResponse,
+    summary="Preview the cost of a proposed bulk operation.",
+)
+async def preview_tabular_bulk_op_cost(
+    execution_id: uuid.UUID,
+    body: TabularBulkOpPreviewRequest,
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> TabularBulkOpPreviewResponse:
+    """Synchronous cost preview — no bulk-op row is created.
+
+    Mirrors ``POST /tabular/preview-cost`` (Decision C-5): the UI calls
+    this before arming the confirmation gate. Calls count is one per
+    grid row for ``redline_rows``, one total for ``summarize_column``;
+    per-call cost is the rolling average over recent
+    ``purpose='tabular_bulk_op'`` routing-log rows (conservative
+    cold-start default before calibration; ADR 0026 D3).
+    """
+
+    row = await _load_bulk_op_target(db, execution_id=execution_id, user=user)
+    _validate_bulk_op_params(row, kind=body.kind, column_name=body.column_name)
+    return await estimate_bulk_op_cost(
+        db,
+        kind=body.kind,
+        n_rows=_bulk_op_grid_row_count(row),
+    )
+
+
+@router.post(
+    "/tabular/executions/{execution_id}/bulk-ops",
+    response_model=TabularBulkOpResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Start a bulk operation over a completed tabular execution.",
+)
+async def create_tabular_bulk_op(
+    execution_id: uuid.UUID,
+    body: TabularBulkOpRequest,
+    user: ActiveUser,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> TabularBulkOpResponse:
+    """Create a ``tabular_bulk_ops`` row at ``pending`` and enqueue the
+    ARQ job on the shared playbook queue (Decision C-3). Returns 202;
+    the detail view polls ``GET /tabular/executions/{id}`` — the
+    ``bulk_ops`` array embedded there is the read-side (ADR 0026 D2).
+
+    ``confirmed_cost_usd`` is the echo of the preview response —
+    persisted for audit; the $1.00 confirmation gate stays UI-side,
+    exactly like ``POST /tabular/execute`` (Decision C-5).
+
+    Per ADR 0026 D4, batch "completed" does NOT mean every item
+    succeeded — failed items are persisted per-row and rendered as
+    failures in the report.
+    """
+
+    row = await _load_bulk_op_target(db, execution_id=execution_id, user=user)
+    params = _validate_bulk_op_params(row, kind=body.kind, column_name=body.column_name)
+    if _bulk_op_grid_row_count(row) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="execution has no results grid rows to bulk-operate on",
+        )
+
+    bulk_op = TabularBulkOp(
+        execution_id=row.id,
+        user_id=user.id,
+        kind=body.kind,
+        status="pending",
+        params=params,
+        confirmed_cost_usd=body.confirmed_cost_usd,
+    )
+    db.add(bulk_op)
+    await db.flush()
+
+    await audit_action(
+        db,
+        user_id=user.id,
+        action="tabular.bulk_op_started",
+        resource_type="tabular_bulk_op",
+        resource_id=str(bulk_op.id),
+        request=request,
+        details={
+            "execution_id": str(row.id),
+            "kind": body.kind,
+            "column_name": body.column_name,
+            "confirmed_cost_usd": (
+                str(body.confirmed_cost_usd) if body.confirmed_cost_usd is not None else None
+            ),
+        },
+    )
+    await db.commit()
+    await db.refresh(bulk_op)
+
+    enqueued = await enqueue_tabular_bulk_op_job(bulk_op.id)
+    logger.info(
+        "tabular_bulk_op_started",
+        extra={
+            "event": "tabular_bulk_op_started",
+            "user_id": str(user.id),
+            "execution_id": str(row.id),
+            "bulk_op_id": str(bulk_op.id),
+            "kind": body.kind,
+            "enqueued": enqueued,
+        },
+    )
+
+    return TabularBulkOpResponse.model_validate(bulk_op)
+
+
+# ---------------------------------------------------------------------------
 # Export (M3-C4a — XLSX + CSV)
 # ---------------------------------------------------------------------------
 
@@ -742,17 +924,32 @@ async def _load_document_names(
     return {row.id: row.filename for row in rows}
 
 
+async def _load_bulk_ops(db: AsyncSession, execution_id: uuid.UUID) -> list[TabularBulkOpResponse]:
+    """Load an execution's bulk ops, recent-first (DE-304 / ADR 0026 D2)."""
+
+    stmt = (
+        select(TabularBulkOp)
+        .where(TabularBulkOp.execution_id == execution_id)
+        .order_by(TabularBulkOp.created_at.desc())
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    return [TabularBulkOpResponse.model_validate(op) for op in rows]
+
+
 async def _to_response(db: AsyncSession, row: TabularExecution) -> TabularExecutionResponse:
     """Convert the ORM row to the response wire shape.
 
     Async because the response includes a ``document_names`` field
     that requires a join on ``files`` — keeping the join inside the
     response builder means every endpoint that returns a single
-    execution gets the names without duplicating the query."""
+    execution gets the names without duplicating the query. The
+    ``bulk_ops`` array (DE-304) is loaded here for the same reason —
+    the detail endpoint the UI polls is the bulk-op read-side."""
 
     document_ids = list(row.document_ids)
     name_by_id = await _load_document_names(db, document_ids)
     document_names = [name_by_id.get(did, "") for did in document_ids]
+    bulk_ops = await _load_bulk_ops(db, row.id)
     return TabularExecutionResponse.model_validate(
         {
             "id": row.id,
@@ -770,6 +967,7 @@ async def _to_response(db: AsyncSession, row: TabularExecution) -> TabularExecut
             "created_at": row.created_at,
             "started_at": row.started_at,
             "completed_at": row.completed_at,
+            "bulk_ops": bulk_ops,
         }
     )
 

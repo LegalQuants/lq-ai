@@ -6,12 +6,16 @@
 	import {
 		getTabularExecution,
 		cancelTabularExecution,
-		exportTabularExecution
+		exportTabularExecution,
+		previewTabularBulkOpCost,
+		createTabularBulkOp
 	} from '$lib/lq-ai/api/tabular';
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
 	import TabularGrid from '$lib/lq-ai/components/TabularGrid.svelte';
 	import TabularCitationModal from '$lib/lq-ai/components/TabularCitationModal.svelte';
 	import type {
+		TabularBulkOpKind,
+		TabularBulkOpPreviewResponse,
 		TabularCellResult,
 		TabularExecution
 	} from '$lib/lq-ai/types';
@@ -20,9 +24,14 @@
 		isTerminalStatus,
 		progressFraction,
 		formatProgress,
+		bulkOpKindLabel,
+		bulkOpStatusSummary,
+		bulkOpItemHeading,
+		hasActiveBulkOp,
 		TABULAR_POLL_INTERVAL_MS
 	} from './page-helpers';
 	import { formatTabularStatus, formatCostUsd, skillNameDisplay } from '../page-helpers';
+	import { requiresCostConfirmation } from '../new/page-helpers';
 
 	let execution: TabularExecution | null = null;
 	let loading = true;
@@ -82,7 +91,10 @@
 
 	function scheduleNextPoll(): void {
 		if (!execution) return;
-		if (isTerminalStatus(execution.status)) {
+		// Keep polling while the execution runs OR any bulk op is
+		// non-terminal — the detail response's `bulk_ops` array is the
+		// bulk-op read-side (DE-304 / ADR 0026 D2).
+		if (isTerminalStatus(execution.status) && !hasActiveBulkOp(execution.bulk_ops)) {
 			if (pollTimer) {
 				clearTimeout(pollTimer);
 				pollTimer = null;
@@ -142,6 +154,67 @@
 			exportError = err instanceof LQAIApiError ? err.message : 'Export failed.';
 		} finally {
 			exportingFormat = null;
+		}
+	}
+
+	// DE-304 / ADR 0026 — bulk operations.
+	let bulkOpKind: TabularBulkOpKind = 'redline_rows';
+	let bulkOpColumn = '';
+	let bulkOpPreview: TabularBulkOpPreviewResponse | null = null;
+	let bulkOpPreviewing = false;
+	let bulkOpStarting = false;
+	let bulkOpConfirmed = false;
+	let bulkOpError: string | null = null;
+
+	$: columnNames = execution?.columns.map((c) => c.name) ?? [];
+	$: if (!bulkOpColumn && columnNames.length > 0) bulkOpColumn = columnNames[0];
+	$: bulkOpNeedsConfirm = bulkOpPreview
+		? requiresCostConfirmation(bulkOpPreview.estimated_cost_usd)
+		: false;
+	$: bulkOpRunnable =
+		bulkOpPreview !== null && !bulkOpStarting && (!bulkOpNeedsConfirm || bulkOpConfirmed);
+
+	function resetBulkOpPreview(): void {
+		bulkOpPreview = null;
+		bulkOpConfirmed = false;
+		bulkOpError = null;
+	}
+
+	async function previewBulkOp(): Promise<void> {
+		if (!executionId || bulkOpPreviewing) return;
+		bulkOpPreviewing = true;
+		bulkOpError = null;
+		try {
+			bulkOpPreview = await previewTabularBulkOpCost(executionId, {
+				kind: bulkOpKind,
+				column_name: bulkOpKind === 'summarize_column' ? bulkOpColumn : null
+			});
+			bulkOpConfirmed = false;
+		} catch (err) {
+			bulkOpError = err instanceof LQAIApiError ? err.message : 'Cost preview failed.';
+		} finally {
+			bulkOpPreviewing = false;
+		}
+	}
+
+	async function startBulkOp(): Promise<void> {
+		if (!executionId || !bulkOpRunnable || !bulkOpPreview) return;
+		bulkOpStarting = true;
+		bulkOpError = null;
+		try {
+			await createTabularBulkOp(executionId, {
+				kind: bulkOpKind,
+				column_name: bulkOpKind === 'summarize_column' ? bulkOpColumn : null,
+				confirmed_cost_usd: bulkOpPreview.estimated_cost_usd
+			});
+			resetBulkOpPreview();
+			// Re-fetch immediately so the new pending op appears and the
+			// poll loop re-arms off its non-terminal status.
+			await loadOnce();
+		} catch (err) {
+			bulkOpError = err instanceof LQAIApiError ? err.message : 'Failed to start bulk operation.';
+		} finally {
+			bulkOpStarting = false;
 		}
 	}
 
@@ -267,6 +340,136 @@
 			/>
 		{:else}
 			<div class="lq-tabres__state">No grid to render (empty execution).</div>
+		{/if}
+
+		<!-- Bulk operations (DE-304 / ADR 0026) — completed grids only. -->
+		{#if execution.status === 'completed'}
+			<section class="lq-bulkops" data-testid="lq-bulkops">
+				<h2>Bulk operations</h2>
+				<p class="lq-bulkops__hint">
+					Run a follow-on operation over this grid. Outputs are drafts for attorney review, not
+					final work product.
+				</p>
+				<div class="lq-bulkops__form">
+					<label class="lq-bulkops__radio">
+						<input
+							type="radio"
+							name="bulk-op-kind"
+							value="redline_rows"
+							bind:group={bulkOpKind}
+							on:change={resetBulkOpPreview}
+							data-testid="lq-bulkops-kind-redline"
+						/>
+						Redline per row
+					</label>
+					<label class="lq-bulkops__radio">
+						<input
+							type="radio"
+							name="bulk-op-kind"
+							value="summarize_column"
+							bind:group={bulkOpKind}
+							on:change={resetBulkOpPreview}
+							data-testid="lq-bulkops-kind-summarize"
+						/>
+						Summarize a column
+					</label>
+					{#if bulkOpKind === 'summarize_column'}
+						<select
+							bind:value={bulkOpColumn}
+							on:change={resetBulkOpPreview}
+							data-testid="lq-bulkops-column"
+							aria-label="Column to summarize"
+						>
+							{#each columnNames as name}
+								<option value={name}>{name}</option>
+							{/each}
+						</select>
+					{/if}
+					<button
+						type="button"
+						class="lq-bulkops__btn"
+						data-testid="lq-bulkops-preview"
+						on:click={previewBulkOp}
+						disabled={bulkOpPreviewing}
+					>
+						{bulkOpPreviewing ? 'Estimating…' : 'Preview cost'}
+					</button>
+				</div>
+				{#if bulkOpPreview}
+					<div class="lq-bulkops__preview" data-testid="lq-bulkops-preview-result">
+						<span>
+							{bulkOpPreview.calls_count} call(s) · est.
+							{formatCostUsd(bulkOpPreview.estimated_cost_usd)}
+						</span>
+						{#if bulkOpNeedsConfirm}
+							<label class="lq-bulkops__confirm">
+								<input
+									type="checkbox"
+									bind:checked={bulkOpConfirmed}
+									data-testid="lq-bulkops-confirm"
+								/>
+								I confirm this estimated cost.
+							</label>
+						{/if}
+						<button
+							type="button"
+							class="lq-bulkops__btn lq-bulkops__btn--run"
+							data-testid="lq-bulkops-run"
+							on:click={startBulkOp}
+							disabled={!bulkOpRunnable}
+						>
+							{bulkOpStarting ? 'Starting…' : `Run ${bulkOpKindLabel(bulkOpKind)}`}
+						</button>
+					</div>
+				{/if}
+				{#if bulkOpError}
+					<div class="lq-tabres__error" role="alert" data-testid="lq-bulkops-error">
+						{bulkOpError}
+					</div>
+				{/if}
+
+				{#if (execution.bulk_ops ?? []).length > 0}
+					<ul class="lq-bulkops__list" data-testid="lq-bulkops-list">
+						{#each execution.bulk_ops ?? [] as op (op.id)}
+							<li class="lq-bulkops__op" data-status={op.status}>
+								<div class="lq-bulkops__op-head">
+									<strong>{bulkOpKindLabel(op.kind)}</strong>
+									<span
+										class="lq-bulkops__op-status"
+										data-failed={op.status === 'failed' ||
+											(op.results?.summary.failed_items ?? 0) > 0}
+										data-testid="lq-bulkops-op-status"
+									>
+										{bulkOpStatusSummary(op)}
+									</span>
+								</div>
+								{#if op.status === 'failed' && op.error_text}
+									<pre class="lq-tabres__banner-error">{op.error_text}</pre>
+								{/if}
+								{#if op.results}
+									{#each op.results.items as item, i (i)}
+										<details class="lq-bulkops__item" data-status={item.status}>
+											<summary>
+												{bulkOpItemHeading(op, item)}
+												{#if item.status === 'failed'}
+													<span class="lq-bulkops__item-failed" data-testid="lq-bulkops-item-failed"
+														>failed</span
+													>
+												{/if}
+											</summary>
+											{#if item.status === 'failed'}
+												<pre class="lq-tabres__banner-error">{item.error ?? 'unknown error'}</pre>
+											{:else}
+												<div class="lq-bulkops__output">{item.output_text}</div>
+											{/if}
+										</details>
+									{/each}
+								{/if}
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</section>
 		{/if}
 	{/if}
 
@@ -420,5 +623,115 @@
 		border: 1px solid var(--lq-error-border, var(--lq-border));
 		border-radius: 0.375rem;
 		color: var(--lq-error, inherit);
+	}
+
+	/* Bulk operations (DE-304) */
+	.lq-bulkops {
+		padding: 1rem;
+		background: var(--lq-inset);
+		border: 1px solid var(--lq-border);
+		border-radius: 0.5rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+	.lq-bulkops h2 {
+		margin: 0;
+		font-size: 1.125rem;
+	}
+	.lq-bulkops__hint {
+		margin: 0;
+		font-size: 0.8125rem;
+		color: var(--lq-text-secondary);
+	}
+	.lq-bulkops__form {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+	}
+	.lq-bulkops__radio {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.375rem;
+		font-size: 0.875rem;
+	}
+	.lq-bulkops__btn {
+		padding: 0.375rem 0.75rem;
+		border: 1px solid var(--lq-border);
+		border-radius: 0.375rem;
+		background: var(--lq-surface);
+		font-size: 0.8125rem;
+		cursor: pointer;
+	}
+	.lq-bulkops__btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+	.lq-bulkops__btn--run {
+		font-weight: 600;
+	}
+	.lq-bulkops__preview {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+		font-size: 0.875rem;
+	}
+	.lq-bulkops__confirm {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.375rem;
+		font-size: 0.8125rem;
+	}
+	.lq-bulkops__list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+	.lq-bulkops__op {
+		padding: 0.75rem;
+		background: var(--lq-surface);
+		border: 1px solid var(--lq-border);
+		border-radius: 0.375rem;
+	}
+	.lq-bulkops__op-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+	}
+	.lq-bulkops__op-status {
+		font-size: 0.8125rem;
+		color: var(--lq-text-secondary);
+	}
+	.lq-bulkops__op-status[data-failed='true'] {
+		color: var(--lq-error, #b91c1c);
+		font-weight: 600;
+	}
+	.lq-bulkops__item {
+		margin-top: 0.5rem;
+		border-top: 1px solid var(--lq-border);
+		padding-top: 0.5rem;
+		font-size: 0.875rem;
+	}
+	.lq-bulkops__item summary {
+		cursor: pointer;
+	}
+	.lq-bulkops__item-failed {
+		margin-left: 0.5rem;
+		color: var(--lq-error, #b91c1c);
+		font-weight: 600;
+		font-size: 0.75rem;
+		text-transform: uppercase;
+	}
+	.lq-bulkops__output {
+		margin-top: 0.5rem;
+		white-space: pre-wrap;
+		font-size: 0.8125rem;
+		line-height: 1.5;
 	}
 </style>

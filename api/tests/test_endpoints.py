@@ -229,6 +229,9 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("POST", "/api/v1/tabular/executions/{execution_id}/cancel"),
     # M3-C4a — XLSX/CSV export.
     ("GET", "/api/v1/tabular/executions/{execution_id}/export"),
+    # DE-304 / ADR 0026 — bulk operations (preview + create).
+    ("POST", "/api/v1/tabular/executions/{execution_id}/bulk-ops/preview-cost"),
+    ("POST", "/api/v1/tabular/executions/{execution_id}/bulk-ops"),
     # M3-B1 — Word add-in admin manifest generation
     ("GET", "/api/v1/admin/word-addin/manifest"),
     # M3-B8 — Word add-in version handshake (unauthenticated)

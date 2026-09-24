@@ -14,9 +14,14 @@ import {
 	formatProgress,
 	cellRenderState,
 	confidenceChipLabel,
+	bulkOpKindLabel,
+	bulkOpStatusSummary,
+	bulkOpItemHeading,
+	hasActiveBulkOp,
+	isBulkOpActive,
 	TABULAR_POLL_INTERVAL_MS
 } from '../page-helpers';
-import type { TabularCellResult, TabularResults } from '$lib/lq-ai/types';
+import type { TabularBulkOp, TabularCellResult, TabularResults } from '$lib/lq-ai/types';
 
 function cell(over: Partial<TabularCellResult> = {}): TabularCellResult {
 	return {
@@ -130,6 +135,114 @@ describe('tabular result page-helpers', () => {
 			expect(confidenceChipLabel('medium')).toBe('Med');
 			expect(confidenceChipLabel('low')).toBe('Low');
 			expect(confidenceChipLabel('failed')).toBe('Failed');
+		});
+	});
+
+	// ----- Bulk operations (DE-304 / ADR 0026) -----
+
+	function bulkOp(over: Partial<TabularBulkOp> = {}): TabularBulkOp {
+		return {
+			id: 'op-1',
+			execution_id: 'exec-1',
+			user_id: 'u-1',
+			kind: 'redline_rows',
+			status: 'completed',
+			params: {},
+			results: {
+				schema_version: 'de304-v1',
+				items: [],
+				summary: { total_items: 0, failed_items: 0 }
+			},
+			confirmed_cost_usd: null,
+			cost_actual_usd: null,
+			error_text: null,
+			created_at: '2026-07-25T00:00:00Z',
+			started_at: null,
+			completed_at: null,
+			...over
+		};
+	}
+
+	describe('bulkOpKindLabel', () => {
+		it('labels the two v1 kinds', () => {
+			expect(bulkOpKindLabel('redline_rows')).toBe('Redline report');
+			expect(bulkOpKindLabel('summarize_column')).toBe('Column memo');
+		});
+	});
+
+	describe('isBulkOpActive / hasActiveBulkOp', () => {
+		it('pending and running are active; completed/failed are not', () => {
+			expect(isBulkOpActive(bulkOp({ status: 'pending' }))).toBe(true);
+			expect(isBulkOpActive(bulkOp({ status: 'running' }))).toBe(true);
+			expect(isBulkOpActive(bulkOp({ status: 'completed' }))).toBe(false);
+			expect(isBulkOpActive(bulkOp({ status: 'failed' }))).toBe(false);
+		});
+
+		it('hasActiveBulkOp drives continued polling and tolerates undefined', () => {
+			expect(hasActiveBulkOp(undefined)).toBe(false);
+			expect(hasActiveBulkOp([])).toBe(false);
+			expect(hasActiveBulkOp([bulkOp({ status: 'completed' })])).toBe(false);
+			expect(hasActiveBulkOp([bulkOp({ status: 'completed' }), bulkOp({ status: 'running' })])).toBe(
+				true
+			);
+		});
+	});
+
+	describe('bulkOpStatusSummary', () => {
+		it('reports pending / running / failed states', () => {
+			expect(bulkOpStatusSummary(bulkOp({ status: 'pending' }))).toBe('Queued…');
+			expect(bulkOpStatusSummary(bulkOp({ status: 'running' }))).toBe('Running…');
+			expect(bulkOpStatusSummary(bulkOp({ status: 'failed' }))).toBe('Failed');
+		});
+
+		it('NEVER reads a partially-failed batch as clean (fail-closed honesty)', () => {
+			const partial = bulkOp({
+				results: {
+					schema_version: 'de304-v1',
+					items: [],
+					summary: { total_items: 3, failed_items: 1 }
+				}
+			});
+			expect(bulkOpStatusSummary(partial)).toBe('Completed — 1 of 3 item(s) FAILED');
+		});
+
+		it('reports clean completion with counts', () => {
+			const clean = bulkOp({
+				results: {
+					schema_version: 'de304-v1',
+					items: [],
+					summary: { total_items: 3, failed_items: 0 }
+				}
+			});
+			expect(bulkOpStatusSummary(clean)).toBe('Completed — 3 item(s)');
+			expect(bulkOpStatusSummary(bulkOp({ results: null }))).toBe('Completed');
+		});
+	});
+
+	describe('bulkOpItemHeading', () => {
+		const item = {
+			document_id: null,
+			document_name: null,
+			status: 'completed' as const,
+			output_text: 'memo',
+			error: null,
+			cost_usd: null
+		};
+
+		it('uses the document name for redline items', () => {
+			expect(bulkOpItemHeading(bulkOp(), { ...item, document_name: 'nda.pdf' })).toBe('nda.pdf');
+		});
+
+		it('labels the summarize memo by its column', () => {
+			const op = bulkOp({ kind: 'summarize_column', params: { column_name: 'Term' } });
+			expect(bulkOpItemHeading(op, item)).toBe('Memo — Term');
+		});
+
+		it('falls back honestly when metadata is missing', () => {
+			expect(bulkOpItemHeading(bulkOp({ kind: 'summarize_column', params: {} }), item)).toBe(
+				'Memo'
+			);
+			expect(bulkOpItemHeading(bulkOp(), item)).toBe('(unknown document)');
 		});
 	});
 });
