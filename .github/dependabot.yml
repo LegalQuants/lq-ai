@@ -158,21 +158,20 @@ updates:
         group-by: dependency-name
         patterns: ["*"]
 
-  # web/Dockerfile's base images (node, python) are pinned by digest like the
-  # rest, but web/ is the vendored OpenWebUI fork (ADR 0001) and its bases are
-  # upstream's choice. Routine currency arrives with the quarterly rebase, the
-  # same reasoning as the npm block above.
+  # web/Dockerfile's node and python bases are digest-pinned, even though web/
+  # is a vendored OpenWebUI fork (ADR 0001). Check for updates weekly and cap
+  # the open PR queue at four. Maintainers review base-image changes separately
+  # from the quarterly upstream rebase, including the tag and multi-arch digest.
   #
-  # Unlike npm, `open-pull-requests-limit: 0` here disables *all* updates for
-  # web/: the docker ecosystem has no Dependabot security-update channel, so no
-  # advisory PR will open either. A base-image security fix for web/ between
-  # rebases is a manual bump. The entry is kept so the coverage decision is
-  # visible and one line away from being switched on.
+  # Docker Dependabot PRs are scheduled version updates, not security alerts.
+  # Maintainers also watch base-image advisories and can refresh a pin ahead of
+  # the rebase when needed. Dependabot may suppress same-tag digest-only updates
+  # (dependabot-core#15103), so check the pinned digest when an advisory lands.
   - package-ecosystem: docker
     directory: /web
     schedule:
       interval: weekly
-    open-pull-requests-limit: 0
+    open-pull-requests-limit: 4
     labels: ["dependencies", "web"]
 
   # docker-compose.yml and docker-compose.release.yml (same #301 posture as the
