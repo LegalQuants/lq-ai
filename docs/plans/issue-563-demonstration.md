@@ -14,7 +14,12 @@ only this sample workflow; live providers, persistent skill workspaces and
 bundled helpers remain separate capabilities.
 Drain or halt active demo runs before switching the flag off. With the flag off,
 the worker schedules no orchestration recovery or execution; owner read and halt
-access remains available.
+access remains available. Switching the flag off does not itself halt or expire
+retained runs. A queued or running root can remain active until its owner halts it
+or recovery runs after re-enablement; the one-active-root-per-owner rule still
+applies. Plans have a one-hour deadline. If that deadline passes while the flag
+is off, recovery on re-enablement expires the run or marks unresolved effects
+for reconciliation rather than resuming it.
 
 ## User-visible behavior
 

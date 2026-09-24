@@ -20,6 +20,16 @@
 		null;
 	let fileError = '';
 	let fileLoading = false;
+	let demoAvailability: 'checking' | 'enabled' | 'disabled' | 'unavailable' = 'checking';
+
+	async function loadDemoAvailability() {
+		try {
+			const caps = await orchestrationApi.capabilities();
+			demoAvailability = caps.enabled ? 'enabled' : 'disabled';
+		} catch {
+			demoAvailability = 'unavailable';
+		}
+	}
 
 	async function openFile(session: string, name: string) {
 		fileController?.abort();
@@ -63,6 +73,7 @@
 		if (manual) {
 			polls = 0;
 			pollPaused = false;
+			void loadDemoAvailability();
 		}
 		const requestGeneration = generation;
 		const id = loadedId;
@@ -83,7 +94,7 @@
 		}
 	}
 	async function act(action: 'approve' | 'reject' | 'halt') {
-		if (!tree) return;
+		if (!tree || (action === 'approve' && demoAvailability !== 'enabled')) return;
 		stopPolling();
 		acting = true;
 		loading = false;
@@ -108,6 +119,7 @@
 	}
 	onMount(() => {
 		mounted = true;
+		void loadDemoAvailability();
 		return () => {
 			mounted = false;
 			stopPolling();
@@ -137,6 +149,11 @@
 		>
 	</div>
 	<p>Orchestration demonstration · Sample findings · Unverified</p>
+	{#if demoAvailability === 'disabled'}
+		<p role="status">The operator has disabled the demonstration. Existing plans and results remain available.</p>
+	{:else if demoAvailability === 'unavailable'}
+		<p role="status">Demonstration availability is unavailable. Approval is disabled until it can be checked.</p>
+	{/if}
 	<p class="text-sm">
 		Working files belong to this run. Shared findings are available to the parent; private notes
 		remain with their child. Files are not reused by future runs of the skill.
@@ -165,7 +182,7 @@
 				</p>
 				<div class="flex gap-3">
 					<button
-						disabled={acting}
+						disabled={acting || demoAvailability !== 'enabled'}
 						on:click={() => act('approve')}
 						class="rounded bg-blue-700 px-4 py-2 text-white">Approve plan</button
 					>

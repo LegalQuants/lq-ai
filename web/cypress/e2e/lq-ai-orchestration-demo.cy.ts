@@ -207,6 +207,18 @@ describe('Orchestration demonstration', () => {
 		cy.contains('button', 'Prepare plan').should('not.exist');
 	});
 
+	it('disables approval on a saved plan after the operator turns the demo off', () => {
+		const onBeforeLoad = setup(false);
+		cy.intercept('GET', `${base}/${rootId}/tree`, { body: fixture() });
+		cy.intercept('POST', `${base}/${rootId}/reject`, { body: fixture('rejected') }).as('reject');
+		cy.visit(`/lq-ai/autonomous/orchestration/${rootId}`, { onBeforeLoad });
+		cy.contains('The operator has disabled the demonstration').should('be.visible');
+		cy.contains('button', 'Approve plan').should('be.disabled');
+		cy.contains('button', 'Reject plan').click();
+		cy.wait('@reject');
+		cy.contains('Status: rejected').should('be.visible');
+	});
+
 	it('links to the demonstration when the operator enables it', () => {
 		const onBeforeLoad = setup(true);
 		cy.visit('/lq-ai/autonomous', { onBeforeLoad });
