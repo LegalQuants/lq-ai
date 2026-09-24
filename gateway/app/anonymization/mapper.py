@@ -56,10 +56,12 @@ class PseudonymMapper:
         previously allocated pseudonym byte-for-byte.
 
         Args:
-            entity_type: Canonical entity-type label, e.g. ``"PERSON"``,
-                ``"ORGANIZATION"``, ``"PHONE_NUMBER"``. Presidio's
-                vocabulary is what M2-B3 wires in; custom recognizers
-                (M2-B2) extend it.
+            entity_type: Pseudonym-domain label, e.g. ``"PERSON"``,
+                ``"ORGANIZATION"``, ``"ADDRESS"``. Usually Presidio's
+                entity type, except where the Anonymizer remaps a
+                label to its documented domain first (see
+                ``PSEUDONYM_DOMAINS`` in ``engine.py``); custom
+                recognizers (M2-B2) extend the vocabulary.
             original: The literal text of the entity as Presidio saw
                 it in the source prompt.
 
