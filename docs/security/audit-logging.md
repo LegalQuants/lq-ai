@@ -2,6 +2,14 @@
 
 > **Scope:** what LQ.AI records to the audit log, retention, and integrity protection. Operators evaluating procurement responses often need this in writing; this is the operational reference for the `audit_log` table.
 
+## In short
+
+Every action that changes state should write one row to `audit_log`, in the same transaction as the change it describes — but that only holds for handlers that call the audit helper; the admin provider-key endpoints are a known exception that is not audited. The log never records message content, provider responses, or secrets, and ordinary reads are not logged either, except privileged cross-user reads (for example, an admin viewing another user's data).
+
+Rows are kept by default rather than auto-expiring. Deleting a user anonymises its audit rows rather than removing them. Append-only behaviour is enforced by the application, not the database, so a row changed directly in the database, outside the app, leaves no signal — and there is no tamper-detection mechanism (such as chained hashes) yet to catch it after the fact.
+
+For a specific matter, two further tables — `citation_ledger_entry` and `inference_routing_log` — add a finer-grained, non-audit-log record of what the assistant read and which model calls it made.
+
 ## What is logged
 
 Each audit event is a row in the `audit_log` table (see [docs/db-schema.md §audit_log](../db-schema.md) for the schema). Columns:

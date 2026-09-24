@@ -1,5 +1,13 @@
 # Security Policy
 
+## In short
+
+- **Don't file vulnerabilities as public GitHub issues.** Email admin@legalquants.com or open a private GitHub Security Advisory instead, with the affected version, reproduction steps, and likely impact.
+- We acknowledge reports within 72 hours, give an initial assessment within 7 business days, and aim to fix confirmed criticals within 30 days, high-severity within 60, and medium-severity within 90.
+- We agree the public disclosure timing with you, and credit you in the advisory unless you'd rather stay anonymous.
+- Not sure whether a finding needs the private path or can be discussed in the open? See "Judging whether a finding needs the private path" below — when in doubt, use the private path.
+- Good-faith research conducted under this policy is covered by our safe harbor: no legal action, no retaliation.
+
 ## Reporting a vulnerability
 
 **Do not file security vulnerabilities as public GitHub issues.** Public reports give attackers a head start; coordinated disclosure protects users while we develop a fix.
