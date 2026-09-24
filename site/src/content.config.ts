@@ -2,6 +2,8 @@ import { defineCollection, z } from 'astro:content';
 import { docsLoader } from '@astrojs/starlight/loaders';
 import { docsSchema } from '@astrojs/starlight/schema';
 
+import { KINDS } from '../scripts/lib/routes.mjs';
+
 /**
  * Who a page is written for. A page may name more than one, but naming all of
  * them is the same as naming none — the chips exist to let a reader skip.
@@ -30,6 +32,14 @@ export const collections = {
         // --- written by the author, in docs/site/** -------------------------
         audience: z.array(z.enum(AUDIENCES)).optional(),
         status: z.enum(STATUSES).default('draft'),
+        /**
+         * How the page is meant to be read — set only by a route-manifest
+         * entry's optional `kind:` (validated in `scripts/lib/routes.mjs`,
+         * which is this field's source of truth). Read by `PageTitle.astro`
+         * for the on-page label; the sidebar badge is set directly by the
+         * sync as Starlight's own `sidebar.badge`, above.
+         */
+        kind: z.enum(KINDS).optional(),
         /**
          * Repository-relative canonical files this page curates or checks its
          * claims against. The stamp is the newest commit touching the page or

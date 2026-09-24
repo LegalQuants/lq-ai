@@ -69,7 +69,7 @@ import {
   sliceBetweenHeadings,
   stripFrontmatter,
 } from './lib/markdown.mjs';
-import { loadRouteManifests, ROUTES_DIRNAME } from './lib/routes.mjs';
+import { loadRouteManifests, KIND_LABELS, ROUTES_DIRNAME } from './lib/routes.mjs';
 import { NAMESPACES } from '../src/namespaces.mjs';
 
 import * as adrIndex from './gen-adr-index.mjs';
@@ -348,6 +348,15 @@ async function main() {
     if (entry.description !== undefined) data.description = entry.description;
     if (entry.audience !== undefined) data.audience = entry.audience;
     if (entry.sidebar !== undefined) data.sidebar = entry.sidebar;
+    // A valid `kind` becomes two things a reader sees before the article
+    // text: Starlight's own sidebar badge, and (via `data.kind`, read by
+    // PageTitle.astro) a short label near the top of the page. An invalid
+    // value was already reported above by `loadRouteManifests` — it is
+    // dropped here rather than writing a badge/label no one asked for.
+    if (entry.kind !== undefined && KIND_LABELS[entry.kind]) {
+      data.kind = entry.kind;
+      data.sidebar = { ...(data.sidebar ?? {}), badge: { text: KIND_LABELS[entry.kind] } };
+    }
 
     mapped.push({
       kind: 'mapped',

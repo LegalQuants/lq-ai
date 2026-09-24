@@ -384,6 +384,25 @@ describe('route manifests', () => {
     assert.match(page, /checkedAgainst:\n\s+sha: /);
     assert.match(page, /sourceFiles:\n\s+- site\/test\/fixtures\/repo\/route-mapped\/basic\.md/);
   });
+
+  it('carries a valid kind into the frontmatter and a Starlight sidebar badge', () => {
+    // `kind:` is what `PageTitle.astro` reads to render the short label near
+    // the top of the page; `sidebar.badge` is Starlight's own field, so the
+    // sidebar renders the badge with no further wiring. `manifest-basic` also
+    // sets `sidebar: { order: 5 }` (above), so this doubles as the merge
+    // check — the badge must not clobber the order a writer already set.
+    const page = contentOf('operate/manifest-basic');
+    assert.match(page, /kind: how-to/);
+    assert.match(page, /sidebar:\n\s+order: 5\n\s+badge:\n\s+text: How-to/);
+  });
+
+  it('leaves a page with no kind exactly as before', () => {
+    // `manifest-slice` sets no `kind:` and no `sidebar:` at all — neither
+    // should appear just because a sibling entry in the same manifest does.
+    const page = contentOf('operate/manifest-slice');
+    assert.ok(!page.includes('kind:'));
+    assert.ok(!page.includes('sidebar:'));
+  });
 });
 
 describe('route manifests: validation', () => {
@@ -457,6 +476,13 @@ describe('route manifests: validation', () => {
 
   it('fails when a next: target is not a known route', () => {
     assert.match(output, /entry "broken\/bad-next": next: "nowhere\/at-all" is not a known route/);
+  });
+
+  it('fails on a kind outside how-to / explanation / reference', () => {
+    assert.match(
+      output,
+      /"broken\/invalid-kind" has kind "not-a-real-kind" — must be one of: how-to, explanation, reference/
+    );
   });
 });
 

@@ -13,6 +13,7 @@
  *       description: One sentence for search results and llms.txt.
  *       audience: [operator]
  *       status: draft
+ *       kind: how-to                                # optional; how-to | explanation | reference
  *       sources: [docker-compose.yml]              # optional extra files the stamp also checks
  *       sidebar: { order: 3 }
  *       next: [operate/upgrade, trust/threat-model] # optional onward links, rendered as "## Next"
@@ -46,6 +47,7 @@ const OPTIONAL_KEYS = [
   'title',
   'audience',
   'status',
+  'kind',
   'sources',
   'sidebar',
   'next',
@@ -53,6 +55,23 @@ const OPTIONAL_KEYS = [
   'to',
 ];
 const ALL_KEYS = new Set([...REQUIRED_KEYS, ...OPTIONAL_KEYS]);
+
+/**
+ * How a mapped page is meant to be read — Iris's ask, so a reader can tell at
+ * a glance which pages are step-by-step and which are background or lookup
+ * material. Renders as a sidebar badge and a short label near the top of the
+ * page (`sync-content.mjs`, `PageTitle.astro`); this array is the one place
+ * the allowed values are declared, and both of those read `KIND_LABELS` below
+ * rather than restating the text.
+ */
+export const KINDS = ['how-to', 'explanation', 'reference'];
+
+/** Sidebar-badge and on-page label text for each `kind`. */
+export const KIND_LABELS = {
+  'how-to': 'How-to',
+  explanation: 'Explanation',
+  reference: 'Reference',
+};
 
 const DOCS_SITE_PREFIX = `${repoPath(DOCS_SITE_DIR)}/`;
 
@@ -78,8 +97,8 @@ export function routeManifestFiles(routesDir = path.join(DOCS_SITE_DIR, ROUTES_D
  * @param {(problem: object) => void} options.report
  * @returns {Array<{
  *   file: string, line: number, route: string, source: string, title?: string,
- *   description: string, audience?: string[], status?: string, sources: string[],
- *   sidebar?: object, next: string[], from?: string, to?: string,
+ *   description: string, audience?: string[], status?: string, kind?: string,
+ *   sources: string[], sidebar?: object, next: string[], from?: string, to?: string,
  * }>} only entries that passed every check that can be made without the rest
  *     of the route table (a missing/unknown key, a missing description, a
  *     source that does not exist or sits under `docs/site/`, a duplicate
@@ -138,6 +157,14 @@ export function loadRouteManifests({ routesDir = path.join(DOCS_SITE_DIR, ROUTES
           level: 'error',
           ...where,
           message: `"${label}" is missing required key(s): ${missing.join(', ')}`,
+        });
+      }
+
+      if (entry.kind !== undefined && !KINDS.includes(entry.kind)) {
+        report({
+          level: 'error',
+          ...where,
+          message: `"${label}" has kind "${entry.kind}" — must be one of: ${KINDS.join(', ')}`,
         });
       }
       // `route` and `source` are what everything else below is keyed on — an
@@ -206,6 +233,7 @@ export function loadRouteManifests({ routesDir = path.join(DOCS_SITE_DIR, ROUTES
         description: entry.description,
         audience: entry.audience !== undefined ? asList(entry.audience) : undefined,
         status: entry.status,
+        kind: entry.kind,
         sources: asList(entry.sources).map(String),
         sidebar: entry.sidebar,
         next: asList(entry.next).map(String),

@@ -43,6 +43,7 @@ reads every file in the directory. Each file is a YAML list of entries:
   description: One sentence for search results and llms.txt.   # required
   audience: [operator]                      # operator | evaluator | author | contributor | partner | agent
   status: draft                             # draft | reviewed
+  kind: how-to                              # optional; how-to | explanation | reference — sidebar badge + a label near the top
   sources: [docker-compose.yml]             # optional extra files the claims are also checked against
   sidebar:
     order: 3
@@ -55,9 +56,15 @@ reads every file in the directory. Each file is a YAML list of entries:
 `description`. A field the schema does not define, a missing required key, a
 `source` that does not exist or sits under `docs/site/`, a route claimed
 twice, a source mapped by more than one route, a route that collides with a
-page already in `docs/site/`, and a `next:` target that is not a known route
-all fail `npm run sync` with the manifest file, the entry, and what is wrong
-— nothing here is silently ignored.
+page already in `docs/site/`, a `kind` outside `how-to`/`explanation`/
+`reference`, and a `next:` target that is not a known route all fail
+`npm run sync` with the manifest file, the entry, and what is wrong —
+nothing here is silently ignored.
+
+A `kind` is optional, and a page with none renders exactly as it did before
+this field existed. Set, it shows up twice: as a Starlight sidebar badge
+(`sidebar.badge`, merged in — an entry's own `sidebar: { order: … }` is kept)
+and as a short label right under the page title.
 
 The manifest is also what registers the source file in the site's
 link-rewrite table: any other page or repository doc linking to
