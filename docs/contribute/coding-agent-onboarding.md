@@ -6,6 +6,16 @@
 
 ---
 
+## In short
+
+- Work from this guide and [CLAUDE.md](../../CLAUDE.md); read the cited files and confirm a request's problem is real before writing anything.
+- Work one task at a time, in a separate test environment — verify migrations against a throwaway database, and never run `docker compose down -v` or other volume-wiping commands against the live dev stack; there is no throwaway alternative for that one, it is forbidden outright.
+- When a task hides an architectural, scope, or authorization decision, stop and put the choice to a maintainer instead of deciding unilaterally.
+- A finished task reports evidence, not a summary: what changed, how it was tested, and links to the files touched — say plainly whether that came from reading code, a run against simulated services, or the running app.
+- Every commit carries a DCO sign-off; an external contributor pushes only to their own fork and opens a PR — a maintainer reviews the gates and merges it.
+
+---
+
 ## 0. The 60-second orientation
 
 LQ.AI is an **open-source, self-hosted AI platform for in-house legal teams**. Three services talk over HTTP via OpenAPI contracts — no shared in-process code:
