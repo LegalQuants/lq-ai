@@ -91,6 +91,9 @@ jobs:
 
       - name: Run Cypress (deterministic track)
         working-directory: web
+        # Keep a stalled Cypress subprocess from consuming the job's 90-minute
+        # limit, which cancels the job before failure artifacts can upload.
+        timeout-minutes: 30
         # Spec selection lives in cypress.config.ts (DETERMINISTIC_SPECS);
         # the workflow intentionally passes no --spec so local runs and CI
         # execute the identical list.

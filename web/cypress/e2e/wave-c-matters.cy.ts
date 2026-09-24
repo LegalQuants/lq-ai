@@ -22,8 +22,10 @@ describe('Wave C — Matters surfaces', () => {
     cy.get('input[type="password"]').type(
       Cypress.env('LQAI_ADMIN_PASSWORD') || 'LQ-AI-smoke-test-Pw1!'
     );
+    cy.intercept('POST', '**/api/v1/auth/login').as('login');
     cy.get('button[type="submit"]').click();
-    cy.url().should('not.include', '/login');
+    cy.wait('@login', { timeout: 30000 }).its('response.statusCode').should('eq', 200);
+    cy.url({ timeout: 15000 }).should('not.include', '/login');
   });
 
   // ── Test 1 ───────────────────────────────────────────────────────────────────
@@ -66,10 +68,12 @@ describe('Wave C — Matters surfaces', () => {
     const matterName = `Cypress Test Matter ${Date.now()}`;
     // The name input is the first text input inside the modal (id="nmm-name").
     cy.get('[role="dialog"]').find('input[type="text"]').first().clear().type(matterName);
+    cy.intercept('POST', '**/api/v1/projects').as('createMatter');
     cy.contains('button', 'Create matter').click();
+    cy.wait('@createMatter', { timeout: 60000 }).its('response.statusCode').should('eq', 201);
 
     // After creation, NewMatterModal calls goto(/lq-ai/matters/{id}).
-    cy.url({ timeout: 10000 }).should('match', /\/lq-ai\/matters\/[a-f0-9-]+$/);
+    cy.url({ timeout: 15000 }).should('match', /\/lq-ai\/matters\/[a-f0-9-]+$/);
 
     // MatterRail renders the matter name (visible in MatterRailMetadata header).
     cy.contains(matterName).should('be.visible');
@@ -87,18 +91,25 @@ describe('Wave C — Matters surfaces', () => {
     cy.contains('button', '+ New matter').first().click();
     const matterName = `Cypress Chat Test ${Date.now()}`;
     cy.get('[role="dialog"]').find('input[type="text"]').first().clear().type(matterName);
+    cy.intercept('POST', '**/api/v1/projects').as('createMatter');
     cy.contains('button', 'Create matter').click();
-    cy.url({ timeout: 10000 }).should('match', /\/lq-ai\/matters\/[a-f0-9-]+$/);
+    cy.wait('@createMatter', { timeout: 60000 }).its('response.statusCode').should('eq', 201);
+    cy.url({ timeout: 15000 }).should('match', /\/lq-ai\/matters\/[a-f0-9-]+$/);
 
     // The Chats section in MatterRail has a "+ New" button (rail-btn-sm).
     // The rail section header shows h3 "Chats" followed by the "+ New" button.
+    cy.intercept('POST', '**/api/v1/chats').as('createChat');
     cy.contains('h3', 'Chats')
       .parent()
       .contains('button', '+ New')
       .click();
+    cy.wait('@createChat', { timeout: 60000 }).its('response.statusCode').should('eq', 201);
 
-    // A new chat entry ("Untitled chat") should appear in the chat list.
-    cy.contains(/untitled chat/i).should('be.visible');
+    // The API assigns "New chat" to a chat with no messages yet.
+    cy.get('ul[aria-label="Matter chats"] li[role="option"]')
+      .should('have.length', 1)
+      .contains('New chat')
+      .should('be.visible');
   });
 
   // ── Test 5 ───────────────────────────────────────────────────────────────────
