@@ -1,13 +1,14 @@
-"""Tests for the EUR-Lex tool-provider adapter (WS-E PR2b Task 1).
+"""Tests for the EUR-Lex tool-provider adapter (WS-E PR2b Task 1; search DE-374).
 
 Auth model mirrors EDGAR: a descriptive User-Agent header, no API key
 (EU Publications Office Cellar service has no fair-access key scheme).
-get_authority only (search lands as DE-374). The Cellar
-``/resource/celex/{CELEX}`` URL 303-redirects to a concrete manifestation
-whose ``Location`` is http; egress is https-only, so the adapter upgrades
-the redirect target to https and re-validates every hop against the
-allowlist before following it (never lets httpx auto-follow an
-unvalidated/http hop)."""
+search_authority (DE-374) queries the Cellar SPARQL endpoint for title
+matches and returns CELEX refs with no body; get_authority fetches the
+document text by CELEX id. The Cellar ``/resource/celex/{CELEX}`` URL
+303-redirects to a concrete manifestation whose ``Location`` is http;
+egress is https-only, so the adapter upgrades the redirect target to https
+and re-validates every hop against the allowlist before following it
+(never lets httpx auto-follow an unvalidated/http hop)."""
 
 import httpx
 import pytest
@@ -86,16 +87,164 @@ def test_content_kind_from_celex(celex: str, kind: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# list_tools: get_authority only
+# list_tools: search_authority + get_authority
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
-async def test_list_tools_only_get_authority(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_list_tools_search_and_get_authority(monkeypatch: pytest.MonkeyPatch) -> None:
     adapter = _adapter(monkeypatch)
     tools = await adapter.list_tools()
-    assert [t.name for t in tools] == ["get_authority"]
+    assert [t.name for t in tools] == ["search_authority", "get_authority"]
     assert all(t.read_only for t in tools)
+
+
+# ---------------------------------------------------------------------------
+# search_authority — SPARQL query construction, escaping, parsing (DE-374)
+# ---------------------------------------------------------------------------
+
+_SPARQL_URL = "https://publications.europa.eu/webapi/rdf/sparql"
+
+
+def _sparql_body(*rows: tuple[str, str]) -> dict:
+    return {
+        "head": {"vars": ["celex", "title"]},
+        "results": {
+            "bindings": [
+                {
+                    "celex": {"type": "literal", "value": celex},
+                    "title": {"type": "literal", "value": title},
+                }
+                for celex, title in rows
+            ]
+        },
+    }
+
+
+@pytest.mark.unit
+async def test_search_authority_builds_sparql_and_parses_results(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = _adapter(monkeypatch)
+    body = _sparql_body(
+        ("32016R0679", "General Data Protection Regulation"),
+        ("32011L0083", "Consumer Rights Directive"),
+    )
+    with respx.mock:
+        route = respx.get(_SPARQL_URL).mock(return_value=httpx.Response(200, json=body))
+        out = await adapter.invoke_tool(
+            "search_authority", {"query": "data protection"}, request_id="r1"
+        )
+        req = route.calls.last.request
+        sparql = req.url.params["query"]
+        assert 'CONTAINS(LCASE(STR(?title)), LCASE("data protection"))' in sparql
+        assert "cdm:resource_legal_id_celex" in sparql
+        assert sparql.endswith("LIMIT 10")
+        assert req.headers["accept"] == "application/sparql-results+json"
+        assert req.headers["user-agent"] == "LQ.AI test ops@lq.ai"
+    assert out.payload["count"] == 2
+    r0 = out.payload["results"][0]
+    assert r0["external_ref"] == "32016R0679"
+    assert r0["title"] == "General Data Protection Regulation"
+    assert r0["url"] == "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32016R0679"
+    assert "text" not in r0  # search results carry NO body (fail-closed contract)
+    assert out.skip_anonymization is True
+
+
+@pytest.mark.unit
+async def test_search_authority_escapes_sparql_string_literal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A hostile keyword must be embedded as an escaped literal — it can never
+    terminate the string and inject SPARQL syntax into the FILTER clause."""
+    adapter = _adapter(monkeypatch)
+    hostile = "x\") } LIMIT 1 # \\ 'quote'\nnewline"
+    with respx.mock:
+        route = respx.get(_SPARQL_URL).mock(return_value=httpx.Response(200, json=_sparql_body()))
+        await adapter.invoke_tool("search_authority", {"query": hostile}, request_id="r1")
+        sparql = route.calls.last.request.url.params["query"]
+    expected_literal = '"x\\") } LIMIT 1 # \\\\ \\\'quote\\\'\\nnewline"'
+    assert f"LCASE({expected_literal})" in sparql
+    # No raw double-quote inside the literal and no raw newline anywhere in it.
+    assert 'LCASE("x") } LIMIT 1' not in sparql
+
+
+@pytest.mark.unit
+async def test_search_authority_respects_page_size(monkeypatch: pytest.MonkeyPatch) -> None:
+    adapter = _adapter(monkeypatch)
+    with respx.mock:
+        route = respx.get(_SPARQL_URL).mock(return_value=httpx.Response(200, json=_sparql_body()))
+        await adapter.invoke_tool(
+            "search_authority", {"query": "gdpr", "page_size": 3}, request_id="r1"
+        )
+        assert route.calls.last.request.url.params["query"].endswith("LIMIT 3")
+        # Bad page_size falls back to the default.
+        await adapter.invoke_tool(
+            "search_authority", {"query": "gdpr", "page_size": True}, request_id="r2"
+        )
+        assert route.calls.last.request.url.params["query"].endswith("LIMIT 10")
+
+
+@pytest.mark.unit
+async def test_search_authority_empty_results(monkeypatch: pytest.MonkeyPatch) -> None:
+    adapter = _adapter(monkeypatch)
+    with respx.mock:
+        respx.get(_SPARQL_URL).mock(return_value=httpx.Response(200, json=_sparql_body()))
+        out = await adapter.invoke_tool(
+            "search_authority", {"query": "no such instrument"}, request_id="r1"
+        )
+    assert out.payload == {"results": [], "count": 0}
+
+
+@pytest.mark.unit
+async def test_search_authority_empty_query_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.providers.tool.base import ToolProviderInvalidRequestError
+
+    adapter = _adapter(monkeypatch)
+    for bad in ("", "   ", None):
+        with pytest.raises(ToolProviderInvalidRequestError):
+            await adapter.invoke_tool("search_authority", {"query": bad}, request_id="r1")
+
+
+@pytest.mark.unit
+async def test_search_authority_drops_unfetchable_celex(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Hits whose CELEX get_authority would reject (DE-375 shapes) are dropped
+    rather than surfaced with an unfetchable external_ref."""
+    adapter = _adapter(monkeypatch)
+    body = _sparql_body(
+        ("32016R0679R(01)", "GDPR corrigendum"),  # '()' — get_authority rejects
+        ("12016E/TXT", "TFEU"),  # '/' — get_authority rejects
+        ("", "no celex at all"),
+        ("32016R0679", "General Data Protection Regulation"),
+    )
+    with respx.mock:
+        respx.get(_SPARQL_URL).mock(return_value=httpx.Response(200, json=body))
+        out = await adapter.invoke_tool("search_authority", {"query": "gdpr"}, request_id="r1")
+    assert [r["external_ref"] for r in out.payload["results"]] == ["32016R0679"]
+    assert out.payload["count"] == 1
+
+
+@pytest.mark.unit
+async def test_search_authority_redirect_hop_outside_allowlist_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A SPARQL-endpoint redirect to a non-allowlisted host must be refused
+    before any egress to that host (every hop re-runs validate_egress_target)."""
+    from app.providers.tool.egress import EgressRefused
+
+    adapter = _adapter(monkeypatch)
+    with respx.mock:
+        respx.get(_SPARQL_URL).mock(
+            return_value=httpx.Response(303, headers={"location": "http://evil.test/steal"})
+        )
+        evil = respx.get("https://evil.test/steal").mock(
+            return_value=httpx.Response(200, json=_sparql_body())
+        )
+        with pytest.raises(EgressRefused):
+            await adapter.invoke_tool("search_authority", {"query": "gdpr"}, request_id="r1")
+        assert not evil.called  # refused before any egress to the rogue host
 
 
 # ---------------------------------------------------------------------------

@@ -240,22 +240,49 @@ async def test_assemble_allowlist_adds_both_sources_when_both_available(db, monk
     assert set(search_spec.parameters["properties"]["source"]["enum"]) == {"govinfo", "edgar"}
 
 
-def test_authority_source_enum_is_per_op():
-    # govinfo+edgar support both ops; eurlex supports only get_authority.
-    schemas = build_authority_tool_schemas(enabled_sources=["govinfo", "edgar", "eurlex"])
+def _get_only_spec():
+    """Synthetic get-only SourceSpec — every real registry source now supports
+    search (eurlex gained search_authority in DE-374), so per-op enum scoping
+    is exercised via a registry double."""
+    from app.research.registry import SourceSpec
+
+    return SourceSpec(
+        type="getonly",
+        jurisdiction="test",
+        coverage="synthetic get-only source",
+        content_kinds=("test",),
+        ops=("get_authority",),
+        adapter=None,
+    )
+
+
+def test_authority_source_enum_is_per_op(monkeypatch):
+    # govinfo/edgar/eurlex all support both ops (eurlex search: DE-374); a
+    # synthetic get-only source preserves coverage of per-op enum scoping.
+    from app.chat.tool_schemas import SOURCE_REGISTRY
+
+    monkeypatch.setitem(SOURCE_REGISTRY, "getonly", _get_only_spec())
+    schemas = build_authority_tool_schemas(
+        enabled_sources=["govinfo", "edgar", "eurlex", "getonly"]
+    )
     by_name = {s["name"]: s for s in schemas}
     assert set(by_name["get_authority"]["parameters"]["properties"]["source"]["enum"]) == {
         "govinfo",
         "edgar",
         "eurlex",
+        "getonly",
     }
     assert set(by_name["search_authority"]["parameters"]["properties"]["source"]["enum"]) == {
         "govinfo",
         "edgar",
+        "eurlex",
     }
 
 
-def test_authority_search_omitted_when_no_search_source():
+def test_authority_search_omitted_when_no_search_source(monkeypatch):
     # only a get-only source enabled → no search_authority tool at all
-    schemas = build_authority_tool_schemas(enabled_sources=["eurlex"])
+    from app.chat.tool_schemas import SOURCE_REGISTRY
+
+    monkeypatch.setitem(SOURCE_REGISTRY, "getonly", _get_only_spec())
+    schemas = build_authority_tool_schemas(enabled_sources=["getonly"])
     assert [s["name"] for s in schemas] == ["get_authority"]
