@@ -21,6 +21,28 @@ substance posture, and the known limitations. It pairs with
 referenced but, as documented below, is *not yet wired* into the
 executor's per-position output).
 
+## In short
+
+A skill is a workflow the model follows in chat. A playbook is
+different: it's a set of contract positions and acceptable fallbacks
+that a fixed executor runs against one target document, position by
+position — through its own execute endpoint and UI page, not the chat
+composer.
+
+- **Each position gets a verdict** — matches your standard, a fallback
+  tier, deviates with a drafted redline, or is missing — plus the
+  clause it's based on.
+- **Five built-in playbooks ship** (Mutual NDA, Unilateral NDA favoring
+  the discloser, SaaS MSA from the customer's perspective, Commercial
+  Services MSA from the purchaser's perspective, GDPR DPA
+  controller-to-processor) as unvetted starting points — you can't edit
+  or delete one directly, only fork it into your own copy.
+- **The Easy Playbook wizard** drafts a new playbook from a corpus of
+  your own past agreements; review and edit the draft before saving.
+- **Check the clause yourself.** The executor's citations are chunk
+  references, not Citation-Engine-verified, so a citation count isn't
+  proof a verdict is right.
+
 ---
 
 ## Scope

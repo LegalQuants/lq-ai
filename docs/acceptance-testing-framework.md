@@ -4,6 +4,13 @@ This document establishes the framework for acceptance testing skills before pub
 
 The framework operationalizes [PRD §9 DE-051](PRD.md#de-051--acceptance-testing-for-the-m1-skill-set-against-real-documents) (acceptance testing for the M1 skill set against real documents) and [DE-061](PRD.md#de-061--contract-qa-acceptance-testing) / [DE-072](PRD.md#de-072--msa-review-acceptance-testing-against-real-document-corpus) (skill-specific acceptance testing entries).
 
+## In short
+
+- Acceptance testing checks two different things: whether a skill's output has the right *shape* — sections, severity tags, and citations a script or a careful reader can check — and whether it's *calibrated* against real documents, which takes a practicing lawyer's judgment.
+- A test plan by itself is not a passing result. Passing needs the actual output the skill produced on real test documents, plus a reviewing attorney's evaluation against the plan's stated criteria — not just the plan file existing.
+- Test documents come from the operator's own anonymized practice, not the repository — keep confidential material out of anything you commit or share.
+- Keep a record of every run: which skill version was tested, which documents were used (described, not reproduced — see Reproduction under Issues filing convention), the actual output, and the reviewing attorney's assessment.
+
 ---
 
 ## Philosophy
