@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32
 # Initialize device type args
 # use build args in the docker build command with --build-arg="BUILDARG=true"
 ARG USE_CUDA=false
@@ -24,7 +24,8 @@ ARG UID=0
 ARG GID=0
 
 ######## WebUI frontend ########
-FROM --platform=$BUILDPLATFORM node:22-alpine3.20 AS build
+# LQ.AI: Digest-pinned for reproducible builds (#301). Bump the tag and digest together.
+FROM --platform=$BUILDPLATFORM node:22-alpine3.20@sha256:2289fb1fba0f4633b08ec47b94a89c7e20b829fc5679f9b7b298eaa2f1ed8b7e AS build
 ARG BUILD_HASH
 # LQ.AI: Vite/SvelteKit bakes PUBLIC_* env vars into the static build at
 # `npm run build` time. Production: leave unset (relative /api/v1, behind
@@ -61,7 +62,8 @@ RUN printf 'PUBLIC_LQ_AI_API_BASE_URL=%s\n' "${PUBLIC_LQ_AI_API_BASE_URL}" > .en
     && npm run build
 
 ######## WebUI backend ########
-FROM python:3.11-slim-bookworm AS base
+# LQ.AI: Digest-pinned for reproducible builds (#301). Bump the tag and digest together.
+FROM python:3.11-slim-bookworm@sha256:a36c24f9cbdf4fd0f52d67f0823eeac19c2028c637cecc392d97f980d4fec56b AS base
 
 # Use args
 ARG USE_CUDA
