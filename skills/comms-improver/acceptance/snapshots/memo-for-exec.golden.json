@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "skill": "comms-improver",
+  "fixture": "memo-for-exec",
+  "status": "provisional",
+  "provenance": "Ranges derived from skills/comms-improver/SKILL.md (Output sections; executive rewrites lead with the recommendation; caveats preserved) and test-plan.md Scenario 2 (bottom-line-up-front, conclusions preserved not changed). NOT observed from a live run; first live run calibrates.",
+  "assertions": {
+    "required_sections": [
+      "Comms Improver",
+      "Rewritten text",
+      "What was changed",
+      "Preservation-of-meaning concerns"
+    ],
+    "metrics": [
+      {
+        "id": "recommendation_preserved",
+        "kind": "regex_count",
+        "pattern": "remediat|fix|update|change the checkout|consent",
+        "min": 1,
+        "max": null
+      },
+      {
+        "id": "penalty_figure_preserved",
+        "kind": "regex_count",
+        "pattern": "2,?500",
+        "min": 1,
+        "max": null
+      }
+    ],
+    "min_chars": 600,
+    "max_chars": 15000
+  }
+}

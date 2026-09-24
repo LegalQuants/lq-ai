@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "skill": "enhance-prompt",
+  "fixture": "vague-review-prompt",
+  "status": "provisional",
+  "provenance": "Ranges derived from skills/enhance-prompt/SKILL.md (Output: structured YAML object with expansion_applied / expanded_prompt / reasoning / skip_reason / preview_to_user keys; expansion typically 2-5x input length; 3-6 reasoning bullets) and test-plan.md Scenario 1 (vague prompt gets a substantive expansion). NOT observed from a live run; first live run calibrates.",
+  "assertions": {
+    "required_sections": [],
+    "metrics": [
+      {
+        "id": "key_expansion_applied",
+        "kind": "regex_count",
+        "pattern": "expansion_applied",
+        "min": 1,
+        "max": null
+      },
+      {
+        "id": "key_expanded_prompt",
+        "kind": "regex_count",
+        "pattern": "expanded_prompt",
+        "min": 1,
+        "max": null
+      },
+      {
+        "id": "key_reasoning",
+        "kind": "regex_count",
+        "pattern": "reasoning",
+        "min": 1,
+        "max": null
+      },
+      {
+        "id": "key_preview",
+        "kind": "regex_count",
+        "pattern": "preview_to_user",
+        "min": 1,
+        "max": null
+      },
+      {
+        "id": "expansion_is_applied",
+        "kind": "regex_count",
+        "pattern": "expansion_applied:\\s*true",
+        "min": 1,
+        "max": 1
+      }
+    ],
+    "min_chars": 400,
+    "max_chars": 12000
+  }
+}
