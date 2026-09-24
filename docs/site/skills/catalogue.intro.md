@@ -1,27 +1,27 @@
-Every first-party skill in `skills/`, one row per skill, built from each
-`SKILL.md`'s own frontmatter — this table is generated, not hand-maintained,
-so it cannot drift from what's actually shipped.
+Every first-party skill in `skills/`, one row per skill, read straight from
+each `SKILL.md`'s own frontmatter. The table is generated, not
+hand-maintained, so it can't fall behind what's actually shipped.
 
-Columns: skill, practice area (from `lq_ai.tags`), jurisdiction, version,
-author, attested-by, and tier floor. **Attested-by** shows a name only where a
-skill's frontmatter records one; no shipped first-party skill carries a
-dedicated attestation field, so the column reads "not recorded in
-frontmatter" across the board rather than leaving a blank that could be
-misread as "unattested". An attestation is
-not a warranty of legal correctness for every use — it is a named practicing
-attorney certifying the same care they apply to their own work product, at
-the version attested, and it is re-made when the skill's substance changes.
-Read [The attestation bar](../../../skills/CONTRIBUTING.md) before relying on any row here.
-**Tier floor** shows a skill's `minimum_inference_tier` where one is
-declared, and is blank where a skill sets no minimum. A blank cell means the
-skill's frontmatter does not record that field — `skill-creator` carries no
-`lq_ai:` block at all, so most of its columns are empty.
+Each row shows the skill's practice area (from `lq_ai.tags`), jurisdiction,
+version, author, attested-by, and tier floor. **Attested-by** reads "not
+recorded in frontmatter" on every row today — no shipped first-party skill's
+frontmatter carries a dedicated attestation field yet, so the column says so
+plainly rather than leaving a blank a reader could misread as "unattested".
+Where a skill does carry a named attestation, it isn't a warranty that the
+skill is right for every use: it's a named practicing attorney certifying
+the same care they'd apply to their own work product, at the version
+attested, remade whenever the skill's substance changes. Read
+[The attestation bar](../../../skills/CONTRIBUTING.md) before relying on any
+row here. **Tier floor** shows a skill's declared `minimum_inference_tier`
+and is blank where the skill sets none — `skill-creator` carries no
+`lq_ai:` block at all, so most of its row is blank too.
 
-**First-party only.** This table covers the skills in this repository's own
-`skills/` directory — 30+ additional skills in the
-[`LegalQuants/lq-skills`](https://github.com/LegalQuants/lq-skills) community
-repository are not indexed on this site yet; browse it directly, or read
-[Where skills live](../../skills/where-skills-live.md) for how the two repositories relate.
+**First-party only.** This table covers the skills that ship in this
+repository's own `skills/` directory. More live in the community
+[`LegalQuants/lq-skills`](https://github.com/LegalQuants/lq-skills)
+repository — 30+ of them at last count — and aren't indexed on this site
+yet; browse that repository directly, or read
+[Where skills live](../../skills/where-skills-live.md) for how the two relate.
 
 ## Next
 
