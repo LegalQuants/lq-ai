@@ -5,7 +5,8 @@
 # mount (mirrors how the api/gateway images bake the skills corpus +
 # gateway.yaml.example). caddy:2-alpine is multi-arch upstream, so the
 # release workflow builds linux/amd64 + linux/arm64 without trouble.
-FROM caddy:2-alpine
+# Digest-pinned for reproducible builds (#301). Bump the tag and digest together.
+FROM caddy:2-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
 
 COPY Caddyfile /etc/caddy/Caddyfile
 

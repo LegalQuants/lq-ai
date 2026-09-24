@@ -85,3 +85,114 @@ updates:
         applies-to: version-updates
         patterns: ["*"]
         update-types: ["minor", "patch"]
+
+  # #301: container images are pinned by tag *and* multi-arch index digest
+  # (e.g. `python:3.12-slim@sha256:...`). The digest is what makes a build
+  # reproducible; this block is what stops it going stale. Dependabot keeps
+  # the tag@digest form and moves both halves together, so a rebuilt base
+  # re-pushed under the same tag (new OS patches, same version) arrives as a
+  # digest-only refresh PR.
+  #
+  # Tag moves are held to patch level. Left alone, Dependabot would also offer
+  # comparable tag bumps (3.12-slim -> 3.13-slim, caddy 2 -> 3), and each of
+  # those is a runtime change that needs its own read, so semver-minor and
+  # semver-major are ignored for every image. Docker cooldown supports only
+  # `default-days`, and it holds digest refreshes too: a re-pushed tag is
+  # proposed once the push is 7 days old.
+  #
+  # Known risk: dependabot-core has a server-side experiment
+  # (`docker_digest_only_update_suppression`, dependabot-core#15103) that,
+  # when GitHub enables it, suppresses digest-only refreshes for comparable
+  # tags such as 3.12-slim, 2-alpine, 7-alpine and 1.0.0 (non-comparable tags
+  # such as pg16 are unaffected). With minor/major ignored, those pins would
+  # then go stale silently. It cannot be toggled from this file; the first
+  # Dependabot PRs after merge show whether it is on (#301 follow-up).
+  #
+  # /deploy/helm/lq-ai (the docker ecosystem reads `image:` strings in the
+  # chart's YAML files):
+  #   - ADR 0036 §2 names this ecosystem as the bump mechanism for the rustfs
+  #     pin in values.yaml. rustfs is also pinned in both compose files (the
+  #     docker-compose block below), so one rustfs release opens two PRs:
+  #     merge them together so the compose and Helm pins stay identical.
+  #   - The chart's pgvector and redis images are tag-only and stay that way;
+  #     Dependabot does not add a digest to a tag-only reference by default.
+  #   - The chart's own LQ.AI images are split into registry/owner/tag keys and
+  #     are not parsed today; the `legalquants/*` ignore keeps them out if that
+  #     changes.
+  #
+  # Bumped by hand, because Dependabot's Dockerfile parser reads FROM lines
+  # only: the `# syntax=docker/dockerfile:...@sha256:...` directives and the
+  # `COPY --from=ghcr.io/astral-sh/uv:<version>` pins (ADR 0023).
+  #
+  # `group-by: dependency-name` opens one PR per image across all directories
+  # (one python:3.12-slim PR, not one per directory). There is no `docker`
+  # label upstream, so these PRs carry `dependencies` only.
+  - package-ecosystem: docker
+    directories:
+      - /api
+      - /gateway
+      - /slack-bridge
+      - /teams-bridge
+      - /proxy
+      - /deploy/helm/lq-ai
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    labels: ["dependencies"]
+    ignore:
+      - dependency-name: "legalquants/*"
+      - dependency-name: "*"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+    groups:
+      docker-images:
+        applies-to: version-updates
+        group-by: dependency-name
+        patterns: ["*"]
+
+  # web/Dockerfile's node and python bases are digest-pinned, even though web/
+  # is a vendored OpenWebUI fork (ADR 0001). Check for updates weekly and cap
+  # the open PR queue at four. Maintainers review base-image changes separately
+  # from the quarterly upstream rebase, including the tag and multi-arch digest.
+  #
+  # Docker Dependabot PRs are scheduled version updates, not security alerts.
+  # Maintainers also watch base-image advisories and can refresh a pin ahead of
+  # the rebase when needed. Dependabot may suppress same-tag digest-only updates
+  # (dependabot-core#15103), so check the pinned digest when an advisory lands.
+  - package-ecosystem: docker
+    directory: /web
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 4
+    labels: ["dependencies", "web"]
+
+  # docker-compose.yml and docker-compose.release.yml (same #301 posture as the
+  # docker block above: digest refreshes and patch tags only, 7-day cooldown).
+  # Locally built `lq-ai-*:latest` images would otherwise be looked up on
+  # Docker Hub, hence the ignore; the release file's ghcr.io/${...} images use
+  # variable interpolation and are not parsed.
+  #
+  # Exception: `ollama/ollama:latest@sha256:...` (the `local` profile). `latest`
+  # has no version to hold back, so each digest refresh is a real Ollama
+  # version upgrade. It is excluded from the group so it arrives as its own
+  # PR; review it as an upgrade, not a rebuild.
+  #
+  # The compose pgvector pin is duplicated in .github/workflows/ci.yml (the
+  # Postgres service container), which no ecosystem here updates. When
+  # Dependabot bumps pgvector in compose, bump ci.yml by hand in the same PR.
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    labels: ["dependencies"]
+    ignore:
+      - dependency-name: "lq-ai-*"
+      - dependency-name: "*"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+    groups:
+      compose-images:
+        applies-to: version-updates
+        patterns: ["*"]
+        exclude-patterns: ["ollama/ollama"]
