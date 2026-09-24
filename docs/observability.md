@@ -7,6 +7,28 @@
 > not yet shipped is listed in [§6 — What's not yet shipped](#6-whats-not-yet-shipped)
 > with links to the tracking DE entries.
 
+## In short
+
+Two kinds of visibility are always on: structured logs, and Prometheus's `/metrics`
+endpoints on the api and gateway. `/metrics` needs no configuration or authentication
+and is reachable from the Docker host's loopback interface and from inside the
+Compose network. Traces are opt-in: nothing leaves the deployment until you set an
+OTLP endpoint, at which point the api and gateway emit domain-specific spans —
+citation checking, anonymization, skills, inference dispatch, playbooks, autonomous
+tool calls — alongside standard HTTP instrumentation. The autonomous-session audit
+log is separate from tracing and always on: M4 autonomous-session lifecycle events
+write rows to the local `audit_log` table regardless of OTel configuration.
+Anonymization spans carry only entity counts and type labels — never raw entity
+values — even when traces go to a third-party backend; other domain spans record
+their own structured attributes (resource IDs, enum/status labels, numeric metrics
+such as cost and confidence) but never raw document text or request parameters.
+
+Coverage isn't complete: the streaming inference path, some playbook nodes, and
+log-to-trace correlation aren't instrumented yet, and two documented outcomes — a
+`refused` metric label and the `autonomous_session.started` audit action — are
+defined but never actually written. See [§6](#6-whats-not-yet-shipped) and the
+"Known gap" notes below before building an alert on either.
+
 For the architectural context see [docs/architecture.md](architecture.md) §OBS and the
 "What the diagram doesn't show" section. For the deployment recipes see
 [deploy/observability/README.md](../deploy/observability/README.md).
