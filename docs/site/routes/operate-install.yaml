@@ -1,7 +1,8 @@
 - route: operate/install-macos
   source: docs/INSTALL-MAC.md
   title: Install on macOS
-  description: Install the signed LQ.AI desktop app on Apple Silicon, and verify what you downloaded.
+  description: The signed, notarized Mac desktop app manages a Docker-based installation through a control panel — install it on Apple Silicon and verify what you downloaded.
+  kind: how-to
   audience: [operator]
   status: draft
   sources:
@@ -15,7 +16,8 @@
   from: "## Quick Start"
   to: "## Architecture"
   title: Install with Docker Compose
-  description: The reference deployment — clone, configure, and run LQ.AI's eight services with Docker Compose.
+  description: Docker Compose starts LQ.AI and its supporting services together — the reference deployment, and the installation method this site's steps are tested against.
+  kind: how-to
   audience: [operator]
   status: draft
   sources:
@@ -30,8 +32,9 @@
 
 - route: operate/install-helm
   source: docs/operate/install-helm.md
-  title: Install with Helm
-  description: Deploy the core LQ.AI services to Kubernetes with the in-repo chart, and what it doesn't yet run for you.
+  title: Install on Kubernetes with Helm
+  description: The repository's Helm chart deploys the core chat services to Kubernetes, but it doesn't yet run everything the Docker Compose setup does.
+  kind: how-to
   audience: [operator]
   status: draft
   sources:
@@ -52,8 +55,9 @@
 
 - route: operate/reverse-proxy-tls
   source: docs/operate/reverse-proxy-tls.md
-  title: Reverse proxy and TLS
-  description: Put a stable, encrypted URL in front of LQ.AI — a private tailnet recipe, and three public-domain recipes.
+  title: Give the app a secure web address
+  description: Put a web server (a reverse proxy) in front of LQ.AI for a stable, encrypted address — a private tailnet recipe, and three public-domain recipes.
+  kind: how-to
   audience: [operator]
   status: draft
   sources:
@@ -65,8 +69,9 @@
 
 - route: operate/air-gapped
   source: docs/operate/air-gapped.md
-  title: Air-gapped and local-only inference
-  description: Run LQ.AI with local-only inference, and what the repository can — and cannot yet — prove about its network behavior.
+  title: Use AI without an internet connection
+  description: Configure LQ.AI to use models on computers you control, and what the repository can — and cannot yet — prove about its network behavior.
+  kind: how-to
   audience: [operator, evaluator]
   status: draft
   sources:
@@ -83,8 +88,9 @@
 
 - route: operate/hardware-sizing
   source: docs/operate/hardware-sizing.md
-  title: Hardware sizing
-  description: Three named configurations the repository actually supports numbers for, and what happens below the floor.
+  title: Choose a computer with enough capacity
+  description: Memory, storage, and processing needs depend on your models, documents, and number of users — three named configurations the repository supports numbers for, and what happens below the floor.
+  kind: reference
   audience: [operator]
   status: draft
   sources:
@@ -100,8 +106,9 @@
 
 - route: operate/architecture
   source: docs/architecture.md
-  title: Architecture
-  description: How the services fit together, what ships at each milestone, and where a customer's data can leave the deployment.
+  title: How the parts fit together
+  description: The website sends requests to the API, which calls the gateway to choose and contact an AI model — how the services fit together, what ships at each milestone, and where a customer's data can leave the deployment.
+  kind: explanation
   audience: [operator, evaluator]
   status: draft
   sources:
@@ -111,8 +118,9 @@
 
 - route: operate/logs-and-monitoring
   source: docs/observability.md
-  title: Logs and monitoring
-  description: What LQ.AI emits by default, what it takes to turn on tracing and metrics, and the ready-made deployment recipes.
+  title: Check service status and read logs
+  description: Start by checking that the services are running, then read the logs for the one handling a failed task — what LQ.AI emits by default, and what it takes to turn on tracing and metrics.
+  kind: reference
   audience: [operator]
   status: draft
   sources:
@@ -122,8 +130,9 @@
 
 - route: operate/recipes/caddy-tailscale
   source: deploy/caddy-tailscale/README.md
-  title: "Recipe: Caddy + Tailscale"
-  description: The runnable steps for a private, tailnet-only URL with auto-renewing HTTPS — no public DNS, no open inbound ports.
+  title: Share access over a private Tailscale network
+  description: The runnable steps for a private, tailnet-only URL with auto-renewing HTTPS, using Caddy — no public DNS, no open inbound ports.
+  kind: how-to
   audience: [operator]
   status: draft
   sources:
@@ -133,8 +142,9 @@
 
 - route: operate/recipes/tailnet-ollama
   source: deploy/tailnet-ollama/README.md
-  title: "Recipe: tailnet-hosted Ollama"
-  description: Point the gateway at Ollama running on a separate GPU host, reached over your tailnet, HTTPS-only.
+  title: Use Ollama on another computer over Tailscale
+  description: Point the gateway at an Ollama server on your private Tailscale network, reached HTTPS-only — make sure that computer has the model you choose.
+  kind: how-to
   audience: [operator]
   status: draft
   sources:
@@ -144,8 +154,9 @@
 
 - route: operate/recipes/observability
   source: deploy/observability/README.md
-  title: "Recipe: observability"
-  description: Wire a traces-and-metrics backend — self-hosted, or forwarding to an existing SaaS collector.
+  title: Set up monitoring
+  description: Wire a traces-and-metrics backend for LQ.AI — self-hosted, or forwarding to an existing SaaS collector — and review what any outside service will see.
+  kind: how-to
   audience: [operator]
   status: draft
   sources:

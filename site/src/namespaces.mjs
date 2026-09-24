@@ -5,14 +5,14 @@
 // needs it (astro.config.mjs and the header).
 
 export const NAMESPACES = [
-  { label: 'Start', dir: 'start' },
-  { label: 'Operate', dir: 'operate' },
-  { label: 'Trust', dir: 'trust' },
+  { label: 'Getting started', dir: 'start' },
+  { label: 'Run and maintain', dir: 'operate' },
+  { label: 'Data and privacy', dir: 'trust' },
   { label: 'Skills', dir: 'skills' },
-  { label: 'Deliver', dir: 'deliver' },
+  { label: 'Client handover', dir: 'deliver' },
   { label: 'Contribute', dir: 'contribute' },
   { label: 'Reference', dir: 'reference' },
-  { label: 'Changelog', dir: 'changelog' },
+  { label: 'Release notes', dir: 'changelog' },
 ];
 
 /**

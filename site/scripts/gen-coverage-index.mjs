@@ -398,7 +398,7 @@ export async function generate(ctx) {
     intro: INTRO,
     stamp,
     frontmatter: {
-      title: 'Coverage',
+      title: 'Find a skill for your task',
       description:
         'Which jurisdictions and practice areas the first-party skills declare, what each declaration actually covers, and where the gaps are.',
       audience: ['author', 'evaluator'],

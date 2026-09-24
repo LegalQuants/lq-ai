@@ -1,7 +1,8 @@
 - route: operate/backup-and-restore
   source: docs/operate/backup-and-restore.md
   title: Back up and restore
-  description: What actually has to survive a disaster, what's safe to lose, and a restore runbook that ends in a verification step.
+  description: A useful backup includes everything needed to bring the app and its data back together — try restoring it to a separate installation before you rely on it.
+  kind: how-to
   audience: [operator]
   status: draft
   sources:
@@ -16,8 +17,9 @@
 
 - route: operate/upgrade
   source: docs/operate/upgrade.md
-  title: Upgrade
-  description: The runbook for taking a new release — read the notes, back up, rebuild the right services together, and verify.
+  title: Update LQ.AI
+  description: Record your current version, take a backup you can restore, and read the new release's notes before you rebuild the right services together and verify.
+  kind: how-to
   audience: [operator]
   status: draft
   sources:
@@ -35,8 +37,9 @@
 
 - route: operate/rotate-a-leaked-key
   source: docs/operate/rotate-a-leaked-key.md
-  title: Rotate a leaked provider key
-  description: Revoke, replace, find the blast radius with one audit query, and confirm — the runbook for the 11pm scenario.
+  title: Replace a leaked API key
+  description: Revoke the exposed key with its provider, add a replacement to LQ.AI, and find the blast radius with one audit query — the runbook for the 11pm scenario.
+  kind: how-to
   audience: [operator]
   status: draft
   sources:
@@ -52,8 +55,9 @@
 
 - route: operate/headless-boot
   source: docs/operate/headless-boot.md
-  title: Headless boot
-  description: The stack boots and serves without the web UI. Here's what that gets you, and the one sentence about what it doesn't promise.
+  title: Run the services without the website
+  description: The stack boots and serves without the web UI — here's what that gets you, and the one sentence about what it doesn't promise.
+  kind: explanation
   audience: [operator, contributor]
   status: draft
   sources:
@@ -67,8 +71,9 @@
 
 - route: operate/move-or-uninstall
   source: docs/operate/move-or-uninstall.md
-  title: Move machines or uninstall
-  description: What to export before you move host or remove LQ.AI, and why one flag is irreversible.
+  title: Move or remove an installation
+  description: Moving LQ.AI means moving its data, settings, and the keys needed to read them — keep the old installation available until you've checked the new one, and why one flag is irreversible.
+  kind: how-to
   audience: [operator]
   status: draft
   sources:
@@ -86,8 +91,9 @@
 
 - route: operate/something-is-wrong
   source: docs/operate/something-is-wrong.md
-  title: Something is wrong
-  description: Start from what you're seeing, not from a task name — three branches, and the catalog of failures that don't announce themselves.
+  title: Something isn't working
+  description: Start from what you're seeing, not from a task name — find the step that failed, then check its settings and logs.
+  kind: how-to
   audience: [operator]
   status: draft
   sources:
@@ -109,7 +115,8 @@
 - route: operate/troubleshooting
   source: docs/operate/troubleshooting.md
   title: Troubleshooting
-  description: Search by the error you're actually seeing — one index over every recovery step published across this site.
+  description: Compare what happened against the expected setup, then search by the error you're actually seeing — one index over every recovery step published across this site.
+  kind: reference
   audience: [operator]
   status: draft
   sources:
