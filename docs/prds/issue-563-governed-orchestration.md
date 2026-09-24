@@ -1,6 +1,6 @@
 # PRD: Governed orchestration and optional skill capabilities
 
-**Status:** Accepted design; local implementation available for review, release pending.
+**Status:** Accepted design; implementation under review, release pending.
 **Tracks:** [#563](https://github.com/LegalQuants/lq-ai/issues/563).
 [ADR 0035](../adr/0035-governed-orchestration-run-tree.md) records the architecture;
 the [research note](../research/issue-563-harness-research.md) explains its evidence.
@@ -52,8 +52,8 @@ Success means the acceptance criteria hold with controlled sample inputs,
 including failure, interruption and empty-result cases. R1–R6 have local
 acceptance coverage across real storage, queue, helper containers and browser
 flows; regression checks passed with controlled providers. **R7's complete
-confidentiality acceptance remains pending.** These results describe unpublished
-code; they establish no live-provider or legal-quality claim.
+confidentiality acceptance remains pending.** These results use controlled
+providers and establish no live-provider or legal-quality claim.
 
 ## Release conditions
 
@@ -65,8 +65,8 @@ code; they establish no live-provider or legal-quality claim.
 - **Real matter use:** complete selected-document/KB intake and project-policy
   propagation, including DE-294, before enabling real sources and inference.
 
-Capabilities remain disabled by default. Production enablement is a separate
-decision; no release date is committed.
+Capabilities remain disabled by default. The sample demonstration is targeted
+for 0.8.0; production enablement remains a separate decision.
 
 Behavior details: [demonstration](../plans/issue-563-demonstration.md),
 [run files](../plans/issue-563-workspace.md),

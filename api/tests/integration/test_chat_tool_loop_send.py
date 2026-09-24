@@ -402,7 +402,11 @@ async def test_loop_confirmation_emits_gate_event_and_persists_rows(
         resp = await client.post(
             f"/api/v1/chats/{chat_id}/messages",
             headers=headers,
-            json={"content": "delete doc abc123", "stream": True},
+            json={
+                "content": "delete doc abc123",
+                "stream": True,
+                "skills": ["saved-notes-demo"],
+            },
         )
 
     assert resp.status_code == 200, resp.text
@@ -454,6 +458,8 @@ async def test_loop_confirmation_emits_gate_event_and_persists_rows(
     decrypted_state = decrypt_payload_envelope(raw_state)
     assert decrypted_state["messages"] == [{"role": "user", "content": "delete the file"}]
     assert decrypted_state["calls_used"] == 0
+    assert decrypted_state["skill_names"] == ["saved-notes-demo"]
+    assert "saved-notes-demo" not in _json.dumps(raw_state)
 
     # Assert ToolCallLog row with pending_confirmation.
     assert pending_row.tool_call_log_id is not None, "tool_call_log_id not linked"

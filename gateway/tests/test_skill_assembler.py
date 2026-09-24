@@ -781,7 +781,10 @@ _SHIPPED_REQUIRED_INPUTS: dict[str, list[str]] = {
     "msa-snapshot": [],
     "nda-review": ["document", "perspective"],
     "nda-snapshot": [],
+    "orchestration-topic-demo": [],
+    "orchestrator-harness": [],
     "playbook-easy-extract": ["document"],
+    "saved-notes-demo": [],
     "skill-creator": [],
     "vendor-privacy-policy-first-pass": ["document"],
 }

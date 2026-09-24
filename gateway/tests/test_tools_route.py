@@ -4,6 +4,8 @@ from httpx import ASGITransport, AsyncClient
 
 from app.api.tools import router as tools_router
 from app.config import GatewayConfig
+from app.config_revision import REVISION_HEADER, configuration_revision
+from app.main import build_tool_adapter
 from app.providers.tool.echo import EchoToolAdapter
 from app.router import Router
 from app.tool_egress_log import RecordingToolEgressLogWriter
@@ -24,7 +26,8 @@ def _make_app(monkeypatch, *, writer=None):
             ]
         }
     )
-    adapter = EchoToolAdapter.from_config(cfg.tool_providers[0])
+    adapter = build_tool_adapter(cfg.tool_providers[0])
+    assert isinstance(adapter, EchoToolAdapter)
     router_obj = Router(
         config=cfg,
         adapters={},
@@ -40,6 +43,62 @@ def _make_app(monkeypatch, *, writer=None):
 
 def _client(app) -> AsyncClient:
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+
+
+@pytest.mark.parametrize("revision", ["current", "0" * 64, "malformed"])
+async def test_checked_tool_revision_refuses_before_provider(monkeypatch, revision):
+    app, adapter = _make_app(monkeypatch)
+    called = []
+    invoke = adapter.invoke_tool
+
+    async def record(*args, **kwargs):
+        called.append(True)
+        return await invoke(*args, **kwargs)
+
+    monkeypatch.setattr(adapter, "invoke_tool", record)
+    expected = configuration_revision(app.state.config)
+    try:
+        async with _client(app) as client:
+            response = await client.post(
+                "/v1/tools/echo-test/echo",
+                json={"args": {}},
+                headers={REVISION_HEADER: expected if revision == "current" else revision},
+            )
+        if revision == "current":
+            assert response.status_code == 200 and called == [True]
+            assert response.headers[REVISION_HEADER] == expected
+        else:
+            assert response.status_code == 412 and not called
+            assert response.json()["error"]["code"] == "configuration_revision_mismatch"
+    finally:
+        await adapter.aclose()
+
+
+async def test_config_reload_with_stale_tool_adapter_refuses(monkeypatch):
+    app, adapter = _make_app(monkeypatch)
+    app.state.config.tool_providers[0].cost_per_call = "0.25"
+    rebuilt = None
+    try:
+        async with _client(app) as client:
+            response = await client.post(
+                "/v1/tools/echo-test/echo",
+                json={"args": {}},
+                headers={REVISION_HEADER: configuration_revision(app.state.config)},
+            )
+        assert response.status_code == 412
+        rebuilt = build_tool_adapter(app.state.config.tool_providers[0])
+        app.state.router._tool_adapters["echo-test"] = rebuilt
+        async with _client(app) as client:
+            accepted = await client.post(
+                "/v1/tools/echo-test/echo",
+                json={"args": {}},
+                headers={REVISION_HEADER: configuration_revision(app.state.config)},
+            )
+        assert accepted.status_code == 200
+    finally:
+        await adapter.aclose()
+        if rebuilt is not None:
+            await rebuilt.aclose()
 
 
 @pytest.mark.unit
@@ -194,6 +253,8 @@ async def test_tool_call_forwards_user_token_to_route_tool_call(monkeypatch) -> 
         request_id: str,
         max_allowed_tier: int | None = None,
         user_token: str | None = None,
+        require_anonymization: bool = False,
+        anonymizer=None,
     ) -> object:
         captured["user_token"] = user_token
         from app.router import ToolCallRoutedResult

@@ -1,18 +1,16 @@
 # Optional skill storage and bundled helpers
 
-Local #563 implementation, awaiting the remaining release and security gates. Both
+#563 implementation, awaiting the remaining release and security gates. Both
 capabilities are disabled by default. Enabling storage does not enable scripts.
 
-**Draft operator notes:** this documentation PR publishes the design and local
-evidence, not migration 0071, the runner, images or the deployment overlay. The
-commands below describe the separate unpublished implementation and cannot enable
-these capabilities on this branch. Production script enablement additionally
+**Draft operator notes:** this branch includes migration 0068, the runner and the
+deployment overlay for controlled evaluation. Production script enablement
 requires the [ADR D8c/D8d confidentiality gates](../adr/0035-governed-orchestration-run-tree.md#d8d--confidentiality-must-survive-compromised-helper-output),
 which remain pending after ratification.
 
 ## Persistent workspaces
 
-Apply migration **0071** through the normal deployment migration process and
+Apply migration **0068** through the normal deployment migration process and
 rebuild the API, arq worker and ingest worker together. Never apply host migrations
 to a running development database. Set `LQ_AI_SKILL_WORKSPACES_ENABLED=true` on the
 API and arq worker when ready. Only skills declaring

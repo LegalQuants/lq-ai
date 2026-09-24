@@ -23,6 +23,14 @@ This is the per-feature companion to
 [docs/HONEST-STATE.md §5](HONEST-STATE.md) (the shipped-vs-deferred
 catalog).
 
+The #563 implementation adds a separate, disabled-by-default
+[orchestration demonstration](plans/issue-563-demonstration.md): explicit plan
+approval, bounded parallel child sessions, progress, internal sample findings and
+root synthesis. It uses LangGraph/Postgres continuation with short arq invocations.
+Its sample provider performs no live research, and results remain unverified.
+ADR 0035 was accepted on 20 September 2026. The implementation is ready for
+review; production enablement remains subject to its release conditions.
+
 ---
 
 ## Honest state up front

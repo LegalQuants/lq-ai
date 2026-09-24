@@ -6,15 +6,15 @@ The audience is anyone authoring a skill containing legal substance: practicing 
 
 For the contribution process (claim, draft, attest, review, merge), see [`skills/CONTRIBUTING.md`](../skills/CONTRIBUTING.md). This guide focuses on **how to author the skill itself** — what goes in `SKILL.md`, what goes in `reference/`, what goes in `examples/`, and what conventions the project expects.
 
-**Accepted optional capabilities, not available on this branch:**
+**Optional capabilities, disabled by default:**
 [ADR 0035 D8b–D8d](adr/0035-governed-orchestration-run-tree.md#d8b--optional-persistent-skill-workspaces)
 adds persistent skill workspaces and installed Python helpers. Bundled scripts
 require security review of their exact code, dependencies and runtime image in
 addition to any legal-content review. Helpers must treat supplied and saved text
 as data and preserve its restrictions through subsequent agent calls. General
 generated-code execution remains excluded. The [capability summary](plans/issue-563-skill-capabilities.md)
-describes available behavior and pending security gates; this documentation PR
-does not add runtime support for `scripts/`.
+describes the implementation and pending security gates. Production helper
+enablement requires those gates to be completed.
 
 ---
 
@@ -38,9 +38,90 @@ my-skill/
 
 `SKILL.md` is the operational instruction the model executes when the skill is attached to a chat. Everything in `SKILL.md` becomes part of the prompt; everything in `reference/` is optionally surfaced when the skill's workflow references it. `examples/` are documentation for users and reviewers; they do not become part of the prompt by default.
 
+**Optional execution (#563).** Declared `scripts/` helpers
+can run through the private bundled-helper broker when an operator enables their
+exact installed version. Merely including a script does not enable execution.
+Generated-code execution is unsupported. The next section describes the optional
+declarations; [PRD §3.4](PRD.md#34-skill-library-and-skill-creator) records release state.
+
 **Where skills live.** Built-in skills are filesystem-canonical under `skills/<slug>/SKILL.md` in this repo. Community skills come from the [`LegalQuants/lq-skills`](https://github.com/LegalQuants/lq-skills) git submodule mounted at `skills/community/` — **empty on a fresh clone until you run `git submodule update --init --remote skills/community`**. At startup the loader (`api/app/skills/loader.py`) walks built-in skills first, then community skills, with **built-in winning on slug collision**. User- and team-authored skills are a separate path entirely: they live in the `user_skills` database table (created via the wizard UI or `POST /api/v1/user-skills`), not on the filesystem — see [User-scope skills](#user-scope-skills-slash_alias-forked_from-and-capture-from-chat-wave-d2) below.
 
 ---
+
+## Optional persistence and bundled helpers
+
+These two capabilities are independent and default off. A skill can use either,
+both or neither. The following declaration opts in to both:
+
+```yaml
+lq_ai:
+  capabilities:
+    workspace_version: 1
+    scripts:
+      - name: summarize_notes
+        description: Count lines and words in a text input and return a short preview.
+```
+
+`workspace_version` is a storage format version (integer 1–1000), separate from
+the skill's release version. Keep it for compatible changes; increment it when
+saved data is incompatible. A new version starts an empty namespace. Files belong
+to the current owner, matter or personal scope, resolved skill and format version.
+Team skills do not share users' saved files. A new invocation can read prior work
+in the same scope; a fork/new skill identity cannot. Loading prior work is always
+explicit and optional, and stored notes remain unverified task data.
+
+The available tool operations are `skill_workspace_list`, `skill_workspace_read`
+and `skill_workspace_write`. Chat exposes skill-specific function names and
+schemas; background execution uses the intent names. The application binds the
+identity and owner; callers never supply a workspace ID or host path. For example:
+
+```json
+{"name": "notes.md", "content": "Alpha beta\nGamma", "expected_revision": null}
+```
+
+The successful write returns a revision UUID. To update, read the file and supply
+that revision as `expected_revision`. A conflict means another write/reset happened;
+read again before deciding what to save. Names match
+`[a-zA-Z0-9][a-zA-Z0-9_.-]{0,95}`. Limits are 32 files, 64 KiB UTF-8 per file and
+1 MiB per workspace. There is no automatic file deletion tool; owners can reset
+the workspace from Saved skill work and export it through account export.
+
+For scripts, install `scripts/<declared_name>.py` in a filesystem skill. Helper
+names match `[a-z][a-z0-9_]{0,47}`; at most eight may be declared. The loader accepts
+up to 32 `.py`, `.json`, `.txt` or `.md` files under `scripts/`, at most 64 KiB each
+and 1 MiB total, with no hidden files or symlinks. All those files are included
+in the bundle hash and exposed in the skill's Source view. DB/user/team/inline
+skill text cannot install executable helpers; a reviewed filesystem installation
+is required for code.
+
+Call `run_bundled_script` with a declared name and bounded JSON input:
+
+```json
+{"script": "summarize_notes", "inputs": {"text": "Alpha beta\nGamma"}}
+```
+
+A helper reads one JSON object from stdin and writes stdout/stderr. The result
+contains `stdout`, `stderr` and `exit_code`, or a fixed error. Nonzero exit status
+means the helper failed even if it printed output. No shell, source-code or
+interpreter argument exists. Helpers must validate input shape and treat strings
+as data; do not use `eval`, shell interpolation, generated imports or execute
+programs from temporary work. The reviewed image supplies Python and approved
+dependencies. Network access, runtime installation, credentials, database access,
+host mounts and persistent filesystem access are absent.
+
+`/work` is temporary, bounded to 16 MiB and fresh on every call. Helpers get ten
+seconds and 64 KiB combined output. Python runs in isolation mode (`-I -B`);
+working-directory and user imports are unavailable. Read selected workspace data
+through its tool, pass it as JSON, and separately save selected output if useful.
+Do not assume the helper can open `notes.md` merely because the workspace stores
+that name. Source and input/output contracts should be reviewable in the skill.
+
+`saved-notes-demo` is a technical example, with a two-invocation worked example.
+Tools are available in attached chat turns, query-driven background planning and
+the guarded orchestration adapter. Existing single-inference playbook/tabular/
+query-less paths do not acquire a tool loop. Orchestration additionally requires
+the approved skill pin, explicit tool grants, phase and live worker claim.
+See [deployment and acceptance](deploy/skill-capabilities.md) for operator enablement.
 
 ## SKILL.md frontmatter
 

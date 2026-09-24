@@ -76,6 +76,50 @@ tags:
 # ============================================================
 paths:
 
+  /api/v1/skill-workspaces:
+    get:
+      tags: [skills]
+      summary: List the caller's saved skill work, including after execution is disabled
+      parameters:
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
+      responses:
+        '200':
+          description: Up to 50 owner-scoped workspaces; file metadata only
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/SavedSkillWorkspace'}
+  /api/v1/skill-workspaces/{workspace_id}:
+    parameters:
+      - {name: workspace_id, in: path, required: true, schema: {type: string, format: uuid}}
+    delete:
+      tags: [skills]
+      summary: Reset all files in one owned skill workspace
+      responses:
+        '204': {description: Saved work deleted; empty response}
+        '404': {description: Workspace absent or not owned}
+  /api/v1/skill-workspaces/{workspace_id}/files/{name}:
+    parameters:
+      - {name: workspace_id, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: name, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [skills]
+      summary: Read an owned saved file as unverified text
+      responses:
+        '200':
+          description: File metadata and UTF-8 content
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - {$ref: '#/components/schemas/SavedSkillFile'}
+                  - type: object
+                    required: [content]
+                    properties:
+                      content: {type: string, description: At most 64 KiB UTF-8}
+        '404': {description: File absent or workspace not owned}
+
   # ----------- AUTH -----------
   /api/v1/auth/login:
     post:
@@ -4964,6 +5008,125 @@ paths:
         '404':
           description: Notification not found
 
+  # ADR 0035: closed local demonstration; canonical detailed shapes are generated
+  # alongside these handlers. These paths add no public child-spawn authority.
+  /api/v1/autonomous/orchestration/capabilities:
+    get:
+      tags: [autonomous]
+      summary: Read demonstration enablement and explicit shared capacity
+      responses:
+        '200':
+          description: Disabled by default; live providers are always false
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/DemoCapabilities'
+  /api/v1/autonomous/orchestration/plans:
+    post:
+      tags: [autonomous]
+      summary: Prepare a sample plan for an owned active matter; requires opt-in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './backend-openapi.generated.yaml#/components/schemas/DemoPlanRequest'
+      responses:
+        '201':
+          description: Awaiting approval; no child is admitted or queued yet
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/TreeRead'
+        '403': {description: Demonstration disabled or autonomous opt-in missing}
+        '404': {description: Owned active project not found}
+        '409': {description: Owner already has an active root}
+  /api/v1/autonomous/orchestration/{root_id}/tree:
+    parameters:
+      - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      tags: [autonomous]
+      summary: Inspect owned plan, progress, budgets, receipts and unverified outcomes
+      responses:
+        '200':
+          description: Readable after opt-out, halt or feature disablement
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/TreeRead'
+        '404': {description: Root absent or owned by another user}
+  /api/v1/autonomous/orchestration/{root_id}/approve:
+    parameters:
+      - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [autonomous]
+      summary: Approve the exact revision and hash before worker wakeup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './backend-openapi.generated.yaml#/components/schemas/ApprovalRequest'
+      responses:
+        '200':
+          description: Durable approval; a lost queue wakeup is recovered by the sweep
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/TreeRead'
+        '409': {description: Stale revision/hash or conflicting transition}
+  /api/v1/autonomous/orchestration/{root_id}/reject:
+    parameters:
+      - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [autonomous]
+      summary: Reject an awaiting plan revision without executing children
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './backend-openapi.generated.yaml#/components/schemas/RejectionRequest'
+      responses:
+        '200':
+          description: Rejected plan and retained history
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/TreeRead'
+        '409': {description: Stale revision or execution already started}
+  /api/v1/autonomous/orchestration/{root_id}/halt:
+    parameters:
+      - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [autonomous]
+      summary: Halt an owned tree, including after opt-out or feature disablement
+      responses:
+        '200':
+          description: Deterministic partial state; no fresh synthesis call after halt
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/TreeRead'
+        '404': {description: Root absent or owned by another user}
+
+  /api/v1/autonomous/orchestration/{root_id}/files/{session_id}/{name}:
+    parameters:
+      - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: session_id, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: name, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [autonomous]
+      summary: Inspect a private or shared working file in an owned run
+      responses:
+        '200':
+          description: Bounded UTF-8 contents and revision; readable after halt or opt-out
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/WorkspaceContent'
+        '404': {description: File absent, belongs to another run or owner}
+
   /api/v1/autonomous/run-now:
     post:
       tags: [autonomous]
@@ -7709,6 +7872,28 @@ components:
             Per-column override of the skill-level tier floor. High-stakes
             columns can demand Tier 4+ while routine columns route Tier 1.
 
+    SavedSkillFile:
+      type: object
+      required: [name, revision, size_bytes, updated_at]
+      properties:
+        name: {type: string}
+        revision: {type: string, format: uuid}
+        size_bytes: {type: integer}
+        updated_at: {type: string, format: date-time}
+    SavedSkillWorkspace:
+      type: object
+      required: [id, skill_name, project_id, project_name, format_version, files]
+      properties:
+        id: {type: string, format: uuid}
+        skill_name: {type: string}
+        project_id: {type: [string, 'null'], format: uuid}
+        project_name: {type: [string, 'null']}
+        format_version: {type: integer, minimum: 1, maximum: 1000}
+        files:
+          type: array
+          maxItems: 32
+          items: {$ref: '#/components/schemas/SavedSkillFile'}
+
     Skill:
       allOf:
         - $ref: '#/components/schemas/SkillSummary'
@@ -7729,6 +7914,15 @@ components:
                 slug → id.
             content_yaml: {type: string, description: "Frontmatter YAML"}
             content_md: {type: string, description: "Body markdown"}
+            script_files:
+              type: array
+              description: Declared installed helper source and supporting text; not executable request inputs
+              items:
+                type: object
+                required: [path, content]
+                properties:
+                  path: {type: string}
+                  content: {type: string}
             reference_files:
               type: array
               items:

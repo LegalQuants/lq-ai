@@ -166,14 +166,14 @@ jobs:
         # The repo-root ruff.toml excludes web/ and applies to api+gateway+scripts.
         # Run from repo root so the config is picked up correctly.
         working-directory: ${{ github.workspace }}
-        run: ruff check api scripts
+        run: ruff check api scripts script_runner
 
       - name: ruff format --check
         working-directory: ${{ github.workspace }}
-        run: ruff format --check api scripts
+        run: ruff format --check api scripts script_runner
 
       - name: mypy (standard mode)
-        run: mypy app
+        run: mypy app ../script_runner
 
       - name: pytest (coverage gate ≥80%)
         # -n auto: one worker per available CPU (4 on ubuntu-latest).
@@ -183,6 +183,18 @@ jobs:
         # (12242/15023 statements) — clears the documented 80% target, so
         # the gate enforces the target itself.
         run: pytest -n auto -q --cov=app --cov-report=term --cov-fail-under=80
+
+      - name: Build reviewed helper acceptance images
+        working-directory: ${{ github.workspace }}
+        run: |
+          docker build -f script_runner/Dockerfile.bundle --build-arg SKILL_DIR=skills/saved-notes-demo -t lq-skill-demo:test .
+          docker build -f script_runner/Dockerfile.bundle --build-arg SKILL_DIR=api/tests/fixtures/runner-probe -t lq-skill-probe:test .
+          echo "LQ_TEST_SCRIPT_IMAGE=$(docker image inspect --format '{{.Id}}' lq-skill-demo:test)" >> "$GITHUB_ENV"
+          echo "LQ_TEST_PROBE_IMAGE=$(docker image inspect --format '{{.Id}}' lq-skill-probe:test)" >> "$GITHUB_ENV"
+
+      - name: Real bundled helpers and application acceptance
+        # Serial: each call proves cleanup of this isolated broker's jobs.
+        run: pytest tests/skills tests/autonomous/orchestration/test_skill_capabilities.py -q
 
   gateway-checks:
     name: Gateway (ruff + mypy --strict + pytest)

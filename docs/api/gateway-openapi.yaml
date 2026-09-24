@@ -93,6 +93,11 @@ paths:
           ADR 0011: the transparency principle requires users / admins
           to be able to pick a specific model without alias indirection.
 
+        With `X-LQ-AI-Config-Revision`, only non-streaming direct routes are
+        accepted. The gateway checks the revision and adapter provenance, then
+        pins configuration and adapter references through the request. Aliases,
+        including names that resemble direct routes, are refused in this mode.
+
         The gateway:
         - Resolves the model field (alias chain OR direct passthrough)
         - Determines the routed inference tier (B4)
@@ -104,8 +109,9 @@ paths:
         - Tracks cost and telemetry
 
         Tier-floor enforcement (D1) applies to BOTH dispatch modes —
-        a direct selection of a tier-1 model against a skill that
-        declares `minimum_inference_tier: 3` is refused with 403.
+        a direct selection of a tier-4 model against a skill that
+        declares `minimum_inference_tier: 3` is refused with 403
+        (lower numeric tiers provide stronger protection).
 
         Per PRD §4.4, the routed Inference Tier is surfaced two ways
         on the response:
@@ -116,6 +122,8 @@ paths:
              need to parse the body.
         The provider name is mirrored at `routed_provider` (body) and
         `X-LQ-AI-Routed-Provider` (header).
+      parameters:
+        - $ref: '#/components/parameters/ConfigurationRevision'
       requestBody:
         required: true
         content:
@@ -126,6 +134,8 @@ paths:
         '200':
           description: Completion (or stream)
           headers:
+            X-LQ-AI-Config-Revision:
+              $ref: '#/components/headers/ConfigurationRevision'
             X-LQ-AI-Routed-Inference-Tier:
               description: |
                 The Inference Tier (1-5) that this request was routed at,
@@ -154,6 +164,8 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/GatewayError'}
+        '412':
+          $ref: '#/components/responses/ConfigurationRevisionMismatch'
         '429':
           description: Rate limit exceeded
           content:
@@ -414,9 +426,17 @@ paths:
         They are configured under ``tool_providers`` in ``gateway.yaml`` and
         carry their own egress tier (1-5) and allowlist policy. The gateway
         refuses any provider not in the registry with 403.
+
+        `require_anonymization: true` requires X-LQ-AI-Config-Revision and a
+        supported GovInfo/EDGAR/EUR-Lex authority operation. The gateway requires
+        provider and tier anonymization settings, transforms bounded query prose,
+        and refuses sensitive/malformed identifiers or unknown fields. Results
+        stay verbatim. No raw fallback occurs on transform failure. Legacy calls
+        that omit the requirement retain their existing behavior.
       security:
         - apiKeyAuth: []
       parameters:
+        - $ref: '#/components/parameters/ConfigurationRevision'
         - name: provider
           in: path
           required: true
@@ -446,6 +466,9 @@ paths:
       responses:
         '200':
           description: Tool call succeeded
+          headers:
+            X-LQ-AI-Config-Revision:
+              $ref: '#/components/headers/ConfigurationRevision'
           content:
             application/json:
               schema:
@@ -465,6 +488,8 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/GatewayError'}
+        '412':
+          $ref: '#/components/responses/ConfigurationRevisionMismatch'
         '429':
           description: Tool provider rate limit exceeded
           content:
@@ -716,10 +741,15 @@ paths:
       summary: Get the live gateway config (sanitized)
       description: |
         Returns the live ``GatewayConfig`` snapshot as JSON, with no
-        secret material (the schema only carries env-var *names*; never
-        values). Authenticated via ``X-LQ-AI-Gateway-Key``. The web UI
+        encrypted credential values; env-var names remain visible. Includes
+        `configuration_revision`, an opaque SHA-256 of the full validated
+        configuration and dispatch contract version, including credential
+        configuration before sanitization.
+        It does not hash resolved environment values. Authenticated via
+        ``X-LQ-AI-Gateway-Key``. The web UI
         consumes this to populate the provider dropdown when editing
-        aliases.
+        aliases. `authority_anonymization_version: 1` advertises the supported
+        checked authority transform, not that it is enabled for every provider.
       security:
         - apiKeyAuth: []
       responses:
@@ -729,6 +759,14 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [configuration_revision, authority_anonymization_version]
+                properties:
+                  configuration_revision:
+                    type: string
+                    pattern: '^[0-9a-f]{64}$'
+                  authority_anonymization_version:
+                    type: integer
+                    const: 1
                 additionalProperties: true
         '401':
           description: Missing or invalid X-LQ-AI-Gateway-Key
@@ -979,6 +1017,39 @@ paths:
               schema: {$ref: '#/components/schemas/GatewayError'}
 
 components:
+  parameters:
+    ConfigurationRevision:
+      name: X-LQ-AI-Config-Revision
+      in: header
+      required: false
+      description: |
+        Optional consistency precondition from GET /admin/v1/config. When supplied,
+        the gateway requires the current configuration and selected adapter's build
+        configuration to match, then pins configuration and adapter references
+        through dispatch. Accepted calls may finish after a hot update; subsequent
+        calls with an old revision are refused. This header is not sent upstream.
+        Supported for non-streaming direct chat completions and named tool calls.
+      schema:
+        type: string
+        pattern: '^[0-9a-f]{64}$'
+  headers:
+    ConfigurationRevision:
+      description: |
+        Present on successful checked requests; exactly echoes the accepted
+        X-LQ-AI-Config-Revision. Omitted when the request supplied no revision.
+      schema:
+        type: string
+        pattern: '^[0-9a-f]{64}$'
+  responses:
+    ConfigurationRevisionMismatch:
+      description: |
+        Refused before provider dispatch: malformed/stale configuration revision,
+        missing/obsolete adapter, required anonymization without a revision,
+        or an unsupported checked inference route
+        (alias or streaming). Error code is configuration_revision_mismatch.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/GatewayError'}
   securitySchemes:
     apiKeyAuth:
       type: apiKey
@@ -1152,6 +1223,9 @@ components:
           type: integer
           enum: [1,2,3,4,5]
         routed_provider: {type: string}
+        routed_model:
+          type: [string, 'null']
+          description: Gateway-resolved native model for a non-streaming completion; independent of the upstream model label.
         cost_estimate: {type: number}
         anonymization_applied: {type: boolean}
         lq_ai_applied_skills:
@@ -1353,9 +1427,12 @@ components:
           type: object
           additionalProperties: true
           description: |
-            Arbitrary key/value arguments forwarded to the tool adapter.
-            Schema is tool-specific; the gateway passes the object through
-            without validation.
+            Tool-specific argument object. With require_anonymization=true,
+            only the supported authority operation shapes are allowed; unknown
+            fields and malformed/reference-changing inputs are refused. Query
+            text is limited to 8192 UTF-8 bytes; IDs/filters to 512 UTF-8 bytes.
+            GovInfo collection is USCODE/CFR and optional page_size is 1-100.
+            Otherwise retains the existing adapter-specific handling.
         max_allowed_tier:
           type: integer
           minimum: 1
@@ -1365,6 +1442,16 @@ components:
             Optional egress-tier ceiling. If the provider's ``egress_tier``
             is higher than this value the gateway refuses with 403
             (``egress_refused``). Omit to allow any tier.
+
+        require_anonymization:
+          type: boolean
+          default: false
+          description: |
+            Require the checked authority transform. Requires a matching
+            X-LQ-AI-Config-Revision, authority_anonymization_version=1 capability,
+            provider anonymize_outbound=true and enabled anonymization at the
+            provider's egress tier. Unsupported/disabled/failed transforms return
+            403 before provider dispatch. Never forwarded inside provider args.
 
     ToolDiscoveryResponse:
       type: object
@@ -1408,7 +1495,7 @@ components:
 
     ToolCallResponse:
       type: object
-      required: [provider, tool, payload, tier]
+      required: [provider, tool, payload, tier, anonymization_applied]
       properties:
         provider:
           type: string
@@ -1426,6 +1513,13 @@ components:
           type: integer
           enum: [1, 2, 3, 4, 5]
           description: The egress tier at which the tool call was routed.
+
+        anonymization_applied:
+          type: boolean
+          description: |
+            Whether the required authority argument protection pass ran, including
+            a pass detecting zero entities. Public result evidence is not rewritten.
+            This does not guarantee detector recall or search coverage.
 
     GatewayError:
       type: object

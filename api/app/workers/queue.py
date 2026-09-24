@@ -24,11 +24,30 @@ Design notes
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from typing import Any
 
 log = logging.getLogger(__name__)
+
+
+async def enqueue_orchestration_job(root_id: uuid.UUID, session_id: uuid.UUID) -> bool:
+    """Best-effort wakeup after durable commit; the bounded sweep repairs loss."""
+    try:
+        async with asyncio.timeout(3):
+            pool = await _get_m3a6_pool()
+            await pool.enqueue_job(
+                "orchestration_session_job",
+                str(root_id),
+                str(session_id),
+                _job_id=f"orchestration:{session_id}",
+            )
+        return True
+    except Exception:
+        log.warning("Orchestration wakeup deferred to recovery sweep", exc_info=False)
+        return False
+
 
 # Job-function name on the worker side. Must match the function name
 # in :mod:`app.workers.document_pipeline`.

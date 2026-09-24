@@ -124,6 +124,7 @@ async def audit_action(
     routed_provider: str | None = None,
     request: Request | None = None,
     details: dict[str, Any] | None = None,
+    timestamp: Any | None = None,
 ) -> AuditLog:
     """Insert one ``audit_log`` row for ``action``; return the inserted instance.
 
@@ -144,6 +145,8 @@ async def audit_action(
     ip_address, user_agent, request_id = _client_metadata(request)
 
     row = AuditLog(
+        # Ordinary audit rows retain their existing transaction-time default.
+        **({"timestamp": timestamp} if timestamp is not None else {}),
         user_id=user_id,
         action=action,
         resource_type=resource_type,

@@ -1,10 +1,25 @@
 # Orchestration demonstration
 
-The local demonstration lets an owner approve parallel agent work, monitor it and
-inspect the combined result. It is available in the unpublished implementation
+The demonstration lets an owner approve parallel agent work, monitor it and
+inspect the combined result. The implementation adds this flow
 under **Autonomous sessions → Orchestration demo**, behind an operator setting.
 See the [feature PRD](../prds/issue-563-governed-orchestration.md) for requirements
 and release status.
+
+After migration 0067, an operator can set `LQ_AI_ORCHESTRATION_DEMO_ENABLED=true`
+in the development or release Compose environment and restart the API and arq
+worker. Both services receive the flag and a shared child-capacity limit of two
+unless `LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN` overrides it. The flag enables
+only this sample workflow; live providers, persistent skill workspaces and
+bundled helpers remain separate capabilities.
+Drain or halt active demo runs before switching the flag off. With the flag off,
+the worker schedules no orchestration recovery or execution; owner read and halt
+access remains available. Switching the flag off does not itself halt or expire
+retained runs. A queued or running root can remain active until its owner halts it
+or recovery runs after re-enablement; the one-active-root-per-owner rule still
+applies. Plans have a one-hour deadline. If that deadline passes while the flag
+is off, recovery on re-enablement expires the run or marks unresolved effects
+for reconciliation rather than resuming it.
 
 ## User-visible behavior
 

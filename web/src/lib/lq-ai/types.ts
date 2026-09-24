@@ -508,6 +508,7 @@ export interface Skill extends SkillSummary {
 	content_md: string;
 	reference_files?: SkillReferenceFile[];
 	example_files?: SkillReferenceFile[];
+	script_files?: SkillReferenceFile[];
 	/**
 	 * Parsed inputs from the frontmatter. The OpenAPI sketch surfaces only
 	 * `content_yaml` (the raw frontmatter); we parse it client-side to drive

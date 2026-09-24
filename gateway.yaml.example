@@ -231,7 +231,7 @@ providers:
 #       hosts: [www.courtlistener.com]   # exact outbound host allowlist (SSRF)
 #     rate_limit:
 #       requests_per_minute: 60    # per-provider, enforced at the adapter
-#     anonymize_outbound: true     # default; transform lands in WS3/WS4
+#     anonymize_outbound: true     # default; generic CourtListener transform remains deferred
 #
 #   - name: govinfo-prod
 #     type: govinfo                # shipped in WS-E PR1a; uncomment + set GOVINFO_API_KEY to enable
@@ -242,7 +242,7 @@ providers:
 #       hosts: [api.govinfo.gov]   # exact outbound host allowlist (SSRF)
 #     rate_limit:
 #       requests_per_minute: 60    # api.data.gov default is 1200/min; 60 is conservative
-#     anonymize_outbound: false    # statutory text is public; skip_anonymization=True on results
+#     anonymize_outbound: false    # opt-out; set true for checked authority-query anonymization
 #     # GovInfo data is free (no per-call cost). Fields below are optional DE-344 extensions
 #     # for future cost-tracking dashboards; omit or set to 0 for free sources:
 #     # cost_per_call: 0.0
@@ -257,7 +257,7 @@ providers:
 #       hosts: [efts.sec.gov, www.sec.gov]
 #     rate_limit:
 #       requests_per_minute: 300   # SEC allows ~10 req/s
-#     anonymize_outbound: false    # public filings; skip_anonymization=True on results
+#     anonymize_outbound: false    # opt-out; set true for checked authority-query anonymization
 #     # (no api_key_env — EDGAR needs only a User-Agent)
 #     # (no cost_per_call — free source; R4 stays a no-op)
 #
@@ -270,7 +270,7 @@ providers:
 #       hosts: [publications.europa.eu]
 #     rate_limit:
 #       requests_per_minute: 60
-#     anonymize_outbound: false    # public legal text; skip_anonymization=True on results
+#     anonymize_outbound: false    # opt-out; set true for checked authority-query anonymization
 #     # (no api_key_env — EUR-Lex Cellar needs only a User-Agent)
 #     # (no cost_per_call — free source; R4 stays a no-op)
 

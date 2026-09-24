@@ -51,6 +51,10 @@ class ToolIntent(StrEnum):
     notify = "notify"
     retrieve_caselaw = "retrieve_caselaw"
     call_mcp_tool = "call_mcp_tool"
+    skill_workspace_list = "skill_workspace_list"
+    skill_workspace_read = "skill_workspace_read"
+    skill_workspace_write = "skill_workspace_write"
+    run_bundled_script = "run_bundled_script"
     # WS-D PR1: the planner's next-step decision call (a gateway inference).
     # Granted only in analysis; the agentic loop dispatches it each iteration.
     plan = "plan"
@@ -58,6 +62,11 @@ class ToolIntent(StrEnum):
     # GovInfo through the registry + GovInfoAdapter egress path.  Granted only
     # in analysis (authority lookup is an analysis-phase activity).
     retrieve_authority = "retrieve_authority"
+    # Internal, run-scoped working files. Require orchestration authority and a
+    # durable effect in addition to phase grants; never expose a host filesystem.
+    workspace_read = "workspace_read"
+    workspace_write = "workspace_write"
+    workspace_share = "workspace_share"
 
 
 PHASE_GRANTS: dict[Phase, frozenset[ToolIntent]] = {
@@ -79,6 +88,13 @@ PHASE_GRANTS: dict[Phase, frozenset[ToolIntent]] = {
             ToolIntent.retrieve_authority,
             # WS-D PR1: the agentic planner decision call.
             ToolIntent.plan,
+            ToolIntent.workspace_read,
+            ToolIntent.workspace_write,
+            ToolIntent.workspace_share,
+            ToolIntent.skill_workspace_list,
+            ToolIntent.skill_workspace_read,
+            ToolIntent.skill_workspace_write,
+            ToolIntent.run_bundled_script,
         }
     ),
     Phase.drafting: frozenset(
@@ -92,6 +108,13 @@ PHASE_GRANTS: dict[Phase, frozenset[ToolIntent]] = {
             # emit_artifact at drafting ONLY: the memo is synthesized work
             # product, written exactly once where synthesis happens (Donna #8).
             ToolIntent.emit_artifact,
+            ToolIntent.workspace_read,
+            ToolIntent.workspace_write,
+            ToolIntent.workspace_share,
+            ToolIntent.skill_workspace_list,
+            ToolIntent.skill_workspace_read,
+            ToolIntent.skill_workspace_write,
+            ToolIntent.run_bundled_script,
         }
     ),
     Phase.ethics_review: frozenset({ToolIntent.emit_finding}),
