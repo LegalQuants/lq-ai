@@ -243,13 +243,7 @@ async def estimate_tabular_execution_cost(
 
     ensemble_premium = Decimal("0")
     if ensemble_config is not None and ensemble_cells_count > 0:
-        per_pass_cost = sum(
-            [
-                await estimate_judge_call_cost_usd(db, judge_model=model)
-                for model in ensemble_config.judge_models
-            ],
-            Decimal("0"),
-        )
+        per_pass_cost = await estimate_ensemble_pass_cost_usd(db, ensemble_config)
         ensemble_premium = per_pass_cost * Decimal(ensemble_cells_count)
 
     return TabularPreviewCostResponse(
@@ -259,6 +253,33 @@ async def estimate_tabular_execution_cost(
         per_tier_breakdown=per_tier_breakdown,
         ensemble_cells_count=ensemble_cells_count,
         ensemble_premium_usd=ensemble_premium,
+    )
+
+
+async def estimate_ensemble_pass_cost_usd(
+    db: AsyncSession | None,
+    ensemble_config: EnsembleConfig,
+) -> Decimal:
+    """Estimated USD cost of ONE Stage-4 ensemble pass (N judge calls).
+
+    The shared per-pass primitive behind the preview's ensemble premium
+    AND the executor's mid-run ensemble ceiling (DE-331):
+    ``sum(estimate_judge_call_cost_usd(db, judge_model=m) for m in
+    ensemble_config.judge_models)`` — the same per-model rolling-average
+    estimator the chat-send cost pre-flight uses, so the pre-flight
+    number the operator confirmed and the mid-run accumulator that is
+    compared against it are computed from the same math.
+
+    ``db=None`` returns the cold-start default per judge
+    (:data:`app.citation.cost.DEFAULT_PER_JUDGE_USD`) x the judge count.
+    """
+
+    return sum(
+        [
+            await estimate_judge_call_cost_usd(db, judge_model=model)
+            for model in ensemble_config.judge_models
+        ],
+        Decimal("0"),
     )
 
 
@@ -399,6 +420,7 @@ __all__ = [
     "DEFAULT_TIER_LABEL",
     "DEFAULT_TOKENS_PER_CELL",
     "TABULAR_EXTRACTION_PURPOSE",
+    "estimate_ensemble_pass_cost_usd",
     "estimate_per_cell_cost_usd",
     "estimate_per_cell_tokens",
     "estimate_tabular_execution_cost",
