@@ -1,5 +1,12 @@
 # Contributing Skills to LQ.AI
 
+## In short
+
+- A skill's `author` field alone doesn't prove it was reviewed — a real review names who checked it, what they tested, and what they found.
+- Any skill with legal substance needs a named human attestation before it merges: a practicing attorney certifies in the PR description that they reviewed the content and it reflects reasonable practice in the stated jurisdiction(s) — either as the skill's co-author, or as the reviewing attorney when the author is a legal-ops practitioner or engineer. An AI agent cannot make this attestation.
+- Merge also needs review from a practicing attorney and an engineer, and any later change to a skill's substance goes through the same process again.
+- No shipped skill records the attesting attorney's name in its own metadata: 14 of the 15 first-party `SKILL.md` files list `author: LegalQuants`, and the 15th (`skill-creator`) carries no `lq_ai:` block at all — the merging pull request is the only place to find a skill's attestation record.
+
 Skills are the canonical artifact of value in this project. **When the project produces a wrong answer, the answer to "why" is almost always in a `SKILL.md` somewhere. Improving LQ.AI is mostly improving skills.**
 
 This document covers contributions of **skills containing legal substance** — the everyday work-product skills like NDA Review, MSA Review, DPA Checklist Review, and the dozens of related skills the deferred-enhancements list catalogs. The contribution path for skills is meaningfully different from the engineering contribution path because skills carry legal substance: the patterns they encode, the severity calibrations they apply, and the recommended language they suggest will affect real legal work in real organizations. The bar is correspondingly higher.

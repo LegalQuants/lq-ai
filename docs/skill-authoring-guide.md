@@ -16,6 +16,14 @@ generated-code execution remains excluded. The [capability summary](plans/issue-
 describes available behavior and pending security gates; this documentation PR
 does not add runtime support for `scripts/`.
 
+## In short
+
+- A skill is a folder built around `SKILL.md`: frontmatter names the skill and its inputs; the body describes when to apply it, the workflow, and the desired output. Optional `reference/` and (rarely) `scripts/` subfolders add supporting material; `examples/` holds at least one worked example and is required before a skill goes to review.
+- Everything in `SKILL.md`, plus every file under `reference/`, is sent to the model as part of the request — not filed away for later search — so keep reference material relevant and mind what you send to the chosen provider.
+- A skill describes the task and the answer you want; you still need to check whether the model followed it and whether the result is correct.
+- Naming a file format in a skill's input description does not add support for uploading that format; the upload pipeline decides that independently.
+- A `scripts/` folder does not by itself mean LQ.AI executes those scripts; see the capability note above for what is actually supported on this branch.
+
 ---
 
 ## Skill anatomy
