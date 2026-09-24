@@ -5,6 +5,19 @@ Inference Gateway), and `web/` (a SvelteKit fork of OpenWebUI) — talking over 
 OpenAPI contracts. This page is the practical loop for running all three, plus the
 database, worker, and object-store services they depend on.
 
+## In short
+
+You don't need the whole stack to read code or run the Python or Gateway test suites —
+but trying the app in a browser needs the website, API, and their supporting services
+together. `docker compose up -d` (or `docker compose --profile local up -d` for local Ollama, no
+external key) brings up all of it in one command; `make run-dev`/`make stop-dev` wrap the same bring-up
+and shutdown. Python dependencies for `api/` and `gateway/` are locked with `uv`
+(`make install-api`/`make install-gateway`); only relock `uv.lock` when deliberately
+changing dependencies. The dockerized `web` container serves a prebuilt bundle, not a live
+dev server, so editing frontend code needs Vite running natively on the host alongside it
+— see the exact values further down. Two things corrupt a shared dev stack: running
+Alembic migrations from the host against the live database, and `docker compose down -v`.
+
 ## Bring up the stack
 
 ```bash

@@ -4,6 +4,16 @@ Thanks for your interest in contributing. This document covers contributions to 
 
 ---
 
+## In short
+
+- Read this file in full before your first change, then read the code and tests for the behavior you're changing — an accepted design decision isn't always fully implemented yet, so check the implementation too.
+- Run `make lint`, `make format-check`, and `make test` locally before opening a pull request; new behavior needs tests, and user-facing changes need updated docs.
+- Every commit needs a DCO sign-off (`git commit -s`) — pull requests with unsigned commits cannot be merged.
+- Changes touching authentication, authorization, audit logging, or cryptographic implementations get security review even when no path-based CODEOWNERS rule catches them automatically — say so in the PR description.
+- For anything beyond a small, well-scoped item, file an issue first to discuss the approach before you invest the work.
+
+---
+
 ## Quick start
 
 ```bash

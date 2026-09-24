@@ -1,53 +1,31 @@
-# On-ramp for a compliance or procurement professional
+# Help with compliance and procurement reviews
 
-If you evaluate vendors for a living, or you run an AI-governance program, LQ.AI's
-contribution board has two items written for exactly that background.
+Help turn broad claims into specific questions, controls and supporting evidence.
 
-## The two items on the board
+## Useful ways to help
 
-**The [Procurement-Readiness Pack](mini-prds/procurement-readiness-pack.md)** turns the
-project's existing procurement objections and compliance mappings into pre-filled SIG Lite
-and CAIQ Lite questionnaire responses, plus a cover letter explaining why a self-hosted
-open-source deployment is an unusual procurement. The structure and the
-`[OPERATOR-CONFIGURABLE]` marker convention already exist in
-[`docs/procurement/README.md`](../procurement/README.md), and a starter SIG Lite response
-covering the privileged-matter-handling domain is already merged; the gap is the remaining
-~15 SIG Lite domains, the full CAIQ Lite response, and the cover letter.
+Review a questionnaire answer, identify the evidence needed for a requirement or document which responsibilities belong to the app and which belong to the team running it.
 
-**The [NIST AI RMF 1.0 Profile mapping](mini-prds/nist-ai-rmf-profile.md)** maps the
-project's design and operational practices against the NIST AI Risk Management Framework
-(AI 100-1) and its Generative AI Profile (AI 600-1), function by function — Govern, Map,
-Measure, Manage. This document does not exist yet in
-[`docs/compliance/`](../compliance/README.md); federal and federal-adjacent procurement
-reviewers look for it specifically, and its absence currently reads as a gap rather than a
-neutral omission.
+## Make the conclusion traceable
 
-Both are scoped as **M** effort with **High** foundation readiness — you read existing
-source, fill the gap, and submit the pull request, rather than inventing structure from
-nothing. [The contribution board's](EASIEST-CONTRIBUTIONS.md) effort key reads M as a few
-days; the NIST mini-PRD sets its own expectation higher, at roughly one to two focused
-weeks, so take that figure for that item.
+Explain how the evidence supports the answer. A setting, policy or code comment alone may not establish that a particular installation meets the requirement. The Procurement-Readiness Pack's `[OPERATOR-CONFIGURABLE]` marker is this project's own device for keeping that distinction visible — it flags an answer that depends on the operator's own configuration instead of asserting it holds for every deployment (see [`docs/procurement/README.md`](../procurement/README.md)).
 
-## A cross-profile item worth knowing about
+## Specific projects to consider
 
-The **[OWASP LLM Top 10 mapping](mini-prds/owasp-llm-top10-mapping.md)** is scoped for a
-security-aware engineer, but its output — a risk-by-risk mapping of prompt injection,
-sensitive-information disclosure, and the rest of the OWASP LLM list against the project's
-actual mitigations — is a document your review process will also want. If you can pair
-with an engineer, this is a natural joint contribution: you bring the framework fluency,
-they bring the code citations.
+The contribution briefs cover completing the procurement-readiness pack and mapping the design to NIST AI RMF. The OWASP language-model risk mapping is a useful joint task with an engineer. Start from the existing SIG Lite starter and the framework brief, identify missing evidence, and avoid describing planned controls as implemented.
 
-## Where review happens
+### Details
 
-Both `docs/compliance/` and `docs/procurement/` are routed by
-[CODEOWNERS](../../.github/CODEOWNERS) to the project's counsel reviewers in addition to
-the maintainer team, because these documents affect what an operator can tell their own
-procurement or governance function. A pull request against either directory does not merge
-on maintainer approval alone.
+- **[Procurement-Readiness Pack](mini-prds/procurement-readiness-pack.md)** — pre-filled SIG Lite and CAIQ Lite questionnaire responses, plus a cover letter explaining why a self-hosted open-source deployment is an unusual procurement. A starter SIG Lite response covering the privileged-matter-handling domain is already merged; the gap is the remaining ~15 SIG Lite domains, the full CAIQ Lite response, and the cover letter. Scoped as **M** effort with **High** foundation readiness — the contribution board's effort key reads M as a few days.
+- **[NIST AI RMF 1.0 Profile mapping](mini-prds/nist-ai-rmf-profile.md)** — maps the project's design and operational practices against the NIST AI Risk Management Framework (AI 100-1) and its Generative AI Profile (AI 600-1), function by function: Govern, Map, Measure, Manage. This document does not exist yet in [`docs/compliance/`](../compliance/README.md), and federal and federal-adjacent procurement reviewers look for it specifically. Also scoped as **M** effort with **High** foundation readiness, but the mini-PRD sets its own expectation higher — roughly one to two focused weeks — so use that figure for this item rather than the board's generic one.
+- **[OWASP LLM Top 10 mapping](mini-prds/owasp-llm-top10-mapping.md)** — scoped for a security-aware engineer, but its output (a risk-by-risk mapping of prompt injection, sensitive-information disclosure, and the rest of the OWASP LLM list against the project's actual mitigations) is a document your review process will also want. You bring the framework fluency; an engineer partner brings the code citations.
 
-## How to claim
+## Review and ownership
 
-Follow [the contribution board's](EASIEST-CONTRIBUTIONS.md) claim process: open a GitHub
-issue titled with the mini-PRD's slug (for example, `procurement-readiness-pack`), comment
-that you would like to take it, and wait for a maintainer response — typically within a
-week. Each mini-PRD's own "Where to start" section is the working brief once you begin.
+Claim the work through an issue and agree its scope with a maintainer. The procurement and compliance paths have counsel review requirements in addition to engineering review. Remove client information from examples before contributing; prior completion of your own questionnaire does not make it suitable to publish unchanged.
+
+### Details
+
+Open a GitHub issue titled with the mini-PRD's slug (for example, `procurement-readiness-pack`), comment that you would like to take it, and wait for a maintainer response — typically within a week. Each mini-PRD's own "Where to start" section is the working brief once you begin; see [the contribution board's](EASIEST-CONTRIBUTIONS.md) claim process for the rest.
+
+[CODEOWNERS](../../.github/CODEOWNERS) routes both `docs/compliance/` and `docs/procurement/` to the project's counsel reviewers in addition to the maintainer team, because these documents affect what an operator can tell their own procurement or governance function. A pull request against either directory does not merge on maintainer approval alone.
