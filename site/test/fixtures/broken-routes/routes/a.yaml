@@ -49,3 +49,9 @@
   source: site/test/fixtures/repo/route-mapped/basic.md
   description: Entry whose next list names a route nothing maps.
   next: [nowhere/at-all]
+
+# j. kind not one of how-to / explanation / reference
+- route: broken/invalid-kind
+  source: site/test/fixtures/repo/route-mapped/kind-invalid.md
+  description: Entry whose kind is not one of the allowed values.
+  kind: not-a-real-kind
