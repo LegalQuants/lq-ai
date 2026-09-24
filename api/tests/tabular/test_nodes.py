@@ -15,18 +15,20 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Any
 
 import pytest
 
 from app.clients.gateway import EnsembleConfig
-from app.schemas.tabular import ColumnSpec
+from app.schemas.tabular import ColumnSpec, TabularResults
 from app.tabular.nodes import (
     _assemble_rows,
     _coerce_chunk_indices,
     _coerce_confidence,
     _parse_cell_response,
     _shape_results_payload,
+    _sum_cell_costs,
     extract_cell,
 )
 
@@ -48,6 +50,10 @@ class _StubChoice:
 @dataclass
 class _StubResponse:
     choices: list[_StubChoice]
+    # DE-310: gateway response annotations (``_annotate_response``).
+    # Default None mirrors a response that lacks the extension fields.
+    routed_inference_tier: int | None = None
+    cost_estimate: float | None = None
 
 
 @dataclass
@@ -57,7 +63,10 @@ class _StubGateway:
     Each entry is either:
       * ``dict`` — JSON-serialized as the LLM response content;
       * ``str`` — returned verbatim (malformed-JSON tests);
-      * ``Exception`` — raised on the call (transport-failure tests).
+      * ``Exception`` — raised on the call (transport-failure tests);
+      * ``(payload, tier, cost)`` tuple — the payload as above plus the
+        gateway's ``routed_inference_tier`` / ``cost_estimate``
+        annotations stamped on the response (DE-310 tests).
     """
 
     payloads: list[Any] = field(default_factory=list)
@@ -68,12 +77,17 @@ class _StubGateway:
         if not self.payloads:
             return _StubResponse(choices=[_StubChoice(message=_StubMessage(content=""))])
         payload = self.payloads.pop(0)
+        tier: int | None = None
+        cost: float | None = None
+        if isinstance(payload, tuple):
+            payload, tier, cost = payload
         if isinstance(payload, Exception):
             raise payload
-        if isinstance(payload, str):
-            return _StubResponse(choices=[_StubChoice(message=_StubMessage(content=payload))])
+        content = payload if isinstance(payload, str) else json.dumps(payload)
         return _StubResponse(
-            choices=[_StubChoice(message=_StubMessage(content=json.dumps(payload)))]
+            choices=[_StubChoice(message=_StubMessage(content=content))],
+            routed_inference_tier=tier,
+            cost_estimate=cost,
         )
 
 
@@ -309,6 +323,136 @@ async def test_extract_cell_with_no_chunks_marks_failed() -> None:
     )
     assert cell["confidence"] == "failed"
     assert gateway.calls_received == []
+
+
+# ---------------------------------------------------------------------------
+# extract_cell — per-cell tier_used + cost_usd propagation (DE-310)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+async def test_extract_cell_propagates_routed_tier_and_cost() -> None:
+    """The gateway's ``routed_inference_tier`` / ``cost_estimate``
+    response annotations land on the cell as ``tier_used`` + a
+    Decimal-string ``cost_usd`` — not the column's tier floor and not
+    the ``"0"`` placeholder."""
+
+    chunks = [_chunk(0, "Term: 5 years")]
+    gateway = _StubGateway(
+        payloads=[
+            (
+                {"value": "5 years", "cited_chunk_indices": [0], "confidence": "high"},
+                3,  # routed_inference_tier — above the column floor of 2
+                0.0035,  # cost_estimate
+            )
+        ]
+    )
+
+    cell = await extract_cell(
+        gateway=gateway,  # type: ignore[arg-type]
+        judge_model="smart",
+        document_name="doc",
+        chunks=chunks,
+        column=ColumnSpec(name="Term", query="?", minimum_inference_tier=2),
+    )
+
+    assert cell["tier_used"] == 3
+    assert cell["cost_usd"] == "0.0035"
+
+
+@pytest.mark.unit
+async def test_extract_cell_cost_string_is_fixed_point_not_scientific() -> None:
+    """A tiny float cost serializes in fixed-point notation (the
+    Decimal-as-string wire rule), never scientific (``3.5e-05``)."""
+
+    gateway = _StubGateway(
+        payloads=[({"value": "x", "cited_chunk_indices": [0], "confidence": "high"}, 1, 3.5e-05)]
+    )
+    cell = await extract_cell(
+        gateway=gateway,  # type: ignore[arg-type]
+        judge_model="fast",
+        document_name="doc",
+        chunks=[_chunk(0)],
+        column=ColumnSpec(name="A", query="?"),
+    )
+    assert cell["cost_usd"] == "0.000035"
+    assert Decimal(cell["cost_usd"]) == Decimal("0.000035")
+
+
+@pytest.mark.unit
+async def test_extract_cell_missing_annotations_fall_back_to_none() -> None:
+    """A response without the gateway annotations yields honest
+    ``None`` for both fields — never the column floor as ``tier_used``
+    or a fabricated ``"0"`` cost."""
+
+    gateway = _StubGateway(payloads=[{"value": "x", "confidence": "high"}])
+    cell = await extract_cell(
+        gateway=gateway,  # type: ignore[arg-type]
+        judge_model="smart",
+        document_name="doc",
+        chunks=[_chunk(0)],
+        column=ColumnSpec(name="A", query="?", minimum_inference_tier=4),
+    )
+    assert cell["value"] == "x"
+    assert cell["tier_used"] is None
+    assert cell["cost_usd"] is None
+
+
+@pytest.mark.unit
+async def test_sum_cell_costs_yields_nonzero_execution_cost() -> None:
+    """Cells extracted with real cost annotations sum to a non-zero
+    ``cost_actual_usd``; a cost-less cell (no annotation) contributes 0
+    rather than sinking the sum."""
+
+    gateway = _StubGateway(
+        payloads=[
+            ({"value": "a", "cited_chunk_indices": [0], "confidence": "high"}, 2, 0.0030),
+            ({"value": "b", "cited_chunk_indices": [0], "confidence": "high"}, 3, 0.0045),
+            {"value": "c", "confidence": "low"},  # no annotations
+        ]
+    )
+    cells = []
+    for name in ("A", "B", "C"):
+        cells.append(
+            await extract_cell(
+                gateway=gateway,  # type: ignore[arg-type]
+                judge_model="smart",
+                document_name="doc",
+                chunks=[_chunk(0)],
+                column=ColumnSpec(name=name, query="?"),
+            )
+        )
+
+    assert _sum_cell_costs(cells) == Decimal("0.0075")
+
+
+@pytest.mark.unit
+async def test_results_payload_round_trips_real_tier_and_cost() -> None:
+    """The shaped results JSONB validates into the read/export schema
+    (:class:`TabularResults` / ``CellResult``) with the real per-cell
+    tier + cost intact — what the grid and the export surface render."""
+
+    doc_id = str(uuid.uuid4())
+    gateway = _StubGateway(
+        payloads=[
+            ({"value": "5 years", "cited_chunk_indices": [0], "confidence": "high"}, 3, 0.0035)
+        ]
+    )
+    cell = await extract_cell(
+        gateway=gateway,  # type: ignore[arg-type]
+        judge_model="smart",
+        document_name="doc",
+        chunks=[_chunk(0, "Term: 5 years")],
+        column=ColumnSpec(name="Term", query="?"),
+    )
+    cell["document_id"] = doc_id
+    cell["column_name"] = "Term"
+
+    payload = _shape_results_payload([cell], [{"id": doc_id, "name": "doc"}])
+    results = TabularResults.model_validate(payload)
+    parsed = results.rows[0].cells["Term"]
+    assert parsed.tier_used == 3
+    assert parsed.cost_usd == Decimal("0.0035")
 
 
 # ---------------------------------------------------------------------------
