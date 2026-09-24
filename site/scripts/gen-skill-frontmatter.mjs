@@ -107,7 +107,7 @@ export async function generate(ctx) {
       intro: INTRO,
       stamp,
       frontmatter: {
-        title: 'Skill frontmatter',
+        title: 'Fields at the top of a skill file',
         description:
           "Every field a SKILL.md's YAML frontmatter may carry, generated from the skill loader's own schema.",
         audience: ['author', 'agent'],

@@ -133,7 +133,7 @@ export async function generate(ctx) {
       intro: INTRO,
       stamp,
       frontmatter: {
-        title: 'ADR index',
+        title: 'Recorded design decisions',
         description:
           'Every architecture decision record in the repository, with the status each file carries, generated at build time.',
         audience: ['contributor', 'evaluator', 'agent'],

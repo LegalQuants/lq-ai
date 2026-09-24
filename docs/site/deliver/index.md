@@ -1,6 +1,6 @@
 ---
-title: Deliver to a client
-description: What a deployer can promise a client about a branded LQ.AI deployment, and what this namespace does not answer yet.
+title: Hand over LQ.AI to a client
+description: Agree who will maintain and manage a delivered deployment, check the license and branding requirements, and see what this namespace does not answer yet.
 audience: [partner]
 status: draft
 sources:
@@ -14,7 +14,9 @@ sidebar:
   order: 1
 ---
 
-You are here because you run LQ.AI for someone else — a client, a portfolio company, an
+Before handing over an installation, agree who will maintain it, manage access, and choose the
+AI services it can use — and check the license and branding requirements for the version you're
+delivering. You are here because you run LQ.AI for someone else — a client, a portfolio company, an
 internal business unit that is not "you" — and you need to know what you can promise
 them about the deployment before you promise it. That is a narrower question than "how do
 I install it" (`/operate/`) or "is the data handling sound" (`/trust/`); this namespace is
@@ -24,7 +26,10 @@ about the commercial and licensing surface of delivering a *branded* deployment.
 
 Only one page: [branding and licensing obligations](../../adr/0001-openwebui-fork-pin.md). It answers
 the question that has an actual answer in the repository right now — what the upstream
-license lets you do with LQ.AI's chrome, and where the line sits.
+license lets you do with LQ.AI's chrome, and where the line sits. It does not supply a complete
+production-readiness assessment, support contract, theming manual, or multi-client operating plan
+— use the installation, maintenance, and privacy guides to assemble the rest of the handover, and
+agree the remaining responsibilities with the client.
 
 The rest of this namespace — a stitched deployment guide across `/operate/`, `/skills/`
 and `/trust/`; the theming mechanics (which CSS variables a branded deployment actually

@@ -1,7 +1,8 @@
 - route: start/is-it-for-you
   source: docs/start/is-it-for-you.md
-  title: Is LQ.AI for you?
-  description: Checkable disqualifiers, and honest answers to the two questions that come up most — litigation, and why not buy something instead.
+  title: Is LQ.AI right for your team?
+  description: LQ.AI suits teams that are ready to run and maintain their own application — try the tasks you care about before deciding.
+  kind: explanation
   audience: [operator, evaluator]
   status: draft
   sources:
@@ -18,8 +19,9 @@
 
 - route: start/what-it-touches
   source: docs/start/what-it-touches.md
-  title: What it touches
-  description: Prerequisites, ports, and where your data actually lives, before you run a command.
+  title: What gets installed and where data goes
+  description: Docker Compose starts eight services — the website, the services that handle requests and AI connections, two background workers, and three storage services.
+  kind: reference
   audience: [operator, evaluator]
   status: draft
   sources:
@@ -34,8 +36,9 @@
 
 - route: start/quickstart
   source: docs/quickstart.md
-  title: Quickstart
-  description: Clone to a citation-grounded skill result against a sample NDA in about 20 minutes, with recovery steps next to the step that needs them.
+  title: Set up LQ.AI and try your first document
+  description: Install LQ.AI, sign in, and upload a test document without an AI-service key, then connect a model when you're ready to ask questions.
+  kind: how-to
   audience: [operator, evaluator]
   status: draft
   sources:
@@ -47,8 +50,9 @@
 
 - route: start/where-help-lives
   source: docs/start/where-help-lives.md
-  title: Where help lives
-  description: Day-to-day product help lives inside the running application, not on this site — with one exception.
+  title: Where to find help
+  description: Open Learn inside the running app for feature walkthroughs; use this site for installation, maintenance, and data-handling questions instead.
+  kind: explanation
   audience: [operator, evaluator]
   status: draft
   sources:

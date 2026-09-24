@@ -4,8 +4,9 @@
 
 - route: trust/what-leaves-my-deployment
   source: docs/trust/what-leaves-my-deployment.md
-  title: What leaves my deployment, and who sees it?
-  description: The honest interim answer to LQ.AI's highest-severity question — where chat and skill content goes, tier by tier, and what a pseudonymization miss looks like.
+  title: What information is sent outside LQ.AI?
+  description: What leaves your deployment depends on which services you enable and where they run — keeping files on your own computer doesn't keep every use of their contents there.
+  kind: explanation
   audience: [evaluator, operator]
   status: draft
   sources: [README.md, docs/security/anonymization.md, docs/HONEST-STATE.md, gateway.yaml.example]
@@ -14,8 +15,9 @@
 
 - route: trust/threat-model
   source: docs/security/threat-model.md
-  title: Threat model
-  description: STRIDE-by-component threats and mitigations for LQ.AI's five production services, and the registers-of-restraint catalog that extends the picture to autonomous work.
+  title: Review the security risks
+  description: STRIDE-by-component threats and mitigations for LQ.AI's five production services — start here, then compare it with how your own installation is configured.
+  kind: reference
   audience: [evaluator, operator]
   status: draft
   sources: [docs/security/boundary-registers.md]
@@ -24,8 +26,9 @@
 
 - route: trust/anonymization
   source: docs/security/anonymization.md
-  title: Anonymization
-  description: What the Anonymization Layer catches, what it skips by design, and — the part most competitors don't publish — exactly what has and has not been empirically measured.
+  title: Replace identifying details before sending a request
+  description: An optional layer that replaces detected names and other identifying details with labels before a request reaches an AI model and restores them in the answer — off by default in the example configuration.
+  kind: explanation
   audience: [evaluator, operator]
   status: draft
   sidebar: { order: 4 }
@@ -33,8 +36,9 @@
 
 - route: trust/audit-and-evidence
   source: docs/security/audit-logging.md
-  title: Audit & evidence
-  description: What LQ.AI logs, what it deliberately does not, retention, and the queries that turn the audit log into evidence for a client, an insurer, or a regulator.
+  title: What the audit log records
+  description: The audit log records specific actions and their context, such as the user and privacy tier — useful for investigating activity, but not a complete record of everything the app does.
+  kind: explanation
   audience: [evaluator, operator]
   status: draft
   sources: [docs/db-schema.md]
@@ -43,8 +47,9 @@
 
 - route: trust/supply-chain
   source: docs/security/releases/README.md
-  title: Supply chain
-  description: How to verify that a specific LQ.AI release's images are authentic, what the SBOM tells you, dependency-update cadence, and which releases carry SLSA Build Level 3 provenance.
+  title: Check the software you download
+  description: Verify the release and the files you install — signing information, what the SBOM tells you, dependency-update cadence, and which releases carry SLSA Build Level 3 provenance.
+  kind: how-to
   audience: [evaluator, operator]
   status: draft
   sources: [docs/security/dependencies.md, docs/security/cryptography.md, docs/BUILD-AND-RELEASE.md, README.md, .github/workflows/release.yml]
@@ -53,8 +58,9 @@
 
 - route: trust/published-gaps
   source: docs/HONEST-STATE.md
-  title: Published gaps
-  description: What LQ.AI ships today, what is deferred, and how to verify each — the project's own honest inventory, surfaced here rather than left to a footnote.
+  title: Known limitations
+  description: The project's own honest inventory of what's shipped, partial, or deferred, with a verification path for every row.
+  kind: reference
   audience: [evaluator, operator]
   status: draft
   sidebar: { order: 7 }
@@ -62,8 +68,9 @@
 
 - route: trust/governance
   source: GOVERNANCE.md
-  title: Governance
+  title: How project decisions are made
   description: Who decides, how routine work differs from architectural and scope decisions, and where the meeting record lives.
+  kind: reference
   audience: [evaluator, partner, contributor]
   status: draft
   sources: [docs/adr/0022-committee-governance-and-meeting-records.md]
@@ -72,8 +79,9 @@
 
 - route: trust/continuity
   source: docs/trust/continuity.md
-  title: Continuity
+  title: Keep the app running if circumstances change
   description: What survives if the maintainers stop — the license, where your data actually lives, and the two named risks this project's own release-process ADR is honest about.
+  kind: explanation
   audience: [evaluator, partner]
   status: draft
   sources: [LICENSE, docs/PRD.md, docs/adr/0025-release-versioning-and-pipeline-ordering.md, GOVERNANCE.md, docker-compose.yml, docs/BUILD-AND-RELEASE.md]
@@ -82,8 +90,9 @@
 
 - route: trust/security-disclosure
   source: SECURITY.md
-  title: Security disclosure
-  description: How to report a vulnerability, what the project commits to, and the test that decides whether a finding is safe to discuss in the open.
+  title: Report a security problem
+  description: Follow the current SECURITY.md reporting instructions, using a made-up example that demonstrates the issue without exposing client information or credentials.
+  kind: reference
   audience: [evaluator, operator, contributor]
   status: draft
   sources: [docs/releases/v0.7.0.md]
@@ -92,8 +101,9 @@
 
 - route: trust/questionnaires
   source: docs/procurement/README.md
-  title: Questionnaires
-  description: A pre-filled SIG Lite starter for the questions that depend on LQ.AI's privileged-matter handling, and what the full Procurement-Readiness Pack still waits on.
+  title: Answer security and procurement questions
+  description: Base answers on the version and configuration you actually run — a pre-filled SIG Lite starter for privileged-matter handling, and what the full Procurement-Readiness Pack still waits on.
+  kind: reference
   audience: [evaluator, operator]
   status: draft
   sources: [docs/procurement/sig-lite.md, docs/contribute/mini-prds/procurement-readiness-pack.md, docs/PRD.md]
@@ -102,8 +112,9 @@
 
 - route: trust/compliance-mappings
   source: docs/compliance/README.md
-  title: Compliance mappings
-  description: What the Compliance Alignment Pack is (and is not), which frameworks it targets, and the AI-specific mappings that are planned but not yet written.
+  title: Match requirements to controls and evidence
+  description: The Compliance Alignment Pack is a starting point for this work — which frameworks it targets, and the AI-specific mappings that are planned but not yet written.
+  kind: reference
   audience: [evaluator, operator]
   status: draft
   sources: [docs/HONEST-STATE.md, docs/contribute/mini-prds/nist-ai-rmf-profile.md, docs/contribute/mini-prds/owasp-llm-top10-mapping.md, docs/contribute/mini-prds/openssf-scorecard-and-badges.md]
@@ -112,8 +123,9 @@
 
 - route: trust/verify-these-claims
   source: docs/trust/verify-these-claims.md
-  title: Verify these claims yourself
+  title: Check the claims yourself
   description: The commands, files, and tests behind every page in the trust centre — so nothing here has to be taken on faith.
+  kind: how-to
   audience: [evaluator, operator, contributor]
   status: draft
   sources: [README.md, docs/HONEST-STATE.md, docs/db-schema.md, .github/workflows/release.yml, docker-compose.yml, docs/adr/0022-committee-governance-and-meeting-records.md]

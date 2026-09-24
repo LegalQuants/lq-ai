@@ -10,7 +10,7 @@ sidebar:
   order: 1
 ---
 
-LQ.AI takes contributions from two different kinds of work, and the two run through different review paths in the same repository.
+You can help by improving instructions, reporting a problem others can reproduce, reviewing a skill, or changing the code — choose a task that fits your experience. LQ.AI takes contributions from two different kinds of work, and the two run through different review paths in the same repository.
 
 **Engineering** — code, infrastructure, deployment recipes, and general project documentation — is reviewed by maintainers under the ordinary pull-request process. **Legal substance** — the skills that do the actual review, drafting, and analysis work — carries an attestation and a practicing-attorney review, because a skill that produces a wrong answer affects real legal work. Neither track is a lesser front door: a lawyer with no engineering background and an engineer with no legal background are both first-class contributors, on their own track, and a single pull request rarely needs both hats at once.
 
@@ -36,5 +36,5 @@ The five steps — claim, draft, attest, review, merge — are unchanged whether
 
 - [On-ramp for lawyers](../../../skills/CONTRIBUTING.md)
 - [On-ramp for engineers](../../../CONTRIBUTING.md)
-- [On-ramp for compliance and procurement professionals](../../contribute/compliance-professionals.md)
-- [Point a coding agent at the repository](../../contribute/coding-agent-onboarding.md)
+- [Help with compliance and procurement reviews](../../contribute/compliance-professionals.md)
+- [Work with a coding assistant](../../contribute/coding-agent-onboarding.md)

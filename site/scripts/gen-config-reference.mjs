@@ -100,7 +100,7 @@ export async function generate(ctx) {
       intro: INTRO,
       stamp,
       frontmatter: {
-        title: 'Configuration reference',
+        title: 'Configuration settings',
         description:
           'Every setting the backend and the Inference Gateway read, generated from their Pydantic settings classes, plus the two example configuration files in full.',
         audience: ['operator', 'agent'],

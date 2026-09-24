@@ -1,6 +1,6 @@
 ---
-title: Trust centre
-description: One page indexing the artifacts a security team, evaluator, or procurement reviewer needs to assess LQ.AI — what each covers, what stays the operator's, and the canonical file behind it.
+title: Data, privacy and evidence
+description: Where your information goes, who can access it, and what the app records — one page indexing every artifact a security, evaluator, or procurement review needs.
 audience: [evaluator, operator, partner]
 status: draft
 sources:
@@ -19,11 +19,12 @@ sidebar:
   order: 1
 ---
 
-You are here because someone asked you to sign off on LQ.AI, or to hand it to someone who will.
-This page is the index of every artifact that answer will need — what it covers, what it
-deliberately leaves to you, and the file in the repository it is checked against. Every table row
-links to a page that curates the underlying artifact rather than restating it, so what you read
-here and what the code does stay the same document.
+Understand where your information goes, who can access it, and what the app records. You are here
+because someone asked you to sign off on LQ.AI, or to hand it to someone who will. This page is the
+index of every artifact that answer will need — what it covers, what it deliberately leaves to you,
+and the file in the repository it is checked against. Every table row links to a page that curates
+the underlying artifact rather than restating it, so what you read here and what the code does stay
+the same document.
 
 LQ.AI is self-hosted: there is no LegalQuants-operated service standing between your deployment
 and this evidence. Every claim below traces to a file you can open in the same repository that
@@ -34,19 +35,19 @@ commands.
 
 | Artifact | What it covers | What stays the operator's | Canonical file |
 |---|---|---|---|
-| [What leaves my deployment](../../trust/what-leaves-my-deployment.md) | Where chat and skill content goes, tier by tier, and what a miss looks like | Which inference tier you route each matter to | `docs/security/anonymization.md` |
-| [Threat model](../../security/threat-model.md) | STRIDE-by-component threats and mitigations for the five production services | Your host, OS, IdP, and secret custody | `docs/security/threat-model.md` |
-| [Anonymization](../../security/anonymization.md) | What the pseudonymization layer catches, skips, and has (and has not) been measured against | Recognizer tuning for your own document conventions | `docs/security/anonymization.md` |
-| [Audit & evidence](../../security/audit-logging.md) | What is logged, what is not, retention, and the one-query evidence pattern | Tamper-evidence infrastructure, retention policy | `docs/security/audit-logging.md` |
-| [Supply chain](../../security/releases/README.md) | Signed images, SBOM, dependency-update cadence | Scanning the SBOM and applying patches | `docs/security/releases/README.md` |
-| [Published gaps](../../HONEST-STATE.md) | Shipped / partial / scaffold / deferred, with a verification path for every row | None — this is the honest inventory | `docs/HONEST-STATE.md` |
-| [Governance](../../../GOVERNANCE.md) | Who decides, how, and where the record lives | None | `GOVERNANCE.md` |
-| [Continuity](../../trust/continuity.md) | What survives if the maintainers stop | Your own backups and exports | `LICENSE` |
-| [Security disclosure](../../../SECURITY.md) | How to report a vulnerability, and how the project decides public vs. private handling | None | `SECURITY.md` |
-| [Questionnaires](../../procurement/README.md) | A pre-filled SIG Lite starter for privileged-matter handling | The rest of your procurement process | `docs/procurement/sig-lite.md` |
-| [Compliance mappings](../../compliance/README.md) | Framework-alignment status (SOC 2, ISO, GDPR, HIPAA, FedRAMP) and what's still planned | Your own certification | `docs/compliance/README.md` |
+| [What information is sent outside LQ.AI?](../../trust/what-leaves-my-deployment.md) | Where chat and skill content goes, tier by tier, and what a miss looks like | Which inference tier you route each matter to | `docs/security/anonymization.md` |
+| [Review the security risks](../../security/threat-model.md) | STRIDE-by-component threats and mitigations for the five production services | Your host, OS, IdP, and secret custody | `docs/security/threat-model.md` |
+| [Replace identifying details before sending a request](../../security/anonymization.md) | What the pseudonymization layer catches, skips, and has (and has not) been measured against | Recognizer tuning for your own document conventions | `docs/security/anonymization.md` |
+| [What the audit log records](../../security/audit-logging.md) | What is logged, what is not, retention, and the one-query evidence pattern | Tamper-evidence infrastructure, retention policy | `docs/security/audit-logging.md` |
+| [Check the software you download](../../security/releases/README.md) | Signed images, SBOM, dependency-update cadence | Scanning the SBOM and applying patches | `docs/security/releases/README.md` |
+| [Known limitations](../../HONEST-STATE.md) | Shipped / partial / scaffold / deferred, with a verification path for every row | None — this is the honest inventory | `docs/HONEST-STATE.md` |
+| [How project decisions are made](../../../GOVERNANCE.md) | Who decides, how, and where the record lives | None | `GOVERNANCE.md` |
+| [Keep the app running if circumstances change](../../trust/continuity.md) | What survives if the maintainers stop | Your own backups and exports | `LICENSE` |
+| [Report a security problem](../../../SECURITY.md) | How to report a vulnerability, and how the project decides public vs. private handling | None | `SECURITY.md` |
+| [Answer security and procurement questions](../../procurement/README.md) | A pre-filled SIG Lite starter for privileged-matter handling | The rest of your procurement process | `docs/procurement/sig-lite.md` |
+| [Match requirements to controls and evidence](../../compliance/README.md) | Framework-alignment status (SOC 2, ISO, GDPR, HIPAA, FedRAMP) and what's still planned | Your own certification | `docs/compliance/README.md` |
 | [Release history](../changelog/index.intro.md) | What each released version changed, and the upgrade class it carries | Deciding when to re-review | `docs/releases/` |
-| [Verify these claims](../../trust/verify-these-claims.md) | Commands and files to check every claim on this page yourself | — | `README.md` |
+| [Check the claims yourself](../../trust/verify-these-claims.md) | Commands and files to check every claim on this page yourself | — | `README.md` |
 
 Each canonical file is named as a repository path; every page's footer stamp links it at the
 commit that page was checked against.
@@ -68,7 +69,7 @@ without a meeting.
 
 ## Next
 
-- [Verify these claims yourself](../../trust/verify-these-claims.md) — the commands and files behind every row above.
-- [Published gaps](../../HONEST-STATE.md) — the honest inventory of what is shipped, partial, or deferred.
-- [What leaves my deployment](../../trust/what-leaves-my-deployment.md) — start here if your first question is about data flow.
+- [Check the claims yourself](../../trust/verify-these-claims.md) — the commands and files behind every row above.
+- [Known limitations](../../HONEST-STATE.md) — the honest inventory of what is shipped, partial, or deferred.
+- [What information is sent outside LQ.AI?](../../trust/what-leaves-my-deployment.md) — start here if your first question is about data flow.
 - [Versioning and upgrade classes](../../adr/0025-release-versioning-and-pipeline-ordering.md) — how to tell what changed between two named releases when a re-review comes round.

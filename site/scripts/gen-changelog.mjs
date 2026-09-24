@@ -123,7 +123,7 @@ export async function generate(ctx) {
     intro: INTRO,
     stamp,
     frontmatter: {
-      title: 'Changelog',
+      title: 'Release notes',
       description:
         'Every tagged release, which of them has structured release notes in the repository, and which does not.',
       audience: ['operator', 'evaluator'],

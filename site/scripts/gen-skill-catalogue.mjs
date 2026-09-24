@@ -110,7 +110,7 @@ export async function generate(ctx) {
       intro: INTRO,
       stamp,
       frontmatter: {
-        title: 'Skill catalogue',
+        title: 'Browse the skills',
         description: `Every first-party skill in ${SKILLS_DIR}/, with its practice area, jurisdiction, version and author, generated from each SKILL.md.`,
         audience: ['author', 'evaluator', 'agent'],
         sources: [SKILLS_DIR],
