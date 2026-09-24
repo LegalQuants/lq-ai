@@ -160,6 +160,10 @@ The shared posture across the ecosystem: substantive legal work product is open-
 
 ## Quick Start
 
+### In short
+
+Docker Compose is the reference way to run LQ.AI: it starts eight services together on your own computer — the website, the API and gateway that handle requests and AI connections, two background workers, and three storage services. You'll need Docker and `git`, nothing else. Copy `.env.example` to `.env`, set four required secrets, then start the stack; the first run also builds the application images, so it takes longer than a later restart. Set the admin password with the CLI command in Step 3 and sign in, then create a test matter and try a skill — no AI-provider key is needed to install and sign in, only to get an answer from a model. Changing an environment variable afterwards needs the containers recreated, not just restarted. Running a second trial, using a model on your own computer, and turning on legal-research connectors are separate, opt-in steps covered further down.
+
 **Prerequisites:** [Docker Desktop 4.x+](https://www.docker.com/products/docker-desktop) (or Docker Engine 24+ on Linux) and `git`. No other host tooling required — no Python, no Node, no language-specific runtimes. Plan for ~8 GB of free disk space and ~6 GB of RAM available to Docker.
 
 ### Step 1 — Clone and configure

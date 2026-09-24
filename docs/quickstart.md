@@ -1,30 +1,16 @@
-# LQ.AI — Quickstart Walkthrough
+# Set up LQ.AI and try your first document
 
-> **Goal:** Take a new user from `git clone` through running their first skill against a sample document and reading the output critically — in about 20 minutes. By the end, you will have LQ.AI deployed on your machine, an Organization Profile reflecting your team, a Project for the matter at hand, and a citation-grounded NDA review you can read alongside the source document.
+You can install LQ.AI, sign in and upload a test document without an AI-service key. Start there, then connect a model when you're ready to ask questions.
 
-This is the long-form quickstart. The README has the 5-line version; this document is the elaboration with explanation of what each step does and what the output means.
+LQ.AI is self-hosted: everything below runs in Docker containers on your machine. The Inference Gateway is the only component that talks to the outside world — inference requests, and, if an operator enables them, case-law/research and connector (MCP) tool calls; tool connectors are off by default ([`docs/HONEST-STATE.md` §5.5](HONEST-STATE.md)). The README has a shorter version of these same steps; this page adds the explanation, the exact values, and the troubleshooting for each one.
 
-If you run into trouble, the [Troubleshooting](#troubleshooting) section at the end covers the most common gotchas. If your gotcha isn't there, file a GitHub issue with the `quickstart` label and we'll add it.
-
-Everything below runs in Docker containers on your machine. The Inference Gateway is the only component that talks to the outside world — inference requests, and, if an operator enables them, case-law/research and connector (MCP) tool calls; tool connectors are off by default (`docs/HONEST-STATE.md` §5.5). The initial `docker compose up` also pulls (and, for the application images, builds) container images, so that step needs an internet connection — as does the rest of the demo in Mode 1 (see "Before you start" below); only Mode 2 ([Troubleshooting → "I want to use Mode 2"](#i-want-to-use-mode-2-local-ollama-instead)) runs offline after setup.
+If you run into trouble, jump to [Troubleshooting](#troubleshooting) at the end. If your problem isn't covered there, file a GitHub issue with the `quickstart` label and we'll add it.
 
 ---
 
-## Before you start
+## 1. Get the files
 
-You need three things:
-
-1. **Docker Desktop** (or compatible runtime) installed and running. Docker Engine 24+ on Linux works as well. Verify with `docker info`.
-2. **Either** an API key for a cloud LLM provider the shipped gateway can actually talk to — Anthropic, OpenAI (or any OpenAI-compatible endpoint), or Azure OpenAI — **or** a local Ollama setup if you want to run fully offline (Mode 2). `gateway.yaml.example` also carries example entries for Google Vertex and AWS Bedrock, but no adapter ships for those provider types yet, so a key for them will not route anything. For the quickstart we use Mode 1 with a cloud key because it's faster to set up; Mode 2 starts with `docker compose --profile local up -d` and then needs a model pulled and a local alias selected — see [Mode 2](#i-want-to-use-mode-2-local-ollama-instead) under Troubleshooting.
-3. **About 15 minutes** once the stack is up. The first `docker compose up` itself takes longer: a source checkout **builds** the application images (`api`, `gateway`, `web` and the workers) as well as pulling the infrastructure images, so allow time and disk space for both. Subsequent runs reuse the images and start in seconds.
-
-What you don't need: any pre-existing legal AI experience; a working knowledge of LangGraph, OpenWebUI, or any of the other components.
-
-What you **do** need in Mode 1 is a network connection for the whole demo, not just the initial `docker compose up`: every chat request goes to the cloud provider, and the default `embedding` alias (used for knowledge-base search) is cloud-backed too. Only Mode 2 — images pulled, a local model downloaded, and every alias you use pointed at it — runs offline.
-
----
-
-## Step 1 — Clone and run
+You'll need Git and Docker — Docker Desktop (or a compatible runtime), or Docker Engine 24+ on Linux — with Docker Compose working on your computer. Verify with `docker info`. Clone the repository and copy `.env.example` to `.env`:
 
 ```bash
 git clone https://github.com/legalquants/lq-ai.git
@@ -32,68 +18,128 @@ cd lq-ai
 cp .env.example .env
 ```
 
-Open `.env` in your editor. Four secrets are **required** and ship empty — the stack will not come up while any of them is blank. Set each to a separate random value (the comments in `.env.example` give a one-liner for generating them):
+The commands ahead build the app from source, so allow time and disk space for both the build and the image downloads.
+
+### Details
+
+- **A provider key isn't required yet.** You can bring the stack up, sign in and upload a test document with no AI-provider key set at all — only the four secrets in [Step 2](#2-set-four-secrets) are required. A key is only needed once you want the app to actually call a model — see [Step 6](#6-connect-an-ai-model).
+- **What you don't need at all:** any pre-existing legal-AI experience, or a working knowledge of LangGraph, OpenWebUI, or any of the other components.
+- **Timing.** About 15 minutes once the stack is up. The first `docker compose up` itself takes longer — it **builds** the application images (`api`, `gateway`, `web`, and the workers) as well as pulling the infrastructure images, so how long it takes depends on your hardware, Docker's build cache, and your network speed. Subsequent runs reuse the images and start in seconds.
+- **Network.** The initial `docker compose up` needs a connection to pull and build images. If you go on to use a cloud provider (Mode 1), every chat request — and the default `embedding` alias used for knowledge-base search — also needs a connection for the whole demo, not just the first boot. Only Mode 2 (local Ollama, once fully set up — see [Step 6](#6-connect-an-ai-model)) runs offline after setup.
+
+## 2. Set four secrets
+
+In `.env`, give `POSTGRES_PASSWORD`, `OBJECT_STORE_SECRET_KEY`, `LQ_AI_GATEWAY_KEY` and `JWT_SECRET` separate random values. They protect the database, the file store, and communication between services. Docker Compose won't start while any of these is empty. Keep `.env` private; don't commit it to Git.
+
+`.env.example`'s own comments give a one-liner for generating each one:
 
 ```bash
-POSTGRES_PASSWORD=
-OBJECT_STORE_SECRET_KEY=   # root secret for the bundled object store (legacy name MINIO_ROOT_PASSWORD is still accepted)
-LQ_AI_GATEWAY_KEY=
-JWT_SECRET=
+# POSTGRES_PASSWORD, OBJECT_STORE_SECRET_KEY, LQ_AI_GATEWAY_KEY
+python -c 'import secrets; print(secrets.token_urlsafe(32))'
+
+# JWT_SECRET
+python -c 'import secrets; print(secrets.token_urlsafe(64))'
 ```
 
-Then the provider key. The relevant lines for the quickstart:
+### Details
+
+- **`OBJECT_STORE_SECRET_KEY`** is the root secret for the bundled S3-compatible object store, `rustfs` (it replaced the earlier MinIO service; ADR 0036). The legacy name `MINIO_ROOT_PASSWORD` is still accepted as a fallback for existing installs, but a new install should set `OBJECT_STORE_SECRET_KEY`.
+- Provider keys aren't limited to `.env`. Once `LQ_AI_GATEWAY_MASTER_KEY` is set, an admin can add, rotate, and revoke keys at runtime through the admin provider-keys surface (`/api/v1/admin/provider-keys`), which encrypts the key into `gateway.yaml` and hot-applies it to the live gateway — no restart. The `.env` path here is the simplest for a first run. See [`gateway.yaml.example`](../gateway.yaml.example).
+
+## 3. Start the app
+
+Run `docker compose config --quiet` first — it catches a blank `POSTGRES_PASSWORD`, `LQ_AI_GATEWAY_KEY`, or `JWT_SECRET` immediately, before anything is pulled or built. `OBJECT_STORE_SECRET_KEY` is checked separately, once the stack starts, by the `rustfs-init` service — leave it blank and the build will still run before the stack fails. Then bring the stack up:
 
 ```bash
-# Anthropic (recommended for quickstart — Claude is what the starter skills are calibrated to)
+docker compose config --quiet && docker compose up -d --build
+```
+
+Use `docker compose ps` to see whether the services have started. The initial admin password is printed once in the API container's logs:
+
+```bash
+docker compose logs api 2>&1 | grep "First-run admin password"
+```
+
+Save the password — you'll use it in the next step.
+
+### Details
+
+- First run brings up the eight always-on services — `postgres`, `redis`, `rustfs`, `gateway`, `api`, `ingest-worker`, `arq-worker`, `web` — plus one one-shot init container, `rustfs-init`, that exits once it finishes. `postgres`, `redis` and `rustfs` are pulled; `gateway`, `api`, `web` and the two background workers are **built** from your checkout, so the first start does real build work, not just downloads. (The local-Ollama `--profile local` and Slack/Teams `--profile slack` / `--profile teams` services are opt-in Compose profiles, not part of a plain first start.)
+- Database migrations run automatically too, inside the `api` container's own startup (`alembic upgrade head`) rather than as a separate container. A standalone `migrate` service exists behind `--profile ops`, but that's an on-demand ops tool for the MinIO→RustFS storage migration, not something a first `docker compose up` runs.
+- `docker compose ps` should report the long-running services as `Up` (those with health checks show `healthy`); the init container shows as exited — that's expected, not a failure.
+- The entry points, once it's up:
+  - LQ.AI shell: <http://localhost:3000/lq-ai>
+  - API documentation: <http://localhost:8000/docs>
+  - Inference Gateway: <http://localhost:8001/docs>
+
+## 4. Sign in
+
+Open <http://localhost:3000/lq-ai>. Use `admin@lq.ai` and the password from the previous step, then set a permanent password when prompted. The home page then shows a **Getting started** checklist of five tasks, ticking off as you do them: **Log in & rotate password**, **Run a skill on a document**, **Try Enhance Prompt**, **Attach a knowledge base**, and **Save a prompt as a skill**. Tasks that ask the AI for a result need a connected model (Step 6).
+
+### Details
+
+- The LQ.AI chat shell lives at `/lq-ai` per [ADR 0009](adr/0009-web-lq-ai-shell-coexistence.md); the upstream OpenWebUI shell at `/` is preserved untouched and isn't the canonical experience for this walkthrough.
+- **Forgot to copy the bootstrap password?** Type any password and submit. While the deployment is still in fresh-install state, the login screen surfaces an inline hint with the exact log command above and a one-click copy button (M3-0.1 / DE-283). The hint hides itself once you've set your permanent password.
+- The default admin email is `admin@lq.ai`. It comes from a backend setting read only on the very first boot; the shipped `docker-compose.yml` doesn't pass a value for it into the `api` container, and the container doesn't read your `.env` for it either, so setting it in `.env` alone has no effect. To change it before the first start, add `FIRST_RUN_ADMIN_EMAIL: <email>` to the `api` service's `environment:` block — e.g. in a `docker-compose.override.yml`.
+- **Admin tip — Settings → Models.** Once signed in as an admin, a **Settings** link in the top-right of the shell opens the model alias editor at `/lq-ai/admin/models`, where you can edit the `smart` / `fast` / `budget` / `local` / `embedding` aliases without restarting the gateway. Edits write `gateway.yaml` atomically and hot-reload the gateway in process; in-flight requests finish on the prior config. See [ADR 0010](adr/0010-gateway-config-hot-reload.md).
+
+## 5. Upload a test document
+
+Open **Matters** in the sidebar (`/lq-ai/matters`) — the shell calls Projects "matters" — and click **+ New matter**. Give it an obvious test name, then open the matter, click **+ New Chat**, then click **+ Files** and upload a short Markdown or plain-text file containing made-up information. Wait for its status to become `ready`. That confirms the app extracted the text; document search and AI answers need their own model settings (Step 6).
+
+### Details
+
+- A matter (Project) is more than a folder for a file: it's a matter-scoped container for chats, files, skills, playbooks, and a free-form context document scoped to a single matter. Chats inside it automatically inherit its attachments and context.
+- For a ready-made test document, the repository ships a short, synthetic mutual NDA with several deliberate issues at [`docs/quickstart/sample-nda.md`](quickstart/sample-nda.md) — built for exactly this walkthrough (and for [Try a skill when a model is connected](#try-a-skill-when-a-model-is-connected) below, once you have a model connected).
+- An example matter, if you want a concrete one to follow along with:
+  - **Name:** `Acme Discussions`
+  - **Description:** `Northbrook–Acme NDA review for potential business relationship`
+  - **Context document:** a sentence or two on who the parties are and where things stand — chats in the matter inherit this automatically.
+- **Privileged flag.** Leave it off for a test matter. For a privileged matter, ticking **Attorney-client privileged** requires you to also set a minimum Inference Tier floor — the form won't submit without one — and marks every chat in the matter as privileged in the audit log. See [PRD §3.11](PRD.md#311-projects-m1) for the full mechanics.
+
+## 6. Connect an AI model
+
+LQ.AI has connections for Anthropic, OpenAI (or any OpenAI-compatible endpoint), Azure OpenAI, and Ollama (for a fully local setup). Choose a configured model name in the app. Ollama lets you run a model on your own computer — starting its Docker profile doesn't by itself switch the app to that model: check the chat model, its backup choices, and the document-search (embedding) model too.
+
+### Details: a cloud provider key (Mode 1)
+
+Add a key to `.env` — the relevant lines:
+
+```bash
+# Anthropic (recommended — Claude is what the starter skills are calibrated to)
 ANTHROPIC_API_KEY=sk-ant-...your-key-here...
 
 # OR OpenAI
 # OPENAI_API_KEY=sk-...your-key-here...
 ```
 
-Set at least one provider key. There is no `.env` switch for the default model: chats default to the `smart` alias (`claude-opus-4-7` in the shipped `gateway.yaml.example`), and you choose another model or alias in the chat's model picker, or repoint the alias under **Settings → Models** once signed in. The starter skills are model-agnostic but were drafted and calibrated against Anthropic's Claude family; if you use a different provider, output will be similar in shape but may differ in calibration nuance.
+- There's no `.env` switch for the default model: chats default to the `smart` alias (`claude-opus-4-7` in the shipped `gateway.yaml.example`). Choose another model or alias in the chat's model picker, or repoint the alias under **Settings → Models** once signed in.
+- The starter skills are model-agnostic but were drafted and calibrated against Anthropic's Claude family; a different provider's output will be similar in shape but may differ in calibration nuance.
+- `gateway.yaml.example` also carries example entries for Google Vertex and AWS Bedrock, but no adapter ships for those provider types yet — a key for them won't route anything.
 
-> Provider keys are not limited to `.env`. Once `LQ_AI_GATEWAY_MASTER_KEY` is set, an admin can add, rotate, and revoke keys at runtime through the admin provider-keys surface (`/api/v1/admin/provider-keys`), which encrypts the key into `gateway.yaml` and hot-applies it to the live gateway — no restart. The `.env` path here is the simplest for a first run; the runtime path is the operator-facing way to manage keys after the stack is up. See [`gateway.yaml.example`](../gateway.yaml.example).
-
-Then start the stack:
-
-```bash
-docker compose up -d
-```
-
-First run brings up the eight always-on services — `postgres`, `redis`, `rustfs`, `gateway`, `api`, `ingest-worker`, `arq-worker`, `web` (the `ingest-worker` and `arq-worker` background workers run unconditionally; the local-Ollama (`--profile local`) and Slack/Teams (`--profile slack` / `--profile teams`) services are opt-in Compose profiles) — plus one one-shot init container, `rustfs-init`, that exits once it finishes. `postgres`, `redis` and `rustfs` are pulled; `gateway`, `api`, `web` and the workers are **built** from the checkout, so the first start does real build work, not just downloads. How long it takes depends on your hardware, Docker build cache and network speed. Subsequent runs reuse the images and start in seconds. Database migrations run automatically too, but inside the `api` container's own startup (`alembic upgrade head`) rather than as a separate container; a standalone `migrate` service also exists, gated behind `--profile ops`, but that's an on-demand ops tool for the MinIO→RustFS storage migration (`docker compose --profile ops run --rm migrate ...`) — not something a first `docker compose up` starts.
-
-Confirm the stack is up with `docker compose ps` — the long-running services should be `Up` (those with health checks report `healthy`; the init container shows as exited). The entry points are then:
-
-- LQ.AI shell: <http://localhost:3000/lq-ai>
-- API documentation: <http://localhost:8000/docs>
-- Inference Gateway: <http://localhost:8001/docs>
-
-The first-run admin password is printed once in the API container's logs, on a line beginning `First-run admin password`. Find it with:
+### Details: local Ollama (Mode 2, offline once set up)
 
 ```bash
-docker compose logs api | grep "First-run admin password"
+docker compose --profile local up -d
+docker compose exec ollama ollama pull qwen3.5:9b   # a few GB — pull before the first inference call
 ```
 
-Save the password. You'll use it momentarily.
+- The local profile does one thing: it starts an `ollama` container alongside the rest of the stack. It does **not** move your chats onto it.
+- `gateway.yaml.example` ships three Tier-1 aliases that route to it at `http://ollama:11434`: `local` and `local-thinking` (both `qwen3.5:9b`), and `local-fast` (`qwen3.5:4b-nvfp4` — a different tag, pulled separately). The default `smart` / `fast` / `budget` aliases still point at cloud providers, and `embedding` still points at OpenAI (the Ollama adapter doesn't serve embeddings yet, so knowledge-base search stays cloud-backed even in this configuration). Pick a `local-*` alias in the chat's model picker, or repoint `smart` under **Settings → Models** and drop its cloud fallbacks.
+- Repointing an alias at a different local model means editing the **live** `gateway.yaml`, not `gateway.yaml.example`: on first boot the gateway entrypoint copies the example into the config volume only if no `gateway.yaml` is there yet, and never reads the example again after that. Use **Settings → Models** (hot-applies), or edit the file inside the volume and `docker compose restart gateway`.
+- Operators running Ollama on the host (rather than in the Compose stack) set `OLLAMA_BASE_URL=http://host.docker.internal:11434` in `.env` and skip `--profile local`. Nothing in the profile itself blocks egress — if you need that guarantee, isolate the network at the deployment layer.
 
 ---
 
-## Step 2 — First-run setup
+## Add your organization's background
 
-Open <http://localhost:3000/lq-ai> in your browser. The LQ.AI chat shell lives at `/lq-ai` per [ADR 0009](adr/0009-web-lq-ai-shell-coexistence.md); the upstream OpenWebUI shell at `/` is preserved untouched and is not the canonical experience for this quickstart. Sign in with email `admin@lq.ai` and the password from the previous step. (The address comes from the backend setting `FIRST_RUN_ADMIN_EMAIL`, read only on the very first boot. The shipped `docker-compose.yml` does not pass that variable into the `api` container, and the container does not read your `.env`, so setting it in `.env` alone has no effect — to change it, add `FIRST_RUN_ADMIN_EMAIL` to the `api` service's `environment:` block, e.g. in a `docker-compose.override.yml`, before the first `docker compose up`.) The first time you sign in, you're prompted to set a permanent password; do so.
+An admin can edit the Organization Profile, a Markdown document at the deployment level with information about your team — voice, jurisdiction, industry, standard positions, and escalation thresholds. Signed-in users can read it. It's added automatically to the prompt of any attached skill unless that skill's own frontmatter turns it off (`use_organization_profile: false`); a chat with no skill attached doesn't include it this way. Skipping this and coming back later is fine.
 
-> **Forgot to copy the bootstrap password?** Type any password and submit. If the deployment is still in fresh-install state, the login screen surfaces an inline hint with the exact `docker compose logs` command above and a one-click copy button (M3-0.1 / DE-283). The hint hides itself automatically once you've set your permanent password.
+### Details
 
-> **Admin tip — Settings → Models.** Once signed in as an admin you'll see a **Settings** link in the top-right of the LQ.AI shell. It opens the model alias editor (D0.5) at `/lq-ai/admin/models`, where you can edit the `smart` / `fast` / `budget` / `local` / `embedding` aliases without restarting the gateway. Edits write `gateway.yaml` atomically and hot-reload the gateway in process; in-flight requests finish on the prior config and the next request picks up the new mapping. See [ADR 0010](adr/0010-gateway-config-hot-reload.md) for the full design.
+The shell has no profile editor page yet: an admin sets it through the API — `PUT /api/v1/organization-profile` with a JSON body `{"content_md": "..."}` — try it from <http://localhost:8000/docs>, signed in as the admin. Read it back at any time with `GET /api/v1/organization-profile`; there's no hidden layer.
 
-After the password change you land on the LQ.AI home page (`/lq-ai`). There is no separate setup wizard: the home page shows a **Getting started** checklist of five items that tick off as you do them — **Log in & rotate password**, **Run a skill on a document**, **Try Enhance Prompt**, **Attach a knowledge base**, and **Save a prompt as a skill** — and it disappears once all five are done. This walkthrough covers the first two, with an optional detour into the third (Enhance Prompt) at Step 4. The deployment-level setup below (profile, tier policy, MFA) is not on that checklist and is done where each item says. Four items, in order, none blocking:
-
-### Setup item 1: Create your Organization Profile
-
-The LQ.AI shell has no profile editor page yet; an admin sets the profile through the API — `PUT /api/v1/organization-profile` with a JSON body `{"content_md": "..."}` (try it from <http://localhost:8000/docs>, signed in as the admin) — and you can skip this and come back later. The profile is a markdown document at the deployment level capturing your team's voice, jurisdiction, industry, standard positions, and escalation thresholds. Skills draw on it as context; without it, every skill has to relearn the org from scratch every time, and outputs feel generic.
-
-For the demo, the simplest version is fine. A starter Profile looks like this:
+A simple starter Profile is fine for the demo:
 
 ```markdown
 # Northbrook Legal Department
@@ -123,170 +169,108 @@ professional services.
 - Any data breach affecting > 1,000 records → escalate to GC and Privacy Officer.
 ```
 
-Send it as `content_md`. The Profile is stored separately from the skills catalogue; at request time the gateway prepends it once to the assembled prompt whenever at least one attached skill has not opted out (`use_organization_profile: false` in the skill's frontmatter), and with no skills attached it is not inserted through this path. You can read it back with `GET /api/v1/organization-profile` and edit it at will — there is no hidden layer.
+## Check the Inference Tier policy
 
-### Setup item 2: Configure Inference Tier policy
+There's no tier-policy page in the shell; an admin reads or adjusts it via `GET` / `PATCH /api/v1/admin/tier-policy` (the policy itself lives in the gateway's `tier_policy` block in `gateway.yaml`). By default the deployment allows Tiers 1–4 and warns on Tier 4 rather than blocking. For a first run, leave the defaults — a standard commercial cloud API key is most likely Tier 4, and the warning surfaces transparently in the chat UI.
 
-There is no tier-policy page in the shell; the policy lives in the gateway's `tier_policy` block (`gateway.yaml`), and an admin can read or adjust it via `GET` / `PATCH /api/v1/admin/tier-policy`. By default the deployment allows Tiers 1–4 and warns on Tier 4. For the quickstart, leave the defaults — your cloud LLM provider running under your standard commercial API terms is most likely Tier 4, and the warning surfaces transparently in the chat UI rather than blocking.
+If your provider account has enterprise terms with zero data retention (ZDR), you can configure that provider as Tier 3 in the gateway YAML instead. Check your provider's actual agreement before assigning a tier — the per-provider compliance matrix the PRD describes hasn't been written yet (`docs/compliance/` currently holds only a [README](compliance/README.md) stating the pack's scope and status).
 
-If your provider account has enterprise terms with ZDR (zero data retention), you can configure that provider as Tier 3 in the gateway YAML and the badge will reflect Tier 3 going forward. The per-provider compliance matrix the PRD describes has not been written yet — `docs/compliance/` currently holds only a [README](compliance/README.md) stating the pack's scope and status — so check your provider's actual agreement before assigning a tier.
+## If you lose the password
 
-### Setup item 3: Optionally enable MFA
+```bash
+docker compose exec api python -m app.cli reset-admin-password
+```
 
-Recommended for any deployment handling client-confidential data; skippable for the quickstart on a personal machine. If you enable, you'll set up TOTP with your authenticator app on next sign-in.
+This resets the admin password, prints the new one, sets `must_change_password=true` so it must be changed on the next login, and revokes existing sessions. You don't need to delete stored data to regain access, and it works the same whether the deployment is brand new or established. If you're scripting a reproducible setup rather than recovering a lost password, `--password VALUE --no-force-change` sets a known password directly instead of generating one.
 
-### Setup item 4: Create your first Project and try a starter skill
+Only if you explicitly want a clean slate on a brand-new install with nothing in it yet, wiping the volumes also re-runs the bootstrap — but this destroys **all** local data, so never use it on a deployment you actually use:
 
-Open **Matters** in the sidebar (`/lq-ai/matters`) and click **+ New matter** — the shell calls Projects "matters". This is where the demo begins.
+```bash
+docker compose down -v   # WARNING: destroys ALL local data — first-run installs only
+docker compose up -d
+docker compose logs api 2>&1 | grep "First-run admin password"
+```
 
----
+## Try a skill when a model is connected
 
-## Step 3 — Create a Project
+Attach your test document and choose a relevant skill, such as NDA Review for a made-up NDA. Supply the perspective and other inputs the skill asks for. Read its instructions first, then compare each quotation, finding and suggested change against the document. Check the model and privacy-tier information shown with the answer.
 
-A Project is a matter-scoped container — chats, files, skills, playbooks, and a free-form context document scoped to a single matter (a deal, a counterparty, a regulatory question). Chats inside a Project automatically inherit the Project's attachments and context.
+### Details: running NDA Review against the sample document
 
-For the quickstart, create a Project for the demo NDA:
+In the matter view:
 
-- **Name:** `Acme Discussions`
-- **Description:** `Northbrook–Acme NDA review for potential business relationship`
-- **Context document:**
-  ```
-  We are Northbrook (the user's organization). Acme has sent us their
-  standard mutual NDA. Initial business discussions have not yet started.
-  Standard counterparty evaluation; no specific data-handling concerns
-  flagged at this stage.
-  ```
-- **Privileged flag:** off for the quickstart. (For privileged matters, ticking **Attorney-client privileged** requires you to also set a minimum Inference Tier floor — the form will not submit without one — and marks every chat in the Project as privileged in the audit log. See [PRD §3.11](PRD.md#311-projects-m1) for the full mechanics.)
-
-Click **Create matter**. You're now in the Project view, with a chat sidebar scoped to this Project on the left and the context document visible on the right.
-
----
-
-## Step 4 — Run NDA Review against the sample document
-
-The repository ships with a sample NDA at `docs/quickstart/sample-nda.md` (the same document linked from this walkthrough). It's a short, synthetic mutual NDA between Acme and Northbrook with several deliberate issues for the skill to surface — this is what the demo exercises against.
-
-In the Project view:
-
-1. Click **+ New Chat**. The chat opens with the Project's attachments (none yet) and context document already in the chat's context.
-2. Click **+ Files** and upload `sample-nda.md` from the repository (or download it from [`docs/quickstart/sample-nda.md`](quickstart/sample-nda.md) on GitHub).
+1. Click **+ New Chat**. It opens with the matter's attachments and context document already in the chat's context.
+2. Click **+ Files** and upload `sample-nda.md` (or download it from [`docs/quickstart/sample-nda.md`](quickstart/sample-nda.md) on GitHub).
 3. Click **+ Skills** and select **NDA Review**.
-4. The skill exposes its inputs as form elements (this is the skill-input-form pattern from PRD §3.4 / DE-010). Fill in:
-   - **Perspective:** `recipient` (Northbrook is receiving the NDA from Acme; we are the recipient party in this exchange).
-   - **Deal type:** `vendor procurement` (Acme is a potential business partner; we're not in M&A diligence).
-   - Other inputs: leave defaults.
-5. In the chat input, type something like: *"Please review."* (Or click the **Run skill** button — the skill is already attached, so you don't need a verbose prompt. This is a chance to also try Enhance Prompt; click the lightning-bolt icon next to the chat input and watch your "Please review." get rewritten into a structured legal prompt before submission.)
-6. Hit Send.
+4. Fill in **Perspective** (`recipient` — Northbrook is receiving the NDA from Acme) and **Deal type** (`vendor procurement`); leave other inputs at their defaults.
+5. Type something like *"Please review."* and hit Send — or click **Run skill**, since the skill is already attached. This is also a chance to try **Enhance Prompt**: click the lightning-bolt icon next to the chat input and watch the prompt get rewritten into a structured one before submission.
 
-The skill runs. Streaming output appears in the chat over ~30–60 seconds depending on your model and connection.
+Streaming output appears over roughly 30–60 seconds depending on your model and connection.
 
----
+### Details: reading the output
 
-## Step 5 — Walk through the output
+The output is a structured markdown report:
 
-The output is a structured markdown report. Let's walk through what you'll see and what each section means.
+- **Bottom line** — two-three sentences leading with the recommendation, not with analysis (e.g. *"We recommend negotiating before executing. The 5-year survival period and the asymmetric return-or-destruction certification are material to a recipient party…"*). If it instead opens with "This NDA contains the following provisions…", that's a calibration regression worth flagging.
+- **Findings** — severity-tagged (`Critical` / `Material` / `Minor`, per the [severity rubric](skill-authoring-guide.md#severity-rubric-for-review-skills)) with citations, and usually clean, drop-in replacement language.
+- **Citations are visibly verified.** Every `"<quote>" (Source: [N])` the skill emits is run through the [Citation Engine](citation-engine.md) — a 4-stage cascade (exact match → tolerant match → paraphrase judge → optional ensemble) that re-reads the cited text against the source document before rendering:
+  - **Green** check + underline — verified verbatim, or after minor formatting normalization (whitespace, smart quotes, OCR confusions).
+  - **Yellow** check + underline — verified by the paraphrase judge or by ensemble; the source supports the claim, possibly with caveats — hover the citation chip for the judge's confidence.
+  - **Greyed text** + `[unverified]` — the cascade couldn't match the model's quote against the source; treat it as unverified.
+- **"What this skill does not do"** — every starter skill enumerates its own limits (e.g. NDA Review doesn't give jurisdiction-specific enforceability opinions, or substitute for review by qualified counsel). This tells you when to escalate rather than relying on the output as the answer.
 
-### Bottom line
+### Details: inspecting the skill
 
-Two-three sentences leading with the recommendation, not with analysis. For the sample NDA, expect something like:
+Click the skill's badge in the chat header. A panel shows its actual `SKILL.md` and supporting reference files — the real prompt and references that ran, not a stylized version ([PRD §1.3](PRD.md#13-transparency-as-a-founding-principle)). If your team's calibration disagrees with it — say, a 5-year survival period should be `Critical` rather than `Material` in your practice — click **Fork this skill**, edit the reference file (e.g. `reference/severity_rubric.md`), and use your fork going forward. Your fork is yours.
 
-> *"Bottom line: We recommend negotiating before executing. The 5-year survival period and the asymmetric return-or-destruction certification are material to a recipient party; the 12-month non-solicitation provision is unusual in a mutual NDA and warrants discussion. After targeted edits, this NDA is acceptable for the stated business-discussion purpose."*
+### Details: the Inference Tier badge and audit log
 
-The exact phrasing will vary — LLM outputs do — but the *structure* (recommendation first, two-three sentences, calibrated to recipient perspective) is what the skill is committing to.
+Click the **Tier** badge in the chat header for the routed tier, the provider, and what the tier implies (where the data is going, the provider's retention policy). Every routing decision is in the audit log (**Admin → Audit Log**, searchable by chat ID), including:
 
-If the output starts with "This NDA contains the following provisions..." instead of with a recommendation, that's a calibration regression — flag it as an issue. The "Bottom line opens with recommendation, not analysis" convention is documented in the skill-authoring guide and is what acceptance tests verify.
+- `anonymization_applied` — whether the gateway's Anonymization Layer substituted detected entities with pseudonyms before forwarding to the provider; the pseudonym table itself lives only in process memory for the request and never persists. It's **off by default** (`anonymization.enabled: false` in `gateway.yaml.example`), so expect `false` on a fresh install until you opt in. See [`docs/security/anonymization.md`](security/anonymization.md).
+- `privilege_marked` / `privilege_basis` — whether the chat sat in a privileged matter, and which one.
 
-### Findings
+Under [PRD §1.5.2](PRD.md#15-deployment-modes-and-the-inference-choice-spectrum), lower tier numbers are stronger: `minimum_inference_tier: 2` allows Tier 1–2 and refuses Tier 3–5. Set a floor on a matter or on a specific skill, or disallow tiers globally via `allowed_tiers_global` in `gateway.yaml`. See also [§1.8 Security Posture](PRD.md#18-security-posture).
 
-Severity-tagged findings with citations. For the sample NDA, expect:
+## Common setup problems
 
-- **`[Material]` Survival period (Section 4)** — *"The five-year survival period is unusually long for a routine business-discussion NDA. From a recipient perspective, this extends Northbrook's confidentiality obligations well beyond the period of active discussion. Recommended: negotiate to a two- or three-year survival period from the date of disclosure."*
-- **`[Material]` Asymmetric return-or-destruction certification (Section 5)** — *"In a 'mutual' NDA, only Northbrook is required to certify return or destruction; Acme has no equivalent obligation. This is asymmetric and inconsistent with the mutual framing. Recommended language is provided below."*
-- **`[Material]` Non-solicitation provision (Section 6)** — *"A 12-month non-solicitation of employees with whom either Party had 'material contact' is unusual scope for a mutual NDA at the discussion stage. From the recipient perspective, this constrains hiring even before any business relationship has formed. Recommended: limit to specific employees disclosed during discussions or remove entirely."*
-- **`[Minor]` Confidential Information definition breadth (Section 1)** — *"The definition includes 'any information... that, by its nature, should reasonably be understood to be confidential.' This is common but creates interpretive ambiguity at the margin. Consider adding a marking requirement for written disclosures."*
+If a port is already in use, change the corresponding `*_HOST_PORT` value in `.env` — another Postgres installation commonly already uses `5432`. If no model is available, check both the provider settings and the selected model name. A privacy-tier refusal means the selected route doesn't meet the request's requirement; choose a permitted model rather than weakening the requirement just to clear the error. Exact error text and fixes are in [Troubleshooting](#troubleshooting) below.
 
-A few things to notice about the output:
+## Set access before inviting others
 
-**Citations are visibly verified.** Every `"<quote>" (Source: [N])` the skill emits is run through the [Citation Engine](citation-engine.md) — a 4-stage cascade (exact match → tolerant match → paraphrase judge → optional ensemble) that re-reads the cited text against the source document before rendering. The chat surface (M2-C2) shows the verification state inline:
+Change the initial password. If you want MFA — recommended for any deployment handling client-confidential data, skippable for a quickstart on a personal machine — enable it and you'll set up TOTP with your authenticator app on the next sign-in. Decide who should have admin access and which matters they should see. An organization profile gives a skill background information; it does not replace permissions or privacy settings.
 
-- **Green check + green underline** — verified verbatim against the source (Stage 1 `exact_match`) or verified after minor formatting normalization for whitespace, smart quotes, or OCR confusions (Stage 2 `tolerant_match`). The model quoted the source faithfully.
-- **Yellow check + yellow underline** — verified by the paraphrase judge (Stage 3 `paraphrase_judge`) or by ensemble (Stage 4 `ensemble_strict` / `ensemble_majority` when activated). The source supports the claim, possibly with caveats; hover the citation chip for the judge's confidence, partial-support framing, and the tier envelope when ensemble fired.
-- **Greyed text + `[unverified]` marker** — the cascade could not match the model's quote against the source. Treat as unverified; the model may have produced a claim that doesn't follow from the cited content. The visual treatment is deliberate: scrolling the report, a reviewer should spot unverified citations without reading tooltips.
+## Commands for a new installation
 
-Procurement reviews and document-review work both benefit from being able to quickly distinguish citations the system stands behind from ones it does not. The 5th `system-error` state (verification-pipeline errors surfaced as their own signal rather than collapsed into "unverified") is tracked at [DE-275](PRD.md#de-275--embed-m2-citations-in-chat-message-envelope) for a future release; the M2-C2 surface ships the four states above.
+Copy the example settings, edit `.env`, then run the configuration check before starting. Use these commands for a new installation:
 
-Click-through-to-source-viewer (highlighting the cited span in the source document with PDF.js bbox overlay) is intentionally out of scope for M2 — the visual contract and the data plumbing are in place; the viewer surface is a follow-on for v0.3+ when the citable-chunk schema (PRD §3.3 / DE-387) is fully wired through the UI.
-
-**Severity tags follow the rubric.** Critical / Material / Minor — the [Skill-Authoring Guide](skill-authoring-guide.md#severity-rubric-for-review-skills) documents the calibration. None of the issues in the sample NDA rise to "Critical" because the sample is calibrated to be *plausibly real, with material issues*, not catastrophic.
-
-**Recommended language is operationally usable.** Where the skill recommends specific replacement language, it's clean and ready to drop in with minor party-name edits. You're not starting from scratch.
-
-**The skill defers enforceability questions.** Notice the language: "unusually long," "warrants discussion," "creates interpretive ambiguity." Not "is unenforceable" or "will not hold up in court." This is the conservative-posture convention — the skill surfaces issues for your judgment rather than asserting legal outcomes. The "What this skill does not do" section at the end of the report makes this explicit.
-
-### What this skill does not do
-
-Every starter skill enumerates its own limits. For NDA Review:
-
-> *"This skill does not provide jurisdiction-specific enforceability opinions on any provision; does not address transactional structuring; does not assess employment-law-specific implications of non-solicitation provisions in jurisdictions where they may face restriction (e.g., California); and does not substitute for review by qualified legal counsel."*
-
-This enumeration is *a feature, not a defensive disclaimer*. It tells you when to escalate to expert legal counsel rather than relying on the skill's output for the answer.
+```bash
+git clone https://github.com/legalquants/lq-ai.git
+cd lq-ai
+cp .env.example .env
+# Edit .env: set POSTGRES_PASSWORD, OBJECT_STORE_SECRET_KEY, LQ_AI_GATEWAY_KEY,
+# JWT_SECRET, and at least one provider key.
+docker compose config --quiet
+docker compose up -d --build
+docker compose ps
+docker compose logs api 2>&1 | grep "First-run admin password"
+```
 
 ---
 
-## Step 6 — Inspect the skill itself
+## Verify the M3 surfaces (optional, fresh-install walkthrough)
 
-Click the **NDA Review** badge in the chat header. A side panel slides in showing the skill's actual `SKILL.md` and its supporting reference files (the severity rubric, the perspective-lens reference, the report-structure reference). This is the skill the model just ran — not a stylized version, the actual prompt and reference files in the agentskills.io format.
+Everything above covers getting the app running and trying your first document and skill. This section is a deeper, optional walkthrough of the **M3** capabilities — Playbooks, Tabular Review, and the Word add-in — end to end, using a synthetic NDA corpus. It isn't needed for a first run; skip it unless you specifically want to exercise these surfaces.
 
-This is the transparency principle from [PRD §1.3](PRD.md#13-transparency-as-a-founding-principle) made operational. **Every artifact that shapes the user's experience is visible work product.** If the skill's calibration disagrees with your team's practice — say, you think the 5-year survival should be flagged Critical rather than Material in a vendor procurement context — you can:
+### Bring the stack up with the optional intake bridges
 
-1. Click **Fork this skill** to create a copy under your scope.
-2. Edit the severity rubric in `reference/severity_rubric.md` to reflect your team's calibration.
-3. Save your fork; use it instead of the upstream version going forward.
-
-This is the customer-can-disagree-with-the-vendor pattern that closed-source legal AI structurally cannot match. The skill is open source. Your fork is yours.
-
----
-
-## Step 7 — Look at the Inference Tier badge
-
-Click the **Tier** badge in the top-right corner of the chat header. A panel opens showing:
-
-- The current routed tier (likely Tier 4 if you're using a standard cloud API key without enterprise ZDR terms).
-- The provider routed to (Anthropic, OpenAI, etc.).
-- What the tier implies: where the data is going, what the provider's retention policy is, whether the audit log captured this routing decision (it did — every routing decision is in the audit log).
-
-If you want to verify against the audit log, navigate to **Admin → Audit Log** and search for your chat ID. You'll see entries for each message with `routed_inference_tier` populated. M2 added two more audit signals visible in the same view:
-
-- **`anonymization_applied: true`** — the gateway's Anonymization Layer (M2-B3) substituted detected entities with pseudonyms before forwarding to the model provider. The audit row records that pseudonymization happened; the pseudonym table itself is held only in process memory for the request duration and never persists. If `anonymization_applied: false`, the request bypassed the middleware (typically because the request was a Citation Engine judge call with `lq_ai_purpose: 'judge_paraphrase'`, the chat sits in a privileged Project, or the deployment has anonymization disabled in `gateway.yaml`). Disabled is the shipped default — `anonymization.enabled: false` in `gateway.yaml.example` — so on a fresh quickstart install expect `false` until you opt in. See [`docs/security/anonymization.md`](security/anonymization.md) for the full mechanism and the honest validation-posture note.
-- **`privilege_marked: true` + `privilege_basis: <project name>`** — the chat sat in a privileged matter (Project with `privileged: true`). Marking a Project privileged does not pick a tier by itself: the Project's own `minimum_inference_tier` (mandatory whenever `privileged: true`) travels with the request as a tier floor, and the gateway refuses any route to a weaker — that is, *higher*-numbered — tier with `403 tier_below_minimum`. A floor of 2 allows Tiers 1–2; a floor of 1 allows Tier 1 only. The audit row records the privilege state and the project it came from. Pinned end-to-end by `api/tests/test_chat_citations.py::test_chat_send_privileged_project_full_audit_trail`.
-
-If your team's matter requires a tier floor (e.g., privileged matters require Tier 1 or 2), you can:
-
-- Set `minimum_inference_tier` on the Project — every chat in the Project then refuses to route to a weaker (higher-numbered) tier than the floor.
-- Set `minimum_inference_tier` on a specific skill — the skill refuses to run if the routed tier is weaker than its declared floor.
-- Configure `allowed_tiers_global` in `gateway.yaml` to disallow tiers globally.
-
-Under PRD §1.5.2, lower tier numbers are stronger: `minimum_inference_tier: 2` requires Tier 2 or stronger (Tier 1 and Tier 2 are allowed; Tier 3–5 are refused).
-
-The PRD's [Inference Choice Spectrum (§1.5.2)](PRD.md#15-deployment-modes-and-the-inference-choice-spectrum) and [Security Posture (§1.8)](PRD.md#18-security-posture) cover the model in detail.
-
----
-
-## Verify the M3 surfaces (fresh-install walkthrough)
-
-Steps 1–7 cover the M1 experience. This section walks the **M3** capabilities — Playbooks, Tabular Review, and the Word add-in — end-to-end on a fresh install, using the synthetic NDA corpus. A mid-level engineer should be able to follow it without reading source. (This is the same path used for the M3-E1 pre-tag fresh-install verification.)
-
-### M3.0 — Bring the stack up (with the optional intake bridges)
-
-The Slack and Teams intake bridges are **opt-in** Compose profiles. To bring them up alongside the core stack:
+The Slack and Teams intake bridges are opt-in Compose profiles:
 
 ```bash
 docker compose --profile slack --profile teams up -d --build
 ```
 
-You should see ten healthy services: `api`, `gateway`, `web`, `postgres`, `redis`, `rustfs`, `arq-worker`, `ingest-worker`, `slack-bridge`, `teams-bridge`. (Omit the `--profile` flags to skip the bridges — see the [intake-bridges doc](intake-bridges.md) for what the bridges need before they're useful, and note that a real Slack/Teams OAuth round-trip has not yet been exercised end-to-end — [DE-312](PRD.md#9-deferred-enhancements-and-identified-future-work).)
-
-> **Port already in use?** If `docker compose up` fails with `address already in use` on `5432` (or `6379` / `9000`), you already run a host Postgres/Redis/S3 service. Remap the host-side port in `.env` — e.g. `POSTGRES_HOST_PORT=15432` — and re-run. The stack's internal traffic stays on the default ports; only the host mapping shifts. See [Troubleshooting](#docker-compose-up-fails-with-address-already-in-use).
+You should see ten healthy services: `api`, `gateway`, `web`, `postgres`, `redis`, `rustfs`, `arq-worker`, `ingest-worker`, `slack-bridge`, `teams-bridge`. (Omit the `--profile` flags to skip the bridges — see [the intake-bridges doc](intake-bridges.md) for what the bridges need before they're useful; a real Slack/Teams OAuth round-trip hasn't yet been exercised end-to-end — [DE-312](PRD.md#9-deferred-enhancements-and-identified-future-work).)
 
 Confirm the migration head is current:
 
@@ -294,89 +278,25 @@ Confirm the migration head is current:
 docker compose exec api alembic current   # expect 0045 (head)
 ```
 
-### M3.1 — Attach the synthetic corpus
+### Attach the synthetic corpus
 
-The repo ships five synthetic mutual NDAs at [`docs/quickstart/sample-ndas/`](quickstart/sample-ndas/) (and sample MSAs at `docs/quickstart/sample-msas/`). In the web app, upload the five NDA PDFs (**Knowledge** → upload, or attach them to a Project). Wait for each to finish ingestion (status `ready`). The corpus is designed to vary on five negotiation axes — see [its README](quickstart/sample-ndas/README.md).
+The repo ships five synthetic mutual NDAs at [`docs/quickstart/sample-ndas/`](quickstart/sample-ndas/) (and sample MSAs at `docs/quickstart/sample-msas/`). Upload the five NDA PDFs (**Knowledge** → upload, or attach them to a matter) and wait for each to reach `ready`. The corpus varies on five negotiation axes — see [its README](quickstart/sample-ndas/README.md).
 
-### M3.2 — Run a built-in Playbook against one NDA
+### Run a built-in Playbook
 
-Open **Playbooks**. Five built-ins are seeded (NDA — Mutual, NDA — Unilateral, MSA — SaaS, MSA — Commercial-Purchase, DPA — GDPR). Apply **NDA — Mutual** to one uploaded NDA. The execution runs the LangGraph cascade (retrieve → classify → redline → compile) and returns a per-position assessment — for the NDA-Mutual playbook, eight positions, each with a verdict (`matches_standard` / deviation / missing), a confidence, and the `matched_text` (the verbatim clause the classifier matched). See [docs/playbooks.md](playbooks.md). *(These per-position references are FTS-anchored `matched_text`, not the M2 Citation Engine verification cascade — that integration is deferred.)*
+Open **Playbooks**. Five built-ins are seeded (NDA — Mutual, NDA — Unilateral, MSA — SaaS, MSA — Commercial-Purchase, DPA — GDPR). Apply **NDA — Mutual** to one uploaded NDA — the run retrieves, classifies, redlines, and compiles a per-position assessment (for NDA-Mutual, eight positions, each with a verdict, a confidence, and the verbatim `matched_text`). See [docs/playbooks.md](playbooks.md). *(These references are FTS-anchored `matched_text`, not the M2 Citation Engine cascade — that integration is deferred.)*
 
-### M3.3 — Generate a Playbook from prior agreements (Easy Playbook wizard)
+### Generate a Playbook from prior agreements
 
-Open **Playbooks → Generate from prior agreements**. Pick contract type **NDA**, upload (or select) all five sample NDAs, and click **Generate playbook**. The wizard uploads → polls until each file is parsed → runs the clustering pipeline on the `arq-worker` (typically 3–6 minutes for five documents). The Step 3 inline editor surfaces the clustered positions with a modal standard value + ranked fallback tiers. Edit / approve / save. See [docs/playbooks.md](playbooks.md). *(Clustering currently over-segments — expect more positions than the corpus's five designed axes; tracked as [DE-308](PRD.md#9-deferred-enhancements-and-identified-future-work).)*
+Open **Playbooks → Generate from prior agreements**. Pick contract type **NDA**, upload (or select) all five sample NDAs, and click **Generate playbook** — the wizard parses each file, then runs clustering on the `arq-worker` (typically 3–6 minutes for five documents). Edit / approve / save the resulting positions. See [docs/playbooks.md](playbooks.md). *(Clustering currently over-segments the corpus's five designed axes — [DE-308](PRD.md#9-deferred-enhancements-and-identified-future-work).)*
 
-### M3.4 — Run a Tabular Review across the five NDAs
+### Run a Tabular Review across the five NDAs
 
-Open **Tabular Review**. Select the five NDAs and define four columns (e.g. *Term*, *Confidential Info Definition*, *Standard of Care*, *Governing Law*) — or pick a `output_format: table` skill. Confirm the cost preview, then run. The grid fills in one cell per `(document, column)`; click any cell to open the citation drawer (the grounding chunks). Export to **XLSX** or **CSV** from the result view. See [docs/tabular-review.md](tabular-review.md). *(Per-cell citations are display-only chunk references — [DE-309](PRD.md#9-deferred-enhancements-and-identified-future-work); per-cell cost/tier read 0 — [DE-310](PRD.md#9-deferred-enhancements-and-identified-future-work).)*
+Open **Tabular Review**, select the five NDAs, and define a few columns (or pick a `output_format: table` skill). Confirm the cost preview, run, then click any cell to open the citation drawer. Export to **XLSX** or **CSV**. See [docs/tabular-review.md](tabular-review.md). *(Per-cell citations are display-only chunk references — [DE-309](PRD.md#9-deferred-enhancements-and-identified-future-work); per-cell cost/tier read 0 — [DE-310](PRD.md#9-deferred-enhancements-and-identified-future-work).)*
 
-### M3.5 — Install the Word add-in (unsigned-manifest path)
+### Install the Word add-in (unsigned-manifest path)
 
-Open **Admin → Word add-in** (`/lq-ai/admin/word-addin`) and generate a manifest — it templates your deployment URL into the XML. Sideload it in Word desktop via the **Microsoft 365 Admin Center** (it will warn about the unsigned add-in — expected at v0.3.0). The task pane loads, completes OAuth against your deployment, and the version handshake confirms compatibility. The in-pane feature surface (chat, skills, playbooks) is deferred to M4 ([DE-287](PRD.md#9-deferred-enhancements-and-identified-future-work)); the signed/distributed manifest is community-led ([DE-295](PRD.md#9-deferred-enhancements-and-identified-future-work)). See [docs/word-addin.md](word-addin.md).
-
----
-
-## What you've just done
-
-In about 20 minutes you have:
-
-- Deployed LQ.AI on your machine, with all data in your environment.
-- Created an Organization Profile that shapes every subsequent skill's output to your team's voice.
-- Created a Project scoping a matter (the Acme NDA review).
-- Run a citation-grounded NDA Review against a sample document.
-- Read the output critically, with each finding traceable to the source clause.
-- Inspected the skill that produced the output — and learned that you can fork it.
-- Verified the Inference Tier the request actually routed against, and the audit log entry that captured it.
-
-That is the full M1 experience compressed into one walkthrough. The same flow applies to the other starter skills (MSA Review — SaaS, DPA Checklist Review, Contract QA, etc.) — pick a skill, attach a document, and run.
-
----
-
-## Where to go next
-
-### Try other starter skills
-
-The 10 starter skills are listed in the [README](../README.md#starter-skills-ship-with-m1). Each has its own input schema and output style; calibration is documented in the per-skill test plan ([NDA Review test plan](../skills/nda-review/test-plan.md), [MSA Review SaaS test plan](../skills/msa-review-saas/test-plan.md), etc.). The most informative second skill to try, depending on your practice:
-
-- **Contract QA** if you want to see citation-grounded Q&A against the same sample NDA.
-- **MSA Review — SaaS** if you have a SaaS contract handy. (For a public sample, see SEC EDGAR — many tech-company 10-Ks include SaaS-style MSAs as exhibits.)
-- **DPA Checklist Review** if you want to see regime-aware analysis.
-- **Comms Improver** if you want to see audience-calibrated rewriting.
-- **Skill Creator** if you want to author a new skill via conversation.
-
-### Generate your own playbook from prior agreements (M3-A6)
-
-LQ.AI ships with the **Easy Playbook wizard** — a 4-step flow that turns a corpus of prior contracts into a draft playbook (Playbooks tab → "Generate from prior agreements"). To exercise it without authoring your own corpus, the repo ships five synthetic mutual NDAs designed for this purpose at [`docs/quickstart/sample-ndas/`](quickstart/sample-ndas/) — same base form, intentional variants on five negotiation axes. See [`docs/quickstart/sample-ndas/README.md`](quickstart/sample-ndas/README.md) for the full variant matrix and what a good wizard run should produce.
-
-### Source documents from your practice
-
-The sample NDA is a synthetic demo; for real value, run the skills against documents from your actual practice (or SEC EDGAR for public-domain alternatives). The acceptance-testing framework documents what corpus a thorough evaluation needs ([acceptance-testing-framework.md](acceptance-testing-framework.md#test-corpus-requirements-operator-provided)).
-
-### SEC EDGAR for public-domain test documents
-
-Many corporate filings include contracts as exhibits — NDAs, MSAs, employment agreements, settlement agreements, and similar. To find them:
-
-1. Visit <https://www.sec.gov/edgar/searchedgar/companysearch>.
-2. Search for a public company in your industry of interest.
-3. Open a recent 10-K or 8-K filing and look at the exhibit list.
-4. Exhibits 10.x are typically material contracts.
-
-These are public documents — no anonymization required for testing — and represent real practice. Don't use them in production work without independent counsel review; they are illustrative, not operational.
-
-### Read the PRD
-
-The [Product Requirements Document](PRD.md) is the canonical specification of what LQ.AI is and what every capability does. It's longer than this walkthrough by an order of magnitude, but the table of contents at the top lets you jump to the sections that matter. Particularly worth reading:
-
-- [§1.3 Transparency as a Founding Principle](PRD.md#13-transparency-as-a-founding-principle) — the project's reason for existing.
-- [§1.5 Deployment Modes and the Inference Choice Spectrum](PRD.md#15-deployment-modes-and-the-inference-choice-spectrum) — the five-tier model.
-- [§1.8 Security Posture](PRD.md#18-security-posture) and [Appendix E Pre-Empted Procurement Objections](PRD.md#appendix-e--pre-empted-procurement-objections) — for procurement reviewers.
-- [§3.11 Projects](PRD.md#311-projects-m1) and [§3.12 Organization Profile](PRD.md#312-organization-profile-m1) — what you just used.
-
-### Contribute back
-
-If your team's practice diverges from a starter skill (different severity calibration, different jurisdiction-specific conventions), fork the skill and contribute the variant back. The skill contribution path is documented in [`skills/CONTRIBUTING.md`](../skills/CONTRIBUTING.md); the engineering contribution path (for code, infrastructure, deployment recipes) is in [`CONTRIBUTING.md`](../CONTRIBUTING.md).
-
-The fastest way to make LQ.AI better for your practice is to fork a skill, fix the calibration, and propose the fix back. Each accepted skill contribution helps the next user with similar practice see better output without doing the same work.
+Open **Admin → Word add-in** (`/lq-ai/admin/word-addin`) and generate a manifest — it templates your deployment URL into the XML. Sideload it in Word desktop via the Microsoft 365 Admin Center (it will warn about the unsigned add-in — expected at v0.3.0). The in-pane feature surface (chat, skills, playbooks) is deferred to M4 ([DE-287](PRD.md#9-deferred-enhancements-and-identified-future-work)); the signed/distributed manifest is community-led ([DE-295](PRD.md#9-deferred-enhancements-and-identified-future-work)). See [docs/word-addin.md](word-addin.md).
 
 ---
 
@@ -395,43 +315,27 @@ If startup fails with `ports are not available: ... bind: address already in use
 POSTGRES_HOST_PORT=15432
 ```
 
-The application services reach Postgres over the Docker network at `postgres:5432` regardless, so remapping the host port has no effect on the running stack — it only changes how you reach it with host tooling (`psql -h localhost -p 15432`). The same pattern applies to `REDIS_HOST_PORT` / `OBJECT_STORE_API_HOST_PORT` / `OBJECT_STORE_CONSOLE_HOST_PORT`.
+The application services reach Postgres over the Docker network at `postgres:5432` regardless, so remapping the host port only changes how you reach it with host tooling (`psql -h localhost -p 15432`). The same pattern applies to `REDIS_HOST_PORT` / `OBJECT_STORE_API_HOST_PORT` / `OBJECT_STORE_CONSOLE_HOST_PORT`.
 
 ### "First-run admin password" doesn't appear in logs
 
-The password is printed on the API container's first start. If you missed it, reset it without touching any data:
-
-```bash
-docker compose exec api python -m app.cli reset-admin-password
-```
-
-The CLI prints the new password and sets `must_change_password=true` on the user, so they will be forced to set a fresh password on the next login. This works on a fresh install and an established deployment alike. Only if you explicitly want a clean slate on a brand-new install, wiping the volumes re-runs the bootstrap:
-
-```bash
-docker compose down -v   # WARNING: this destroys ALL local data; never use on an established deployment
-docker compose up -d
-docker compose logs api | grep "First-run admin password"
-```
+See [If you lose the password](#if-you-lose-the-password) above: `docker compose exec api python -m app.cli reset-admin-password` works on a fresh install and an established deployment alike, without touching any data. Wiping the volumes with `docker compose down -v` also re-triggers the bootstrap, but only do that on a brand-new install with nothing in it yet — it destroys all local data.
 
 ### Chat returns "no model configured"
 
-Verify your `.env` has at least one provider key set and matches the model alias in your chat. Default model alias is `smart`; verify the alias resolves to a configured provider in `gateway.yaml`.
+Verify your `.env` has at least one provider key set and that it matches the model alias in your chat. The default model alias is `smart`; verify the alias resolves to a configured provider in `gateway.yaml`.
 
 ### Citation engine fails on the sample NDA
 
-The sample is markdown rather than PDF. The Citation Engine handles markdown with synthetic page boundaries; if you see verification errors, check the API logs. The ingestion pipeline is PyMuPDF and parses text-bearing documents only — there is no OCR step (scanned-PDF OCR is not implemented; DE-320), so a verification miss is not an OCR configuration issue. Confirm the document carries extractable text rather than being a scanned image.
+The sample is markdown rather than PDF. The Citation Engine handles markdown with synthetic page boundaries; if you see verification errors, check the API logs. The ingestion pipeline is PyMuPDF and parses text-bearing documents only — there is no OCR step (scanned-PDF OCR is not implemented; DE-320), so a verification miss on your own upload usually means the file has no extractable text, not an OCR configuration issue. Confirm the document carries extractable text rather than being a scanned image.
 
-### "Tier 4 not allowed" message
+### "Tier N not allowed" message
 
-You configured `allowed_tiers_global` to disallow Tier 4 in setup item 2; either re-enable Tier 4 for the quickstart or upgrade your provider configuration to Tier 3 in `gateway.yaml`.
+Your deployment's `allowed_tiers_global` disallows that tier, or the routed provider doesn't match your policy — either re-enable the tier for the quickstart or upgrade your provider configuration in `gateway.yaml`.
 
 ### "I want to use Mode 2 (local Ollama) instead"
 
-Replace `docker compose up -d` with `docker compose --profile local up -d`. The local profile does one thing: it starts an `ollama` container alongside the rest of the stack. Pull a model into it once with `docker compose exec ollama ollama pull qwen3.5:9b` (a few GB) before the first inference call.
-
-Starting the container does not move your chats onto it. `gateway.yaml.example` ships three Tier-1 aliases that route to the local Ollama service at `http://ollama:11434` — `local` and `local-thinking` (both `qwen3.5:9b`) and `local-fast` (`qwen3.5:4b-nvfp4`, a different tag you must pull separately if you want that alias) — but the default `smart` / `fast` / `budget` aliases still point at the cloud providers, and the `embedding` alias points at OpenAI (the Ollama adapter does not serve embeddings yet, so knowledge-base search stays cloud-backed in this configuration). To run a chat locally, pick a `local-*` alias in the chat's model picker, or repoint `smart` at `ollama-local` under **Settings → Models** and drop its cloud fallbacks.
-
-Repointing an alias at a different local model means editing the *live* `gateway.yaml`, not `gateway.yaml.example`: on the first boot the gateway entrypoint copies the example into the `gateway-config` volume (as `/etc/lq-ai/gateway.yaml`) only if no `gateway.yaml` is there yet, and after that the example is never read again. Use **Settings → Models** (which hot-applies), or edit the file inside the volume and `docker compose restart gateway`; recreating the container does not overwrite the saved file. Editing `gateway.yaml.example` only takes effect if you do it before the very first start. Either way, pull the corresponding tag.
+See [Connect an AI model → Details: local Ollama](#6-connect-an-ai-model) above for the setup commands and the alias/gateway-config gotchas. Mode 2 is the air-gap-capable mode: once images are pulled, models are downloaded, and every alias you use (including `embedding`, if you use knowledge bases) points at a local provider, the deployment runs without internet. The starter skills run against a local model with calibration nuance that differs from the cloud Tier 4 path — expect different (typically slightly less polished) output than Claude / GPT-4.
 
 To exercise the local path with `curl`:
 
@@ -444,13 +348,9 @@ curl -X POST http://localhost:8001/v1/chat/completions \
   -d '{"model": "local-thinking", "messages": [{"role": "user", "content": "hello"}]}'
 ```
 
-Operators running Ollama on the host (rather than in the Compose stack) set `OLLAMA_BASE_URL=http://host.docker.internal:11434` in their `.env` and skip `--profile local` when running compose. Mode 2 is the air-gap-capable mode; once images are pulled, models are downloaded, and every alias you use (including `embedding`, if you use knowledge bases) points at a local provider, the deployment runs without internet. Nothing in the profile itself blocks egress — if you need that guarantee, isolate the network at the deployment layer.
-
-The starter skills run against the local model with calibration nuance that differs from the cloud Tier 4 path — expect different (typically slightly less polished) output than Claude / GPT-4. Refer to PRD §1.5.2 for the tier semantics.
-
 ### "I see the OpenWebUI shell at `/`, not the LQ.AI shell"
 
-That's expected: the upstream OpenWebUI fork's chat shell lives at `/` and is preserved untouched per [ADR 0009](adr/0009-web-lq-ai-shell-coexistence.md). The LQ.AI canonical experience is at `/lq-ai` — point your bookmark there. If you want `/` to redirect to `/lq-ai` (i.e., not expose the OpenWebUI shell at all), add a one-line `+page.svelte` at `web/src/routes/+page.svelte` (or `(app)/+page.svelte`) that calls `goto('/lq-ai')` on mount. This is an operator-side decision; the upstream-shell-at-`/` posture is the default so the OpenWebUI fork's other features (admin, RAG, model management) remain reachable for operators who want them.
+That's expected: the upstream OpenWebUI fork's chat shell lives at `/` and is preserved untouched per [ADR 0009](adr/0009-web-lq-ai-shell-coexistence.md). The LQ.AI canonical experience is at `/lq-ai` — point your bookmark there. If you want `/` to redirect to `/lq-ai` instead, add a one-line `+page.svelte` at `web/src/routes/+page.svelte` (or `(app)/+page.svelte`) that calls `goto('/lq-ai')` on mount. This is an operator-side decision; the upstream-shell-at-`/` posture is the default so the OpenWebUI fork's other features (admin, RAG, model management) remain reachable for operators who want them.
 
 ### My issue isn't here
 
