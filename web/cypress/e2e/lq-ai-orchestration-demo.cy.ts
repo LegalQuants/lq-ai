@@ -199,9 +199,18 @@ describe('Orchestration demonstration', () => {
 
 	it('keeps the feature disabled until the operator enables it', () => {
 		const onBeforeLoad = setup(false);
+		cy.visit('/lq-ai/autonomous', { onBeforeLoad });
+		cy.contains('button', 'Orchestration demo — disabled by operator').should('be.disabled');
+		cy.get('a[href="/lq-ai/autonomous/orchestration"]').should('not.exist');
 		cy.visit('/lq-ai/autonomous/orchestration', { onBeforeLoad });
 		cy.contains('The operator has not enabled').should('be.visible');
 		cy.contains('button', 'Prepare plan').should('not.exist');
+	});
+
+	it('links to the demonstration when the operator enables it', () => {
+		const onBeforeLoad = setup(true);
+		cy.visit('/lq-ai/autonomous', { onBeforeLoad });
+		cy.get('a[href="/lq-ai/autonomous/orchestration"]').should('be.visible');
 	});
 
 	it('shows saved working files after halt without treating their text as HTML', () => {

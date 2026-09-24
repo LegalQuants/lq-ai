@@ -155,15 +155,15 @@ async def on_startup(ctx: dict[str, Any]) -> None:
 
     # No try/except: propagation is the contract (see docstring).
     holder = install_skill_registry(app, get_settings())
-    from app.autonomous.orchestration.service import DemonstrationService
-    from app.db.session import get_session_factory
+    settings = get_settings()
+    if settings.orchestration_demo_enabled:
+        from app.autonomous.orchestration.service import DemonstrationService
+        from app.db.session import get_session_factory
 
-    runtime = DemonstrationService(get_settings(), holder, get_session_factory())
-    runtime.policy()  # Validate enabled configuration; never enable implicitly.
-    if get_settings().orchestration_demo_enabled:
+        runtime = DemonstrationService(settings, holder, get_session_factory())
+        runtime.policy()  # Validate enabled configuration; never enable implicitly.
         await runtime.executor().checkpoints.setup()
-    # Keep cleanup available when new execution is disabled after a restart.
-    ctx["orchestration_runtime"] = runtime
+        ctx["orchestration_runtime"] = runtime
     skill_count = len(holder.current().names())
     log.info(
         "arq-worker startup: skill registry installed (%d skills)",
@@ -223,15 +223,17 @@ def _build_cron_jobs() -> list[Any]:
 
     from arq import cron
 
-    return [
+    jobs = [
         # Every minute at second=0: reap idle autonomous sessions via
         # the two-tick running→paused→halted lifecycle (M4-A4-ii).
         cron(autonomous_idle_watchdog, second=0),
         # Every minute at second=0: spawn sessions for due schedules and
         # advance next_run_at from each schedule's cron_expr (M4-B3).
         cron(autonomous_schedule_dispatcher, second=0),
-        cron(orchestration_watchdog, second=15),
     ]
+    if get_settings().orchestration_demo_enabled:
+        jobs.append(cron(orchestration_watchdog, second=15))
+    return jobs
 
 
 class WorkerSettings:
@@ -273,7 +275,9 @@ def _populate_class_attrs() -> None:
     with contextlib.suppress(ImportError):  # pragma: no cover - arq missing in some envs
         from arq import func
 
-        # No retained arq result may suppress a later wakeup of the same session.
+        # Keep the handler registered to reject stale queued jobs safely when
+        # disabled; only an enabled deployment schedules new jobs or sweeps.
+        # No retained result may suppress a later wakeup of the same session.
         WorkerSettings.functions.append(func(orchestration_session_job, keep_result=0))
         WorkerSettings.redis_settings = _build_redis_settings()  # type: ignore[attr-defined]
         WorkerSettings.cron_jobs = _build_cron_jobs()  # type: ignore[attr-defined]

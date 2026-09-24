@@ -12,6 +12,9 @@ worker. Both services receive the flag and a shared child-capacity limit of two
 unless `LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN` overrides it. The flag enables
 only this sample workflow; live providers, persistent skill workspaces and
 bundled helpers remain separate capabilities.
+Drain or halt active demo runs before switching the flag off. With the flag off,
+the worker schedules no orchestration recovery or execution; owner read and halt
+access remains available.
 
 ## User-visible behavior
 

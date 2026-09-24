@@ -21,7 +21,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit import audit_action
@@ -412,7 +412,7 @@ async def test_audit_log_endpoint_without_bearer_returns_401(
 
 
 @pytest.mark.integration
-async def test_audit_events_record_write_time_within_one_transaction(
+async def test_explicit_audit_events_record_write_time_within_one_transaction(
     db_session: AsyncSession,
     regular_user: User,
 ) -> None:
@@ -422,11 +422,13 @@ async def test_audit_events_record_write_time_within_one_transaction(
         user_id=regular_user.id,
         action="fixture.started",
         resource_type="fixture",
+        timestamp=func.clock_timestamp(),
     )
     second = await audit_action(
         db_session,
         user_id=regular_user.id,
         action="fixture.completed",
         resource_type="fixture",
+        timestamp=func.clock_timestamp(),
     )
     assert second.timestamp > first.timestamp

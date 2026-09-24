@@ -1,4 +1,4 @@
-"""Short arq invocations and bounded recovery for the disabled demonstration."""
+"""Short arq invocations and bounded recovery for the opt-in demonstration."""
 
 import asyncio
 from typing import Any
@@ -57,34 +57,32 @@ async def orchestration_session_job(
 
 async def orchestration_watchdog(ctx: dict[str, Any]) -> dict[str, Any]:
     runtime: DemonstrationService | None = ctx.get("orchestration_runtime")
-    if runtime is None:
+    if runtime is None or runtime.policy() is None:
         return {"status": "disabled"}
-    # Recovery remains available after an operator disables new execution.
     page = await sweep_recovery(runtime.store, after=ctx.get("orchestration_recovery_after"))
     ctx["orchestration_recovery_after"] = page.next_after
     woken = 0
-    if runtime.policy() is not None:
-        async with asyncio.timeout(5), runtime.store.sessions() as db:
-            query = select(Root.session_id).where(
-                Root.status.in_(["queued", "running", "waiting_children"])
-            )
-            after = ctx.get("orchestration_wakeup_after")
-            if after is not None:
-                query = query.where(Root.session_id > after)
-            roots = list(await db.scalars(query.order_by(Root.session_id).limit(26)))
-        # A queue failure leaves durable state for the next pass. Bound this
-        # job so unavailable Redis does not consume an entire invocation.
-        try:
-            async with asyncio.timeout(15):
-                for root_id in roots[:25]:
-                    # Advance only over attempted roots. A slow/failed queue
-                    # must not starve later roots by skipping the whole page.
-                    ctx["orchestration_wakeup_after"] = root_id
-                    woken += await wake_tree(runtime, root_id)
-                if len(roots) <= 25:
-                    ctx["orchestration_wakeup_after"] = None
-        except TimeoutError:
-            pass
+    async with asyncio.timeout(5), runtime.store.sessions() as db:
+        query = select(Root.session_id).where(
+            Root.status.in_(["queued", "running", "waiting_children"])
+        )
+        after = ctx.get("orchestration_wakeup_after")
+        if after is not None:
+            query = query.where(Root.session_id > after)
+        roots = list(await db.scalars(query.order_by(Root.session_id).limit(26)))
+    # A queue failure leaves durable state for the next pass. Bound this
+    # job so unavailable Redis does not consume an entire invocation.
+    try:
+        async with asyncio.timeout(15):
+            for root_id in roots[:25]:
+                # Advance only over attempted roots. A slow/failed queue
+                # must not starve later roots by skipping the whole page.
+                ctx["orchestration_wakeup_after"] = root_id
+                woken += await wake_tree(runtime, root_id)
+            if len(roots) <= 25:
+                ctx["orchestration_wakeup_after"] = None
+    except TimeoutError:
+        pass
     return {
         "inspected": page.inspected,
         "claims_recovered": page.claims_recovered,

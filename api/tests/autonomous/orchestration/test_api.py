@@ -296,3 +296,7 @@ async def test_real_arq_worker_completes_tree_from_one_approved_wakeup(api_demo,
 async def test_disabled_worker_has_no_database_or_queue_work():
     assert await orchestration_session_job({}, str(uuid4()), str(uuid4())) == {"status": "disabled"}
     assert await orchestration_watchdog({}) == {"status": "disabled"}
+    disabled = SimpleNamespace(policy=lambda: None, store=object())
+    assert await orchestration_watchdog({"orchestration_runtime": disabled}) == {
+        "status": "disabled"
+    }

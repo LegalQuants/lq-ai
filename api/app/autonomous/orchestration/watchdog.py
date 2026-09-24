@@ -1,4 +1,4 @@
-"""Bounded recovery sweeps; deliberately not registered with production arq.
+"""Bounded recovery sweeps, registered only when the demo is enabled.
 
 Pagination is maintenance scan state, not graph continuation or retry authority.
 The caller follows next_after until None, then starts a new scan from the start.

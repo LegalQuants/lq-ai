@@ -151,6 +151,9 @@ async def _audit(db: AsyncSession, root: Root, event: str, **details: Any) -> No
         resource_type="autonomous_session",
         resource_id=str(root.session_id),
         details=details,
+        # Multiple phase/effect events may commit together. Timestamp their
+        # writes individually without changing ordinary audit semantics.
+        timestamp=func.clock_timestamp(),
     )
 
 

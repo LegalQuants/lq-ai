@@ -55,7 +55,6 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 from fastapi import Request
-from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit import AuditLog
@@ -125,6 +124,7 @@ async def audit_action(
     routed_provider: str | None = None,
     request: Request | None = None,
     details: dict[str, Any] | None = None,
+    timestamp: Any | None = None,
 ) -> AuditLog:
     """Insert one ``audit_log`` row for ``action``; return the inserted instance.
 
@@ -145,9 +145,8 @@ async def audit_action(
     ip_address, user_agent, request_id = _client_metadata(request)
 
     row = AuditLog(
-        # now() is the transaction start time: multiple phase/effect events in
-        # one atomic outcome would otherwise tie and lose their write order.
-        timestamp=func.clock_timestamp(),
+        # Ordinary audit rows retain their existing transaction-time default.
+        **({"timestamp": timestamp} if timestamp is not None else {}),
         user_id=user_id,
         action=action,
         resource_type=resource_type,
