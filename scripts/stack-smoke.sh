@@ -33,6 +33,7 @@ WAIT_TIMEOUT="${WAIT_TIMEOUT:-900}"
 # job summary.
 LOG_DIR="stack-smoke-logs"
 PHASE="startup"
+IMAGE_PROJECT="${COMPOSE_PROJECT_NAME:-lq-ai}"
 
 dump_diagnostics() {
   local rc=$?
@@ -91,14 +92,14 @@ fi
 # produce byte-identical images. Letting `up --build` build all three
 # exports the ~12 GB image three times concurrently, which can exhaust
 # disk mid-extraction. Build each distinct image once and tag the worker
-# images from the api image — image names are stable because
-# docker-compose.yml pins the project name (`name: lq-ai`).
+# images from the api image. Respect COMPOSE_PROJECT_NAME so local smoke
+# runs can use isolated containers and volumes.
 PHASE="build"
 echo "stack-smoke: building images"
 docker compose build gateway web
 docker compose build api
-docker tag lq-ai-api:latest lq-ai-ingest-worker:latest
-docker tag lq-ai-api:latest lq-ai-arq-worker:latest
+docker tag "${IMAGE_PROJECT}-api:latest" "${IMAGE_PROJECT}-ingest-worker:latest"
+docker tag "${IMAGE_PROJECT}-api:latest" "${IMAGE_PROJECT}-arq-worker:latest"
 
 PHASE="fresh migration plan"
 echo "stack-smoke: asserting the fresh object-store volume has no migration pending"
@@ -121,7 +122,7 @@ echo "stack-smoke: probing health endpoints from the host"
 # would be swallowed and the smoke would still report PASS.
 curl -fsS http://127.0.0.1:8000/health; echo
 curl -fsS http://127.0.0.1:8001/health; echo
-curl -fsS http://127.0.0.1:3000/health; echo
+curl -fsS "http://127.0.0.1:${WEB_HOST_PORT:-3000}/health"; echo
 
 # Several production paths defer third-party imports into request or job
 # handlers, so a broken dependency can survive boot. Import each deferred
