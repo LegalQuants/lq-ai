@@ -4399,20 +4399,20 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 #### DE-319 — Migrate LangGraph 0.2 → 1.x (re-type the executors)
 
-**Current follow-up:** [Issue #524](https://github.com/LegalQuants/lq-ai/issues/524)
-records the updated failure surface: 12 typing errors across three executors,
-with CI stopping before pytest. The historical counts and runtime-compatibility
-assumption below are not verification of a modern lock. [ADR 0035](adr/0035-governed-orchestration-run-tree.md)
-keeps this migration separately reviewable and requires a reviewed, tested
-runtime baseline before activating the accepted durable LangGraph execution.
+**Priority:** P3 · **Effort:** S · **Status:** implementation under review in
+[#524](https://github.com/LegalQuants/lq-ai/issues/524).
 
-**Priority:** P3 · **Effort:** S
+Playbook, tabular and single-session autonomous graphs share a LangGraph 1.x
+runtime. The application-owned `AsyncStateNode` protocol preserves the named
+`state` argument at all 12 node factories, resolving the typing failures without
+changing their behavior. The runtime migration remains a separate commit for
+review, as required by [ADR 0035](adr/0035-governed-orchestration-run-tree.md).
 
-**Context:** M4-0.1 evaluated Dependabot #68 (which widened the `langgraph` constraint to admit a 1.x release) and held the project at `langgraph>=0.2.76,<0.3` for M4. LangGraph 1.x re-typed `StateGraph` as `Generic[StateT, ...]` and changed the `add_node` overload set; our node factories are annotated to return `Awaitable[dict[str, Any]]`, which matches no 1.x overload → mypy `[call-overload]` (7 errors across `api/app/playbooks/executor.py` + `api/app/tabular/executor.py`, the failure #68 tripped on). The break is **type-checking only** — every runtime API used (`StateGraph`, `add_node`/`add_edge`/`add_conditional_edges`, `set_entry_point`, `compile`, `ainvoke`, `END`/`START`) is unchanged in 1.x, and the M4 autonomous executor (which mirrors the playbook executor — a plain phase state-machine, no checkpointing, no prebuilt agents) needs no 1.x-only API. So migrating was not justified for M4 (CLAUDE.md dependency-justification rule).
-
-**Specific scope:** Re-type the ~7 `add_node` call sites across **all three** executors that share the runtime — `api/app/playbooks/executor.py`, `api/app/tabular/executor.py`, and `api/app/autonomous/executor.py` (lands in M4) — by annotating node-factory returns against the graph's state type (the `total=False` TypedDicts already permit partial returns) per 1.x's `State -> Partial<State>` contract, **or** parametrize `StateGraph[StateT, ...]`. Then bump the pin to `>=1,<2`, confirm the `langgraph-checkpoint` / `langgraph-sdk` transitive pins resolve (SBOM churn), and re-run `ruff` + `mypy` + `pytest` for `api/`. Note: `warn_unused_ignores=true` means a blanket `# type: ignore` is not a clean fix.
-
-**When to ship:** Post-M4, low priority. Do all three executors in one PR since they share the runtime. No runtime behavior change expected; the gate is the full api test+type matrix.
+The lock resolves LangGraph 1.2.11, Core 1.6.3, checkpoint 4.2.0 and SDK 0.4.4;
+prebuilt 1.1.0 and protocol 0.0.19 enter the dependency inventory. Websockets stays
+at 16.1.1. Acceptance requires dependency review, all three compiled-graph suites,
+the API regression suite, type/lint checks and container smoke checks. Runtime
+migration alone does not authorize orchestration or helper enablement.
 
 ---
 

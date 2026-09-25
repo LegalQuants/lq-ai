@@ -88,6 +88,7 @@
 					slug={skill.name}
 					contentMd={skill.content_md}
 					contentYaml={skill.content_yaml}
+					scriptFiles={skill.script_files ?? []}
 				/>
 			{:else if activeTab === 'try'}
 				<SkillTryItTab skillSlug={skill.name} />

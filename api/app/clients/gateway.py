@@ -389,6 +389,7 @@ class GatewayClient:
         request: ChatCompletionRequest,
         *,
         request_id: str | None = None,
+        configuration_revision: str | None = None,
     ) -> ChatCompletionResponse:
         """POST a non-streaming chat-completion to the gateway.
 
@@ -407,6 +408,8 @@ class GatewayClient:
 
         body = request.model_dump(mode="json", exclude_none=True)
         headers = self._build_headers(request_id=request_id)
+        if configuration_revision is not None:
+            headers["X-LQ-AI-Config-Revision"] = configuration_revision
 
         try:
             response = await self._client.post(
@@ -448,6 +451,14 @@ class GatewayClient:
                 body_bytes=response.content,
                 op="chat_completion",
                 request_id=request_id,
+            )
+
+        if (
+            configuration_revision is not None
+            and response.headers.get("X-LQ-AI-Config-Revision") != configuration_revision
+        ):
+            raise GatewayInvalidResponse(
+                "Gateway did not acknowledge the bound configuration revision"
             )
 
         try:
@@ -693,6 +704,8 @@ class GatewayClient:
         args: dict[str, Any],
         *,
         max_allowed_tier: int | None = None,
+        require_anonymization: bool | None = None,
+        configuration_revision: str | None = None,
         user_token: str | None = None,
         request_id: str | None = None,
     ) -> dict[str, Any]:
@@ -712,6 +725,10 @@ class GatewayClient:
             # logs and never written to tool_egress_log).
             headers["X-LQ-AI-User-Token"] = user_token
         body: dict[str, Any] = {"args": args}
+        if configuration_revision is not None:
+            headers["X-LQ-AI-Config-Revision"] = configuration_revision
+        if require_anonymization is not None:
+            body["require_anonymization"] = require_anonymization
         if max_allowed_tier is not None:
             body["max_allowed_tier"] = max_allowed_tier
         op = f"call_tool:{provider}/{tool}"
@@ -738,6 +755,13 @@ class GatewayClient:
             )
         try:
             payload: dict[str, Any] = response.json()
+            if (
+                configuration_revision is not None
+                and response.headers.get("X-LQ-AI-Config-Revision") != configuration_revision
+            ):
+                raise GatewayInvalidResponse(
+                    "Gateway did not acknowledge the bound configuration revision"
+                )
             return payload
         except json.JSONDecodeError as exc:
             raise GatewayInvalidResponse(

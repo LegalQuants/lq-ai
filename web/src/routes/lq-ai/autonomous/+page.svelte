@@ -23,6 +23,7 @@
 	import { goto } from '$app/navigation';
 
 	import { autonomousApi, skillsApi, knowledgeBasesApi, projectsApi } from '$lib/lq-ai/api';
+	import { orchestrationApi } from '$lib/lq-ai/api/orchestration';
 	import * as playbooksApi from '$lib/lq-ai/api/playbooks';
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
 	import type { AutonomousSessionRead } from '$lib/lq-ai/api/autonomous';
@@ -37,6 +38,7 @@
 	let actionError: string | null = null;
 	let actionSuccess: string | null = null;
 	let pendingHaltId: string | null = null;
+	let demoAvailability: 'checking' | 'enabled' | 'disabled' | 'unavailable' = 'checking';
 
 	// ---------------------------------------------------------------------------
 	// Run-now modal state
@@ -64,7 +66,17 @@
 	onMount(() => {
 		load();
 		loadPickerData();
+		loadDemoAvailability();
 	});
+
+	async function loadDemoAvailability(): Promise<void> {
+		try {
+			const caps = await orchestrationApi.capabilities();
+			demoAvailability = caps.enabled ? 'enabled' : 'disabled';
+		} catch {
+			demoAvailability = 'unavailable';
+		}
+	}
 
 	async function load(): Promise<void> {
 		loading = true;
@@ -191,6 +203,17 @@
 				</p>
 			</div>
 			<button type="button" class="new-button" on:click={openRunModal}> Run now </button>
+			{#if demoAvailability === 'enabled'}
+				<a href="/lq-ai/autonomous/orchestration" class="underline">Orchestration demo</a>
+			{:else}
+				<button type="button" disabled class="text-sm text-gray-500">
+					Orchestration demo — {demoAvailability === 'disabled'
+						? 'disabled by operator'
+						: demoAvailability === 'checking'
+							? 'checking availability…'
+							: 'unavailable'}
+				</button>
+			{/if}
 		</div>
 	</header>
 

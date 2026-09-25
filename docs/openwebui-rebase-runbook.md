@@ -362,8 +362,14 @@ Six files changed on both sides yet resolve without conflict markers. Git is rig
 | `package.json` | §4 — our deps, upstream's pins, the Dependabot supersessions. |
 | `package-lock.json` | §4 — regenerate, don't trust. |
 | `static/pyodide/pyodide-lock.json` | §4 — regenerate, don't trust. |
-| `Dockerfile` | Cross-check the result against `docker-compose.yml`'s `web` service. |
+| `Dockerfile` | Cross-check the result against `docker-compose.yml`'s `web` service, and re-apply the digest pins (see below). |
 | `.gitignore` | Trivial union; skim it. |
+
+**`Dockerfile` digest pins (#301).** Both `FROM` lines and the `# syntax=` line carry `@sha256:` index digests, and Dependabot does not refresh them for `web/`. Where upstream left a pinned line alone, our pin survives the merge. Where upstream changed it (a Node or Python bump, likely in a quarterly refresh), the merge now conflicts on that line: take upstream's tag and re-resolve its index digest (`docker buildx imagetools inspect <tag>`). From the repository root, this must print nothing; it catches a resolution that dropped a pin:
+
+```bash
+! grep -E '^(FROM|# *syntax)' web/Dockerfile | grep -v '@sha256:'
+```
 
 **`AddToolServerModal.svelte` is the one to actually read.** Our fork strips the OpenAPI/MCP type toggle from this modal — the UI half of ADR 0014's "the gateway is the sole MCP speaker", the other half being the `mcp/client.py` deletion. Upstream rewrote the same file heavily at v0.11.0 (+126/−74), adding MCP OAuth 2.1 registration flows.
 

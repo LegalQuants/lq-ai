@@ -48,7 +48,9 @@ services:
   # ============================================================
 
   postgres:
-    image: pgvector/pgvector:pg16
+    # Digest-pinned for reproducible boots (matches the pin in
+    # docker-compose.yml). Bump the tag and digest together.
+    image: pgvector/pgvector:pg16@sha256:ad2e18408bf447f62092a8a5259e7df10505c5a0360bd1a1853ac8b8b0763da2
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-lq_ai}
@@ -66,7 +68,9 @@ services:
       retries: 10
 
   redis:
-    image: redis:7-alpine
+    # Digest-pinned for reproducible boots (matches the pin in
+    # docker-compose.yml). Bump the tag and digest together.
+    image: redis:7-alpine@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
@@ -240,6 +244,10 @@ services:
       # image already sets LQ_AI_SKILLS_DIR=/skills via ENV; set it here too
       # for clarity, matching the dev compose). No ./skills bind mount.
       LQ_AI_SKILLS_DIR: ${LQ_AI_SKILLS_DIR:-/skills}
+      # Sample-only orchestration remains operator opt-in. Both processes use
+      # the same bounded deployment capacity when the flag is enabled.
+      LQ_AI_ORCHESTRATION_DEMO_ENABLED: ${LQ_AI_ORCHESTRATION_DEMO_ENABLED:-false}
+      LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN: ${LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN:-2}
       # Bridge secrets — bridges are excluded from the release stack, but the
       # api reads these (optional, default empty) so leaving them unset is fine.
       LQ_AI_BRIDGE_TOKEN: ${LQ_AI_BRIDGE_TOKEN:-}
@@ -323,6 +331,8 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       # Skills corpus is baked at /skills (image ENV); set explicitly for clarity.
       LQ_AI_SKILLS_DIR: ${LQ_AI_SKILLS_DIR:-/skills}
+      LQ_AI_ORCHESTRATION_DEMO_ENABLED: ${LQ_AI_ORCHESTRATION_DEMO_ENABLED:-false}
+      LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN: ${LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN:-2}
       # Same key as the api service — worker code paths that touch
       # envelope-encrypted payloads (DE-358 item 5) or per-user MCP OAuth
       # tokens need it to decrypt/encrypt.

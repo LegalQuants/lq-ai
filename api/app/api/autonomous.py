@@ -509,6 +509,19 @@ async def halt_session(
     """
     session = await _load_owned_session(db, session_id=session_id, user_id=user.id)
 
+    from app.models.orchestration import OrchestrationRoot
+
+    if await db.get(OrchestrationRoot, session.root_session_id) is not None:
+        from app.api.orchestration import service
+
+        # Halt on an existing child receipt also stops the governed root.
+        root_id = session.root_session_id
+        actor_id = user.id
+        await db.rollback()
+        await service(request).store.halt(root_id, actor_id=actor_id)
+        await db.refresh(session)
+        return AutonomousSessionRead.model_validate(session)
+
     # Idempotency check: if the session is already halted (in any sense),
     # return current state without a duplicate audit write.
     if session.halt_state in ("halt_requested", "halted"):

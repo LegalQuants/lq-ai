@@ -49,6 +49,18 @@ def test_worker_settings_class_shape() -> None:
 
 
 @pytest.mark.unit
+def test_orchestration_cron_is_registered_only_when_enabled() -> None:
+    def jobs(enabled: bool) -> set[str]:
+        settings = type("Settings", (), {"orchestration_demo_enabled": enabled})()
+        with patch("app.workers.arq_setup.get_settings", return_value=settings):
+            return {job.coroutine.__name__ for job in arq_setup._build_cron_jobs()}
+
+    assert "orchestration_watchdog" not in jobs(False)
+    assert "orchestration_watchdog" in jobs(True)
+    assert {"autonomous_idle_watchdog", "autonomous_schedule_dispatcher"} <= jobs(False)
+
+
+@pytest.mark.unit
 async def test_noop_job_returns_ok() -> None:
     """Direct invocation: the registered job is a coroutine that returns ``"ok"``."""
 
@@ -68,17 +80,21 @@ async def test_on_startup_installs_skill_registry_and_returns_none() -> None:
     pins the wiring (hook calls the shared bootstrap; returns None).
     """
 
+    from app.config import get_settings
     from app.skills.registry import MutableSkillRegistry, SkillRegistry
 
     holder = MutableSkillRegistry(SkillRegistry(records={}))
-    with patch(
-        "app.skills.bootstrap.install_skill_registry",
-        return_value=holder,
-    ) as mock_install:
+    settings = get_settings().model_copy(update={"orchestration_demo_enabled": False})
+    ctx: dict[str, Any] = {}
+    with (
+        patch("app.skills.bootstrap.install_skill_registry", return_value=holder) as mock_install,
+        patch("app.workers.arq_setup.get_settings", return_value=settings),
+    ):
         # No exception, no return value.
-        assert await arq_setup.on_startup({}) is None
+        assert await arq_setup.on_startup(ctx) is None
 
     mock_install.assert_called_once()
+    assert "orchestration_runtime" not in ctx
 
 
 @pytest.mark.unit

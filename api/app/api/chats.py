@@ -1727,6 +1727,12 @@ async def send_message(
         )
         allowlist = ChatToolAllowlist(specs={})
 
+    from app.skills.chat_tools import extend_chat_tools
+
+    await extend_chat_tools(
+        db, allowlist, owner_id=user.id, chat_id=cid, skill_names=list(effective_skills)
+    )
+
     if payload.stream:
         return await _stream_response(
             db=db,
@@ -2119,6 +2125,7 @@ async def resume_tool_call(
     messages: list[dict] = list(resume_state.get("messages", []))
     calls_used: int = int(resume_state.get("calls_used", 0))
     model: str = str(resume_state.get("model", "smart"))
+    resumed_skills: list[str] = list(resume_state.get("skill_names", []))
 
     request_id = (
         request.headers.get("x-request-id")
@@ -2279,6 +2286,12 @@ async def resume_tool_call(
         except Exception:
             resume_allowlist = ChatToolAllowlist(specs={})
 
+        from app.skills.chat_tools import extend_chat_tools
+
+        await extend_chat_tools(
+            db, resume_allowlist, owner_id=user.id, chat_id=cid, skill_names=resumed_skills
+        )
+
         # Run the tool loop with remaining budget.
         loop_outcome: LoopFinal | LoopConfirmation | LoopMcpAuth | None = None
         error_code: str | None = None
@@ -2356,6 +2369,7 @@ async def resume_tool_call(
                             "messages": loop_outcome.messages,
                             "calls_used": loop_outcome.calls_used,
                             "model": model,
+                            "skill_names": resumed_skills,
                         }
                     ),
                     status="pending",
@@ -3244,6 +3258,7 @@ async def _non_streaming_response(
                         "messages": outcome.messages,
                         "calls_used": outcome.calls_used,
                         "model": request.model,
+                        "skill_names": list(request.lq_ai_skills or []),
                     }
                 ),
                 status="pending",
@@ -3573,6 +3588,7 @@ async def _stream_response(
                                 "messages": loop_outcome.messages,
                                 "calls_used": loop_outcome.calls_used,
                                 "model": request.model,
+                                "skill_names": list(request.lq_ai_skills or []),
                             }
                         ),
                         status="pending",

@@ -275,6 +275,11 @@ services:
       # not mutate it (skill authoring is a host-side / human-attestation
       # workflow per CLAUDE.md "Working with skills").
       LQ_AI_SKILLS_DIR: ${LQ_AI_SKILLS_DIR:-/skills}
+      LQ_AI_ORCHESTRATION_DEMO_ENABLED: ${LQ_AI_ORCHESTRATION_DEMO_ENABLED:-false}
+      LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN: ${LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN:-2}
+      LQ_AI_SKILL_WORKSPACES_ENABLED: ${LQ_AI_SKILL_WORKSPACES_ENABLED:-false}
+      LQ_AI_SKILL_SCRIPT_RUNNER_URL: ${LQ_AI_SKILL_SCRIPT_RUNNER_URL:-}
+      LQ_AI_SKILL_SCRIPT_RUNNER_TOKEN: ${LQ_AI_SKILL_SCRIPT_RUNNER_TOKEN:-}
       # M3-D1 slack-bridge integration. Both optional: only required for
       # operators who enable the `slack` compose profile. The api refuses
       # bridge traffic with 500 when either is unset.
@@ -419,6 +424,11 @@ services:
       # not mutate it (skill authoring is a host-side / human-attestation
       # workflow per CLAUDE.md "Working with skills").
       LQ_AI_SKILLS_DIR: ${LQ_AI_SKILLS_DIR:-/skills}
+      LQ_AI_ORCHESTRATION_DEMO_ENABLED: ${LQ_AI_ORCHESTRATION_DEMO_ENABLED:-false}
+      LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN: ${LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN:-2}
+      LQ_AI_SKILL_WORKSPACES_ENABLED: ${LQ_AI_SKILL_WORKSPACES_ENABLED:-false}
+      LQ_AI_SKILL_SCRIPT_RUNNER_URL: ${LQ_AI_SKILL_SCRIPT_RUNNER_URL:-}
+      LQ_AI_SKILL_SCRIPT_RUNNER_TOKEN: ${LQ_AI_SKILL_SCRIPT_RUNNER_TOKEN:-}
       # Same key as the api service — worker code paths that touch
       # envelope-encrypted payloads (DE-358 item 5) or per-user MCP
       # OAuth tokens need it to decrypt/encrypt.

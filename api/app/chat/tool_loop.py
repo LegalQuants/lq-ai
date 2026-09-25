@@ -49,7 +49,7 @@ from app.autonomous.enums import ToolIntent
 from app.autonomous.guard import ToolResult, _args_digest
 from app.chat.tool_schemas import ChatToolAllowlist, ToolSpec
 from app.config import get_settings
-from app.errors import MCPAuthorizationRequired, ToolTierRefused
+from app.errors import MCPAuthorizationRequired, ToolNotGranted, ToolTierRefused
 from app.mcp.oauth import get_valid_token
 from app.mcp.service import list_servers
 from app.models.user import User
@@ -287,6 +287,8 @@ def collect_tool_sources(spec: ToolSpec, data: Any) -> list[ToolSourceRecord]:
     MCP → one ``mcp`` record; authority (DE-369, ADR 0021 D3) → one record for
     both search and get calls; research → the existing case-law extraction.
     """
+    if spec.kind == "skill":
+        return []
     if spec.kind == "mcp":
         rec = extract_mcp_tool_source(spec, data)
         return [rec] if rec is not None else []
@@ -642,7 +644,9 @@ async def execute_tool(
         :class:`~app.errors.MCPAuthorizationRequired`: When the MCP server
             requires OAuth and no valid token is stored.
     """
-    if spec.kind == "research":
+    if spec.kind == "skill":
+        intent = ToolIntent(spec.tool)
+    elif spec.kind == "research":
         intent = ToolIntent.retrieve_caselaw
     elif spec.kind == "authority":
         intent = ToolIntent.retrieve_authority
@@ -665,10 +669,29 @@ async def execute_tool(
     else:
         provider = spec.provider
 
-    provider_tier = await resolve_provider_tier(provider, request_id=request_id)
+    provider_tier = (
+        0 if spec.kind == "skill" else await resolve_provider_tier(provider, request_id=request_id)
+    )
 
     async def _dispatch() -> ToolResult:
-        if spec.kind == "research":
+        if spec.kind == "skill":
+            from sqlalchemy import select
+
+            from app.models.chat import Chat
+            from app.skills.tools import SkillTools, current_registry
+
+            chat = await db.scalar(select(Chat).where(Chat.id == chat_id, Chat.owner_id == user.id))
+            if chat is None or chat.archived_at is not None or spec.skill_binding is None:
+                raise ToolNotGranted("Skill invocation is unavailable")
+            return await SkillTools(current_registry()).execute(
+                db,
+                binding=spec.skill_binding,
+                owner_id=user.id,
+                project_id=chat.project_id,
+                intent=intent,
+                params=args,
+            )
+        elif spec.kind == "research":
             return await _dispatch_research(db, spec, args, cluster_cache, request_id)
         elif spec.kind == "authority":
             return await _dispatch_authority(db, spec, args, gateway, request_id)
@@ -768,7 +791,11 @@ async def run_chat_tool_loop(
     # Build the server-auth map once per turn from list_servers.  Only
     # ``auth == "oauth"`` servers need per-user token resolution; for
     # ``none``/``bearer`` we pass user_token=None to the gateway.
-    raw_servers = await list_servers(request_id=request_id)
+    raw_servers = (
+        await list_servers(request_id=request_id)
+        if any(spec.kind == "mcp" for spec in allowlist.specs.values())
+        else []
+    )
     server_auth_map: dict[str, str] = {s["name"]: s.get("auth", "none") for s in raw_servers}
 
     # Working message list — grows as tool results are appended.
@@ -879,6 +906,8 @@ async def run_chat_tool_loop(
                         if rec.external_ref is not None:
                             _seen_source_refs.add(rec.external_ref)
                         collected_sources.append(rec)
+            except ToolNotGranted:
+                tool_result_msgs.append(_tool_error_message(tc_id, "skill tool refused"))
             except MCPAuthorizationRequired:
                 return LoopMcpAuth(
                     server=spec.provider,

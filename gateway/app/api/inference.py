@@ -568,6 +568,25 @@ async def chat_completions(request: Request) -> JSONResponse | StreamingResponse
 
     config = _config(request)
     gw_router = _router(request)
+    from app.config_revision import REVISION_HEADER, ConfigRevisionMismatch
+
+    revision = request.headers.get(REVISION_HEADER)
+    if revision is not None:
+        try:
+            if chat_request.stream or "/" not in chat_request.model:
+                raise ConfigRevisionMismatch(
+                    "Checked inference requires a direct non-streaming route"
+                )
+            gw_router = gw_router.pin(revision, chat_request.model.split("/", 1)[0])
+            config = gw_router.config
+            if chat_request.model in config.model_aliases:
+                raise ConfigRevisionMismatch("Checked inference cannot dispatch an alias")
+        except ConfigRevisionMismatch:
+            return _gateway_error(
+                code="configuration_revision_mismatch",
+                message="Gateway configuration, adapter or direct route does not match",
+                http_status=412,
+            )
     log_writer = _routing_log(request)
     request_id = synthesize_request_id(_request_id_header(request))
 
@@ -784,6 +803,7 @@ async def chat_completions(request: Request) -> JSONResponse | StreamingResponse
             headers={
                 TIER_HEADER: str(result.target.routed_inference_tier),
                 PROVIDER_HEADER: result.target.provider.name,
+                **({REVISION_HEADER: revision} if revision is not None else {}),
             },
         )
 
@@ -1433,6 +1453,7 @@ def _annotate_response(
     """Stamp the routed-tier and routed-provider fields plus cost estimate."""
 
     response.routed_provider = target.provider.name
+    response.routed_model = target.native_model
     response.routed_inference_tier = target.routed_inference_tier
     cost = estimate_cost(
         provider_name=target.provider.name,
