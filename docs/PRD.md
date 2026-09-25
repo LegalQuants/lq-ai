@@ -2153,6 +2153,8 @@ Entries are tagged with priority (P1 = should be addressed in v1.5; P2 = good fo
 
 **Acceptance criteria:** Dictation works in Chrome and Safari; clearly disclaimed as browser-side.
 
+**✅ Delivered** for the `/lq-ai` shell's composer (`web/src/lib/lq-ai/components/Dictation/`): a mic toggle backed by the browser's `SpeechRecognition`/`webkitSpeechRecognition` API, a live level-meter waveform driven by a parallel `getUserMedia`+`AnalyserNode` stream, and a hover tooltip disclosing that dictation runs client-side. The button is hidden entirely when neither constructor is present (Firefox has no Web Speech API support at all) rather than shown disabled. No server-side STT, per the original scope. The OpenWebUI shell at `/` already ships its own separate dictation (untouched, per ADR 0009).
+
 #### DE-265 — In-app "unverified citation" badging until Citation Engine ships
 
 **Status:** ✅ RESOLVED (M2). Superseded by the shipped Citation Engine (§3.3, "M2 status: SHIPPED") — verified spans render with per-stage verification metadata and unverified citations render greyed with an explicit `[unverified]` marker, so the interim M1 badge is no longer needed.
