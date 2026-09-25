@@ -19,12 +19,12 @@ from __future__ import annotations
 
 import hmac
 import logging
-import os
 from collections.abc import Awaitable, Callable
 
 from fastapi import Header, HTTPException, Request, status
 
 from app.config import GatewayConfig
+from app.secrets import resolve_secret
 
 logger = logging.getLogger(__name__)
 
@@ -37,10 +37,12 @@ def _resolve_required_key(config: GatewayConfig) -> str | None:
     """Return the expected shared-secret value, or None if disabled.
 
     Pulls the env-var name from ``gateway_auth.api_key_env`` (default
-    ``LQ_AI_GATEWAY_KEY``) and reads the value from the process
-    environment. Returns None when ``gateway_auth.enabled`` is False
-    (auth disabled — typical only for local dev with the env var
-    unset) or when the env var resolves to an empty string.
+    ``LQ_AI_GATEWAY_KEY``) and reads the value via
+    :func:`app.secrets.resolve_secret`, so ``NAME_FILE`` delivery works.
+    A conflicting or unreadable file source raises (fail closed) rather
+    than silently disabling auth. Returns None when
+    ``gateway_auth.enabled`` is False (auth disabled — typical only for
+    local dev with the env var unset) or when the secret resolves empty.
 
     The empty-string case is treated as "auth disabled" rather than
     "any key matches" — silently accepting unauthenticated writes
@@ -50,7 +52,7 @@ def _resolve_required_key(config: GatewayConfig) -> str | None:
     if not config.gateway_auth.enabled:
         return None
     env_name = config.gateway_auth.api_key_env or "LQ_AI_GATEWAY_KEY"
-    expected = os.environ.get(env_name, "")
+    expected = resolve_secret(env_name)
     if not expected:
         return None
     return expected

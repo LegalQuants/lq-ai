@@ -203,10 +203,7 @@ class OllamaAdapter(ProviderAdapter):
 
         env_lookup = env if env is not None else dict(os.environ)
         if key_resolver is None:
-            key_resolver = ProviderKeyResolver(
-                master_key=env_lookup.get("LQ_AI_GATEWAY_MASTER_KEY") or None,
-                env=env_lookup,
-            )
+            key_resolver = ProviderKeyResolver.from_env_dict(env_lookup)
         # Ollama keys are optional. The resolver returns "" when both
         # sources are unset, which the adapter treats as "no auth header".
         api_key = key_resolver.resolve(

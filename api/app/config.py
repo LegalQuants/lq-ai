@@ -12,12 +12,17 @@ clear the cache via `get_settings.cache_clear()` after monkeypatching env.
 
 from __future__ import annotations
 
+import logging
 from decimal import Decimal
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
+from pydantic import AliasChoices, Field, model_validator
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+log = logging.getLogger(__name__)
 
 LogLevel = Literal["debug", "info", "warning", "warn", "error", "critical"]
 
@@ -149,6 +154,68 @@ class Settings(BaseSettings):
         default="",
         description="Shared secret for backend ↔ gateway. Required in prod.",
     )
+    lq_ai_gateway_key_file: str = Field(
+        default="",
+        description=(
+            "Path to a file containing the backend ↔ gateway shared secret "
+            "(Docker/K8s secret-mount delivery for LQ_AI_GATEWAY_KEY). "
+            "Setting both LQ_AI_GATEWAY_KEY and LQ_AI_GATEWAY_KEY_FILE is a "
+            "configuration error."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _resolve_gateway_key_file(self) -> Settings:
+        """Resolve ``LQ_AI_GATEWAY_KEY_FILE`` into ``lq_ai_gateway_key``.
+
+        Gateway-only file delivery (#590): the api needs the same shared
+        secret the gateway checks, so mixed env/file deployments keep
+        working. Both set → fail closed; file missing/unreadable/empty →
+        fail closed (silently disabling service-to-service auth would be
+        worse). File values are stripped; group/world-readable files log
+        a warning but still load.
+        """
+
+        if self.lq_ai_gateway_key and self.lq_ai_gateway_key_file:
+            raise ValueError(
+                "LQ_AI_GATEWAY_KEY and LQ_AI_GATEWAY_KEY_FILE are both set; "
+                "choose one delivery path."
+            )
+        if self.lq_ai_gateway_key_file:
+            path = Path(self.lq_ai_gateway_key_file.strip())
+            if not path.is_file():
+                raise ValueError(
+                    "LQ_AI_GATEWAY_KEY_FILE points at "
+                    f"{self.lq_ai_gateway_key_file!r}, which is missing or not a regular file."
+                )
+            try:
+                mode = path.stat().st_mode
+            except OSError as exc:
+                raise ValueError(
+                    "cannot stat LQ_AI_GATEWAY_KEY_FILE "
+                    f"at {self.lq_ai_gateway_key_file!r}: {exc.strerror or exc}"
+                ) from exc
+            if mode & 0o077:
+                log.warning(
+                    "secret file for LQ_AI_GATEWAY_KEY at %r is group/world-accessible "
+                    "(mode %o); expected 0400 or 0600",
+                    self.lq_ai_gateway_key_file,
+                    mode & 0o777,
+                )
+            try:
+                value = path.read_text(encoding="utf-8").strip()
+            except OSError as exc:
+                raise ValueError(
+                    "cannot read LQ_AI_GATEWAY_KEY_FILE "
+                    f"at {self.lq_ai_gateway_key_file!r}: {exc.strerror or exc}"
+                ) from exc
+            if not value:
+                raise ValueError(
+                    "secret file for LQ_AI_GATEWAY_KEY_FILE "
+                    f"at {self.lq_ai_gateway_key_file!r} is empty."
+                )
+            self.lq_ai_gateway_key = value
+        return self
 
     # ----- Chat history (multi-turn memory) -----
     # The chat send path (api/app/api/chats.py) replays prior turns of the
