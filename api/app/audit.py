@@ -57,8 +57,10 @@ from typing import TYPE_CHECKING, Any
 from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.models.audit import AuditLog
 from app.models.project import Project
+from app.security.client_ip import resolve_client_ip
 
 if TYPE_CHECKING:
     pass
@@ -71,7 +73,7 @@ def _client_metadata(request: Request | None) -> tuple[str | None, str | None, s
         return None, None, None
 
     user_agent = request.headers.get("user-agent")
-    ip_address = request.client.host if request.client else None
+    ip_address = resolve_client_ip(request, get_settings().lq_ai_trusted_proxies)
     # The B5 GatewayClient + chat handler stamp X-Request-ID; the
     # FastAPI middleware (when present) uses the same header. Read
     # it opportunistically so audit rows correlate to log lines.

@@ -55,6 +55,7 @@ from app.security import (
     refresh_token_matches,
     verify_password,
 )
+from app.security.client_ip import resolve_client_ip
 from app.security.totp import (
     consume_recovery_code,
     generate_recovery_codes,
@@ -239,14 +240,13 @@ def _client_metadata(request: Request) -> tuple[str | None, str | None]:
     """Return `(user_agent, ip_address)` for the session row, both nullable.
 
     `user_agent` comes straight off the User-Agent header.
-    `ip_address` honors `X-Forwarded-For` only if the request reached us
-    through a trusted proxy — we conservatively use the immediate client
-    IP from `request.client` for now and let an operator front the
-    deployment with a reverse proxy that sets the column itself if they
-    want X-Forwarded-For semantics. (Future: trusted-proxy config.)
+    `ip_address` is resolved via :func:`resolve_client_ip`: the real client
+    IP from `CF-Connecting-IP` when the immediate peer is a configured
+    trusted proxy (``LQ_AI_TRUSTED_PROXIES``), else the immediate peer
+    address. Defaults to the immediate peer when no trusted proxy is set.
     """
     user_agent = request.headers.get("user-agent")
-    ip_address = request.client.host if request.client else None
+    ip_address = resolve_client_ip(request, get_settings().lq_ai_trusted_proxies)
     return user_agent, ip_address
 
 

@@ -499,6 +499,23 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Trusted reverse-proxy addresses (comma-separated IPs/CIDRs). When the
+    # immediate peer (request.client.host) is within one of these ranges, the
+    # real client IP is read from the CF-Connecting-IP header (set and
+    # overwritten by Cloudflare, so not client-spoofable) for audit/session
+    # rows and IP-keyed controls. X-Forwarded-For is intentionally NOT trusted
+    # (its left-most entry is client-supplied). Empty (default) preserves the
+    # legacy behavior of recording request.client.host verbatim. Behind the
+    # Compose/Barnabas proxy set this to the proxy container's subnet.
+    lq_ai_trusted_proxies: str = Field(
+        default="",
+        description=(
+            "Comma-separated reverse-proxy IPs/CIDRs whose CF-Connecting-IP "
+            "header is trusted as the real client IP. Empty disables forwarded "
+            "client-IP resolution."
+        ),
+    )
+
 
 # WS-D PR1: default maximum number of plan→act steps in the agentic analysis loop.
 # Session params["max_analysis_steps"] overrides this per-session.
