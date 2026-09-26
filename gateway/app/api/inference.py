@@ -676,6 +676,20 @@ async def chat_completions(request: Request) -> JSONResponse | StreamingResponse
             },
         )
 
+    # --- Tier-floor enforcement on the fallback chain (D1) ------------------
+    # The primary satisfies the floor (checked above), but the fallback chain
+    # must not silently downgrade to a weaker tier on primary failure. Drop
+    # any candidate below the floor so the streaming walk in
+    # ``_stream_with_fallback`` (which iterates this list) cannot dispatch a
+    # weaker tier; the non-streaming path re-resolves inside the router, so it
+    # receives ``floor`` below and applies the same filter.
+    if floor is not None:
+        candidates = [
+            candidate
+            for candidate in candidates
+            if not is_refused(resolved_tier=candidate.routed_inference_tier, floor=floor)
+        ]
+
     # --- Anonymization pre-middleware (M2-B3) -------------------------------
     # Sits between Tier Derivation and Provider Adapter per PRD §4.3.
     # Mutates chat_request.messages[*].content + lq_ai_skill_inputs in
@@ -711,7 +725,7 @@ async def chat_completions(request: Request) -> JSONResponse | StreamingResponse
     tracer = get_tracer()
     with tracer.start_as_current_span("inference.dispatch") as dispatch_span:
         try:
-            result = await gw_router.chat_completion(chat_request)
+            result = await gw_router.chat_completion(chat_request, floor=floor)
         except RoutedProviderError as wrapped:
             # The router attributes the failure to the actual target that
             # produced the error (rather than the last candidate). Unwrap
