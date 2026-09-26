@@ -159,6 +159,21 @@ Tailscale Serve is the simplest option when Ollama runs directly on the GPU host
 
 Regardless of the mechanism used, a remote Ollama endpoint should always be configured with an HTTPS `OLLAMA_BASE_URL`.
 
+### Generalizing this rule
+
+Step 3 above is explicit that setting `OLLAMA_BASE_URL` isn't enough on its own —
+you have to recreate or restart the gateway so the new value actually loads; an
+env-var edit with no restart leaves the gateway dispatching against whatever
+`base_url` it resolved at its last start. If step 4's `curl` succeeds against the
+tailnet endpoint but a chat routed through the gateway still fails, that's the most
+likely gap to check first.
+
+This refusal is not specific to Ollama. Any remote inference or tool-provider host
+reached over plaintext HTTP gets the same refusal unless it's on the guard's small
+local allowlist. Once you've seen the reasoning here, the same shape applies to a
+remote vLLM host, a self-hosted OpenAI-compatible server, or any other non-local
+`base_url` you point the gateway at.
+
 ---
 
 ## References

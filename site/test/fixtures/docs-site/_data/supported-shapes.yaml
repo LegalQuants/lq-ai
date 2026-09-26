@@ -1,0 +1,22 @@
+# Fixture data for the `<!-- supported-shapes -->` directive.
+#
+# One row of each status, including the one that matters most: a shape with no
+# recipe and no source, which the table has to render as plainly as the shapes
+# that do work.
+
+shapes:
+  - topology: Docker Compose, cloud provider keys
+    status: recipe published
+    recipe: install-docker-compose/
+    source: README.md
+
+  - topology: Kubernetes via the in-repo Helm chart
+    status: known-to-work
+    recipe: null
+    source: deploy/helm/lq-ai/
+    notes: the chart runs the core services only.
+
+  - topology: Windows host
+    status: not tried
+    recipe: null
+    source: null

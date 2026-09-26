@@ -6,6 +6,8 @@ This is the long-form quickstart. The README has the 5-line version; this docume
 
 If you run into trouble, the [Troubleshooting](#troubleshooting) section at the end covers the most common gotchas. If your gotcha isn't there, file a GitHub issue with the `quickstart` label and we'll add it.
 
+Everything below runs in Docker containers on your machine. The Inference Gateway is the only component that talks to the outside world — inference requests, and, if an operator enables them, case-law/research and connector (MCP) tool calls; tool connectors are off by default (`docs/HONEST-STATE.md` §5.5). The initial `docker compose up` also pulls container images, so that step needs an internet connection even though the rest of the demo doesn't.
+
 ---
 
 ## Before you start

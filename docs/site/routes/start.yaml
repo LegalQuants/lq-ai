@@ -1,0 +1,59 @@
+- route: start/is-it-for-you
+  source: docs/start/is-it-for-you.md
+  title: Is LQ.AI for you?
+  description: Checkable disqualifiers, and honest answers to the two questions that come up most — litigation, and why not buy something instead.
+  audience: [operator, evaluator]
+  status: draft
+  sources:
+    - docs/comparison.md
+    - docs/PRD.md
+    - docs/HONEST-STATE.md
+    - docs/adr/0001-openwebui-fork-pin.md
+    - README.md
+    - api/app/api/auth.py
+    - web/backend/open_webui/config.py
+  sidebar:
+    order: 2
+  next: [start/what-it-touches, start/quickstart]
+
+- route: start/what-it-touches
+  source: docs/start/what-it-touches.md
+  title: What it touches
+  description: Prerequisites, ports, and where your data actually lives, before you run a command.
+  audience: [operator, evaluator]
+  status: draft
+  sources:
+    - README.md
+    - docs/architecture.md
+    - docker-compose.yml
+    - docs/security/anonymization.md
+    - docs/HONEST-STATE.md
+  sidebar:
+    order: 3
+  next: [start/quickstart]
+
+- route: start/quickstart
+  source: docs/quickstart.md
+  title: Quickstart
+  description: Clone to a citation-grounded skill result against a sample NDA in about 20 minutes, with recovery steps next to the step that needs them.
+  audience: [operator, evaluator]
+  status: draft
+  sources:
+    - README.md
+    - docs/HONEST-STATE.md
+    - docs/PRD.md
+  sidebar:
+    order: 4
+
+- route: start/where-help-lives
+  source: docs/start/where-help-lives.md
+  title: Where help lives
+  description: Day-to-day product help lives inside the running application, not on this site — with one exception.
+  audience: [operator, evaluator]
+  status: draft
+  sources:
+    - README.md
+    - web/src/lib/lq-ai/tabs.ts
+    - SECURITY.md
+  sidebar:
+    order: 6

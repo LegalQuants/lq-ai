@@ -1,0 +1,69 @@
+- route: skills/what-a-skill-is
+  source: docs/skill-authoring-guide.md
+  title: What a skill is
+  description: The anatomy of a SKILL.md — what's frontmatter, what's prompt, and why the format matters.
+  audience: [author, evaluator]
+  status: draft
+  sources: [README.md]
+  sidebar: { order: 2 }
+  next: [skills/author-your-first-skill, skills/your-prompt-files-are-skills, skills/where-skills-live]
+
+- route: skills/author-your-first-skill
+  source: docs/skills/author-your-first-skill.md
+  title: Author your first skill
+  description: Two ways to build a SKILL.md — in conversation, or by hand — using a shipped skill as the worked example.
+  audience: [author]
+  status: draft
+  sources: [docs/skill-authoring-guide.md, skills/skill-creator/SKILL.md, skills/nda-review/SKILL.md]
+  sidebar: { order: 3 }
+  next: [skills/test-your-skill, skills/attestation, skills/where-skills-live]
+
+- route: skills/your-prompt-files-are-skills
+  source: docs/skills/your-prompt-files-are-skills.md
+  title: Your prompt files are already skills
+  description: What has to change in an existing prompt file to make it a SKILL.md — mapped field by field.
+  audience: [author]
+  status: draft
+  sources: [docs/skill-authoring-guide.md, skills/nda-review/SKILL.md]
+  sidebar: { order: 4 }
+  next: [skills/author-your-first-skill, skills/what-a-skill-is, skills/attestation]
+
+- route: skills/test-your-skill
+  source: docs/acceptance-testing-framework.md
+  title: Test your skill before sharing it
+  description: The structural-vs-calibration test-plan pattern every first-party skill follows, and what's tested today versus documented but open.
+  audience: [author, contributor]
+  status: draft
+  sources: [docs/contribute/mini-prds/skill-acceptance-tests.md, docs/PRD.md, skills/nda-review/test-plan.md]
+  sidebar: { order: 5 }
+  next: [skills/attestation, skills/author-your-first-skill]
+
+- route: skills/where-skills-live
+  source: docs/skills/where-skills-live.md
+  title: Where skills live
+  description: Personal, team-shared, or upstream — and, for jurisdiction- or practice-area-specific work, which upstream.
+  audience: [author, contributor]
+  status: draft
+  sources: [docs/adr/0012-db-backed-user-skills.md, docs/adr/0024-jurisdiction-and-practice-area-expansion.md, skills/CONTRIBUTING.md, api/app/api/user_skills.py, README.md]
+  sidebar: { order: 6 }
+  next: [skills/attestation]
+
+- route: skills/attestation
+  source: skills/CONTRIBUTING.md
+  title: The attestation bar
+  description: What a legal-substance skill's attestation covers, who can make it, and how it decays.
+  audience: [author, contributor, evaluator]
+  status: draft
+  sources: [CLAUDE.md]
+  sidebar: { order: 7 }
+  next: [skills/where-skills-live, skills/test-your-skill]
+
+- route: skills/playbooks
+  source: docs/playbooks.md
+  title: Playbooks
+  description: The artifact that codifies an organization's standard and fallback positions against a contract, rather than a workflow.
+  audience: [author, evaluator]
+  status: draft
+  sources: [skills/CONTRIBUTING.md]
+  sidebar: { order: 8 }
+  next: [skills/author-your-first-skill, skills/attestation]

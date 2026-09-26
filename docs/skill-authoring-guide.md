@@ -36,7 +36,7 @@ my-skill/
     └── ...
 ```
 
-`SKILL.md` is the operational instruction the model executes when the skill is attached to a chat. Everything in `SKILL.md` becomes part of the prompt; everything in `reference/` is optionally surfaced when the skill's workflow references it. `examples/` are documentation for users and reviewers; they do not become part of the prompt by default.
+`SKILL.md` is the operational instruction the model executes when the skill is attached to a chat. Everything in `SKILL.md` becomes part of the prompt; everything in `reference/` is optionally surfaced when the skill's workflow references it — a skill with a heavy `reference/` tree is not necessarily a heavier prompt; it depends what the workflow actually cites. `examples/` are documentation, not instruction: they exist for three audiences at once — a user deciding whether the skill fits their document, a reviewer checking the skill's calibration, and a maintainer checking for drift after a model upgrade — and none of that depends on the model reading them at run time.
 
 **Optional execution (#563).** Declared `scripts/` helpers
 can run through the private bundled-helper broker when an operator enables their

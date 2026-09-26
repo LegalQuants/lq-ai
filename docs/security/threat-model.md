@@ -50,6 +50,7 @@ The five rows in the STRIDE table below cover the production-facing services (`a
 - [ADR 0011 Transparency-first model selection](../adr/0011-transparency-first-model-selection.md) — encrypted-at-rest provider keys.
 - [Encrypted-at-rest provider keys workflow](encrypted-keys.md) — master-key bootstrap and rotation.
 - [Vulnerability disclosure policy](../../SECURITY.md) — coordinated disclosure process.
+- [Boundary registers](boundary-registers.md) — a separate, orthogonal catalog that restrains *autonomous work* (economic, temporal, contextual limits, and how each is enforced) rather than the STRIDE threats above, which cover the five production services as they exist today.
 
 ## Update cadence
 
