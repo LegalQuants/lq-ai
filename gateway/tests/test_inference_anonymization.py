@@ -105,6 +105,12 @@ async def gateway_with_anon_enabled(
         # ``smart`` resolves to Tier 4 in the example config; the
         # example's apply_at_tiers is [3, 4, 5], so the tier gate is
         # already correct for the requests below.
+        # These tests exercise anonymization, not the tier policy. The shipped
+        # example sets privileged_minimum_tier=3, which would refuse the
+        # privileged Tier-4 request in test_privileged_request_skips_middleware
+        # (that enforcement is covered by test_inference_tier_floor). Relax it
+        # here so the anonymization-skip behavior is what's under test.
+        app.state.config.tier_policy.privileged_minimum_tier = 4
 
         try:
             yield app, recorder, backend_client

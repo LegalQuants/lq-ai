@@ -110,7 +110,7 @@ from app.routing_log import (
     RoutingLogWriter,
 )
 from app.skills import assemble_skill_prompt
-from app.tier_floor import TierFloor, is_refused, resolve_tier_floor
+from app.tier_floor import TierFloor, apply_policy_floor, is_refused, resolve_tier_floor
 
 logger = logging.getLogger(__name__)
 
@@ -644,6 +644,16 @@ async def chat_completions(request: Request) -> JSONResponse | StreamingResponse
     # tries and fails. Refusing on the primary's tier mirrors the
     # documented "what tier would this request go to?" semantics.
     floor = resolve_tier_floor(request=chat_request, skills=applied_skill_objects)
+    # F2: fold in the operator tier_policy baseline (default/privileged minimum
+    # tier). Previously the tier_policy block was loaded but never enforced on
+    # any request path; this applies it even when the request/project/skill
+    # declared no floor (pen-test finding gateway#F2).
+    floor = apply_policy_floor(
+        floor,
+        default_minimum_tier=config.tier_policy.default_minimum_tier,
+        privileged_minimum_tier=config.tier_policy.privileged_minimum_tier,
+        privileged=chat_request.lq_ai_privileged,
+    )
     primary = candidates[0]
     if is_refused(resolved_tier=primary.routed_inference_tier, floor=floor):
         # is_refused returns False when floor is None; the assert tells mypy
@@ -670,6 +680,45 @@ async def chat_completions(request: Request) -> JSONResponse | StreamingResponse
                 "required_tier": floor.value,
                 "resolved_tier": primary.routed_inference_tier,
                 "source": floor.source,
+                "requested_model": chat_request.model,
+                "routed_provider": primary.provider.name,
+                "routed_model": primary.native_model,
+            },
+        )
+
+    # --- Global tier allow-list (D1 / F2) ----------------------------------
+    # Independent of the floor: the operator can forbid specific tiers outright
+    # (e.g. no consumer/free Tier 5 anywhere). Previously unenforced.
+    if primary.routed_inference_tier not in config.tier_policy.allowed_tiers_global:
+        chat_id, message_id = _correlation_ids(chat_request)
+        allowed = sorted(config.tier_policy.allowed_tiers_global)
+        await log_writer.write(
+            InferenceRoutingLogRow(
+                requested_model=chat_request.model,
+                routed_provider=primary.provider.name,
+                routed_model=primary.native_model,
+                routed_inference_tier=primary.routed_inference_tier,
+                refused=True,
+                refusal_reason=(
+                    f"tier_disallowed_globally:resolved={primary.routed_inference_tier}:"
+                    f"allowed={allowed}"
+                ),
+                request_id=request_id,
+                chat_id=chat_id,
+                message_id=message_id,
+                purpose=_purpose_from_request(chat_request),
+            )
+        )
+        return _gateway_error(
+            code="tier_disallowed_globally",
+            message=(
+                f"Routed tier {primary.routed_inference_tier} is not permitted by "
+                f"the operator's tier policy (allowed tiers: {allowed})."
+            ),
+            http_status=status.HTTP_403_FORBIDDEN,
+            details={
+                "resolved_tier": primary.routed_inference_tier,
+                "allowed_tiers": allowed,
                 "requested_model": chat_request.model,
                 "routed_provider": primary.provider.name,
                 "routed_model": primary.native_model,

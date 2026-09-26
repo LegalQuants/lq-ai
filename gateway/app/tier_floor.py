@@ -134,6 +134,33 @@ def resolve_tier_floor(
     return TierFloor(value=chosen[0], source=chosen[2])
 
 
+def apply_policy_floor(
+    floor: TierFloor | None,
+    *,
+    default_minimum_tier: int,
+    privileged_minimum_tier: int,
+    privileged: bool,
+) -> TierFloor:
+    """Fold the operator ``tier_policy`` baseline into the resolved floor.
+
+    Per PRD §4.4 / ``gateway.yaml.example``, the deployment declares a baseline
+    minimum tier that applies even when the request / project / skill declared
+    none (or a weaker one): ``privileged_minimum_tier`` for a privileged request,
+    ``default_minimum_tier`` otherwise. The effective floor is the *stricter*
+    (lower-numbered, per PRD §1.5.2) of the resolved floor and the policy floor.
+
+    When the resolved floor is equal or stricter it is returned unchanged so its
+    provenance (``request`` / ``project`` / ``skill:<name>``) is preserved for
+    the refusal envelope; otherwise the policy floor wins.
+    """
+
+    policy_value = privileged_minimum_tier if privileged else default_minimum_tier
+    policy_source = "tier_policy:privileged" if privileged else "tier_policy:default"
+    if floor is not None and floor.value <= policy_value:
+        return floor
+    return TierFloor(value=policy_value, source=policy_source)
+
+
 def is_refused(*, resolved_tier: int, floor: TierFloor | None) -> bool:
     """Return True iff the resolved tier is weaker than (strictly above) the floor.
 
@@ -156,4 +183,4 @@ def is_refused(*, resolved_tier: int, floor: TierFloor | None) -> bool:
     return int(resolved_tier) > int(floor.value)
 
 
-__all__ = ["TierFloor", "is_refused", "resolve_tier_floor"]
+__all__ = ["TierFloor", "apply_policy_floor", "is_refused", "resolve_tier_floor"]
