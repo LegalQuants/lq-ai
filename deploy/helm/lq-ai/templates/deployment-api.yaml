@@ -36,6 +36,8 @@ spec:
                   key: {{ .Values.postgres.passwordSecretRef.key }}
             - name: DATABASE_URL
               value: "postgresql+asyncpg://{{ .Values.postgres.user }}:$(POSTGRES_PASSWORD)@{{ include "lq-ai.fullname" . }}-postgres:5432/{{ .Values.postgres.database }}"
+            - name: LQ_AI_TRUSTED_PROXIES
+              value: {{ .Values.api.trustedProxies | default "" | quote }}
             - name: REDIS_URL
               value: "redis://{{ include "lq-ai.fullname" . }}-redis:6379/0"
             - name: S3_ENDPOINT_URL

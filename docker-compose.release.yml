@@ -240,6 +240,10 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LQ_AI_DEV_MODE: ${LQ_AI_DEV_MODE:-false}
       LQ_AI_CORS_ORIGINS: ${LQ_AI_CORS_ORIGINS:-}
+      # Real client IP behind a trusted reverse proxy (audit/session rows,
+      # login throttling). Only for Cloudflare-fronted deployments — see
+      # .env.example. Empty (default) records the immediate peer address.
+      LQ_AI_TRUSTED_PROXIES: ${LQ_AI_TRUSTED_PROXIES:-}
       # Skills corpus is BAKED into the api release image at /skills (the
       # image already sets LQ_AI_SKILLS_DIR=/skills via ENV; set it here too
       # for clarity, matching the dev compose). No ./skills bind mount.

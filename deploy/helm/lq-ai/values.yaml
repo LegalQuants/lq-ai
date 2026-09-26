@@ -90,6 +90,10 @@ gateway:
 
 # API
 api:
+  # Comma-separated IPs/CIDRs of reverse proxies whose CF-Connecting-IP header
+  # is trusted as the real client IP. Only for Cloudflare-fronted ingress (see
+  # .env.example). Empty records the immediate peer address.
+  trustedProxies: ""
   replicaCount: 1
   resources:
     requests: { cpu: 200m, memory: 256Mi }

@@ -8,6 +8,7 @@ http:
       entryPoints:
         - websecure
       middlewares:
+        - lq-api-strip-cf-ip
         - lq-api-strip
         - lq-api-restore
       service: lq-api
@@ -23,6 +24,12 @@ http:
         certResolver: letsencrypt
 
   middlewares:
+    # Not behind Cloudflare: drop any client-supplied CF-Connecting-IP before it
+    # reaches the api (an empty value deletes the header in Traefik).
+    lq-api-strip-cf-ip:
+      headers:
+        customRequestHeaders:
+          CF-Connecting-IP: ""
     lq-api-strip:
       stripPrefix:
         prefixes:

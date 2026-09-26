@@ -270,6 +270,10 @@ services:
       # CORS — empty disables. Production behind a same-origin reverse
       # proxy: leave unset. Local Compose dev: http://localhost:3000.
       LQ_AI_CORS_ORIGINS: ${LQ_AI_CORS_ORIGINS:-}
+      # Real client IP behind a trusted reverse proxy (audit/session rows,
+      # login throttling). Only for Cloudflare-fronted deployments — see
+      # .env.example. Empty (default) records the immediate peer address.
+      LQ_AI_TRUSTED_PROXIES: ${LQ_AI_TRUSTED_PROXIES:-}
       # Skills loader — C1 walks this directory at startup. Mounted
       # read-only so the container can only consume the skills filesystem,
       # not mutate it (skill authoring is a host-side / human-attestation

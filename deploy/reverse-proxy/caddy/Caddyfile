@@ -25,6 +25,10 @@
 	handle /lq-ai-api/v1/* {
 		uri replace /lq-ai-api/v1 /api/v1
 		reverse_proxy api:8000 {
+			# Strip any client-supplied CF-Connecting-IP: this recipe is not behind
+			# Cloudflare, so the header would be spoofable (the api trusts it only
+			# from LQ_AI_TRUSTED_PROXIES peers, which should stay empty here).
+			header_up -CF-Connecting-IP
 			# Chat responses stream (SSE); flush every write so tokens
 			# reach the browser as they are generated, never buffered.
 			flush_interval -1
