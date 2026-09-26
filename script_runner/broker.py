@@ -204,7 +204,7 @@ class Broker:
 
 
 def make_server(
-    broker: Broker, token: str, host: str = "0.0.0.0", port: int = 8095
+    broker: Broker, token: str, host: str = "127.0.0.1", port: int = 8095
 ) -> ThreadingHTTPServer:
     if len(token) < 32:
         raise ValueError("Runner authentication token must contain at least 32 characters")
@@ -247,8 +247,8 @@ def make_server(
     return ThreadingHTTPServer((host, port), Handler)
 
 
-def serve(broker: Broker, token: str) -> None:
-    server = make_server(broker, token)
+def serve(broker: Broker, token: str, host: str = "127.0.0.1") -> None:
+    server = make_server(broker, token, host)
     stopped = threading.Event()
 
     def maintain() -> None:
@@ -271,7 +271,15 @@ if __name__ == "__main__":
     configuration = json.loads(
         Path(os.environ.get("LQ_SCRIPT_BUNDLES", "/config/bundles.json")).read_text()
     )
+    # The broker holds container-engine access, so it binds loopback unless the
+    # deployment explicitly opts in. The Compose overlay sets
+    # LQ_SCRIPT_BIND_HOST=0.0.0.0 because the api reaches it by service name
+    # over an internal-only network; a direct or misconfigured run no longer
+    # exposes an engine-holding service on every interface by default.
     serve(
         Broker(configuration, instance=os.environ.get("LQ_SCRIPT_INSTANCE", "lq-skills")),
         os.environ.get("LQ_SCRIPT_TOKEN", ""),
+        # An empty value would bind every interface (host "" == 0.0.0.0);
+        # treat it as unset.
+        os.environ.get("LQ_SCRIPT_BIND_HOST") or "127.0.0.1",
     )

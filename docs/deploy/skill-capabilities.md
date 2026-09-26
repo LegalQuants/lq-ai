@@ -92,6 +92,12 @@ resource limits; container-creation warnings cause refusal before execution.
    same token on the API/worker. Use TLS when crossing hosts. Keep the broker on
    an operator-controlled private endpoint; do not route `/run` through public ingress.
 
+   The broker holds container-engine access, so it binds `127.0.0.1` unless
+   `LQ_SCRIPT_BIND_HOST` says otherwise. The Compose overlay sets
+   `LQ_SCRIPT_BIND_HOST=0.0.0.0` because the API reaches it by service name over
+   the internal-only `skill-runner` network. Only widen the bind on a network
+   that nothing untrusted can reach.
+
 ## Execution contract and operational limits
 
 The request selects an enabled installed helper and supplies a JSON object of at
