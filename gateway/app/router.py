@@ -687,6 +687,7 @@ class Router:
         request: ChatCompletionRequest,
         *,
         floor: TierFloor | None = None,
+        allowed_tiers: frozenset[int] | None = None,
     ) -> ChatCompletionRoutedResult:
         """Run a non-streaming chat completion through the router.
 
@@ -701,7 +702,9 @@ class Router:
         primary violates the floor, but this method re-resolves the chain,
         so a primary failure must not silently fall through to a
         weaker-tier fallback. Candidates weaker than the floor are dropped
-        before the walk.
+        before the walk. ``allowed_tiers`` (the operator's
+        ``tier_policy.allowed_tiers_global``) is applied the same way, so a
+        fallback outside the allow-list is never dispatched either.
         """
 
         candidates = self.resolve(request.model)
@@ -710,6 +713,10 @@ class Router:
                 target
                 for target in candidates
                 if not is_refused(resolved_tier=target.routed_inference_tier, floor=floor)
+            ]
+        if allowed_tiers is not None:
+            candidates = [
+                target for target in candidates if target.routed_inference_tier in allowed_tiers
             ]
         last_error: ProviderAdapterError | None = None
         last_error_target: ResolvedTarget | None = None

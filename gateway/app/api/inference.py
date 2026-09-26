@@ -110,7 +110,7 @@ from app.routing_log import (
     RoutingLogWriter,
 )
 from app.skills import assemble_skill_prompt
-from app.tier_floor import TierFloor, is_refused, resolve_tier_floor
+from app.tier_floor import TierFloor, apply_policy_floor, is_refused, resolve_tier_floor
 
 logger = logging.getLogger(__name__)
 
@@ -644,6 +644,16 @@ async def chat_completions(request: Request) -> JSONResponse | StreamingResponse
     # tries and fails. Refusing on the primary's tier mirrors the
     # documented "what tier would this request go to?" semantics.
     floor = resolve_tier_floor(request=chat_request, skills=applied_skill_objects)
+    # F2: fold in the operator tier_policy baseline (default/privileged minimum
+    # tier). Previously the tier_policy block was loaded but never enforced on
+    # any request path; this applies it even when the request/project/skill
+    # declared no floor (pen-test finding gateway#F2).
+    floor = apply_policy_floor(
+        floor,
+        default_minimum_tier=config.tier_policy.default_minimum_tier,
+        privileged_minimum_tier=config.tier_policy.privileged_minimum_tier,
+        privileged=chat_request.lq_ai_privileged,
+    )
     primary = candidates[0]
     if is_refused(resolved_tier=primary.routed_inference_tier, floor=floor):
         # is_refused returns False when floor is None; the assert tells mypy
@@ -676,19 +686,60 @@ async def chat_completions(request: Request) -> JSONResponse | StreamingResponse
             },
         )
 
-    # --- Tier-floor enforcement on the fallback chain (D1) ------------------
-    # The primary satisfies the floor (checked above), but the fallback chain
-    # must not silently downgrade to a weaker tier on primary failure. Drop
-    # any candidate below the floor so the streaming walk in
-    # ``_stream_with_fallback`` (which iterates this list) cannot dispatch a
-    # weaker tier; the non-streaming path re-resolves inside the router, so it
-    # receives ``floor`` below and applies the same filter.
-    if floor is not None:
-        candidates = [
-            candidate
-            for candidate in candidates
-            if not is_refused(resolved_tier=candidate.routed_inference_tier, floor=floor)
-        ]
+    # --- Global tier allow-list (D1 / F2) ----------------------------------
+    # Independent of the floor: the operator can forbid specific tiers outright
+    # (e.g. no consumer/free Tier 5 anywhere). Previously unenforced.
+    if primary.routed_inference_tier not in config.tier_policy.allowed_tiers_global:
+        chat_id, message_id = _correlation_ids(chat_request)
+        allowed = sorted(config.tier_policy.allowed_tiers_global)
+        await log_writer.write(
+            InferenceRoutingLogRow(
+                requested_model=chat_request.model,
+                routed_provider=primary.provider.name,
+                routed_model=primary.native_model,
+                routed_inference_tier=primary.routed_inference_tier,
+                refused=True,
+                refusal_reason=(
+                    f"tier_disallowed_globally:resolved={primary.routed_inference_tier}:"
+                    f"allowed={allowed}"
+                ),
+                request_id=request_id,
+                chat_id=chat_id,
+                message_id=message_id,
+                purpose=_purpose_from_request(chat_request),
+            )
+        )
+        return _gateway_error(
+            code="tier_disallowed_globally",
+            message=(
+                f"Routed tier {primary.routed_inference_tier} is not permitted by "
+                f"the operator's tier policy (allowed tiers: {allowed})."
+            ),
+            http_status=status.HTTP_403_FORBIDDEN,
+            details={
+                "resolved_tier": primary.routed_inference_tier,
+                "allowed_tiers": allowed,
+                "requested_model": chat_request.model,
+                "routed_provider": primary.provider.name,
+                "routed_model": primary.native_model,
+            },
+        )
+
+    # --- Tier enforcement on the fallback chain (D1 / F2) -------------------
+    # The primary satisfies the floor and the allow-list (checked above), but
+    # the fallback chain must not silently downgrade on primary failure. Drop
+    # any candidate below the (policy-adjusted) floor or outside the operator's
+    # allowed_tiers_global, so the streaming walk in ``_stream_with_fallback``
+    # (which iterates this list) cannot dispatch it; the non-streaming path
+    # re-resolves inside the router, so it receives ``floor`` and
+    # ``allowed_tiers`` below and applies the same filter.
+    allowed_tiers = frozenset(config.tier_policy.allowed_tiers_global)
+    candidates = [
+        candidate
+        for candidate in candidates
+        if candidate.routed_inference_tier in allowed_tiers
+        and not is_refused(resolved_tier=candidate.routed_inference_tier, floor=floor)
+    ]
 
     # --- Anonymization pre-middleware (M2-B3) -------------------------------
     # Sits between Tier Derivation and Provider Adapter per PRD §4.3.
@@ -725,7 +776,9 @@ async def chat_completions(request: Request) -> JSONResponse | StreamingResponse
     tracer = get_tracer()
     with tracer.start_as_current_span("inference.dispatch") as dispatch_span:
         try:
-            result = await gw_router.chat_completion(chat_request, floor=floor)
+            result = await gw_router.chat_completion(
+                chat_request, floor=floor, allowed_tiers=allowed_tiers
+            )
         except RoutedProviderError as wrapped:
             # The router attributes the failure to the actual target that
             # produced the error (rather than the last candidate). Unwrap
