@@ -26,6 +26,12 @@ LogLevel = Literal["debug", "info", "warning", "warn", "error", "critical"]
 # silently ship with a public signing key.
 DEV_JWT_SECRET = "dev-jwt-secret-change-me"
 
+# Minimum JWT_SECRET length enforced in production. HS256 signs with an
+# HMAC-SHA256 key; RFC 7518 §3.2 requires at least 256 bits (32 bytes). A
+# shorter secret is offline-brute-forceable, which would let an attacker forge
+# tokens for any user. See ``assert_production_secrets``.
+MIN_JWT_SECRET_BYTES = 32
+
 
 class Settings(BaseSettings):
     """Backend API configuration.
@@ -532,6 +538,21 @@ def assert_production_secrets(settings: Settings) -> None:
         raise RuntimeError(
             "Refusing to start: JWT_SECRET is the published development default "
             f"({DEV_JWT_SECRET!r}). Set JWT_SECRET to a strong random secret, or "
+            "set LQ_AI_DEV_MODE=true for local development."
+        )
+
+    # A short/weak secret is offline-brute-forceable under HS256, which forfeits
+    # the entire token scheme: an attacker who recovers it can forge a token for
+    # any user, including is_admin=true. RFC 7518 §3.2 requires an HMAC-SHA256
+    # key of at least 256 bits (32 bytes). Enforce that floor in production;
+    # local dev (LQ_AI_DEV_MODE=true) may keep the short default.
+    jwt_secret_bytes = len(settings.jwt_secret.encode("utf-8"))
+    if not settings.lq_ai_dev_mode and jwt_secret_bytes < MIN_JWT_SECRET_BYTES:
+        raise RuntimeError(
+            "Refusing to start: JWT_SECRET is too weak for HS256 "
+            f"({jwt_secret_bytes} bytes; RFC 7518 requires at least "
+            f"{MIN_JWT_SECRET_BYTES}). Generate a strong secret, e.g. "
+            '`python -c "import secrets; print(secrets.token_urlsafe(48))"`, or '
             "set LQ_AI_DEV_MODE=true for local development."
         )
 
