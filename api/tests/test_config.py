@@ -150,3 +150,51 @@ def test_assert_production_secrets_allows_real_secret(
     monkeypatch.delenv("LQ_AI_DEV_MODE", raising=False)
     s = Settings(_env_file=None)  # type: ignore[call-arg]
     assert_production_secrets(s)  # does not raise
+
+
+@pytest.mark.unit
+def test_assert_production_secrets_refuses_short_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A custom-but-short secret is offline-brute-forceable under HS256 and
+    must be refused in production (pen-test 2026-09-25 finding jwt#F-D)."""
+    monkeypatch.setenv("JWT_SECRET", "pass")  # 4 bytes, well under 32
+    monkeypatch.delenv("LQ_AI_DEV_MODE", raising=False)
+    s = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert s.lq_ai_dev_mode is False
+    with pytest.raises(RuntimeError, match="too weak for HS256"):
+        assert_production_secrets(s)
+
+
+@pytest.mark.unit
+def test_assert_production_secrets_refuses_empty_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An empty secret must fail closed at boot (not later, as a login 500)."""
+    monkeypatch.setenv("JWT_SECRET", "")
+    monkeypatch.delenv("LQ_AI_DEV_MODE", raising=False)
+    s = Settings(_env_file=None)  # type: ignore[call-arg]
+    with pytest.raises(RuntimeError, match="too weak for HS256"):
+        assert_production_secrets(s)
+
+
+@pytest.mark.unit
+def test_assert_production_secrets_allows_short_secret_in_dev_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The length floor only applies in production; dev may use a short secret."""
+    monkeypatch.setenv("JWT_SECRET", "short")
+    monkeypatch.setenv("LQ_AI_DEV_MODE", "true")
+    s = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert_production_secrets(s)  # does not raise
+
+
+@pytest.mark.unit
+def test_assert_production_secrets_allows_exactly_min_length_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A secret exactly at the 32-byte floor is accepted in production."""
+    monkeypatch.setenv("JWT_SECRET", "x" * 32)
+    monkeypatch.delenv("LQ_AI_DEV_MODE", raising=False)
+    s = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert_production_secrets(s)  # does not raise
