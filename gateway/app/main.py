@@ -61,7 +61,12 @@ from app.clients.backend import (
     close_backend_client,
     configure_backend_client,
 )
-from app.config import GatewayConfig, ProviderConfig, ToolProviderConfig
+from app.config import (
+    GatewayConfig,
+    ProviderConfig,
+    ToolProviderConfig,
+    check_gateway_auth_configured,
+)
 from app.config_holder import MutableConfigHolder, install_sighup_reload
 from app.config_loader import ConfigLoadError, load_config
 from app.db import engine_or_none
@@ -257,6 +262,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except ConfigLoadError:
         logger.exception("gateway config load failed; refusing to start")
         raise
+
+    # gateway#F5: refuse to start if auth is enabled but no key is configured, so
+    # the gateway can never serve unauthenticated traffic through the fail-open
+    # request path. Mirrors the api's JWT_SECRET startup gate.
+    auth_misconfig = check_gateway_auth_configured(config)
+    if auth_misconfig is not None:
+        logger.error("gateway config rejected; refusing to start: %s", auth_misconfig)
+        raise RuntimeError(auth_misconfig)
 
     # D0.5: wrap the loaded config in a mutable holder so admin endpoints
     # can hot-reload after writing the YAML file. The router and admin

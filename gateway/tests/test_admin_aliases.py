@@ -69,7 +69,11 @@ async def admin_app(tmp_gateway_config: Path) -> AsyncIterator[FastAPI]:
 @pytest_asyncio.fixture
 async def admin_client(admin_app: FastAPI) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=admin_app)
-    async with AsyncClient(transport=transport, base_url="http://test") as http:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-LQ-AI-Gateway-Key": "test-gateway-key"},
+    ) as http:
         yield http
 
 

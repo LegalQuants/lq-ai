@@ -95,7 +95,11 @@ async def ollama_app(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[FastAPI]:
 @pytest_asyncio.fixture
 async def ollama_client(ollama_app: FastAPI) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=ollama_app)
-    async with AsyncClient(transport=transport, base_url="http://test") as http_client:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-LQ-AI-Gateway-Key": "test-gateway-key"},
+    ) as http_client:
         yield http_client
 
 
@@ -497,7 +501,11 @@ async def fallback_app(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[FastAPI
 @pytest_asyncio.fixture
 async def fallback_client(fallback_app: FastAPI) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=fallback_app)
-    async with AsyncClient(transport=transport, base_url="http://test") as http_client:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-LQ-AI-Gateway-Key": "test-gateway-key"},
+    ) as http_client:
         yield http_client
 
 

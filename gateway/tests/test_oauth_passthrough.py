@@ -398,7 +398,11 @@ def _make_app(writer: RecordingToolEgressLogWriter, **kw) -> FastAPI:
 
 
 def _client(app: FastAPI) -> AsyncClient:
-    return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+    return AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        headers={"X-LQ-AI-Gateway-Key": "test-gateway-key"},
+    )
 
 
 @pytest.mark.unit

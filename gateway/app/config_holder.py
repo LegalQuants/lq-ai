@@ -36,7 +36,7 @@ import signal
 import threading
 from pathlib import Path
 
-from app.config import GatewayConfig
+from app.config import GatewayConfig, check_gateway_auth_configured
 from app.config_loader import ConfigLoadError, load_config
 
 logger = logging.getLogger(__name__)
@@ -127,6 +127,16 @@ class MutableConfigHolder:
                     exc,
                 )
                 raise ConfigReloadError(str(exc)) from exc
+            # gateway#F5: reject a reload that would enable auth with no key
+            # configured, so a hot-reload can't drop the gateway into the
+            # fail-open state. Keep the prior snapshot on rejection.
+            auth_misconfig = check_gateway_auth_configured(new_config)
+            if auth_misconfig is not None:
+                logger.warning(
+                    "gateway config hot-reload rejected; keeping prior snapshot: %s",
+                    auth_misconfig,
+                )
+                raise ConfigReloadError(auth_misconfig)
             old = self._config
             self._config = new_config
         # Log outside the lock to keep the critical section minimal.
