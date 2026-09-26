@@ -347,3 +347,30 @@ def test_install_sighup_reload_no_op_on_windows(monkeypatch: pytest.MonkeyPatch)
         monkeypatch.delattr(signal, "SIGHUP", raising=False)
     # Should not raise.
     install_sighup_reload(holder)  # type: ignore[arg-type]
+
+
+@pytest.mark.unit
+def test_reload_from_disk_keeps_mcp_tool_providers(tmp_config: Path, example_env: None) -> None:
+    """Hot-reload must re-read mcp.yaml too (pen-test finding gateway#F4).
+
+    Startup merges mcp.yaml tool providers into the config; a reload that
+    re-read only gateway.yaml silently dropped them, so every admin write or
+    SIGHUP disabled all MCP tools.
+    """
+
+    mcp = tmp_config.parent / "mcp.yaml"
+    mcp.write_text(
+        "mcp_servers:\n"
+        "  - name: acme-mcp\n"
+        "    server_url: https://mcp.acme.example/sse\n"
+        "    auth: none\n"
+        "    egress_tier: 2\n"
+        "    allowlist: {hosts: [mcp.acme.example]}\n"
+    )
+    initial = load_config(tmp_config, mcp_path=mcp)
+    assert "acme-mcp" in {tp.name for tp in initial.tool_providers}
+
+    holder = MutableConfigHolder(initial, config_path=tmp_config, mcp_path=mcp)
+    reloaded = holder.reload_from_disk()
+
+    assert "acme-mcp" in {tp.name for tp in reloaded.tool_providers}

@@ -65,9 +65,14 @@ class MutableConfigHolder:
         initial: GatewayConfig,
         *,
         config_path: Path,
+        mcp_path: Path | None = None,
     ) -> None:
         self._config = initial
         self._config_path = config_path
+        # The MCP server file loaded alongside gateway.yaml at startup. Reloads
+        # must re-read it too, or every admin write / SIGHUP would silently drop
+        # all mcp.yaml tool providers from the live config.
+        self._mcp_path = mcp_path
         # ``_lock`` protects the *write side*. Reads do not take the
         # lock; they read ``_config`` once and operate on the snapshot.
         self._lock = threading.Lock()
@@ -120,7 +125,7 @@ class MutableConfigHolder:
 
         with self._lock:
             try:
-                new_config = load_config(self._config_path)
+                new_config = load_config(self._config_path, mcp_path=self._mcp_path)
             except ConfigLoadError as exc:
                 logger.warning(
                     "gateway config hot-reload failed; keeping prior snapshot: %s",

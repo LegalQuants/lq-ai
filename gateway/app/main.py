@@ -262,7 +262,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # can hot-reload after writing the YAML file. The router and admin
     # handlers read through the holder; in-flight requests hold their
     # own snapshot via :meth:`MutableConfigHolder.current`.
-    config_holder = MutableConfigHolder(config, config_path=config_path)
+    config_holder = MutableConfigHolder(config, config_path=config_path, mcp_path=mcp_config_path)
     app.state.config_holder = config_holder
     # Backwards-compat: the existing routes read ``app.state.config``
     # for the *initial* snapshot. Per-request handlers that need the
