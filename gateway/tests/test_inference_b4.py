@@ -82,7 +82,11 @@ async def client_with_recorder(
 ) -> AsyncIterator[tuple[AsyncClient, RecordingRoutingLogWriter]]:
     app, recorder = app_with_recorder
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as http_client:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-LQ-AI-Gateway-Key": "test-gateway-key"},
+    ) as http_client:
         yield http_client, recorder
 
 
@@ -186,7 +190,11 @@ async def test_checked_inference_refuses_fresh_config_with_obsolete_adapter(
     else:
         provider.api_key_env = "REPLACEMENT_ANTHROPIC_KEY"
     holder.replace(updated)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        headers={"X-LQ-AI-Gateway-Key": "test-gateway-key"},
+    ) as client:
         revision = (await client.get("/admin/v1/config")).json()["configuration_revision"]
         assert revision != old_revision
         response = await client.post(
@@ -211,7 +219,11 @@ async def test_checked_inference_requires_unambiguous_nonstreaming_route(app_wit
     if mode == "shadowing_alias":
         config.model_aliases[direct] = config.model_aliases["fast"]
         holder.replace(config)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        headers={"X-LQ-AI-Gateway-Key": "test-gateway-key"},
+    ) as client:
         response = await client.post(
             "/v1/chat/completions",
             json={
@@ -255,7 +267,11 @@ async def test_checked_inference_keeps_snapshot_during_hot_swap(app_with_recorde
         )
     )
     try:
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+            headers={"X-LQ-AI-Gateway-Key": "test-gateway-key"},
+        ) as client:
             response = await client.post(
                 "/v1/chat/completions",
                 json={

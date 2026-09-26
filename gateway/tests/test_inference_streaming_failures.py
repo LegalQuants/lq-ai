@@ -91,7 +91,11 @@ async def streaming_app(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[FastAP
 @pytest_asyncio.fixture
 async def streaming_client(streaming_app: FastAPI) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=streaming_app)
-    async with AsyncClient(transport=transport, base_url="http://test") as http_client:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-LQ-AI-Gateway-Key": "test-gateway-key"},
+    ) as http_client:
         yield http_client
 
 

@@ -30,6 +30,20 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 EXAMPLE_CONFIG = REPO_ROOT / "gateway.yaml.example"
 
 
+# gateway.yaml.example (and the default GatewayConfig) enable gateway_auth. The
+# startup/reload gate now refuses to run without a key (gateway#F5), and the
+# request-path gate enforces it. Provide a key for the whole suite so the real
+# authenticated path is exercised; the shared client fixtures carry the matching
+# header. Dedicated auth tests override the env / omit the header to assert the
+# 401 and misconfiguration paths.
+TEST_GATEWAY_KEY = "test-gateway-key"
+
+
+@pytest.fixture(autouse=True)
+def _gateway_key_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LQ_AI_GATEWAY_KEY", TEST_GATEWAY_KEY)
+
+
 @pytest.fixture
 def example_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Satisfy the ``${VAR}`` placeholders in ``gateway.yaml.example``."""
@@ -91,5 +105,9 @@ async def client(gateway_app: FastAPI) -> AsyncIterator[AsyncClient]:
     """An ``httpx.AsyncClient`` wired to the lifespan-started gateway app."""
 
     transport = ASGITransport(app=gateway_app)
-    async with AsyncClient(transport=transport, base_url="http://test") as http_client:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-LQ-AI-Gateway-Key": TEST_GATEWAY_KEY},
+    ) as http_client:
         yield http_client

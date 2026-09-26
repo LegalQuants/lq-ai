@@ -25,6 +25,7 @@ tasks can keep adding fields without rev-locking the YAML schema.
 
 from __future__ import annotations
 
+import os
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -760,3 +761,27 @@ class GatewayConfig(BaseModel):
                 entry["routed_inference_tier"] = tier
             out.append(entry)
         return {"object": "list", "data": out}
+
+
+def check_gateway_auth_configured(config: GatewayConfig) -> str | None:
+    """Return an error message if gateway auth is enabled but no key is set.
+
+    The gateway is the security boundary. If ``gateway_auth.enabled`` is true but
+    the configured key env var resolves to empty, the request-path auth gate has
+    nothing to compare against and would accept every request (pen-test finding
+    gateway#F5). Detect that misconfiguration so the caller can fail closed —
+    refuse to start (lifespan) or reject the reload (config hot-reload) — rather
+    than silently serving unauthenticated traffic. Returns ``None`` when the
+    configuration is safe.
+    """
+
+    if not config.gateway_auth.enabled:
+        return None
+    env_name = config.gateway_auth.api_key_env or "LQ_AI_GATEWAY_KEY"
+    if not os.environ.get(env_name):
+        return (
+            f"gateway_auth.enabled is true but {env_name} is empty or unset; "
+            "refusing to serve unauthenticated traffic. Set the gateway key or "
+            "disable gateway_auth."
+        )
+    return None

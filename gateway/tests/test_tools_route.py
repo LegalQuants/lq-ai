@@ -42,7 +42,11 @@ def _make_app(monkeypatch, *, writer=None):
 
 
 def _client(app) -> AsyncClient:
-    return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+    return AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        headers={"X-LQ-AI-Gateway-Key": "test-gateway-key"},
+    )
 
 
 @pytest.mark.parametrize("revision", ["current", "0" * 64, "malformed"])

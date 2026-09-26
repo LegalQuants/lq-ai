@@ -96,7 +96,11 @@ async def keyed_app(
 @pytest_asyncio.fixture
 async def client(keyed_app: FastAPI) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=keyed_app)
-    async with AsyncClient(transport=transport, base_url="http://test") as http_client:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-LQ-AI-Gateway-Key": "test-gateway-key"},
+    ) as http_client:
         yield http_client
 
 
@@ -119,7 +123,11 @@ async def no_master_key_app(
 @pytest_asyncio.fixture
 async def no_master_key_client(no_master_key_app: FastAPI) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=no_master_key_app)
-    async with AsyncClient(transport=transport, base_url="http://test") as http_client:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-LQ-AI-Gateway-Key": "test-gateway-key"},
+    ) as http_client:
         yield http_client
 
 

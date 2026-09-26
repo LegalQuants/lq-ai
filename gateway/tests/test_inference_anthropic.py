@@ -65,7 +65,11 @@ async def anthropic_app(
 @pytest_asyncio.fixture
 async def anthropic_client(anthropic_app: FastAPI) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=anthropic_app)
-    async with AsyncClient(transport=transport, base_url="http://test") as http_client:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-LQ-AI-Gateway-Key": "test-gateway-key"},
+    ) as http_client:
         yield http_client
 
 
