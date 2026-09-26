@@ -61,6 +61,7 @@ class AccessTokenClaims:
     user_id: uuid.UUID
     email: str
     is_admin: bool
+    token_epoch: int
     issued_at: datetime
     expires_at: datetime
 
@@ -79,12 +80,16 @@ def _utcnow() -> datetime:
     return datetime.now(tz=UTC)
 
 
-def create_access_token(user_id: uuid.UUID, email: str, *, is_admin: bool) -> str:
+def create_access_token(
+    user_id: uuid.UUID, email: str, *, is_admin: bool, token_epoch: int = 0
+) -> str:
     """Mint a signed access-token JWT for `user_id`.
 
-    Encodes `sub`, `email`, `is_admin`, `iat`, `exp`, and a `typ` claim so
-    we can refuse, e.g., a refresh-context MFA token presented as an
-    access token. Returns the encoded JWT as a UTF-8 string.
+    Encodes `sub`, `email`, `is_admin`, `epoch`, `iat`, `exp`, and a `typ`
+    claim so we can refuse, e.g., a refresh-context MFA token presented as an
+    access token. ``token_epoch`` must be the user's current epoch so logout /
+    password change (which increment it) can invalidate this token on the
+    request path. Returns the encoded JWT as a UTF-8 string.
     """
     settings = get_settings()
     now = _utcnow()
@@ -92,6 +97,7 @@ def create_access_token(user_id: uuid.UUID, email: str, *, is_admin: bool) -> st
         "sub": str(user_id),
         "email": email,
         "is_admin": is_admin,
+        "epoch": int(token_epoch),
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(seconds=settings.jwt_access_token_ttl_seconds)).timestamp()),
         "typ": _TYPE_ACCESS,
@@ -134,10 +140,20 @@ def decode_access_token(token: str) -> AccessTokenClaims | None:
     except (TypeError, ValueError):
         return None
 
+    # `epoch` is optional for backward compatibility with tokens minted before
+    # this claim existed; a missing epoch is treated as 0 (the default user
+    # epoch), so pre-existing tokens for never-invalidated users stay valid.
+    epoch = payload.get("epoch", 0)
+    try:
+        token_epoch = int(epoch)
+    except (TypeError, ValueError):
+        return None
+
     return AccessTokenClaims(
         user_id=user_id,
         email=str(email),
         is_admin=bool(is_admin),
+        token_epoch=token_epoch,
         issued_at=datetime.fromtimestamp(int(iat), tz=UTC),
         expires_at=datetime.fromtimestamp(int(exp), tz=UTC),
     )

@@ -530,3 +530,102 @@ async def test_full_round_trip(client: AsyncClient, seed_user: User) -> None:
         json={"refresh_token": rotated["refresh_token"]},
     )
     assert fail2_resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Access-token invalidation (pen-test jwt#F-A / #F-B / #F-C).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+async def test_logout_invalidates_access_token(client: AsyncClient, seed_user: User) -> None:
+    """After logout, the access token minted at login stops working immediately
+    (not only at TTL expiry) — jwt#F-A."""
+    tokens = await _login(client, seed_user)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+    # Token works before logout.
+    assert (await client.get("/api/v1/users/me", headers=headers)).status_code == 200
+
+    # Logout (authenticated with the same token).
+    assert (await client.post("/api/v1/auth/logout", headers=headers)).status_code == 204
+
+    # The same access token is now rejected.
+    assert (await client.get("/api/v1/users/me", headers=headers)).status_code == 401
+
+
+@pytest.mark.integration
+async def test_change_password_invalidates_access_token(
+    client: AsyncClient, seed_user: User
+) -> None:
+    """A password change invalidates outstanding access tokens immediately — jwt#F-B."""
+    tokens = await _login(client, seed_user)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+    assert (await client.get("/api/v1/users/me", headers=headers)).status_code == 200
+
+    resp = await client.post(
+        "/api/v1/auth/change-password",
+        headers=headers,
+        json={
+            "current_password": "correct-horse-battery-staple",
+            "new_password": "an-entirely-new-passphrase-9000",
+        },
+    )
+    assert resp.status_code in (200, 204), resp.text
+
+    # The pre-change access token no longer authenticates.
+    assert (await client.get("/api/v1/users/me", headers=headers)).status_code == 401
+
+
+@pytest.mark.integration
+async def test_fresh_login_after_invalidation_still_works(
+    client: AsyncClient, seed_user: User
+) -> None:
+    """Guard against over-blocking: a new login after logout mints a valid token."""
+    first = await _login(client, seed_user)
+    await client.post(
+        "/api/v1/auth/logout",
+        headers={"Authorization": f"Bearer {first['access_token']}"},
+    )
+    # A fresh login carries the new epoch and authenticates.
+    second = await _login(client, seed_user)
+    resp = await client.get(
+        "/api/v1/users/me",
+        headers={"Authorization": f"Bearer {second['access_token']}"},
+    )
+    assert resp.status_code == 200, resp.text
+
+
+@pytest.mark.integration
+async def test_refresh_reuse_revokes_session_family(
+    client: AsyncClient, db_session: AsyncSession, seed_user: User
+) -> None:
+    """Replaying a rotated refresh token is treated as a breach: the whole
+    session family is revoked and the reused token is rejected — jwt#F-C."""
+    tokens = await _login(client, seed_user)
+    old_refresh = tokens["refresh_token"]
+
+    # Rotate once — old_refresh is now revoked, a new session is active.
+    rotated = await client.post("/api/v1/auth/refresh", json={"refresh_token": old_refresh})
+    assert rotated.status_code == 200, rotated.text
+    new_refresh = rotated.json()["refresh_token"]
+
+    # Replay the OLD (rotated) refresh token: reuse detected -> 401.
+    replay = await client.post("/api/v1/auth/refresh", json={"refresh_token": old_refresh})
+    assert replay.status_code == 401
+    assert "reuse" in replay.json()["detail"].lower()
+
+    # The cascade revoked the whole family, so even the legitimate NEW token
+    # no longer works.
+    after = await client.post("/api/v1/auth/refresh", json={"refresh_token": new_refresh})
+    assert after.status_code == 401
+
+    # All sessions for the user are revoked.
+    sessions = (
+        (await db_session.execute(select(UserSession).where(UserSession.user_id == seed_user.id)))
+        .scalars()
+        .all()
+    )
+    assert sessions
+    assert all(s.revoked_at is not None for s in sessions)

@@ -48,6 +48,7 @@ CREATE TABLE users (
     created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_login_at         TIMESTAMPTZ,
+    token_epoch           INTEGER NOT NULL DEFAULT 0,
     deleted_at            TIMESTAMPTZ,
     deletion_scheduled_at TIMESTAMPTZ
 );

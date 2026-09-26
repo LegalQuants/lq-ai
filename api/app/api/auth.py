@@ -295,7 +295,9 @@ async def _create_session(
 def _login_response(user: User, refresh_token: str) -> LoginResponse:
     """Build the LoginResponse for a successful login or refresh-with-user."""
     settings = get_settings()
-    access_token = create_access_token(user.id, user.email, is_admin=user.is_admin)
+    access_token = create_access_token(
+        user.id, user.email, is_admin=user.is_admin, token_epoch=user.token_epoch
+    )
     return LoginResponse(
         access_token=access_token,
         token_type="Bearer",
@@ -447,8 +449,49 @@ async def refresh(
             break
 
     if matched is None:
-        # No user context (the presented token didn't match any active
-        # session); the audit row records the *attempt* with no user id.
+        # Reuse detection (pen-test finding jwt#F-C): the token matched no
+        # active session. If it matches an already-REVOKED session, a rotated
+        # (one-time) refresh token is being replayed — a stolen token racing the
+        # legitimate client, or a leaked token. Treat it as a breach and revoke
+        # the whole session family for that user so neither party keeps a live
+        # chain.
+        revoked_result = await db.execute(
+            select(UserSession).where(UserSession.revoked_at.is_not(None))
+        )
+        reused = next(
+            (
+                s
+                for s in revoked_result.scalars().all()
+                if refresh_token_matches(payload.refresh_token, s.refresh_token_hash)
+            ),
+            None,
+        )
+        if reused is not None:
+            await db.execute(
+                update(UserSession)
+                .where(
+                    UserSession.user_id == reused.user_id,
+                    UserSession.revoked_at.is_(None),
+                )
+                .values(revoked_at=now)
+            )
+            await audit_action(
+                db,
+                user_id=reused.user_id,
+                action="user.session_reuse_detected",
+                resource_type="user_session",
+                resource_id=str(reused.id),
+                request=request,
+                details={"reason": "refresh_token_reuse", "action_taken": "revoked_all_sessions"},
+            )
+            await db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token reuse detected; all sessions revoked. Please log in again.",
+            )
+
+        # No user context (the presented token didn't match any session);
+        # the audit row records the *attempt* with no user id.
         await audit_action(
             db,
             user_id=None,
@@ -555,7 +598,9 @@ async def refresh(
     await db.commit()
 
     return TokenResponse(
-        access_token=create_access_token(user.id, user.email, is_admin=user.is_admin),
+        access_token=create_access_token(
+            user.id, user.email, is_admin=user.is_admin, token_epoch=user.token_epoch
+        ),
         token_type="Bearer",
         expires_in=settings.jwt_access_token_ttl_seconds,
         refresh_token=plaintext,
@@ -584,6 +629,9 @@ async def logout(
         .where(UserSession.user_id == user.id, UserSession.revoked_at.is_(None))
         .values(revoked_at=_utcnow())
     )
+    # Invalidate outstanding access tokens too (not just refresh sessions), so
+    # the bearer stops working immediately rather than at TTL expiry (jwt#F-A).
+    user.token_epoch = user.token_epoch + 1
     await audit_action(
         db,
         user_id=user.id,
@@ -682,6 +730,9 @@ async def change_password(
         .where(UserSession.user_id == user.id, UserSession.revoked_at.is_(None))
         .values(revoked_at=_utcnow())
     )
+    # Also invalidate outstanding access tokens so a stolen bearer stops working
+    # the moment the password changes, not at TTL expiry (jwt#F-B).
+    user.token_epoch = user.token_epoch + 1
     await audit_action(
         db,
         user_id=user.id,

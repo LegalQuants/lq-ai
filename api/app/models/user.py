@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, text
 from sqlalchemy.dialects.postgresql import ARRAY, CITEXT, INET, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -93,6 +93,15 @@ class User(Base):
         server_default=text("now()"),
     )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Access-token invalidation epoch: each access token carries the user's
+    # epoch at mint time; the request path rejects any token whose epoch is
+    # below the user's current one. Incremented on logout and password change so
+    # those actions invalidate outstanding access tokens immediately rather than
+    # only when they expire (pen-test findings jwt#F-A / #F-B). An integer epoch
+    # (not a timestamp) avoids the same-second iat race.
+    token_epoch: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0"), default=0
+    )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     deletion_scheduled_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
