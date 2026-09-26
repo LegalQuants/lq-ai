@@ -42,6 +42,11 @@ LQ_AI_UID=10001
 LQ_AI_GID=10001
 if [ "$(id -u)" = "0" ]; then
   if [ -d "${CONFIG_DIR}" ]; then
+    # Seed as root: the example may be a host bind mount (dev compose) that the
+    # unprivileged user cannot read, e.g. a 0600 file owned by the host user.
+    if [ ! -f "${TARGET}" ] && [ -f "${EXAMPLE}" ]; then
+      cp "${EXAMPLE}" "${TARGET}" 2>/dev/null || true
+    fi
     chown -R "${LQ_AI_UID}:${LQ_AI_GID}" "${CONFIG_DIR}" 2>/dev/null || true
   fi
   if [ -n "${GATEWAY_CONFIG_PATH:-}" ] && [ -f "${GATEWAY_CONFIG_PATH}" ]; then
