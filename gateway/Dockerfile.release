@@ -71,6 +71,18 @@ COPY gateway.yaml.example /usr/share/lq-ai/gateway.yaml.example
 ENV GATEWAY_CONFIG_PATH=/etc/lq-ai/gateway.yaml \
     LQ_AI_GATEWAY_CONFIG_DIR=/etc/lq-ai
 
+# Run as a non-root user. The gateway is the security boundary and holds
+# plaintext provider keys, so root is an unnecessary blast radius (pen-test
+# 2026-09-25). Create the writable config dir and hand it (plus /app) to the
+# user so the entrypoint's first-boot seed of gateway.yaml works without root.
+# A named volume mounted at the config dir inherits this ownership; a bind
+# mount must be chowned to uid 10001 by the operator.
+RUN groupadd --system --gid 10001 lqai \
+    && useradd --system --uid 10001 --gid lqai lqai \
+    && mkdir -p /etc/lq-ai \
+    && chown -R lqai:lqai /app /etc/lq-ai
+USER lqai
+
 EXPOSE 8001
 
 ENTRYPOINT ["/usr/local/bin/lq-ai-gateway-entrypoint.sh"]
