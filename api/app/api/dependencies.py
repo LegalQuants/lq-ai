@@ -69,6 +69,13 @@ async def get_current_user(
     if user is None or user.deleted_at is not None:
         raise _unauthorized()
 
+    # Access-token invalidation epoch: reject any token minted at an epoch below
+    # the user's current one (incremented on logout / password change), so those
+    # actions kill outstanding access tokens immediately instead of only at TTL
+    # expiry (pen-test findings jwt#F-A / #F-B).
+    if claims.token_epoch < user.token_epoch:
+        raise _unauthorized()
+
     return user
 
 
