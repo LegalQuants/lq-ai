@@ -347,3 +347,17 @@ def test_install_sighup_reload_no_op_on_windows(monkeypatch: pytest.MonkeyPatch)
         monkeypatch.delattr(signal, "SIGHUP", raising=False)
     # Should not raise.
     install_sighup_reload(holder)  # type: ignore[arg-type]
+
+
+@pytest.mark.unit
+def test_reload_error_does_not_leak_absolute_config_path(
+    tmp_config: Path, example_env: None
+) -> None:
+    """Reload errors surface in admin 422 bodies; they name the file, not its
+    absolute on-disk location (gateway#F7)."""
+    initial = load_config(tmp_config)
+    holder = MutableConfigHolder(initial, config_path=tmp_config)
+    tmp_config.write_text("model_aliases: [this is not a mapping", encoding="utf-8")
+    with pytest.raises(ConfigReloadError) as excinfo:
+        holder.reload_from_disk()
+    assert str(tmp_config.parent) not in str(excinfo.value)

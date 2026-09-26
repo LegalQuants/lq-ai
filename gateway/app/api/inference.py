@@ -846,7 +846,15 @@ async def embeddings(request: Request) -> JSONResponse:
             code="invalid_request",
             message="Embeddings request failed schema validation",
             http_status=status.HTTP_400_BAD_REQUEST,
-            details={"errors": exc.errors()},
+            # Same hygiene as the chat path: never echo the submitted input
+            # (pen-test finding gateway#F7).
+            details={
+                "errors": exc.errors(
+                    include_context=False,
+                    include_url=False,
+                    include_input=False,
+                )
+            },
         )
 
     config = _config(request)

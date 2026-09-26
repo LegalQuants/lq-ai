@@ -126,7 +126,11 @@ class MutableConfigHolder:
                     "gateway config hot-reload failed; keeping prior snapshot: %s",
                     exc,
                 )
-                raise ConfigReloadError(str(exc)) from exc
+                # The message surfaces in admin API 422 bodies; name the file,
+                # not its absolute on-disk location (pen-test finding gateway#F7).
+                # The warning log above keeps the full path for operators.
+                message = str(exc).replace(str(self._config_path), self._config_path.name)
+                raise ConfigReloadError(message) from exc
             old = self._config
             self._config = new_config
         # Log outside the lock to keep the critical section minimal.

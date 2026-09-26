@@ -221,3 +221,17 @@ async def test_embeddings_anthropic_alias_falls_through(
     # Anthropic returns 501-able / unsupported; the endpoint walks
     # the chain and finds nothing usable.
     assert response.status_code in (501, 502, 503)
+
+
+@pytest.mark.integration
+async def test_embeddings_validation_error_does_not_echo_input(
+    client_with_keys: AsyncClient,
+) -> None:
+    """A schema failure must not reflect the submitted payload back (gateway#F7)."""
+    marker = "SENSITIVE-INPUT-MARKER-" + "x" * 64
+    response = await client_with_keys.post(
+        "/v1/embeddings",
+        json={"model": "embedding", "input": {"not": "a string", "leak": marker}},
+    )
+    assert response.status_code == 400
+    assert marker not in response.text
