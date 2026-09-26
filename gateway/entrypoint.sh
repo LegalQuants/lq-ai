@@ -29,6 +29,28 @@ TARGET="${CONFIG_DIR}/gateway.yaml"
 # repo-root gateway.yaml.example here read-only.
 EXAMPLE="${LQ_AI_GATEWAY_EXAMPLE_PATH:-/usr/share/lq-ai/gateway.yaml.example}"
 
+# Privilege drop. The gateway holds plaintext provider keys, so the long-running
+# process runs as the unprivileged `lqai` user (uid/gid 10001). The container
+# starts as root only so this block can repair ownership of the writable config
+# location first: a named volume created by an older, root-running image stays
+# root-owned (Docker copies image ownership only into an *empty* volume), and
+# admin writes left gateway.yaml as root:root 0600 — unreadable to 10001. We
+# chown just the config location (best-effort: read-only and ConfigMap mounts
+# are skipped), then re-exec this script as 10001. If the container is started
+# as non-root already (e.g. a Kubernetes runAsUser), this block is skipped.
+LQ_AI_UID=10001
+LQ_AI_GID=10001
+if [ "$(id -u)" = "0" ]; then
+  if [ -d "${CONFIG_DIR}" ]; then
+    chown -R "${LQ_AI_UID}:${LQ_AI_GID}" "${CONFIG_DIR}" 2>/dev/null || true
+  fi
+  if [ -n "${GATEWAY_CONFIG_PATH:-}" ] && [ -f "${GATEWAY_CONFIG_PATH}" ]; then
+    chown "${LQ_AI_UID}:${LQ_AI_GID}" "${GATEWAY_CONFIG_PATH}" 2>/dev/null || true
+  fi
+  export HOME=/home/lqai
+  exec setpriv --reuid="${LQ_AI_UID}" --regid="${LQ_AI_GID}" --clear-groups -- "$0" "$@"
+fi
+
 # Honor an explicit override (e.g., a single-file mount) without
 # touching anything.
 if [ -n "${GATEWAY_CONFIG_PATH:-}" ] && [ "${GATEWAY_CONFIG_PATH}" != "${TARGET}" ]; then
