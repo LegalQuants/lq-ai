@@ -81,6 +81,7 @@ from app.providers.tool.oauth_passthrough import (
     exchange_oauth_token,
 )
 from app.providers.tool.ratelimit import FixedWindowRateLimiter, RateLimited
+from app.tier_floor import TierFloor, is_refused
 from app.tool_egress_log import (
     NullToolEgressLogWriter,
     ToolEgressLogRow,
@@ -684,6 +685,8 @@ class Router:
     async def chat_completion(
         self,
         request: ChatCompletionRequest,
+        *,
+        floor: TierFloor | None = None,
     ) -> ChatCompletionRoutedResult:
         """Run a non-streaming chat completion through the router.
 
@@ -692,9 +695,22 @@ class Router:
         candidate is tried. The first success returns. If every candidate
         fails, the last error is re-raised wrapped (so the route handler
         sees both the final error and the chain that led there).
+
+        ``floor`` enforces the D1 tier floor on *every* dispatch target,
+        not just the primary. The route handler refuses up-front when the
+        primary violates the floor, but this method re-resolves the chain,
+        so a primary failure must not silently fall through to a
+        weaker-tier fallback. Candidates weaker than the floor are dropped
+        before the walk.
         """
 
         candidates = self.resolve(request.model)
+        if floor is not None:
+            candidates = [
+                target
+                for target in candidates
+                if not is_refused(resolved_tier=target.routed_inference_tier, floor=floor)
+            ]
         last_error: ProviderAdapterError | None = None
         last_error_target: ResolvedTarget | None = None
         last_error_latency_ms = 0
