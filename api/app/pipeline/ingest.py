@@ -55,6 +55,7 @@ from app.pipeline.parsers import (
     ParsedDocument,
     ParserDecodeError,
     ParserError,
+    ParserTooLarge,
     ParserUnsupported,
     is_pdf_mime,
     is_text_filename,
@@ -225,6 +226,8 @@ async def ingest_file(
                     parse_pdf,
                     raw_bytes,
                     run_docling=settings.lq_ai_docling_enabled,
+                    max_pages=settings.lq_ai_max_pdf_pages,
+                    max_chars=settings.lq_ai_max_document_chars,
                 ),
                 timeout=settings.lq_ai_docling_timeout_seconds,
             )
@@ -246,6 +249,18 @@ async def ingest_file(
             chunk_count=0,
             parser=None,
             error="ingestion_timeout",
+        )
+    except ParserTooLarge as exc:
+        # The document exceeds a page/character ceiling — a decompression-bomb
+        # guard. Terminal (retry won't help): mark failed with a distinct code.
+        await _mark_failed(db, row, error="too_large", reason=str(exc))
+        return IngestResult(
+            file_id=file_id,
+            status="failed",
+            document_id=None,
+            chunk_count=0,
+            parser=None,
+            error="too_large",
         )
     except ParserDecodeError as exc:
         # A supported text type whose bytes are not valid UTF-8. Honest,
@@ -278,6 +293,28 @@ async def ingest_file(
             chunk_count=0,
             parser=None,
             error="parse_failed",
+        )
+
+    # ---- Character ceiling (covers the text path, which the PyMuPDF loop
+    # ceiling doesn't reach). Bounds normalized_content size and the resulting
+    # chunk/embedding fan-out for any parser. Terminal — retry won't help.
+    if len(parsed.canonical_text) > settings.lq_ai_max_document_chars:
+        await _mark_failed(
+            db,
+            row,
+            error="too_large",
+            reason=(
+                f"extracted text is {len(parsed.canonical_text)} characters, "
+                f"exceeding the limit of {settings.lq_ai_max_document_chars}"
+            ),
+        )
+        return IngestResult(
+            file_id=file_id,
+            status="failed",
+            document_id=None,
+            chunk_count=0,
+            parser=None,
+            error="too_large",
         )
 
     # ---- Chunk the parsed text.
