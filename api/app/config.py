@@ -109,6 +109,28 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Resource ceilings for document parsing. PDF content streams are
+    # compressed, so a small upload (well under LQ_AI_MAX_UPLOAD_SIZE_MB) can
+    # expand into an enormous extracted-text string, an oversized
+    # normalized_content row, and tens of thousands of chunk/embedding
+    # operations — a decompression-bomb DoS. Refuse before building that string.
+    lq_ai_max_pdf_pages: int = Field(
+        default=5000,
+        description=(
+            "Maximum page count for an ingested PDF. Documents with more pages "
+            "are refused with ingestion_error='too_large'."
+        ),
+    )
+    lq_ai_max_document_chars: int = Field(
+        default=20_000_000,
+        description=(
+            "Maximum extracted-text length (characters) for an ingested "
+            "document. Larger documents are refused with "
+            "ingestion_error='too_large'. ~20M chars is generous for legal "
+            "documents while bounding the decompression-bomb blast radius."
+        ),
+    )
+
     # When False, skip the Docling pass entirely and run PyMuPDF only.
     # Useful for environments where Docling can't be installed (e.g.
     # constrained Python builds or CI runners without HuggingFace

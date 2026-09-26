@@ -63,6 +63,17 @@ class ParserUnsupported(ParserError):
     """
 
 
+class ParserTooLarge(ParserError):
+    """The document exceeds a resource ceiling (page count or character count).
+
+    PDF content streams are compressed, so a small upload can expand into an
+    enormous extracted-text string, an oversized ``normalized_content`` row, and
+    tens of thousands of chunk/embedding operations — a decompression-bomb DoS.
+    We refuse before building that string. See ``lq_ai_max_pdf_pages`` /
+    ``lq_ai_max_document_chars`` (pen-test 2026-09-25 finding ingest#F1).
+    """
+
+
 class ParserDecodeError(ParserError):
     """A text/markdown upload could not be decoded as UTF-8.
 
@@ -253,7 +264,13 @@ def parse_text(raw_bytes: bytes) -> ParsedDocument:
     )
 
 
-def parse_pdf(pdf_bytes: bytes, *, run_docling: bool = True) -> ParsedDocument:
+def parse_pdf(
+    pdf_bytes: bytes,
+    *,
+    run_docling: bool = True,
+    max_pages: int | None = None,
+    max_chars: int | None = None,
+) -> ParsedDocument:
     """Run the parser cascade on a PDF byte string.
 
     PyMuPDF is run first and is mandatory — without it we cannot
@@ -284,7 +301,9 @@ def parse_pdf(pdf_bytes: bytes, *, run_docling: bool = True) -> ParsedDocument:
     # PyMuPDF is the canonical parser — without it, no offsets, no
     # ingestion. We import it lazily so this module imports cleanly
     # in environments where it isn't installed (test stubs, etc.).
-    canonical_text, pages, pymupdf_version = _run_pymupdf(pdf_bytes)
+    canonical_text, pages, pymupdf_version = _run_pymupdf(
+        pdf_bytes, max_pages=max_pages, max_chars=max_chars
+    )
 
     # Docling is best-effort. Skip if disabled or unavailable.
     structured_content: dict[str, object] | None = None
@@ -332,7 +351,12 @@ def parse_pdf(pdf_bytes: bytes, *, run_docling: bool = True) -> ParsedDocument:
 # ---------------------------------------------------------------------------
 
 
-def _run_pymupdf(pdf_bytes: bytes) -> tuple[str, list[PageSpan], str]:
+def _run_pymupdf(
+    pdf_bytes: bytes,
+    *,
+    max_pages: int | None = None,
+    max_chars: int | None = None,
+) -> tuple[str, list[PageSpan], str]:
     """Extract canonical text + page spans + library version via PyMuPDF.
 
     The canonical text is built by concatenating every page's
@@ -377,6 +401,11 @@ def _run_pymupdf(pdf_bytes: bytes) -> tuple[str, list[PageSpan], str]:
         running_offset = 0
         page_count = doc.page_count
 
+        # Page-count ceiling: refuse up front (cheap) so a compressed PDF with
+        # an enormous page count cannot drive an unbounded extraction loop.
+        if max_pages is not None and page_count > max_pages:
+            raise ParserTooLarge(f"PDF has {page_count} pages, exceeding the limit of {max_pages}")
+
         for page_idx in range(page_count):
             page = doc.load_page(page_idx)
             try:
@@ -395,6 +424,14 @@ def _run_pymupdf(pdf_bytes: bytes) -> tuple[str, list[PageSpan], str]:
             pages.append(page_span)
             page_texts.append(text)
             running_offset += len(text)
+
+            # Character ceiling: refuse mid-loop so we never build a
+            # multi-megabyte canonical string in memory (a few pathological
+            # pages can blow the budget even under the page-count limit).
+            if max_chars is not None and running_offset > max_chars:
+                raise ParserTooLarge(
+                    f"PDF extracted text exceeds the limit of {max_chars} characters"
+                )
 
             # Add a single newline between pages — except after the last.
             if page_idx < page_count - 1:
