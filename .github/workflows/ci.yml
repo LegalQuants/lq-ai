@@ -124,7 +124,7 @@ jobs:
         # pre-fetched wheel files; uv sync --frozen skips the network entirely
         # on a cache hit, saving ~30s per run. restore-keys allows a partial
         # hit when the lockfile changes (avoids a full cold download).
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/uv
           key: uv-api-${{ runner.os }}-${{ hashFiles('api/uv.lock') }}
