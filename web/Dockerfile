@@ -25,7 +25,7 @@ ARG GID=0
 
 ######## WebUI frontend ########
 # LQ.AI: Digest-pinned for reproducible builds (#301). Bump the tag and digest together.
-FROM --platform=$BUILDPLATFORM node:22-alpine3.20@sha256:2289fb1fba0f4633b08ec47b94a89c7e20b829fc5679f9b7b298eaa2f1ed8b7e AS build
+FROM --platform=$BUILDPLATFORM node:24-alpine3.20@sha256:8fe019e0d57dbdce5f5c27c0b63d2775cf34b00e3755a7dea969802d7e0c2b25 AS build
 ARG BUILD_HASH
 # LQ.AI: Vite/SvelteKit bakes PUBLIC_* env vars into the static build at
 # `npm run build` time. Production: leave unset (relative /api/v1, behind
