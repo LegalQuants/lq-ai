@@ -44,7 +44,7 @@ from app.api.dependencies import CurrentUser
 from app.audit import audit_action
 from app.config import get_settings
 from app.db.session import get_db
-from app.errors import Conflict
+from app.errors import Conflict, RateLimited
 from app.models.user import User, UserSession
 from app.security import (
     create_access_token,
@@ -56,6 +56,7 @@ from app.security import (
     verify_password,
 )
 from app.security.client_ip import resolve_client_ip
+from app.security.rate_limit import check_rate_limit
 from app.security.totp import (
     consume_recovery_code,
     generate_recovery_codes,
@@ -250,6 +251,34 @@ def _client_metadata(request: Request) -> tuple[str | None, str | None]:
     return user_agent, ip_address
 
 
+async def _enforce_login_rate_limit(request: Request, *, surface: str) -> None:
+    """Throttle the credential-guessing surface per client IP.
+
+    Raises :class:`RateLimited` (HTTP 429) once a client IP exceeds
+    ``lq_ai_login_rate_limit_max_attempts`` within the window. Disabled when
+    the limit is 0 or the client IP is unknown. ``surface`` namespaces the
+    counter (``login`` vs ``mfa``) so the two endpoints don't share a bucket.
+    """
+
+    settings = get_settings()
+    limit = settings.lq_ai_login_rate_limit_max_attempts
+    if limit <= 0:
+        return
+    ip_address = resolve_client_ip(request, settings.lq_ai_trusted_proxies)
+    if ip_address is None:
+        return
+    retry_after = await check_rate_limit(
+        f"{surface}:{ip_address}",
+        limit=limit,
+        window_seconds=settings.lq_ai_login_rate_limit_window_seconds,
+    )
+    if retry_after is not None:
+        raise RateLimited(
+            "Too many attempts. Try again later.",
+            details={"retry_after_seconds": retry_after},
+        )
+
+
 async def _create_session(
     db: AsyncSession,
     user: User,
@@ -327,6 +356,7 @@ async def login(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     """POST /api/v1/auth/login — see backend-openapi.yaml."""
+    await _enforce_login_rate_limit(request, surface="login")
     # Look up the user. Email column is CITEXT so case is irrelevant.
     # `deleted_at IS NOT NULL` users are treated as non-existent.
     result = await db.execute(
@@ -863,6 +893,7 @@ async def mfa_verify(
     MFA-not-enabled, wrong code) collapse into a single 401 so an
     attacker cannot probe which leg failed.
     """
+    await _enforce_login_rate_limit(request, surface="mfa")
     claims = decode_mfa_token(payload.mfa_token)
     if claims is None:
         await audit_action(

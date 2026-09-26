@@ -499,6 +499,22 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Login-surface rate limiting. Fixed window per client IP across the
+    # password-login and MFA-verify endpoints; exceeding it returns HTTP 429.
+    # Bounds online password / TOTP brute-force. Requires the real client IP
+    # (see lq_ai_trusted_proxies) to be effective behind a reverse proxy.
+    lq_ai_login_rate_limit_max_attempts: int = Field(
+        default=10,
+        description=(
+            "Max login/MFA-verify attempts per client IP within the window "
+            "before HTTP 429. Set to 0 to disable app-level login throttling."
+        ),
+    )
+    lq_ai_login_rate_limit_window_seconds: int = Field(
+        default=900,
+        description="Sliding window (seconds) for the login rate limit. Default 900 (15 min).",
+    )
+
     # Trusted reverse-proxy addresses (comma-separated IPs/CIDRs). When the
     # immediate peer (request.client.host) is within one of these ranges, the
     # real client IP is read from the CF-Connecting-IP header (set and

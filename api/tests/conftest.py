@@ -43,6 +43,29 @@ if TYPE_CHECKING:
 API_DIR = Path(__file__).resolve().parent.parent
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def _reset_login_rate_limit() -> AsyncIterator[None]:
+    """Clear login rate-limit counters before each test.
+
+    The login limiter (``app.security.rate_limit``) keys on the client IP, and
+    the in-process ASGI test client presents a single fixed IP, so counters
+    would otherwise accumulate across tests and spuriously 429 later logins.
+    Flush the ``ratelimit:*`` namespace before each test. No-op when Redis is
+    unavailable (the limiter itself fails open).
+    """
+
+    from app.cache import get_redis
+
+    try:
+        redis = get_redis()
+        keys = [key async for key in redis.scan_iter(match="ratelimit:*")]
+        if keys:
+            await redis.delete(*keys)
+    except Exception:
+        pass
+    yield
+
+
 def _split_url(url: str) -> tuple[str, str]:
     """Split a SQLAlchemy URL into (prefix-without-db, db-name)."""
     base, dbname = url.rsplit("/", 1)
