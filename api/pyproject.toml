@@ -89,7 +89,15 @@ dependencies = [
     # drives off PyMuPDF's character stream, not Docling's offsets.
     # Heavy install footprint (transformers, sentencepiece) — accepted
     # for M1 per PRD §3 and §7.6.
-    "docling>=1.16,<2",
+    "docling>=2.94,<3",
+    # Security floors on docling's transitive ML stack (pen-test 2026-09-25 F7).
+    # docling 2.x no longer pins these low, but the resolver would otherwise keep
+    # the old vulnerable versions: pillow 10.4.0 (21 CVEs incl. no-auth OOB/DoS in
+    # image/PDF decoders; fixed in 12.3.0) and torch 2.2.2 (torch.load RCE
+    # CVE-2025-32434; fixed in 2.6.0). Lifting docling<2 also drops the abandoned
+    # deepsearch-glm and pyarrow (their CVEs go with them).
+    "pillow>=12.3",
+    "torch>=2.6",
     # arq: Redis-native asyncio job queue for the document-pipeline
     # worker. MIT-licensed; small dep footprint (just redis-py which
     # we already have, plus click). Avoids Celery's complexity at
