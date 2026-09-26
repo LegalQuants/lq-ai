@@ -70,7 +70,7 @@ from app.anonymization.middleware import (
 )
 from app.api.dependencies import make_require_gateway_key
 from app.clients.backend import BackendClient, Skill, get_backend_client
-from app.config import GatewayConfig
+from app.config import GatewayConfig, RequestValidationConfig
 from app.errors import LQAIError
 from app.model_discovery import ModelDiscoverer
 from app.observability_helpers import get_tracer, record_attributes
@@ -292,6 +292,52 @@ def _failure_reason(error: ProviderAdapterError) -> str:
     if isinstance(error, ProviderHTTPError):
         return f"upstream_error:{code}:status={error.upstream_status}"
     return f"upstream_error:{code}"
+
+
+def _validate_request_limits(
+    chat_request: ChatCompletionRequest, rv: RequestValidationConfig
+) -> JSONResponse | None:
+    """Reject a request exceeding the operator's request_validation ceilings.
+
+    Returns a 400 envelope on violation, or ``None`` when within limits.
+    Enforces ``max_max_tokens``, ``max_messages_per_request`` and
+    ``max_total_request_chars`` (pen-test finding gateway#F6) — these were
+    loaded but enforced on no request path, allowing unbounded per-request
+    provider spend.
+    """
+
+    if chat_request.max_tokens is not None and chat_request.max_tokens > rv.max_max_tokens:
+        return _gateway_error(
+            code="invalid_request",
+            message=f"max_tokens {chat_request.max_tokens} exceeds the limit of {rv.max_max_tokens}.",
+            http_status=status.HTTP_400_BAD_REQUEST,
+            details={"max_tokens": chat_request.max_tokens, "limit": rv.max_max_tokens},
+        )
+    if len(chat_request.messages) > rv.max_messages_per_request:
+        return _gateway_error(
+            code="invalid_request",
+            message=(
+                f"request has {len(chat_request.messages)} messages, exceeding the "
+                f"limit of {rv.max_messages_per_request}."
+            ),
+            http_status=status.HTTP_400_BAD_REQUEST,
+            details={
+                "messages": len(chat_request.messages),
+                "limit": rv.max_messages_per_request,
+            },
+        )
+    total_chars = sum(len(m.content or "") for m in chat_request.messages)
+    if total_chars > rv.max_total_request_chars:
+        return _gateway_error(
+            code="invalid_request",
+            message=(
+                f"request body is {total_chars} characters, exceeding the limit of "
+                f"{rv.max_total_request_chars}."
+            ),
+            http_status=status.HTTP_400_BAD_REQUEST,
+            details={"total_chars": total_chars, "limit": rv.max_total_request_chars},
+        )
+    return None
 
 
 def _config(request: Request) -> GatewayConfig:
@@ -589,6 +635,15 @@ async def chat_completions(request: Request) -> JSONResponse | StreamingResponse
             )
     log_writer = _routing_log(request)
     request_id = synthesize_request_id(_request_id_header(request))
+
+    # --- Request-size ceilings (F6) ----------------------------------------
+    # request_validation was loaded but enforced nowhere (DE-392), so a single
+    # request could ask for an unbounded max_tokens or ship an arbitrarily large
+    # message set — unbounded per-request provider spend. Reject over-limit
+    # requests before dispatch.
+    limit_error = _validate_request_limits(chat_request, config.request_validation)
+    if limit_error is not None:
+        return limit_error
 
     # --- Skill prompt assembly (C2) ----------------------------------------
     # Mutates chat_request in place: replaces system message(s) with
