@@ -198,7 +198,11 @@ paths:
   /api/v1/auth/logout:
     post:
       tags: [auth]
-      summary: Invalidate the current refresh token
+      summary: Log out everywhere
+      description: |
+        Bearer-authenticated. Revokes all of the caller's refresh sessions and
+        bumps the caller's token epoch, so every access token issued before
+        the logout (on any device) is rejected on its next use.
       responses:
         '204': {description: Logout successful}
 
@@ -287,7 +291,8 @@ paths:
         accepting a new one (defense against a stolen access token).
         Clears `must_change_password` if it was set (used by the
         first-run admin flow per Task B2). Revokes all active sessions
-        for the user; the caller must re-authenticate.
+        for the user and bumps the token epoch, so outstanding access
+        tokens stop working too; the caller must re-authenticate.
       requestBody:
         required: true
         content:

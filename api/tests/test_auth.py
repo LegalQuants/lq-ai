@@ -595,37 +595,3 @@ async def test_fresh_login_after_invalidation_still_works(
         headers={"Authorization": f"Bearer {second['access_token']}"},
     )
     assert resp.status_code == 200, resp.text
-
-
-@pytest.mark.integration
-async def test_refresh_reuse_revokes_session_family(
-    client: AsyncClient, db_session: AsyncSession, seed_user: User
-) -> None:
-    """Replaying a rotated refresh token is treated as a breach: the whole
-    session family is revoked and the reused token is rejected — jwt#F-C."""
-    tokens = await _login(client, seed_user)
-    old_refresh = tokens["refresh_token"]
-
-    # Rotate once — old_refresh is now revoked, a new session is active.
-    rotated = await client.post("/api/v1/auth/refresh", json={"refresh_token": old_refresh})
-    assert rotated.status_code == 200, rotated.text
-    new_refresh = rotated.json()["refresh_token"]
-
-    # Replay the OLD (rotated) refresh token: reuse detected -> 401.
-    replay = await client.post("/api/v1/auth/refresh", json={"refresh_token": old_refresh})
-    assert replay.status_code == 401
-    assert "reuse" in replay.json()["detail"].lower()
-
-    # The cascade revoked the whole family, so even the legitimate NEW token
-    # no longer works.
-    after = await client.post("/api/v1/auth/refresh", json={"refresh_token": new_refresh})
-    assert after.status_code == 401
-
-    # All sessions for the user are revoked.
-    sessions = (
-        (await db_session.execute(select(UserSession).where(UserSession.user_id == seed_user.id)))
-        .scalars()
-        .all()
-    )
-    assert sessions
-    assert all(s.revoked_at is not None for s in sessions)

@@ -283,3 +283,30 @@ async def test_reset_admin_password_revokes_active_sessions(cli_db_url: str) -> 
     finally:
         await engine.dispose()
         await _cleanup_users(cli_db_url)
+
+
+@pytest.mark.integration
+async def test_reset_admin_password_bumps_token_epoch(cli_db_url: str) -> None:
+    """Reset is the compromise-recovery path: outstanding access tokens must die
+    too, not just refresh sessions (pen-test finding jwt#F-B)."""
+    email = f"admin-{uuid.uuid4().hex[:8]}@lq.ai"
+    await _seed_admin(cli_db_url, email, "OldPasswordABCDE!")
+
+    engine = create_async_engine(cli_db_url, future=True)
+    factory = async_sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
+    try:
+        async with factory() as s:
+            before = (
+                await s.execute(select(User.token_epoch).where(User.email == email))
+            ).scalar_one()
+
+        assert await _reset_admin_password(email=email) == 0
+
+        async with factory() as s:
+            after = (
+                await s.execute(select(User.token_epoch).where(User.email == email))
+            ).scalar_one()
+        assert after == before + 1
+    finally:
+        await engine.dispose()
+        await _cleanup_users(cli_db_url)

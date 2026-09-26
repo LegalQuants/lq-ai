@@ -129,6 +129,12 @@ async def _reset_admin_password(
                 .where(UserSession.user_id == target.id, UserSession.revoked_at.is_(None))
                 .values(revoked_at=datetime.now(tz=UTC)),
             )
+            # ...and bump the token epoch so outstanding *access* tokens die too.
+            # This is the compromise-recovery path: an attacker's bearer must
+            # not survive the reset until its TTL expires.
+            await session.execute(
+                update(User).where(User.id == target.id).values(token_epoch=User.token_epoch + 1),
+            )
 
             await session.commit()
 
