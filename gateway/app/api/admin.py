@@ -31,6 +31,7 @@ rolled back to the prior bytes on a best-effort basis.
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request, Response, status
@@ -170,8 +171,41 @@ def _sanitized_config_payload(config: GatewayConfig) -> dict[str, Any]:
     for key in ("providers", "tool_providers"):
         for entry in payload.get(key, []) or []:
             if isinstance(entry, dict):
-                entry.pop("api_key_encrypted", None)
+                _strip_secret_fields(entry)
     return payload
+
+
+# api_key_env holds only the *name* of an env var and is safe to expose; every
+# other secret-shaped field is stripped.
+_SECRET_FIELD_RE = re.compile(r"(secret|token|password)", re.IGNORECASE)
+
+
+def _is_secret_field(name: str) -> bool:
+    """True if a provider-config field name looks like it holds a secret.
+
+    ``ProviderConfig`` is ``extra="allow"`` and ``load_config`` expands
+    ``${VAR}`` placeholders before validation, so an operator using the
+    deprecated ``api_key: ${ANTHROPIC_API_KEY}`` form (or interpolating any
+    ``${SECRET}`` into an extra field) would otherwise have the expanded
+    plaintext echoed by ``GET /admin/v1/config`` (pen-test finding gateway#F3a).
+    Strip by field-name shape rather than an explicit allowlist so arbitrary
+    secret-shaped extras are caught too. ``api_key_env`` (a variable *name*,
+    not a value) is explicitly kept.
+    """
+
+    if name == "api_key_env":
+        return False
+    lowered = name.lower()
+    return (
+        name in ("api_key", "api_key_encrypted")
+        or lowered.endswith("key")
+        or _SECRET_FIELD_RE.search(lowered) is not None
+    )
+
+
+def _strip_secret_fields(entry: dict[str, Any]) -> None:
+    for field_name in [k for k in entry if _is_secret_field(k)]:
+        entry.pop(field_name, None)
 
 
 # ---------------------------------------------------------------------------
