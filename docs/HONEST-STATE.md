@@ -2,6 +2,13 @@
 
 > Catalog of what LQ.AI ships today, what is deferred, and how to verify each. Maintained per release. **Current as of the fiduciary-grade agentic legal work milestone close (ADRs [0018](adr/0018-citation-ledger-and-fiduciary-grade-output.md)–[0021](adr/0021-content-source-registry-and-free-source-expansion.md)); migration head `0064`.** (Prior baselines: the legal-research + connectors (MCP) milestone close, #158–#193, head `0055`; before that, the M4 close plus the post-v0.4.0 "Donna" run, #115–#139, head `0047`.)
 
+## In short
+
+- This is LQ.AI's own status board: what's live, what's partial, what's only scaffolding, and what hasn't been built yet — one line per capability.
+- Most statuses come with a way to check it yourself — a file path, a test command, or both; a few (like the pending pen-test engagement) are stated plans instead. Read the Verification column rather than trusting the status word alone.
+- [§6](#6-capabilities-not-yet-started-in-source) lists what doesn't exist yet — worth reading before you assume a feature works because it's mentioned somewhere else.
+- If this file and the actual code ever disagree, the code is right — [open an issue](https://github.com/LegalQuants/lq-ai/issues) so we can fix the doc.
+
 ## What this doc is
 
 This document catalogs what LQ.AI ships today, what is deferred, and how an operator can verify each. We publish it in source because the verification path for an open-source project terminates in code, not in a vendor's marketing claims. If you find a discrepancy between this doc and the codebase, the codebase is canonical; please [open an issue](https://github.com/LegalQuants/lq-ai/issues).

@@ -1,0 +1,149 @@
+- route: contribute/board
+  source: docs/contribute/EASIEST-CONTRIBUTIONS.md
+  title: Find something to work on
+  description: The maintainer team's own curated list of short-cycle, mergeable contributions, read live from the repository — check the issue and code first, since a listed task may have already shipped.
+  kind: reference
+  audience: [contributor]
+  status: draft
+  sidebar:
+    order: 2
+  next: [contribute/lawyers, contribute/compliance-professionals, contribute/engineers]
+
+- route: contribute/code-of-conduct
+  source: CODE_OF_CONDUCT.md
+  title: Code of conduct
+  description: Follow the project's current code of conduct when taking part, and use its reporting route for conduct concerns.
+  kind: reference
+  audience: [contributor]
+  status: draft
+  sources:
+    - CONTRIBUTING.md
+    - skills/CONTRIBUTING.md
+  sidebar:
+    order: 9
+  next: [contribute/board, contribute/engineers, contribute/lawyers]
+
+- route: contribute/coding-agents
+  source: docs/contribute/coding-agent-onboarding.md
+  title: Work with a coding assistant
+  description: Give the assistant a specific task, a separate test environment, and the repository's current instructions — the cold-start guide a coding agent reads before its first contribution.
+  kind: how-to
+  audience: [contributor, agent]
+  status: draft
+  sidebar:
+    order: 6
+  next: [contribute/dev-environment, contribute/engineers]
+
+- route: contribute/compliance-professionals
+  source: docs/contribute/compliance-professionals.md
+  title: Help with compliance and procurement reviews
+  description: Turn broad compliance and procurement claims into specific questions, controls, and supporting evidence — the mini-PRDs that fit this profile, and how review is routed.
+  kind: how-to
+  audience: [contributor]
+  status: draft
+  sources:
+    - docs/contribute/mini-prds/procurement-readiness-pack.md
+    - docs/contribute/mini-prds/nist-ai-rmf-profile.md
+    - docs/contribute/mini-prds/owasp-llm-top10-mapping.md
+    - docs/procurement/README.md
+    - docs/compliance/README.md
+    - .github/CODEOWNERS
+    - docs/contribute/EASIEST-CONTRIBUTIONS.md
+  sidebar:
+    order: 4
+  next: [contribute/board]
+
+- route: contribute/dev-environment
+  source: docs/contribute/dev-environment.md
+  title: Set up for development
+  description: Follow the instructions for the part of LQ.AI you're working on — Python dependencies, the frontend HMR loop, migrations, and the rules that keep a shared dev stack from breaking.
+  kind: how-to
+  audience: [contributor]
+  status: draft
+  sources:
+    - CONTRIBUTING.md
+    - CLAUDE.md
+    - web/docs/frontend-dev.md
+    - docs/adr/0023-uv-lockfiles-gateway-api.md
+    - docker-compose.yml
+    - docs/adr/0036-bundled-object-store-rustfs.md
+  sidebar:
+    order: 7
+  next: [contribute/engineers, contribute/coding-agents]
+
+- route: contribute/engineers
+  source: CONTRIBUTING.md
+  title: Contribute code
+  description: Read the repository's instructions, then follow the code responsible for the behavior you want to change — the build loop, the gates CI runs, DCO sign-off, and where security review is required.
+  kind: how-to
+  audience: [contributor]
+  status: draft
+  sources:
+    - .github/workflows/ci.yml
+    - docs/test-strategy.md
+    - CLAUDE.md
+    - .github/CODEOWNERS
+  sidebar:
+    order: 5
+  next: [contribute/dev-environment, contribute/coding-agents, contribute/code-of-conduct]
+
+- route: contribute/lawyers
+  source: docs/contribute/lawyers.md
+  title: Contribute your legal experience
+  description: Help check whether a skill, workflow, or explanation actually supports the legal task it claims to — what to claim first, how the attestation works, and where review happens.
+  kind: how-to
+  audience: [contributor, author]
+  status: draft
+  sources:
+    - skills/CONTRIBUTING.md
+    - docs/contribute/mini-prds/skill-acceptance-tests.md
+    - .github/CODEOWNERS
+    - CLAUDE.md
+    - docs/adr/0024-jurisdiction-and-practice-area-expansion.md
+  sidebar:
+    order: 3
+  next: [contribute/board, skills/attestation]
+
+- route: contribute/membership
+  source: docs/contribute/membership.md
+  title: Contributions and membership
+  description: How a material LQ.AI contribution relates to LegalQuants community membership.
+  kind: explanation
+  audience: [contributor]
+  status: draft
+  sources:
+    - docs/contribute/mini-prds/skill-acceptance-tests.md
+    - skills/CONTRIBUTING.md
+  sidebar:
+    order: 8
+  next: [contribute/board]
+
+- route: deliver/branding-and-licensing
+  source: docs/adr/0001-openwebui-fork-pin.md
+  title: Branding and license requirements
+  description: Read the license and branding terms for the exact version you're delivering, keep the required notices, and make clear who operates the client's installation.
+  kind: explanation
+  audience: [partner]
+  status: draft
+  sources:
+    - LICENSE
+    - web/LICENSE
+    - NOTICES.md
+    - docs/db-schema.md
+    - docs/api/backend-openapi.yaml
+    - .gitmodules
+
+  sidebar:
+    order: 2
+
+- route: reference/versioning
+  source: docs/adr/0025-release-versioning-and-pipeline-ordering.md
+  title: Understand the version numbers
+  description: Record the LQ.AI release and exact code version when testing or reporting a problem — what a version bump means before you take it, patch, minor, and the pre-1.0 promise behind them.
+  kind: reference
+  audience: [operator, author]
+  status: draft
+  sources:
+    - desktop/src/main/index.ts
+  sidebar:
+    order: 2

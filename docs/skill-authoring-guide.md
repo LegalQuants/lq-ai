@@ -16,6 +16,14 @@ generated-code execution remains excluded. The [capability summary](plans/issue-
 describes the implementation and pending security gates. Production helper
 enablement requires those gates to be completed.
 
+## In short
+
+- A skill is a folder built around `SKILL.md`: frontmatter names the skill and its inputs; the body describes when to apply it, the workflow, and the desired output. Optional `reference/` and (rarely) `scripts/` subfolders add supporting material; `examples/` holds at least one worked example and is required before a skill goes to review.
+- Everything in `SKILL.md`, plus every file under `reference/`, is sent to the model as part of the request — not filed away for later search — so keep reference material relevant and mind what you send to the chosen provider.
+- A skill describes the task and the answer you want; you still need to check whether the model followed it and whether the result is correct.
+- Naming a file format in a skill's input description does not add support for uploading that format; the upload pipeline decides that independently.
+- A `scripts/` folder does not by itself mean LQ.AI executes those scripts; see the capability note above for what is actually supported on this branch.
+
 ---
 
 ## Skill anatomy
@@ -36,7 +44,7 @@ my-skill/
     └── ...
 ```
 
-`SKILL.md` is the operational instruction the model executes when the skill is attached to a chat. Everything in `SKILL.md` becomes part of the prompt; everything in `reference/` is optionally surfaced when the skill's workflow references it. `examples/` are documentation for users and reviewers; they do not become part of the prompt by default.
+`SKILL.md` is the operational instruction the model executes when the skill is attached to a chat. Everything in `SKILL.md` becomes part of the prompt, and so does everything in `reference/`: for filesystem skills (built-in and community) the loader picks up every file under `reference/`, and the gateway's prompt assembler (`gateway/app/skills/assembler.py`) appends each one verbatim to the skill's section under a `## Reference: <path>` heading — whether or not the body mentions it. Budget prompt size and confidentiality on that basis; reference files are not lazily loaded. `examples/` are documentation, not instruction, and the assembler does not append them to the prompt: they exist for three audiences at once — a user deciding whether the skill fits their document, a reviewer checking the skill's calibration, and a maintainer checking for drift after a model upgrade — and none of that depends on the model reading them at run time.
 
 **Optional execution (#563).** Declared `scripts/` helpers
 can run through the private bundled-helper broker when an operator enables their
@@ -246,6 +254,8 @@ inputs:
       type: document
       description: The contract to review.
 ```
+
+A `document` input's description states what the skill expects, not what the platform can ingest. The upload pipeline (`api/app/pipeline/ingest.py`) currently accepts PDFs (no OCR or decryption — encrypted and image-only PDFs fail as `unsupported_content`) and UTF-8 plain text or Markdown; DOCX and RTF uploads fail with `unsupported_type`. Several starter skills describe their document input as "PDF, DOCX, or pasted text" — read that as skill intent, not an upload-format guarantee. A Word document must be pasted as text or converted to PDF before upload.
 
 Avoid requiring inputs that "would be nice to have." If the skill can produce useful output with reasonable defaults, the input belongs in `optional`, not `required`.
 
@@ -468,7 +478,7 @@ Conventions from the contract-review skills:
 - **`reference/<regime>_requirements.md`** — for regime-aware skills, the specific requirements per regime.
 - **`reference/<scenario>_handling.md`** — for skills with multiple scenarios, the per-scenario logic.
 
-The body of `SKILL.md` references these files: "See `reference/severity_rubric.md` for the calibration tiers and examples." The model loads the referenced files as part of the skill's operational context.
+The body of `SKILL.md` references these files: "See `reference/severity_rubric.md` for the calibration tiers and examples." The cross-reference tells the model where to look; it does not control loading — every file under `reference/` is appended to the prompt regardless (see [Skill anatomy](#skill-anatomy)), so keep the folder to material the skill actually needs on every run.
 
 The DPA Checklist Review skill is a good example of multi-regime reference structure — separate `reference/gdpr_requirements.md`, `reference/us_state_privacy_requirements.md`, `reference/hipaa_baa_requirements.md`, etc.
 

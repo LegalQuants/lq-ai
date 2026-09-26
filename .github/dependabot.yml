@@ -73,6 +73,32 @@ updates:
     open-pull-requests-limit: 0
     labels: ["dependencies", "web"]
 
+  # site/ is the documentation site (ADR 0028): its own npm tree, its own
+  # committed lockfile, exact version pins, and never shipped in a release image.
+  # Unlike web/ above, these pins are ours, so version updates are worth taking —
+  # and unlike api/ and gateway/, a bad bump breaks a docs build, not a running
+  # service.
+  #
+  # Grouping mirrors the uv entries: minor and patch land together as one
+  # lockfile write, majors are ungrouped because each needs its own read.
+  # ADR 0028 names one bump class that is never routine: Starlight is pre-1.0,
+  # so its *minor* releases can break the build or the theme. The group will
+  # carry those, and the ADR's rule is that a Starlight bump is merged after a
+  # local build, not auto-merged.
+  - package-ecosystem: npm
+    directory: /site
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "site"]
+    groups:
+      site-minor-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
   - package-ecosystem: github-actions
     directory: /
     schedule:

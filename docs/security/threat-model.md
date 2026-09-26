@@ -2,6 +2,13 @@
 
 > **Depth:** Summary-level. STRIDE-by-component for the 5 production services. Named threats + named mitigations with cross-references. Detailed design intent lives in PRD §5 and the ADR series.
 
+## In short
+
+- This page is LQ.AI's threat model: a STRIDE-by-component table covering each of the five production services (`api`, `gateway`, `web`, `postgres`, `rustfs`). "STRIDE" is impersonation, unauthorized changes, missing evidence, disclosure, service disruption, and gaining higher privileges — read the table cell-by-cell for the service and category you're checking.
+- The Inference Gateway, holding the only plaintext provider API keys, is the primary trust boundary — see "Trust boundaries" below for the three trust zones.
+- Most mitigations cite the code, ADR, or PRD section behind them, so you can usually verify the claim yourself rather than take it on trust.
+- Host administration, OS patching, and secret storage are out of scope here and stay the operator's responsibility — a compromised host isn't something this table, or an application setting, fixes.
+
 ## Trust boundaries
 
 LQ.AI runs as 7 services on a single operator-controlled deployment (Docker Compose for dev; Helm/Kubernetes for production per `deploy/helm/lq-ai/`). The Inference Gateway is the only component holding plaintext provider API keys per PRD §4; this defines the primary trust boundary. Everything internal to the operator's deployment is one trust zone; the LLM providers (Anthropic, OpenAI, etc.) are another; the operator's IdP (if integrated) is a third.
@@ -50,6 +57,7 @@ The five rows in the STRIDE table below cover the production-facing services (`a
 - [ADR 0011 Transparency-first model selection](../adr/0011-transparency-first-model-selection.md) — encrypted-at-rest provider keys.
 - [Encrypted-at-rest provider keys workflow](encrypted-keys.md) — master-key bootstrap and rotation.
 - [Vulnerability disclosure policy](../../SECURITY.md) — coordinated disclosure process.
+- [Boundary registers](boundary-registers.md) — a separate, orthogonal catalog that restrains *autonomous work* (economic, temporal, contextual limits, and how each is enforced) rather than the STRIDE threats above, which cover the five production services as they exist today.
 
 ## Update cadence
 

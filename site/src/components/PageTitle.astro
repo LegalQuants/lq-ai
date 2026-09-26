@@ -1,0 +1,99 @@
+---
+/**
+ * Page title override: namespace eyebrow, the H1, the kind label, the status
+ * badge, and the audience chips when the page names an audience.
+ *
+ * Starlight anchors its skip link at `#${PAGE_TITLE_ID}`, so the H1 keeps that
+ * id and stays the first thing in the block. The eyebrow is a paragraph, not a
+ * heading, so the document outline still starts at the H1.
+ */
+import Eyebrow from './Eyebrow.astro';
+import StatusBadge from './StatusBadge.astro';
+import { namespaceOf } from '../namespaces.mjs';
+import { KIND_LABELS } from '../../scripts/lib/routes.mjs';
+
+/**
+ * Starlight's skip link targets `#_top` (`PAGE_TITLE_ID` in its source). The
+ * constant is not a public export, so it is restated here; if a Starlight
+ * upgrade changes it, the skip link stops landing on the H1 and the a11y gate
+ * catches it.
+ */
+const PAGE_TITLE_ID = '_top';
+
+const { id, entry } = Astro.locals.starlightRoute;
+const { title, status, audience, kind } = entry.data;
+
+const namespace = namespaceOf(id);
+---
+
+<div class="lq-page-title">
+  {namespace && <Eyebrow text={namespace.label} />}
+  <h1 id={PAGE_TITLE_ID}>{title}</h1>
+  {
+    kind && (
+      // Reuses the eyebrow's already-vetted-for-contrast caption style rather
+      // than inventing a new one — Iris asked that a reader can tell at a
+      // glance whether a page is a how-to, an explanation or reference, and a
+      // short caption right under the title says that before the article text
+      // does. It carries no heading level, same as the namespace eyebrow.
+      <Eyebrow text={KIND_LABELS[kind]} as="p" class="lq-page-title__kind" />
+    )
+  }
+  {
+    (status || audience?.length) && (
+      <div class="lq-page-title__meta">
+        {status && <StatusBadge status={status} />}
+        {audience?.length ? (
+          <ul class="lq-page-title__audience" aria-label="Written for">
+            {audience.map((who) => (
+              <li class="lq-chip">{who}</li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    )
+  }
+</div>
+
+<style>
+  @layer starlight.core {
+    .lq-page-title {
+      margin-top: 1rem;
+    }
+
+    h1 {
+      margin-top: 0.35rem;
+      font-size: var(--sl-text-h1);
+      line-height: var(--sl-line-height-headings);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--sl-color-white);
+    }
+
+    /* `.lq-page-title__kind` lands on the <p> rendered by the child <Eyebrow>
+       component, not on an element in this file's own template — Astro only
+       scopes styles to elements a component's own template literally
+       contains, so this rule has to opt out of scoping with :global() or it
+       would silently do nothing. */
+    :global(.lq-page-title__kind) {
+      margin-top: 0.35rem;
+    }
+
+    .lq-page-title__meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+    }
+
+    .lq-page-title__audience {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+  }
+</style>

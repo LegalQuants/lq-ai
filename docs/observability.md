@@ -7,6 +7,28 @@
 > not yet shipped is listed in [§6 — What's not yet shipped](#6-whats-not-yet-shipped)
 > with links to the tracking DE entries.
 
+## In short
+
+Two kinds of visibility are always on: structured logs, and Prometheus's `/metrics`
+endpoints on the api and gateway. `/metrics` needs no configuration or authentication
+and is reachable from the Docker host's loopback interface and from inside the
+Compose network. Traces are opt-in: nothing leaves the deployment until you set an
+OTLP endpoint, at which point the api and gateway emit domain-specific spans —
+citation checking, anonymization, skills, inference dispatch, playbooks, autonomous
+tool calls — alongside standard HTTP instrumentation. The autonomous-session audit
+log is separate from tracing and always on: M4 autonomous-session lifecycle events
+write rows to the local `audit_log` table regardless of OTel configuration.
+Anonymization spans carry only entity counts and type labels — never raw entity
+values — even when traces go to a third-party backend; other domain spans record
+their own structured attributes (resource IDs, enum/status labels, numeric metrics
+such as cost and confidence) but never raw document text or request parameters.
+
+Coverage isn't complete: the streaming inference path, some playbook nodes, and
+log-to-trace correlation aren't instrumented yet, and two documented outcomes — a
+`refused` metric label and the `autonomous_session.started` audit action — are
+defined but never actually written. See [§6](#6-whats-not-yet-shipped) and the
+"Known gap" notes below before building an alert on either.
+
 For the architectural context see [docs/architecture.md](architecture.md) §OBS and the
 "What the diagram doesn't show" section. For the deployment recipes see
 [deploy/observability/README.md](../deploy/observability/README.md).
@@ -162,7 +184,7 @@ this span — tracked at [DE-317](PRD.md#de-317--inferencedispatch-span-on-the-s
 
 | Attribute | Description |
 |---|---|
-| `inference.provider` | Provider name: `anthropic`, `openai`, `azure_openai`, `ollama` |
+| `inference.provider` | The provider's configured `name` from `gateway.yaml` (for example `anthropic-prod`, `ollama-local`) — the operator-chosen entry name, not the adapter `type` |
 | `inference.model` | Model ID as sent to the provider |
 | `inference.tier` | Routed inference tier (1–5) |
 | `inference.outcome` | `success`, `provider_error`, `network_error`, or `unavailable` (the last when no adapter could be instantiated). The `provider_error` / `network_error` labels come from `outcome_label_from_error` in `gateway/app/router.py`; `unavailable` is set on the `NoAdapterAvailableError` path in `gateway/app/api/inference.py`. |
@@ -229,9 +251,14 @@ The autonomous spans also write audit rows — see [§2.4 — Audit actions](#au
 ### Metrics
 
 Prometheus metrics are served by the api (`:8000/metrics`) and gateway
-(`:8001/metrics`). These endpoints are always on but are reachable only inside the
-Compose network (or wherever the operator's reverse proxy routes them) — they are
-not exposed on a public interface by default.
+(`:8001/metrics`). These endpoints are always on and carry no authentication (the
+gateway's key check is attached to its `/v1` routers, not to `/metrics`). They are
+not container-internal: `docker-compose.yml` publishes both services on the host's
+loopback interface by default (`127.0.0.1:8000`, `127.0.0.1:8001`), so any process on
+the Docker host can scrape them. They stay off other interfaces unless the operator
+changes `API_BIND_ADDR` / `GATEWAY_BIND_ADDR` or routes them through a reverse proxy;
+the shipped proxy recipes forward only `/lq-ai-api/v1/*` to the api, so `/metrics` is
+not on the proxied path unless added.
 
 | Metric | Type | Labels | Description |
 |---|---|---|---|
@@ -255,7 +282,9 @@ a `tier_below_minimum` gateway error **without** incrementing this counter. Trea
 ### Audit actions
 
 The M4 Autonomous Layer writes structured audit rows to the `audit_log` table for
-every session lifecycle event, distinct from OTel spans. All autonomous-session
+session lifecycle events, distinct from OTel spans. Coverage is not complete: the
+`started` action is reserved but never written at session creation (see the known
+gap below). All autonomous-session
 writes flow through `autonomous_audit` (`api/app/autonomous/audit.py`), which
 stamps a canonical `autonomous_session.<event>` action and gates the `details`
 dict to counts, type labels, IDs, costs, and enums — **never raw entity values**.
@@ -290,6 +319,11 @@ Structured logs are emitted by both services. **Log-trace correlation (injecting
 [DE-300](PRD.md#de-300--log-trace-correlation-via-structured-logger-trace_id--span_id-injection-otel-deepening-de-b).
 Until DE-300 lands, pivoting from a span in Tempo or Honeycomb to the logs for that
 request requires matching on timestamp + `service.name` manually.
+
+Before attributing a timeout in the logs to the model, check which layer timed out: the gateway's
+provider adapters (Anthropic, OpenAI and Ollama) default to 600 s, but the api's own client to the
+gateway waits 60 s and its streaming call inherits that. See
+[Something is wrong](operate/something-is-wrong.md#silent-degrade) for both layers.
 
 ---
 
@@ -354,9 +388,11 @@ or a per-signal endpoint is set, **no traces leave the deployment.** The OTel SD
 present in the service images but the TracerProvider is never initialized, and spans
 are silently dropped.
 
-Prometheus `/metrics` is always on. It is served on the internal Docker network only
-(`:8000` for api, `:8001` for gateway); the operator's reverse proxy or a scrape
-configuration inside the Compose network is required to reach it. The metrics
+Prometheus `/metrics` is always on and unauthenticated. With the default Compose
+bindings it is reachable from the Docker host's loopback interface (`127.0.0.1:8000`
+for api, `127.0.0.1:8001` for gateway) as well as from inside the Compose network;
+reaching it from anywhere else requires the operator to rebind the port or route it
+through a reverse proxy. The metrics
 endpoint does not emit data to any external destination — it is a pull surface, not
 a push surface.
 

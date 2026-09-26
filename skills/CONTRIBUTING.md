@@ -1,5 +1,12 @@
 # Contributing Skills to LQ.AI
 
+## In short
+
+- A skill's `author` field alone doesn't prove it was reviewed — a real review names who checked it, what they tested, and what they found.
+- Any skill with legal substance needs a named human attestation before it merges: a practicing attorney certifies in the PR description that they reviewed the content and it reflects reasonable practice in the stated jurisdiction(s) — either as the skill's co-author, or as the reviewing attorney when the author is a legal-ops practitioner or engineer. An AI agent cannot make this attestation.
+- Merge also needs review from a practicing attorney and an engineer, and any later change to a skill's substance goes through the same process again.
+- No shipped skill records the attesting attorney's name in its own metadata: 14 of the 15 first-party `SKILL.md` files list `author: LegalQuants`, and the 15th (`skill-creator`) carries no `lq_ai:` block at all — the merging pull request is the only place to find a skill's attestation record.
+
 Skills are the canonical artifact of value in this project. **When the project produces a wrong answer, the answer to "why" is almost always in a `SKILL.md` somewhere. Improving LQ.AI is mostly improving skills.**
 
 This document covers contributions of **skills containing legal substance** — the everyday work-product skills like NDA Review, MSA Review, DPA Checklist Review, and the dozens of related skills the deferred-enhancements list catalogs. The contribution path for skills is meaningfully different from the engineering contribution path because skills carry legal substance: the patterns they encode, the severity calibrations they apply, and the recommended language they suggest will affect real legal work in real organizations. The bar is correspondingly higher.
@@ -105,6 +112,8 @@ The full backlog is in [PRD §9](../docs/PRD.md#9-deferred-enhancements-and-iden
 
 Skills outside this catalog are also welcome — file an issue describing the use case and the proposed skill before investing time in authoring.
 
+**Where a new skill lands** is decided by [ADR 0024](../docs/adr/0024-jurisdiction-and-practice-area-expansion.md): a new domain skill or a new jurisdiction/regime for an existing skill is a community work-product contribution and routes to [`legalquants/lq-skills`](https://github.com/LegalQuants/lq-skills), not this repository. This repository's own `skills/` directory holds the curated first-party set; a change to an existing first-party skill (a new regime for DPA Checklist Review, for example) still follows the process below, in this repository.
+
 ---
 
 ## The contribution process
@@ -174,6 +183,13 @@ Contributors who are not themselves practicing attorneys can still author skills
 - **Author and have the skill reviewed by a practicing attorney before submission.** Add the reviewing attorney's name and acknowledgment to the PR description; the reviewer makes the attestation. This is the right path for legal-ops practitioners and engineers who want to contribute substantive skills.
 
 In both cases, the attesting attorney's name appears in the skill's metadata and the project's contributor credits.
+
+> [!NOTE]
+> **Professional duty** — An attestation is another lawyer's statement of care, not a transfer of your own. Relying on a skill's output in client work is an exercise of your competence and, where you supervise others using it, your supervision — the attesting attorney's name tells you who stood behind the substance at that version, not that the output is right for your matter. Each skill's "What this skill does not do" section is the boundary the attestation was made against; read it before the first client use.
+
+The attestation does not expire with time; it decays only with updates. There is no expiry date on an attestation — what happens instead is that any update to a skill's substance (a new perspective, a changed severity calibration, a regime added) goes through this same review-and-attest process again, calibrated to the size of the change. A skill that hasn't been touched since its `1.0.0` release still carries its original attestation; a skill on `1.3.0` carries whatever attestation covered the `1.3.0` change, on top of the ones before it.
+
+As of the checked commit, the commitment above (the attesting attorney's name in the skill's `author` field) is unmet in the shipped corpus: fourteen of the fifteen first-party `SKILL.md` files record `author: LegalQuants`, and the fifteenth (`skill-creator`) carries no `lq_ai:` block at all — so no shipped skill records an individual attesting attorney's name in frontmatter, and no `SKILL.md` carries a dedicated attestation field. The merging pull request is therefore the only per-skill attestation record today; if you need the attesting record for a specific skill, the PR history is currently the only place to find it.
 
 ### 4. Review
 

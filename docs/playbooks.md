@@ -21,6 +21,28 @@ substance posture, and the known limitations. It pairs with
 referenced but, as documented below, is *not yet wired* into the
 executor's per-position output).
 
+## In short
+
+A skill is a workflow the model follows in chat. A playbook is
+different: it's a set of contract positions and acceptable fallbacks
+that a fixed executor runs against one target document, position by
+position — through its own execute endpoint and UI page, not the chat
+composer.
+
+- **Each position gets a verdict** — matches your standard, a fallback
+  tier, deviates with a drafted redline, or is missing — plus the
+  clause it's based on.
+- **Five built-in playbooks ship** (Mutual NDA, Unilateral NDA favoring
+  the discloser, SaaS MSA from the customer's perspective, Commercial
+  Services MSA from the purchaser's perspective, GDPR DPA
+  controller-to-processor) as unvetted starting points — you can't edit
+  or delete one directly, only fork it into your own copy.
+- **The Easy Playbook wizard** drafts a new playbook from a corpus of
+  your own past agreements; review and edit the draft before saving.
+- **Check the clause yourself.** The executor's citations are chunk
+  references, not Citation-Engine-verified, so a citation count isn't
+  proof a verdict is right.
+
 ---
 
 ## Scope
@@ -391,7 +413,13 @@ admins. The canonical mutation path is fork-then-edit — create a new
 owned playbook (which the operator can edit/delete) rather than
 modifying the shipped one. The `POST /api/v1/playbooks` endpoint always
 sets `created_by = caller.id`, so the only way to mint a new built-in
-is a seed migration.
+is a seed migration. This mirrors the forking posture
+[`skills/CONTRIBUTING.md`](../skills/CONTRIBUTING.md) sets for skills —
+fork, modify, run your version — applied to a playbook's positions
+rather than to a skill's workflow: a built-in is a starting point
+drafted to give an operator a head start, not a vetted template, and
+never a substitute for their own attorney reviewing every position
+before relying on it for client work.
 
 ## Legal-substance posture
 

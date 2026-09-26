@@ -1,6 +1,6 @@
 # Mini-PRD: Reverse-Proxy + TLS Deployment Recipes
 
-> **Status:** Open for contribution
+> **Status:** Shipped in #429 — the three recipes live under `deploy/reverse-proxy/` (see its README for their evidence level). This document is kept as the design record.
 > **Effort:** S
 > **Contributor profile:** Junior-to-mid DevOps engineer. Familiar with Docker Compose, reverse proxies (at least one of Caddy, Traefik, nginx), and TLS certificate flows (Let's Encrypt for auto-issuance; operator-provided for manual). ~one focused day.
 > **Mentor:** Maintainer (Kevin Keller, via PR review)

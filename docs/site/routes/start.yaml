@@ -1,0 +1,63 @@
+- route: start/is-it-for-you
+  source: docs/start/is-it-for-you.md
+  title: Is LQ.AI right for your team?
+  description: LQ.AI suits teams that are ready to run and maintain their own application — try the tasks you care about before deciding.
+  kind: explanation
+  audience: [operator, evaluator]
+  status: draft
+  sources:
+    - docs/comparison.md
+    - docs/PRD.md
+    - docs/HONEST-STATE.md
+    - docs/adr/0001-openwebui-fork-pin.md
+    - README.md
+    - api/app/api/auth.py
+    - web/backend/open_webui/config.py
+  sidebar:
+    order: 2
+  next: [start/what-it-touches, start/quickstart]
+
+- route: start/what-it-touches
+  source: docs/start/what-it-touches.md
+  title: What gets installed and where data goes
+  description: Docker Compose starts eight services — the website, the services that handle requests and AI connections, two background workers, and three storage services.
+  kind: reference
+  audience: [operator, evaluator]
+  status: draft
+  sources:
+    - README.md
+    - docs/architecture.md
+    - docker-compose.yml
+    - docs/security/anonymization.md
+    - docs/HONEST-STATE.md
+  sidebar:
+    order: 3
+  next: [start/quickstart]
+
+- route: start/quickstart
+  source: docs/quickstart.md
+  title: Set up LQ.AI and try your first document
+  description: Install LQ.AI, sign in, and upload a test document without an AI-service key, then connect a model when you're ready to ask questions.
+  kind: how-to
+  audience: [operator, evaluator]
+  status: draft
+  sources:
+    - README.md
+    - docs/HONEST-STATE.md
+    - docs/PRD.md
+  sidebar:
+    order: 4
+
+- route: start/where-help-lives
+  source: docs/start/where-help-lives.md
+  title: Where to find help
+  description: Open Learn inside the running app for feature walkthroughs; use this site for installation, maintenance, and data-handling questions instead.
+  kind: explanation
+  audience: [operator, evaluator]
+  status: draft
+  sources:
+    - README.md
+    - web/src/lib/lq-ai/tabs.ts
+    - SECURITY.md
+  sidebar:
+    order: 6
