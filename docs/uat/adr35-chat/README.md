@@ -27,11 +27,31 @@ The successful fixture database is `lqai_demo3`; earlier failed runs remain in
 separate disposable fixtures. These services are temporary local UAT facilities,
 not deployment evidence for the full Docker composition.
 
-While those services remain running, open the
-[completed run](http://127.0.0.1:15173/lq-ai/autonomous/orchestration/chat/129b14e7-d75f-45b1-aa9d-a0d1267042e4)
-or [new request form](http://127.0.0.1:15173/lq-ai/autonomous/orchestration/chat).
-The browser was left signed in to the disposable fixture account. The model
-profile remains disabled by default in committed configuration.
+The same fixture is now running with the orchestration demo settings removed.
+Open a [completed run](http://127.0.0.1:15173/lq-ai/autonomous/orchestration/chat/699ea090-85ce-45ab-9426-8f4247a680d4)
+or the [disabled request page](http://127.0.0.1:15173/lq-ai/autonomous/orchestration/chat).
+The model profile remains disabled by default in committed configuration.
+
+## Post-demo switch-off check
+
+After human UAT, the same `lqai_demo3` database, Redis instance, account and
+run history were retained. The API, arq worker and gateway were restarted with
+the same connection settings but **no `LQ_AI_ORCHESTRATION_*` environment
+variables**. The old demo environment file was removed; no fresh database was
+substituted. The frontend continues to serve this branch on port 15173.
+The gateway's local model route was held constant to isolate the effect of
+switching off orchestration; ordinary chat still offers that route.
+
+The API and gateway health checks passed. In the signed-in browser, Home,
+ordinary Chats and Autonomous sessions loaded, and a new ordinary chat opened
+with its composer. A completed orchestration run still showed its plan, child
+answers, agreement and combined answer. The new orchestration request page
+reported that model orchestration was not enabled and showed no intake form.
+No model message was sent during this switch-off check. The Autonomous sessions
+page still displays the “Orchestration chat (experimental)” link, which leads to
+that disabled page; this is a visible UX footprint even with the feature off.
+Human UAT-11 remains for the reviewer to confirm, and this check does not prove
+that ordinary chat inference or every app workflow is unaffected.
 
 ## Successful run
 
