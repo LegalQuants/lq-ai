@@ -208,7 +208,7 @@
 <div class="sessions-page">
 	<header class="page-header">
 		<div class="page-header-row">
-			<div>
+			<div class="page-header-copy">
 				<h1 class="lq-text-page-h">Autonomous sessions</h1>
 				<p class="page-intro">
 					Audit what LQVern did — every autonomous run, its cost, current phase, and terminal state.
@@ -216,6 +216,8 @@
 				</p>
 			</div>
 			<button type="button" class="new-button" on:click={openRunModal}> Run now </button>
+		</div>
+		<div class="experimental-controls" aria-label="Experimental orchestration">
 			{#if chatAvailability === 'enabled'}
 				<a href="/lq-ai/autonomous/orchestration/chat" class="underline"
 					>Orchestration chat (experimental)</a
@@ -511,6 +513,25 @@
 		justify-content: space-between;
 		gap: var(--lq-space-4);
 		flex-wrap: wrap;
+	}
+
+	.page-header-copy {
+		flex: 1 1 24rem;
+		min-width: 0;
+	}
+
+	.experimental-controls {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: var(--lq-space-2) var(--lq-space-4);
+		font-size: 14px;
+	}
+
+	.experimental-controls a,
+	.experimental-controls button {
+		max-width: 100%;
+		text-align: left;
 	}
 
 	.page-intro {
