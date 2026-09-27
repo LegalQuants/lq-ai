@@ -58,6 +58,18 @@ restored both messages. This exercises basic chat creation, database persistence
 and inference after the demo switch-off. Human UAT-11 remains for the reviewer
 to confirm; other app workflows were not exercised in this check.
 
+## Second-user isolation check
+
+A separate disposable member account, `adr35-reviewer@example.com`, was added
+to the **same** fixture database with Autonomous access enabled. It has no
+admin role and owns no sessions. Its own API login succeeded. With that
+account's token, `GET /autonomous/sessions` returned 200 and zero rows;
+reading the owner's completed chat run
+`699ea090-85ce-45ab-9426-8f4247a680d4` through either the chat-run endpoint
+or the autonomous-session endpoint returned 404. Chat orchestration capabilities
+still reported disabled. This verifies the live API isolation for this pair of
+accounts. Human UAT-12 remains for the reviewer to exercise in the browser.
+
 ## Successful run
 
 User goal:
