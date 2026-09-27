@@ -1,0 +1,321 @@
+{
+  "root_id": "fbc1b9cc-bc4b-49b6-af39-26e9212a04fc",
+  "status": "rejected",
+  "stop_reason": null,
+  "planning": {
+    "contract_version": 1,
+    "plan_id": "c1d5436b-41e5-45df-b447-716493f58969",
+    "root_id": "fbc1b9cc-bc4b-49b6-af39-26e9212a04fc",
+    "owner_id": "1a035000-0000-4000-8000-000000000002",
+    "project_id": "1a035000-0000-4000-8000-000000000001",
+    "goal": "Focus only on notice obligations and the duties that survive termination of this fictional agreement. Propose two focused questions, one for notices and one for surviving duties.",
+    "policy_version": "5f4ae5d232c7965df77909e84bf097d56447a05574bd59315ed2df6846c3f9ed",
+    "root": {
+      "resources": {
+        "document_ids": [],
+        "source_names": []
+      },
+      "grants": {
+        "intake": [],
+        "analysis": [
+          "plan"
+        ],
+        "drafting": [],
+        "ethics_review": [],
+        "delivery": []
+      },
+      "skill": {
+        "name": "orchestration-chat-demo",
+        "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d"
+      },
+      "minimum_inference_tier": 1,
+      "maximum_egress_tier": 0,
+      "privileged": false,
+      "anonymize": true
+    },
+    "delegation_grants": {
+      "intake": [],
+      "analysis": [
+        "plan",
+        "run_skill",
+        "workspace_read",
+        "workspace_write"
+      ],
+      "drafting": [
+        "run_skill",
+        "workspace_read",
+        "workspace_share",
+        "workspace_write"
+      ],
+      "ethics_review": [],
+      "delivery": []
+    },
+    "budget_usd": "2.0000",
+    "root_allowance_usd": "0.0000",
+    "planning_allowance_usd": "0.0000",
+    "max_active_children": 2,
+    "deadline": "2026-09-27T09:20:31.292702Z",
+    "attempt_timeout_seconds": 300,
+    "packet_digest": "31621b3b2ac3b863a5fdfaf6f9e0021d24751e041654792d17b776d3d193b6db",
+    "gateway_revision": "2e80c52a5ddf325ba9ab468c11e751a522ae0f025414bf1fcd9914502ca9ae79",
+    "model": "local-uat/gemma4:26b-mlx",
+    "child_skill_version": "1.0.0",
+    "root_skill_version": "1.0.0"
+  },
+  "effects": [
+    {
+      "effect_key": "chat:plan:v1",
+      "status": "completed",
+      "reserved_usd": "0.0000",
+      "charged_usd": "0.0000",
+      "intent": "plan",
+      "created_at": "2026-09-27T08:20:31.718183Z",
+      "completed_at": "2026-09-27T08:20:50.345449Z",
+      "skill": {
+        "name": "orchestration-chat-demo",
+        "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d",
+        "version": "1.0.0"
+      },
+      "accounting": {
+        "basis": "conservative-estimate-or-reported-usage-v1",
+        "model": "gemma4:26b-mlx",
+        "provider": "local-uat",
+        "charged_usd": "0.0000",
+        "reserved_usd": "0.0000",
+        "config_digest": "3fc6de655639f07216016264cb218ef4dc5e9aa5c5bb7ea484e13f9f4b080a0c",
+        "estimated_prompt_tokens": 7915,
+        "reported_usage_cost_usd": "0.0000"
+      }
+    }
+  ],
+  "spent_usd": "0.0000",
+  "reserved_usd": "0.0000",
+  "tree": {
+    "root_id": "fbc1b9cc-bc4b-49b6-af39-26e9212a04fc",
+    "status": "rejected",
+    "stop_reason": null,
+    "plan": {
+      "contract_version": 2,
+      "planning_digest": "b0cf7b2c98665d30ada0e4852e8511350df99162492072c455c6c97f7f24f60b",
+      "plan_id": "c1d5436b-41e5-45df-b447-716493f58969",
+      "revision": 1,
+      "root_id": "fbc1b9cc-bc4b-49b6-af39-26e9212a04fc",
+      "project_id": "1a035000-0000-4000-8000-000000000001",
+      "owner_id": "1a035000-0000-4000-8000-000000000002",
+      "goal": "Focus only on notice obligations and the duties that survive termination of this fictional agreement. Propose two focused questions, one for notices and one for surviving duties.",
+      "policy_version": "5f4ae5d232c7965df77909e84bf097d56447a05574bd59315ed2df6846c3f9ed",
+      "root": {
+        "resources": {
+          "document_ids": [],
+          "source_names": []
+        },
+        "grants": {
+          "intake": [],
+          "analysis": [
+            "plan",
+            "run_skill",
+            "workspace_read",
+            "workspace_write"
+          ],
+          "drafting": [
+            "run_skill",
+            "workspace_read",
+            "workspace_share",
+            "workspace_write"
+          ],
+          "ethics_review": [],
+          "delivery": []
+        },
+        "skill": {
+          "name": "orchestration-chat-demo",
+          "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d"
+        },
+        "minimum_inference_tier": 1,
+        "maximum_egress_tier": 0,
+        "privileged": false,
+        "anonymize": true
+      },
+      "delegation_grants": {
+        "intake": [],
+        "analysis": [
+          "plan",
+          "run_skill",
+          "workspace_read",
+          "workspace_write"
+        ],
+        "drafting": [
+          "run_skill",
+          "workspace_read",
+          "workspace_share",
+          "workspace_write"
+        ],
+        "ethics_review": [],
+        "delivery": []
+      },
+      "children": [
+        {
+          "dispatch_id": "2bdf0b8e-fd16-4cf9-8620-34b6912df073",
+          "profile": "research",
+          "task": {
+            "topic": "Notice requirements and timeframes",
+            "question": "What are the notice requirements and timeframes specified for non-renewal, termination for convenience, and material breach?",
+            "boundaries": "Identify the specific notice requirements and timeframes mentioned for non-renewal, termination for convenience, and material breach as explicitly stated in the agreement.",
+            "output_contract": "Notice requirements and timeframes for non-renewal, termination for convenience, and material breach.",
+            "stopping_condition": "One answer provided."
+          },
+          "execution": {
+            "resources": {
+              "document_ids": [],
+              "source_names": []
+            },
+            "grants": {
+              "intake": [],
+              "analysis": [
+                "plan",
+                "run_skill",
+                "workspace_read",
+                "workspace_write"
+              ],
+              "drafting": [
+                "run_skill",
+                "workspace_read",
+                "workspace_share",
+                "workspace_write"
+              ],
+              "ethics_review": [],
+              "delivery": []
+            },
+            "skill": {
+              "name": "contract-qa",
+              "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42"
+            },
+            "minimum_inference_tier": 1,
+            "maximum_egress_tier": 0,
+            "privileged": false,
+            "anonymize": true
+          },
+          "budget_usd": "0.0000"
+        },
+        {
+          "dispatch_id": "ebd15a07-6814-4af7-b125-e09bfa0b26fa",
+          "profile": "research",
+          "task": {
+            "topic": "Surviving obligations",
+            "question": "Which obligations are specified to survive the termination of the agreement, and is a survival period stated for confidentiality?",
+            "boundaries": "Identify the obligations that survive termination and any mentioned survival periods for those obligations, specifically for confidentiality.",
+            "output_contract": "A list of surviving obligations and any specified survival periods.",
+            "stopping_condition": "One answer provided."
+          },
+          "execution": {
+            "resources": {
+              "document_ids": [],
+              "source_names": []
+            },
+            "grants": {
+              "intake": [],
+              "analysis": [
+                "plan",
+                "run_skill",
+                "workspace_read",
+                "workspace_write"
+              ],
+              "drafting": [
+                "run_skill",
+                "workspace_read",
+                "workspace_share",
+                "workspace_write"
+              ],
+              "ethics_review": [],
+              "delivery": []
+            },
+            "skill": {
+              "name": "contract-qa",
+              "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42"
+            },
+            "minimum_inference_tier": 1,
+            "maximum_egress_tier": 0,
+            "privileged": false,
+            "anonymize": true
+          },
+          "budget_usd": "0.0000"
+        }
+      ],
+      "budget_usd": "2.0000",
+      "root_allowance_usd": "0.0000",
+      "max_active_children": 2,
+      "deadline": "2026-09-27T09:20:31.292702Z",
+      "attempt_timeout_seconds": 300
+    },
+    "plan_hash": "8340e3b5b26e3333bc40fe2ded40847b879f3c1f611f13504bfabf2005a1693c",
+    "approved": false,
+    "mode": "model_demo_v1",
+    "verification": "unverified",
+    "root": {
+      "session_id": "fbc1b9cc-bc4b-49b6-af39-26e9212a04fc",
+      "status": "halted",
+      "phase": "analysis",
+      "allocation_usd": "0.0000",
+      "spent_usd": "0.0000",
+      "reserved_usd": "0.0000",
+      "updated_at": "2026-09-27T08:20:50.350278Z",
+      "outcome": null,
+      "effects": [
+        {
+          "effect_key": "chat:plan:v1",
+          "status": "completed",
+          "reserved_usd": "0.0000",
+          "charged_usd": "0.0000",
+          "intent": "plan",
+          "created_at": "2026-09-27T08:20:31.718183Z",
+          "completed_at": "2026-09-27T08:20:50.345449Z",
+          "skill": {
+            "name": "orchestration-chat-demo",
+            "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d",
+            "version": "1.0.0"
+          },
+          "accounting": {
+            "basis": "conservative-estimate-or-reported-usage-v1",
+            "model": "gemma4:26b-mlx",
+            "provider": "local-uat",
+            "charged_usd": "0.0000",
+            "reserved_usd": "0.0000",
+            "config_digest": "3fc6de655639f07216016264cb218ef4dc5e9aa5c5bb7ea484e13f9f4b080a0c",
+            "estimated_prompt_tokens": 7915,
+            "reported_usage_cost_usd": "0.0000"
+          }
+        }
+      ],
+      "files": []
+    },
+    "children": [
+      {
+        "session_id": "2bdf0b8e-fd16-4cf9-8620-34b6912df073",
+        "status": "pending",
+        "phase": "intake",
+        "allocation_usd": "0.0000",
+        "spent_usd": "0",
+        "reserved_usd": "0",
+        "updated_at": null,
+        "outcome": null,
+        "effects": [],
+        "files": []
+      },
+      {
+        "session_id": "ebd15a07-6814-4af7-b125-e09bfa0b26fa",
+        "status": "pending",
+        "phase": "intake",
+        "allocation_usd": "0.0000",
+        "spent_usd": "0",
+        "reserved_usd": "0",
+        "updated_at": null,
+        "outcome": null,
+        "effects": [],
+        "files": []
+      }
+    ],
+    "spent_usd": "0.0000",
+    "reserved_usd": "0.0000",
+    "result": null,
+    "partial_summary": "Orchestration demonstration stopped. Findings are unverified.\n\nNotice requirements and timeframes: No delivered outcome.\nSurviving obligations: No delivered outcome."
+  }
+}

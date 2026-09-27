@@ -23,7 +23,7 @@
 	import { goto } from '$app/navigation';
 
 	import { autonomousApi, skillsApi, knowledgeBasesApi, projectsApi } from '$lib/lq-ai/api';
-	import { orchestrationApi } from '$lib/lq-ai/api/orchestration';
+	import { orchestrationChatApi } from '$lib/lq-ai/api/orchestration';
 	import * as playbooksApi from '$lib/lq-ai/api/playbooks';
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
 	import type { AutonomousSessionRead } from '$lib/lq-ai/api/autonomous';
@@ -38,7 +38,7 @@
 	let actionError: string | null = null;
 	let actionSuccess: string | null = null;
 	let pendingHaltId: string | null = null;
-	let demoAvailability: 'checking' | 'enabled' | 'disabled' | 'unavailable' = 'checking';
+	let chatAvailability: 'checking' | 'enabled' | 'disabled' | 'unavailable' = 'checking';
 
 	// ---------------------------------------------------------------------------
 	// Run-now modal state
@@ -66,15 +66,15 @@
 	onMount(() => {
 		load();
 		loadPickerData();
-		loadDemoAvailability();
+		loadChatAvailability();
 	});
 
-	async function loadDemoAvailability(): Promise<void> {
+	async function loadChatAvailability(): Promise<void> {
 		try {
-			const caps = await orchestrationApi.capabilities();
-			demoAvailability = caps.enabled ? 'enabled' : 'disabled';
+			const caps = await orchestrationChatApi.capabilities();
+			chatAvailability = caps.enabled ? 'enabled' : 'disabled';
 		} catch {
-			demoAvailability = 'unavailable';
+			chatAvailability = 'unavailable';
 		}
 	}
 
@@ -177,7 +177,9 @@
 		runError = null;
 		try {
 			const session = await autonomousApi.runNow({
-				...(runTargetKind === 'skill' ? { skill_ref: runSkillRef } : { playbook_id: runPlaybookId }),
+				...(runTargetKind === 'skill'
+					? { skill_ref: runSkillRef }
+					: { playbook_id: runPlaybookId }),
 				...(runKbId ? { target_kb_id: runKbId } : {}),
 				...(runProjectId ? { project_id: runProjectId } : {}),
 				...(runMaxCostUsd.trim() !== '' ? { max_cost_usd: runMaxCostUsd.trim() } : {})
@@ -195,21 +197,25 @@
 <div class="sessions-page">
 	<header class="page-header">
 		<div class="page-header-row">
-			<div>
+			<div class="page-header-copy">
 				<h1 class="lq-text-page-h">Autonomous sessions</h1>
 				<p class="page-intro">
-					Audit what LQVern did — every autonomous run, its cost, current phase, and terminal
-					state. Running sessions can be halted inline. Select a row to view the full receipt.
+					Audit what LQVern did — every autonomous run, its cost, current phase, and terminal state.
+					Running sessions can be halted inline. Select a row to view the full receipt.
 				</p>
 			</div>
 			<button type="button" class="new-button" on:click={openRunModal}> Run now </button>
-			{#if demoAvailability === 'enabled'}
-				<a href="/lq-ai/autonomous/orchestration" class="underline">Orchestration demo</a>
+		</div>
+		<div class="experimental-controls" aria-label="Experimental orchestration">
+			{#if chatAvailability === 'enabled'}
+				<a href="/lq-ai/autonomous/orchestration/chat" class="underline"
+					>Orchestration chat (experimental)</a
+				>
 			{:else}
 				<button type="button" disabled class="text-sm text-gray-500">
-					Orchestration demo — {demoAvailability === 'disabled'
+					Orchestration chat (experimental) — {chatAvailability === 'disabled'
 						? 'disabled by operator'
-						: demoAvailability === 'checking'
+						: chatAvailability === 'checking'
 							? 'checking availability…'
 							: 'unavailable'}
 				</button>
@@ -267,9 +273,12 @@
 						</td>
 						<td class="date-cell">{formatCreatedAt(session.created_at)}</td>
 						<td class="sessions-table-actions">
-							<a href="/lq-ai/autonomous/sessions/{session.id}" class="action-link">
-								View
-							</a>
+							<a
+								href={session.params.orchestration_profile === 'model_demo_v1'
+									? `/lq-ai/autonomous/orchestration/chat/${session.id}`
+									: `/lq-ai/autonomous/sessions/${session.id}`}
+								class="action-link">View</a
+							>
 							{#if isHaltable(session.status)}
 								<button
 									type="button"
@@ -355,22 +364,20 @@
 								{/each}
 							</select>
 						{/if}
+					{:else if pickerLoading}
+						<p class="picker-loading">Loading playbooks…</p>
 					{:else}
-						{#if pickerLoading}
-							<p class="picker-loading">Loading playbooks…</p>
-						{:else}
-							<select
-								class="modal-select"
-								bind:value={runPlaybookId}
-								disabled={runSubmitting}
-								aria-label="Select playbook"
-							>
-								<option value="">— Select a playbook —</option>
-								{#each playbooks as pb (pb.id)}
-									<option value={pb.id}>{pb.name}</option>
-								{/each}
-							</select>
-						{/if}
+						<select
+							class="modal-select"
+							bind:value={runPlaybookId}
+							disabled={runSubmitting}
+							aria-label="Select playbook"
+						>
+							<option value="">— Select a playbook —</option>
+							{#each playbooks as pb (pb.id)}
+								<option value={pb.id}>{pb.name}</option>
+							{/each}
+						</select>
 					{/if}
 				</div>
 
@@ -484,6 +491,25 @@
 		justify-content: space-between;
 		gap: var(--lq-space-4);
 		flex-wrap: wrap;
+	}
+
+	.page-header-copy {
+		flex: 1 1 24rem;
+		min-width: 0;
+	}
+
+	.experimental-controls {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: var(--lq-space-2) var(--lq-space-4);
+		font-size: 14px;
+	}
+
+	.experimental-controls a,
+	.experimental-controls button {
+		max-width: 100%;
+		text-align: left;
 	}
 
 	.page-intro {

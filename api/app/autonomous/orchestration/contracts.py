@@ -13,7 +13,7 @@ import hashlib
 import json
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Annotated, Literal, Self
+from typing import Annotated, Any, Literal, Self
 from uuid import UUID
 
 from pydantic import (
@@ -22,9 +22,11 @@ from pydantic import (
     BeforeValidator,
     ConfigDict,
     Field,
+    SerializerFunctionWrapHandler,
     StringConstraints,
     field_serializer,
     field_validator,
+    model_serializer,
     model_validator,
 )
 
@@ -207,7 +209,8 @@ class ChildAssignment(Snapshot):
 class PreparedPlan(Snapshot):
     """Canonical executable plan built from resolved server policy, never an LLM."""
 
-    contract_version: Literal[1] = 1
+    contract_version: Literal[1, 2] = 1
+    planning_digest: Digest | None = None
     plan_id: UUID
     revision: Annotated[int, Field(ge=1)]
     root_id: UUID
@@ -242,6 +245,8 @@ class PreparedPlan(Snapshot):
 
     @model_validator(mode="after")
     def bounded_delegation(self) -> Self:
+        if (self.contract_version == 2) != (self.planning_digest is not None):
+            raise ValueError("model plans require their planning scope digest")
         if len({child.dispatch_id for child in self.children}) != len(self.children):
             raise ValueError("duplicate dispatch identity")
         if self.root_allowance_usd + sum(c.budget_usd for c in self.children) > self.budget_usd:
@@ -261,6 +266,13 @@ class PreparedPlan(Snapshot):
             if self.root.anonymize and not scope.anonymize:
                 raise ValueError("child disables required anonymization")
         return self
+
+    @model_serializer(mode="wrap")
+    def serialize_plan(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        value = handler(self)
+        if self.contract_version == 1:
+            value.pop("planning_digest", None)
+        return value
 
     def approval_hash(self) -> str:
         """Bind every field; canonicalize set order, UTC and monetary precision.

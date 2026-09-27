@@ -47,6 +47,7 @@ async def sweep_recovery(
     after: UUID | None = None,
     limit: int = 25,
     operation_timeout_seconds: int = 2,
+    profiles: tuple[str, ...] | None = None,
 ) -> RecoverySweep:
     """Process one page with isolated, independently committed recovery stages.
 
@@ -71,11 +72,20 @@ async def sweep_recovery(
     stmt = select(Root.session_id).where(
         or_(
             Root.status.in_(
-                ["awaiting_approval", "queued", "running", "waiting_children", "uncertain"]
+                [
+                    "planning",
+                    "awaiting_approval",
+                    "queued",
+                    "running",
+                    "waiting_children",
+                    "uncertain",
+                ]
             ),
             owned,
         )
     )
+    if profiles is not None:
+        stmt = stmt.where(Root.profile.in_(profiles))
     if after is not None:
         stmt = stmt.where(Root.session_id > after)
     async with asyncio.timeout(operation_timeout_seconds), store.sessions() as db:

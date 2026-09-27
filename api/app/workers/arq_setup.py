@@ -156,12 +156,12 @@ async def on_startup(ctx: dict[str, Any]) -> None:
     # No try/except: propagation is the contract (see docstring).
     holder = install_skill_registry(app, get_settings())
     settings = get_settings()
-    if settings.orchestration_demo_enabled:
+    if settings.orchestration_chat_enabled:
         from app.autonomous.orchestration.service import DemonstrationService
         from app.db.session import get_session_factory
 
         runtime = DemonstrationService(settings, holder, get_session_factory())
-        runtime.policy()  # Validate enabled configuration; never enable implicitly.
+        runtime.require_policy()
         await runtime.executor().checkpoints.setup()
         ctx["orchestration_runtime"] = runtime
     skill_count = len(holder.current().names())
@@ -231,7 +231,7 @@ def _build_cron_jobs() -> list[Any]:
         # advance next_run_at from each schedule's cron_expr (M4-B3).
         cron(autonomous_schedule_dispatcher, second=0),
     ]
-    if get_settings().orchestration_demo_enabled:
+    if get_settings().orchestration_chat_enabled:
         jobs.append(cron(orchestration_watchdog, second=15))
     return jobs
 

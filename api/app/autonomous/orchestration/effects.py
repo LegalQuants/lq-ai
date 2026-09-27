@@ -21,7 +21,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.autonomous.enums import ToolIntent
 from app.autonomous.guard import ToolResult, guarded_tool_call
-from app.autonomous.orchestration.contracts import ExecutionScope, Money, ShortText, Snapshot
+from app.autonomous.orchestration.contracts import (
+    ExecutionScope,
+    Money,
+    PreparedPlan,
+    ShortText,
+    Snapshot,
+)
 from app.autonomous.orchestration.inference import InferenceBinding, InferenceRoutes
 from app.autonomous.orchestration.policy import load_pinned_skill
 from app.autonomous.orchestration.sources import AuthoritySources, SourceBinding
@@ -160,6 +166,15 @@ class _Invocation:
         # effect. Leave the reservation for reconciliation, never auto-replay it.
         if result.outcome == "gateway_error":
             raise Conflict(message="Provider outcome is uncertain; reconciliation is required")
+        if self.inference_binding and self.view.planning:
+            snapshot = self.view.planning
+            result.data["skill"] = {
+                "name": self.view.scope.skill.name,
+                "digest": self.view.scope.skill.digest,
+                "version": snapshot.root_skill_version
+                if self.claim.root_id == self.claim.session_id
+                else snapshot.child_skill_version,
+            }
         await self.store._settle_effect(
             db,
             self.claim,
@@ -253,6 +268,8 @@ class GuardedEffects:
         if self.inference is not None:
             async with asyncio.timeout(view.lease_seconds):
                 binding = await self.inference.bind(view.plan, view.scope, params["messages"])
+            if view.planning and binding.gateway_revision != view.planning.gateway_revision:
+                raise Forbidden(message="Gateway configuration changed; start a new approved run")
             params["model"] = binding.policy.model_key
             params["max_tokens"] = binding.policy.max_output_tokens
             view = await self.store.execution_view(claim)
@@ -315,6 +332,8 @@ class GuardedEffects:
         if self.sources is None:
             raise Forbidden(message="Authority sources are not configured")
         view = await self.store.execution_view(claim)
+        if not isinstance(view.plan, PreparedPlan):
+            raise Forbidden(message="Planning cannot call authority sources")
         # No control or outcome transaction is open during gateway config I/O.
         async with asyncio.timeout(view.lease_seconds):
             binding = await self.sources.bind(

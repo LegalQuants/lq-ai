@@ -1516,6 +1516,90 @@ components:
       - new_password
       title: ChangePasswordRequest
       type: object
+    ChatCapabilities:
+      properties:
+        attempt_timeout_seconds:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Attempt Timeout Seconds
+        budget_usd:
+          anyOf:
+          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+            type: string
+          - type: 'null'
+          title: Budget Usd
+        child_skill:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Child Skill
+        deployment_children:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Deployment Children
+        enabled:
+          title: Enabled
+          type: boolean
+        model:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model
+        packet:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Packet
+        packet_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Packet Id
+        planning_allowance_usd:
+          anyOf:
+          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+            type: string
+          - type: 'null'
+          title: Planning Allowance Usd
+        planning_notice:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Planning Notice
+        profile:
+          anyOf:
+          - const: model_demo_v1
+            type: string
+          - type: 'null'
+          title: Profile
+        project_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Project Id
+        project_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Project Name
+        root_allowance_usd:
+          anyOf:
+          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+            type: string
+          - type: 'null'
+          title: Root Allowance Usd
+        title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Title
+      required:
+      - enabled
+      title: ChatCapabilities
+      type: object
     ChatCreateRequest:
       additionalProperties: false
       description: '``ChatCreate`` from backend-openapi.yaml.
@@ -1559,6 +1643,35 @@ components:
       required:
       - items
       title: ChatListResponse
+      type: object
+    ChatPlanRequest:
+      additionalProperties: false
+      properties:
+        goal:
+          $ref: '#/components/schemas/TaskText'
+        packet_id:
+          const: fictional-agreement-v1
+          default: fictional-agreement-v1
+          title: Packet Id
+          type: string
+        profile:
+          const: model_demo_v1
+          default: model_demo_v1
+          title: Profile
+          type: string
+        project_id:
+          format: uuid
+          title: Project Id
+          type: string
+        request_id:
+          format: uuid
+          title: Request Id
+          type: string
+      required:
+      - request_id
+      - project_id
+      - goal
+      title: ChatPlanRequest
       type: object
     ChatResponse:
       description: '``Chat`` schema from backend-openapi.yaml.
@@ -1617,6 +1730,55 @@ components:
       - created_at
       - updated_at
       title: ChatResponse
+      type: object
+    ChatRunRead:
+      properties:
+        effects:
+          items:
+            $ref: '#/components/schemas/EffectRead'
+          title: Effects
+          type: array
+        packet:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Packet
+        planning:
+          $ref: '#/components/schemas/PlanningSnapshot'
+        reserved_usd:
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Reserved Usd
+          type: string
+        root_id:
+          format: uuid
+          title: Root Id
+          type: string
+        spent_usd:
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Spent Usd
+          type: string
+        status:
+          title: Status
+          type: string
+        stop_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Stop Reason
+        tree:
+          anyOf:
+          - $ref: '#/components/schemas/TreeRead'
+          - type: 'null'
+      required:
+      - root_id
+      - status
+      - stop_reason
+      - planning
+      - effects
+      - spent_usd
+      - reserved_usd
+      - tree
+      title: ChatRunRead
       type: object
     ChatSearchHit:
       description: 'One row in the chat-search response.
@@ -1956,57 +2118,6 @@ components:
       - grace_period_days
       title: DeleteScheduledResponse
       type: object
-    DemoCapabilities:
-      properties:
-        deployment_children:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Deployment Children
-        enabled:
-          title: Enabled
-          type: boolean
-        live_providers:
-          default: false
-          title: Live Providers
-          type: boolean
-        max_topics:
-          default: 4
-          title: Max Topics
-          type: integer
-      required:
-      - enabled
-      - deployment_children
-      title: DemoCapabilities
-      type: object
-    DemoPlanRequest:
-      additionalProperties: false
-      properties:
-        goal:
-          $ref: '#/components/schemas/TaskText'
-        max_active_children:
-          default: 2
-          maximum: 4.0
-          minimum: 1.0
-          title: Max Active Children
-          type: integer
-        project_id:
-          format: uuid
-          title: Project Id
-          type: string
-        topics:
-          items:
-            $ref: '#/components/schemas/ShortText'
-          maxItems: 4
-          minItems: 1
-          title: Topics
-          type: array
-      required:
-      - project_id
-      - goal
-      - topics
-      title: DemoPlanRequest
-      type: object
     DemonstrationResult:
       additionalProperties: false
       properties:
@@ -2189,19 +2300,48 @@ components:
       type: object
     EffectRead:
       properties:
+        accounting:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Accounting
         charged_usd:
           anyOf:
           - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
             type: string
           - type: 'null'
           title: Charged Usd
+        completed_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Completed At
+        created_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Created At
         effect_key:
           title: Effect Key
+          type: string
+        intent:
+          default: ''
+          title: Intent
           type: string
         reserved_usd:
           pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           title: Reserved Usd
           type: string
+        skill:
+          anyOf:
+          - additionalProperties:
+              type: string
+            type: object
+          - type: 'null'
+          title: Skill
         status:
           title: Status
           type: string
@@ -3707,6 +3847,92 @@ components:
       - delivery
       title: PhaseGrants
       type: object
+    PlanningSnapshot:
+      additionalProperties: false
+      description: Server-owned intake; deliberately cannot be used as an approved
+        plan.
+      properties:
+        attempt_timeout_seconds:
+          default: 120
+          maximum: 900.0
+          minimum: 1.0
+          title: Attempt Timeout Seconds
+          type: integer
+        budget_usd:
+          type: string
+        child_skill_version:
+          $ref: '#/components/schemas/ShortText'
+        contract_version:
+          const: 1
+          default: 1
+          title: Contract Version
+          type: integer
+        deadline:
+          format: date-time
+          title: Deadline
+          type: string
+        delegation_grants:
+          $ref: '#/components/schemas/PhaseGrants'
+        gateway_revision:
+          $ref: '#/components/schemas/Digest'
+        goal:
+          $ref: '#/components/schemas/TaskText'
+        max_active_children:
+          default: 2
+          maximum: 4.0
+          minimum: 1.0
+          title: Max Active Children
+          type: integer
+        model:
+          $ref: '#/components/schemas/ShortText'
+        owner_id:
+          format: uuid
+          title: Owner Id
+          type: string
+        packet_digest:
+          $ref: '#/components/schemas/Digest'
+        plan_id:
+          format: uuid
+          title: Plan Id
+          type: string
+        planning_allowance_usd:
+          type: string
+        policy_version:
+          $ref: '#/components/schemas/ShortText'
+        project_id:
+          format: uuid
+          title: Project Id
+          type: string
+        root:
+          $ref: '#/components/schemas/ExecutionScope'
+        root_allowance_usd:
+          type: string
+        root_id:
+          format: uuid
+          title: Root Id
+          type: string
+        root_skill_version:
+          $ref: '#/components/schemas/ShortText'
+      required:
+      - plan_id
+      - root_id
+      - owner_id
+      - project_id
+      - goal
+      - policy_version
+      - root
+      - delegation_grants
+      - budget_usd
+      - root_allowance_usd
+      - planning_allowance_usd
+      - deadline
+      - packet_digest
+      - gateway_revision
+      - model
+      - child_skill_version
+      - root_skill_version
+      title: PlanningSnapshot
+      type: object
     Playbook:
       description: 'Full playbook — header plus ordered positions.
 
@@ -4152,85 +4378,7 @@ components:
       title: PrecedentEntryRead
       type: object
     PreparedPlan:
-      additionalProperties: false
-      description: Canonical executable plan built from resolved server policy, never
-        an LLM.
-      properties:
-        attempt_timeout_seconds:
-          maximum: 900.0
-          minimum: 1.0
-          title: Attempt Timeout Seconds
-          type: integer
-        budget_usd:
-          type: string
-        children:
-          items:
-            $ref: '#/components/schemas/ChildAssignment'
-          maxItems: 4
-          minItems: 1
-          title: Children
-          type: array
-        contract_version:
-          const: 1
-          default: 1
-          title: Contract Version
-          type: integer
-        deadline:
-          format: date-time
-          title: Deadline
-          type: string
-        delegation_grants:
-          $ref: '#/components/schemas/PhaseGrants'
-        goal:
-          $ref: '#/components/schemas/TaskText'
-        max_active_children:
-          maximum: 4.0
-          minimum: 1.0
-          title: Max Active Children
-          type: integer
-        owner_id:
-          format: uuid
-          title: Owner Id
-          type: string
-        plan_id:
-          format: uuid
-          title: Plan Id
-          type: string
-        policy_version:
-          $ref: '#/components/schemas/ShortText'
-        project_id:
-          format: uuid
-          title: Project Id
-          type: string
-        revision:
-          minimum: 1.0
-          title: Revision
-          type: integer
-        root:
-          $ref: '#/components/schemas/ExecutionScope'
-        root_allowance_usd:
-          type: string
-        root_id:
-          format: uuid
-          title: Root Id
-          type: string
-      required:
-      - plan_id
-      - revision
-      - root_id
-      - project_id
-      - owner_id
-      - goal
-      - policy_version
-      - root
-      - delegation_grants
-      - children
-      - budget_usd
-      - root_allowance_usd
-      - max_active_children
-      - deadline
-      - attempt_timeout_seconds
-      title: PreparedPlan
+      additionalProperties: true
       type: object
     ProjectContextProposalListResponse:
       description: 'Paginated list of :class:`ProjectContextProposalRead` items (M4-B2).
@@ -6363,8 +6511,8 @@ components:
           title: Children
           type: array
         mode:
-          const: demonstration
-          default: demonstration
+          const: model_demo_v1
+          default: model_demo_v1
           title: Mode
           type: string
         partial_summary:
@@ -9276,36 +9424,35 @@ paths:
       summary: Mark an autonomous notification read (the dismiss action; idempotent)
       tags:
       - autonomous
-  /api/v1/autonomous/orchestration/capabilities:
+  /api/v1/autonomous/orchestration/chat-runs:
     get:
-      operationId: capabilities_api_v1_autonomous_orchestration_capabilities_get
+      operationId: chat_capabilities_api_v1_autonomous_orchestration_chat_runs_get
       responses:
         '200':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DemoCapabilities'
+                $ref: '#/components/schemas/ChatCapabilities'
           description: Successful Response
       security:
       - OAuth2PasswordBearer: []
-      summary: Capabilities
+      summary: Chat Capabilities
       tags:
       - autonomous
-  /api/v1/autonomous/orchestration/plans:
     post:
-      operationId: prepare_plan_api_v1_autonomous_orchestration_plans_post
+      operationId: start_chat_api_v1_autonomous_orchestration_chat_runs_post
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/DemoPlanRequest'
+              $ref: '#/components/schemas/ChatPlanRequest'
         required: true
       responses:
-        '201':
+        '202':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TreeRead'
+                $ref: '#/components/schemas/ChatRunRead'
           description: Successful Response
         '422':
           content:
@@ -9315,7 +9462,65 @@ paths:
           description: Validation Error
       security:
       - OAuth2PasswordBearer: []
-      summary: Prepare Plan
+      summary: Start Chat
+      tags:
+      - autonomous
+  /api/v1/autonomous/orchestration/chat-runs/{root_id}:
+    get:
+      operationId: chat_run_api_v1_autonomous_orchestration_chat_runs__root_id__get
+      parameters:
+      - in: path
+        name: root_id
+        required: true
+        schema:
+          format: uuid
+          title: Root Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatRunRead'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Chat Run
+      tags:
+      - autonomous
+  /api/v1/autonomous/orchestration/chat-runs/{root_id}/halt:
+    post:
+      operationId: halt_chat_api_v1_autonomous_orchestration_chat_runs__root_id__halt_post
+      parameters:
+      - in: path
+        name: root_id
+        required: true
+        schema:
+          format: uuid
+          title: Root Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatRunRead'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Halt Chat
       tags:
       - autonomous
   /api/v1/autonomous/orchestration/{root_id}/approve:

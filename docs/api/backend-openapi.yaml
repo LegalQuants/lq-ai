@@ -5008,39 +5008,68 @@ paths:
         '404':
           description: Notification not found
 
-  # ADR 0035: closed local demonstration; canonical detailed shapes are generated
+  # ADR 0035: bounded model-backed orchestration chat.
+  # Canonical detailed shapes are generated
   # alongside these handlers. These paths add no public child-spawn authority.
-  /api/v1/autonomous/orchestration/capabilities:
+  /api/v1/autonomous/orchestration/chat-runs:
     get:
       tags: [autonomous]
-      summary: Read demonstration enablement and explicit shared capacity
+      summary: Read owner-scoped model demo configuration and planning quote
       responses:
         '200':
-          description: Disabled by default; live providers are always false
+          description: Disabled by default; enabled response includes fictional packet, direct model route, configured project and accounted caps. Does not dispatch inference.
           content:
             application/json:
               schema:
-                $ref: './backend-openapi.generated.yaml#/components/schemas/DemoCapabilities'
-  /api/v1/autonomous/orchestration/plans:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/ChatCapabilities'
+        '403': {description: Required skill, pricing, capacity or gateway protection unavailable}
     post:
       tags: [autonomous]
-      summary: Prepare a sample plan for an owned active matter; requires opt-in
+      summary: Persist a bounded planning root and enqueue one model planning call
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: './backend-openapi.generated.yaml#/components/schemas/DemoPlanRequest'
+              $ref: './backend-openapi.generated.yaml#/components/schemas/ChatPlanRequest'
       responses:
-        '201':
-          description: Awaiting approval; no child is admitted or queued yet
+        '202':
+          description: Durable planning state; request_id is idempotent; no children until separate approval
           content:
             application/json:
               schema:
-                $ref: './backend-openapi.generated.yaml#/components/schemas/TreeRead'
-        '403': {description: Demonstration disabled or autonomous opt-in missing}
+                $ref: './backend-openapi.generated.yaml#/components/schemas/ChatRunRead'
+        '403': {description: Demo disabled, opt-in absent, wrong demo project or inference preflight refused}
         '404': {description: Owned active project not found}
-        '409': {description: Owner already has an active root}
+        '409': {description: Active owner run or conflicting request identity}
+  /api/v1/autonomous/orchestration/chat-runs/{root_id}:
+    parameters:
+      - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      tags: [autonomous]
+      summary: Read retained planning, proposed plan, results and skill receipts
+      responses:
+        '200':
+          description: Owner-only; readable after disablement; tree is null before a valid proposal. Fictional agreement text is included only when the installed fixture matches this run's pinned digest.
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/ChatRunRead'
+        '404': {description: Model run absent or owned by another user}
+  /api/v1/autonomous/orchestration/chat-runs/{root_id}/halt:
+    parameters:
+      - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [autonomous]
+      summary: Halt planning or execution, including after opt-out or disablement
+      responses:
+        '200':
+          description: Retained receipts and charges; no new child or synthesis calls
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/ChatRunRead'
+        '404': {description: Model run absent or owned by another user}
   /api/v1/autonomous/orchestration/{root_id}/tree:
     parameters:
       - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}

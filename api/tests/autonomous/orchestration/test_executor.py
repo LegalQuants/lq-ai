@@ -9,14 +9,14 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 from sqlalchemy import delete, func, select, text
-
-from app.autonomous.orchestration.checkpoints import CheckpointRuntime
-from app.autonomous.orchestration.demo import (
+from tests.autonomous.orchestration.sample_harness import (
     SampleGateway,
     demo_effects,
     demonstration_policy,
     prepare_demo_plan,
 )
+
+from app.autonomous.orchestration.checkpoints import CheckpointRuntime
 from app.autonomous.orchestration.executor import OrchestrationExecutor
 from app.autonomous.orchestration.outcomes import DemonstrationResult, TopicOutcome
 from app.autonomous.orchestration.policy import CurrentPolicy
@@ -66,7 +66,9 @@ class ControlledSampleGateway(SampleGateway):
 
 @pytest_asyncio.fixture
 async def demonstration(env, test_db_url):
-    env.skills = MutableSkillRegistry(load_registry(Path(__file__).resolve().parents[4] / "skills"))
+    env.skills = MutableSkillRegistry(
+        load_registry(Path(__file__).resolve().parent / "fixtures" / "skills")
+    )
     env.policy = demonstration_policy(env.skills, deployment_children=2)
     env.store = OrchestrationStore(
         env.factory,

@@ -1,0 +1,588 @@
+{
+  "root_id": "a313ce89-3fd7-41f8-a2c8-bfb966b08c82",
+  "status": "uncertain",
+  "stop_reason": "owner_halt",
+  "planning": {
+    "contract_version": 1,
+    "plan_id": "5a55086a-c2a6-4408-8a9f-b7f1f58ff37f",
+    "root_id": "a313ce89-3fd7-41f8-a2c8-bfb966b08c82",
+    "owner_id": "1a035000-0000-4000-8000-000000000002",
+    "project_id": "1a035000-0000-4000-8000-000000000001",
+    "goal": "Explain our payment obligations, the implementation and support commitments, and how renewal and termination work in this fictional vendor agreement. Divide the questions into independent assessments, then combine the answers and highlight missing information.",
+    "policy_version": "a238ae9cecb33df82e6404b63260aa7e447fdf669b93e1c15ce98ebefc67ae20",
+    "root": {
+      "resources": {
+        "document_ids": [],
+        "source_names": []
+      },
+      "grants": {
+        "intake": [],
+        "analysis": [
+          "plan"
+        ],
+        "drafting": [],
+        "ethics_review": [],
+        "delivery": []
+      },
+      "skill": {
+        "name": "orchestration-chat-demo",
+        "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d"
+      },
+      "minimum_inference_tier": 1,
+      "maximum_egress_tier": 0,
+      "privileged": false,
+      "anonymize": true
+    },
+    "delegation_grants": {
+      "intake": [],
+      "analysis": [
+        "plan",
+        "run_skill",
+        "workspace_read",
+        "workspace_write"
+      ],
+      "drafting": [
+        "run_skill",
+        "workspace_read",
+        "workspace_share",
+        "workspace_write"
+      ],
+      "ethics_review": [],
+      "delivery": []
+    },
+    "budget_usd": "2.0000",
+    "root_allowance_usd": "0.0000",
+    "planning_allowance_usd": "0.0000",
+    "max_active_children": 2,
+    "deadline": "2026-09-27T08:50:30.343662Z",
+    "attempt_timeout_seconds": 300,
+    "packet_digest": "31621b3b2ac3b863a5fdfaf6f9e0021d24751e041654792d17b776d3d193b6db",
+    "gateway_revision": "2661c6af0d5de3a96d54d6c326485cdf1f6966659dc37ba14fbb5d23886dcc6d",
+    "model": "local-uat/qwen3.8:27b-mlx",
+    "child_skill_version": "1.0.0",
+    "root_skill_version": "1.0.0"
+  },
+  "effects": [
+    {
+      "effect_key": "chat:plan:v1",
+      "status": "completed",
+      "reserved_usd": "0.0000",
+      "charged_usd": "0.0000",
+      "intent": "plan",
+      "created_at": "2026-09-27T07:50:30.874077Z",
+      "completed_at": "2026-09-27T07:51:05.059013Z",
+      "skill": {
+        "name": "orchestration-chat-demo",
+        "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d",
+        "version": "1.0.0"
+      },
+      "accounting": {
+        "basis": "conservative-estimate-or-reported-usage-v1",
+        "model": "qwen3.8:27b-mlx",
+        "provider": "local-uat",
+        "charged_usd": "0.0000",
+        "reserved_usd": "0.0000",
+        "config_digest": "dbbb138306e4acf9cee2d1acf6d297e3b8907b52ef5792c2d660fe77d4ba4a69",
+        "estimated_prompt_tokens": 7785,
+        "reported_usage_cost_usd": "0.0000"
+      }
+    }
+  ],
+  "spent_usd": "0.0000",
+  "reserved_usd": "0.0000",
+  "tree": {
+    "root_id": "a313ce89-3fd7-41f8-a2c8-bfb966b08c82",
+    "status": "uncertain",
+    "stop_reason": "owner_halt",
+    "plan": {
+      "contract_version": 2,
+      "planning_digest": "cfcbbaeba0873af325f2dfb795b59a83a136f3e78c082dcd467f6ed5713015b0",
+      "plan_id": "5a55086a-c2a6-4408-8a9f-b7f1f58ff37f",
+      "revision": 1,
+      "root_id": "a313ce89-3fd7-41f8-a2c8-bfb966b08c82",
+      "project_id": "1a035000-0000-4000-8000-000000000001",
+      "owner_id": "1a035000-0000-4000-8000-000000000002",
+      "goal": "Explain our payment obligations, the implementation and support commitments, and how renewal and termination work in this fictional vendor agreement. Divide the questions into independent assessments, then combine the answers and highlight missing information.",
+      "policy_version": "a238ae9cecb33df82e6404b63260aa7e447fdf669b93e1c15ce98ebefc67ae20",
+      "root": {
+        "resources": {
+          "document_ids": [],
+          "source_names": []
+        },
+        "grants": {
+          "intake": [],
+          "analysis": [
+            "plan",
+            "run_skill",
+            "workspace_read",
+            "workspace_write"
+          ],
+          "drafting": [
+            "run_skill",
+            "workspace_read",
+            "workspace_share",
+            "workspace_write"
+          ],
+          "ethics_review": [],
+          "delivery": []
+        },
+        "skill": {
+          "name": "orchestration-chat-demo",
+          "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d"
+        },
+        "minimum_inference_tier": 1,
+        "maximum_egress_tier": 0,
+        "privileged": false,
+        "anonymize": true
+      },
+      "delegation_grants": {
+        "intake": [],
+        "analysis": [
+          "plan",
+          "run_skill",
+          "workspace_read",
+          "workspace_write"
+        ],
+        "drafting": [
+          "run_skill",
+          "workspace_read",
+          "workspace_share",
+          "workspace_write"
+        ],
+        "ethics_review": [],
+        "delivery": []
+      },
+      "children": [
+        {
+          "dispatch_id": "31acf20e-bf12-43a4-9102-eeb36e588608",
+          "profile": "research",
+          "task": {
+            "topic": "Payment obligations, dispute window, and suspension triggers under \u00a72",
+            "question": "Under \u00a72 of the fictional Paper Lantern / Cedar Cloud agreement, what are the customer's payment obligations (amount, invoicing cadence, payment deadline), what is the dispute-notification window, under what conditions may the supplier suspend service, and which payment-related mechanisms are expressly absent from the agreement?",
+            "boundaries": "Answer only from \u00a72 of the supplied fictional agreement. Do not consult external sources, real contracts, or jurisdiction-specific law. Do not opine on enforceability, fairness, or whether the customer should sign. Do not invent dates, amounts, or fees that the agreement does not state. Treat all DATE_TIME and currency placeholders as fictional tokens. Do not delegate to another task or request additional documents.",
+            "output_contract": "A concise structured summary containing: (a) invoicing and payment-deadline mechanics; (b) the dispute-notice window and the requirement to pay undisputed portions on time; (c) the suspension trigger (undisputed invoice unpaid after written notice plus the stated grace period); (d) a short list of expressly absent mechanisms (late fee, dispute-resolution procedure). Each item must cite the governing clause (\u00a72). Uncertainties and placeholder tokens must be flagged, not resolved.",
+            "stopping_condition": "The task is complete when a single answer has listed the \u00a72 payment mechanics, the stated omissions, and all clause references. No follow-up sub-questions or second-pass answers are produced."
+          },
+          "execution": {
+            "resources": {
+              "document_ids": [],
+              "source_names": []
+            },
+            "grants": {
+              "intake": [],
+              "analysis": [
+                "plan",
+                "run_skill",
+                "workspace_read",
+                "workspace_write"
+              ],
+              "drafting": [
+                "run_skill",
+                "workspace_read",
+                "workspace_share",
+                "workspace_write"
+              ],
+              "ethics_review": [],
+              "delivery": []
+            },
+            "skill": {
+              "name": "contract-qa",
+              "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42"
+            },
+            "minimum_inference_tier": 1,
+            "maximum_egress_tier": 0,
+            "privileged": false,
+            "anonymize": true
+          },
+          "budget_usd": "0.0000"
+        },
+        {
+          "dispatch_id": "76d27353-b1d4-42f8-978e-161cfb172a99",
+          "profile": "research",
+          "task": {
+            "topic": "Implementation and support commitments under \u00a7\u00a73\u20134",
+            "question": "Under \u00a7\u00a73 and 4 of the fictional agreement, what onboarding sessions and support acknowledgement does the supplier commit to, what support hours apply, and which service-delivery elements (migration, milestone payments, acceptance, resolution deadline, uptime, service credits) are not specified?",
+            "boundaries": "Answer only from \u00a7\u00a73\u20134 of the supplied fictional agreement. Do not apply industry benchmarks, SLA templates, or external standards. Do not judge whether the commitments are adequate or recommend negotiating changes. Do not invent resolution times, uptime percentages, or credit formulas. Treat DATE_TIME and LOCATION tokens as fictional placeholders. Do not delegate or request outside materials.",
+            "output_contract": "A concise structured summary containing: (a) onboarding commitment (number of sessions, trigger, deadline) from \u00a73; (b) customer's data-validation responsibility from \u00a73; (c) support acknowledgement window and support hours from \u00a74; (d) a short list of expressly absent elements (migration service, milestone payment, completion acceptance, resolution deadline, uptime commitment, service credits). Each item must cite the governing clause. Omissions must be labelled as omissions, not gaps to be filled.",
+            "stopping_condition": "The task is complete when a single answer has summarised the \u00a7\u00a73\u20134 commitments, enumerated the stated omissions, and attached clause references. No second pass or delegated sub-task is produced."
+          },
+          "execution": {
+            "resources": {
+              "document_ids": [],
+              "source_names": []
+            },
+            "grants": {
+              "intake": [],
+              "analysis": [
+                "plan",
+                "run_skill",
+                "workspace_read",
+                "workspace_write"
+              ],
+              "drafting": [
+                "run_skill",
+                "workspace_read",
+                "workspace_share",
+                "workspace_write"
+              ],
+              "ethics_review": [],
+              "delivery": []
+            },
+            "skill": {
+              "name": "contract-qa",
+              "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42"
+            },
+            "minimum_inference_tier": 1,
+            "maximum_egress_tier": 0,
+            "privileged": false,
+            "anonymize": true
+          },
+          "budget_usd": "0.0000"
+        },
+        {
+          "dispatch_id": "a2ef1563-761d-4527-819a-a4b62db30f84",
+          "profile": "research",
+          "task": {
+            "topic": "Renewal, termination, data export, and survival under \u00a7\u00a75\u20137",
+            "question": "Under \u00a7\u00a75\u20137 of the fictional agreement, how does the initial term and auto-renewal work, what are the material-breach and convenience termination rights (including notice periods and cure periods), what data-export obligation does the supplier owe, and which obligations survive termination?",
+            "boundaries": "Answer only from \u00a7\u00a75\u20137 of the supplied fictional agreement. Do not apply default statutory termination rules from any jurisdiction. Do not opine on whether either party can or should terminate. Do not invent a renewal cap, an export-window deadline, or a confidentiality survival period that the agreement does not state. Treat DATE_TIME tokens as fictional placeholders. Do not delegate or request external sources.",
+            "output_contract": "A concise structured summary containing: (a) initial term length and auto-renewal mechanics from \u00a75, including the non-renewal notice window; (b) material-breach termination with cure period from \u00a76; (c) convenience-termination right and continued fee liability from \u00a76; (d) CSV data-export obligation and its trigger from \u00a76; (e) surviving obligations from \u00a77; (f) a short list of expressly absent items (renewal cap, export-request deadline, confidentiality survival period). Each item must cite the governing clause. Omissions must be labelled as omissions.",
+            "stopping_condition": "The task is complete when a single answer has summarised the \u00a7\u00a75\u20137 mechanics, listed the stated omissions, and attached clause references. No follow-up sub-questions or second-pass answers are produced."
+          },
+          "execution": {
+            "resources": {
+              "document_ids": [],
+              "source_names": []
+            },
+            "grants": {
+              "intake": [],
+              "analysis": [
+                "plan",
+                "run_skill",
+                "workspace_read",
+                "workspace_write"
+              ],
+              "drafting": [
+                "run_skill",
+                "workspace_read",
+                "workspace_share",
+                "workspace_write"
+              ],
+              "ethics_review": [],
+              "delivery": []
+            },
+            "skill": {
+              "name": "contract-qa",
+              "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42"
+            },
+            "minimum_inference_tier": 1,
+            "maximum_egress_tier": 0,
+            "privileged": false,
+            "anonymize": true
+          },
+          "budget_usd": "0.0000"
+        }
+      ],
+      "budget_usd": "2.0000",
+      "root_allowance_usd": "0.0000",
+      "max_active_children": 2,
+      "deadline": "2026-09-27T08:50:30.343662Z",
+      "attempt_timeout_seconds": 300
+    },
+    "plan_hash": "f155544164c4e5a3507428106cb17a8afd5b48e3fba7a80107893cb3169d7006",
+    "approved": true,
+    "mode": "model_demo_v1",
+    "verification": "unverified",
+    "root": {
+      "session_id": "a313ce89-3fd7-41f8-a2c8-bfb966b08c82",
+      "status": "halted",
+      "phase": "analysis",
+      "allocation_usd": "0.0000",
+      "spent_usd": "0.0000",
+      "reserved_usd": "0.0000",
+      "updated_at": "2026-09-27T07:51:05.066157Z",
+      "outcome": null,
+      "effects": [
+        {
+          "effect_key": "chat:plan:v1",
+          "status": "completed",
+          "reserved_usd": "0.0000",
+          "charged_usd": "0.0000",
+          "intent": "plan",
+          "created_at": "2026-09-27T07:50:30.874077Z",
+          "completed_at": "2026-09-27T07:51:05.059013Z",
+          "skill": {
+            "name": "orchestration-chat-demo",
+            "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d",
+            "version": "1.0.0"
+          },
+          "accounting": {
+            "basis": "conservative-estimate-or-reported-usage-v1",
+            "model": "qwen3.8:27b-mlx",
+            "provider": "local-uat",
+            "charged_usd": "0.0000",
+            "reserved_usd": "0.0000",
+            "config_digest": "dbbb138306e4acf9cee2d1acf6d297e3b8907b52ef5792c2d660fe77d4ba4a69",
+            "estimated_prompt_tokens": 7785,
+            "reported_usage_cost_usd": "0.0000"
+          }
+        }
+      ],
+      "files": []
+    },
+    "children": [
+      {
+        "session_id": "31acf20e-bf12-43a4-9102-eeb36e588608",
+        "status": "completed",
+        "phase": "delivery",
+        "allocation_usd": "0.0000",
+        "spent_usd": "0.0000",
+        "reserved_usd": "0.0000",
+        "updated_at": "2026-09-27T07:55:42.350575Z",
+        "outcome": {
+          "status": "completed",
+          "summary": "\u00a72 sets a USD 200 per month fee invoiced monthly in advance, payable within 30 days of receipt; dispute notice due within 15 days; suspension permitted after 15 days written-notice grace on undisputed amounts; no late fee or dispute-resolution procedure is specified.",
+          "findings": [
+            "### Payment obligations, dispute window, and suspension triggers under \u00a72\n\n\u00a72 of the Paper Lantern / Cedar Cloud agreement contains four distinct payment-mechanics elements plus two express omissions. All references are to **\u00a72** of the fictional demo agreement (Effective Date: 1 January 2026). All DATE_TIME and currency tokens are fictional placeholders and are flagged as such.\n\n---\n\n### (a) Invoicing and payment-deadline mechanics\n\nThe customer's core payment obligation is a fixed fee, invoiced on a stated cadence in advance, with a defined payment window.\n\n> \"Customer shall pay USD 200 per month, invoiced monthly in advance. Undisputed invoices are payable within 30 days of receipt.\"\n\n[\u00a72]\n\n- **Amount:** USD 200 per month *(fictional token; no numeric value is stated in the document)*.\n- **Invoicing cadence:** monthly in advance *(fictional token; the frequency\u2014monthly, quarterly, annually\u2014is not resolved by the document)*.\n- **Payment deadline:** within 30 days of receipt of the invoice *(fictional token; the number of days is not stated)*.\n- **Condition:** the deadline applies to *undisputed* invoices (see below).\n\n---\n\n### (b) Dispute-notification window and obligation to pay undisputed portions\n\n> \"Customer must notify Supplier of a disputed amount within 15 days of receipt and pay undisputed amounts on time.\"\n\n[\u00a72]\n\n- **Window:** Customer must notify Supplier of any disputed amount within 15 days of invoice receipt *(fictional token)*.\n- **Partial-payment duty:** even when a dispute exists, Customer must pay the *undisputed* portion by the normal deadline (30 days). A dispute over part of an invoice does not suspend the obligation to pay the rest.\n- **Consequence of missing the window:** The agreement does not state what happens if Customer fails to notify within 15 days. The invoice is treated as undisputed for all practical purposes under \u00a72, which interacts with the suspension right below.\n\n---\n\n### (c) Suspension trigger\n\n> \"Supplier may suspend service for an undisputed invoice remaining unpaid 15 days after Supplier gives written notice.\"\n\n[\u00a72]\n\nThe suspension right is **conditional and two-step**:\n\n1. The invoice must be **undisputed** (i.e., no valid dispute notice was given within the 15 days window under (b)).\n2. Supplier must first give **written notice** of the overdue amount.\n3. A grace period of **15 days** *(fictional token\u2014likely \"days\" but not confirmed by the text)* must elapse after that written notice.\n\nOnly after all three conditions are met may Supplier suspend the team-scheduling service. The agreement does not specify the scope of suspension (full service vs. partial), whether notice of suspension is itself required, or whether suspension lifts immediately upon payment.\n\n---\n\n### (d) Expressly absent payment-related mechanisms\n\n> \"This agreement specifies no late fee and no procedure for resolving a disputed amount.\"\n\n[\u00a72]\n\nTwo mechanisms are **expressly identified as absent**:\n\n| Absent mechanism | Effect |\n|---|---|\n| **Late fee / interest** | Customer faces no contractual monetary penalty for late payment beyond the suspension remedy in (c). |\n| **Dispute-resolution procedure** | No escalation ladder, no third-party determination, no deadline for Supplier to respond to a dispute notice. The dispute sits in limbo until resolved by the parties informally. |\n\n---\n\n### Limitations and flags\n\n- All DATE_TIME and currency tokens (200 per month, monthly, 30 days, 15 days, days) are **fictional placeholders**; the document does not resolve them to specific numbers. The answer preserves the tokens as stated.\n- The agreement does not specify: interest accrual, a cure period for disputed-amount resolution, the scope of a service suspension, or a deadline by which the CSV export right under \u00a76 must be exercised. These are outside \u00a72 but noted for completeness.\n- No enforceability or fairness opinion is offered. This is a fictional demo fixture; no party or obligation is real."
+          ],
+          "verification": "unverified",
+          "failure_code": null,
+          "artifact": {
+            "session_id": "31acf20e-bf12-43a4-9102-eeb36e588608",
+            "name": "findings.json",
+            "revision": 1,
+            "digest": "56bce7c09d35065f97fa918f8d90c1415ba305323d728a00c6b6ca77b4d76106"
+          }
+        },
+        "effects": [
+          {
+            "effect_key": "demo:notes:create:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "workspace_write",
+            "created_at": "2026-09-27T07:54:16.261645Z",
+            "completed_at": "2026-09-27T07:54:16.307892Z",
+            "skill": null,
+            "accounting": null
+          },
+          {
+            "effect_key": "demo:notes:read:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "workspace_read",
+            "created_at": "2026-09-27T07:54:16.395690Z",
+            "completed_at": "2026-09-27T07:54:16.440323Z",
+            "skill": null,
+            "accounting": null
+          },
+          {
+            "effect_key": "demo:topic:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "run_skill",
+            "created_at": "2026-09-27T07:54:16.554826Z",
+            "completed_at": "2026-09-27T07:55:41.991614Z",
+            "skill": {
+              "name": "contract-qa",
+              "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42",
+              "version": "1.0.0"
+            },
+            "accounting": {
+              "basis": "conservative-estimate-or-reported-usage-v1",
+              "model": "qwen3.8:27b-mlx",
+              "provider": "local-uat",
+              "charged_usd": "0.0000",
+              "reserved_usd": "0.0000",
+              "config_digest": "dbbb138306e4acf9cee2d1acf6d297e3b8907b52ef5792c2d660fe77d4ba4a69",
+              "estimated_prompt_tokens": 69253,
+              "reported_usage_cost_usd": "0.0000"
+            }
+          },
+          {
+            "effect_key": "demo:findings:write:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "workspace_write",
+            "created_at": "2026-09-27T07:55:42.029986Z",
+            "completed_at": "2026-09-27T07:55:42.082576Z",
+            "skill": null,
+            "accounting": null
+          },
+          {
+            "effect_key": "demo:notes:update:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "workspace_write",
+            "created_at": "2026-09-27T07:55:42.110514Z",
+            "completed_at": "2026-09-27T07:55:42.150539Z",
+            "skill": null,
+            "accounting": null
+          },
+          {
+            "effect_key": "demo:findings:read:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "workspace_read",
+            "created_at": "2026-09-27T07:55:42.195169Z",
+            "completed_at": "2026-09-27T07:55:42.229097Z",
+            "skill": null,
+            "accounting": null
+          },
+          {
+            "effect_key": "demo:findings:share:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "workspace_share",
+            "created_at": "2026-09-27T07:55:42.250505Z",
+            "completed_at": "2026-09-27T07:55:42.282252Z",
+            "skill": null,
+            "accounting": null
+          }
+        ],
+        "files": [
+          {
+            "session_id": "31acf20e-bf12-43a4-9102-eeb36e588608",
+            "name": "findings.json",
+            "revision": 1,
+            "digest": "56bce7c09d35065f97fa918f8d90c1415ba305323d728a00c6b6ca77b4d76106",
+            "size_bytes": 4448,
+            "shared": true,
+            "updated_at": "2026-09-27T07:55:42.277362Z"
+          },
+          {
+            "session_id": "31acf20e-bf12-43a4-9102-eeb36e588608",
+            "name": "notes.md",
+            "revision": 2,
+            "digest": "af7e7a79396515fb6596854774e8eb42d662b4d4682e3ee1ed12bab8e0943dc7",
+            "size_bytes": 301,
+            "shared": false,
+            "updated_at": "2026-09-27T07:55:42.143638Z"
+          }
+        ]
+      },
+      {
+        "session_id": "76d27353-b1d4-42f8-978e-161cfb172a99",
+        "status": "halted",
+        "phase": "analysis",
+        "allocation_usd": "0.0000",
+        "spent_usd": "0.0000",
+        "reserved_usd": "0.0000",
+        "updated_at": "2026-09-27T07:54:16.483301Z",
+        "outcome": null,
+        "effects": [
+          {
+            "effect_key": "demo:notes:create:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "workspace_write",
+            "created_at": "2026-09-27T07:54:16.281800Z",
+            "completed_at": "2026-09-27T07:54:16.362077Z",
+            "skill": null,
+            "accounting": null
+          },
+          {
+            "effect_key": "demo:notes:read:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "workspace_read",
+            "created_at": "2026-09-27T07:54:16.435060Z",
+            "completed_at": "2026-09-27T07:54:16.480530Z",
+            "skill": null,
+            "accounting": null
+          },
+          {
+            "effect_key": "demo:topic:v1",
+            "status": "uncertain",
+            "reserved_usd": "0.0000",
+            "charged_usd": null,
+            "intent": "run_skill",
+            "created_at": "2026-09-27T07:54:16.601407Z",
+            "completed_at": null,
+            "skill": null,
+            "accounting": null
+          }
+        ],
+        "files": [
+          {
+            "session_id": "76d27353-b1d4-42f8-978e-161cfb172a99",
+            "name": "notes.md",
+            "revision": 1,
+            "digest": "956be563c6806a2c115605570e57a208da5f9d1c8528cd7e2bc61cdc66ebe0a1",
+            "size_bytes": 101,
+            "shared": false,
+            "updated_at": "2026-09-27T07:54:16.354275Z"
+          }
+        ]
+      },
+      {
+        "session_id": "a2ef1563-761d-4527-819a-a4b62db30f84",
+        "status": "halted",
+        "phase": "analysis",
+        "allocation_usd": "0.0000",
+        "spent_usd": "0.0000",
+        "reserved_usd": "0.0000",
+        "updated_at": "2026-09-27T07:55:42.615139Z",
+        "outcome": null,
+        "effects": [
+          {
+            "effect_key": "demo:notes:create:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "workspace_write",
+            "created_at": "2026-09-27T07:55:42.520337Z",
+            "completed_at": "2026-09-27T07:55:42.549416Z",
+            "skill": null,
+            "accounting": null
+          },
+          {
+            "effect_key": "demo:notes:read:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "workspace_read",
+            "created_at": "2026-09-27T07:55:42.584376Z",
+            "completed_at": "2026-09-27T07:55:42.612709Z",
+            "skill": null,
+            "accounting": null
+          },
+          {
+            "effect_key": "demo:topic:v1",
+            "status": "admitted",
+            "reserved_usd": "0.0000",
+            "charged_usd": null,
+            "intent": "run_skill",
+            "created_at": "2026-09-27T07:55:42.666133Z",
+            "completed_at": null,
+            "skill": null,
+            "accounting": null
+          }
+        ],
+        "files": [
+          {
+            "session_id": "a2ef1563-761d-4527-819a-a4b62db30f84",
+            "name": "notes.md",
+            "revision": 1,
+            "digest": "aa4258d217eb52a57b02bb9c6fd70fef1761911e0511bf2f20493133a284e776",
+            "size_bytes": 110,
+            "shared": false,
+            "updated_at": "2026-09-27T07:55:42.544886Z"
+          }
+        ]
+      }
+    ],
+    "spent_usd": "0.0000",
+    "reserved_usd": "0.0000",
+    "result": null,
+    "partial_summary": "Orchestration demonstration stopped. Findings are unverified.\n\nPayment obligations, dispute window, and suspension triggers under \u00a72: \u00a72 sets a USD 200 per month fee invoiced monthly in advance, payable within 30 days of receipt; dispute notice due within 15 days; suspension permitted after 15 days written-notice grace on undisputed amounts; no late fee or dispute-resolution procedure is specified.\nImplementation and support commitments under \u00a7\u00a73\u20134: No delivered outcome.\nRenewal, termination, data export, and survival under \u00a7\u00a75\u20137: No delivered outcome."
+  }
+}

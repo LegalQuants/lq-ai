@@ -1,6 +1,8 @@
 """Current policy and selected-resource checks against migrated Postgres."""
 
 import asyncio
+import hashlib
+import json
 from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -78,6 +80,16 @@ async def test_real_policy_allows_approved_selected_documents(policy_env):
     await approve(env)
     claim = await env.store.claim(env.root_id, env.root_id, worker_id=uuid4(), seconds=60)
     assert len(await env.store.admit_children(claim)) == 2
+
+
+async def test_optional_demo_allowlist_preserves_legacy_policy_hash(policy_env):
+    policy = policy_env.config.current
+    legacy = policy.model_dump(mode="json", exclude={"demo_project_id"})
+    expected = hashlib.sha256(
+        json.dumps(legacy, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    assert policy.version() == expected
+    assert policy.model_copy(update={"demo_project_id": uuid4()}).version() != expected
 
 
 @pytest.mark.parametrize("mutation", ["delete", "detach", "missing", "unattached"])
