@@ -2,17 +2,20 @@
 
 import asyncio
 from dataclasses import replace
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
-from uuid import uuid4
+from types import SimpleNamespace
+from typing import Any
+from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
 from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.autonomous.enums import ToolIntent
-from app.autonomous.orchestration.store import WorkerClaim
+from app.autonomous.orchestration.store import EffectReceipt, WorkerClaim
 from app.errors import Conflict, Forbidden, ValidationError
 from app.models.audit import AuditLog
 from app.models.autonomous import AutonomousSession
@@ -28,7 +31,7 @@ from app.schemas.autonomous import Phase
 pytestmark = pytest.mark.integration
 
 
-async def audit_count(env, event):
+async def audit_count(env: SimpleNamespace, event: str) -> int:
     async with env.factory() as db:
         return await db.scalar(
             select(func.count())
@@ -40,7 +43,7 @@ async def audit_count(env, event):
         )
 
 
-async def begin(env):
+async def begin(env: SimpleNamespace) -> EffectReceipt:
     return await env.store.begin_effect(
         env.claim,
         effect_key="analysis:one",
@@ -51,7 +54,7 @@ async def begin(env):
     )
 
 
-async def expire(env):
+async def expire(env: SimpleNamespace) -> None:
     async with env.factory.begin() as db:
         await db.execute(
             update(Account)
@@ -61,7 +64,7 @@ async def expire(env):
 
 
 @pytest_asyncio.fixture
-async def leased(env):
+async def leased(env: SimpleNamespace) -> SimpleNamespace:
     await env.store.save_plan(env.plan, actor_id=env.owner_id)
     await env.store.approve(
         env.root_id, actor_id=env.owner_id, revision=1, plan_hash=env.plan.approval_hash()
@@ -78,7 +81,9 @@ async def leased(env):
         "worker_id=NULL,lease_until=NULL",
     ],
 )
-async def test_database_rejects_partial_or_extended_worker_claim(ready, mutation):
+async def test_database_rejects_partial_or_extended_worker_claim(
+    ready: SimpleNamespace, mutation: str
+) -> None:
     with pytest.raises(DBAPIError, match="ck_orchestration_attempt_lease"):
         async with ready.factory.begin() as db:
             await db.execute(
@@ -88,7 +93,9 @@ async def test_database_rejects_partial_or_extended_worker_claim(ready, mutation
 
 
 @pytest.mark.parametrize("child_run", [False, True])
-async def test_renewal_caps_at_fixed_attempt_without_changing_progress(leased, child_run):
+async def test_renewal_caps_at_fixed_attempt_without_changing_progress(
+    leased: SimpleNamespace, child_run: bool
+) -> None:
     env = leased
     if child_run:
         children = await env.store.admit_children(env.claim)
@@ -122,7 +129,7 @@ async def test_renewal_caps_at_fixed_attempt_without_changing_progress(leased, c
             assert (await db.get(Account, children[1])).attempt_deadline is None
 
 
-async def test_root_deadline_bounds_claim_and_renewal(env):
+async def test_root_deadline_bounds_claim_and_renewal(env: SimpleNamespace) -> None:
     async with env.factory() as db:
         now = await db.scalar(select(func.clock_timestamp()))
     env.plan = env.plan.model_copy(update={"deadline": now + timedelta(seconds=45)})
@@ -138,14 +145,16 @@ async def test_root_deadline_bounds_claim_and_renewal(env):
 
 
 @pytest.mark.parametrize("seconds", [True, False, 0, -1, 901, 1.5, "60", None])
-async def test_renewal_rejects_invalid_durations(leased, seconds):
+async def test_renewal_rejects_invalid_durations(leased: SimpleNamespace, seconds: object) -> None:
     with pytest.raises(ValidationError):
         await leased.store.renew_claim(leased.claim, seconds=seconds)
     assert await audit_count(leased, "claim_renewed") == 0
 
 
 @pytest.mark.parametrize("reason", ["policy", "optout", "archive", "project_policy", "halt"])
-async def test_revocation_refuses_renewal_but_allows_release(leased, reason):
+async def test_revocation_refuses_renewal_but_allows_release(
+    leased: SimpleNamespace, reason: str
+) -> None:
     env = leased
     async with env.factory() as db:
         until = (await db.get(Account, env.root_id)).lease_until
@@ -182,7 +191,7 @@ async def test_revocation_refuses_renewal_but_allows_release(leased, reason):
         assert account.worker_id is account.lease_until is account.attempt_deadline is None
 
 
-async def test_expired_and_replaced_claims_cannot_be_renewed(leased):
+async def test_expired_and_replaced_claims_cannot_be_renewed(leased: SimpleNamespace) -> None:
     env = leased
     for stale in (
         replace(env.claim, worker_id=uuid4()),
@@ -202,7 +211,9 @@ async def test_expired_and_replaced_claims_cannot_be_renewed(leased):
     assert await audit_count(env, "claim_renewed") == 0
 
 
-async def test_renewal_audit_failure_rolls_back_extension(leased, monkeypatch):
+async def test_renewal_audit_failure_rolls_back_extension(
+    leased: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from app.autonomous.orchestration import store
 
     env = leased
@@ -210,7 +221,7 @@ async def test_renewal_audit_failure_rolls_back_extension(leased, monkeypatch):
         before = await db.get(Account, env.root_id)
     original = store._audit
 
-    async def fail(db, root, event, **details):
+    async def fail(db: AsyncSession, root: Root, event: str, **details: Any) -> None:
         await original(db, root, event, **details)
         if event == "claim_renewed":
             raise RuntimeError("audit rollback fixture")
@@ -226,7 +237,7 @@ async def test_renewal_audit_failure_rolls_back_extension(leased, monkeypatch):
     assert await audit_count(env, "claim_renewed") == 0
 
 
-async def test_concurrent_renewals_serialize_without_shortening(leased):
+async def test_concurrent_renewals_serialize_without_shortening(leased: SimpleNamespace) -> None:
     env = leased
     async with env.factory() as db:
         limit = (await db.get(Account, env.root_id)).attempt_deadline
@@ -240,12 +251,14 @@ async def test_concurrent_renewals_serialize_without_shortening(leased):
         assert account.generation == env.claim.generation
 
 
-async def test_renewal_cannot_resurrect_claim_after_waiting_for_account_lock(leased, monkeypatch):
+async def test_renewal_cannot_resurrect_claim_after_waiting_for_account_lock(
+    leased: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     env = leased
     entering = asyncio.Event()
     original = env.store._account
 
-    async def lock(db, root_id, session_id):
+    async def lock(db: AsyncSession, root_id: UUID, session_id: UUID) -> Account:
         entering.set()
         return await original(db, root_id, session_id)
 
@@ -256,7 +269,7 @@ async def test_renewal_cannot_resurrect_claim_after_waiting_for_account_lock(lea
                 select(Account).where(Account.session_id == env.root_id).with_for_update()
             )
 
-            async def renew():
+            async def renew() -> None:
                 with pytest.raises(Conflict, match="stale or expired"):
                     await env.store.renew_claim(env.claim, seconds=900)
 
@@ -267,7 +280,9 @@ async def test_renewal_cannot_resurrect_claim_after_waiting_for_account_lock(lea
     assert await audit_count(env, "claim_renewed") == 0
 
 
-async def test_renewal_and_release_race_cannot_restore_released_ownership(leased):
+async def test_renewal_and_release_race_cannot_restore_released_ownership(
+    leased: SimpleNamespace,
+) -> None:
     env = leased
     results = await asyncio.gather(
         env.store.renew_claim(env.claim, seconds=900),
@@ -285,7 +300,9 @@ async def test_renewal_and_release_race_cannot_restore_released_ownership(leased
 
 
 @pytest.mark.parametrize("recovery_method", ["recover_expired_effects", "recover_expired_claims"])
-async def test_expired_pending_effect_cannot_be_renewed_or_reclaimed(leased, recovery_method):
+async def test_expired_pending_effect_cannot_be_renewed_or_reclaimed(
+    leased: SimpleNamespace, recovery_method: str
+) -> None:
     env = leased
     await begin(env)
     async with env.factory.begin() as db:
@@ -314,7 +331,9 @@ async def test_expired_pending_effect_cannot_be_renewed_or_reclaimed(leased, rec
 
 
 @pytest.mark.parametrize("recovery_method", ["recover_expired_effects", "recover_expired_claims"])
-async def test_live_renewal_keeps_recovery_and_competing_claim_out(leased, recovery_method):
+async def test_live_renewal_keeps_recovery_and_competing_claim_out(
+    leased: SimpleNamespace, recovery_method: str
+) -> None:
     env = leased
     await begin(env)
     results = await asyncio.gather(
@@ -331,7 +350,7 @@ async def test_live_renewal_keeps_recovery_and_competing_claim_out(leased, recov
     await env.store.release_claim(env.claim)
 
 
-async def test_fresh_attempt_gets_new_limit_after_safe_release(leased):
+async def test_fresh_attempt_gets_new_limit_after_safe_release(leased: SimpleNamespace) -> None:
     env = leased
     await env.store.renew_claim(env.claim, seconds=900)
     async with env.factory() as db:
@@ -345,7 +364,7 @@ async def test_fresh_attempt_gets_new_limit_after_safe_release(leased):
         assert account.attempt_deadline - account.lease_until == timedelta(seconds=30)
 
 
-async def test_noop_renewal_still_checks_current_policy(leased):
+async def test_noop_renewal_still_checks_current_policy(leased: SimpleNamespace) -> None:
     await leased.store.renew_claim(leased.claim, seconds=900)
     leased.policy.valid = False
     with pytest.raises(Forbidden):
@@ -354,7 +373,9 @@ async def test_noop_renewal_still_checks_current_policy(leased):
 
 
 @pytest.mark.parametrize("operation", ["claim", "renew"])
-async def test_plan_deadline_rechecked_after_account_lock(leased, monkeypatch, operation):
+async def test_plan_deadline_rechecked_after_account_lock(
+    leased: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, operation: str
+) -> None:
     from app.autonomous.orchestration import store
 
     env = leased
@@ -363,13 +384,13 @@ async def test_plan_deadline_rechecked_after_account_lock(leased, monkeypatch, o
     original_now, original_account = store._now, env.store._account
     locked = False
 
-    async def account(db, root_id, session_id):
+    async def account(db: AsyncSession, root_id: UUID, session_id: UUID) -> Account:
         nonlocal locked
         row = await original_account(db, root_id, session_id)
         locked = True
         return row
 
-    async def clock(db):
+    async def clock(db: AsyncSession) -> datetime:
         # Advance only after the account lock; approval used the real DB clock.
         return env.plan.deadline if locked else await original_now(db)
 

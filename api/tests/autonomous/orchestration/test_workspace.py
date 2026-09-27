@@ -6,6 +6,8 @@ import os
 import sys
 from datetime import timedelta
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -17,7 +19,8 @@ from tests.autonomous.orchestration.test_executor import (
 )
 
 from app.autonomous.enums import ToolIntent
-from app.autonomous.guard import guarded_tool_call
+from app.autonomous.guard import ToolResult, guarded_tool_call
+from app.autonomous.orchestration.store import WorkerClaim
 from app.autonomous.orchestration.views import read_workspace_file
 from app.autonomous.orchestration.workspace import parse_request
 from app.errors import Conflict, Forbidden, NotFound, SessionHalted, ToolNotGranted
@@ -68,8 +71,8 @@ asyncio.run(main())
 
 
 async def test_wip_survives_process_death_and_parent_synthesizes_shared_file(
-    demonstration, test_db_url, tmp_path
-):
+    demonstration: SimpleNamespace, test_db_url: str, tmp_path: Path
+) -> None:
     env = demonstration
     await approve(env)
     await env.executor.run_one(env.root_id, env.root_id)
@@ -87,6 +90,7 @@ async def test_wip_survives_process_death_and_parent_synthesizes_shared_file(
             stdout=asyncio.subprocess.PIPE,
             stderr=log,
         )
+        assert peer.stdin is not None and peer.stdout is not None
         try:
             peer.stdin.write(
                 (
@@ -137,6 +141,7 @@ async def test_wip_survives_process_death_and_parent_synthesizes_shared_file(
         assert receipt.status == "completed" and receipt.result["data"]["revision"] == 1
         for topic in result.topics:
             row = await db.get(OrchestrationFile, (topic.session_id, "findings.json"))
+            assert topic.outcome.artifact is not None
             assert row.shared and row.digest == topic.outcome.artifact.digest
             collected = await db.get(Effect, (env.root_id, f"demo:collect:{topic.session_id}:v1"))
             assert collected.result["data"]["content"] == row.content
@@ -145,7 +150,16 @@ async def test_wip_survives_process_death_and_parent_synthesizes_shared_file(
         assert not await db.scalar(select(OrchestrationFile.session_id))
 
 
-async def workspace_call(env, claim, intent, *, key, name="notes.md", revision=1, **params):
+async def workspace_call(
+    env: SimpleNamespace,
+    claim: WorkerClaim,
+    intent: ToolIntent,
+    *,
+    key: str,
+    name: str = "notes.md",
+    revision: int = 1,
+    **params: Any,
+) -> ToolResult:
     return await env.effects.workspace(
         claim,
         effect_key=key,
@@ -155,7 +169,9 @@ async def workspace_call(env, claim, intent, *, key, name="notes.md", revision=1
     )
 
 
-async def test_workspace_isolation_versions_sharing_and_halt(demonstration):
+async def test_workspace_isolation_versions_sharing_and_halt(
+    demonstration: SimpleNamespace,
+) -> None:
     env = demonstration
     await approve(env)
     await env.executor.run_one(env.root_id, env.root_id)
@@ -171,7 +187,7 @@ async def test_workspace_isolation_versions_sharing_and_halt(demonstration):
         env, child, ToolIntent.workspace_write, key="create", revision=0, content="private notes"
     )
     assert created.data == replay.data
-    read = {"name": "notes.md", "revision": 1, "session_id": str(child.session_id)}
+    read: dict[str, Any] = {"name": "notes.md", "revision": 1, "session_id": str(child.session_id)}
     assert (
         await workspace_call(env, sibling, ToolIntent.workspace_read, key="sibling", **read)
     ).data == {"error": "file_unavailable"}
@@ -225,7 +241,7 @@ async def test_workspace_isolation_versions_sharing_and_halt(demonstration):
     ).content == "private notes"
 
 
-async def test_workspace_quotas_unicode_and_unscoped_calls(demonstration):
+async def test_workspace_quotas_unicode_and_unscoped_calls(demonstration: SimpleNamespace) -> None:
     env = demonstration
     await approve(env)
     await env.executor.run_one(env.root_id, env.root_id)
@@ -276,7 +292,9 @@ async def test_workspace_quotas_unicode_and_unscoped_calls(demonstration):
             )
 
 
-async def test_workspace_write_and_effect_receipt_roll_back_together(demonstration, monkeypatch):
+async def test_workspace_write_and_effect_receipt_roll_back_together(
+    demonstration: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     env = demonstration
     await approve(env)
     await env.executor.run_one(env.root_id, env.root_id)
@@ -284,7 +302,7 @@ async def test_workspace_write_and_effect_receipt_roll_back_together(demonstrati
     await env.store.phase(claim, Phase.analysis)
     settle = env.store._settle_effect
 
-    async def fail_commit(*args, **kwargs):
+    async def fail_commit(*args: Any, **kwargs: Any) -> None:
         await settle(*args, **kwargs)
         raise RuntimeError("Injected outcome transaction failure")
 
@@ -314,6 +332,6 @@ async def test_workspace_write_and_effect_receipt_roll_back_together(demonstrati
         {"name": "ok", "revision": 0, "content": "x", "owner_id": str(uuid4())},
     ],
 )
-def test_workspace_rejects_paths_and_unbounded_authority(params):
+def test_workspace_rejects_paths_and_unbounded_authority(params: dict[str, Any]) -> None:
     with pytest.raises(ToolNotGranted):
         parse_request(ToolIntent.workspace_write, params)

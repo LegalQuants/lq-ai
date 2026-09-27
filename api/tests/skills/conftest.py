@@ -3,8 +3,9 @@ import importlib.util
 import json
 import os
 import threading
+from collections.abc import Iterator
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -12,15 +13,16 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 @pytest.fixture(scope="session")
-def runner_module():
+def runner_module() -> ModuleType:
     spec = importlib.util.spec_from_file_location("skill_broker", ROOT / "script_runner/broker.py")
+    assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
 @pytest.fixture(scope="session")
-def real_runner(runner_module):
+def real_runner(runner_module: ModuleType) -> Iterator[SimpleNamespace]:
     image = os.environ.get("LQ_TEST_SCRIPT_IMAGE")
     probe = os.environ.get("LQ_TEST_PROBE_IMAGE")
     if not image or not probe:

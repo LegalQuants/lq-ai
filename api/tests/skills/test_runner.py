@@ -1,11 +1,18 @@
 import json
 import time
+from types import ModuleType, SimpleNamespace
+from typing import Any
 
 import httpx
 import pytest
 
 
-def request_for(broker, key="test:probe", script="probe", inputs=None):
+def request_for(
+    broker: Any,
+    key: str = "test:probe",
+    script: str = "probe",
+    inputs: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     return {
         "key": key,
         "bundle_digest": broker.bundles[key]["bundle_digest"],
@@ -14,7 +21,9 @@ def request_for(broker, key="test:probe", script="probe", inputs=None):
     }
 
 
-def test_restricted_container_profile_and_uncertain_create_cleanup(runner_module):
+def test_restricted_container_profile_and_uncertain_create_cleanup(
+    runner_module: ModuleType,
+) -> None:
     broker = runner_module.Broker(
         {
             "fixture": {
@@ -24,9 +33,9 @@ def test_restricted_container_profile_and_uncertain_create_cleanup(runner_module
             }
         }
     )
-    calls = []
+    calls: list[tuple[str, str, Any, dict[str, Any]]] = []
 
-    def engine(method, path, body=None, **kwargs):
+    def engine(method: str, path: str, body: Any = None, **kwargs: Any) -> bytes:
         calls.append((method, path, body, kwargs))
         if method == "POST":
             raise OSError("create response lost")
@@ -48,11 +57,11 @@ def test_restricted_container_profile_and_uncertain_create_cleanup(runner_module
     assert broker.run(request_for(broker, "fixture", "helper")) == {"error": "runner_busy"}
 
 
-def test_reaper_scopes_and_removes_only_expired_jobs(runner_module):
+def test_reaper_scopes_and_removes_only_expired_jobs(runner_module: ModuleType) -> None:
     broker = runner_module.Broker({}, instance="test-reaper")
-    calls = []
+    calls: list[tuple[str, str]] = []
 
-    def engine(method, path, *args, **kwargs):
+    def engine(method: str, path: str, *args: Any, **kwargs: Any) -> bytes:
         calls.append((method, path))
         return (
             json.dumps(
@@ -71,7 +80,9 @@ def test_reaper_scopes_and_removes_only_expired_jobs(runner_module):
     assert len(calls) == 2 and "a" * 64 in calls[1][1]
 
 
-async def test_real_runner_auth_pins_and_generated_text_is_data(real_runner):
+async def test_real_runner_auth_pins_and_generated_text_is_data(
+    real_runner: SimpleNamespace,
+) -> None:
     async with httpx.AsyncClient(base_url=real_runner.url, trust_env=False, timeout=45) as client:
         request = request_for(
             real_runner.broker,
@@ -96,7 +107,7 @@ async def test_real_runner_auth_pins_and_generated_text_is_data(real_runner):
         }
 
 
-def test_real_isolation_fresh_work_and_cleanup(real_runner):
+def test_real_isolation_fresh_work_and_cleanup(real_runner: SimpleNamespace) -> None:
     for _ in range(2):
         result = real_runner.broker.run(request_for(real_runner.broker))
         assert result["exit_code"] == 0, result
@@ -120,13 +131,13 @@ def test_real_isolation_fresh_work_and_cleanup(real_runner):
 
 
 @pytest.mark.parametrize("script,error", [("stall", "script_timeout"), ("flood", "output_limit")])
-def test_real_limits(real_runner, script, error):
+def test_real_limits(real_runner: SimpleNamespace, script: str, error: str) -> None:
     assert real_runner.broker.run(
         request_for(real_runner.broker, script=script, inputs={"text": "x" * 60000})
     ) == {"error": error}
 
 
-def test_image_bundle_mismatch_refused(real_runner):
+def test_image_bundle_mismatch_refused(real_runner: SimpleNamespace) -> None:
     broker = real_runner.broker
     original = broker.bundles["test:probe"]["bundle_digest"]
     broker.bundles["test:probe"]["bundle_digest"] = "c" * 64

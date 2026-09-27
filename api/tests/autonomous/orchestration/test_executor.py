@@ -2,12 +2,17 @@
 
 import asyncio
 import json
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
+from uuid import UUID
 
 import pytest
 import pytest_asyncio
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from sqlalchemy import delete, func, select, text
 from tests.autonomous.orchestration.sample_harness import (
     SampleGateway,
@@ -20,7 +25,7 @@ from app.autonomous.orchestration.checkpoints import CheckpointRuntime
 from app.autonomous.orchestration.executor import OrchestrationExecutor
 from app.autonomous.orchestration.outcomes import DemonstrationResult, TopicOutcome
 from app.autonomous.orchestration.policy import CurrentPolicy
-from app.autonomous.orchestration.store import OrchestrationStore
+from app.autonomous.orchestration.store import OrchestrationStore, WorkerClaim
 from app.errors import Conflict
 from app.models.audit import AuditLog
 from app.models.autonomous import AutonomousSession
@@ -30,23 +35,26 @@ from app.models.orchestration import (
     OrchestrationEffect as Effect,
     OrchestrationRoot as Root,
 )
+from app.schemas.gateway import ChatCompletionRequest, ChatCompletionResponse
 from app.skills.loader import load_registry
 from app.skills.registry import MutableSkillRegistry
 
 
 class ControlledSampleGateway(SampleGateway):
-    def __init__(self):
+    def __init__(self) -> None:
         self.entered = asyncio.Event()
         self.release = asyncio.Event()
         self.release.set()
-        self.requests = []
+        self.requests: list[ChatCompletionRequest] = []
         self.active = self.peak = 0
         self.wait_for = 2
-        self.outcomes = {}
+        self.outcomes: dict[str, str] = {}
 
-    async def chat_completion(self, request):
+    async def chat_completion(self, request: ChatCompletionRequest) -> ChatCompletionResponse:
         self.requests.append(request)
-        payload = json.loads(request.messages[1].content)
+        content = request.messages[1].content
+        assert content is not None
+        payload = json.loads(content)
         if payload["inputs"]["operation"] == "sample_topic":
             self.active += 1
             self.peak = max(self.peak, self.active)
@@ -65,7 +73,7 @@ class ControlledSampleGateway(SampleGateway):
 
 
 @pytest_asyncio.fixture
-async def demonstration(env, test_db_url):
+async def demonstration(env: SimpleNamespace, test_db_url: str) -> SimpleNamespace:
     env.skills = MutableSkillRegistry(
         load_registry(Path(__file__).resolve().parent / "fixtures" / "skills")
     )
@@ -97,13 +105,13 @@ async def demonstration(env, test_db_url):
     return env
 
 
-async def approve(env):
+async def approve(env: SimpleNamespace) -> None:
     await env.store.approve(
         env.root_id, actor_id=env.owner_id, revision=1, plan_hash=env.plan.approval_hash()
     )
 
 
-async def finish(env):
+async def finish(env: SimpleNamespace) -> tuple[str, DemonstrationResult]:
     for child in env.children:
         await env.executor.run_one(env.root_id, child)
     await env.executor.run_one(env.root_id, env.root_id)
@@ -113,7 +121,9 @@ async def finish(env):
         return root.status, DemonstrationResult.model_validate_json(json.dumps(session.result))
 
 
-async def test_approved_plan_overlaps_children_collects_and_synthesizes(demonstration):
+async def test_approved_plan_overlaps_children_collects_and_synthesizes(
+    demonstration: SimpleNamespace,
+) -> None:
     env = demonstration
     assert await env.executor.run_one(env.root_id, env.root_id) == "stopped"
     async with env.factory() as db:
@@ -185,8 +195,8 @@ async def test_approved_plan_overlaps_children_collects_and_synthesizes(demonstr
     ],
 )
 async def test_empty_and_ordinary_failed_topics_are_honest(
-    demonstration, case, coverage, status, requests
-):
+    demonstration: SimpleNamespace, case: str, coverage: str, status: str, requests: int
+) -> None:
     env = demonstration
     empty = TopicOutcome(
         status="empty", summary="No sample findings.", findings=()
@@ -204,7 +214,9 @@ async def test_empty_and_ordinary_failed_topics_are_honest(
     assert result.verification == "unverified"
 
 
-async def test_halt_blocks_join_and_synthesis_but_retains_finished_child(demonstration):
+async def test_halt_blocks_join_and_synthesis_but_retains_finished_child(
+    demonstration: SimpleNamespace,
+) -> None:
     env = demonstration
     await approve(env)
     await env.executor.run_one(env.root_id, env.root_id)
@@ -217,7 +229,9 @@ async def test_halt_blocks_join_and_synthesis_but_retains_finished_child(demonst
         assert (await db.get(AutonomousSession, env.children[0])).result["status"] == "completed"
 
 
-async def test_fresh_executor_resumes_durable_join_without_repeating_children(demonstration):
+async def test_fresh_executor_resumes_durable_join_without_repeating_children(
+    demonstration: SimpleNamespace,
+) -> None:
     env = demonstration
     await approve(env)
     await env.executor.run_one(env.root_id, env.root_id)
@@ -233,15 +247,15 @@ async def test_fresh_executor_resumes_durable_join_without_repeating_children(de
 
 
 async def test_uncheckpointed_topic_reuses_receipt_and_session_delete_cascades(
-    demonstration, monkeypatch
-):
+    demonstration: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     env = demonstration
     await approve(env)
     await env.executor.run_one(env.root_id, env.root_id)
     original = env.store.stage_topic
     fail = True
 
-    async def stage(claim, outcome):
+    async def stage(claim: WorkerClaim, outcome: TopicOutcome) -> None:
         nonlocal fail
         await original(claim, outcome)
         if fail:
@@ -268,8 +282,8 @@ async def test_uncheckpointed_topic_reuses_receipt_and_session_delete_cascades(
 
 
 async def test_lost_checkpoint_connection_keeps_durable_capacity_until_old_attempt_stops(
-    demonstration, monkeypatch
-):
+    demonstration: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     env = demonstration
     env.store.deployment_children = 1
     await approve(env)
@@ -278,7 +292,9 @@ async def test_lost_checkpoint_connection_keeps_durable_capacity_until_old_attem
     connections = []
 
     @asynccontextmanager
-    async def capture(root_id, session_id, **kwargs):
+    async def capture(
+        root_id: UUID, session_id: UUID, **kwargs: Any
+    ) -> AsyncIterator[AsyncPostgresSaver | None]:
         async with acquire(root_id, session_id, **kwargs) as saver:
             if saver and session_id == env.children[0]:
                 connections.append(saver.conn)

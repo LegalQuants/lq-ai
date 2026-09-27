@@ -3,7 +3,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import delete, select
 from sqlalchemy.exc import DBAPIError
-from sqlalchemy.ext.asyncio import async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from app.models.skill_workspace import SkillWorkspace
 from app.models.user import User
@@ -11,7 +11,9 @@ from tests.autonomous.orchestration.test_workspace_migration import migrate
 from tests.skills.test_capabilities import make_user
 
 
-async def test_migration_preserves_users_and_refuses_retained_work(test_engine, test_db_url):
+async def test_migration_preserves_users_and_refuses_retained_work(
+    test_engine: AsyncEngine, test_db_url: str
+) -> None:
     factory = async_sessionmaker(test_engine, expire_on_commit=False)
     owner = make_user()
     async with factory.begin() as db:

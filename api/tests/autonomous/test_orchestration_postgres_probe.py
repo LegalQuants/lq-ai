@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from decimal import Decimal
 from types import SimpleNamespace
-from typing import Annotated, TypedDict
+from typing import Annotated, Protocol, TypedDict
 from uuid import UUID, uuid4
 
 import pytest
@@ -25,10 +25,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 pytest.importorskip("langgraph.checkpoint.postgres", reason="requires orchestration-test extra")
 
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.errors import NodeCancelledError
 from langgraph.graph import END, START, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command, Send, interrupt
 
 from app.autonomous.enums import ToolIntent
@@ -37,12 +39,13 @@ from app.errors import SessionHalted
 from app.models.audit import AuditLog
 from app.models.autonomous import AutonomousSession
 from app.models.user import User
+from app.schemas.gateway import ChatCompletionRequest
 
 pytestmark = pytest.mark.integration
 
 
 @pytest.fixture(autouse=True)
-def disable_remote_traces(monkeypatch):
+def disable_remote_traces(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LANGSMITH_TRACING", "false")
     monkeypatch.setenv("LANGCHAIN_TRACING_V2", "false")
 
@@ -61,6 +64,10 @@ class BatchState(TypedDict):
     completed: Annotated[list[str], operator.add]
 
 
+class ProbeNode(Protocol):
+    async def __call__(self, state: ProbeState) -> ProbeState: ...
+
+
 @dataclass
 class ProbeGateway:
     """Provider stub only; the actual guard, estimator, audit and DB run."""
@@ -69,8 +76,9 @@ class ProbeGateway:
     barrier: asyncio.Barrier | None = None
     cancel_at: str | None = None
 
-    async def chat_completion(self, request):
+    async def chat_completion(self, request: ChatCompletionRequest) -> SimpleNamespace:
         key = request.messages[0].content
+        assert key is not None
         self.calls[key] += 1
         if self.barrier is not None and key.endswith(":one"):
             await asyncio.wait_for(self.barrier.wait(), timeout=5)
@@ -116,7 +124,7 @@ async def run_ids(test_engine: AsyncEngine) -> AsyncIterator[list[str]]:
 
 
 @asynccontextmanager
-async def saver_for(test_db_url: str):
+async def saver_for(test_db_url: str) -> AsyncIterator[AsyncPostgresSaver]:
     # Every invocation has a fresh saver/connection. No permissive arbitrary
     # object deserialization, pickle fallback or LangSmith callback is enabled.
     serde = JsonPlusSerializer(
@@ -132,15 +140,15 @@ async def saver_for(test_db_url: str):
 def make_graph(
     engine: AsyncEngine,
     gateway: ProbeGateway,
-    saver=None,
+    saver: AsyncPostgresSaver | None = None,
     *,
     approval: bool = False,
     crash_at: str | None = None,
-):
+) -> CompiledStateGraph[ProbeState, None, ProbeState, ProbeState]:
     factory = async_sessionmaker(engine, expire_on_commit=False)
 
-    def make_effect(step: str):
-        async def effect(state: ProbeState):
+    def make_effect(step: str) -> ProbeNode:
+        async def effect(state: ProbeState) -> ProbeState:
             # Independent session per effect. This intentionally preserves the
             # current guard's transaction semantics for characterization.
             async with factory() as db:
@@ -169,7 +177,7 @@ def make_graph(
 
         return effect
 
-    def wait_for_consent(state: ProbeState):
+    def wait_for_consent(state: ProbeState) -> ProbeState:
         consent = interrupt({"session_id": state["session_id"]})
         assert consent is True  # Only a runtime interrupt probe, not LQ approval.
         return {}
@@ -188,9 +196,11 @@ def make_graph(
     return builder.compile(checkpointer=saver)
 
 
-async def test_interrupt_survives_fresh_saver_and_graph(test_engine, test_db_url, run_ids):
+async def test_interrupt_survives_fresh_saver_and_graph(
+    test_engine: AsyncEngine, test_db_url: str, run_ids: list[str]
+) -> None:
     gateway = ProbeGateway()
-    config = {"configurable": {"thread_id": str(uuid4())}}
+    config: RunnableConfig = {"configurable": {"thread_id": str(uuid4())}}
     async with saver_for(test_db_url) as saver:
         result = await make_graph(test_engine, gateway, saver, approval=True).ainvoke(
             {"session_id": run_ids[0], "completed": []}, config, durability="sync"
@@ -206,10 +216,10 @@ async def test_interrupt_survives_fresh_saver_and_graph(test_engine, test_db_url
 
 
 async def test_checkpointed_step_survives_but_committed_uncheckpointed_effect_repeats(
-    test_engine, test_db_url, run_ids
-):
+    test_engine: AsyncEngine, test_db_url: str, run_ids: list[str]
+) -> None:
     gateway = ProbeGateway()
-    config = {"configurable": {"thread_id": str(uuid4())}}
+    config: RunnableConfig = {"configurable": {"thread_id": str(uuid4())}}
     async with saver_for(test_db_url) as saver:
         with pytest.raises(CrashAfterCommit):
             await make_graph(test_engine, gateway, saver, crash_at="two").ainvoke(
@@ -236,9 +246,11 @@ async def test_checkpointed_step_survives_but_committed_uncheckpointed_effect_re
         assert count == 3
 
 
-async def test_current_halt_wins_over_checkpoint_resume(test_engine, test_db_url, run_ids):
+async def test_current_halt_wins_over_checkpoint_resume(
+    test_engine: AsyncEngine, test_db_url: str, run_ids: list[str]
+) -> None:
     gateway = ProbeGateway()
-    config = {"configurable": {"thread_id": str(uuid4())}}
+    config: RunnableConfig = {"configurable": {"thread_id": str(uuid4())}}
     async with saver_for(test_db_url) as saver:
         await make_graph(test_engine, gateway, saver, approval=True).ainvoke(
             {"session_id": run_ids[0], "completed": []}, config, durability="sync"
@@ -258,12 +270,15 @@ async def test_current_halt_wins_over_checkpoint_resume(test_engine, test_db_url
     assert not gateway.calls
     async with async_sessionmaker(test_engine)() as db:
         session = await db.get(AutonomousSession, UUID(run_ids[0]))
+        assert session is not None
         assert session.halt_state == "halted"
 
 
-async def test_interrupted_provider_call_needs_receipt_before_io(test_engine, test_db_url, run_ids):
+async def test_interrupted_provider_call_needs_receipt_before_io(
+    test_engine: AsyncEngine, test_db_url: str, run_ids: list[str]
+) -> None:
     gateway = ProbeGateway(cancel_at=f"{run_ids[0]}:two")
-    config = {"configurable": {"thread_id": str(uuid4())}}
+    config: RunnableConfig = {"configurable": {"thread_id": str(uuid4())}}
     async with saver_for(test_db_url) as saver:
         # The locked 1.2.11 runtime makes a node-raised cancellation an explicit
         # failure, rather than silently treating it as a completed node.
@@ -291,19 +306,19 @@ async def test_interrupted_provider_call_needs_receipt_before_io(test_engine, te
 
 
 async def test_langgraph_fanout_overlaps_multistep_children_with_independent_sessions(
-    test_engine, test_db_url, run_ids
-):
+    test_engine: AsyncEngine, test_db_url: str, run_ids: list[str]
+) -> None:
     gateway = ProbeGateway(barrier=asyncio.Barrier(2))
-    config = {"configurable": {"thread_id": str(uuid4())}, "max_concurrency": 2}
+    config: RunnableConfig = {"configurable": {"thread_id": str(uuid4())}, "max_concurrency": 2}
     async with saver_for(test_db_url) as saver:
         child = make_graph(test_engine, gateway)
 
-        async def research(state: ProbeState):
+        async def research(state: ProbeState) -> dict[str, list[str]]:
             result = await child.ainvoke(state)
             assert result["completed"] == ["one", "two"]
             return {"completed": [state["session_id"]]}
 
-        def dispatch(state: BatchState):
+        def dispatch(state: BatchState) -> list[Send]:
             return [
                 Send("research", {"session_id": session_id, "completed": []})
                 for session_id in state["session_ids"]
@@ -320,13 +335,15 @@ async def test_langgraph_fanout_overlaps_multistep_children_with_independent_ses
     assert gateway.calls == {f"{sid}:{step}": 1 for sid in run_ids for step in ("one", "two")}
 
 
-async def test_saver_is_not_an_exclusive_worker_claim(test_engine, test_db_url, run_ids):
+async def test_saver_is_not_an_exclusive_worker_claim(
+    test_engine: AsyncEngine, test_db_url: str, run_ids: list[str]
+) -> None:
     gateway = ProbeGateway(barrier=asyncio.Barrier(2))
-    config = {"configurable": {"thread_id": str(uuid4())}}
+    config: RunnableConfig = {"configurable": {"thread_id": str(uuid4())}}
     async with saver_for(test_db_url) as first_saver, saver_for(test_db_url) as second_saver:
         first = make_graph(test_engine, gateway, first_saver)
         second = make_graph(test_engine, gateway, second_saver)
-        initial = {"session_id": run_ids[0], "completed": []}
+        initial: ProbeState = {"session_id": run_ids[0], "completed": []}
         await asyncio.gather(
             first.ainvoke(initial, config, durability="sync"),
             second.ainvoke(initial, config, durability="sync"),

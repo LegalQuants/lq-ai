@@ -7,14 +7,15 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
-from uuid import uuid4
+from typing import Any
+from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
 from sqlalchemy import delete, select, update
 
 from app.autonomous.enums import ToolIntent
-from app.autonomous.guard import guarded_tool_call
+from app.autonomous.guard import ToolResult, guarded_tool_call
 from app.autonomous.orchestration.contracts import ResourceScope
 from app.autonomous.orchestration.policy import (
     SourcePolicy,
@@ -26,9 +27,10 @@ from app.models.document import Document, DocumentChunk
 from app.models.file import File
 from app.models.project import ProjectFile
 from app.schemas.autonomous import Phase
+from app.schemas.gateway import ChatCompletionRequest
 
 
-async def add_document(env, *, attached=True):
+async def add_document(env: SimpleNamespace, *, attached: bool = True) -> tuple[UUID, UUID]:
     async with env.factory.begin() as db:
         file = File(
             owner_id=env.owner_id,
@@ -49,7 +51,7 @@ async def add_document(env, *, attached=True):
         return file.id, document.id
 
 
-def select_documents(env, *ids):
+def select_documents(env: SimpleNamespace, *ids: UUID) -> None:
     scope = env.plan.root.model_copy(
         update={
             "resources": ResourceScope(document_ids=tuple(ids), source_names=()),
@@ -63,7 +65,7 @@ def select_documents(env, *ids):
     )
 
 
-async def approve(env):
+async def approve(env: SimpleNamespace) -> None:
     await env.store.save_plan(env.plan, actor_id=env.owner_id)
     await env.store.approve(
         env.root_id,
@@ -73,7 +75,7 @@ async def approve(env):
     )
 
 
-async def test_real_policy_allows_approved_selected_documents(policy_env):
+async def test_real_policy_allows_approved_selected_documents(policy_env: SimpleNamespace) -> None:
     env = policy_env
     _, document_id = await add_document(env)
     select_documents(env, document_id)
@@ -82,7 +84,9 @@ async def test_real_policy_allows_approved_selected_documents(policy_env):
     assert len(await env.store.admit_children(claim)) == 2
 
 
-async def test_optional_demo_allowlist_preserves_legacy_policy_hash(policy_env):
+async def test_optional_demo_allowlist_preserves_legacy_policy_hash(
+    policy_env: SimpleNamespace,
+) -> None:
     policy = policy_env.config.current
     legacy = policy.model_dump(mode="json", exclude={"demo_project_id"})
     expected = hashlib.sha256(
@@ -93,7 +97,9 @@ async def test_optional_demo_allowlist_preserves_legacy_policy_hash(policy_env):
 
 
 @pytest.mark.parametrize("mutation", ["delete", "detach", "missing", "unattached"])
-async def test_selected_document_access_is_current(policy_env, mutation):
+async def test_selected_document_access_is_current(
+    policy_env: SimpleNamespace, mutation: str
+) -> None:
     env = policy_env
     file_id, document_id = await add_document(env, attached=mutation != "unattached")
     select_documents(env, uuid4() if mutation == "missing" else document_id)
@@ -116,7 +122,9 @@ async def test_selected_document_access_is_current(policy_env, mutation):
 @pytest.mark.parametrize(
     "mutation", ["body", "reference", "missing_reference", "new_reference", "reload"]
 )
-async def test_skill_drift_after_approval_refuses_worker(policy_env, mutation):
+async def test_skill_drift_after_approval_refuses_worker(
+    policy_env: SimpleNamespace, mutation: str
+) -> None:
     env = policy_env
     await approve(env)
     if mutation == "body":
@@ -137,7 +145,9 @@ async def test_skill_drift_after_approval_refuses_worker(policy_env, mutation):
 
 
 @pytest.mark.parametrize("mutation", ["disabled", "source", "tier", "grants"])
-async def test_operator_change_requires_new_approval(policy_env, mutation):
+async def test_operator_change_requires_new_approval(
+    policy_env: SimpleNamespace, mutation: str
+) -> None:
     env = policy_env
     await approve(env)
     policy = env.config.current
@@ -154,7 +164,9 @@ async def test_operator_change_requires_new_approval(policy_env, mutation):
 
 
 @pytest.mark.parametrize("name,tier", [("unconfigured", 2), ("statutes", 0)])
-async def test_source_name_and_egress_ceiling_are_enforced(policy_env, name, tier):
+async def test_source_name_and_egress_ceiling_are_enforced(
+    policy_env: SimpleNamespace, name: str, tier: int
+) -> None:
     env = policy_env
     scope = env.plan.root.model_copy(
         update={
@@ -167,7 +179,7 @@ async def test_source_name_and_egress_ceiling_are_enforced(policy_env, name, tie
         await env.store.save_plan(env.plan, actor_id=env.owner_id)
 
 
-async def test_skill_source_coverage_is_not_universal(policy_env):
+async def test_skill_source_coverage_is_not_universal(policy_env: SimpleNamespace) -> None:
     env = policy_env
     policy = env.config.current
     env.config.current = policy.model_copy(
@@ -193,12 +205,16 @@ async def test_skill_source_coverage_is_not_universal(policy_env):
 @pytest.mark.parametrize(
     "source,ops", [("unknown", ("search",)), ("eurlex", ("search_authority",))]
 )
-def test_unimplemented_source_operations_cannot_be_configured(source, ops):
+def test_unimplemented_source_operations_cannot_be_configured(
+    source: str, ops: tuple[str, ...]
+) -> None:
     with pytest.raises(ValidationError, match="registered adapter"):
         SourcePolicy(name="fixture", source_type=source, egress_tier=1, operations=ops)
 
 
-async def test_operator_grant_does_not_expand_closed_research_profile(policy_env):
+async def test_operator_grant_does_not_expand_closed_research_profile(
+    policy_env: SimpleNamespace,
+) -> None:
     env = policy_env
     grants = env.plan.root.grants.model_copy(update={"analysis": (ToolIntent.run_playbook,)})
     policy = env.config.current
@@ -222,7 +238,9 @@ async def test_operator_grant_does_not_expand_closed_research_profile(policy_env
 
 
 @pytest.mark.parametrize("selected", [True, False])
-async def test_guard_reads_only_selected_document_text(policy_env, selected):
+async def test_guard_reads_only_selected_document_text(
+    policy_env: SimpleNamespace, selected: bool
+) -> None:
     env = policy_env
     file_id, document_id = await add_document(env)
     select_documents(env, *([document_id] if selected else []))
@@ -270,7 +288,9 @@ async def test_guard_reads_only_selected_document_text(policy_env, selected):
         {"file_id": "invalid"},
     ],
 )
-async def test_guard_rejects_unbounded_or_malformed_retrieval(policy_env, params):
+async def test_guard_rejects_unbounded_or_malformed_retrieval(
+    policy_env: SimpleNamespace, params: dict[str, str]
+) -> None:
     env = policy_env
     async with env.factory.begin() as db:
         session = await db.get(AutonomousSession, env.root_id)
@@ -287,14 +307,16 @@ async def test_guard_rejects_unbounded_or_malformed_retrieval(policy_env, params
             )
 
 
-async def test_guard_scope_overrides_model_policy_params(policy_env, monkeypatch):
+async def test_guard_scope_overrides_model_policy_params(
+    policy_env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     env = policy_env
-    requests = []
+    requests: list[ChatCompletionRequest] = []
 
-    async def estimate(*args):
+    async def estimate(*args: Any) -> Decimal:
         return Decimal("0")
 
-    async def chat_completion(request):
+    async def chat_completion(request: ChatCompletionRequest) -> SimpleNamespace:
         requests.append(request)
         return SimpleNamespace(
             choices=[SimpleNamespace(message=SimpleNamespace(content=""))],
@@ -329,10 +351,12 @@ async def test_guard_scope_overrides_model_policy_params(policy_env, monkeypatch
     assert not request.lq_ai_skills  # never ask gateway to re-resolve a mutable slug
 
 
-async def test_guard_r5_precedes_scope_refusal_and_cost(policy_env, monkeypatch):
+async def test_guard_r5_precedes_scope_refusal_and_cost(
+    policy_env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     env = policy_env
 
-    async def unexpected_estimate(*args):
+    async def unexpected_estimate(*args: Any) -> Decimal:
         pytest.fail("R4 must not run for a stopped or ungranted call")
 
     monkeypatch.setattr("app.autonomous.guard.estimate_tool_cost", unexpected_estimate)
@@ -351,10 +375,12 @@ async def test_guard_r5_precedes_scope_refusal_and_cost(policy_env, monkeypatch)
             )
 
 
-async def test_guard_denies_external_dispatch_without_source_binding(policy_env, monkeypatch):
+async def test_guard_denies_external_dispatch_without_source_binding(
+    policy_env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     env = policy_env
 
-    async def unexpected_estimate(*args):
+    async def unexpected_estimate(*args: Any) -> Decimal:
         pytest.fail("No cost/provider I/O for an unsupported scope path")
 
     monkeypatch.setattr("app.autonomous.guard.estimate_tool_cost", unexpected_estimate)
@@ -385,7 +411,9 @@ async def test_guard_denies_external_dispatch_without_source_binding(policy_env,
         assert row.details == {"tool": "retrieve_authority", "outcome": "tool_not_granted"}
 
 
-async def test_revocation_allows_admitted_call_to_settle_but_blocks_next(policy_env, monkeypatch):
+async def test_revocation_allows_admitted_call_to_settle_but_blocks_next(
+    policy_env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     env = policy_env
     await approve(env)
     claim = await env.store.claim(env.root_id, env.root_id, worker_id=uuid4(), seconds=60)
@@ -399,10 +427,10 @@ async def test_revocation_allows_admitted_call_to_settle_but_blocks_next(policy_
     )
     entered, release = asyncio.Event(), asyncio.Event()
 
-    async def estimate(*args):
+    async def estimate(*args: Any) -> Decimal:
         return Decimal("1")
 
-    async def chat_completion(request):
+    async def chat_completion(request: ChatCompletionRequest) -> SimpleNamespace:
         entered.set()
         await asyncio.wait_for(release.wait(), timeout=5)
         return SimpleNamespace(
@@ -412,7 +440,7 @@ async def test_revocation_allows_admitted_call_to_settle_but_blocks_next(policy_
 
     monkeypatch.setattr("app.autonomous.guard.estimate_tool_cost", estimate)
 
-    async def invoke():
+    async def invoke() -> ToolResult:
         async with env.factory.begin() as db:
             session = await db.get(AutonomousSession, env.root_id)
             return await guarded_tool_call(
@@ -450,7 +478,9 @@ async def test_revocation_allows_admitted_call_to_settle_but_blocks_next(policy_
 
 
 @pytest.mark.parametrize("restriction", ["inference", "egress", "anonymization", "skill_grants"])
-async def test_plan_must_fit_current_data_and_skill_policy(policy_env, restriction):
+async def test_plan_must_fit_current_data_and_skill_policy(
+    policy_env: SimpleNamespace, restriction: str
+) -> None:
     env = policy_env
     policy = env.config.current
     scope = env.plan.root
@@ -483,8 +513,12 @@ async def test_plan_must_fit_current_data_and_skill_policy(policy_env, restricti
     ],
 )
 async def test_operator_and_skill_floors_use_strongest_requirement(
-    policy_env, operator_floor, skill_floor, scope_floor, allowed
-):
+    policy_env: SimpleNamespace,
+    operator_floor: int,
+    skill_floor: int | None,
+    scope_floor: int,
+    allowed: bool,
+) -> None:
     from app.autonomous.orchestration.policy import skill_pin
     from app.skills.loader import load_registry
 
@@ -521,7 +555,9 @@ async def test_operator_and_skill_floors_use_strongest_requirement(
 
 
 @pytest.mark.parametrize("halt_state,status", [("halted", "running"), ("running", "completed")])
-async def test_guard_rechecks_terminal_state(policy_env, halt_state, status):
+async def test_guard_rechecks_terminal_state(
+    policy_env: SimpleNamespace, halt_state: str, status: str
+) -> None:
     env = policy_env
     async with env.factory.begin() as db:
         session = await db.get(AutonomousSession, env.root_id)

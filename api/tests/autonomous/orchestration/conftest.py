@@ -1,13 +1,15 @@
 """Committed Postgres fixtures: independent transactions and actual row races."""
 
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest_asyncio
 from sqlalchemy import delete
-from sqlalchemy.ext.asyncio import async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.autonomous.enums import ToolIntent
 from app.autonomous.orchestration.contracts import (
@@ -19,6 +21,7 @@ from app.autonomous.orchestration.contracts import (
     ResourceScope,
     SkillPin,
 )
+from app.autonomous.orchestration.planning import PlanningSnapshot
 from app.autonomous.orchestration.policy import (
     CurrentPolicy,
     OperatorPolicy,
@@ -42,14 +45,14 @@ class FixturePolicy:
 
     valid = True
 
-    async def __call__(self, db, plan):
+    async def __call__(self, db: AsyncSession, plan: PreparedPlan | PlanningSnapshot) -> None:
         assert db.in_transaction()
         if not self.valid:
             raise Forbidden(message="Fixture policy revoked")
 
 
 @pytest_asyncio.fixture
-async def env(test_engine):
+async def env(test_engine: AsyncEngine) -> AsyncIterator[SimpleNamespace]:
     factory = async_sessionmaker(test_engine, expire_on_commit=False)
     async with factory.begin() as db:
         owner = User(
@@ -144,7 +147,7 @@ async def env(test_engine):
 
 
 @pytest_asyncio.fixture
-async def ready(env):
+async def ready(env: SimpleNamespace) -> SimpleNamespace:
     await env.store.save_plan(env.plan, actor_id=env.owner_id)
     await env.store.approve(
         env.root_id, actor_id=env.owner_id, revision=1, plan_hash=env.plan.approval_hash()
@@ -154,7 +157,7 @@ async def ready(env):
 
 
 @pytest_asyncio.fixture
-async def policy_env(env, tmp_path):
+async def policy_env(env: SimpleNamespace, tmp_path: Path) -> AsyncIterator[SimpleNamespace]:
     folder = tmp_path / "fixture-skill"
     folder.mkdir()
     (folder / "SKILL.md").write_text(
@@ -164,7 +167,9 @@ async def policy_env(env, tmp_path):
     (folder / "reference").mkdir()
     (folder / "reference" / "limits.md").write_text("Fixture coverage only.")
     holder = MutableSkillRegistry(load_registry(tmp_path))
-    pin = skill_pin(holder.current().get("fixture-skill"))
+    record = holder.current().get("fixture-skill")
+    assert record is not None
+    pin = skill_pin(record)
     grants = env.plan.root.grants
     policy = OperatorPolicy(
         skills=tuple(

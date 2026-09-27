@@ -6,16 +6,19 @@ The provider is controlled here. An unmocked provider run is a separate UAT gate
 import asyncio
 import hashlib
 import json
+from collections.abc import AsyncIterator
 from copy import deepcopy
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_active_user
 from app.api.orchestration import service
@@ -34,7 +37,7 @@ BASE = "/api/v1/autonomous/orchestration"
 
 
 @pytest.mark.unit
-async def test_disabled_chat_worker_does_no_database_or_queue_work():
+async def test_disabled_chat_worker_does_no_database_or_queue_work() -> None:
     assert await orchestration_session_job({}, str(uuid4()), str(uuid4())) == {"status": "disabled"}
     assert await orchestration_watchdog({}) == {"status": "disabled"}
     disabled = SimpleNamespace(settings=SimpleNamespace(orchestration_chat_enabled=False))
@@ -44,8 +47,8 @@ async def test_disabled_chat_worker_does_no_database_or_queue_work():
 
 
 class ModelGateway:
-    def __init__(self):
-        self.config = {
+    def __init__(self) -> None:
+        self.config: dict[str, Any] = {
             "configuration_revision": "b" * 64,
             "providers": [
                 {
@@ -64,8 +67,8 @@ class ModelGateway:
             },
             "anonymization": {"enabled": True, "apply_at_tiers": [1]},
         }
-        self.requests = []
-        self.operations = []
+        self.requests: list[Any] = []
+        self.operations: list[str] = []
         self.proposal = json.dumps(
             {
                 "tasks": [
@@ -93,10 +96,12 @@ class ModelGateway:
         self.uncertain = False
         self.synthesis_finish_reason = "stop"
 
-    async def get_admin_config(self):
+    async def get_admin_config(self) -> dict[str, Any]:
         return deepcopy(self.config)
 
-    async def chat_completion(self, request, *, configuration_revision):
+    async def chat_completion(
+        self, request: Any, *, configuration_revision: str
+    ) -> SimpleNamespace:
         assert configuration_revision == self.config["configuration_revision"]
         self.requests.append(request)
         payload = json.loads(request.messages[1].content)
@@ -151,7 +156,9 @@ class ModelGateway:
 
 
 @pytest_asyncio.fixture
-async def model_demo(env, test_db_url, monkeypatch):
+async def model_demo(
+    env: SimpleNamespace, test_db_url: str, monkeypatch: pytest.MonkeyPatch
+) -> AsyncIterator[SimpleNamespace]:
     skills = MutableSkillRegistry(load_registry(Path(__file__).resolve().parents[4] / "skills"))
     settings = get_settings().model_copy(
         update={
@@ -170,9 +177,9 @@ async def model_demo(env, test_db_url, monkeypatch):
     await runtime.for_profile("model_demo_v1").executor().checkpoints.setup()
     async with env.factory() as db:
         user = await db.get(User, env.owner_id)
-    queued = []
+    queued: list[tuple[UUID, UUID]] = []
 
-    async def enqueue(root_id, session_id):
+    async def enqueue(root_id: UUID, session_id: UUID) -> bool:
         queued.append((root_id, session_id))
         return True
 
@@ -198,7 +205,7 @@ async def model_demo(env, test_db_url, monkeypatch):
         app.dependency_overrides.update(previous)
 
 
-async def start(api):
+async def start(api: SimpleNamespace) -> dict[str, Any]:
     response = await api.client.post(
         f"{BASE}/chat-runs",
         json={
@@ -211,13 +218,13 @@ async def start(api):
     return response.json()
 
 
-async def read(api, root_id):
+async def read(api: SimpleNamespace, root_id: str) -> dict[str, Any]:
     response = await api.client.get(f"{BASE}/chat-runs/{root_id}")
     assert response.status_code == 200, response.text
     return response.json()
 
 
-async def plan(api):
+async def plan(api: SimpleNamespace) -> dict[str, Any]:
     initial = await start(api)
     root_id = initial["root_id"]
     result = await orchestration_session_job(api.ctx, root_id, root_id)
@@ -225,7 +232,7 @@ async def plan(api):
     return await read(api, root_id)
 
 
-async def approve(api, value):
+async def approve(api: SimpleNamespace, value: dict[str, Any]) -> None:
     tree = value["tree"]
     response = await api.client.post(
         f"{BASE}/{value['root_id']}/approve",
@@ -237,7 +244,9 @@ async def approve(api, value):
     assert response.status_code == 200, response.text
 
 
-async def test_complete_skill_backed_run_through_worker_and_receipts(model_demo):
+async def test_complete_skill_backed_run_through_worker_and_receipts(
+    model_demo: SimpleNamespace,
+) -> None:
     api = model_demo
     caps = await api.client.get(f"{BASE}/chat-runs")
     assert caps.status_code == 200 and caps.json()["planning_allowance_usd"] != "0"
@@ -288,7 +297,9 @@ async def test_complete_skill_backed_run_through_worker_and_receipts(model_demo)
         assert child["outcome"]["artifact"] and "[§5]" in child["outcome"]["findings"][0]
 
 
-async def test_retained_run_includes_only_its_pinned_agreement(model_demo, monkeypatch):
+async def test_retained_run_includes_only_its_pinned_agreement(
+    model_demo: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     api = model_demo
     value = await start(api)
     source = value["packet"]
@@ -301,7 +312,7 @@ async def test_retained_run_includes_only_its_pinned_agreement(model_demo, monke
     assert (await read(api, value["root_id"]))["packet"] is None
 
 
-def test_contract_qa_adaptive_markdown_is_retained_without_repair():
+def test_contract_qa_adaptive_markdown_is_retained_without_repair() -> None:
     answer = (
         "The Supplier provides two onboarding sessions within 20 business days. [§3]\n\n"
         "### Support\nThe Supplier acknowledges requests within two business days. [§4]"
@@ -313,7 +324,7 @@ def test_contract_qa_adaptive_markdown_is_retained_without_repair():
     assert outcome.verification == "unverified" and outcome.artifact is None
 
 
-def test_contract_qa_malformed_json_and_incomplete_answers_still_fail():
+def test_contract_qa_malformed_json_and_incomplete_answers_still_fail() -> None:
     for content, reason in (
         ('```json\n{"status":"completed","findings":[ way]}\n```', "stop"),
         ("A valid-looking answer [§4]", "length"),
@@ -325,7 +336,7 @@ def test_contract_qa_malformed_json_and_incomplete_answers_still_fail():
             contract_qa_outcome(content, reason)
 
 
-def test_contract_qa_completed_json_effect_remains_readable():
+def test_contract_qa_completed_json_effect_remains_readable() -> None:
     content = json.dumps(
         {
             "status": "completed",
@@ -349,7 +360,9 @@ def test_contract_qa_completed_json_effect_remains_readable():
         '```json\n{"tasks":[],"grants":["notify"]}\n```',
     ],
 )
-async def test_invalid_model_plan_retains_charge_without_fallback(model_demo, proposal):
+async def test_invalid_model_plan_retains_charge_without_fallback(
+    model_demo: SimpleNamespace, proposal: str
+) -> None:
     api = model_demo
     api.gateway.proposal = proposal
     value = await plan(api)
@@ -358,7 +371,9 @@ async def test_invalid_model_plan_retains_charge_without_fallback(model_demo, pr
     assert api.gateway.operations == ["propose_plan"]
 
 
-async def test_halt_before_planning_and_disable_preserve_read_access(model_demo):
+async def test_halt_before_planning_and_disable_preserve_read_access(
+    model_demo: SimpleNamespace,
+) -> None:
     api = model_demo
     value = await start(api)
     root = value["root_id"]
@@ -370,7 +385,9 @@ async def test_halt_before_planning_and_disable_preserve_read_access(model_demo)
     assert not api.gateway.requests
 
 
-async def test_changed_gateway_configuration_cannot_dispatch_children(model_demo):
+async def test_changed_gateway_configuration_cannot_dispatch_children(
+    model_demo: SimpleNamespace,
+) -> None:
     api = model_demo
     value = await plan(api)
     await approve(api, value)
@@ -384,7 +401,9 @@ async def test_changed_gateway_configuration_cannot_dispatch_children(model_demo
     assert api.gateway.operations == ["propose_plan"]
 
 
-async def test_uncertain_planning_is_retained_without_automatic_retry(model_demo):
+async def test_uncertain_planning_is_retained_without_automatic_retry(
+    model_demo: SimpleNamespace,
+) -> None:
     api = model_demo
     api.gateway.uncertain = True
     value = await start(api)
@@ -398,7 +417,7 @@ async def test_uncertain_planning_is_retained_without_automatic_retry(model_demo
     assert len(api.gateway.requests) == 1
 
 
-async def test_request_idempotency_and_rejection(model_demo):
+async def test_request_idempotency_and_rejection(model_demo: SimpleNamespace) -> None:
     api = model_demo
     value = await plan(api)
     response = await api.client.post(
@@ -418,7 +437,7 @@ async def test_request_idempotency_and_rejection(model_demo):
     assert (await start(api))["status"] == "planning"
 
 
-async def test_wrong_hash_cannot_approve_or_admit_children(model_demo):
+async def test_wrong_hash_cannot_approve_or_admit_children(model_demo: SimpleNamespace) -> None:
     api = model_demo
     value = await plan(api)
     root = value["root_id"]
@@ -432,7 +451,9 @@ async def test_wrong_hash_cannot_approve_or_admit_children(model_demo):
     assert api.gateway.operations == ["propose_plan"]
 
 
-async def test_watchdog_requeues_approved_root_after_lost_wakeup(model_demo):
+async def test_watchdog_requeues_approved_root_after_lost_wakeup(
+    model_demo: SimpleNamespace,
+) -> None:
     api = model_demo
     value = await plan(api)
     await approve(api, value)
@@ -443,7 +464,9 @@ async def test_watchdog_requeues_approved_root_after_lost_wakeup(model_demo):
     assert (await read(api, value["root_id"]))["status"] == "queued"
 
 
-async def test_watchdog_requeues_admitted_children_after_lost_wakeup(model_demo):
+async def test_watchdog_requeues_admitted_children_after_lost_wakeup(
+    model_demo: SimpleNamespace,
+) -> None:
     api = model_demo
     value = await plan(api)
     await approve(api, value)
@@ -466,8 +489,8 @@ async def test_watchdog_requeues_admitted_children_after_lost_wakeup(model_demo)
 
 
 async def test_legacy_worker_refuses_chat_child_and_legacy_halt_reaches_tree(
-    model_demo, monkeypatch
-):
+    model_demo: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from app.workers import autonomous_worker
 
     api = model_demo
@@ -481,7 +504,7 @@ async def test_legacy_worker_refuses_chat_child_and_legacy_halt_reaches_tree(
     blocked = await autonomous_worker.autonomous_session_job({}, child_id)
     assert blocked["status"] == "governed_orchestration_only"
 
-    async def db_override():
+    async def db_override() -> AsyncIterator[AsyncSession]:
         async with api.env.factory() as db:
             yield db
 
@@ -492,7 +515,9 @@ async def test_legacy_worker_refuses_chat_child_and_legacy_halt_reaches_tree(
     assert (await read(api, root))["status"] == "halted"
 
 
-async def test_one_json_presentation_fence_preserves_strict_plan_validation(model_demo):
+async def test_one_json_presentation_fence_preserves_strict_plan_validation(
+    model_demo: SimpleNamespace,
+) -> None:
     api = model_demo
     api.gateway.proposal = "```json\n" + api.gateway.proposal + "\n```"
     value = await plan(api)
@@ -501,7 +526,7 @@ async def test_one_json_presentation_fence_preserves_strict_plan_validation(mode
     assert api.gateway.operations == ["propose_plan"]
 
 
-async def test_scope_and_pricing_refusals_before_planning(model_demo):
+async def test_scope_and_pricing_refusals_before_planning(model_demo: SimpleNamespace) -> None:
     api = model_demo
     wrong_project = await api.client.post(
         f"{BASE}/chat-runs",
@@ -521,24 +546,26 @@ async def test_scope_and_pricing_refusals_before_planning(model_demo):
 
 
 @pytest.mark.parametrize("fail", [False, True])
-async def test_model_transport_uses_bounded_timeout_and_closes(monkeypatch, fail):
+async def test_model_transport_uses_bounded_timeout_and_closes(
+    monkeypatch: pytest.MonkeyPatch, fail: bool
+) -> None:
     """Regression for live UAT's 60-second ordinary-chat timeout mismatch."""
-    created = []
 
     class Transport:
-        def __init__(self, url, key, *, timeout):
+        def __init__(self, url: str, key: str, *, timeout: float) -> None:
             self.timeout, self.closed = timeout, False
             created.append(self)
 
-        async def chat_completion(self, request, *, configuration_revision):
+        async def chat_completion(self, request: Any, *, configuration_revision: str) -> str:
             assert configuration_revision == "a" * 64
             if fail:
                 raise TimeoutError
             return "response"
 
-        async def aclose(self):
+        async def aclose(self) -> None:
             self.closed = True
 
+    created: list[Transport] = []
     monkeypatch.setattr("app.autonomous.orchestration.service.GatewayClient", Transport)
     settings = get_settings().model_copy(update={"orchestration_chat_timeout_seconds": 300})
     gateway = ModelDemoGateway(settings)
@@ -552,7 +579,9 @@ async def test_model_transport_uses_bounded_timeout_and_closes(monkeypatch, fail
     assert created[0].timeout == 300 and created[0].closed
 
 
-async def test_planning_is_not_approvable_and_cross_owner_cannot_inspect(model_demo):
+async def test_planning_is_not_approvable_and_cross_owner_cannot_inspect(
+    model_demo: SimpleNamespace,
+) -> None:
     api = model_demo
     value = await start(api)
     root = value["root_id"]
@@ -566,7 +595,9 @@ async def test_planning_is_not_approvable_and_cross_owner_cannot_inspect(model_d
     assert not api.gateway.requests
 
 
-async def test_truncated_synthesis_fails_without_replaying_and_retains_children(model_demo):
+async def test_truncated_synthesis_fails_without_replaying_and_retains_children(
+    model_demo: SimpleNamespace,
+) -> None:
     api = model_demo
     value = await plan(api)
     await approve(api, value)
