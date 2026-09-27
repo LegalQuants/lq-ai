@@ -93,7 +93,8 @@ jobs:
         run: |
           cat > .env <<'EOF'
           POSTGRES_PASSWORD=ci-airgap-postgres
-          MINIO_ROOT_PASSWORD=ci-airgap-minio-password
+          OBJECT_STORE_SECRET_KEY=ci-airgap-object-store-password
+          OBJECT_STORE_ACCESS_KEY=lq_ai
           LQ_AI_GATEWAY_KEY=ci-airgap-gateway-key
           JWT_SECRET=ci-airgap-jwt-secret-0123456789abcdef0123456789abcdef
           EOF
@@ -110,7 +111,7 @@ jobs:
           docker tag lq-ai-api:latest lq-ai-arq-worker:latest
 
       - name: Pull pinned third-party images (network still open)
-        run: docker compose --profile local pull postgres redis minio ollama
+        run: docker compose --profile local pull postgres redis rustfs ollama
 
       - name: Pre-fetch the Ollama model (network still open)
         # Starting only the ollama service also creates the compose

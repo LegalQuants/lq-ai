@@ -12,10 +12,10 @@ This page explains exactly what that proof covers, how to reproduce it, what an 
 
 On every run (weekly, on demand, and on PRs touching the compose topology, gateway config, or the harness), the job:
 
-1. **Builds and fetches everything while the network is open** — the four locally-built images (`api`, `gateway`, `web`, plus worker tags of the api image), the four digest-pinned third-party images (`pgvector`, `redis`, `minio`, `ollama`), and one Ollama model.
+1. **Builds and fetches everything while the network is open** — the four locally-built images (`api`, `gateway`, `web`, plus worker tags of the api image), the four digest-pinned third-party images (`pgvector`, `redis`, `rustfs`, `ollama`), and one Ollama model.
 2. **Seals the compose bridge** — an iptables `DOCKER-USER` chain drops every packet leaving the bridge whose destination is not RFC1918/loopback ([`scripts/airgap/deny-egress.sh`](../../scripts/airgap/deny-egress.sh)).
 3. **Starts an egress canary** — tcpdump on the bridge records any packet with a non-private destination, so even *attempts* the seal drops (tolerated-failure telemetry) are evidence ([`scripts/airgap/capture-egress.sh`](../../scripts/airgap/capture-egress.sh)).
-4. **Boots the full stack fresh, under the seal** — every first-boot path runs offline: Alembic migrations, gateway config seeding from `gateway.yaml.example`, MinIO bucket setup, first-run admin bootstrap.
+4. **Boots the full stack fresh, under the seal** — every first-boot path runs offline: Alembic migrations, gateway config seeding from `gateway.yaml.example`, RustFS object-store setup (ADR 0036), first-run admin bootstrap.
 5. **Drives a real user journey** — bootstrap-password login → forced password rotation → chat creation → a message routed to `ollama-local` → non-empty assistant response ([`scripts/airgap/drive-smoke.sh`](../../scripts/airgap/drive-smoke.sh)). It then asserts the gateway's `inference_routing_log` recorded the turn as `routed_provider='ollama-local'`, `routed_inference_tier=1`, with **zero** non-refused rows at any other tier.
 6. **Asserts zero *successful* egress** — a hard failure on any packet from a non-private *source* (a reply from outside means the seal leaked). Outbound *attempts* the seal dropped do not fail the run: upstream components (base images, the web UI, Ollama) try phone-home connections at boot exactly as they would in a true air gap, where those connections simply fail. Every attempt is inventoried — with per-container attribution — into `sealed.attempts.txt` in the evidence artifact and echoed in the job summary, so the operator knows precisely which components will experience connection timeouts on an air-gapped site. The first live run recorded 24 blocked attempt packets from three containers and zero replies.
 7. **Runs a negative control** — from inside the sealed gateway container (the one component that legitimately egresses in cloud mode), a TCP connect to a fixed public IP and an HTTPS request to `https://api.anthropic.com` must both **fail**, and the blocked attempts must **appear** in a second capture. This proves the seal blocks and the canary sees — a clean pcap cannot be a mis-wired no-op. No provider key is involved; unreachability of the cloud endpoint is the whole proof.
@@ -44,7 +44,7 @@ cp .env.example .env   # no provider keys needed
 docker compose build gateway web && docker compose build api
 docker tag lq-ai-api:latest lq-ai-ingest-worker:latest
 docker tag lq-ai-api:latest lq-ai-arq-worker:latest
-docker compose --profile local pull postgres redis minio ollama
+docker compose --profile local pull postgres redis rustfs ollama
 docker compose --profile local up -d --wait ollama
 docker compose exec ollama ollama pull llama3.2:1b
 
@@ -82,7 +82,7 @@ Everything the deployment needs at runtime, per component. Authoritative image d
 |---|---|---|
 | Postgres | `pgvector/pgvector:pg16@sha256:…` (pinned in compose) | `docker save` → media → `docker load` |
 | Redis | `redis:7-alpine@sha256:…` (pinned) | same |
-| MinIO | `minio/minio:latest@sha256:…` (pinned) | same |
+| RustFS | `rustfs/rustfs:1.0.0@sha256:…` (pinned, ADR 0036) | same |
 | Ollama server | `ollama/ollama:latest@sha256:…` (pinned) | same |
 | api / ingest-worker / arq-worker | `lq-ai-api` image (one image, three service tags) | build on a connected host from a repo checkout, `docker save` |
 | gateway | `lq-ai-gateway` image | same |
@@ -98,7 +98,7 @@ Everything the deployment needs at runtime, per component. Authoritative image d
 
 1. `git clone` the repo at the release tag.
 2. `docker compose build gateway web && docker compose build api` (+ tag the two worker images from `lq-ai-api`, as in §2).
-3. `docker compose --profile local pull postgres redis minio ollama`.
+3. `docker compose --profile local pull postgres redis rustfs ollama`.
 4. `docker save` all seven images to a tarball; checksum it.
 5. `ollama pull` every model referenced by your `gateway.yaml` `model_aliases` (defaults: `qwen3.5:9b`, `qwen3.5:4b-nvfp4`); copy the model directory.
 6. Ingest one throwaway document on the staging stack; copy the `ingest-hf-cache` and `ingest-easyocr-cache` volume contents.
