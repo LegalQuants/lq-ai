@@ -40,6 +40,8 @@
 	let pendingHaltId: string | null = null;
 	let demoAvailability: 'checking' | 'enabled' | 'disabled' | 'unavailable' = 'checking';
 	let chatAvailability: 'checking' | 'enabled' | 'disabled' | 'unavailable' = 'checking';
+	$: bothOrchestrationFeaturesDisabled =
+		chatAvailability === 'disabled' && demoAvailability === 'disabled';
 
 	// ---------------------------------------------------------------------------
 	// Run-now modal state
@@ -218,29 +220,33 @@
 			<button type="button" class="new-button" on:click={openRunModal}> Run now </button>
 		</div>
 		<div class="experimental-controls" aria-label="Experimental orchestration">
+			<span class="experimental-label">Orchestration</span>
 			{#if chatAvailability === 'enabled'}
-				<a href="/lq-ai/autonomous/orchestration/chat" class="underline"
-					>Orchestration chat (experimental)</a
-				>
+				<a href="/lq-ai/autonomous/orchestration/chat" class="underline">Chat (experimental)</a>
 			{:else}
 				<button type="button" disabled class="text-sm text-gray-500">
-					Orchestration chat (experimental) — {chatAvailability === 'disabled'
-						? 'disabled by operator'
-						: chatAvailability === 'checking'
-							? 'checking availability…'
-							: 'unavailable'}
+					Chat (experimental){#if !bothOrchestrationFeaturesDisabled}
+						— {chatAvailability === 'disabled'
+							? 'disabled by operator'
+							: chatAvailability === 'checking'
+								? 'checking availability…'
+								: 'unavailable'}{/if}
 				</button>
 			{/if}
 			{#if demoAvailability === 'enabled'}
-				<a href="/lq-ai/autonomous/orchestration" class="underline">Orchestration demo</a>
+				<a href="/lq-ai/autonomous/orchestration" class="underline">Demo</a>
 			{:else}
 				<button type="button" disabled class="text-sm text-gray-500">
-					Orchestration demo — {demoAvailability === 'disabled'
-						? 'disabled by operator'
-						: demoAvailability === 'checking'
-							? 'checking availability…'
-							: 'unavailable'}
+					Demo{#if !bothOrchestrationFeaturesDisabled}
+						— {demoAvailability === 'disabled'
+							? 'disabled by operator'
+							: demoAvailability === 'checking'
+								? 'checking availability…'
+								: 'unavailable'}{/if}
 				</button>
+			{/if}
+			{#if bothOrchestrationFeaturesDisabled}
+				<span class="experimental-status">Disabled by operator</span>
 			{/if}
 		</div>
 	</header>
@@ -532,6 +538,14 @@
 	.experimental-controls button {
 		max-width: 100%;
 		text-align: left;
+	}
+
+	.experimental-label {
+		font-weight: 600;
+	}
+
+	.experimental-status {
+		color: var(--lq-text-secondary);
 	}
 
 	.page-intro {
