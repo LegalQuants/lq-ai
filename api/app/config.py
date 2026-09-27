@@ -257,6 +257,28 @@ class Settings(BaseSettings):
         validation_alias="LQ_AI_ORCHESTRATION_DEMO_ENABLED",
         description="Enable only the local sample orchestration demonstration, with no provider egress.",
     )
+    orchestration_chat_enabled: bool = Field(
+        default=False, validation_alias="LQ_AI_ORCHESTRATION_CHAT_ENABLED"
+    )
+    orchestration_chat_project_id: str = Field(
+        default="", validation_alias="LQ_AI_ORCHESTRATION_CHAT_PROJECT_ID"
+    )
+    orchestration_chat_provider: str = Field(
+        default="", validation_alias="LQ_AI_ORCHESTRATION_CHAT_PROVIDER"
+    )
+    orchestration_chat_model: str = Field(
+        default="", validation_alias="LQ_AI_ORCHESTRATION_CHAT_MODEL"
+    )
+    orchestration_chat_budget_usd: str = Field(
+        default="2.0000", validation_alias="LQ_AI_ORCHESTRATION_CHAT_BUDGET_USD"
+    )
+    orchestration_chat_minimum_tier: int = Field(
+        default=1, ge=1, le=5, validation_alias="LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER"
+    )
+    orchestration_chat_timeout_seconds: int = Field(
+        default=120, ge=1, le=900, validation_alias="LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS"
+    )
+
     orchestration_deployment_children: int | None = Field(
         default=None,
         ge=1,

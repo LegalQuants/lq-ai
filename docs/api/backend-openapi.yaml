@@ -5008,8 +5008,68 @@ paths:
         '404':
           description: Notification not found
 
-  # ADR 0035: closed local demonstration; canonical detailed shapes are generated
+  # ADR 0035: independently enabled sample preview and bounded model chat.
+  # Canonical detailed shapes are generated
   # alongside these handlers. These paths add no public child-spawn authority.
+  /api/v1/autonomous/orchestration/chat-runs:
+    get:
+      tags: [autonomous]
+      summary: Read owner-scoped model demo configuration and planning quote
+      responses:
+        '200':
+          description: Disabled by default; enabled response includes fictional packet, direct model route, configured project and accounted caps. Does not dispatch inference.
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/ChatCapabilities'
+        '403': {description: Required skill, pricing, capacity or gateway protection unavailable}
+    post:
+      tags: [autonomous]
+      summary: Persist a bounded planning root and enqueue one model planning call
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './backend-openapi.generated.yaml#/components/schemas/ChatPlanRequest'
+      responses:
+        '202':
+          description: Durable planning state; request_id is idempotent; no children until separate approval
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/ChatRunRead'
+        '403': {description: Demo disabled, opt-in absent, wrong demo project or inference preflight refused}
+        '404': {description: Owned active project not found}
+        '409': {description: Active owner run or conflicting request identity}
+  /api/v1/autonomous/orchestration/chat-runs/{root_id}:
+    parameters:
+      - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      tags: [autonomous]
+      summary: Read retained planning, proposed plan, results and skill receipts
+      responses:
+        '200':
+          description: Owner-only; readable after disablement; tree is null before a valid proposal
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/ChatRunRead'
+        '404': {description: Model run absent or owned by another user}
+  /api/v1/autonomous/orchestration/chat-runs/{root_id}/halt:
+    parameters:
+      - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [autonomous]
+      summary: Halt planning or execution, including after opt-out or disablement
+      responses:
+        '200':
+          description: Retained receipts and charges; no new child or synthesis calls
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/ChatRunRead'
+        '404': {description: Model run absent or owned by another user}
   /api/v1/autonomous/orchestration/capabilities:
     get:
       tags: [autonomous]

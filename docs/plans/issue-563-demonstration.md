@@ -1,5 +1,10 @@
 # Orchestration demonstration
 
+This page describes the existing **workflow preview**. The proposed
+[bounded chat demonstration](issue-563-chat-demonstration.md) adds model-proposed
+plans and model-backed child work; it is a separate implementation plan, not a
+claim about the current preview or its recording.
+
 The demonstration lets an owner approve parallel agent work, monitor it and
 inspect the combined result. The implementation adds this flow
 under **Autonomous sessions → Orchestration demo**, behind an operator setting.

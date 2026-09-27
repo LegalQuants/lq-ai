@@ -177,7 +177,9 @@
 		runError = null;
 		try {
 			const session = await autonomousApi.runNow({
-				...(runTargetKind === 'skill' ? { skill_ref: runSkillRef } : { playbook_id: runPlaybookId }),
+				...(runTargetKind === 'skill'
+					? { skill_ref: runSkillRef }
+					: { playbook_id: runPlaybookId }),
 				...(runKbId ? { target_kb_id: runKbId } : {}),
 				...(runProjectId ? { project_id: runProjectId } : {}),
 				...(runMaxCostUsd.trim() !== '' ? { max_cost_usd: runMaxCostUsd.trim() } : {})
@@ -198,11 +200,14 @@
 			<div>
 				<h1 class="lq-text-page-h">Autonomous sessions</h1>
 				<p class="page-intro">
-					Audit what LQVern did — every autonomous run, its cost, current phase, and terminal
-					state. Running sessions can be halted inline. Select a row to view the full receipt.
+					Audit what LQVern did — every autonomous run, its cost, current phase, and terminal state.
+					Running sessions can be halted inline. Select a row to view the full receipt.
 				</p>
 			</div>
 			<button type="button" class="new-button" on:click={openRunModal}> Run now </button>
+			<a href="/lq-ai/autonomous/orchestration/chat" class="underline"
+				>Orchestration chat (experimental)</a
+			>
 			{#if demoAvailability === 'enabled'}
 				<a href="/lq-ai/autonomous/orchestration" class="underline">Orchestration demo</a>
 			{:else}
@@ -267,9 +272,12 @@
 						</td>
 						<td class="date-cell">{formatCreatedAt(session.created_at)}</td>
 						<td class="sessions-table-actions">
-							<a href="/lq-ai/autonomous/sessions/{session.id}" class="action-link">
-								View
-							</a>
+							<a
+								href={session.params.orchestration_profile === 'model_demo_v1'
+									? `/lq-ai/autonomous/orchestration/chat/${session.id}`
+									: `/lq-ai/autonomous/sessions/${session.id}`}
+								class="action-link">View</a
+							>
 							{#if isHaltable(session.status)}
 								<button
 									type="button"
@@ -355,22 +363,20 @@
 								{/each}
 							</select>
 						{/if}
+					{:else if pickerLoading}
+						<p class="picker-loading">Loading playbooks…</p>
 					{:else}
-						{#if pickerLoading}
-							<p class="picker-loading">Loading playbooks…</p>
-						{:else}
-							<select
-								class="modal-select"
-								bind:value={runPlaybookId}
-								disabled={runSubmitting}
-								aria-label="Select playbook"
-							>
-								<option value="">— Select a playbook —</option>
-								{#each playbooks as pb (pb.id)}
-									<option value={pb.id}>{pb.name}</option>
-								{/each}
-							</select>
-						{/if}
+						<select
+							class="modal-select"
+							bind:value={runPlaybookId}
+							disabled={runSubmitting}
+							aria-label="Select playbook"
+						>
+							<option value="">— Select a playbook —</option>
+							{#each playbooks as pb (pb.id)}
+								<option value={pb.id}>{pb.name}</option>
+							{/each}
+						</select>
 					{/if}
 				</div>
 

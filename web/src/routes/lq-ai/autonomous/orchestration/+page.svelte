@@ -60,6 +60,9 @@
 <div class="mx-auto max-w-3xl space-y-6 p-6">
 	<a href="/lq-ai/autonomous" class="underline">Autonomous sessions</a>
 	<h1 class="lq-text-page-h">Orchestration demonstration</h1>
+	<a href="/lq-ai/autonomous/orchestration/chat" class="underline"
+		>Open experimental orchestration chat</a
+	>
 	<p>
 		Prepare a plan, approve parallel topics and follow their findings into a combined result. This
 		demonstration uses local sample responses. Findings remain unverified.

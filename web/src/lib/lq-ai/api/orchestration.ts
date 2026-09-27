@@ -33,6 +33,17 @@ export interface RunProgress {
 		status: string;
 		reserved_usd: string;
 		charged_usd: string | null;
+		intent?: string;
+		created_at?: string;
+		completed_at?: string | null;
+		skill?: { name: string; version: string; digest: string } | null;
+		accounting?: {
+			provider: string;
+			model: string;
+			basis: string;
+			estimated_prompt_tokens: number;
+			reported_usage_cost_usd: string;
+		} | null;
 	}[];
 }
 
@@ -42,7 +53,7 @@ export interface OrchestrationTree {
 	stop_reason: string | null;
 	plan_hash: string;
 	approved: boolean;
-	mode: 'demonstration';
+	mode: 'demonstration' | 'model_demo_v1';
 	verification: 'unverified';
 	plan: {
 		revision: number;
@@ -110,5 +121,60 @@ export const orchestrationApi = {
 };
 
 export function shouldPollTree(status: string): boolean {
-	return ['queued', 'running', 'waiting_children'].includes(status);
+	return ['planning', 'queued', 'running', 'waiting_children'].includes(status);
 }
+
+export interface ChatCapabilities {
+	enabled: boolean;
+	attempt_timeout_seconds?: number;
+	profile?: 'model_demo_v1';
+	title?: string;
+	project_id?: string;
+	project_name?: string;
+	packet_id?: 'fictional-agreement-v1';
+	packet?: string;
+	model?: string;
+	budget_usd?: string;
+	planning_allowance_usd?: string;
+	root_allowance_usd?: string;
+	child_skill?: string;
+	deployment_children?: number;
+}
+
+export interface OrchestrationChatRun {
+	root_id: string;
+	status: string;
+	stop_reason: string | null;
+	planning: {
+		attempt_timeout_seconds: number;
+		goal: string;
+		model: string;
+		budget_usd: string;
+		root_allowance_usd: string;
+		planning_allowance_usd: string;
+		packet_digest: string;
+		gateway_revision: string;
+		child_skill_version: string;
+		root_skill_version: string;
+		deadline: string;
+	};
+	effects: RunProgress['effects'];
+	spent_usd: string;
+	reserved_usd: string;
+	tree: OrchestrationTree | null;
+}
+
+export const orchestrationChatApi = {
+	capabilities: () => apiRequest<ChatCapabilities>(`${base}/chat-runs`),
+	start: (body: { request_id: string; project_id: string; goal: string }) =>
+		apiRequest<OrchestrationChatRun>(`${base}/chat-runs`, {
+			method: 'POST',
+			body: { ...body, profile: 'model_demo_v1', packet_id: 'fictional-agreement-v1' }
+		}),
+	read: (id: string, signal?: AbortSignal) =>
+		apiRequest<OrchestrationChatRun>(`${base}/chat-runs/${encodeURIComponent(id)}`, { signal }),
+	halt: (id: string) =>
+		apiRequest<OrchestrationChatRun>(`${base}/chat-runs/${encodeURIComponent(id)}/halt`, {
+			method: 'POST'
+		})
+};

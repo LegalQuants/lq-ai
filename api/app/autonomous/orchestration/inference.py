@@ -24,6 +24,7 @@ from app.autonomous.orchestration.contracts import (
     ShortText,
     Snapshot,
 )
+from app.autonomous.orchestration.planning import PlanningSnapshot
 from app.autonomous.orchestration.policy import InferencePolicy, OperatorPolicy
 from app.errors import Forbidden, ValidationError
 
@@ -101,7 +102,10 @@ class InferenceRoutes:
         self.gateway, self.operator = gateway, operator
 
     async def bind(
-        self, plan: PreparedPlan, scope: ExecutionScope, messages: list[dict[str, Any]]
+        self,
+        plan: PreparedPlan | PlanningSnapshot,
+        scope: ExecutionScope,
+        messages: list[dict[str, Any]],
     ) -> InferenceBinding:
         operator = self.operator()
         if (

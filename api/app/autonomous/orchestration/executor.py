@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Callable
 from contextlib import suppress
 from typing import Any, Literal, TypedDict
 from uuid import UUID, uuid4
@@ -23,12 +24,15 @@ from langsmith import tracing_context
 from pydantic import ValidationError as SchemaError
 
 from app.autonomous.enums import ToolIntent
+from app.autonomous.orchestration.chat_demo import model_json, packet, prepare_model_plan
 from app.autonomous.orchestration.checkpoints import CheckpointRuntime
 from app.autonomous.orchestration.effects import GuardedEffects
 from app.autonomous.orchestration.outcomes import TopicOutcome, topic_coverage
+from app.autonomous.orchestration.planning import PlanningSnapshot
+from app.autonomous.orchestration.policy import OperatorPolicy
 from app.autonomous.orchestration.store import OrchestrationStore, WorkerClaim
 from app.autonomous.orchestration.workspace import WorkspaceContent, WorkspaceRef
-from app.errors import Conflict, Forbidden, NotFound
+from app.errors import Conflict, Forbidden, NotFound, ValidationError
 from app.graph_types import AsyncStateNode
 from app.models.autonomous import AutonomousSession
 from app.models.orchestration import OrchestrationRoot as Root
@@ -58,6 +62,7 @@ def child_graph(
     effects: GuardedEffects,
     claim: WorkerClaim,
     saver: AsyncPostgresSaver,
+    model_demo: bool = False,
 ) -> Any:
     async def intake(state: RunState) -> dict[str, Any]:
         await store.phase(claim, Phase.intake)
@@ -75,7 +80,7 @@ def child_graph(
             params={
                 "name": "notes.md",
                 "revision": 0,
-                "content": f"Work in progress: {topic}. Sample findings remain unverified.",
+                "content": f"Work in progress: {topic}. Findings remain unverified.",
             },
         )
         if saved.outcome == "workspace_refused":
@@ -93,23 +98,54 @@ def child_graph(
         )
         if notes.outcome == "workspace_refused":
             raise Conflict(message="Working notes are unavailable")
+        inputs = {"operation": "sample_topic", "working_notes": notes.data["content"]}
+        if model_demo:
+            view = await store.execution_view(claim)
+            task = next(c.task for c in view.plan.children if c.dispatch_id == claim.session_id)
+            inputs = {
+                "operation": "answer_contract_question",
+                "document": packet(effects.skills),
+                "question": task.question,
+                "response_contract": (
+                    'Return only JSON: {"status":"completed|empty|failed", "summary":"up to 512 characters", '
+                    '"findings":["your full Contract QA Markdown answer, at most 4096 characters"], '
+                    '"verification":"unverified", "failure_code":null}. '
+                    "Use exactly one finding for a completed answer. Preserve clause quotes and limitations. "
+                    "For no answer or a refusal use status empty and findings []. "
+                    'For failure use status failed, findings [] and failure_code "execution_failed".'
+                ),
+                "redaction_handling": (
+                    "Gateway pseudonym tokens stand for supplied values and will be restored "
+                    "in the answer. Preserve tokens verbatim in quotations. A pseudonym is not "
+                    "a missing contractual term: do not say a number, date or amount is absent "
+                    "merely because its value is represented by a token. Do not guess its value."
+                ),
+            }
         result = await effects.infer(
             claim,
             effect_key="demo:topic:v1",
             phase=Phase.analysis,
-            inputs={"operation": "sample_topic", "working_notes": notes.data["content"]},
+            inputs=inputs,
         )
         try:
             content = result.data.get("content")
             if not isinstance(content, str) or len(content.encode("utf-8")) > 65536:
                 raise ValueError("invalid output")
-            outcome = TopicOutcome.model_validate_json(content)
+            outcome = TopicOutcome.model_validate_json(
+                model_json(content) if model_demo else content
+            )
+            if model_demo and (
+                result.data.get("finish_reason") != "stop"
+                or len(outcome.findings) > 1
+                or len(outcome.summary) > 512
+            ):
+                raise ValueError("invalid bounded answer")
             if outcome.artifact is not None:
                 raise ValueError("The application supplies artifact references")
         except (SchemaError, ValueError):
             outcome = TopicOutcome(
                 status="failed",
-                summary="The topic returned an invalid sample outcome.",
+                summary="The topic returned an invalid bounded outcome.",
                 findings=(),
                 failure_code="invalid_output",
             )
@@ -130,7 +166,7 @@ def child_graph(
                 params={"name": name, "revision": revision, "content": body},
             )
             if saved.outcome == "workspace_refused":
-                raise Conflict(message="Sample work could not be saved")
+                raise Conflict(message="Work could not be saved")
         return {}
 
     async def drafting(state: RunState) -> dict[str, Any]:
@@ -143,7 +179,7 @@ def child_graph(
             params={"name": "findings.json", "revision": 1},
         )
         if saved.outcome == "workspace_refused":
-            raise Conflict(message="Sample findings are unavailable")
+            raise Conflict(message="Findings are unavailable")
         outcome = TopicOutcome.model_validate_json(saved.data["content"])
         shared = await effects.workspace(
             claim,
@@ -153,7 +189,7 @@ def child_graph(
             params={"name": "findings.json", "revision": 1},
         )
         if shared.outcome == "workspace_refused":
-            raise Conflict(message="Sample findings could not be shared")
+            raise Conflict(message="Findings could not be shared")
         reference = WorkspaceRef.model_validate_json(
             json.dumps({k: shared.data[k] for k in ("session_id", "name", "revision", "digest")})
         )
@@ -196,6 +232,7 @@ def root_graph(
     effects: GuardedEffects,
     claim: WorkerClaim,
     saver: AsyncPostgresSaver,
+    model_demo: bool = False,
 ) -> Any:
     async def delegate(state: RunState) -> dict[str, Any]:
         await store.phase(claim, Phase.analysis)
@@ -252,11 +289,18 @@ def root_graph(
                 effect_key="demo:synthesis:v1",
                 phase=Phase.drafting,
                 inputs={
-                    "operation": "sample_synthesis",
+                    "operation": "synthesize_answers" if model_demo else "sample_synthesis",
                     "topics": [topic.model_dump(mode="json") for topic in topics],
                 },
             )
             summary = result.data.get("content")
+            if model_demo and (
+                result.data.get("finish_reason") != "stop"
+                or not isinstance(summary, str)
+                or not 1 <= len(summary) <= 16384
+            ):
+                await store.fail_synthesis(claim)
+                raise Conflict(message="Model synthesis is incomplete; child work is retained")
             if not isinstance(summary, str) or not 1 <= len(summary) <= 16384:
                 raise Conflict(message="Synthesis output is invalid")
         await store.stage_synthesis(claim, summary)
@@ -289,9 +333,16 @@ def root_graph(
 
 class OrchestrationExecutor:
     def __init__(
-        self, store: OrchestrationStore, effects: GuardedEffects, checkpoints: CheckpointRuntime
+        self,
+        store: OrchestrationStore,
+        effects: GuardedEffects,
+        checkpoints: CheckpointRuntime,
+        *,
+        model_demo: bool = False,
+        policy: Callable[[], OperatorPolicy | None] | None = None,
     ) -> None:
         self.store, self.effects, self.checkpoints = store, effects, checkpoints
+        self.model_demo, self.policy = model_demo, policy
 
     async def run_one(
         self, root_id: UUID, session_id: UUID
@@ -301,8 +352,10 @@ class OrchestrationExecutor:
             session = await db.get(AutonomousSession, session_id)
             if root is None or session is None or session.root_session_id != root_id:
                 raise NotFound(message="Orchestration session not found")
-            if root.status not in {"queued", "running", "waiting_children"}:
+            if root.status not in {"planning", "queued", "running", "waiting_children"}:
                 return "stopped"
+            if (root.profile == "model_demo_v1") != self.model_demo:
+                raise Forbidden(message="Executor does not match the retained run profile")
             if session.status != "running":
                 return "completed"
             plan = await self.store._stored_plan(db, root)
@@ -315,8 +368,10 @@ class OrchestrationExecutor:
                 root_id, session_id, worker_id=uuid4(), seconds=plan.attempt_timeout_seconds
             )
             try:
+                if isinstance(plan, PlanningSnapshot):
+                    return await self._plan(claim, plan)
                 graph = (root_graph if root_id == session_id else child_graph)(
-                    self.store, self.effects, claim, saver
+                    self.store, self.effects, claim, saver, self.model_demo
                 )
                 config: RunnableConfig = {
                     "configurable": {"thread_id": str(session_id)},
@@ -340,3 +395,34 @@ class OrchestrationExecutor:
                 # Expired/uncertain claims are drained by the watchdog.
                 with suppress(Conflict, Forbidden, NotFound):
                     await self.store.release_claim(claim)
+
+    async def _plan(self, claim: WorkerClaim, snapshot: PlanningSnapshot) -> Literal["completed"]:
+        """A durable planning effect precedes the approved LangGraph batch."""
+        policy = self.policy() if self.policy else None
+        if not self.model_demo or policy is None:
+            raise Forbidden(message="Model planning is disabled")
+        result = await self.effects.infer(
+            claim,
+            effect_key="chat:plan:v1",
+            phase=Phase.analysis,
+            intent=ToolIntent.plan,
+            inputs={
+                "operation": "propose_plan",
+                "document": packet(self.effects.skills),
+                "redaction_handling": (
+                    "Gateway pseudonym tokens represent supplied values, not missing terms. "
+                    "Ask clause-based questions without guessing redacted values or asking "
+                    "children to describe supplied values as absent."
+                ),
+            },
+        )
+        plan = None
+        try:
+            content = result.data.get("content")
+            if not isinstance(content, str) or result.data.get("finish_reason") != "stop":
+                raise ValueError("incomplete proposal")
+            plan = prepare_model_plan(snapshot, content, policy)
+        except (ValidationError, SchemaError, ValueError):
+            pass
+        await self.store.finish_planning(claim, plan)
+        return "completed"

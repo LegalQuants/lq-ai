@@ -39,6 +39,7 @@ from app.autonomous.orchestration.outcomes import (
     TopicOutcome,
     topic_coverage,
 )
+from app.autonomous.orchestration.planning import PlanningSnapshot
 from app.errors import Conflict, Forbidden, NotFound, ValidationError
 from app.models.autonomous import AutonomousSession
 from app.models.orchestration import (
@@ -57,6 +58,9 @@ _MONEY: TypeAdapter[Decimal] = TypeAdapter(Money)
 _EVENTS = frozenset(
     {
         "plan_saved",
+        "planning_started",
+        "planning_failed",
+        "synthesis_failed",
         "approved",
         "rejected",
         "children_admitted",
@@ -78,7 +82,7 @@ _EVENTS = frozenset(
 
 
 class CurrentPolicyCheck(Protocol):
-    async def __call__(self, db: AsyncSession, plan: PreparedPlan) -> None:
+    async def __call__(self, db: AsyncSession, plan: PreparedPlan | PlanningSnapshot) -> None:
         """Raise on stale policy/resources/skills; no remote I/O or commits."""
         ...
 
@@ -103,9 +107,10 @@ class EffectReceipt:
 
 @dataclass(frozen=True)
 class ExecutionView:
-    plan: PreparedPlan
+    plan: PreparedPlan | PlanningSnapshot
     scope: ExecutionScope
     lease_seconds: float
+    planning: PlanningSnapshot | None = None
 
 
 def _receipt(effect: Effect) -> EffectReceipt:
@@ -132,7 +137,7 @@ async def _now(db: AsyncSession) -> datetime:
     return (await db.execute(select(func.clock_timestamp()))).scalar_one()
 
 
-def _project_scope(project: Project, plan: PreparedPlan) -> None:
+def _project_scope(project: Project, plan: PreparedPlan | PlanningSnapshot) -> None:
     # Gateway tier semantics: lower numbers provide stronger protection.
     # An unset project floor adds no restriction beyond the explicit plan.
     if plan.root.minimum_inference_tier > (project.minimum_inference_tier or 5) or (
@@ -188,7 +193,9 @@ class OrchestrationStore:
             raise Forbidden(message="Orchestration requires an owned active project")
         return project
 
-    async def _root(self, db: AsyncSession, root_id: UUID) -> tuple[Root, PreparedPlan, datetime]:
+    async def _root(
+        self, db: AsyncSession, root_id: UUID
+    ) -> tuple[Root, PreparedPlan | PlanningSnapshot, datetime]:
         row = await db.get(Root, root_id)
         if row is None:
             raise NotFound(message="Orchestration root not found")
@@ -205,7 +212,20 @@ class OrchestrationStore:
         _project_scope(project, plan)
         return root, plan, await _now(db)
 
-    async def _stored_plan(self, db: AsyncSession, root: Root) -> PreparedPlan:
+    async def _stored_plan(self, db: AsyncSession, root: Root) -> PreparedPlan | PlanningSnapshot:
+        if root.current_revision is None:
+            try:
+                snapshot = PlanningSnapshot.model_validate_json(json.dumps(root.planning_snapshot))
+            except SchemaError:
+                raise Conflict(message="Stored planning scope is invalid") from None
+            if (snapshot.root_id, snapshot.owner_id, snapshot.project_id, snapshot.plan_id) != (
+                root.session_id,
+                root.owner_id,
+                root.project_id,
+                root.plan_id,
+            ):
+                raise Conflict(message="Planning identity differs from root")
+            return snapshot
         stored = await db.get(PlanRow, (root.session_id, root.current_revision))
         if stored is None:
             raise Conflict(message="Current orchestration plan is missing")
@@ -231,7 +251,9 @@ class OrchestrationStore:
             raise Conflict(message="Stored plan identity does not match the root")
         return plan
 
-    async def _live(self, db: AsyncSession, root: Root, plan: PreparedPlan, now: datetime) -> None:
+    async def _live(
+        self, db: AsyncSession, root: Root, plan: PreparedPlan | PlanningSnapshot, now: datetime
+    ) -> None:
         session = await db.get(AutonomousSession, root.session_id)
         if (
             session is None
@@ -248,9 +270,9 @@ class OrchestrationStore:
             raise Conflict(message="Plan expired during policy validation")
 
     async def _approved(
-        self, db: AsyncSession, root: Root, plan: PreparedPlan, now: datetime
+        self, db: AsyncSession, root: Root, plan: PreparedPlan | PlanningSnapshot, now: datetime
     ) -> None:
-        if root.status not in _ACTIVE:
+        if not isinstance(plan, PreparedPlan) or root.status not in _ACTIVE:
             raise Conflict(message="Root is not approved for execution")
         stored = await db.get(PlanRow, (root.session_id, root.current_revision))
         if stored is None or stored.status != "approved" or stored.approval is None:
@@ -334,6 +356,8 @@ class OrchestrationStore:
                         plan.plan_id,
                     ):
                         raise Conflict(message="Plan identity cannot change")
+                    if root.current_revision is None:
+                        raise Conflict(message="Planning must finish before revising a plan")
                     old = await db.get(PlanRow, (root.session_id, root.current_revision))
                     assert old is not None
                     if (
@@ -381,10 +405,160 @@ class OrchestrationStore:
                 )
                 await db.flush()
                 await _audit(
-                    db, root, "plan_saved", revision=plan.revision, child_count=len(plan.children)
+                    db,
+                    root,
+                    "plan_saved",
+                    revision=plan.revision,
+                    child_count=len(plan.children),
                 )
         except IntegrityError:
             raise Conflict(message="Plan conflicts with an existing root or admission") from None
+
+    async def _execution_authority(
+        self,
+        db: AsyncSession,
+        root: Root,
+        plan: PreparedPlan | PlanningSnapshot,
+        now: datetime,
+        session_id: UUID,
+    ) -> None:
+        """Planning authorizes only the root; all subsequent work needs approval."""
+        if isinstance(plan, PlanningSnapshot):
+            if root.status != "planning" or session_id != root.session_id:
+                raise Forbidden(message="Planning authority is unavailable")
+            await self._live(db, root, plan, now)
+        else:
+            await self._approved(db, root, plan, now)
+
+    async def start_planning(self, snapshot: PlanningSnapshot, *, actor_id: UUID) -> UUID:
+        """Persist a bounded root before queue dispatch; request UUID is idempotent."""
+        snapshot = PlanningSnapshot.model_validate(snapshot)
+        if actor_id != snapshot.owner_id:
+            raise Forbidden(message="Only the owner may request planning")
+        try:
+            async with self.sessions.begin() as db:
+                project = await self._owner_project(
+                    db, actor_id, snapshot.project_id, creating=True
+                )
+                _project_scope(project, snapshot)
+                existing = await db.get(Root, snapshot.root_id)
+                if existing is not None:
+                    if existing.owner_id != actor_id or existing.profile != "model_demo_v1":
+                        raise Conflict(message="Request identity is unavailable")
+                    old = PlanningSnapshot.model_validate_json(
+                        json.dumps(existing.planning_snapshot)
+                    )
+                    if (old.project_id, old.goal) != (snapshot.project_id, snapshot.goal):
+                        raise Conflict(message="Request identity was reused with different input")
+                    return existing.session_id
+                db.add(
+                    AutonomousSession(
+                        id=snapshot.root_id,
+                        user_id=actor_id,
+                        project_id=snapshot.project_id,
+                        trigger_kind="manual",
+                        current_phase="analysis",
+                        max_cost_usd=snapshot.root_allowance_usd,
+                        params={
+                            "orchestration_profile": "model_demo_v1",
+                            "query": snapshot.goal,
+                            "skill_ref": snapshot.root.skill.name,
+                        },
+                    )
+                )
+                await db.flush()
+                root = Root(
+                    session_id=snapshot.root_id,
+                    owner_id=actor_id,
+                    project_id=snapshot.project_id,
+                    plan_id=snapshot.plan_id,
+                    current_revision=None,
+                    status="planning",
+                    profile="model_demo_v1",
+                    planning_snapshot=snapshot.model_dump(mode="json"),
+                )
+                await self._live(db, root, snapshot, await _now(db))
+                db.add(root)
+                await db.flush()
+                db.add(
+                    Account(
+                        session_id=root.session_id,
+                        root_id=root.session_id,
+                        allocation_usd=snapshot.root_allowance_usd,
+                    )
+                )
+                await _audit(db, root, "planning_started")
+        except IntegrityError:
+            raise Conflict(message="An active run or conflicting request already exists") from None
+        return snapshot.root_id
+
+    async def finish_planning(
+        self,
+        claim: WorkerClaim,
+        plan: PreparedPlan | None,
+        *,
+        failure: str = "invalid_proposal",
+    ) -> None:
+        """Promote a paid planning result atomically, without resetting its ledger."""
+        async with self.sessions.begin() as db:
+            root, snapshot, now = await self._root(db, claim.root_id)
+            if not isinstance(snapshot, PlanningSnapshot):
+                raise Conflict(message="Planning has already finished")
+            await self._execution_authority(db, root, snapshot, now, claim.session_id)
+            account = await self._account(db, claim.root_id, claim.session_id)
+            self._fence(account, claim, await _now(db))
+            receipt = await db.get(Effect, (claim.session_id, "chat:plan:v1"))
+            if account.reserved_usd or receipt is None or receipt.status != "completed":
+                raise Conflict(message="Planning effect must be settled before promotion")
+            if account.spent_usd > snapshot.planning_allowance_usd:
+                plan, failure = None, "unfunded_plan"
+            if plan is None:
+                if failure not in {"invalid_proposal", "unfunded_plan"}:
+                    raise ValidationError(message="Invalid planning failure code")
+                root.status, root.stop_reason = "failed", failure
+                session = await db.get(AutonomousSession, root.session_id)
+                assert session is not None
+                session.status, session.completed_at = "failed", now
+                await _audit(db, root, "planning_failed", reason=failure)
+            else:
+                plan = PreparedPlan.model_validate(plan)
+                if plan.planning_digest != snapshot.approval_hash():
+                    raise Forbidden(message="Plan must bind its original planning scope")
+                for key in (
+                    "root_id",
+                    "plan_id",
+                    "owner_id",
+                    "project_id",
+                    "goal",
+                    "policy_version",
+                    "budget_usd",
+                    "root_allowance_usd",
+                    "deadline",
+                    "max_active_children",
+                    "attempt_timeout_seconds",
+                    "delegation_grants",
+                ):
+                    if getattr(plan, key) != getattr(snapshot, key):
+                        raise Forbidden(message="Prepared plan differs from planning authority")
+                if (
+                    plan.revision != 1
+                    or plan.root.model_copy(update={"grants": snapshot.root.grants})
+                    != snapshot.root
+                ):
+                    raise Forbidden(message="Prepared root exceeds planning scope")
+                await self._live(db, root, plan, await _now(db))
+                root.current_revision, root.status = 1, "awaiting_approval"
+                db.add(
+                    PlanRow(
+                        root_id=root.session_id,
+                        revision=1,
+                        plan_hash=plan.approval_hash(),
+                        snapshot=plan.model_dump(mode="json"),
+                        status="proposed",
+                    )
+                )
+                await _audit(db, root, "plan_saved", revision=1, child_count=len(plan.children))
+            root.updated_at = now
 
     async def approve(
         self, root_id: UUID, *, actor_id: UUID, revision: int, plan_hash: str
@@ -393,6 +567,8 @@ class OrchestrationStore:
             root, plan, now = await self._root(db, root_id)
             if actor_id != root.owner_id:
                 raise Forbidden(message="Only the owner may approve this plan")
+            if not isinstance(plan, PreparedPlan):
+                raise Conflict(message="Planning has not produced an approvable plan")
             if revision != plan.revision or plan_hash != plan.approval_hash():
                 raise Conflict(message="Approval refers to a stale plan")
             await self._live(db, root, plan, now)
@@ -470,7 +646,7 @@ class OrchestrationStore:
         uncertain = False
         async with self.sessions.begin() as db:
             root, plan, now = await self._root(db, root_id)
-            await self._approved(db, root, plan, now)
+            await self._execution_authority(db, root, plan, now, session_id)
             if session_id != root_id:
                 # Serialize capacity admissions across roots/processes. Count
                 # expired ownership and uncertain calls until recovery proves
@@ -538,7 +714,7 @@ class OrchestrationStore:
                 account.lease_until = min(
                     account.attempt_deadline, now + timedelta(seconds=seconds)
                 )
-                root.status = "running"
+                root.status = "planning" if isinstance(plan, PlanningSnapshot) else "running"
                 await _audit(
                     db, root, "claimed", session_id=str(session_id), generation=account.generation
                 )
@@ -562,7 +738,7 @@ class OrchestrationStore:
             raise ValidationError(message="Worker lease must be between 1 and 900 seconds")
         async with self.sessions.begin() as db:
             root, plan, now = await self._root(db, claim.root_id)
-            await self._approved(db, root, plan, now)
+            await self._execution_authority(db, root, plan, now, claim.session_id)
             account = await self._account(db, claim.root_id, claim.session_id)
             now = await _now(db)
             self._fence(account, claim, now)
@@ -642,7 +818,7 @@ class OrchestrationStore:
         """
         async with self.sessions.begin() as db:
             root, plan, now = await self._root(db, claim.root_id)
-            await self._approved(db, root, plan, now)
+            await self._execution_authority(db, root, plan, now, claim.session_id)
             account = await self._account(db, claim.root_id, claim.session_id)
             now = await _now(db)
             self._fence(account, claim, now)
@@ -655,7 +831,14 @@ class OrchestrationStore:
             )
             if scope is None or account.lease_until is None:
                 raise Forbidden(message="Worker is outside the approved tree")
-            return ExecutionView(plan, scope, (account.lease_until - now).total_seconds())
+            return ExecutionView(
+                plan,
+                scope,
+                (account.lease_until - now).total_seconds(),
+                PlanningSnapshot.model_validate_json(json.dumps(root.planning_snapshot))
+                if root.planning_snapshot
+                else None,
+            )
 
     async def mark_effect_uncertain(self, claim: WorkerClaim, *, effect_key: str) -> bool:
         """Conservatively abandon one admitted effect after rollback/cancellation.
@@ -847,7 +1030,9 @@ class OrchestrationStore:
                 db, root, "topic_delivered", session_id=str(session.id), outcome=outcome.status
             )
 
-    async def _topics(self, db: AsyncSession, plan: PreparedPlan) -> tuple[CollectedTopic, ...]:
+    async def _topics(
+        self, db: AsyncSession, plan: PreparedPlan | PlanningSnapshot
+    ) -> tuple[CollectedTopic, ...]:
         topics = []
         for child in plan.children:
             session = await db.get(AutonomousSession, child.dispatch_id)
@@ -892,6 +1077,26 @@ class OrchestrationStore:
             if not ready:
                 root.status = "waiting_children"
             return ready
+
+    async def fail_synthesis(self, claim: WorkerClaim) -> None:
+        """Retain delivered children and a settled but invalid model synthesis."""
+        if claim.session_id != claim.root_id:
+            raise Forbidden(message="Only the root may finish synthesis")
+        async with self.sessions.begin() as db:
+            root, plan, now = await self._root(db, claim.root_id)
+            await self._approved(db, root, plan, now)
+            account = await self._account(db, claim.root_id, claim.session_id)
+            self._fence(account, claim, await _now(db))
+            receipt = await db.get(Effect, (claim.session_id, "demo:synthesis:v1"))
+            if account.reserved_usd or receipt is None or receipt.status != "completed":
+                raise Conflict(message="Synthesis must be settled before failure")
+            await self._topics(db, plan)
+            session = await db.get(AutonomousSession, claim.root_id)
+            assert session is not None
+            root.status = session.status = "failed"
+            root.stop_reason = "invalid_synthesis"
+            root.updated_at = session.completed_at = now
+            await _audit(db, root, "synthesis_failed", reason="invalid_output")
 
     async def stage_synthesis(self, claim: WorkerClaim, summary: str) -> None:
         if claim.session_id != claim.root_id:
@@ -1036,14 +1241,17 @@ class OrchestrationStore:
                     root.updated_at = await _now(db)
                     await _audit(db, root, "deadline_uncertain", revision=plan.revision)
                 return False
-            if root.status not in _ACTIVE | {"awaiting_approval"}:
+            if root.status not in _ACTIVE | {"planning", "awaiting_approval"}:
                 return False
             root.status = "expired"
             root.stop_reason = root.stop_reason or "root_deadline"
             root.updated_at = await _now(db)
             await _audit(db, root, "root_expired", revision=plan.revision)
             session = await db.get(AutonomousSession, root_id)
-            if session and session.params.get("orchestration_profile") == "demonstration":
+            if session and session.params.get("orchestration_profile") in {
+                "demonstration",
+                "model_demo_v1",
+            }:
                 await db.execute(
                     update(AutonomousSession)
                     .where(
@@ -1165,7 +1373,11 @@ class OrchestrationStore:
             raise ValidationError(message="Effect identity is invalid")
         async with self.sessions.begin() as db:
             root, plan, now = await self._root(db, claim.root_id)
-            await self._approved(db, root, plan, now)
+            await self._execution_authority(db, root, plan, now, claim.session_id)
+            if isinstance(plan, PlanningSnapshot) and (
+                intent != ToolIntent.plan or phase != Phase.analysis or effect_key != "chat:plan:v1"
+            ):
+                raise Forbidden(message="Planning permits only its single root inference")
             account = await self._account(db, claim.root_id, claim.session_id)
             self._fence(account, claim, await _now(db))
             existing = await db.get(Effect, (claim.session_id, effect_key))
@@ -1205,7 +1417,12 @@ class OrchestrationStore:
                 .limit(1)
             ):
                 raise Conflict(message="Run already has an outstanding effect")
-            if account.spent_usd + account.reserved_usd + reservation > account.allocation_usd:
+            limit = (
+                plan.planning_allowance_usd
+                if isinstance(plan, PlanningSnapshot)
+                else account.allocation_usd
+            )
+            if account.spent_usd + account.reserved_usd + reservation > limit:
                 raise Conflict(message="Effect exceeds the run's allocated budget")
             account.reserved_usd += reservation
             effect = Effect(

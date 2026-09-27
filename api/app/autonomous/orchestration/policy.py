@@ -14,6 +14,7 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated, Literal
+from uuid import UUID
 
 from pydantic import Field, model_validator
 from sqlalchemy import select
@@ -29,6 +30,7 @@ from app.autonomous.orchestration.contracts import (
     SkillPin,
     Snapshot,
 )
+from app.autonomous.orchestration.planning import PlanningSnapshot
 from app.errors import Forbidden
 from app.models.document import Document
 from app.models.file import File
@@ -114,6 +116,7 @@ class InferencePolicy(Snapshot):
 class OperatorPolicy(Snapshot):
     """No implicit skill, source, tier, grant or anonymization defaults."""
 
+    demo_project_id: UUID | None = None
     skills: tuple[SkillPolicy, ...]
     sources: tuple[SourcePolicy, ...]
     grants: PhaseGrants
@@ -138,8 +141,12 @@ class OperatorPolicy(Snapshot):
 
     def version(self) -> str:
         """Bind approval to the entire operator policy, including provider tiers."""
+        value = self.model_dump(mode="json")
+        if self.demo_project_id is None:
+            # Existing sample approvals predate the optional project allowlist.
+            value.pop("demo_project_id")
         return hashlib.sha256(
-            json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":")).encode()
+            json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()
 
 
@@ -212,10 +219,12 @@ class CurrentPolicy:
         self.skills = skills
         self.operator = operator
 
-    async def __call__(self, db: AsyncSession, plan: PreparedPlan) -> None:
+    async def __call__(self, db: AsyncSession, plan: PreparedPlan | PlanningSnapshot) -> None:
         policy = self.operator()
         if policy is None or policy.version() != plan.policy_version:
             raise Forbidden(message="Orchestration operator policy is disabled or changed")
+        if policy.demo_project_id is not None and plan.project_id != policy.demo_project_id:
+            raise Forbidden(message="Project is outside the enabled demonstration")
         registry = self.skills.current()
         sources = {source.name: source for source in policy.sources}
         selections: dict[tuple[str, str], SkillPolicy] = {

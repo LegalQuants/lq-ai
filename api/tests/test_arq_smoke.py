@@ -50,13 +50,21 @@ def test_worker_settings_class_shape() -> None:
 
 @pytest.mark.unit
 def test_orchestration_cron_is_registered_only_when_enabled() -> None:
-    def jobs(enabled: bool) -> set[str]:
-        settings = type("Settings", (), {"orchestration_demo_enabled": enabled})()
+    def jobs(enabled: bool, chat_enabled: bool = False) -> set[str]:
+        settings = type(
+            "Settings",
+            (),
+            {
+                "orchestration_demo_enabled": enabled,
+                "orchestration_chat_enabled": chat_enabled,
+            },
+        )()
         with patch("app.workers.arq_setup.get_settings", return_value=settings):
             return {job.coroutine.__name__ for job in arq_setup._build_cron_jobs()}
 
     assert "orchestration_watchdog" not in jobs(False)
     assert "orchestration_watchdog" in jobs(True)
+    assert "orchestration_watchdog" in jobs(False, True)
     assert {"autonomous_idle_watchdog", "autonomous_schedule_dispatcher"} <= jobs(False)
 
 

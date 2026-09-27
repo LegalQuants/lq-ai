@@ -18,7 +18,7 @@ describe('Orchestration consent and polling contract', () => {
 		});
 	});
 	it('polls active work but stops at approval waits, uncertainty and terminal states', () => {
-		for (const state of ['queued', 'running', 'waiting_children'])
+		for (const state of ['planning', 'queued', 'running', 'waiting_children'])
 			expect(shouldPollTree(state)).toBe(true);
 		for (const state of [
 			'awaiting_approval',
