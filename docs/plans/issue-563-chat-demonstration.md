@@ -170,8 +170,8 @@ current policy/route, deadline, total cap and planning/finishing allowances.
 Persist it before queueing the planning invocation. Extend the existing root
 schema to represent `planning` without a prepared revision; update its status
 constraints, active-owner index and read projection accordingly. Keep prepared
-plan requirements intact for approval and child admission. Add a forward
-migration rather than editing migration 0067.
+plan requirements intact for approval and child admission. Since this release
+starts from revision 0066, include the final root shape in migration 0067.
 
 Provide narrowly scoped planning claim/admission methods using the same fenced
 effect and accounting machinery. This pre-approval authority permits only the
@@ -304,9 +304,9 @@ completion evidence for slices 3 or 5.
 
 Extend the existing Postgres orchestration suites for contracts, policy,
 inference, store, executor, deadlines, recovery and API behavior. Exercise the
-actual arq worker and gateway revision contract. Add frontend state/API tests,
-run `npm run check:lq-ai`, and extend browser coverage from
-[`lq-ai-orchestration-demo.cy.ts`](../../web/cypress/e2e/lq-ai-orchestration-demo.cy.ts).
+actual arq worker and gateway revision contract. Add frontend state/API tests and
+run `npm run check:lq-ai`. No Cypress/browser test was added for the chat flow;
+browser verification was manual, per the [UAT runbook](../runbooks/adr35-chat-uat.md).
 Controlled-provider tests establish reproducible failures; a separate opt-in
 unmocked run establishes that a real model performed the work. Both are needed.
 

@@ -15,7 +15,13 @@ Use a dedicated demo deployment, an owned active demo project and a user with
 Autonomous mode enabled. Keep all goals fictional. Do not attach real documents.
 Install the unchanged `contract-qa` v1.0.0 skill and the new technical
 `orchestration-chat-demo` v1.0.0 profile, including its fictional agreement.
-Apply migration 0069 and deploy API and workers from the same branch.
+Apply migrations 0067 and 0068 from revision 0066, then deploy API and workers
+from the same branch. A database already on the earlier experimental 0069
+fixture must be rebuilt separately; do not downgrade retained runs to reuse it.
+Migration 0067 refuses downgrade to 0066 while any orchestration run, child,
+checkpoint or working file remains. Keep a real instance at 0067/0068 until a
+reviewed export and deletion plan exists; only discard a dedicated disposable
+fixture after recording its required evidence.
 
 Set these values on both API and arq worker:
 

@@ -195,7 +195,7 @@ failures.
 | API mypy | Passed; 229 source files. |
 | Frontend `check:lq-ai` | 0 errors; 7 existing warnings in 4 files. |
 | Prettier on changed frontend files | Passed; existing `pluginSearchDirs` option warnings. |
-| Migration 0069 | Applied on fresh disposable databases and exercised by integration tests. |
+| Original UAT migration 0069 | Applied to the disposable recording fixture. The release branch now folds its schema into 0067; that 0066 → 0068 path is verified separately. The recording fixture is retained unchanged. |
 | Full API suite, earlier in implementation | 3,186 passed, 10 skipped, 4 failed. One worker-cron test fixture was updated for the new flag. Three unchanged audit-order assertions failed in that broad run and passed in isolation; their ordering is sensitive to equal transaction timestamps. All four failing cases and their nearby checks passed on rerun (12 passed). A fresh all-API green run is **not claimed**. |
 | Full Docker stack smoke | **Blocked by memory**, twice. Default build failed with `cannot allocate memory`; a temporary 4 GB Node heap override failed with JavaScript heap exhaustion. Neither reached compose boot/soak. Native live UAT does not replace this gate. |
 

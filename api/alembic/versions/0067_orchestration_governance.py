@@ -5,7 +5,8 @@ Revises: 0066
 
 No public routes or workers are enabled. Downgrade refuses retained runs,
 checkpoints or files: drain/export first. Legacy-only databases can round-trip
-without data loss. New installations receive the final schema in one revision.
+without data loss. The release upgrades from 0066, before sample orchestration
+roots existed; new installations receive the final schema in one revision.
 """
 
 from alembic import op
@@ -43,14 +44,25 @@ def upgrade() -> None:
           owner_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           project_id uuid NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
           plan_id uuid NOT NULL UNIQUE,
-          current_revision integer NOT NULL CHECK (current_revision > 0),
+          current_revision integer CHECK (current_revision > 0),
+          planning_snapshot jsonb,
+          profile text NOT NULL DEFAULT 'demonstration'
+            CHECK (profile IN ('demonstration','model_demo_v1')),
           admitted_revision integer CHECK (admitted_revision = current_revision),
-          status text NOT NULL CHECK (status IN ('awaiting_approval','queued','running','waiting_children','uncertain','halted','completed','failed','rejected','expired')),
+          status text NOT NULL CHECK (status IN ('planning','awaiting_approval','queued','running','waiting_children','uncertain','halted','completed','failed','rejected','expired')),
           stop_reason text,
-          created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+          created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
+          CONSTRAINT ck_orchestration_planning CHECK (
+            (profile = 'demonstration' AND planning_snapshot IS NULL AND current_revision IS NOT NULL)
+            OR (profile = 'model_demo_v1' AND planning_snapshot IS NOT NULL
+              AND jsonb_typeof(planning_snapshot) = 'object'
+              AND (current_revision IS NOT NULL OR status IN
+                ('planning','uncertain','halted','failed','expired')))),
+          CONSTRAINT ck_orchestration_planning_revision CHECK
+            (status <> 'planning' OR current_revision IS NULL)
         );
         CREATE UNIQUE INDEX uq_orchestration_active_owner ON orchestration_roots(owner_id)
-          WHERE status IN ('awaiting_approval','queued','running','waiting_children','uncertain');
+          WHERE status IN ('planning','awaiting_approval','queued','running','waiting_children','uncertain');
 
         CREATE TABLE orchestration_plans (
           root_id uuid NOT NULL REFERENCES orchestration_roots(session_id) ON DELETE CASCADE,

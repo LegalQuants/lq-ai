@@ -203,7 +203,7 @@ async def prepare_intake(
         policy_version=policy.version(),
         root=scope,
         delegation_grants=policy.grants,
-        budget_usd=Decimal(settings.orchestration_chat_budget_usd),
+        budget_usd=settings.orchestration_chat_budget_usd,
         root_allowance_usd=Decimal("0"),
         planning_allowance_usd=Decimal("0"),
         deadline=datetime.now(UTC) + timedelta(hours=1),

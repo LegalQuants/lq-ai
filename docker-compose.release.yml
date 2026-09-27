@@ -244,7 +244,7 @@ services:
       # image already sets LQ_AI_SKILLS_DIR=/skills via ENV; set it here too
       # for clarity, matching the dev compose). No ./skills bind mount.
       LQ_AI_SKILLS_DIR: ${LQ_AI_SKILLS_DIR:-/skills}
-      # Sample-only orchestration remains operator opt-in. Both processes use
+      # Bounded orchestration chat remains operator opt-in. Both processes use
       # the same bounded deployment capacity when the flag is enabled.
       LQ_AI_ORCHESTRATION_CHAT_ENABLED: ${LQ_AI_ORCHESTRATION_CHAT_ENABLED:-false}
       LQ_AI_ORCHESTRATION_CHAT_PROJECT_ID: ${LQ_AI_ORCHESTRATION_CHAT_PROJECT_ID:-}

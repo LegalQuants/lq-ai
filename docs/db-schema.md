@@ -1769,8 +1769,8 @@ The authoritative governance DDL is
 the [lifecycle and transaction contract](adr/0035-governed-orchestration-run-tree.md#d5--durable-admission-short-transactions-and-explicit-uncertain-effects)
 defines allowed transitions and remaining integration gates.
 
-Revision **0069** adds `profile` (`demonstration` by default, or
-`model_demo_v1`) and nullable private `planning_snapshot JSONB` to
+Revision **0067** includes `profile` (`demonstration` by default, or
+`model_demo_v1`) and nullable private `planning_snapshot JSONB` on
 `orchestration_roots`. Model roots have a snapshot before their first provider
 call and may have `current_revision = NULL` until a valid proposal is retained.
 The new `planning` status participates in the one-active-root-per-owner index.
@@ -1783,8 +1783,8 @@ The existing account and effect ledger charge planning before approval;
 promotion writes plan revision 1 with a `planning_digest`, preserving that
 ledger. No child admission is authorized by a planning snapshot. Invalid model
 output, halt, expiry and uncertain effects retain the snapshot and receipts.
-Downgrade refuses retained model runs instead of discarding their history.
-See [0069](../api/alembic/versions/0069_orchestration_chat_planning.py) and the
+Downgrade to 0066 refuses retained orchestration runs instead of discarding their history.
+See [0067](../api/alembic/versions/0067_orchestration_governance.py) and the
 [model demo tests](../api/tests/autonomous/orchestration/test_chat_demo.py).
 
 `autonomous_sessions` gains immutable tree identity. Depth-zero roots have no

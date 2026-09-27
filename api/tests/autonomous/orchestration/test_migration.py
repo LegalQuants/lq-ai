@@ -1,4 +1,4 @@
-"""0067 round trips on a second disposable DB, never the shared test database."""
+"""0066 → 0068 round trips on a second disposable DB, never the shared test database."""
 
 import asyncio
 import os
@@ -22,7 +22,17 @@ def exercise_migration(source_url: str) -> None:
     config = Config(str(Path(__file__).resolve().parents[3] / "alembic.ini"))
     config.set_main_option("script_location", str(Path(__file__).resolve().parents[3] / "alembic"))
     old_url = os.environ.get("DATABASE_URL")
-    owner, session, project, child, plan_id = (uuid4() for _ in range(5))
+    (
+        owner,
+        session,
+        project,
+        child,
+        plan_id,
+        model_session,
+        model_plan,
+        second_session,
+        second_plan,
+    ) = (uuid4() for _ in range(9))
     try:
         with admin.connect() as db:
             db.execute(text(f'CREATE DATABASE "{name}"'))
@@ -56,6 +66,67 @@ def exercise_migration(source_url: str) -> None:
                 {"id": session},
             ).one()
             assert row == (session, 0)
+        command.upgrade(config, "0068")
+        with target.begin() as db:
+            db.execute(
+                text(
+                    "INSERT INTO autonomous_sessions(id,user_id,project_id,trigger_kind) "
+                    "VALUES (:id,:owner,:project,'manual')"
+                ),
+                {"id": model_session, "owner": owner, "project": project},
+            )
+        with pytest.raises(DBAPIError), target.begin() as db:
+            db.execute(
+                text(
+                    "INSERT INTO orchestration_roots"
+                    "(session_id,owner_id,project_id,plan_id,profile,status) "
+                    "VALUES (:root,:owner,:project,:plan,'model_demo_v1','planning')"
+                ),
+                {"root": model_session, "owner": owner, "project": project, "plan": model_plan},
+            )
+        with target.begin() as db:
+            db.execute(
+                text(
+                    "INSERT INTO orchestration_roots"
+                    "(session_id,owner_id,project_id,plan_id,profile,planning_snapshot,status) "
+                    "VALUES (:root,:owner,:project,:plan,'model_demo_v1','{}','planning')"
+                ),
+                {"root": model_session, "owner": owner, "project": project, "plan": model_plan},
+            )
+            assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0068"
+            db.execute(
+                text(
+                    "INSERT INTO autonomous_sessions(id,user_id,project_id,trigger_kind) "
+                    "VALUES (:id,:owner,:project,'manual')"
+                ),
+                {"id": second_session, "owner": owner, "project": project},
+            )
+        with pytest.raises(DBAPIError), target.begin() as db:
+            db.execute(
+                text("UPDATE orchestration_roots SET current_revision=1 WHERE session_id=:root"),
+                {"root": model_session},
+            )
+        with pytest.raises(DBAPIError), target.begin() as db:
+            db.execute(
+                text(
+                    "INSERT INTO orchestration_roots"
+                    "(session_id,owner_id,project_id,plan_id,profile,planning_snapshot,status) "
+                    "VALUES (:root,:owner,:project,:plan,'model_demo_v1','{}','planning')"
+                ),
+                {"root": second_session, "owner": owner, "project": project, "plan": second_plan},
+            )
+        with pytest.raises(DBAPIError, match="draining and exporting"):
+            command.downgrade(config, "0066")
+        with target.begin() as db:
+            assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0068"
+            db.execute(
+                text("DELETE FROM autonomous_sessions WHERE id=:id"),
+                {"id": model_session},
+            )
+            db.execute(
+                text("DELETE FROM autonomous_sessions WHERE id=:id"),
+                {"id": second_session},
+            )
         command.downgrade(config, "0066")
         with target.connect() as db:
             assert (
@@ -107,5 +178,5 @@ def exercise_migration(source_url: str) -> None:
         admin.dispose()
 
 
-async def test_0067_legacy_backfill_roundtrip_and_nonlossy_downgrade(test_db_url):
+async def test_0067_0068_backfill_planning_shape_and_nonlossy_downgrade(test_db_url):
     await asyncio.to_thread(exercise_migration, test_db_url)

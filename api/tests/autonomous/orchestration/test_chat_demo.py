@@ -7,9 +7,10 @@ import asyncio
 import hashlib
 import json
 from copy import deepcopy
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
@@ -21,6 +22,7 @@ from app.api.orchestration import service
 from app.autonomous.orchestration.chat_demo import contract_qa_outcome
 from app.autonomous.orchestration.service import DemonstrationService, ModelDemoGateway
 from app.config import get_settings
+from app.db.session import get_db
 from app.main import app
 from app.models.orchestration import OrchestrationAdmission
 from app.models.user import User
@@ -159,7 +161,7 @@ async def model_demo(env, test_db_url, monkeypatch):
             "orchestration_chat_provider": "selected",
             "orchestration_chat_model": "native",
             "orchestration_chat_minimum_tier": 1,
-            "orchestration_chat_budget_usd": "2.0000",
+            "orchestration_chat_budget_usd": Decimal("2.0000"),
             "orchestration_deployment_children": 2,
         }
     )
@@ -391,6 +393,7 @@ async def test_uncertain_planning_is_retained_without_automatic_retry(model_demo
     result = await read(api, root)
     assert result["status"] == "uncertain" and result["reserved_usd"] != "0.0000"
     assert result["effects"][0]["status"] == "uncertain"
+    assert "private provider details must not escape" not in json.dumps(result)
     await orchestration_session_job(api.ctx, root, root)
     assert len(api.gateway.requests) == 1
 
@@ -412,6 +415,59 @@ async def test_request_idempotency_and_rejection(model_demo):
     final = await read(api, value["root_id"])
     assert final["status"] == "rejected" and final["spent_usd"] == value["spent_usd"]
     assert api.gateway.operations == ["propose_plan"]
+    assert (await start(api))["status"] == "planning"
+
+
+async def test_wrong_hash_cannot_approve_or_admit_children(model_demo):
+    api = model_demo
+    value = await plan(api)
+    root = value["root_id"]
+    response = await api.client.post(
+        f"{BASE}/{root}/approve", json={"revision": 1, "plan_hash": "0" * 64}
+    )
+    assert response.status_code == 409
+    assert (await read(api, root))["status"] == "awaiting_approval"
+    async with api.env.factory() as db:
+        assert not await db.scalar(select(OrchestrationAdmission.session_id))
+    assert api.gateway.operations == ["propose_plan"]
+
+
+async def test_watchdog_requeues_approved_root_after_lost_wakeup(model_demo):
+    api = model_demo
+    value = await plan(api)
+    await approve(api, value)
+    api.queued.clear()
+    result = await orchestration_watchdog(api.ctx)
+    assert result["woken"] == 1
+    assert (UUID(value["root_id"]), UUID(value["root_id"])) in api.queued
+    assert (await read(api, value["root_id"]))["status"] == "queued"
+
+
+async def test_legacy_worker_refuses_chat_child_and_legacy_halt_reaches_tree(
+    model_demo, monkeypatch
+):
+    from app.workers import autonomous_worker
+
+    api = model_demo
+    value = await plan(api)
+    await approve(api, value)
+    root = value["root_id"]
+    assert await orchestration_session_job(api.ctx, root, root) == {"status": "waiting_children"}
+    child_id = (await read(api, root))["tree"]["children"][0]["session_id"]
+    monkeypatch.setattr(autonomous_worker, "get_session_factory", lambda: api.env.factory)
+    monkeypatch.setattr(autonomous_worker, "_gateway_from_ctx", lambda ctx: None)
+    blocked = await autonomous_worker.autonomous_session_job({}, child_id)
+    assert blocked["status"] == "governed_orchestration_only"
+
+    async def db_override():
+        async with api.env.factory() as db:
+            yield db
+
+    app.dependency_overrides[get_db] = db_override
+    monkeypatch.setattr("app.api.orchestration.service", lambda request: api.runtime)
+    halted = await api.client.post(f"/api/v1/autonomous/sessions/{child_id}/halt")
+    assert halted.status_code == 200 and halted.json()["status"] == "halted"
+    assert (await read(api, root))["status"] == "halted"
 
 
 async def test_one_json_presentation_fence_preserves_strict_plan_validation(model_demo):

@@ -264,8 +264,12 @@ class Settings(BaseSettings):
     orchestration_chat_model: str = Field(
         default="", validation_alias="LQ_AI_ORCHESTRATION_CHAT_MODEL"
     )
-    orchestration_chat_budget_usd: str = Field(
-        default="2.0000", validation_alias="LQ_AI_ORCHESTRATION_CHAT_BUDGET_USD"
+    orchestration_chat_budget_usd: Decimal = Field(
+        default=Decimal("2.0000"),
+        gt=0,
+        max_digits=10,
+        decimal_places=4,
+        validation_alias="LQ_AI_ORCHESTRATION_CHAT_BUDGET_USD",
     )
     orchestration_chat_minimum_tier: int = Field(
         default=1, ge=1, le=5, validation_alias="LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER"
