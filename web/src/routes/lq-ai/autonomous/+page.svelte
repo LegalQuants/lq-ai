@@ -23,7 +23,7 @@
 	import { goto } from '$app/navigation';
 
 	import { autonomousApi, skillsApi, knowledgeBasesApi, projectsApi } from '$lib/lq-ai/api';
-	import { orchestrationApi, orchestrationChatApi } from '$lib/lq-ai/api/orchestration';
+	import { orchestrationChatApi } from '$lib/lq-ai/api/orchestration';
 	import * as playbooksApi from '$lib/lq-ai/api/playbooks';
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
 	import type { AutonomousSessionRead } from '$lib/lq-ai/api/autonomous';
@@ -38,10 +38,7 @@
 	let actionError: string | null = null;
 	let actionSuccess: string | null = null;
 	let pendingHaltId: string | null = null;
-	let demoAvailability: 'checking' | 'enabled' | 'disabled' | 'unavailable' = 'checking';
 	let chatAvailability: 'checking' | 'enabled' | 'disabled' | 'unavailable' = 'checking';
-	$: bothOrchestrationFeaturesDisabled =
-		chatAvailability === 'disabled' && demoAvailability === 'disabled';
 
 	// ---------------------------------------------------------------------------
 	// Run-now modal state
@@ -69,7 +66,6 @@
 	onMount(() => {
 		load();
 		loadPickerData();
-		loadDemoAvailability();
 		loadChatAvailability();
 	});
 
@@ -79,15 +75,6 @@
 			chatAvailability = caps.enabled ? 'enabled' : 'disabled';
 		} catch {
 			chatAvailability = 'unavailable';
-		}
-	}
-
-	async function loadDemoAvailability(): Promise<void> {
-		try {
-			const caps = await orchestrationApi.capabilities();
-			demoAvailability = caps.enabled ? 'enabled' : 'disabled';
-		} catch {
-			demoAvailability = 'unavailable';
 		}
 	}
 
@@ -220,33 +207,18 @@
 			<button type="button" class="new-button" on:click={openRunModal}> Run now </button>
 		</div>
 		<div class="experimental-controls" aria-label="Experimental orchestration">
-			<span class="experimental-label">Orchestration</span>
 			{#if chatAvailability === 'enabled'}
-				<a href="/lq-ai/autonomous/orchestration/chat" class="underline">Chat (experimental)</a>
+				<a href="/lq-ai/autonomous/orchestration/chat" class="underline"
+					>Orchestration chat (experimental)</a
+				>
 			{:else}
 				<button type="button" disabled class="text-sm text-gray-500">
-					Chat (experimental){#if !bothOrchestrationFeaturesDisabled}
-						— {chatAvailability === 'disabled'
-							? 'disabled by operator'
-							: chatAvailability === 'checking'
-								? 'checking availability…'
-								: 'unavailable'}{/if}
+					Orchestration chat (experimental) — {chatAvailability === 'disabled'
+						? 'disabled by operator'
+						: chatAvailability === 'checking'
+							? 'checking availability…'
+							: 'unavailable'}
 				</button>
-			{/if}
-			{#if demoAvailability === 'enabled'}
-				<a href="/lq-ai/autonomous/orchestration" class="underline">Demo</a>
-			{:else}
-				<button type="button" disabled class="text-sm text-gray-500">
-					Demo{#if !bothOrchestrationFeaturesDisabled}
-						— {demoAvailability === 'disabled'
-							? 'disabled by operator'
-							: demoAvailability === 'checking'
-								? 'checking availability…'
-								: 'unavailable'}{/if}
-				</button>
-			{/if}
-			{#if bothOrchestrationFeaturesDisabled}
-				<span class="experimental-status">Disabled by operator</span>
 			{/if}
 		</div>
 	</header>
@@ -538,14 +510,6 @@
 	.experimental-controls button {
 		max-width: 100%;
 		text-align: left;
-	}
-
-	.experimental-label {
-		font-weight: 600;
-	}
-
-	.experimental-status {
-		color: var(--lq-text-secondary);
 	}
 
 	.page-intro {
