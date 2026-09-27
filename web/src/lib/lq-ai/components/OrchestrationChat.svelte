@@ -7,7 +7,11 @@
 		orchestrationChatApi,
 		shouldPollTree
 	} from '$lib/lq-ai/api/orchestration';
-	import type { ChatCapabilities, OrchestrationChatRun } from '$lib/lq-ai/api/orchestration';
+	import type {
+		ChatCapabilities,
+		OrchestrationChatRun,
+		WorkspaceFile
+	} from '$lib/lq-ai/api/orchestration';
 
 	let caps: ChatCapabilities | null = null;
 	let run: OrchestrationChatRun | null = null;
@@ -23,8 +27,9 @@
 	let loadedId = '';
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let request: AbortController | undefined;
-	let openedFile = '';
+	let openedFile: (WorkspaceFile & { content: string }) | null = null;
 	let fileError = '';
+	let fileSession = '';
 	$: id = $page.params.id ?? '';
 	$: tree = run?.tree;
 	$: canHalt =
@@ -40,6 +45,9 @@
 	$: if (mounted && id !== loadedId) {
 		loadedId = id;
 		run = null;
+		openedFile = null;
+		fileError = '';
+		fileSession = '';
 		polls = 0;
 		paused = false;
 		clearTimeout(timer);
@@ -137,12 +145,13 @@
 		}
 	}
 
-	async function openFile(session: string, name: string) {
+	async function openFile(session: string, file: WorkspaceFile) {
 		if (!run) return;
 		fileError = '';
-		openedFile = '';
+		fileSession = session;
+		openedFile = null;
 		try {
-			openedFile = (await orchestrationApi.file(run.root_id, session, name)).content;
+			openedFile = await orchestrationApi.file(run.root_id, session, file.name);
 		} catch (err) {
 			fileError = err instanceof Error ? err.message : String(err);
 		}
@@ -226,6 +235,14 @@
 				retains the receipts and any reservation; an operator must reconcile this run before this
 				owner can start another.
 			</p>{/if}
+		{#if run.status === 'rejected'}<p class="notice" role="status">
+				Plan rejected. No child work or synthesis will run. You can start a new request; this
+				planning receipt remains available.
+			</p>{/if}
+		{#if run.status === 'halted'}<p class="notice" role="status">
+				Run halted. No combined answer was produced. Any completed child answers and their files
+				remain available below.
+			</p>{/if}
 		{#if paused}<p class="notice">
 				Automatic refresh paused. Refresh to continue following this run; execution continues on the
 				server.
@@ -233,6 +250,22 @@
 		<section class="message user">
 			<p class="eyebrow">Your request</p>
 			<p>{run.planning.goal}</p>
+		</section>
+		<section class="source-reference" aria-label="Agreement reference">
+			<div class="heading">
+				<div>
+					<p class="eyebrow">Agreement reference</p>
+					<h2>Fictional vendor agreement</h2>
+				</div>
+				<span class="tag">Source for this run</span>
+			</div>
+			{#if run.packet}<details>
+					<summary>Read the agreement used by the agents</summary>
+					<pre class="source-text">{run.packet}</pre>
+				</details>{:else}<p class="muted">
+					The agreement text for this run is unavailable. Its pinned digest remains in Run
+					provenance.
+				</p>{/if}
 		</section>
 		<section class="message" aria-label="Orchestrator response">
 			<p class="eyebrow">Contract Questions Orchestrator · {run.planning.root_skill_version}</p>
@@ -311,29 +344,51 @@
 										</p>{/if}
 									<p>{effect.created_at ?? ''} → {effect.completed_at ?? 'pending'}</p>
 								</div>{/each}{#each child.files as file}<button
-									on:click={() => openFile(child.session_id, file.name)}
+									class="file-link"
+									type="button"
+									on:click={() => openFile(child.session_id, file)}
 									>{file.name} · revision {file.revision}{file.shared
 										? ' · shared with root'
 										: ' · private notes'}</button
 								>{/each}
+							{#if fileSession === child.session_id && fileError}<p role="alert" class="error">
+									{fileError}
+								</p>{/if}
+							{#if openedFile?.session_id === child.session_id}<div
+									class="file-preview"
+									role="region"
+									aria-label="{openedFile.name} file contents"
+								>
+									<div class="file-preview-header">
+										<div>
+											<p class="eyebrow">Saved run file</p>
+											<h3>{openedFile.name}</h3>
+											<p class="muted">
+												Revision {openedFile.revision} · {openedFile.shared
+													? 'Shared with orchestrator'
+													: 'Private child notes'}
+											</p>
+										</div>
+										<button type="button" on:click={() => (openedFile = null)}>Close file</button>
+									</div>
+									<pre class="file-content">{openedFile.content}</pre>
+								</div>{/if}
 						</details>
 					</article>
 				{/each}
 			</section>
 		{/if}
-		{#if tree?.result || tree?.partial_summary}<section
+		{#if tree?.result || (tree?.partial_summary && !['halted', 'rejected'].includes(run.status))}<section
 				class="message result"
 				aria-label="Combined result"
 			>
-				<h2>{tree.result ? 'Combined answer' : 'Retained results'}</h2>
-				<p class="scope">Model-generated from fictional inputs; unverified</p>
+				<h2>{tree.result ? 'Combined answer' : 'Retained work overview'}</h2>
+				<p class="scope">
+					{tree.result
+						? 'Model-generated from fictional inputs; unverified'
+						: 'No combined model answer was produced. This overview lists stored child outcomes.'}
+				</p>
 				<pre class="answer">{tree.result?.summary ?? tree.partial_summary}</pre>
-			</section>{/if}
-		{#if fileError}<p class="error" role="alert">{fileError}</p>{/if}
-		{#if openedFile}<section class="panel">
-				<h2>Run file</h2>
-				<pre>{openedFile}</pre>
-				<button on:click={() => (openedFile = '')}>Close file</button>
 			</section>{/if}
 		<details class="panel">
 			<summary>Run provenance and root receipts</summary>
@@ -398,6 +453,26 @@
 		border-radius: 12px;
 		padding: 1.25rem;
 		margin: 1rem 0;
+		background: var(--lq-surface);
+	}
+	.source-reference {
+		border: 1px solid var(--lq-border);
+		border-left: 3px solid var(--lq-accent);
+		border-radius: 8px;
+		padding: 1rem 1.25rem;
+		margin: 1rem 0;
+		background: var(--lq-bg-secondary, var(--lq-surface));
+	}
+	.source-reference h2,
+	.file-preview h3 {
+		margin: 0;
+	}
+	.source-text {
+		max-height: 24rem;
+		overflow: auto;
+		padding: 0.75rem;
+		border: 1px solid var(--lq-border);
+		border-radius: 6px;
 		background: var(--lq-surface);
 	}
 	.user {
@@ -491,6 +566,34 @@
 		padding: 0.65rem 0;
 		font-size: 0.75rem;
 		overflow-wrap: anywhere;
+	}
+	.file-link {
+		color: var(--lq-accent);
+		text-align: left;
+	}
+	.file-preview {
+		margin-top: 1rem;
+		border: 1px solid var(--lq-accent);
+		border-left: 4px solid var(--lq-accent);
+		border-radius: 8px;
+		background: var(--lq-bg-secondary, var(--lq-surface));
+	}
+	.file-preview-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
+		gap: 0.75rem;
+		padding: 0.75rem 1rem;
+	}
+	.file-content {
+		margin: 0;
+		padding: 1rem;
+		max-height: 24rem;
+		overflow: auto;
+		border-top: 1px solid var(--lq-border);
+		background: var(--lq-surface);
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+		font-size: 0.8rem;
 	}
 	.children {
 		display: grid;

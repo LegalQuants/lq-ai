@@ -1738,6 +1738,11 @@ components:
             $ref: '#/components/schemas/EffectRead'
           title: Effects
           type: array
+        packet:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Packet
         planning:
           $ref: '#/components/schemas/PlanningSnapshot'
         reserved_usd:

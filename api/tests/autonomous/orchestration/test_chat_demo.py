@@ -4,6 +4,7 @@ The provider is controlled here. An unmocked provider run is a separate UAT gate
 """
 
 import asyncio
+import hashlib
 import json
 from copy import deepcopy
 from pathlib import Path
@@ -274,6 +275,19 @@ async def test_complete_skill_backed_run_through_worker_and_receipts(model_demo)
         assert len(skill_receipt["skill"]["digest"]) == 64
         assert skill_receipt["accounting"]["provider"] == "selected"
         assert child["outcome"]["artifact"] and "[§5]" in child["outcome"]["findings"][0]
+
+
+async def test_retained_run_includes_only_its_pinned_agreement(model_demo, monkeypatch):
+    api = model_demo
+    value = await start(api)
+    source = value["packet"]
+    assert (
+        source and hashlib.sha256(source.encode()).hexdigest() == value["planning"]["packet_digest"]
+    )
+    api.runtime.settings.orchestration_chat_enabled = False
+    assert (await read(api, value["root_id"]))["packet"] == source
+    monkeypatch.setattr("app.api.orchestration.packet", lambda _: "A changed agreement")
+    assert (await read(api, value["root_id"]))["packet"] is None
 
 
 def test_contract_qa_adaptive_markdown_is_retained_without_repair():

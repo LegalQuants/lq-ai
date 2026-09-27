@@ -1,5 +1,6 @@
 """Closed demonstration intake, explicit consent and owner-only tree inspection."""
 
+import hashlib
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
@@ -24,7 +25,7 @@ from app.autonomous.orchestration.views import (
 from app.autonomous.orchestration.workspace import WorkspaceContent
 from app.config import get_settings
 from app.db.session import get_session_factory
-from app.errors import Conflict, NotFound
+from app.errors import Conflict, Forbidden, NotFound
 from app.models.orchestration import OrchestrationRoot
 from app.models.project import Project
 from app.workers.queue import enqueue_orchestration_job
@@ -66,6 +67,18 @@ class ChatCapabilities(BaseModel):
     deployment_children: int | None = None
     attempt_timeout_seconds: int | None = None
     planning_notice: str | None = None
+
+
+async def _chat_read(runtime: DemonstrationService, root_id: UUID, owner_id: UUID) -> ChatRunRead:
+    """Attach the exact current fixture only when it matches this run's pin."""
+    value = await read_chat_run(runtime.store.sessions, root_id, owner_id)
+    try:
+        source = packet(runtime.skills)
+    except Forbidden:
+        return value
+    if hashlib.sha256(source.encode()).hexdigest() != value.planning.packet_digest:
+        return value
+    return value.model_copy(update={"packet": source})
 
 
 @router.get("/chat-runs", response_model=ChatCapabilities, response_model_exclude_none=True)
@@ -128,7 +141,7 @@ async def start_chat(
         previous = await db.get(OrchestrationRoot, body.request_id)
         if previous is not None:
             # Owner-only read before comparing input or exposing any state.
-            retained = await read_chat_run(model.store.sessions, body.request_id, user.id)
+            retained = await _chat_read(runtime, body.request_id, user.id)
             if (
                 retained.planning.goal != body.goal
                 or retained.planning.project_id != body.project_id
@@ -161,19 +174,19 @@ async def start_chat(
     )
     await model.store.start_planning(snapshot, actor_id=user.id)
     await enqueue_orchestration_job(snapshot.root_id, snapshot.root_id)
-    return await read_chat_run(model.store.sessions, snapshot.root_id, user.id)
+    return await _chat_read(runtime, snapshot.root_id, user.id)
 
 
 @router.get("/chat-runs/{root_id}", response_model=ChatRunRead)
 async def chat_run(root_id: UUID, user: ActiveUser, runtime: Service) -> ChatRunRead:
-    return await read_chat_run(runtime.store.sessions, root_id, user.id)
+    return await _chat_read(runtime, root_id, user.id)
 
 
 @router.post("/chat-runs/{root_id}/halt", response_model=ChatRunRead)
 async def halt_chat(root_id: UUID, user: ActiveUser, runtime: Service) -> ChatRunRead:
     await read_chat_run(runtime.store.sessions, root_id, user.id)
     await runtime.store.halt(root_id, actor_id=user.id)
-    return await read_chat_run(runtime.store.sessions, root_id, user.id)
+    return await _chat_read(runtime, root_id, user.id)
 
 
 class DemoPlanRequest(BaseModel):

@@ -5050,7 +5050,7 @@ paths:
       summary: Read retained planning, proposed plan, results and skill receipts
       responses:
         '200':
-          description: Owner-only; readable after disablement; tree is null before a valid proposal
+          description: Owner-only; readable after disablement; tree is null before a valid proposal. Fictional agreement text is included only when the installed fixture matches this run's pinned digest.
           content:
             application/json:
               schema:

@@ -145,6 +145,7 @@ export interface OrchestrationChatRun {
 	root_id: string;
 	status: string;
 	stop_reason: string | null;
+	packet: string | null;
 	planning: {
 		attempt_timeout_seconds: number;
 		goal: string;

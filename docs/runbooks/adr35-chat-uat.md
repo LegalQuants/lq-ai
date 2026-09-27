@@ -61,20 +61,22 @@ matching CORS. Do not point host migrations at an existing development database.
 
 ## Acceptance script
 
-| ID | Action | Expected result / evidence |
+| ID | Action | Expected result / evidence | Results |
 |---|---|---|
-| UAT-01 | Leave the new flag off; open the chat page. | Clear disabled state; existing work and sample preview unaffected. No model call. |
-| UAT-02 | Enable the dedicated fixture; select Contract Questions Orchestrator and inspect the agreement. | Model, project, fictional packet, total cap, planning allowance and attempt timeout are disclosed. |
-| UAT-03 | Submit the default goal about payments, implementation/support, renewal/termination. | Durable `planning` state; one real gateway planning receipt; then 2–4 proposed questions. No child admission before approval. |
-| UAT-04 | Inspect every proposed task. | Each has question, boundaries, expected output, stopping condition, Contract QA v1.0.0 and allowance. No extra tools or deeper delegation. |
-| UAT-05 | Approve once; refresh while children run. | Approved revision/hash retained; two child sessions overlap; any additional child waits for capacity. Reload follows the same run without repeating planning or admission. |
-| UAT-06 | Open “Skill execution receipt and files” for the renewal/termination child. | Actual `run_skill` effect, `contract-qa` version/digest, provider/model, accounting and timestamps; answer reaches shared `findings.json`. Merely naming the skill in prose does not pass. |
-| UAT-07 | Inspect the combined answer. | Model synthesis uses the delivered child findings, retains missing information and clause references, and is labeled unverified. No synthetic replacement for failed children. |
-| UAT-08 | Reopen the run URL after completion. | Same plan, approval, child results, receipts and synthesis; no new inference. |
-| UAT-09 | Start a new request focused only on notice obligations and surviving duties. Reject its proposal. | Different model-authored tasks; planning receipt retained, zero child inferences and no synthesis. |
-| UAT-10 | Start another request; halt during planning or child work. | No new effects after halt; retain delivered work and unresolved reservations. An already-dispatched call may finish at its provider. |
-| UAT-11 | Disable the flag after a retained run exists. | Read and Halt remain reachable; fresh planning/approval/dispatch refused. |
-| UAT-12 | Use another owner, stale hash, unpriced route or changed skill/config. | Owner-only reads; refusal before unauthorized dispatch. Controlled-provider tests exercise these without spending model calls. |
+| UAT-01 | Leave the new flag off; open the chat page. | Clear disabled state; existing work and sample preview unaffected. No model call. | Not tested. |
+| UAT-02 | Enable the dedicated fixture; select Contract Questions Orchestrator and inspect the agreement. | Model, project, fictional packet, total cap, planning allowance and attempt timeout are disclosed. | OK, but the page on Autnomous sessions says “Orchestration chat (experimental)"|
+| UAT-03 | Submit the default goal about payments, implementation/support, renewal/termination. | Durable `planning` state; one real gateway planning receipt; then 2–4 proposed questions. No child admission before approval. | OK when a request is submitted , the “model is proposing bounded tasks”. A run provenance and root receipts are provided. No child runs. |
+| UAT-04 | Inspect every proposed task. | Each has question, boundaries, expected output, stopping condition, Contract QA v1.0.0 and allowance. No extra tools or deeper delegation. | OK all pass |
+| UAT-05 | Approve once; refresh while children run. | Approved revision/hash retained; two child sessions overlap; any additional child waits for capacity. Reload follows the same run without repeating planning or admission. | Pass |
+| UAT-06 | Open “Skill execution receipt and files” for the renewal/termination child. | Actual `run_skill` effect, `contract-qa` version/digest, provider/model, accounting and timestamps; answer reaches shared `findings.json`. Merely naming the skill in prose does not pass. | Pass |
+| UAT-07 | Inspect the combined answer. | Model synthesis uses the delivered child findings, retains missing information and clause references, and is labeled unverified. No synthetic replacement for failed children. | PASS |
+| UAT-08 | Reopen the run URL after completion. | Same plan, approval, child results, receipts and synthesis; no new inference. | PASS |
+| UAT-09 | Start a new request focused only on notice obligations and surviving duties. Reject its proposal. | Different model-authored tasks; planning receipt retained, zero child inferences and no synthesis. | PASS but the interface should inform that the work is not proceeding |
+| UAT-10 | Start another request; halt during planning or child work. | No new effects after halt; retain delivered work and unresolved reservations. An already-dispatched call may finish at its provider. | PASS but I noted that Retained results tried to syntehsis as well |
+| UAT-11 | Disable the flag after a retained run exists. | Read and Halt remain reachable; fresh planning/approval/dispatch refused. | Not tested |
+| UAT-12 | Use another owner, stale hash, unpriced route or changed skill/config. | Owner-only reads; refusal before unauthorized dispatch. Controlled-provider tests exercise these without spending model calls. | Not tested |
+| UAT-13 | Open the results page after completion, rejection or halt. | The original request and the fictional agreement used for that run remain available for comparison; the agreement is shown only when its content matches the run's pinned digest. | Pending human retest. |
+| UAT-14 | Open `notes.md` or `findings.json` from a child receipt. | The preview clearly identifies the saved file, revision and sharing status, and displays its contents in a distinct file viewer within that child's receipt. | Pending human retest. |
 
 For UAT-07, check the fictional agreement rather than accepting plausible prose:
 USD 200/month and 30-day payment window; two onboarding sessions within 20 business

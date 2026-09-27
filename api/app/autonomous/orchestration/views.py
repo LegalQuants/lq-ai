@@ -214,6 +214,7 @@ class ChatRunRead(BaseModel):
     status: str
     stop_reason: str | None
     planning: PlanningSnapshot
+    packet: str | None = None
     effects: list[EffectRead]
     spent_usd: Decimal
     reserved_usd: Decimal
