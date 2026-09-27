@@ -443,6 +443,28 @@ async def test_watchdog_requeues_approved_root_after_lost_wakeup(model_demo):
     assert (await read(api, value["root_id"]))["status"] == "queued"
 
 
+async def test_watchdog_requeues_admitted_children_after_lost_wakeup(model_demo):
+    api = model_demo
+    value = await plan(api)
+    await approve(api, value)
+    root = value["root_id"]
+    assert await orchestration_session_job(api.ctx, root, root) == {"status": "waiting_children"}
+    children = (await read(api, root))["tree"]["children"]
+    child_ids = {UUID(child["session_id"]) for child in children}
+    assert len(child_ids) == 2
+
+    # Lose the notifications emitted when the root admitted its children.
+    api.queued.clear()
+    result = await orchestration_watchdog(api.ctx)
+    assert result["woken"] == len(child_ids) + 1
+    assert {(UUID(root), child_id) for child_id in child_ids} <= set(api.queued)
+    assert (await read(api, root))["status"] == "waiting_children"
+
+    # A recovered notification still drives the admitted child through the worker.
+    child_id = next(iter(child_ids))
+    assert await orchestration_session_job(api.ctx, root, str(child_id)) == {"status": "completed"}
+
+
 async def test_legacy_worker_refuses_chat_child_and_legacy_halt_reaches_tree(
     model_demo, monkeypatch
 ):
