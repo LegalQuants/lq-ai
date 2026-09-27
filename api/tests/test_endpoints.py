@@ -100,8 +100,7 @@ def _materialise(path: str) -> str:
 # now-implemented handler returns 200/204/etc. and fails the 501 assertion.
 # Format: (METHOD, registered_path).
 IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
-    # ADR 0035 closed demonstration; exercised against real governance storage.
-    ("GET", "/api/v1/autonomous/orchestration/capabilities"),
+    # ADR 0035 bounded model demonstration; exercised against real governance storage.
     ("GET", "/api/v1/autonomous/orchestration/chat-runs"),
     ("POST", "/api/v1/autonomous/orchestration/chat-runs"),
     ("GET", "/api/v1/autonomous/orchestration/chat-runs/{root_id}"),
@@ -109,7 +108,6 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("GET", "/api/v1/skill-workspaces"),
     ("DELETE", "/api/v1/skill-workspaces/{workspace_id}"),
     ("GET", "/api/v1/skill-workspaces/{workspace_id}/files/{name}"),
-    ("POST", "/api/v1/autonomous/orchestration/plans"),
     ("GET", "/api/v1/autonomous/orchestration/{root_id}/tree"),
     ("POST", "/api/v1/autonomous/orchestration/{root_id}/approve"),
     ("POST", "/api/v1/autonomous/orchestration/{root_id}/reject"),

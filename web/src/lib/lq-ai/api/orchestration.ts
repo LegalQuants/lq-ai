@@ -53,7 +53,7 @@ export interface OrchestrationTree {
 	stop_reason: string | null;
 	plan_hash: string;
 	approved: boolean;
-	mode: 'demonstration' | 'model_demo_v1';
+	mode: 'model_demo_v1';
 	verification: 'unverified';
 	plan: {
 		revision: number;
@@ -89,16 +89,6 @@ export interface OrchestrationTree {
 
 const base = '/autonomous/orchestration';
 export const orchestrationApi = {
-	capabilities: () =>
-		apiRequest<{ enabled: boolean; deployment_children: number | null; live_providers: false }>(
-			`${base}/capabilities`
-		),
-	prepare: (body: {
-		project_id: string;
-		goal: string;
-		topics: string[];
-		max_active_children: number;
-	}) => apiRequest<OrchestrationTree>(`${base}/plans`, { method: 'POST', body }),
 	tree: (id: string, signal?: AbortSignal) =>
 		apiRequest<OrchestrationTree>(`${base}/${encodeURIComponent(id)}/tree`, { signal }),
 	file: (root: string, session: string, name: string, signal?: AbortSignal) =>

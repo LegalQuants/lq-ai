@@ -5008,7 +5008,7 @@ paths:
         '404':
           description: Notification not found
 
-  # ADR 0035: independently enabled sample preview and bounded model chat.
+  # ADR 0035: bounded model-backed orchestration chat.
   # Canonical detailed shapes are generated
   # alongside these handlers. These paths add no public child-spawn authority.
   /api/v1/autonomous/orchestration/chat-runs:
@@ -5070,37 +5070,6 @@ paths:
               schema:
                 $ref: './backend-openapi.generated.yaml#/components/schemas/ChatRunRead'
         '404': {description: Model run absent or owned by another user}
-  /api/v1/autonomous/orchestration/capabilities:
-    get:
-      tags: [autonomous]
-      summary: Read demonstration enablement and explicit shared capacity
-      responses:
-        '200':
-          description: Disabled by default; live providers are always false
-          content:
-            application/json:
-              schema:
-                $ref: './backend-openapi.generated.yaml#/components/schemas/DemoCapabilities'
-  /api/v1/autonomous/orchestration/plans:
-    post:
-      tags: [autonomous]
-      summary: Prepare a sample plan for an owned active matter; requires opt-in
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: './backend-openapi.generated.yaml#/components/schemas/DemoPlanRequest'
-      responses:
-        '201':
-          description: Awaiting approval; no child is admitted or queued yet
-          content:
-            application/json:
-              schema:
-                $ref: './backend-openapi.generated.yaml#/components/schemas/TreeRead'
-        '403': {description: Demonstration disabled or autonomous opt-in missing}
-        '404': {description: Owned active project not found}
-        '409': {description: Owner already has an active root}
   /api/v1/autonomous/orchestration/{root_id}/tree:
     parameters:
       - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}

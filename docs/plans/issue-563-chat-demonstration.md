@@ -129,9 +129,9 @@ new run rather than introduce a plan editor.
 | [Store](../../api/app/autonomous/orchestration/store.py) and [models](../../api/app/models/orchestration.py) | Reuse admissions, accounts, fenced effects, receipts and outcomes. Add a genuine planning lifecycle before a prepared plan exists. |
 | [Guarded effects](../../api/app/autonomous/orchestration/effects.py), [inference binding](../../api/app/autonomous/orchestration/inference.py), [policy](../../api/app/autonomous/orchestration/policy.py) | Reuse pinned prompts, direct routing, pricing and current-policy checks. Wire these into an enabled model profile, including planning. |
 | [Executor](../../api/app/autonomous/orchestration/executor.py) | Reuse fan-out/join and explicit immutable child-file handoff. Add profile-specific operations/prompts; existing operations and messages are sample-specific. |
-| [Service](../../api/app/autonomous/orchestration/service.py), [worker](../../api/app/workers/orchestration_worker.py), [worker startup](../../api/app/workers/arq_setup.py) | Replace sample-only assembly with explicit profile dispatch while retaining the same execution-state owner and shared capacity. |
+| [Service](../../api/app/autonomous/orchestration/service.py), [worker](../../api/app/workers/orchestration_worker.py), [worker startup](../../api/app/workers/arq_setup.py) | Use the model-backed profile with the same execution-state owner and shared capacity. The sample-only profile was retired. |
 | [API](../../api/app/api/orchestration.py), [read views](../../api/app/autonomous/orchestration/views.py), [web client](../../web/src/lib/lq-ai/api/orchestration.ts) | Add model-profile intake and planning read states; extend receipts with safe inference provenance. Reuse owner-only approve/reject/halt operations. |
-| [Preview UI](../../web/src/routes/lq-ai/autonomous/orchestration/+page.svelte) | Reuse plan, progress, receipts and bounded polling in a compact conversational presentation. |
+| [Chat UI](../../web/src/lib/lq-ai/components/OrchestrationChat.svelte) | Present plan, progress, receipts and bounded polling in a compact conversation. The old preview route was removed. |
 
 The [LQ.AI chat wrapper](../../web/src/routes/lq-ai/chats/+page.svelte) mounts
 `ChatPanel`. The separate
@@ -201,8 +201,8 @@ governance path with a normal chat completion or a placeholder approved plan.
 Add a dedicated pinned root skill covering structured planning and synthesis;
 reuse installed `contract-qa` as the substantive child skill. Explicitly allowlist
 it for the closed research profile, with the existing restricted grants and
-inference policy. Keep the sample skills/provider available for deterministic
-regression tests and the old workflow preview. The server chooses the root/child
+inference policy. Keep a test-only sample harness for deterministic executor
+regression tests. The server chooses the root/child
 profile and constructs prompts; model fields cannot name agents, grant tools,
 select data or change the route/budget.
 

@@ -246,7 +246,6 @@ services:
       LQ_AI_SKILLS_DIR: ${LQ_AI_SKILLS_DIR:-/skills}
       # Sample-only orchestration remains operator opt-in. Both processes use
       # the same bounded deployment capacity when the flag is enabled.
-      LQ_AI_ORCHESTRATION_DEMO_ENABLED: ${LQ_AI_ORCHESTRATION_DEMO_ENABLED:-false}
       LQ_AI_ORCHESTRATION_CHAT_ENABLED: ${LQ_AI_ORCHESTRATION_CHAT_ENABLED:-false}
       LQ_AI_ORCHESTRATION_CHAT_PROJECT_ID: ${LQ_AI_ORCHESTRATION_CHAT_PROJECT_ID:-}
       LQ_AI_ORCHESTRATION_CHAT_PROVIDER: ${LQ_AI_ORCHESTRATION_CHAT_PROVIDER:-}
@@ -338,7 +337,6 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       # Skills corpus is baked at /skills (image ENV); set explicitly for clarity.
       LQ_AI_SKILLS_DIR: ${LQ_AI_SKILLS_DIR:-/skills}
-      LQ_AI_ORCHESTRATION_DEMO_ENABLED: ${LQ_AI_ORCHESTRATION_DEMO_ENABLED:-false}
       LQ_AI_ORCHESTRATION_CHAT_ENABLED: ${LQ_AI_ORCHESTRATION_CHAT_ENABLED:-false}
       LQ_AI_ORCHESTRATION_CHAT_PROJECT_ID: ${LQ_AI_ORCHESTRATION_CHAT_PROJECT_ID:-}
       LQ_AI_ORCHESTRATION_CHAT_PROVIDER: ${LQ_AI_ORCHESTRATION_CHAT_PROVIDER:-}

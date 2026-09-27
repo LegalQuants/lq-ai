@@ -50,13 +50,12 @@ def test_worker_settings_class_shape() -> None:
 
 @pytest.mark.unit
 def test_orchestration_cron_is_registered_only_when_enabled() -> None:
-    def jobs(enabled: bool, chat_enabled: bool = False) -> set[str]:
+    def jobs(enabled: bool) -> set[str]:
         settings = type(
             "Settings",
             (),
             {
-                "orchestration_demo_enabled": enabled,
-                "orchestration_chat_enabled": chat_enabled,
+                "orchestration_chat_enabled": enabled,
             },
         )()
         with patch("app.workers.arq_setup.get_settings", return_value=settings):
@@ -64,7 +63,6 @@ def test_orchestration_cron_is_registered_only_when_enabled() -> None:
 
     assert "orchestration_watchdog" not in jobs(False)
     assert "orchestration_watchdog" in jobs(True)
-    assert "orchestration_watchdog" in jobs(False, True)
     assert {"autonomous_idle_watchdog", "autonomous_schedule_dispatcher"} <= jobs(False)
 
 
@@ -92,7 +90,7 @@ async def test_on_startup_installs_skill_registry_and_returns_none() -> None:
     from app.skills.registry import MutableSkillRegistry, SkillRegistry
 
     holder = MutableSkillRegistry(SkillRegistry(records={}))
-    settings = get_settings().model_copy(update={"orchestration_demo_enabled": False})
+    settings = get_settings().model_copy(update={"orchestration_chat_enabled": False})
     ctx: dict[str, Any] = {}
     with (
         patch("app.skills.bootstrap.install_skill_registry", return_value=holder) as mock_install,

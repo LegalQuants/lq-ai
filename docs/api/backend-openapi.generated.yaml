@@ -2118,57 +2118,6 @@ components:
       - grace_period_days
       title: DeleteScheduledResponse
       type: object
-    DemoCapabilities:
-      properties:
-        deployment_children:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Deployment Children
-        enabled:
-          title: Enabled
-          type: boolean
-        live_providers:
-          default: false
-          title: Live Providers
-          type: boolean
-        max_topics:
-          default: 4
-          title: Max Topics
-          type: integer
-      required:
-      - enabled
-      - deployment_children
-      title: DemoCapabilities
-      type: object
-    DemoPlanRequest:
-      additionalProperties: false
-      properties:
-        goal:
-          $ref: '#/components/schemas/TaskText'
-        max_active_children:
-          default: 2
-          maximum: 4.0
-          minimum: 1.0
-          title: Max Active Children
-          type: integer
-        project_id:
-          format: uuid
-          title: Project Id
-          type: string
-        topics:
-          items:
-            $ref: '#/components/schemas/ShortText'
-          maxItems: 4
-          minItems: 1
-          title: Topics
-          type: array
-      required:
-      - project_id
-      - goal
-      - topics
-      title: DemoPlanRequest
-      type: object
     DemonstrationResult:
       additionalProperties: false
       properties:
@@ -6562,10 +6511,8 @@ components:
           title: Children
           type: array
         mode:
-          default: demonstration
-          enum:
-          - demonstration
-          - model_demo_v1
+          const: model_demo_v1
+          default: model_demo_v1
           title: Mode
           type: string
         partial_summary:
@@ -9477,21 +9424,6 @@ paths:
       summary: Mark an autonomous notification read (the dismiss action; idempotent)
       tags:
       - autonomous
-  /api/v1/autonomous/orchestration/capabilities:
-    get:
-      operationId: capabilities_api_v1_autonomous_orchestration_capabilities_get
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DemoCapabilities'
-          description: Successful Response
-      security:
-      - OAuth2PasswordBearer: []
-      summary: Capabilities
-      tags:
-      - autonomous
   /api/v1/autonomous/orchestration/chat-runs:
     get:
       operationId: chat_capabilities_api_v1_autonomous_orchestration_chat_runs_get
@@ -9589,33 +9521,6 @@ paths:
       security:
       - OAuth2PasswordBearer: []
       summary: Halt Chat
-      tags:
-      - autonomous
-  /api/v1/autonomous/orchestration/plans:
-    post:
-      operationId: prepare_plan_api_v1_autonomous_orchestration_plans_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DemoPlanRequest'
-        required: true
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TreeRead'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - OAuth2PasswordBearer: []
-      summary: Prepare Plan
       tags:
       - autonomous
   /api/v1/autonomous/orchestration/{root_id}/approve:

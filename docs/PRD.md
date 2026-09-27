@@ -889,9 +889,9 @@ The scope-as-shipped is narrower than the original "ensemble runs on the whole a
 **Experimental extension; production acceptance pending:** [ADR 0035 — Governed orchestration](adr/0035-governed-orchestration-run-tree.md)
 records the revised [#563](https://github.com/LegalQuants/lq-ai/issues/563) design:
 user approval of one topic batch before parallel child runs, inherited authority,
-durable recovery, shared accounted budgets and an inspectable run tree. The first
-visible profile is a technical workflow preview with sample findings. A separately
-enabled [bounded chat demonstration](plans/issue-563-chat-demonstration.md) adds
+durable recovery, shared accounted budgets and an inspectable run tree. The
+sample-only workflow preview has been removed. The
+[bounded chat demonstration](plans/issue-563-chat-demonstration.md) adds
 one real gateway planning call, owner approval, one to four independent Contract
 QA child sessions and a model synthesis. It accepts one installed fictional
 agreement in one operator-configured demo project. Installed skill instructions,
@@ -909,7 +909,7 @@ The chat demonstration remains off by default and separate from ordinary chat.
 Its [UAT runbook](runbooks/adr35-chat-uat.md) distinguishes controlled-provider
 regression tests, a real local-model browser run and human acceptance. Persistent
 skill workspaces, bundled helpers and live retrieval are not exercised by this
-profile. The earlier sample recording is evidence of the workflow preview only.
+profile. The earlier sample recording is historical evidence of workflow mechanics only.
 
 **M4 status: SHIPPED.** The opt-in background executor runs real in-loop work end-to-end. The five-phase LangGraph state machine (intake → analysis → drafting → ethics_review → delivery) lives in `api/app/autonomous/executor.py` (`run_autonomous_session`) + `nodes.py`; every external action routes through the single `guarded_tool_call` chokepoint (`api/app/autonomous/guard.py`) enforcing R5 (external halt + idle watchdog → `SessionHalted`), R6 (`PHASE_GRANTS` phase-gated tool grants → `ToolNotGranted`), and R4 (per-session **and** per-trigger cost cap → `CostCapReached`). The four primitives ship: watches (`api/app/autonomous/watch_trigger.py`, table `autonomous_watches` — migration `0039`), schedules (`api/app/autonomous/cron.py`, table `autonomous_schedules`), per-user memory (`autonomous_memory`), and the precedent board (`precedent_entries` — migration `0039`; `project_context_proposals` — migration `0041`). Honest per-session receipts carry `terminal_reason` (completed / cost_cap_reached / external_halt) via `api/app/autonomous/receipt.py` (`build_receipt` / `build_receipt_safe`). The layer is per-user opt-in, off by default (`User.autonomous_enabled` — migration `0044`), with a full web dashboard at `web/src/routes/lq-ai/autonomous/`. Migration head at M4 close is `0045`. See [HONEST-STATE.md §5](HONEST-STATE.md#5-m4--autonomous-layer-shipped). As of M4 close the **Contract Repository auto-relationship graph** (§3.16) and the MCP-client subsystem (§8.5) remained deferred; the **MCP-client subsystem subsequently shipped** in the legal-research + connectors milestone (#158–#193 — see [DE-200](#de-200--mcp-client-subsystem-in-the-lq-ai-backend) and [HONEST-STATE.md §5.5](HONEST-STATE.md)), while the contract relationship graph remains deferred.
 

@@ -26,9 +26,19 @@ from app.models.orchestration import OrchestrationAdmission
 from app.models.user import User
 from app.skills.loader import load_registry
 from app.skills.registry import MutableSkillRegistry
-from app.workers.orchestration_worker import orchestration_session_job
+from app.workers.orchestration_worker import orchestration_session_job, orchestration_watchdog
 
 BASE = "/api/v1/autonomous/orchestration"
+
+
+@pytest.mark.unit
+async def test_disabled_chat_worker_does_no_database_or_queue_work():
+    assert await orchestration_session_job({}, str(uuid4()), str(uuid4())) == {"status": "disabled"}
+    assert await orchestration_watchdog({}) == {"status": "disabled"}
+    disabled = SimpleNamespace(settings=SimpleNamespace(orchestration_chat_enabled=False))
+    assert await orchestration_watchdog({"orchestration_runtime": disabled}) == {
+        "status": "disabled"
+    }
 
 
 class ModelGateway:
@@ -144,7 +154,6 @@ async def model_demo(env, test_db_url, monkeypatch):
     settings = get_settings().model_copy(
         update={
             "database_url": test_db_url,
-            "orchestration_demo_enabled": False,
             "orchestration_chat_enabled": True,
             "orchestration_chat_project_id": str(env.project_id),
             "orchestration_chat_provider": "selected",

@@ -41,9 +41,7 @@ async def orchestration_session_job(
     ctx: dict[str, Any], root_id: str, session_id: str
 ) -> dict[str, str]:
     runtime: DemonstrationService | None = ctx.get("orchestration_runtime")
-    if runtime is None or not (
-        runtime.settings.orchestration_demo_enabled or runtime.settings.orchestration_chat_enabled
-    ):
+    if runtime is None or not runtime.settings.orchestration_chat_enabled:
         return {"status": "disabled"}
     root, session = UUID(root_id), UUID(session_id)
     try:
@@ -70,18 +68,9 @@ async def orchestration_session_job(
 
 async def orchestration_watchdog(ctx: dict[str, Any]) -> dict[str, Any]:
     runtime: DemonstrationService | None = ctx.get("orchestration_runtime")
-    if runtime is None or not (
-        runtime.settings.orchestration_demo_enabled or runtime.settings.orchestration_chat_enabled
-    ):
+    if runtime is None or not runtime.settings.orchestration_chat_enabled:
         return {"status": "disabled"}
-    profiles = tuple(
-        name
-        for name, enabled in (
-            ("demonstration", runtime.settings.orchestration_demo_enabled),
-            ("model_demo_v1", runtime.settings.orchestration_chat_enabled),
-        )
-        if enabled
-    )
+    profiles = ("model_demo_v1",)
     page = await sweep_recovery(
         runtime.store, after=ctx.get("orchestration_recovery_after"), profiles=profiles
     )

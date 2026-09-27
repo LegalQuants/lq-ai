@@ -62,7 +62,7 @@ class TreeRead(BaseModel):
     plan: PreparedPlan
     plan_hash: str
     approved: bool
-    mode: Literal["demonstration", "model_demo_v1"] = "demonstration"
+    mode: Literal["model_demo_v1"] = "model_demo_v1"
     verification: Literal["unverified"] = "unverified"
     root: RunRead
     children: list[RunRead]
@@ -79,7 +79,7 @@ async def read_tree(
         root = await db.scalar(
             select(Root).where(Root.session_id == root_id, Root.owner_id == actor_id)
         )
-        if root is None:
+        if root is None or root.profile != "model_demo_v1":
             raise NotFound(message="Orchestration root not found")
         if root.current_revision is None:
             raise Conflict(message="The model is still preparing a plan; use the chat run view")
@@ -153,7 +153,7 @@ async def read_tree(
             )
         return TreeRead(
             root_id=root_id,
-            mode="model_demo_v1" if root.profile == "model_demo_v1" else "demonstration",
+            mode="model_demo_v1",
             status=root.status,
             stop_reason=root.stop_reason,
             plan=plan,

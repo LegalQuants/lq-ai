@@ -1,4 +1,4 @@
-"""Shared API/worker assembly for separately enabled sample and model demos."""
+"""Shared API/worker assembly for the bounded model-backed demonstration."""
 
 from typing import Any
 
@@ -6,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.autonomous.orchestration.chat_demo import PROFILE, chat_policy
 from app.autonomous.orchestration.checkpoints import CheckpointRuntime
-from app.autonomous.orchestration.demo import demo_effects, demonstration_policy
 from app.autonomous.orchestration.effects import GuardedEffects
 from app.autonomous.orchestration.executor import OrchestrationExecutor
 from app.autonomous.orchestration.inference import InferenceRoutes
@@ -52,12 +51,12 @@ class DemonstrationService:
         skills: MutableSkillRegistry,
         sessions: async_sessionmaker[AsyncSession],
         *,
-        profile: str = "demonstration",
+        profile: str = PROFILE,
         gateway: Any = None,
     ) -> None:
         self.settings, self.skills = settings, skills
         self.profile, self.gateway = profile, gateway
-        if profile not in {"demonstration", PROFILE}:
+        if profile != PROFILE:
             raise Forbidden(message="Unknown orchestration profile")
         self.store = OrchestrationStore(
             sessions,
@@ -69,16 +68,9 @@ class DemonstrationService:
         )
 
     def policy(self) -> OperatorPolicy | None:
-        if self.profile == PROFILE:
-            if not self.settings.orchestration_chat_enabled:
-                return None
-            return chat_policy(self.skills, self.settings)
-        if not self.settings.orchestration_demo_enabled:
+        if not self.settings.orchestration_chat_enabled:
             return None
-        capacity = self.settings.orchestration_deployment_children
-        if capacity is None:
-            raise Forbidden(message="The operator must configure shared child capacity")
-        return demonstration_policy(self.skills, deployment_children=capacity)
+        return chat_policy(self.skills, self.settings)
 
     def require_policy(self) -> OperatorPolicy:
         policy = self.policy()
@@ -95,13 +87,11 @@ class DemonstrationService:
             CheckpointRuntime(
                 self.settings.database_url, deployment_children=policy.deployment_children
             ),
-            model_demo=self.profile == PROFILE,
+            model_demo=True,
             policy=self.policy,
         )
 
     def effects(self) -> GuardedEffects:
-        if self.profile != PROFILE:
-            return demo_effects(self.store, self.skills)
         gateway = self.gateway or ModelDemoGateway(self.settings)
         return GuardedEffects(
             self.store,

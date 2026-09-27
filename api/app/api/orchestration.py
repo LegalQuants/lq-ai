@@ -1,7 +1,6 @@
-"""Closed demonstration intake, explicit consent and owner-only tree inspection."""
+"""Model-backed orchestration intake, consent and owner-only tree inspection."""
 
 import hashlib
-from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
@@ -12,8 +11,7 @@ from sqlalchemy import select
 
 from app.api.dependencies import ActiveUser, AutonomousEnabledUser
 from app.autonomous.orchestration.chat_demo import PACKET, PROFILE, packet, prepare_intake
-from app.autonomous.orchestration.contracts import Digest, ShortText, TaskText
-from app.autonomous.orchestration.demo import prepare_demo_plan
+from app.autonomous.orchestration.contracts import Digest, TaskText
 from app.autonomous.orchestration.service import DemonstrationService
 from app.autonomous.orchestration.views import (
     ChatRunRead,
@@ -189,14 +187,6 @@ async def halt_chat(root_id: UUID, user: ActiveUser, runtime: Service) -> ChatRu
     return await _chat_read(runtime, root_id, user.id)
 
 
-class DemoPlanRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    project_id: UUID
-    goal: TaskText
-    topics: Annotated[list[ShortText], Field(min_length=1, max_length=4)]
-    max_active_children: Annotated[int, Field(strict=True, ge=1, le=4)] = 2
-
-
 class ApprovalRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     revision: Annotated[int, Field(strict=True, ge=1)]
@@ -206,52 +196,6 @@ class ApprovalRequest(BaseModel):
 class RejectionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     revision: Annotated[int, Field(strict=True, ge=1)]
-
-
-class DemoCapabilities(BaseModel):
-    enabled: bool
-    deployment_children: int | None
-    max_topics: int = 4
-    live_providers: bool = False
-
-
-@router.get("/capabilities", response_model=DemoCapabilities)
-async def capabilities(user: ActiveUser, runtime: Service) -> DemoCapabilities:
-    policy = runtime.policy()
-    return DemoCapabilities(
-        enabled=policy is not None,
-        deployment_children=policy.deployment_children if policy else None,
-    )
-
-
-@router.post("/plans", response_model=TreeRead, status_code=201)
-async def prepare_plan(
-    body: DemoPlanRequest, user: AutonomousEnabledUser, runtime: Service
-) -> TreeRead:
-    policy = runtime.require_policy()
-    async with runtime.store.sessions() as db:
-        project = await db.scalar(
-            select(Project).where(
-                Project.id == body.project_id,
-                Project.owner_id == user.id,
-                Project.archived_at.is_(None),
-            )
-        )
-        if project is None:
-            raise NotFound(message="Project not found")
-        plan = prepare_demo_plan(
-            policy=policy,
-            owner_id=user.id,
-            project_id=project.id,
-            goal=body.goal,
-            topics=tuple(body.topics),
-            now=datetime.now(UTC),
-            privileged=project.privileged,
-            minimum_inference_tier=project.minimum_inference_tier or 5,
-            max_active_children=body.max_active_children,
-        )
-    await runtime.store.save_plan(plan, actor_id=user.id, create_session=True)
-    return await read_tree(runtime.store.sessions, plan.root_id, user.id)
 
 
 @router.get("/{root_id}/tree", response_model=TreeRead)
@@ -292,5 +236,6 @@ async def reject(
 
 @router.post("/{root_id}/halt", response_model=TreeRead)
 async def halt(root_id: UUID, user: ActiveUser, runtime: Service) -> TreeRead:
+    await read_tree(runtime.store.sessions, root_id, user.id)
     await runtime.store.halt(root_id, actor_id=user.id)
     return await read_tree(runtime.store.sessions, root_id, user.id)

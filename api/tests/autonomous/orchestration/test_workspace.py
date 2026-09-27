@@ -33,22 +33,26 @@ PEER = r"""
 import asyncio, json, sys
 from pathlib import Path
 from uuid import UUID
-from app.config import get_settings
 from app.db.session import get_session_factory
-from app.autonomous.orchestration.service import DemonstrationService
+from app.autonomous.orchestration.checkpoints import CheckpointRuntime
+from app.autonomous.orchestration.executor import OrchestrationExecutor
+from app.autonomous.orchestration.policy import CurrentPolicy
+from app.autonomous.orchestration.store import OrchestrationStore
 from app.skills.loader import load_registry
 from app.skills.registry import MutableSkillRegistry
+from tests.autonomous.orchestration.sample_harness import demo_effects, demonstration_policy
 
 async def main():
     data = json.loads(sys.stdin.readline())
-    settings = get_settings().model_copy(update={
-        "database_url": data["url"], "orchestration_demo_enabled": True,
-        "orchestration_deployment_children": 2,
-    })
-    # The environment also selects the same disposable database for the factory.
-    service = DemonstrationService(settings,
-        MutableSkillRegistry(load_registry(Path(data["skills"]))), get_session_factory())
-    executor = service.executor()
+    skills = MutableSkillRegistry(load_registry(Path(data["skills"])))
+    policy = demonstration_policy(skills, deployment_children=2)
+    store = OrchestrationStore(
+        get_session_factory(), check_policy=CurrentPolicy(skills=skills, operator=lambda: policy)
+    )
+    executor = OrchestrationExecutor(
+        store, demo_effects(store, skills),
+        CheckpointRuntime(data["url"], deployment_children=2),
+    )
     real = executor.effects.workspace
     async def stop_after_commit(*args, **kwargs):
         result = await real(*args, **kwargs)
@@ -91,7 +95,7 @@ async def test_wip_survives_process_death_and_parent_synthesizes_shared_file(
                             "url": test_db_url,
                             "root": str(env.root_id),
                             "child": str(child),
-                            "skills": str(Path(__file__).resolve().parents[4] / "skills"),
+                            "skills": str(Path(__file__).resolve().parent / "fixtures" / "skills"),
                         }
                     )
                     + "\n"

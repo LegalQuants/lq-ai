@@ -1,4 +1,4 @@
-"""Explicit local sample provider and plan builder; no network/provider fallback.
+"""Test-only local sample provider and plan builder for executor regression tests.
 
 The demonstration is a technical workflow, not a research product. The provider
 consumes the actual pinned skill request through GuardedEffects and returns

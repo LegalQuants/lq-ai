@@ -252,11 +252,6 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("LQ_AI_AUTONOMOUS_DEFAULT_MODEL"),
     )
 
-    orchestration_demo_enabled: bool = Field(
-        default=False,
-        validation_alias="LQ_AI_ORCHESTRATION_DEMO_ENABLED",
-        description="Enable only the local sample orchestration demonstration, with no provider egress.",
-    )
     orchestration_chat_enabled: bool = Field(
         default=False, validation_alias="LQ_AI_ORCHESTRATION_CHAT_ENABLED"
     )

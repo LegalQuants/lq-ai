@@ -7,7 +7,7 @@ persistent skill storage or bundled helpers.
 
 Implementation: `feat/adr35-chat-orchestration`. Design:
 [bounded chat plan](../plans/issue-563-chat-demonstration.md). The earlier
-[sample page](../plans/issue-563-demonstration.md) remains a workflow preview.
+sample-only page has been removed; its recording is historical preview evidence.
 
 ## Setup
 
@@ -35,7 +35,6 @@ an explicitly permitted tier consistent with the project and installed skills.
 Configure exact gateway prices for `provider/model`; local inference requires
 explicit zero prices. Enable gateway anonymization at the selected tier for a
 non-privileged project. Aliases, missing prices and route drift are refused.
-The sample flag `LQ_AI_ORCHESTRATION_DEMO_ENABLED` can remain false.
 
 Planning reserves one call, each child one call, and the root a final synthesis
 allowance. Readiness checks that the cap can fund six bounded calls (planning,

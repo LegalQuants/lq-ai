@@ -275,7 +275,6 @@ services:
       # not mutate it (skill authoring is a host-side / human-attestation
       # workflow per CLAUDE.md "Working with skills").
       LQ_AI_SKILLS_DIR: ${LQ_AI_SKILLS_DIR:-/skills}
-      LQ_AI_ORCHESTRATION_DEMO_ENABLED: ${LQ_AI_ORCHESTRATION_DEMO_ENABLED:-false}
       LQ_AI_ORCHESTRATION_CHAT_ENABLED: ${LQ_AI_ORCHESTRATION_CHAT_ENABLED:-false}
       LQ_AI_ORCHESTRATION_CHAT_PROJECT_ID: ${LQ_AI_ORCHESTRATION_CHAT_PROJECT_ID:-}
       LQ_AI_ORCHESTRATION_CHAT_PROVIDER: ${LQ_AI_ORCHESTRATION_CHAT_PROVIDER:-}
@@ -431,7 +430,6 @@ services:
       # not mutate it (skill authoring is a host-side / human-attestation
       # workflow per CLAUDE.md "Working with skills").
       LQ_AI_SKILLS_DIR: ${LQ_AI_SKILLS_DIR:-/skills}
-      LQ_AI_ORCHESTRATION_DEMO_ENABLED: ${LQ_AI_ORCHESTRATION_DEMO_ENABLED:-false}
       LQ_AI_ORCHESTRATION_CHAT_ENABLED: ${LQ_AI_ORCHESTRATION_CHAT_ENABLED:-false}
       LQ_AI_ORCHESTRATION_CHAT_PROJECT_ID: ${LQ_AI_ORCHESTRATION_CHAT_PROJECT_ID:-}
       LQ_AI_ORCHESTRATION_CHAT_PROVIDER: ${LQ_AI_ORCHESTRATION_CHAT_PROVIDER:-}
