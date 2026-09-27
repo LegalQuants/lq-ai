@@ -47,11 +47,16 @@ ordinary Chats and Autonomous sessions loaded, and a new ordinary chat opened
 with its composer. A completed orchestration run still showed its plan, child
 answers, agreement and combined answer. The new orchestration request page
 reported that model orchestration was not enabled and showed no intake form.
-No model message was sent during this switch-off check. The Autonomous sessions
-page still displays the “Orchestration chat (experimental)” link, which leads to
-that disabled page; this is a visible UX footprint even with the feature off.
-Human UAT-11 remains for the reviewer to confirm, and this check does not prove
-that ordinary chat inference or every app workflow is unaffected.
+The Autonomous sessions page now displays “Orchestration chat (experimental) —
+disabled by operator” as a disabled control. Direct links to retained runs
+remain readable.
+
+A new ordinary chat sent one short prompt to the unchanged local
+`local-uat/gemma4:26b-mlx` route and received “Confirmed. I can read this
+message.” After a page reload, the chat appeared in the list and reopening it
+restored both messages. This exercises basic chat creation, database persistence
+and inference after the demo switch-off. Human UAT-11 remains for the reviewer
+to confirm; other app workflows were not exercised in this check.
 
 ## Successful run
 

@@ -23,7 +23,7 @@
 	import { goto } from '$app/navigation';
 
 	import { autonomousApi, skillsApi, knowledgeBasesApi, projectsApi } from '$lib/lq-ai/api';
-	import { orchestrationApi } from '$lib/lq-ai/api/orchestration';
+	import { orchestrationApi, orchestrationChatApi } from '$lib/lq-ai/api/orchestration';
 	import * as playbooksApi from '$lib/lq-ai/api/playbooks';
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
 	import type { AutonomousSessionRead } from '$lib/lq-ai/api/autonomous';
@@ -39,6 +39,7 @@
 	let actionSuccess: string | null = null;
 	let pendingHaltId: string | null = null;
 	let demoAvailability: 'checking' | 'enabled' | 'disabled' | 'unavailable' = 'checking';
+	let chatAvailability: 'checking' | 'enabled' | 'disabled' | 'unavailable' = 'checking';
 
 	// ---------------------------------------------------------------------------
 	// Run-now modal state
@@ -67,7 +68,17 @@
 		load();
 		loadPickerData();
 		loadDemoAvailability();
+		loadChatAvailability();
 	});
+
+	async function loadChatAvailability(): Promise<void> {
+		try {
+			const caps = await orchestrationChatApi.capabilities();
+			chatAvailability = caps.enabled ? 'enabled' : 'disabled';
+		} catch {
+			chatAvailability = 'unavailable';
+		}
+	}
 
 	async function loadDemoAvailability(): Promise<void> {
 		try {
@@ -205,9 +216,19 @@
 				</p>
 			</div>
 			<button type="button" class="new-button" on:click={openRunModal}> Run now </button>
-			<a href="/lq-ai/autonomous/orchestration/chat" class="underline"
-				>Orchestration chat (experimental)</a
-			>
+			{#if chatAvailability === 'enabled'}
+				<a href="/lq-ai/autonomous/orchestration/chat" class="underline"
+					>Orchestration chat (experimental)</a
+				>
+			{:else}
+				<button type="button" disabled class="text-sm text-gray-500">
+					Orchestration chat (experimental) — {chatAvailability === 'disabled'
+						? 'disabled by operator'
+						: chatAvailability === 'checking'
+							? 'checking availability…'
+							: 'unavailable'}
+				</button>
+			{/if}
 			{#if demoAvailability === 'enabled'}
 				<a href="/lq-ai/autonomous/orchestration" class="underline">Orchestration demo</a>
 			{:else}
