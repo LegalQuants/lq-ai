@@ -668,9 +668,12 @@ async function main() {
 }
 
 /** Sidebar order: the entry hub, then namespace by namespace, `order` then title. */
+/** Where the entry page is served: `/`, or `overview/` in the pathways layout. */
+const ENTRY_ROUTE = SITE_LAYOUT === 'pathways' ? OVERVIEW_ROUTE : '';
+
 function comparePages(a, b) {
-  if (a.route === '') return -1;
-  if (b.route === '') return 1;
+  if (a.route === ENTRY_ROUTE) return -1;
+  if (b.route === ENTRY_ROUTE) return 1;
   const ai = NAMESPACES.findIndex((ns) => ns.dir === a.namespace);
   const bi = NAMESPACES.findIndex((ns) => ns.dir === b.namespace);
   if (ai !== bi) return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);

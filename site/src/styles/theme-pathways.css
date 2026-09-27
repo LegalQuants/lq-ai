@@ -49,6 +49,9 @@
   --sl-nav-height: calc(var(--lq-nav-row) + var(--lq-tabs-row));
 }
 
+/* The phone breakpoint is 50rem (800px) throughout this layout, not the
+   review's 760px: 50rem is Starlight's own `md` breakpoint (search label, page
+   padding), and matching it avoids a 40px band where the two disagree. */
 @media (max-width: 50rem) {
   :root {
     /* brand + buttons, then a full-width search, then the tabs as a 2×2 grid */

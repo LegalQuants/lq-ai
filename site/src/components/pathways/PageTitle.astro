@@ -172,7 +172,9 @@ const pathway = pathwayOf(route);
   }
 
   @media (max-width: 50rem) {
-    /* The pill becomes a round arrow button; its name stays in the text. */
+    /* The pill becomes a round arrow button; its name stays in the text.
+       44px rather than the review's 40px: the same WCAG 2.5.5 target size as
+       the header buttons. */
     .lq-pw-back {
       display: grid;
       place-items: center;
