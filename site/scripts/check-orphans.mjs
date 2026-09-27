@@ -15,15 +15,26 @@
  *
  * The entry hub (`/`) is exempt: it is the site title's link in the header, not
  * a sidebar item.
+ *
+ * The pathways layout (`SITE_LAYOUT=pathways`) has no sidebar. There the map
+ * itself is checked first — every page in exactly one pathway group, every
+ * listed route a real page (`validatePathways`) — and then the built
+ * "All documentation" page, which links every page, is read the same way.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { DIST_DIR, MANIFEST_PATH, SITE_BASE, withBase } from './lib/paths.mjs';
+import { DIST_DIR, MANIFEST_PATH, SITE_BASE, SITE_LAYOUT, withBase } from './lib/paths.mjs';
+import { NAV_ROUTES, validatePathways } from '../src/pathways.mjs';
 
-/** Starlight's sidebar landmark. */
-const SIDEBAR_START = /<nav\b[^>]*aria-label\s*=\s*["']Main["'][^>]*>/i;
+const PATHWAYS = SITE_LAYOUT === 'pathways';
+
+/** Starlight's sidebar landmark, or the pathways sitemap's. */
+const SIDEBAR_START = PATHWAYS
+  ? /<nav\b[^>]*aria-label\s*=\s*["']All documentation["'][^>]*>/i
+  : /<nav\b[^>]*aria-label\s*=\s*["']Main["'][^>]*>/i;
+const WHERE = PATHWAYS ? 'the All documentation page' : 'the sidebar';
 
 function sidebarLinks(html) {
   const start = SIDEBAR_START.exec(html);
@@ -55,10 +66,23 @@ function main() {
     return;
   }
 
+  if (PATHWAYS) {
+    const problems = validatePathways(pages.map((page) => page.route));
+    if (problems.length) {
+      console.error(
+        `check:orphans: the pathway map (src/pathways.mjs) has ${problems.length} problem(s).`
+      );
+      for (const problem of problems) console.error(`  ${problem}`);
+      process.exitCode = 1;
+      return;
+    }
+  }
+
   // Any built page carries the whole sidebar; take the first one that exists.
+  // In the pathways layout only the sitemap carries every link.
   let html;
   let source;
-  for (const page of pages) {
+  for (const page of PATHWAYS ? [{ route: NAV_ROUTES.all }] : pages) {
     const file = path.join(DIST_DIR, page.route, 'index.html');
     if (existsSync(file)) {
       html = readFileSync(file, 'utf8');
@@ -76,7 +100,7 @@ function main() {
   const links = sidebarLinks(html);
   if (!links) {
     console.error(
-      `check:orphans: could not find the sidebar in dist/${source}/index.html — the check cannot ` +
+      `check:orphans: could not find ${WHERE}'s links in dist/${source}/index.html — the check cannot ` +
         'prove anything, so it fails rather than passing silently. Starlight may have changed the ' +
         'nav landmark this script looks for.'
     );
@@ -87,7 +111,7 @@ function main() {
   const orphans = pages.filter((page) => !links.has(withBase(page.route)));
 
   if (orphans.length) {
-    console.error(`check:orphans: ${orphans.length} page(s) are not reachable from the sidebar.`);
+    console.error(`check:orphans: ${orphans.length} page(s) are not reachable from ${WHERE}.`);
     for (const page of orphans) {
       console.error(`  ${withBase(page.route)} — ${page.page ?? page.kind}`);
     }
@@ -96,7 +120,7 @@ function main() {
   }
 
   console.log(
-    `check:orphans: all ${pages.length} page(s) appear in the sidebar (read from dist/${source}/index.html; ${links.size} sidebar link(s)).`
+    `check:orphans: all ${pages.length} page(s) appear in ${WHERE} (read from dist/${source}/index.html; ${links.size} link(s)).`
   );
 }
 

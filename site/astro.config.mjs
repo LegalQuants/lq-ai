@@ -18,7 +18,15 @@ import { rehypeLqTablesSatteri } from './scripts/lib/rehype-lq-tables.mjs';
  * Astro and the build scripts cannot drift apart: the sync writes links with
  * the same base Astro serves them under.
  */
-import { SITE_BASE, SITE_URL } from './scripts/lib/paths.mjs';
+import { SITE_BASE, SITE_COMPARE, SITE_LAYOUT, SITE_URL } from './scripts/lib/paths.mjs';
+
+/**
+ * `SITE_LAYOUT=pathways` builds Iris's four-pathway UI from the same pages:
+ * its own header and page title, a second stylesheet after theme.css, and
+ * route middleware that turns the sidebar off (src/routeData.mjs). The
+ * classic layout is untouched unless a compare banner is asked for.
+ */
+const PATHWAYS = SITE_LAYOUT === 'pathways';
 
 /**
  * `autogenerate` throws when its directory does not exist, and the content
@@ -68,7 +76,10 @@ export default defineConfig({
         'Documentation for LQ.AI — a self-hosted, bring-your-own-keys AI platform for in-house legal teams.',
       // The site's own theme. No webfonts: a trust centre makes no third-party
       // requests to render a page.
-      customCss: ['./src/styles/theme.css'],
+      customCss: [
+        './src/styles/theme.css',
+        ...(PATHWAYS ? ['./src/styles/theme-pathways.css'] : []),
+      ],
       // The site stamps every page with the commit it was checked against
       // (Footer.astro), which is a stronger claim than a file mtime. Starlight's
       // own "last updated" would show a second, weaker date beside it.
@@ -104,10 +115,15 @@ export default defineConfig({
       // "Built with Starlight" is off; the footer carries the project's own line.
       credits: false,
       components: {
-        Header: './src/components/Header.astro',
-        PageTitle: './src/components/PageTitle.astro',
+        Header: PATHWAYS
+          ? './src/components/pathways/Header.astro'
+          : './src/components/Header.astro',
+        PageTitle: PATHWAYS
+          ? './src/components/pathways/PageTitle.astro'
+          : './src/components/PageTitle.astro',
         Footer: './src/components/Footer.astro',
       },
+      ...(PATHWAYS || SITE_COMPARE ? { routeMiddleware: './src/routeData.mjs' } : {}),
       defaultLocale: 'root',
       locales: {
         root: { label: 'English', lang: 'en' },

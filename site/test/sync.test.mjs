@@ -56,6 +56,7 @@ const run = (script, extraEnv = {}) =>
       SYNC_OUT_ROOT: out,
       DIST_DIR: dist,
       SITE_BASE: BASE,
+      SITE_LAYOUT: 'classic',
       SITE_URL: 'https://legalquants.github.io',
       ...extraEnv,
     },
@@ -416,6 +417,7 @@ describe('route manifests: validation', () => {
           DOCS_SITE_DIR: path.join(SITE_ROOT, 'test', 'fixtures', tree),
           SYNC_OUT_ROOT: mkdtempSync(path.join(os.tmpdir(), 'lq-ai-docs-routes-fail-')),
           SITE_BASE: BASE,
+          SITE_LAYOUT: 'classic',
         },
       });
       return undefined;
@@ -580,6 +582,7 @@ describe('failure modes', () => {
           DOCS_SITE_DIR: path.join(SITE_ROOT, 'test', 'fixtures', tree),
           SYNC_OUT_ROOT: mkdtempSync(path.join(os.tmpdir(), 'lq-ai-docs-fail-')),
           SITE_BASE: BASE,
+          SITE_LAYOUT: 'classic',
         },
       });
       return undefined;

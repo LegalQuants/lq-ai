@@ -1,0 +1,189 @@
+---
+/**
+ * Page title for the pathways layout.
+ *
+ * A content page gets a breadcrumb naming its pathway in place of the classic
+ * namespace eyebrow (this layout has no namespaces on show), then the H1, the
+ * how-to / explanation / reference label, and the status and audience line —
+ * the same facts the classic title carries.
+ *
+ * The layout's own navigation pages (landing, pathway pages, sitemap) are
+ * pages *about* the site, not documentation, so they carry the H1 only; a
+ * pathway page adds the "All pathways" link on the H1's row.
+ *
+ * The H1 keeps Starlight's skip-link target id (`_top`; see the classic
+ * PageTitle for why it is restated).
+ */
+import Eyebrow from '../Eyebrow.astro';
+import StatusBadge from '../StatusBadge.astro';
+import { withBase } from '../../namespaces.mjs';
+import { NAV_ROUTES, pathwayOf } from '../../pathways.mjs';
+import { KIND_LABELS } from '../../../scripts/lib/routes.mjs';
+
+const PAGE_TITLE_ID = '_top';
+
+const { id, entry } = Astro.locals.starlightRoute;
+const { title, status, audience, kind } = entry.data;
+const base = import.meta.env.BASE_URL;
+
+const route = String(id ?? '').replace(/\/+$/, '');
+const isLanding = route === NAV_ROUTES.landing;
+const isHub = route.startsWith('pathways/');
+const isNavPage = isLanding || isHub || route === NAV_ROUTES.all;
+const pathway = pathwayOf(route);
+---
+
+{
+  isNavPage ? (
+    <div class:list={['lq-pw-title', { 'lq-pw-title--landing': isLanding }]}>
+      <h1 id={PAGE_TITLE_ID}>{title}</h1>
+      {isHub && (
+        <a class="lq-pw-back" href={withBase(base, NAV_ROUTES.landing)}>
+          <span aria-hidden="true">←</span> All pathways
+        </a>
+      )}
+    </div>
+  ) : (
+    <div class="lq-page-title lq-pw-page-title">
+      {pathway && (
+        <nav class="lq-pw-crumbs" aria-label="Breadcrumb">
+          <ol>
+            <li>
+              <a href={withBase(base, NAV_ROUTES.landing)}>Docs</a>
+            </li>
+            <li>
+              <a href={withBase(base, NAV_ROUTES.pathway(pathway.id))}>{pathway.title}</a>
+            </li>
+          </ol>
+        </nav>
+      )}
+      <h1 id={PAGE_TITLE_ID}>{title}</h1>
+      {kind && <Eyebrow text={KIND_LABELS[kind]} as="p" class="lq-page-title__kind" />}
+      {(status || audience?.length) && (
+        <div class="lq-page-title__meta">
+          {status && <StatusBadge status={status} />}
+          {audience?.length ? (
+            <ul class="lq-page-title__audience" aria-label="Written for">
+              {audience.map((who) => (
+                <li class="lq-chip">{who}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      )}
+    </div>
+  )
+}
+
+<style>
+  /* Unlayered on purpose: these render inside .sl-markdown-content, and
+     theme.css's unlayered prose rules would beat any layered style. */
+  .lq-pw-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.25rem;
+    margin-top: 1rem;
+  }
+
+  .lq-pw-title h1 {
+    margin: 0;
+    min-width: 0;
+    font-size: clamp(1.875rem, 4vw, 2.875rem);
+    font-weight: 650;
+    line-height: 1.15;
+    letter-spacing: -0.03em;
+    color: var(--sl-color-text-accent);
+  }
+
+  .lq-pw-title--landing h1 {
+    font-size: clamp(3rem, 5.4vw, 4.875rem);
+    line-height: 1.02;
+    letter-spacing: -0.045em;
+    color: var(--sl-color-white);
+  }
+
+  .lq-pw-back {
+    flex-shrink: 0;
+    padding: 0.55rem 0.9rem;
+    border: 1px solid var(--sl-color-hairline);
+    border-radius: 999px;
+    font-size: 0.875rem;
+    color: var(--sl-color-text-accent);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .lq-pw-back:hover {
+    background: var(--lq-color-hover);
+  }
+
+  .lq-pw-page-title {
+    margin-top: 1rem;
+  }
+
+  .lq-pw-page-title h1 {
+    margin-top: 0.35rem;
+    font-size: clamp(2rem, 4vw, 3rem);
+    font-weight: 650;
+    line-height: 1.12;
+    letter-spacing: -0.03em;
+    color: var(--sl-color-text-accent);
+  }
+
+  .lq-pw-crumbs ol {
+    display: flex;
+    flex-wrap: wrap;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.875rem;
+    color: var(--sl-color-gray-3);
+  }
+
+  .lq-pw-crumbs li + li::before {
+    content: '/';
+    padding: 0 0.4rem;
+  }
+
+  .lq-pw-crumbs a {
+    color: var(--sl-color-text-accent);
+  }
+
+  :global(.lq-page-title__kind) {
+    margin-top: 0.35rem;
+  }
+
+  .lq-page-title__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+  }
+
+  .lq-page-title__audience {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  @media (max-width: 50rem) {
+    /* The pill becomes a round arrow button; its name stays in the text. */
+    .lq-pw-back {
+      display: grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      font-size: 0;
+    }
+
+    .lq-pw-back span {
+      font-size: 1.375rem;
+    }
+  }
+</style>

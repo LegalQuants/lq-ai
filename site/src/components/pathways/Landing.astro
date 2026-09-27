@@ -1,0 +1,165 @@
+---
+/**
+ * The pathways landing: one line on what LQ.AI is, then the four pathways as
+ * large colour cards (title and arrow only). Desktop alternates wide and narrow
+ * cards (5/7 then 7/5 of a 12-column grid); phones stack them.
+ *
+ * The introduction is Iris's text from her UI review (lq-docs-v2), verbatim.
+ */
+import { withBase } from '../../namespaces.mjs';
+import { NAV_ROUTES } from '../../pathways.mjs';
+
+const { pathways } = Astro.props;
+const base = import.meta.env.BASE_URL;
+---
+
+<section class="lq-landing-intro" aria-label="About LQ.AI">
+  <p>
+    LQ.AI is an AI workspace for legal teams that runs on computers you control. Chat with your
+    documents, create and attach customised workflows, or use our prepacked skills. You choose
+    whether to connect a cloud AI service or use a model running on your own computers.
+  </p>
+</section>
+
+<nav class="lq-landing-grid" aria-label="Documentation pathways">
+  {
+    pathways.map((p) => (
+      <a class="lq-landing-card" data-tone={p.tone} href={withBase(base, NAV_ROUTES.pathway(p.id))}>
+        <strong>{p.title}</strong>
+        <span class="lq-landing-arrow" aria-hidden="true">
+          ↗
+        </span>
+      </a>
+    ))
+  }
+</nav>
+
+<style>
+  /* Unlayered on purpose: these render inside .sl-markdown-content, and
+     theme.css's unlayered prose rules would beat any layered style. */
+  .lq-landing-intro {
+    max-width: 56rem;
+    margin: 0 0 1.875rem;
+  }
+
+  .lq-landing-intro p {
+    margin: 0;
+    font-size: clamp(1.125rem, 1.5vw, 1.3125rem);
+    line-height: 1.65;
+    color: var(--sl-color-gray-3);
+    text-wrap: pretty;
+  }
+
+  .lq-landing-grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 18px;
+  }
+
+  .lq-landing-card {
+    grid-column: span 5;
+    min-height: 238px;
+    padding: 30px 34px;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    color: var(--lq-card-ink);
+    text-decoration: none;
+    transition:
+      transform 180ms ease,
+      filter 180ms ease,
+      box-shadow 180ms ease;
+  }
+
+  .lq-landing-card[data-tone='a'] {
+    background: var(--lq-card-a);
+  }
+  .lq-landing-card[data-tone='b'] {
+    background: var(--lq-card-b);
+  }
+  .lq-landing-card[data-tone='c'] {
+    background: var(--lq-card-c);
+  }
+
+  .lq-landing-card:nth-child(2),
+  .lq-landing-card:nth-child(3) {
+    grid-column: span 7;
+  }
+
+  .lq-landing-card:nth-child(n + 3) {
+    min-height: 202px;
+  }
+
+  .lq-landing-card strong {
+    max-width: 90%;
+    font-size: clamp(1.75rem, 3vw, 2.6875rem);
+    font-weight: 600;
+    line-height: 1.08;
+    letter-spacing: -0.025em;
+  }
+
+  .lq-landing-arrow {
+    align-self: flex-end;
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    font-size: 1.5rem;
+    line-height: 1;
+    transition: transform 180ms ease;
+  }
+
+  .lq-landing-card:is(:hover, :focus-visible),
+  .lq-landing-card:is(:hover, :focus-visible) * {
+    text-decoration: none;
+    color: var(--lq-card-ink);
+  }
+
+  @media (hover: hover) {
+    .lq-landing-card:hover {
+      transform: translateY(-4px);
+      filter: brightness(1.045);
+      box-shadow: 0 12px 24px #0002;
+    }
+
+    .lq-landing-card:hover .lq-landing-arrow {
+      transform: rotate(45deg);
+    }
+  }
+
+  .lq-landing-card:focus-visible {
+    outline: 3px solid var(--lq-accent);
+    outline-offset: 4px;
+  }
+
+  @media (max-width: 50rem) {
+    .lq-landing-grid {
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    .lq-landing-card,
+    .lq-landing-card:nth-child(n) {
+      grid-column: 1;
+      min-height: 108px;
+      padding: 22px;
+      flex-direction: row;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .lq-landing-card strong {
+      font-size: 1.75rem;
+    }
+
+    .lq-landing-arrow {
+      align-self: center;
+      flex-shrink: 0;
+      width: 40px;
+      height: 40px;
+    }
+  }
+</style>

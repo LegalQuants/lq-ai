@@ -21,7 +21,17 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
+import { SITE_LAYOUT } from './lib/paths.mjs';
+
 const THEME = fileURLToPath(new URL('../src/styles/theme.css', import.meta.url));
+/**
+ * The pathways layout (`SITE_LAYOUT=pathways`) loads a second stylesheet after
+ * theme.css that redefines tokens in the same selectors. Reading both, in load
+ * order, gives the values that layout renders with — so the same pairs are
+ * checked against whichever palette is being built.
+ */
+const PATHWAYS_THEME = fileURLToPath(new URL('../src/styles/theme-pathways.css', import.meta.url));
+const PATHWAYS = SITE_LAYOUT === 'pathways';
 
 // ---------------------------------------------------------------- colour math
 
@@ -46,7 +56,10 @@ const contrast = (a, b) => {
 // ------------------------------------------------------- read the token table
 
 // Comments carry selector names in prose, so they go before anything is matched.
-const css = readFileSync(THEME, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+const css = [THEME, ...(PATHWAYS ? [PATHWAYS_THEME] : [])]
+  .map((file) => readFileSync(file, 'utf8'))
+  .join('\n')
+  .replace(/\/\*[\s\S]*?\*\//g, '');
 
 /**
  * Collect `--name: value` declarations per selector. Every rule whose selector
@@ -80,11 +93,14 @@ const themes = {
 function resolve(theme, name, seen = new Set()) {
   const raw = themes[theme].get(name) ?? shared.get(name);
   if (raw === undefined) throw new Error(`${theme}: token ${name} is not defined`);
-  const ref = raw.match(/^var\((--[\w-]+)\)$/);
+  // `var(--x)` or `var(--x, var(--y))`: a fallback is what renders wherever
+  // --x is not set in the stylesheet (the pathways accent is set per page).
+  const ref = raw.match(/^var\((--[\w-]+)(?:,\s*var\((--[\w-]+)\))?\)$/);
   if (!ref) return raw;
   if (seen.has(name)) throw new Error(`${theme}: circular token ${name}`);
   seen.add(name);
-  return resolve(theme, ref[1], seen);
+  const defined = (token) => themes[theme].has(token) || shared.has(token);
+  return resolve(theme, ref[2] && !defined(ref[1]) ? ref[2] : ref[1], seen);
 }
 
 // ------------------------------------------------------------- the pair table
@@ -145,7 +161,40 @@ const UI_PAIRS = [
  * 3.58:1; the check is here so that a future "just use the accent" edit trips
  * the gate instead of shipping.
  */
-const FORBIDDEN = [['light', '--lq-accent', '--sl-color-bg', 4.5, 'brand accent as text on white']];
+const FORBIDDEN = PATHWAYS
+  ? [] // the pathways palette has no brand orange; its accents are the tones below
+  : [['light', '--lq-accent', '--sl-color-bg', 4.5, 'brand accent as text on white']];
+
+/**
+ * The pathways layout's own pairs. A page's accent is one of three tones,
+ * chosen per page, so each tone is checked in every role the accent plays:
+ * headings and links on the page and on raised surfaces, and the filled tab
+ * and "All documentation" chip with the page background as their text. The
+ * landing cards carry white titles on the card fills.
+ */
+const PATHWAY_PAIRS = PATHWAYS
+  ? [
+      ...['a', 'b', 'c'].flatMap((tone) => [
+        [
+          `--lq-tone-${tone}`,
+          '--sl-color-bg',
+          4.5,
+          `tone ${tone}: heading / link on page background`,
+        ],
+        [
+          `--lq-tone-${tone}`,
+          '--lq-color-surface-raised',
+          4.5,
+          `tone ${tone}: link on raised surface`,
+        ],
+        [`--lq-tone-${tone}`, '--lq-color-hover', 4.5, `tone ${tone}: link on hover surface`],
+        ['--sl-color-text-invert', `--lq-tone-${tone}`, 4.5, `tone ${tone}: filled tab text`],
+        ['--lq-card-ink', `--lq-card-${tone}`, 4.5, `card ${tone}: landing card title`],
+      ]),
+      ['--sl-color-white', '--lq-color-hover', 4.5, 'tab text on hover surface'],
+      ['--sl-color-gray-3', '--sl-color-bg', 4.5, 'breadcrumb / intro on page background'],
+    ]
+  : [];
 
 // ------------------------------------------------------------------ run them
 
@@ -153,7 +202,7 @@ let failures = 0;
 const rows = [];
 
 for (const theme of ['light', 'dark']) {
-  for (const [fg, bg, floor, label] of [...TEXT_PAIRS, ...UI_PAIRS]) {
+  for (const [fg, bg, floor, label] of [...TEXT_PAIRS, ...UI_PAIRS, ...PATHWAY_PAIRS]) {
     const fgValue = resolve(theme, fg);
     const bgValue = resolve(theme, bg);
     const ratio = contrast(fgValue, bgValue);

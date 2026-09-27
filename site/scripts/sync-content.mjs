@@ -51,11 +51,13 @@ import {
   PUBLIC_REPO_DIR,
   REPO_ROOT,
   SITE_BASE,
+  SITE_LAYOUT,
   SITE_URL,
   SKIP_PAGES,
   repoPath,
   withBase,
 } from './lib/paths.mjs';
+import { OVERVIEW_ROUTE } from '../src/pathways.mjs';
 import { head, stampFor } from './lib/git.mjs';
 import { blobUrl, createResolver, mapLinks, treeUrl } from './lib/links.mjs';
 import { expandIncludes, includedFiles } from './lib/includes.mjs';
@@ -222,10 +224,15 @@ async function main() {
       });
       continue;
     }
+    // The pathways layout serves its own landing at `/`, so the entry page
+    // moves to `overview/`. Only where it is written and served changes:
+    // `relPath` stays the source path, so links to it still resolve.
+    const moved = SITE_LAYOUT === 'pathways' && routeFor(rel) === '';
     authored.push({
       kind: 'authored',
       relPath: rel,
-      route: routeFor(rel),
+      outPath: moved ? `${OVERVIEW_ROUTE}${path.extname(rel)}` : undefined,
+      route: moved ? OVERVIEW_ROUTE : routeFor(rel),
       sourcePath: repoPath(path.join(DOCS_SITE_DIR, rel)),
       baseDir: path.dirname(path.join(DOCS_SITE_DIR, rel)),
       data: parsed.data,
@@ -420,8 +427,9 @@ async function main() {
   // reported once so a writer can settle it by reordering `sources:`.
   const claims = new Map();
   for (const page of authored) {
-    // The entry hub curates eight namespaces, not its first source file.
-    if (page.route === '') continue;
+    // The entry hub curates eight namespaces, not its first source file — in
+    // either layout, wherever it is served.
+    if (routeFor(page.relPath) === '') continue;
     const primary = Array.isArray(page.data.sources) ? page.data.sources[0] : undefined;
     if (!primary) continue;
     if (!claims.has(primary)) claims.set(primary, []);
@@ -604,7 +612,7 @@ async function main() {
     data.checkedAgainst = { sha: stamp.sha, date: stamp.date };
     data.sourceFiles = stamp.sourceFiles.filter(Boolean);
 
-    const target = path.join(CONTENT_DIR, page.relPath);
+    const target = path.join(CONTENT_DIR, page.outPath ?? page.relPath);
     await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, serializePage(data, body), 'utf8');
 

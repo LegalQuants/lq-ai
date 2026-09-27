@@ -29,12 +29,16 @@ const { entry, editUrl } = Astro.locals.starlightRoute;
 const { checkedAgainst, sourceFiles, editUrl: frontmatterEditUrl } = entry.data;
 
 const docsSitePath = toDocsSitePath(entry.filePath);
+// `editUrl: false` is Starlight's documented opt-out; the pathways layout's
+// navigation pages use it, having no source file to edit.
 const editHref =
-  typeof frontmatterEditUrl === 'string'
-    ? frontmatterEditUrl
-    : docsSitePath
-      ? EDIT_BASE + docsSitePath
-      : editUrl?.href;
+  frontmatterEditUrl === false
+    ? undefined
+    : typeof frontmatterEditUrl === 'string'
+      ? frontmatterEditUrl
+      : docsSitePath
+        ? EDIT_BASE + docsSitePath
+        : editUrl?.href;
 ---
 
 <footer class="lq-footer">

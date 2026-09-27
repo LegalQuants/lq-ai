@@ -19,6 +19,8 @@
  * | `SYNC_SKIP`     | empty                | page paths to leave out of this run  |
  * | `SITE_BASE`     | `/lq-ai/`            | the deployed base path               |
  * | `SITE_URL`      | `https://legalquants.github.io` | the deployed origin       |
+ * | `SITE_LAYOUT`   | `classic`            | `pathways`: Iris's four-pathway UI   |
+ * | `SITE_COMPARE`  | empty                | `<label>|<url>`: a compare banner    |
  *
  * `REPO_ROOT` is deliberately *not* overridable: includes, `sources:` entries
  * and stamps are repository-relative by definition, and a fixture run still
@@ -78,6 +80,37 @@ export const SITE_BASE = (() => {
 
 /** The deployed origin, without a trailing slash. */
 export const SITE_URL = (process.env.SITE_URL || 'https://legalquants.github.io').replace(/\/+$/, '');
+
+/**
+ * Which navigation the site is built with. `classic` is the eight-section
+ * sidebar; `pathways` is the four-pathway layout from Iris's UI review
+ * (`src/pathways.mjs`). Both render the same pages from the same sources — the
+ * layout is the only thing that differs, which is what lets the two be
+ * compared side by side. Anything else is a typo, and a typo that silently
+ * built the wrong layout would defeat the comparison.
+ */
+export const SITE_LAYOUT = (() => {
+  const raw = process.env.SITE_LAYOUT || 'classic';
+  if (raw !== 'classic' && raw !== 'pathways') {
+    throw new Error(`SITE_LAYOUT must be "classic" or "pathways", not "${raw}"`);
+  }
+  return raw;
+})();
+
+/**
+ * An optional one-line banner pointing at the other layout while the two are
+ * being compared: `SITE_COMPARE="Layout A|https://example.vercel.app"`. Unset
+ * for any real deployment.
+ */
+export const SITE_COMPARE = (() => {
+  const raw = process.env.SITE_COMPARE;
+  if (!raw) return undefined;
+  const [label, url] = raw.split('|');
+  if (!label || !/^https:\/\//.test(url ?? '')) {
+    throw new Error('SITE_COMPARE must be "<label>|https://<url>"');
+  }
+  return { label: label.trim(), url: url.trim() };
+})();
 
 /** `start/quickstart/` → `/lq-ai/start/quickstart/`. Route `''` is the root. */
 export function withBase(route) {
