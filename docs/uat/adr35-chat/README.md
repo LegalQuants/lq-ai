@@ -121,6 +121,33 @@ an uncertain run blocks further runs by its owner. Do not clear production
 receipts to get around this condition. The local model was changed explicitly
 between fixtures, never during an approved run.
 
+## Follow-up during human UAT
+
+Two further three-topic experiments (`26ff23e3-68d2-4bb9-a1d7-889ffec73d5b`
+and `3934ea18-7181-4384-bc6d-4dc9d25f53e5`) exposed a child output mismatch.
+The Implementation and Support child failed with `invalid_output` in both runs;
+the Term/Renewal/Termination child also failed in the second. Their inference
+receipts completed with `finish_reason=stop`. Two of the three failed responses
+were substantive Contract QA Markdown; one was malformed fenced JSON. The
+previous adapter required every child to return a JSON envelope even though
+the installed skill specifies an adaptive Markdown answer.
+
+The branch now requests the skill's Markdown directly. A bounded adapter wraps
+that answer in the server-owned, unverified child outcome and preserves the full
+text for the shared findings file. It still refuses empty or truncated output,
+oversized text, control characters, malformed JSON attempts and model-supplied
+artifact references. One completed older JSON envelope remains readable for
+effect replay. No retry, authority grant or change to the retained failures was
+made. Replaying the three actual response texts through the new adapter accepts
+the two Markdown answers and still rejects the malformed JSON.
+
+The focused integration test now drives the full approved child flow with
+Markdown. The orchestration and API regression suite passed **455 tests, with
+3 skipped**; ruff and mypy passed. The isolated arq worker was restarted with
+the fix after both user runs completed. A new live run after this change remains
+a human UAT check; previous run records must continue to show their original
+failures.
+
 ## Verification results
 
 | Check | Result |

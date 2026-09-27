@@ -17,6 +17,7 @@ from sqlalchemy import select
 
 from app.api.dependencies import get_active_user
 from app.api.orchestration import service
+from app.autonomous.orchestration.chat_demo import contract_qa_outcome
 from app.autonomous.orchestration.service import DemonstrationService, ModelDemoGateway
 from app.config import get_settings
 from app.main import app
@@ -103,16 +104,14 @@ class ModelGateway:
                 self.two_entered.set()
             try:
                 await self.child_gate.wait()
-                content = json.dumps(
-                    {
-                        "status": "completed",
-                        "summary": "The agreement answers this question.",
-                        "findings": [
-                            "Customer can prevent renewal with notice. [§5]\n\n> at least 30 days before the current term ends."
-                        ],
-                        "verification": "unverified",
-                        "failure_code": None,
-                    }
+                assert (
+                    "Return only the Contract QA answer as Markdown"
+                    in payload["inputs"]["response_contract"]
+                )
+                content = (
+                    "Customer can prevent renewal with written notice at least 30 days "
+                    "before the current term ends. [§5]\n\n"
+                    '> "at least 30 days before the current term ends." [§5]'
                 )
             finally:
                 self.active -= 1
@@ -275,6 +274,44 @@ async def test_complete_skill_backed_run_through_worker_and_receipts(model_demo)
         assert len(skill_receipt["skill"]["digest"]) == 64
         assert skill_receipt["accounting"]["provider"] == "selected"
         assert child["outcome"]["artifact"] and "[§5]" in child["outcome"]["findings"][0]
+
+
+def test_contract_qa_adaptive_markdown_is_retained_without_repair():
+    answer = (
+        "The Supplier provides two onboarding sessions within 20 business days. [§3]\n\n"
+        "### Support\nThe Supplier acknowledges requests within two business days. [§4]"
+    )
+    outcome = contract_qa_outcome(answer, "stop")
+    assert outcome.status == "completed"
+    assert outcome.findings == (answer,)
+    assert outcome.summary.startswith("The Supplier provides")
+    assert outcome.verification == "unverified" and outcome.artifact is None
+
+
+def test_contract_qa_malformed_json_and_incomplete_answers_still_fail():
+    for content, reason in (
+        ('```json\n{"status":"completed","findings":[ way]}\n```', "stop"),
+        ("A valid-looking answer [§4]", "length"),
+        (" ", "stop"),
+        ("A" * 4097, "stop"),
+        ("Answer\x00[§4]", "stop"),
+    ):
+        with pytest.raises((ValueError, TypeError)):
+            contract_qa_outcome(content, reason)
+
+
+def test_contract_qa_completed_json_effect_remains_readable():
+    content = json.dumps(
+        {
+            "status": "completed",
+            "summary": "The agreement answers this question.",
+            "findings": ["Customer can prevent renewal with notice. [§5]"],
+            "verification": "unverified",
+            "failure_code": None,
+        }
+    )
+    outcome = contract_qa_outcome(content, "stop")
+    assert outcome.status == "completed" and outcome.findings[0].endswith("[§5]")
 
 
 @pytest.mark.parametrize(

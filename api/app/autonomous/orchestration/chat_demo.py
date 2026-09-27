@@ -18,6 +18,7 @@ from app.autonomous.orchestration.contracts import (
     parse_research_proposal,
 )
 from app.autonomous.orchestration.inference import InferenceRoutes
+from app.autonomous.orchestration.outcomes import TopicOutcome
 from app.autonomous.orchestration.planning import PlanningSnapshot
 from app.autonomous.orchestration.policy import (
     InferencePolicy,
@@ -51,6 +52,41 @@ def model_json(content: str) -> str:
     except (ValueError, TypeError, RecursionError):
         raise ValueError("Invalid bounded model JSON") from None
     return value
+
+
+def contract_qa_outcome(content: str, finish_reason: str) -> TopicOutcome:
+    """Wrap the skill's adaptive Markdown in a bounded, unverified result.
+
+    Older completed effects may contain the original JSON envelope. Keep those
+    readable, but never reinterpret a malformed JSON attempt as a Markdown
+    answer or make another model call to repair it.
+    """
+    answer = content.strip()
+    if finish_reason != "stop" or not answer or len(answer.encode()) > 16384:
+        raise ValueError("Incomplete or oversized Contract QA answer")
+    if any(ord(char) < 32 and char not in "\n\r\t" for char in answer):
+        raise ValueError("Contract QA answer contains control characters")
+    if answer.startswith(("{", "```json")):
+        outcome = TopicOutcome.model_validate_json(model_json(answer))
+        if len(outcome.findings) > 1 or len(outcome.summary) > 512:
+            raise ValueError("Invalid bounded Contract QA envelope")
+    else:
+        if len(answer) > 4096:
+            raise ValueError("Oversized Contract QA Markdown answer")
+        summary = next(
+            (
+                line.strip()
+                for line in answer.splitlines()
+                if line.strip()
+                and len(line.strip()) <= 512
+                and not line.lstrip().startswith(("#", ">", "-", "*", "[§"))
+            ),
+            "Contract QA returned an answer to the approved question.",
+        )
+        outcome = TopicOutcome(status="completed", summary=summary, findings=(answer,))
+    if outcome.artifact is not None:
+        raise ValueError("The application supplies artifact references")
+    return outcome
 
 
 def packet(skills: MutableSkillRegistry) -> str:

@@ -24,7 +24,11 @@ from langsmith import tracing_context
 from pydantic import ValidationError as SchemaError
 
 from app.autonomous.enums import ToolIntent
-from app.autonomous.orchestration.chat_demo import model_json, packet, prepare_model_plan
+from app.autonomous.orchestration.chat_demo import (
+    contract_qa_outcome,
+    packet,
+    prepare_model_plan,
+)
 from app.autonomous.orchestration.checkpoints import CheckpointRuntime
 from app.autonomous.orchestration.effects import GuardedEffects
 from app.autonomous.orchestration.outcomes import TopicOutcome, topic_coverage
@@ -107,12 +111,10 @@ def child_graph(
                 "document": packet(effects.skills),
                 "question": task.question,
                 "response_contract": (
-                    'Return only JSON: {"status":"completed|empty|failed", "summary":"up to 512 characters", '
-                    '"findings":["your full Contract QA Markdown answer, at most 4096 characters"], '
-                    '"verification":"unverified", "failure_code":null}. '
-                    "Use exactly one finding for a completed answer. Preserve clause quotes and limitations. "
-                    "For no answer or a refusal use status empty and findings []. "
-                    'For failure use status failed, findings [] and failure_code "execution_failed".'
+                    "Return only the Contract QA answer as Markdown, at most 4096 characters. "
+                    "Lead with the answer and preserve clause quotes, citations, and limitations. "
+                    "State explicitly when the agreement does not answer a part of the question. "
+                    "Do not add a JSON envelope; the application records the outcome and receipt."
                 ),
                 "redaction_handling": (
                     "Gateway pseudonym tokens stand for supplied values and will be restored "
@@ -131,17 +133,12 @@ def child_graph(
             content = result.data.get("content")
             if not isinstance(content, str) or len(content.encode("utf-8")) > 65536:
                 raise ValueError("invalid output")
-            outcome = TopicOutcome.model_validate_json(
-                model_json(content) if model_demo else content
-            )
-            if model_demo and (
-                result.data.get("finish_reason") != "stop"
-                or len(outcome.findings) > 1
-                or len(outcome.summary) > 512
-            ):
-                raise ValueError("invalid bounded answer")
-            if outcome.artifact is not None:
-                raise ValueError("The application supplies artifact references")
+            if model_demo:
+                outcome = contract_qa_outcome(content, result.data.get("finish_reason"))
+            else:
+                outcome = TopicOutcome.model_validate_json(content)
+                if outcome.artifact is not None:
+                    raise ValueError("The application supplies artifact references")
         except (SchemaError, ValueError):
             outcome = TopicOutcome(
                 status="failed",
