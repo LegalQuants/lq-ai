@@ -23,8 +23,9 @@ launcher pulls those images), then the desktop release.
 
 ## ⭐ Manual steps checklist (Kevin only — these cannot be automated)
 
-CI runs on **`origin` = `github.com/LegalQuants/lq-ai`**, so the secrets and package visibility live
-there. Do these once (secrets/visibility), then per-release (cut the tags).
+CI runs in **`github.com/LegalQuants/lq-ai`**, so the secrets and package visibility live there.
+Check `git remote -v` before pushing tags: a fork checkout may call that repository something other
+than `origin`. Do these once (secrets/visibility), then per-release (cut the tags).
 
 ### 1. Apple signing secrets (5) on the `LegalQuants/lq-ai` repo
 
@@ -81,13 +82,13 @@ API for this):
    administrators"), an **org owner** (not a plain member) must first enable public packages at
    `https://github.com/organizations/LegalQuants/settings/packages` → *Package creation* → allow
    **Public**.
-2. **Per-package.** Then for each of `lq-ai-api`, `lq-ai-gateway`, `lq-ai-web`: org → Packages →
+2. **Per-package.** Then for each of `lq-ai-api`, `lq-ai-gateway`, `lq-ai-web`, `lq-ai-proxy`: org → Packages →
    package → *Package settings* → *Change visibility* → **Public**.
 
 Verify anonymous pull (200 = public):
 
 ```bash
-for img in lq-ai-api lq-ai-gateway lq-ai-web; do
+for img in lq-ai-api lq-ai-gateway lq-ai-web lq-ai-proxy; do
   TOKEN=$(curl -s "https://ghcr.io/token?scope=repository:legalquants/$img:pull" \
     | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
   code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" \
@@ -170,12 +171,16 @@ in the release PR.
 
 ```bash
 # (a) Images first — tag from a ref that CONTAINS the release Dockerfiles + release.yml (main):
-git tag vX.Y.Z && git push origin vX.Y.Z
+# Replace origin with the LegalQuants remote shown by git remote -v in a fork checkout.
+# Verify the fetched main commit contains the reviewed release PR and rehearsal evidence.
+git fetch origin main
+RELEASE_COMMIT=$(git rev-parse origin/main)
+git tag -a vX.Y.Z "$RELEASE_COMMIT" -m "Release vX.Y.Z" && git push origin vX.Y.Z
 #   …or dispatch: gh workflow run release.yml -R LegalQuants/lq-ai
-# release.yml then publishes multi-arch lq-ai-{api,gateway,web}:vX.Y.Z (+ :latest).
+# release.yml then publishes multi-arch lq-ai-{api,gateway,web,proxy}:vX.Y.Z (+ :latest).
 
 # (b) The macOS app — separate tag, runs on macos-14, needs the 5 Apple secrets:
-git tag desktop-vX.Y.Z && git push origin desktop-vX.Y.Z
+git tag -a desktop-vX.Y.Z "$RELEASE_COMMIT" -m "Desktop release vX.Y.Z" && git push origin desktop-vX.Y.Z
 #   …or dispatch: gh workflow run desktop-release.yml -R LegalQuants/lq-ai -f tag=desktop-vX.Y.Z
 ```
 
