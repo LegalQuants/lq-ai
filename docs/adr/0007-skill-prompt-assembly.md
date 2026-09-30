@@ -144,3 +144,50 @@ The provenance record for a skill invocation or creation consists of three eleme
 - The `{{var}}` templating mechanism (ADR 0007 §2) is unchanged.
 - The cache TTL (ADR 0007 §4) is unchanged.
 - Skill versioning at request time remains a future enhancement (the `version` field is still documentary-only at invocation).
+
+---
+
+## Amendment — 2026-09-02: Untrusted-input envelope and marker neutralisation
+
+**Status:** Accepted addendum.
+**Trigger:** external security report (credit `rips4w`), 2026-08-25.
+
+### What changed in §2's escaping rule
+
+§2 said *"values are inserted verbatim … skill authors who want to escape
+model-meaningful tokens in a value handle that in the skill body's prose
+around the placeholder."* Two facts made that posture inoperative: none
+of the 15 shipped skills uses a `{{placeholder}}`, so there is no prose
+around a placeholder anywhere in the corpus; and the DE-328 leftover-input
+block (Option A) appended unconsumed inputs as raw `- key: value` lines, so
+a value containing a newline continued as further system-prompt text and
+could reproduce the assembler's own `## Operator system instructions`
+separator verbatim, impersonating the operator's block.
+
+The substitutor now does two things it did not do before:
+
+1. **Unconsumed inputs are rendered as a one-line JSON envelope**, not as
+   list items: `{"source": "skill_input", "skill": <name>, "inputs":
+   {...}}` inside a fenced block, under a fixed policy line that the
+   values are data, not instructions. JSON encoding removes every raw line
+   break (U+2028/U+2029 are escaped explicitly), so a value cannot start a
+   new prompt line, close the fence, or forge a heading.
+2. **Assembler-owned boundary headings inside any interpolated value are
+   backslash-escaped** at line start (`# Skill:`, `## Reference:`,
+   `### Provided inputs for`, `## Operator system instructions`). This
+   includes all line separators and markers formed partly by a template
+   or another input. Markers authored entirely in the template remain
+   intact, as does ordinary document markdown.
+
+### What this amendment does not claim
+
+This is **envelope integrity, not isolation**. The values still sit in the
+`role="system"` message. A model that reads attacker prose under a
+correctly labelled "untrusted" heading can still follow it. Relocating
+untrusted content — skill inputs, retrieved chunks, attachments,
+filenames — into a data channel per provider is a separate
+architectural decision, tracked as DE-388 and requiring its own ADR and an
+adversarial evaluation corpus (DE-110). PRD Appendix E previously claimed
+"skill-prompt isolation conventions" in the authoring guide; no such
+conventions existed, and that sentence has been corrected to describe
+this envelope and its limits.

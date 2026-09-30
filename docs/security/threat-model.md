@@ -24,6 +24,12 @@ LQ.AI runs as 7 services on a single operator-controlled deployment (Docker Comp
 
 The five rows in the STRIDE table below cover the production-facing services (`api`, `gateway`, `web`, `postgres`, `rustfs`). Redis and the ingest-worker are cluster-internal and inherit `postgres`-tier mitigations (least-privilege role, no external listener, operator-managed secret); they do not add a distinct row.
 
+### Untrusted document content → model instruction channel
+
+The boundary the STRIDE table below does not draw is the one between the operator's instructions to the model and the *content the model is asked to work on*. A counterparty's NDA, a retrieved knowledge-base chunk, an attached file, its filename, and a tool result are all attacker-influenced bytes, and the product's own stated threat (PRD §1.9, Appendix E) is a malicious counterparty document carrying instructions. Skill inputs, retrieved chunks, attachments, and filenames are placed in the `role="system"` message — the instruction channel — by the gateway's skill assembler (`gateway/app/skills/assembler.py`, caller-supplied skill inputs) and by the chat path (`api/app/api/chats.py`, retrieved chunks and attachments, verbatim and anonymization-skipped so citation grounding stays byte-exact). Chat tool results already use JSON-encoded `role="tool"` messages (`api/app/chat/tool_loop.py::tool_result_message`); that placement still requires adversarial evaluation and does not establish immunity to prompt injection.
+
+**Threat (Tampering / Elevation of Privilege at the model boundary):** instructions embedded in untrusted content steer the analysis presented as skill output, influence tool selection, or impersonate the operator's own instruction block. **Mitigations shipped:** unconsumed skill inputs are JSON-encoded on one line into a source-labelled block under an explicit data-not-instructions policy, so a value cannot start a new prompt line, close a fence, or reproduce the assembler's `## Operator system instructions` / `# Skill:` markers (ADR 0007, amendment of 2026-09-02). Placeholder-consumed inputs remain in the skill text; input-created assembler headings are backslash-escaped, including headings formed across template boundaries. Tool calls require a persisted, human-confirmed lifecycle state before they execute; the Citation Engine's verifier rejects quotes that do not match the source byte-for-byte; and the operator's human-in-the-loop review is the last line. **Residual risk, stated plainly:** the envelope preserves structure but does not reduce the authority of those bytes — a model can still follow well-formed instructions it reads under an "untrusted" label in the system message, and the retrieval / attachment blocks have not received even the envelope treatment. Relocating the remaining system-message content into a data channel the model is told to distrust is [DE-388](../PRD.md#9-deferred-enhancements-and-identified-future-work), ADR-gated, and depends on an adversarial evaluation corpus (DE-110) that does not exist yet. There are no "skill-prompt isolation conventions" in the skill-authoring guide; a previous version of Appendix E said there were.
+
 ## STRIDE-by-component
 
 | Component | Spoofing | Tampering | Repudiation | Info Disclosure | DoS | Elevation of Privilege |
@@ -48,6 +54,7 @@ The five rows in the STRIDE table below cover the production-facing services (`a
 - [ADR 0009 Web + LQ.AI shell coexistence](../adr/0009-web-lq-ai-shell-coexistence.md) — frontend trust boundary.
 - [ADR 0010 Gateway config hot-reload](../adr/0010-gateway-config-hot-reload.md) — secret rotation.
 - [ADR 0011 Transparency-first model selection](../adr/0011-transparency-first-model-selection.md) — encrypted-at-rest provider keys.
+- [ADR 0007 Skill prompt assembly](../adr/0007-skill-prompt-assembly.md) — the untrusted-input envelope (amendment of 2026-09-02) and what it does not do.
 - [Encrypted-at-rest provider keys workflow](encrypted-keys.md) — master-key bootstrap and rotation.
 - [Vulnerability disclosure policy](../../SECURITY.md) — coordinated disclosure process.
 
