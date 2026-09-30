@@ -174,9 +174,10 @@ The substitutor now does two things it did not do before:
    new prompt line, close the fence, or forge a heading.
 2. **Assembler-owned boundary headings inside any interpolated value are
    backslash-escaped** at line start (`# Skill:`, `## Reference:`,
-   `### Provided inputs for`, `## Operator system instructions`). Values
-   are otherwise still opaque strings — ordinary markdown in a document
-   is untouched.
+   `### Provided inputs for`, `## Operator system instructions`). This
+   includes all line separators and markers formed partly by a template
+   or another input. Markers authored entirely in the template remain
+   intact, as does ordinary document markdown.
 
 ### What this amendment does not claim
 
@@ -184,18 +185,9 @@ This is **envelope integrity, not isolation**. The values still sit in the
 `role="system"` message. A model that reads attacker prose under a
 correctly labelled "untrusted" heading can still follow it. Relocating
 untrusted content — skill inputs, retrieved chunks, attachments,
-filenames, tool results — into a data channel per provider is a separate
+filenames — into a data channel per provider is a separate
 architectural decision, tracked as DE-388 and requiring its own ADR and an
 adversarial evaluation corpus (DE-110). PRD Appendix E previously claimed
 "skill-prompt isolation conventions" in the authoring guide; no such
 conventions existed, and that sentence has been corrected to describe
 this envelope and its limits.
-
-### Adjacent correction: required-input enforcement
-
-`extract_required_inputs` read `inputs:` at the top level of the
-frontmatter only; every shipped skill nests it under `lq_ai:`, so the
-`SkillInputMissing` 400 that §2 documents had never fired for any built-in
-skill. It now reads both spellings (as `consumes_organization_profile`
-already did). This is a behavior change for direct API callers who omit a
-required input — per ADR 0025 it bumps the minor version.

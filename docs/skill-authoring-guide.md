@@ -595,8 +595,9 @@ gateway's assembler (ADR 0007) handles them two ways:
 - **Inputs consumed by a `{{placeholder}}`** are substituted into your body
   as opaque strings. The only transformation is that the assembler's own
   boundary headings (`# Skill:`, `## Reference:`, `### Provided inputs for`,
-  `## Operator system instructions`) at the start of a line inside a value
-  are backslash-escaped, so a value cannot impersonate a section. Anything
+  `## Operator system instructions`) at the start of a line are
+  backslash-escaped when formed wholly or partly by an input, including
+  across template boundaries and after Unicode line separators. Anything
   else in the value reaches the model verbatim, in-body, with the same
   authority as your prose.
 
