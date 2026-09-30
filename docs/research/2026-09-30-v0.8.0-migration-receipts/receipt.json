@@ -1,0 +1,419 @@
+{
+  "candidate_commit": "99fb25b88a66881093bdc5afa926d4e75d5ce7fe",
+  "compose_project": "lq-ai-080-migration-receipts",
+  "source_release": "v0.7.1",
+  "architecture": "arm64",
+  "docker_server": "29.8.0",
+  "source_compose_sha256": "a0ddd60ea7fe3260c78effefbbf0802ac5a93479afb2e312c223d1cbf09f8fd9",
+  "target_compose_sha256": "43c9f85976d2bc080cf8daaab95a55ed7741a23fc3a307b0d7703a0e6735ddd4",
+  "images": {
+    "source_api": "sha256:4ea59aadabb92a3db85727c506cc44aadffe9956970f18d3d3852425b653282d",
+    "source_minio": "sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e",
+    "candidate_api": "sha256:b280add8921c9bdd5dfe0a01ce639ea3ff2fdb30802d248feeaf0f910de76d02",
+    "target_rustfs": "rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff",
+    "web_v0.7.1": "sha256:6df8a62ffe267ab5ac39be39c8872542f22a26d7109f165c84a902f86f484fac",
+    "gateway_v0.7.1": "sha256:58804993c46c0aac7e47a01e7375b9d7c5fdbeca5836d468f28abb46c19c0e07",
+    "proxy_v0.7.1": "sha256:f1e9ac8eaae4c832eb23432a9c3d117b051f9db35ba9d31b1a9bb0e44ef1c848"
+  },
+  "seed": {
+    "files": [
+      {
+        "id": "308d8354-7859-4a80-b108-84c5d241e34a",
+        "filename": "migration-contract.txt",
+        "size_bytes": 13800,
+        "sha256": "3db969dbfe7ededb76fe00bed6d28e4244da16bf168fcc3f396c6fdf5021731a",
+        "soft_deleted": false
+      },
+      {
+        "id": "74f3bfb7-18e0-4a48-b68e-38d979d807ff",
+        "filename": "migration-large.txt",
+        "size_bytes": 9900000,
+        "sha256": "01de026f1e6ff8ab74231752c560eaa28aec867e66bed45896ca83172fe03d9e",
+        "soft_deleted": false
+      },
+      {
+        "id": "4f93af35-e5dd-4ffe-9970-e9187b88940d",
+        "filename": "migration-soft-deleted.txt",
+        "size_bytes": 69,
+        "sha256": "e9daa87b97afd4409715f814ec94a63a9a1832d1b2b91cfd9a8c0879ed7267c4",
+        "soft_deleted": true
+      }
+    ],
+    "export_job_id": "a922afe9-c49b-4b3a-b6d7-bbf4acf9bc8e",
+    "export_status": "completed"
+  },
+  "baseline": {
+    "alembic_revision": "0066",
+    "files": [
+      {
+        "storage_path": "308d8354-7859-4a80-b108-84c5d241e34a",
+        "hash_sha256": "3db969dbfe7ededb76fe00bed6d28e4244da16bf168fcc3f396c6fdf5021731a",
+        "size_bytes": 13800,
+        "soft_deleted": false
+      },
+      {
+        "storage_path": "4f93af35-e5dd-4ffe-9970-e9187b88940d",
+        "hash_sha256": "e9daa87b97afd4409715f814ec94a63a9a1832d1b2b91cfd9a8c0879ed7267c4",
+        "size_bytes": 69,
+        "soft_deleted": true
+      },
+      {
+        "storage_path": "74f3bfb7-18e0-4a48-b68e-38d979d807ff",
+        "hash_sha256": "01de026f1e6ff8ab74231752c560eaa28aec867e66bed45896ca83172fe03d9e",
+        "size_bytes": 9900000,
+        "soft_deleted": false
+      }
+    ],
+    "exports": [
+      {
+        "storage_key": "exports/e0fccd74-81ee-4824-8466-19b06cf72755/a922afe9-c49b-4b3a-b6d7-bbf4acf9bc8e.zip",
+        "status": "completed",
+        "unexpired": true
+      }
+    ],
+    "objects": [
+      {
+        "key": "308d8354-7859-4a80-b108-84c5d241e34a",
+        "size_bytes": 13800,
+        "sha256": "3db969dbfe7ededb76fe00bed6d28e4244da16bf168fcc3f396c6fdf5021731a",
+        "etag": "\"c059d808e3ef462394e134670b1cad6d-1\"",
+        "content_type": "text/plain"
+      },
+      {
+        "key": "4f93af35-e5dd-4ffe-9970-e9187b88940d",
+        "size_bytes": 69,
+        "sha256": "e9daa87b97afd4409715f814ec94a63a9a1832d1b2b91cfd9a8c0879ed7267c4",
+        "etag": "\"2fcd1ff2ab7b4de1981980dbb6b6bacf-1\"",
+        "content_type": "text/plain"
+      },
+      {
+        "key": "74f3bfb7-18e0-4a48-b68e-38d979d807ff",
+        "size_bytes": 9900000,
+        "sha256": "01de026f1e6ff8ab74231752c560eaa28aec867e66bed45896ca83172fe03d9e",
+        "etag": "\"2a3dcd47040d8cc8d70e566e0b68f535-2\"",
+        "content_type": "text/plain"
+      },
+      {
+        "key": "exports/e0fccd74-81ee-4824-8466-19b06cf72755/a922afe9-c49b-4b3a-b6d7-bbf4acf9bc8e.zip",
+        "size_bytes": 32683,
+        "sha256": "9c785459f34554fc010b59764ee2cfabd578c702ef3c6cf4b8f3a8869820cd15",
+        "etag": "\"192f06ccc6d9e7c09bec396cbfaefec9\"",
+        "content_type": "application/zip"
+      }
+    ]
+  },
+  "comparisons": {
+    "migrated": {
+      "alembic_revision": "0068",
+      "files_equal_baseline": true,
+      "exports_equal_baseline": true,
+      "object_bytes_and_metadata_equal_baseline": true,
+      "manifest_sha256": "d11cdf634120dce82a6bfe7c19aa550c4a531f4c43d0a8d7c80ad35424695050"
+    },
+    "rollback": {
+      "alembic_revision": "0066",
+      "files_equal_baseline": true,
+      "exports_equal_baseline": true,
+      "object_bytes_and_metadata_equal_baseline": true,
+      "manifest_sha256": "5941181465b19d4d15b25f0e24308e84383210567ac6b79800a66174ce4c9d35"
+    },
+    "final": {
+      "alembic_revision": "0068",
+      "files_equal_baseline": true,
+      "exports_equal_baseline": true,
+      "object_bytes_and_metadata_equal_baseline": true,
+      "manifest_sha256": "d11cdf634120dce82a6bfe7c19aa550c4a531f4c43d0a8d7c80ad35424695050"
+    }
+  },
+  "api_checks_same_for_all_three_phases": {
+    "file_checks": [
+      {
+        "filename": "migration-contract.txt",
+        "http_status": 200,
+        "sha256": "3db969dbfe7ededb76fe00bed6d28e4244da16bf168fcc3f396c6fdf5021731a",
+        "size_bytes": 13800
+      },
+      {
+        "filename": "migration-large.txt",
+        "http_status": 200,
+        "sha256": "01de026f1e6ff8ab74231752c560eaa28aec867e66bed45896ca83172fe03d9e",
+        "size_bytes": 9900000
+      },
+      {
+        "filename": "migration-soft-deleted.txt",
+        "http_status": 404,
+        "soft_delete_preserved": true
+      }
+    ],
+    "export_status": "completed",
+    "export_download_url_issued": true,
+    "knowledge_base_files": 2
+  },
+  "plan_exit_code": 10,
+  "plan": {
+    "plan": {
+      "action": "apply",
+      "checks": [
+        {
+          "message": "supported MinIO volume detected",
+          "name": "supported-layout",
+          "passed": true
+        },
+        {
+          "message": "/lq-ai/ops/snapshots: 722844954624 bytes free; 10985937 bytes required (110% of 9987215)",
+          "name": "snapshot-space",
+          "passed": true
+        },
+        {
+          "message": "object store is stopped",
+          "name": "store-stopped",
+          "passed": true
+        },
+        {
+          "message": "alembic revision 0066; supported floor is v0.3.0 (0038)",
+          "name": "supported-floor",
+          "passed": true
+        },
+        {
+          "message": "files and user_export_jobs are readable",
+          "name": "storage-ledger-readable",
+          "passed": true
+        }
+      ],
+      "detection": {
+        "deployment_id": "0d8787ed-4152-4029-883e-2ca3289851f7",
+        "facts": {
+          "format_path": "/lq-ai/volumes/objectstore/.minio.sys/format.json",
+          "object_count": 4,
+          "volume_bytes": 9987215
+        },
+        "kind": "applies",
+        "layout": "xl-single",
+        "reason": "supported MinIO volume detected"
+      },
+      "migration_id": "0001",
+      "preflight_passed": true,
+      "reason": "MinIO volume requires a snapshot and ownership migration",
+      "title": "Object store: MinIO to RustFS"
+    },
+    "status": "planned"
+  },
+  "first_verify": {
+    "checks": [
+      {
+        "message": "GET http://object-store:9000/health/ready returned 200",
+        "name": "rustfs-ready",
+        "passed": true
+      },
+      {
+        "message": "expected 4, found 4; missing=[], unexpected=[]",
+        "name": "object-key-reconciliation",
+        "passed": true
+      },
+      {
+        "message": "verified 3 document digests; mismatches=[]",
+        "name": "document-digests",
+        "passed": true
+      }
+    ],
+    "marker": {
+      "component": "objectstore",
+      "deployment_id": "0d8787ed-4152-4029-883e-2ca3289851f7",
+      "migration_id": "0001",
+      "snapshot_path": "/lq-ai/ops/snapshots/0001-0d8787ed-4152-4029-883e-2ca3289851f7-20260930T030708Z.tar",
+      "snapshot_sha256": "98a2f265e0c67d2643d81a4ec29c3c95e871044b56223ad6ab628523e7ea3dd9",
+      "state": "verified",
+      "updated_at": "2026-09-30T03:08:12.531663+00:00"
+    },
+    "status": "verified"
+  },
+  "rollback": {
+    "instruction": "Check out the previous release and start it with the cached MinIO image.",
+    "snapshot_path": "/lq-ai/ops/snapshots/0001-0d8787ed-4152-4029-883e-2ca3289851f7-20260930T030708Z.tar",
+    "status": "rolled_back"
+  },
+  "final_plan_exit_code": 0,
+  "final_plan": {
+    "plan": {
+      "action": "none",
+      "checks": [],
+      "detection": {
+        "deployment_id": "0d8787ed-4152-4029-883e-2ca3289851f7",
+        "facts": {
+          "format_path": "/lq-ai/volumes/objectstore/.rustfs.sys/format.json",
+          "object_count": 4,
+          "volume_bytes": 9995111
+        },
+        "kind": "not_applicable",
+        "layout": "rustfs",
+        "reason": "object-store volume is already RustFS"
+      },
+      "migration_id": "0001",
+      "preflight_passed": true,
+      "reason": "migration is verified",
+      "title": "Object store: MinIO to RustFS"
+    },
+    "status": "planned"
+  },
+  "final_volume": {
+    "volume_uid": 10001,
+    "volume_gid": 10001,
+    "rustfs_format_exists": true,
+    "minio_format_retained": true
+  },
+  "journal": {
+    "entries": [
+      {
+        "actor": "cli",
+        "component": "objectstore",
+        "deployment_id": "0d8787ed-4152-4029-883e-2ca3289851f7",
+        "error": null,
+        "layout": "rustfs",
+        "migration_id": "0001",
+        "phase": "verify",
+        "receipt": {
+          "digest_comparison": "matched",
+          "document_digests_verified": 3,
+          "duration_seconds": 0.173,
+          "object_bytes": 9946552,
+          "object_count": 4,
+          "snapshot_path": "/lq-ai/ops/snapshots/0001-0d8787ed-4152-4029-883e-2ca3289851f7-20260930T030708Z.tar",
+          "snapshot_sha256": "98a2f265e0c67d2643d81a4ec29c3c95e871044b56223ad6ab628523e7ea3dd9"
+        },
+        "state": "verified",
+        "supersedes": null,
+        "timestamp": "2026-09-30T03:11:36.988869+00:00",
+        "tool_version": "0.8.0"
+      },
+      {
+        "actor": "cli",
+        "component": "objectstore",
+        "deployment_id": "0d8787ed-4152-4029-883e-2ca3289851f7",
+        "error": null,
+        "layout": "xl-single",
+        "migration_id": "0001",
+        "phase": "apply",
+        "receipt": {
+          "duration_seconds": 0.001,
+          "object_count_before": 4,
+          "snapshot_bytes": 10158080,
+          "snapshot_path": "/lq-ai/ops/snapshots/0001-0d8787ed-4152-4029-883e-2ca3289851f7-20260930T030708Z.tar",
+          "snapshot_sha256": "98a2f265e0c67d2643d81a4ec29c3c95e871044b56223ad6ab628523e7ea3dd9",
+          "target_gid": 10001,
+          "target_uid": 10001,
+          "volume_bytes_before": 9972602
+        },
+        "state": "applied",
+        "supersedes": null,
+        "timestamp": "2026-09-30T03:11:01.472332+00:00",
+        "tool_version": "0.8.0"
+      },
+      {
+        "actor": "cli",
+        "component": "objectstore",
+        "deployment_id": "0d8787ed-4152-4029-883e-2ca3289851f7",
+        "error": null,
+        "layout": "xl-single",
+        "migration_id": "0001",
+        "phase": "rollback",
+        "receipt": {
+          "snapshot_path": "/lq-ai/ops/snapshots/0001-0d8787ed-4152-4029-883e-2ca3289851f7-20260930T030708Z.tar",
+          "snapshot_sha256": "98a2f265e0c67d2643d81a4ec29c3c95e871044b56223ad6ab628523e7ea3dd9"
+        },
+        "state": "rolled_back",
+        "supersedes": null,
+        "timestamp": "2026-09-30T03:09:04.086707+00:00",
+        "tool_version": "0.8.0"
+      },
+      {
+        "actor": "cli",
+        "component": "objectstore",
+        "deployment_id": "0d8787ed-4152-4029-883e-2ca3289851f7",
+        "error": null,
+        "layout": "rustfs",
+        "migration_id": "0001",
+        "phase": "verify",
+        "receipt": {
+          "digest_comparison": "matched",
+          "document_digests_verified": 3,
+          "duration_seconds": 0.18,
+          "object_bytes": 9946552,
+          "object_count": 4,
+          "snapshot_path": "/lq-ai/ops/snapshots/0001-0d8787ed-4152-4029-883e-2ca3289851f7-20260930T030708Z.tar",
+          "snapshot_sha256": "98a2f265e0c67d2643d81a4ec29c3c95e871044b56223ad6ab628523e7ea3dd9"
+        },
+        "state": "verified",
+        "supersedes": null,
+        "timestamp": "2026-09-30T03:08:12.532543+00:00",
+        "tool_version": "0.8.0"
+      },
+      {
+        "actor": "cli",
+        "component": "objectstore",
+        "deployment_id": "0d8787ed-4152-4029-883e-2ca3289851f7",
+        "error": null,
+        "layout": "xl-single",
+        "migration_id": "0001",
+        "phase": "apply",
+        "receipt": {
+          "duration_seconds": 0.002,
+          "object_count_before": 4,
+          "snapshot_bytes": 10158080,
+          "snapshot_path": "/lq-ai/ops/snapshots/0001-0d8787ed-4152-4029-883e-2ca3289851f7-20260930T030708Z.tar",
+          "snapshot_sha256": "98a2f265e0c67d2643d81a4ec29c3c95e871044b56223ad6ab628523e7ea3dd9",
+          "target_gid": 10001,
+          "target_uid": 10001,
+          "volume_bytes_before": 9987215
+        },
+        "state": "applied",
+        "supersedes": null,
+        "timestamp": "2026-09-30T03:07:08.608233+00:00",
+        "tool_version": "0.8.0"
+      },
+      {
+        "actor": "cli",
+        "component": "objectstore",
+        "deployment_id": "0d8787ed-4152-4029-883e-2ca3289851f7",
+        "error": null,
+        "layout": "xl-single",
+        "migration_id": "0001",
+        "phase": "snapshot",
+        "receipt": {
+          "duration_seconds": 0.019,
+          "snapshot_bytes": 10158080,
+          "snapshot_path": "/lq-ai/ops/snapshots/0001-0d8787ed-4152-4029-883e-2ca3289851f7-20260930T030708Z.tar",
+          "snapshot_sha256": "98a2f265e0c67d2643d81a4ec29c3c95e871044b56223ad6ab628523e7ea3dd9"
+        },
+        "state": "applied",
+        "supersedes": null,
+        "timestamp": "2026-09-30T03:07:08.604935+00:00",
+        "tool_version": "0.8.0"
+      },
+      {
+        "actor": "cli",
+        "component": "objectstore",
+        "deployment_id": "0d8787ed-4152-4029-883e-2ca3289851f7",
+        "error": null,
+        "layout": "xl-single",
+        "migration_id": "0001",
+        "phase": "baseline",
+        "receipt": {
+          "format_path": "/lq-ai/volumes/objectstore/.minio.sys/format.json",
+          "object_count": 4,
+          "reason": "supported MinIO volume detected",
+          "volume_bytes": 9987215
+        },
+        "state": "pending",
+        "supersedes": null,
+        "timestamp": "2026-09-30T03:06:51.885220+00:00",
+        "tool_version": "0.8.0"
+      }
+    ],
+    "snapshots": [
+      {
+        "bytes": 10158080,
+        "path": "/lq-ai/ops/snapshots/0001-0d8787ed-4152-4029-883e-2ca3289851f7-20260930T030708Z.tar"
+      }
+    ]
+  }
+}

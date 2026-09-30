@@ -149,6 +149,8 @@ release:
 docker compose down
 docker compose --profile ops run --rm migrate rollback 0001 --yes
 git checkout v0.7.1
+# If the target API advanced the database schema, restore the pre-upgrade
+# pg_dump before starting the old API and workers (see below).
 docker compose up -d
 ```
 
@@ -156,6 +158,15 @@ Rollback verifies the snapshot SHA-256, requires the store to be stopped,
 restores the MinIO layout, removes the migration marker, and records the action.
 The previous release still needs the cached MinIO image because it can no longer
 be pulled.
+
+The migration tool restores only the object-store volume. If the target API
+advanced the Postgres schema, restore the separate pre-upgrade database backup
+while the API and workers are stopped, before starting the previous release.
+Use database and object-store backups from the same pre-upgrade point; changes
+made after that point will not be present in the restored deployment. The
+[v0.7.1 application rehearsal](../research/2026-09-30-v0.8.0-migration-rehearsal.md)
+exercised this with a custom-format `pg_dump`, restoring revision `0066` after
+the candidate had advanced it to `0068`.
 
 ## CLI exit codes
 
