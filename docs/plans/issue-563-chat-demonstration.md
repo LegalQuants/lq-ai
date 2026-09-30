@@ -1,8 +1,9 @@
 # ADR 0035: bounded chat demonstration plan
 
-**Status:** Implemented on `feat/adr35-chat-orchestration`; UAT and evidence are
-tracked in the [UAT runbook](../runbooks/adr35-chat-uat.md). Human acceptance is a
-separate gate from automated or agent-executed testing.
+**Status:** Implemented on main via PR #631; UAT and evidence are tracked in the
+[UAT runbook](../runbooks/adr35-chat-uat.md). Human acceptance remains a separate
+gate from automated or agent-executed testing. The design steps below record the
+original implementation plan; the runbook describes current behavior.
 **Date:** 2026-09-27. **Baseline inspected:** `ce57d6fa3`.
 **Tracks:** [#563](https://github.com/LegalQuants/lq-ai/issues/563),
 [ADR 0035](../adr/0035-governed-orchestration-run-tree.md), and the
@@ -43,9 +44,9 @@ planning or research. Describe that recording as a **workflow preview**.
 
 ## First demonstration: concrete scope
 
-Recommended UI: a dedicated **Orchestration chat — experimental** page, reachable
-from the existing preview area. The proposed route is
-`/lq-ai/autonomous/orchestration/chat`, with an owner-only run URL for reopening.
+Implemented UI: a dedicated **Orchestration chat — experimental** page, reached
+from Autonomous sessions at `/lq-ai/autonomous/orchestration/chat`, with an
+owner-only run URL for reopening.
 Its location does not determine its interaction model: the work starts and ends
 in a conversation. Ordinary LQ.AI chat integration is a later increment.
 

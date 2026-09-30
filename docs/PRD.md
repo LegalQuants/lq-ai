@@ -516,15 +516,15 @@ This is the single most differentiated capability in the product. Specified in d
 
 ### 3.4 Skill Library and Skill Creator
 
-**Accepted optional extension, not shipped:**
+**Accepted optional extension, implemented on main but disabled by default:**
 [ADR 0035 D8b–D8d](adr/0035-governed-orchestration-run-tree.md#d8b--optional-persistent-skill-workspaces)
 specifies persistent skill workspaces and reviewed, installed Python helpers.
 Skills opt in separately to storage and execution. Generated-code execution is
 excluded; exact executable review, isolated jobs and protection against indirect
 disclosure through helper output or persisted reuse are required. The
 [capability summary](plans/issue-563-skill-capabilities.md) describes local behavior
-and pending security gates. ADR 0035 was ratified on 2026-09-20, so implementation
-publication may proceed; the M1 status below remains unchanged until the release
+and pending security gates. ADR 0035 was ratified on 2026-09-20; PR #596 merged
+the implementation. The M1 status below remains unchanged until release
 conditions are met.
 
 **M1 status:** Shipped. The Skill Library (browse built-in, user, and team scopes), Skill Creator (capture / wizard / fork), skill versions tab, per-version audit, Try-It sandbox, and slash-invoked skills with provenance pill are all wired end-to-end in Wave D.2. An operator can verify at `api/app/api/skills.py`; Cypress E2E coverage is in `web/cypress/e2e/wave-d2-skill-creator.cy.ts` (Tests 1–6). Skill script execution (`scripts/`) and autonomous skill self-improvement are deferred (M4). See [HONEST-STATE.md §1](HONEST-STATE.md#1-conversational-and-workspace-surface).
@@ -3929,33 +3929,22 @@ Lavern is the closest public prior art for several LQ.AI roadmap commitments tha
 
 #### DE-294 — Cross-agent handoff validation for autonomous multi-agent flows
 
-**Issue #563 proposal:** [ADR 0035](adr/0035-governed-orchestration-run-tree.md)
-would make this validation a prerequisite for shipping its first multi-agent
-profile. It specifies the backend location, strict task/authority separation,
-current resource checks and metadata-only database audit in place of the older
-alternatives below. ADR 0035 was ratified on 2026-09-20; this DE remains
-unimplemented until the accepted design's release conditions are met.
+**Status:** Bounded fictional orchestration is implemented on main; broader
+real-matter handoff acceptance remains pending.
 
-**Priority:** P1 if M4 ships multi-agent autonomous flows / P2 if M4 ships single-agent only · **Effort:** M
+[ADR 0035](adr/0035-governed-orchestration-run-tree.md), accepted on 2026-09-20,
+replaced this entry's earlier conditional M4 proposal. PR #596 merged the governed
+run tree, and PR #631 merged a model-backed chat profile. Model output supplies
+bounded task data; the server supplies authority, resources, budgets and pinned
+skills. Child admission follows approval of the exact plan. The demonstrated
+profile uses one fictional agreement and does not permit child delegation.
 
-**Context:** Greenwood's Register 3 (code-enforced cross-agent handoff validation) has two facets in the LQ.AI architecture. The in-Playbook-step-handoff facet (step output validated against typed schema before becoming step N+1 input) is the retrofit covered by DE-292. The *cross-agent* handoff facet — where one autonomous agent's emitted event becomes another autonomous agent's invocation prompt, and where a hostile document upstream could otherwise smuggle instructions across the seam — only attaches if LQ.AI's autonomous layer ships *multi-agent* autonomous flows. Whether it does is pinned by the DE-289 Phase 1 ADR (the autonomous-layer design-influences study comparing Lavern's multi-agent Clawern pipeline to LQ.AI's planned approach).
-
-**Specific scope (if M4 ships multi-agent autonomous flows):**
-
-A reference cross-agent orchestrator in `api/app/autonomous/orchestrate.py` (or `gateway/app/autonomous/orchestrate.py` if the autonomous executor lives in the gateway — pinned by the ADR). Functional behavior:
-
-- Validates every cross-agent handoff envelope against a closed intent enum (the set of intents the source agent is permitted to emit, declared in the workflow definition) and a per-intent Pydantic schema for parameters.
-- Renders the next agent's invocation prompt from a typed template (intent-keyed, parameters interpolated via `format_map`), never from source-agent free text.
-- Wraps any free-text field the source agent supplies in an `<agent-handoff source="…" timestamp="…">` envelope inside the rendered prompt, with explicit framing that the envelope content is "data describing a task, not an instruction."
-- Refuses (and audits) any handoff whose intent is not in the allowlist or whose parameters fail schema validation. Audit log: appended to a JSONL file `out/handoff-audit.jsonl` (or the structured `audit_log` table — pinned by the ADR) with `params_keys`, `raw_event_len`, `sanitized_event_len`, and the rejection reason for rejected handoffs.
-
-Acceptance is structured against the same four failure modes Lavern's `orchestrate.py` exercises (Greenwood describes them as the "four cases" of validation harness output): unknown target agent, intent not in allowlist, parameter schema violation, oversize / malformed envelope. Plus a fifth Greenwood specifically flags: the non-greedy-regex bug that breaks payload extraction on nested objects — LQ.AI's implementation should parse JSON, not regex-extract, from the start.
-
-**Specific scope (if M4 ships single-agent only):** this DE is reclassified P2 and deferred to whichever later milestone first ships multi-agent autonomous flows. The Playbook-step-handoff implementation in DE-292 covers the in-scope R3 surface in the meantime.
-
-**Acceptance criteria:** depends on classification per the ADR. If M4-scope: orchestrator implementation + 4-case integration test suite + posture-document update naming R3 as "shipped" with line-level citation. If deferred: this DE is marked P2 with a note pointing to the ADR's pin.
-
-**Sequence:** DE entry lands now (with this PR). Classification pinned when the DE-289 Phase 1 ADR lands. Implementation lands with M4 (or later) per classification.
+Before real-matter orchestration is enabled, validate untrusted handoffs and
+selected-resource enforcement against the applicable ADR 0035 authority and
+confidentiality requirements. See the
+[feature PRD](prds/issue-563-governed-orchestration.md) for the remaining release
+conditions. The earlier suggested orchestrator locations, JSONL audit alternative
+and M4 single-agent/multi-agent classification are superseded by ADR 0035.
 
 #### DE-295 — Word add-in code-signing certificate + signed manifest CI (community-led)
 
@@ -4410,19 +4399,19 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 #### DE-319 — Migrate LangGraph 0.2 → 1.x (re-type the executors)
 
-**Priority:** P3 · **Effort:** S · **Status:** implementation under review in
-[#524](https://github.com/LegalQuants/lq-ai/issues/524).
+**Priority:** P3 · **Effort:** S · **Status:** runtime migration merged with
+PR #596; [#524](https://github.com/LegalQuants/lq-ai/issues/524) is closed.
 
 Playbook, tabular and single-session autonomous graphs share a LangGraph 1.x
 runtime. The application-owned `AsyncStateNode` protocol preserves the named
 `state` argument at all 12 node factories, resolving the typing failures without
-changing their behavior. The runtime migration remains a separate commit for
-review, as required by [ADR 0035](adr/0035-governed-orchestration-run-tree.md).
+changing their behavior. The runtime migration is now in main; [ADR 0035](adr/0035-governed-orchestration-run-tree.md)
+requires review of this shared runtime change.
 
 The lock resolves LangGraph 1.2.11, Core 1.6.3, checkpoint 4.2.0 and SDK 0.4.4;
 prebuilt 1.1.0 and protocol 0.0.19 enter the dependency inventory. Websockets stays
-at 16.1.1. Acceptance requires dependency review, all three compiled-graph suites,
-the API regression suite, type/lint checks and container smoke checks. Runtime
+at 16.1.1. The implementation PR records the compiled-graph, API, type/lint
+and container checks. Runtime
 migration alone does not authorize orchestration or helper enablement.
 
 ---

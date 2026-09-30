@@ -15,11 +15,11 @@ cosign verify \
 
 A successful run prints the signing certificate's issuer, subject (the workflow OIDC identity), and Rekor transparency-log entry. Failure prints a diagnostic explaining whether the signature is missing, the cert doesn't match, or the cert's identity doesn't match the regexp.
 
-## Verify all three images in a release
+## Verify all four images in a release
 
 ```bash
 TAG=v0.1.0
-for service in api gateway web; do
+for service in api gateway web proxy; do
   echo "=== ${service} ==="
   cosign verify \
     --certificate-identity-regexp "https://github.com/legalquants/lq-ai" \

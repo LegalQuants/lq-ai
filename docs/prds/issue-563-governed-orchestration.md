@@ -1,6 +1,6 @@
 # PRD: Governed orchestration and optional skill capabilities
 
-**Status:** Accepted design; implementation under review, release pending.
+**Status:** Accepted design; bounded implementation merged on main, release pending.
 **Tracks:** [#563](https://github.com/LegalQuants/lq-ai/issues/563).
 [ADR 0035](../adr/0035-governed-orchestration-run-tree.md) records the architecture;
 the [research note](../research/issue-563-harness-research.md) explains its evidence.
@@ -25,9 +25,11 @@ collection and synthesis. Preserve work across interruptions and, when a skill
 opts in, across runs. Keep access, spending and execution under owner/operator
 control.
 
-The first profile uses sample findings and labels results unverified. Generated
-code and arbitrary shell execution are excluded to keep execution within reviewed
-helpers. Recursive delegation, watch/schedule orchestration and substantive
+The initial sample-only preview has been superseded by a bounded experimental
+chat. A configured model proposes the plan, approved children apply installed
+Contract QA to one fictional agreement, and a model synthesizes their findings.
+Outputs remain unverified. Generated code and arbitrary shell execution are
+excluded. Recursive delegation, watch/schedule orchestration and substantive
 legal-research quality are outside this delivery.
 
 ## Requirements and acceptance
@@ -51,9 +53,11 @@ paths do not gain a tool loop.
 Success means the acceptance criteria hold with controlled sample inputs,
 including failure, interruption and empty-result cases. R1–R6 have local
 acceptance coverage across real storage, queue, helper containers and browser
-flows; regression checks passed with controlled providers. **R7's complete
-confidentiality acceptance remains pending.** These results use controlled
-providers and establish no live-provider or legal-quality claim.
+flows; regression checks passed with controlled providers. A separate local
+model run exercised planning, skill-backed children and synthesis on fictional
+inputs; see the [UAT evidence](../uat/adr35-chat/README.md). **R7's complete
+confidentiality acceptance remains pending.** These results establish no
+production-provider or legal-quality claim.
 
 ## Release conditions
 
@@ -65,8 +69,9 @@ providers and establish no live-provider or legal-quality claim.
 - **Real matter use:** complete selected-document/KB intake and project-policy
   propagation, including DE-294, before enabling real sources and inference.
 
-Capabilities remain disabled by default. The sample demonstration is targeted
-for 0.8.0; production enablement remains a separate decision.
+Capabilities remain disabled by default. The bounded model-backed chat
+demonstration is targeted for 0.8.0; production enablement remains a separate
+decision.
 
 Behavior details: [demonstration](../plans/issue-563-demonstration.md),
 [run files](../plans/issue-563-workspace.md),
