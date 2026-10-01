@@ -15,7 +15,7 @@ from typing import Literal
 
 import pytest
 from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
@@ -130,7 +130,7 @@ def _spans_by_name(exporter: InMemorySpanExporter, name: str) -> list:
     return [s for s in exporter.get_finished_spans() if s.name == name]
 
 
-def _event_names(span) -> list[str]:
+def _event_names(span: ReadableSpan) -> list[str]:
     return [e.name for e in span.events]
 
 

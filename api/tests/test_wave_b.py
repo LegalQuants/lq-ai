@@ -14,7 +14,7 @@ indexes get exercised end-to-end.
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock
@@ -34,7 +34,7 @@ from app.models.inference import InferenceRoutingLog
 from app.security import create_access_token, hash_password
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -248,6 +248,7 @@ async def test_admin_tier_policy_patch_writes_audit(
     audit = (
         await db_session.execute(select(AuditLog).where(AuditLog.action == "tier_policy.updated"))
     ).scalar_one()
+    assert audit.details is not None
     assert audit.details["before"]["default_minimum_tier"] == 4
     assert audit.details["after"]["default_minimum_tier"] == 3
 

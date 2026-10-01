@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 
 import pytest
 import pytest_asyncio
@@ -23,7 +23,7 @@ GATEWAY_BASE = "http://test-gateway"
 GATEWAY_KEY = "test-gw-key"
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -70,7 +70,9 @@ async def _assistant_message(db_session: AsyncSession, owner: User) -> tuple[Cha
 
 
 @pytest.mark.asyncio
-async def test_persist_message_tool_sources_writes_rows(db_session: AsyncSession, owner_user: User):
+async def test_persist_message_tool_sources_writes_rows(
+    db_session: AsyncSession, owner_user: User
+) -> None:
     from app.api.chats import _persist_message_tool_sources
     from app.chat.tool_loop import ToolSourceRecord
 
@@ -115,7 +117,7 @@ async def test_persist_message_tool_sources_writes_rows(db_session: AsyncSession
 
 
 @pytest.mark.asyncio
-async def test_message_tool_source_roundtrips(db_session: AsyncSession, owner_user: User):
+async def test_message_tool_source_roundtrips(db_session: AsyncSession, owner_user: User) -> None:
     _chat, msg = await _assistant_message(db_session, owner_user)
     row = MessageToolSource(
         message_id=msg.id,
@@ -143,7 +145,7 @@ async def test_message_tool_source_roundtrips(db_session: AsyncSession, owner_us
 @pytest.mark.asyncio
 async def test_get_sources_endpoint(
     client: AsyncClient, db_session: AsyncSession, owner_user: User
-):
+) -> None:
     chat, msg = await _assistant_message(db_session, owner_user)
     db_session.add(
         MessageToolSource(
@@ -180,7 +182,7 @@ async def test_get_sources_endpoint(
 @pytest.mark.asyncio
 async def test_get_sources_auditor_can_read_cross_user_and_is_audited(
     client: AsyncClient, db_session: AsyncSession, owner_user: User
-):
+) -> None:
     chat, msg = await _assistant_message(db_session, owner_user)
     db_session.add(
         MessageToolSource(
@@ -225,13 +227,14 @@ async def test_get_sources_auditor_can_read_cross_user_and_is_audited(
         .one()
     )
     assert row.user_id == auditor.id
+    assert row.details is not None
     assert row.details["viewed_user_id"] == str(owner_user.id)
 
 
 @pytest.mark.asyncio
 async def test_get_sources_member_cross_user_still_404_and_not_audited(
     client: AsyncClient, db_session: AsyncSession, owner_user: User
-):
+) -> None:
     chat, msg = await _assistant_message(db_session, owner_user)
     db_session.add(
         MessageToolSource(
@@ -280,7 +283,7 @@ async def test_get_sources_member_cross_user_still_404_and_not_audited(
 @pytest.mark.asyncio
 async def test_get_sources_owner_read_not_audited(
     client: AsyncClient, db_session: AsyncSession, owner_user: User
-):
+) -> None:
     chat, msg = await _assistant_message(db_session, owner_user)
     db_session.add(
         MessageToolSource(

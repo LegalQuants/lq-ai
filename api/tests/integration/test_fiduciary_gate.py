@@ -3,6 +3,7 @@ import uuid
 import pytest
 import pytest_asyncio
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.citation.gate import compute_and_record_gate, resolve_gates
 from app.citation.ledger import assemble_ledger_entries
@@ -18,7 +19,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest_asyncio.fixture
-async def seeded(db_session):
+async def seeded(db_session: AsyncSession) -> tuple[User, Chat, Message]:
     user = User(email=f"g-{uuid.uuid4().hex[:8]}@example.com", hashed_password="x", role="member")
     db_session.add(user)
     await db_session.flush()
@@ -31,7 +32,15 @@ async def seeded(db_session):
     return user, chat, msg
 
 
-async def _seed_entry(db_session, chat, msg, status, conf, *, opinion_id):
+async def _seed_entry(
+    db_session: AsyncSession,
+    chat: Chat,
+    msg: Message,
+    status: str,
+    conf: float | None,
+    *,
+    opinion_id: int,
+) -> None:
     """Create an FK-valid caselaw-citation-backed ledger entry whose
     verification_status is overridden to ``status`` (the entry's status is what
     the gate reads — it need not equal the citation's real method)."""
@@ -62,7 +71,9 @@ async def _seed_entry(db_session, chat, msg, status, conf, *, opinion_id):
 
 
 @pytest.mark.asyncio
-async def test_all_pass_is_fiduciary_grade(db_session, seeded):
+async def test_all_pass_is_fiduciary_grade(
+    db_session: AsyncSession, seeded: tuple[User, Chat, Message]
+) -> None:
     _user, chat, msg = seeded
     # Seed ledger entries directly via real caselaw-citation rows so FKs resolve.
     for status, conf in [("exact_match", 1.0), ("tolerant_match", 0.95)]:
@@ -98,11 +109,14 @@ async def test_all_pass_is_fiduciary_grade(db_session, seeded):
     assert gate.supported_count == 0
     assert gate.fail_count == 0
     assert gate.total_assertions == 2
+    assert gate.confidence is not None
     assert abs(gate.confidence - 0.975) < 1e-6
 
 
 @pytest.mark.asyncio
-async def test_supported_only_when_paraphrase_no_fail(db_session, seeded):
+async def test_supported_only_when_paraphrase_no_fail(
+    db_session: AsyncSession, seeded: tuple[User, Chat, Message]
+) -> None:
     _user, chat, msg = seeded
     # one PASS (tolerant_match) + one SUPPORTED (paraphrase_judge), no FAIL
     await _seed_entry(db_session, chat, msg, "tolerant_match", 0.95, opinion_id=101)
@@ -118,7 +132,9 @@ async def test_supported_only_when_paraphrase_no_fail(db_session, seeded):
 
 
 @pytest.mark.asyncio
-async def test_any_fail_is_flagged(db_session, seeded):
+async def test_any_fail_is_flagged(
+    db_session: AsyncSession, seeded: tuple[User, Chat, Message]
+) -> None:
     _user, chat, msg = seeded
     # one PASS (exact_match, conf=1.0) + one FAIL (unverified, conf=None)
     await _seed_entry(db_session, chat, msg, "exact_match", 1.0, opinion_id=201)
@@ -136,7 +152,9 @@ async def test_any_fail_is_flagged(db_session, seeded):
 
 
 @pytest.mark.asyncio
-async def test_provenance_excluded(db_session, seeded):
+async def test_provenance_excluded(
+    db_session: AsyncSession, seeded: tuple[User, Chat, Message]
+) -> None:
     _user, chat, msg = seeded
     # one PASS entry + one provenance entry (via a real MessageToolSource)
     await _seed_entry(db_session, chat, msg, "exact_match", 1.0, opinion_id=301)
@@ -173,7 +191,9 @@ async def test_provenance_excluded(db_session, seeded):
 
 
 @pytest.mark.asyncio
-async def test_zero_assertions_is_fiduciary_grade(db_session, seeded):
+async def test_zero_assertions_is_fiduciary_grade(
+    db_session: AsyncSession, seeded: tuple[User, Chat, Message]
+) -> None:
     _user, chat, msg = seeded
     # only a provenance entry — no assertion entries
     ts = MessageToolSource(
@@ -208,7 +228,9 @@ async def test_zero_assertions_is_fiduciary_grade(db_session, seeded):
 
 
 @pytest.mark.asyncio
-async def test_unknown_status_excluded(db_session, seeded):
+async def test_unknown_status_excluded(
+    db_session: AsyncSession, seeded: tuple[User, Chat, Message]
+) -> None:
     _user, chat, msg = seeded
     # one valid PASS + one entry with unknown status "weird"
     await _seed_entry(db_session, chat, msg, "exact_match", 1.0, opinion_id=501)
@@ -222,7 +244,9 @@ async def test_unknown_status_excluded(db_session, seeded):
 
 
 @pytest.mark.asyncio
-async def test_upsert_replaces(db_session, seeded):
+async def test_upsert_replaces(
+    db_session: AsyncSession, seeded: tuple[User, Chat, Message]
+) -> None:
     _user, chat, msg = seeded
     # First call: one exact_match (PASS) → fiduciary_grade
     await _seed_entry(db_session, chat, msg, "exact_match", 1.0, opinion_id=601)
@@ -252,7 +276,9 @@ async def test_upsert_replaces(db_session, seeded):
 
 
 @pytest.mark.asyncio
-async def test_resolve_gates_shapes(db_session, seeded):
+async def test_resolve_gates_shapes(
+    db_session: AsyncSession, seeded: tuple[User, Chat, Message]
+) -> None:
     _user, chat, msg = seeded
     await _seed_entry(db_session, chat, msg, "exact_match", 1.0, opinion_id=701)
     await compute_and_record_gate(db_session, message_id=msg.id)
@@ -284,7 +310,9 @@ async def test_resolve_gates_shapes(db_session, seeded):
 
 
 @pytest.mark.asyncio
-async def test_assembler_marks_unverified_kb_citation(db_session, seeded):
+async def test_assembler_marks_unverified_kb_citation(
+    db_session: AsyncSession, seeded: tuple[User, Chat, Message]
+) -> None:
     """Regression: an unverified KB citation must land as 'unverified', not 'verified'."""
     user, _chat, msg = seeded
 

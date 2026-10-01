@@ -178,5 +178,5 @@ def exercise_migration(source_url: str) -> None:
         admin.dispose()
 
 
-async def test_0067_0068_backfill_planning_shape_and_nonlossy_downgrade(test_db_url):
+async def test_0067_0068_backfill_planning_shape_and_nonlossy_downgrade(test_db_url: str) -> None:
     await asyncio.to_thread(exercise_migration, test_db_url)

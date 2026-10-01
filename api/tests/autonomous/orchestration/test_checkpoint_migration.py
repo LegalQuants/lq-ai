@@ -12,7 +12,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError
 
 
-def exercise(source_url):
+def exercise(source_url: str) -> None:
     name = f"lq_ai_test_checkpoint_{uuid4().hex[:10]}"
     base = source_url.replace("postgresql+asyncpg://", "postgresql://", 1).rsplit("/", 1)[0]
     admin = create_engine(f"{base}/postgres", isolation_level="AUTOCOMMIT")
@@ -90,5 +90,5 @@ def exercise(source_url):
         admin.dispose()
 
 
-async def test_checkpoint_migration_roundtrip_and_user_deletion(test_db_url):
+async def test_checkpoint_migration_roundtrip_and_user_deletion(test_db_url: str) -> None:
     await asyncio.to_thread(exercise, test_db_url)

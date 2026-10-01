@@ -6,6 +6,7 @@ import json
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -45,7 +46,7 @@ def plan_data() -> dict:
         "ethics_review": (ToolIntent.emit_finding,),
         "delivery": (),
     }
-    execution = {
+    execution: dict[str, Any] = {
         "resources": {
             "document_ids": (UUID(int=11), UUID(int=12)),
             "source_names": ("govinfo", "caselaw"),
@@ -118,8 +119,8 @@ def approval(plan: PreparedPlan) -> ApprovalBinding:
 )
 @pytest.mark.parametrize("location", ["task", "batch"])
 def test_model_cannot_supply_authority(field: str, location: str) -> None:
-    payload = {"tasks": [task()]}
-    target = payload if location == "batch" else payload["tasks"][0]
+    payload: dict[str, Any] = {"tasks": [task()]}
+    target: dict[str, Any] = payload if location == "batch" else payload["tasks"][0]
     target[field] = "injected private value"
     with pytest.raises(ValidationError) as error:
         parse_research_proposal(json.dumps(payload))

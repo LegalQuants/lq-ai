@@ -21,7 +21,7 @@ app.citation.authority import point.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
@@ -49,12 +49,12 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture(autouse=True)
-def _reset_cost_cache() -> None:
+def _reset_cost_cache() -> Iterator[None]:
     """Reset the process-level provider tier+cost cache before/after each test."""
     from app.tools.governance import _reset_provider_tier_cache_for_tests
 
     _reset_provider_tier_cache_for_tests()
-    yield  # type: ignore[misc]
+    yield
     _reset_provider_tier_cache_for_tests()
 
 

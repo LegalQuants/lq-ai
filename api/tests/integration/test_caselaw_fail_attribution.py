@@ -107,7 +107,7 @@ class _ErroringGateway:
 
 
 @pytest_asyncio.fixture
-async def seeded(db_session: AsyncSession):
+async def seeded(db_session: AsyncSession) -> tuple[uuid.UUID, int, int]:
     user = User(
         email=f"fail-{uuid.uuid4().hex[:8]}@example.com", hashed_password="x", role="member"
     )
@@ -158,7 +158,7 @@ async def _rows(db_session: AsyncSession, message_id: uuid.UUID) -> list[Message
 
 @pytest.mark.asyncio
 async def test_attributed_reject_writes_fail_row_and_flags(
-    db_session: AsyncSession, seeded
+    db_session: AsyncSession, seeded: tuple[uuid.UUID, int, int]
 ) -> None:
     message_id, opinion_id, cluster_id = seeded
     gw = _FakeGateway(json.dumps({"verdict": "no"}))
@@ -191,7 +191,9 @@ async def test_attributed_reject_writes_fail_row_and_flags(
 
 
 @pytest.mark.asyncio
-async def test_attributed_accept_writes_supported_row(db_session: AsyncSession, seeded) -> None:
+async def test_attributed_accept_writes_supported_row(
+    db_session: AsyncSession, seeded: tuple[uuid.UUID, int, int]
+) -> None:
     message_id, _opinion_id, cluster_id = seeded
     gw = _FakeGateway(json.dumps({"verdict": "yes", "confidence": "high"}))
     n = await verify_and_persist_caselaw_citations(
@@ -210,7 +212,9 @@ async def test_attributed_accept_writes_supported_row(db_session: AsyncSession, 
 
 
 @pytest.mark.asyncio
-async def test_unattributed_reject_drops_no_fail(db_session: AsyncSession, seeded) -> None:
+async def test_unattributed_reject_drops_no_fail(
+    db_session: AsyncSession, seeded: tuple[uuid.UUID, int, int]
+) -> None:
     message_id, _opinion_id, cluster_id = seeded
     # H3 names a DIFFERENT case than the consulted cluster -> no attribution.
     answer = "### Totally Different Case, N.Y., 1999\n\n**Relevant passage:**\n> " + _PASSAGE + "\n"
@@ -230,7 +234,7 @@ async def test_unattributed_reject_drops_no_fail(db_session: AsyncSession, seede
 
 @pytest.mark.asyncio
 async def test_attributed_over_budget_writes_unverified_fail(
-    db_session: AsyncSession, seeded, monkeypatch: pytest.MonkeyPatch
+    db_session: AsyncSession, seeded: tuple[uuid.UUID, int, int], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import app.citation.caselaw as caselaw_mod
 
@@ -255,7 +259,9 @@ async def test_attributed_over_budget_writes_unverified_fail(
 
 
 @pytest.mark.asyncio
-async def test_attributed_transient_error_drops(db_session: AsyncSession, seeded) -> None:
+async def test_attributed_transient_error_drops(
+    db_session: AsyncSession, seeded: tuple[uuid.UUID, int, int]
+) -> None:
     message_id, _opinion_id, cluster_id = seeded
     gw = _ErroringGateway()
     n = await verify_and_persist_caselaw_citations(
@@ -273,7 +279,9 @@ async def test_attributed_transient_error_drops(db_session: AsyncSession, seeded
 
 
 @pytest.mark.asyncio
-async def test_attributed_yes_without_confidence_drops(db_session: AsyncSession, seeded) -> None:
+async def test_attributed_yes_without_confidence_drops(
+    db_session: AsyncSession, seeded: tuple[uuid.UUID, int, int]
+) -> None:
     """A 'yes' verdict without a confidence field is non-substantive -> drop, no row.
 
     _parse_judge_response returns _MISS for {"verdict": "yes"} with no confidence.
@@ -296,7 +304,9 @@ async def test_attributed_yes_without_confidence_drops(db_session: AsyncSession,
 
 
 @pytest.mark.asyncio
-async def test_attributed_nonjson_output_drops(db_session: AsyncSession, seeded) -> None:
+async def test_attributed_nonjson_output_drops(
+    db_session: AsyncSession, seeded: tuple[uuid.UUID, int, int]
+) -> None:
     """Truncated / non-JSON judge output is non-substantive -> drop, no row.
 
     The judge caps at max_tokens=400; a verbose justification can truncate the

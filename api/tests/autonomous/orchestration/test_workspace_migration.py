@@ -3,6 +3,7 @@
 import asyncio
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -10,6 +11,7 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import delete, select
 from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import AsyncEngine
 from tests.autonomous.orchestration.test_executor import approve, demonstration as demonstration
 
 from app.autonomous.enums import ToolIntent
@@ -18,8 +20,8 @@ from app.models.orchestration import OrchestrationFile
 from app.schemas.autonomous import Phase
 
 
-async def migrate(url, engine, direction, revision):
-    def run():
+async def migrate(url: str, engine: AsyncEngine, direction: str, revision: str) -> None:
+    def run() -> None:
         config = Config(str(Path(__file__).resolve().parents[3] / "alembic.ini"))
         config.set_main_option(
             "script_location", str(Path(__file__).resolve().parents[3] / "alembic")
@@ -42,8 +44,8 @@ async def migrate(url, engine, direction, revision):
 
 
 async def test_orchestration_downgrade_refuses_retained_files(
-    demonstration, test_engine, test_db_url
-):
+    demonstration: SimpleNamespace, test_engine: AsyncEngine, test_db_url: str
+) -> None:
     env = demonstration
     await approve(env)
     await env.executor.run_one(env.root_id, env.root_id)

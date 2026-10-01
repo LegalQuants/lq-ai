@@ -173,7 +173,8 @@ jobs:
         run: ruff format --check api scripts script_runner
 
       - name: mypy (standard mode)
-        run: mypy app ../script_runner
+        # DE-284 — tests/ are type-checked alongside app/.
+        run: mypy app tests ../script_runner
 
       - name: pytest (coverage gate ≥80%)
         # -n auto: one worker per available CPU (4 on ubuntu-latest).

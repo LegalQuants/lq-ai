@@ -1,13 +1,17 @@
 """Recovery pages use real independent transactions and reveal only safe outcomes."""
 
 import asyncio
+from collections.abc import AsyncIterator
 from dataclasses import asdict
+from datetime import datetime
 from types import SimpleNamespace
-from uuid import uuid4
+from typing import Any
+from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
 from sqlalchemy import delete, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.autonomous.orchestration import store as store_module
 from app.autonomous.orchestration.watchdog import sweep_recovery
@@ -26,9 +30,9 @@ pytestmark = pytest.mark.integration
 
 
 @pytest_asyncio.fixture
-async def batch(env):
+async def batch(env: SimpleNamespace) -> AsyncIterator[list[SimpleNamespace]]:
     entries = [env]
-    owners = []
+    owners: list[UUID] = []
     try:
         for _ in range(3):
             async with env.factory.begin() as db:
@@ -95,14 +99,14 @@ async def batch(env):
             await db.execute(delete(User).where(User.id.in_(owners)))
 
 
-def due(env, monkeypatch):
-    async def clock(db):
+def due(env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def clock(db: AsyncSession) -> datetime:
         return env.plan.deadline
 
     monkeypatch.setattr(store_module, "_now", clock)
 
 
-async def audit_count(env, event):
+async def audit_count(env: SimpleNamespace, event: str) -> int | None:
     async with env.factory() as db:
         return await db.scalar(
             select(func.count())
@@ -115,8 +119,8 @@ async def audit_count(env, event):
 
 
 async def test_pages_advance_past_persistent_invalid_root_and_clean_up_its_claim(
-    batch, monkeypatch
-):
+    batch: list[SimpleNamespace], monkeypatch: pytest.MonkeyPatch
+) -> None:
     first = batch[0]
     async with first.factory.begin() as db:
         (await db.get(PlanRow, (first.root_id, 1))).snapshot = {"private": "must not appear"}
@@ -141,7 +145,9 @@ async def test_pages_advance_past_persistent_invalid_root_and_clean_up_its_claim
     assert await audit_count(first, "claim_expired") == 1
 
 
-async def test_clean_terminal_roots_are_skipped_unless_they_still_own_workers(batch, monkeypatch):
+async def test_clean_terminal_roots_are_skipped_unless_they_still_own_workers(
+    batch: list[SimpleNamespace], monkeypatch: pytest.MonkeyPatch
+) -> None:
     for item in batch:
         await item.store.halt(item.root_id, actor_id=item.owner_id)
     await batch[0].store.release_claim(batch[0].claim)
@@ -156,7 +162,7 @@ async def test_clean_terminal_roots_are_skipped_unless_they_still_own_workers(ba
             assert (await db.get(Root, item.root_id)).status == "halted"
 
 
-async def test_before_deadline_sweep_preserves_live_claims(batch):
+async def test_before_deadline_sweep_preserves_live_claims(batch: list[SimpleNamespace]) -> None:
     report = await sweep_recovery(batch[0].store, limit=2)
     assert report.inspected == 2 and report.claims_recovered == report.roots_expired == 0
     assert not report.failures and report.next_after == batch[1].root_id
@@ -165,7 +171,9 @@ async def test_before_deadline_sweep_preserves_live_claims(batch):
             assert (await db.get(Account, item.root_id)).worker_id == item.claim.worker_id
 
 
-async def test_competing_sweeps_do_not_duplicate_recovery_or_expiration(batch, monkeypatch):
+async def test_competing_sweeps_do_not_duplicate_recovery_or_expiration(
+    batch: list[SimpleNamespace], monkeypatch: pytest.MonkeyPatch
+) -> None:
     due(batch[0], monkeypatch)
     reports = await asyncio.gather(*(sweep_recovery(batch[0].store) for _ in range(3)))
     assert sum(r.claims_recovered for r in reports) == 4
@@ -177,7 +185,9 @@ async def test_competing_sweeps_do_not_duplicate_recovery_or_expiration(batch, m
         )
 
 
-async def test_blocked_root_times_out_without_blocking_later_roots(batch, monkeypatch):
+async def test_blocked_root_times_out_without_blocking_later_roots(
+    batch: list[SimpleNamespace], monkeypatch: pytest.MonkeyPatch
+) -> None:
     first = batch[0]
     due(first, monkeypatch)
     async with first.factory.begin() as blocker:
@@ -202,12 +212,14 @@ async def test_blocked_root_times_out_without_blocking_later_roots(batch, monkey
     assert retry.claims_recovered == retry.roots_expired == 1 and not retry.failures
 
 
-async def test_failed_deadline_audit_keeps_prior_claim_cleanup_and_continues(batch, monkeypatch):
+async def test_failed_deadline_audit_keeps_prior_claim_cleanup_and_continues(
+    batch: list[SimpleNamespace], monkeypatch: pytest.MonkeyPatch
+) -> None:
     first = batch[0]
     due(first, monkeypatch)
     original = store_module._audit
 
-    async def fail(db, root, event, **details):
+    async def fail(db: AsyncSession, root: Root, event: str, **details: Any) -> None:
         await original(db, root, event, **details)
         if root.session_id == first.root_id and event == "root_expired":
             raise RuntimeError("private provider payload must not leak")
@@ -225,13 +237,13 @@ async def test_failed_deadline_audit_keeps_prior_claim_cleanup_and_continues(bat
 
 
 async def test_candidate_deleted_after_discovery_is_reported_without_stopping_page(
-    batch, monkeypatch
-):
+    batch: list[SimpleNamespace], monkeypatch: pytest.MonkeyPatch
+) -> None:
     first = batch[0]
     due(first, monkeypatch)
     original = first.store.recover_expired_claims
 
-    async def deleted(root_id):
+    async def deleted(root_id: UUID) -> int:
         if root_id == first.root_id:
             async with first.factory.begin() as db:
                 await db.execute(delete(AutonomousSession).where(AutonomousSession.id == root_id))
@@ -247,15 +259,15 @@ async def test_candidate_deleted_after_discovery_is_reported_without_stopping_pa
 
 
 async def test_cancelled_sweep_does_not_swallow_cancellation_or_visit_later_roots(
-    batch, monkeypatch
-):
+    batch: list[SimpleNamespace], monkeypatch: pytest.MonkeyPatch
+) -> None:
     first = batch[0]
     entered = asyncio.Event()
     forever = asyncio.Event()
     due(first, monkeypatch)
     original = store_module._audit
 
-    async def blocked(db, root, event, **details):
+    async def blocked(db: AsyncSession, root: Root, event: str, **details: Any) -> None:
         await original(db, root, event, **details)
         if event == "claim_expired":
             entered.set()
@@ -289,12 +301,14 @@ async def test_cancelled_sweep_does_not_swallow_cancellation_or_visit_later_root
         {"operation_timeout_seconds": True},
     ],
 )
-async def test_sweep_rejects_unbounded_or_ill_typed_inputs(env, kwargs):
+async def test_sweep_rejects_unbounded_or_ill_typed_inputs(
+    env: SimpleNamespace, kwargs: dict[str, Any]
+) -> None:
     with pytest.raises(ValidationError):
         await sweep_recovery(env.store, **kwargs)
 
 
-async def test_old_approval_wait_is_not_subject_to_legacy_idle_rules(env):
+async def test_old_approval_wait_is_not_subject_to_legacy_idle_rules(env: SimpleNamespace) -> None:
     from datetime import UTC, datetime
 
     await env.store.save_plan(env.plan, actor_id=env.owner_id)
@@ -311,7 +325,9 @@ async def test_old_approval_wait_is_not_subject_to_legacy_idle_rules(env):
         assert (session.status, session.halt_state) == ("running", "running")
 
 
-async def test_sweep_keeps_uncertain_reservation_while_expiring_other_roots(batch, monkeypatch):
+async def test_sweep_keeps_uncertain_reservation_while_expiring_other_roots(
+    batch: list[SimpleNamespace], monkeypatch: pytest.MonkeyPatch
+) -> None:
     from decimal import Decimal
 
     from app.autonomous.enums import ToolIntent
@@ -340,8 +356,8 @@ async def test_sweep_keeps_uncertain_reservation_while_expiring_other_roots(batc
 
 
 async def test_discovery_releases_its_only_connection_before_recovery(
-    batch, test_db_url, monkeypatch
-):
+    batch: list[SimpleNamespace], test_db_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
     from app.autonomous.orchestration.store import OrchestrationStore
@@ -360,14 +376,14 @@ async def test_discovery_releases_its_only_connection_before_recovery(
 
 
 async def test_cancellation_after_claim_commit_can_restart_page_without_double_fencing(
-    batch, monkeypatch
-):
+    batch: list[SimpleNamespace], monkeypatch: pytest.MonkeyPatch
+) -> None:
     first = batch[0]
     due(first, monkeypatch)
     entered, forever = asyncio.Event(), asyncio.Event()
     original = first.store.expire_root
 
-    async def blocked(root_id):
+    async def blocked(root_id: UUID) -> bool:
         entered.set()
         await forever.wait()
         return await original(root_id)
@@ -388,8 +404,8 @@ async def test_cancellation_after_claim_commit_can_restart_page_without_double_f
 
 
 async def test_discovery_timeout_propagates_without_processing_a_page(
-    batch, test_db_url, monkeypatch
-):
+    batch: list[SimpleNamespace], test_db_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
     from app.autonomous.orchestration.store import OrchestrationStore

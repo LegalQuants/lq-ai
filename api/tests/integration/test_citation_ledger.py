@@ -4,6 +4,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.citation.ledger import assemble_ledger_entries, resolve_ledger_entries
 from app.models.chat import Chat, Message, MessageCitation
@@ -17,7 +18,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest_asyncio.fixture
-async def seeded_message(db_session):
+async def seeded_message(db_session: AsyncSession) -> uuid.UUID:
     """Seed a user + chat + assistant message; yield the message id."""
     user = User(
         email=f"ledger-{uuid.uuid4().hex[:8]}@example.com",
@@ -36,7 +37,7 @@ async def seeded_message(db_session):
 
 
 @pytest.mark.asyncio
-async def test_ledger_entry_roundtrips(db_session, seeded_message):
+async def test_ledger_entry_roundtrips(db_session: AsyncSession, seeded_message: uuid.UUID) -> None:
     """A single-FK entry referencing a real tool-source row persists and reads back."""
     chat_id = (
         await db_session.execute(select(Message.chat_id).where(Message.id == seeded_message))
@@ -75,7 +76,9 @@ async def test_ledger_entry_roundtrips(db_session, seeded_message):
 
 
 @pytest.mark.asyncio
-async def test_exactly_one_fk_check_rejects_zero_and_two(db_session, seeded_message):
+async def test_exactly_one_fk_check_rejects_zero_and_two(
+    db_session: AsyncSession, seeded_message: uuid.UUID
+) -> None:
     chat_id = (
         await db_session.execute(select(Message.chat_id).where(Message.id == seeded_message))
     ).scalar_one()
@@ -108,7 +111,9 @@ async def test_exactly_one_fk_check_rejects_zero_and_two(db_session, seeded_mess
 
 
 @pytest.mark.asyncio
-async def test_assembles_one_entry_per_source_row(db_session, seeded_message):
+async def test_assembles_one_entry_per_source_row(
+    db_session: AsyncSession, seeded_message: uuid.UUID
+) -> None:
     mid = seeded_message
     # A KB-document citation (verified) — needs a real source_file_id (files row).
     # Reuse the message_tool_sources + caselaw rows that DON'T need a file FK,
@@ -171,13 +176,17 @@ async def test_assembles_one_entry_per_source_row(db_session, seeded_message):
 
 
 @pytest.mark.asyncio
-async def test_no_sources_yields_no_entries(db_session, seeded_message):
+async def test_no_sources_yields_no_entries(
+    db_session: AsyncSession, seeded_message: uuid.UUID
+) -> None:
     n = await assemble_ledger_entries(db_session, message_id=seeded_message)
     assert n == 0
 
 
 @pytest.mark.asyncio
-async def test_resolve_shapes_all_three_source_kinds(db_session, seeded_message):
+async def test_resolve_shapes_all_three_source_kinds(
+    db_session: AsyncSession, seeded_message: uuid.UUID
+) -> None:
     """Each entry resolves to its source block; passages present for quote kinds."""
     mid = seeded_message
     chat_id = (
@@ -258,7 +267,9 @@ async def test_resolve_shapes_all_three_source_kinds(db_session, seeded_message)
 
 
 @pytest.mark.asyncio
-async def test_resolve_message_id_filter_and_empty(db_session, seeded_message):
+async def test_resolve_message_id_filter_and_empty(
+    db_session: AsyncSession, seeded_message: uuid.UUID
+) -> None:
     chat_id = (
         await db_session.execute(select(Message.chat_id).where(Message.id == seeded_message))
     ).scalar_one()
@@ -287,7 +298,9 @@ async def test_resolve_message_id_filter_and_empty(db_session, seeded_message):
 
 
 @pytest.mark.asyncio
-async def test_resolve_skips_dangling_reference(db_session, seeded_message):
+async def test_resolve_skips_dangling_reference(
+    db_session: AsyncSession, seeded_message: uuid.UUID
+) -> None:
     """An entry whose referenced row is absent is skipped, not fatal."""
     _chat_id = (
         await db_session.execute(select(Message.chat_id).where(Message.id == seeded_message))
@@ -304,4 +317,4 @@ async def test_resolve_skips_dangling_reference(db_session, seeded_message):
         message_authority_citation_id = None
         id = uuid.uuid4()
 
-    assert _resolve_source(_E(), {}, {}, {}, {}) is None
+    assert _resolve_source(_E(), {}, {}, {}, {}) is None  # type: ignore[arg-type]  # stub entry

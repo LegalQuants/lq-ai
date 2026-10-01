@@ -3,6 +3,8 @@
 import asyncio
 import json
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -11,6 +13,7 @@ from sqlalchemy import delete, select
 from tests.skills.conftest import real_runner as real_runner, runner_module as runner_module
 
 from app.autonomous.enums import ToolIntent
+from app.autonomous.guard import ToolResult
 from app.autonomous.orchestration.effects import GuardedEffects
 from app.autonomous.orchestration.policy import (
     CurrentPolicy,
@@ -18,6 +21,7 @@ from app.autonomous.orchestration.policy import (
     SkillPolicy,
     skill_pin,
 )
+from app.autonomous.orchestration.store import WorkerClaim
 from app.config import get_settings
 from app.errors import Conflict, Forbidden, SessionHalted, ToolNotGranted
 from app.models.autonomous import AutonomousSession
@@ -29,7 +33,7 @@ from app.skills.tools import SKILL_TOOL_INTENTS, SkillTools
 
 
 @pytest.fixture
-async def capable(env, monkeypatch):
+async def capable(env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     env.skills = MutableSkillRegistry(load_registry(Path(__file__).resolve().parents[4] / "skills"))
     pin = skill_pin(env.skills.current().get("saved-notes-demo"))
     grants = env.plan.root.grants.model_copy(update={"analysis": tuple(SKILL_TOOL_INTENTS)})
@@ -70,13 +74,21 @@ async def capable(env, monkeypatch):
     return env
 
 
-async def call(env, claim, intent, key, params):
+async def call(
+    env: SimpleNamespace,
+    claim: WorkerClaim,
+    intent: ToolIntent,
+    key: str,
+    params: dict[str, Any],
+) -> ToolResult:
     return await env.effects.skill_tool(
         claim, effect_key=key, phase=Phase.analysis, intent=intent, params=params
     )
 
 
-async def test_root_and_child_reuse_replay_atomicity_and_run_deletion(capable, monkeypatch):
+async def test_root_and_child_reuse_replay_atomicity_and_run_deletion(
+    capable: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     env = capable
     params = {"name": "notes.md", "expected_revision": None, "content": "Alpha beta\nGamma"}
     saved = await call(env, env.child, ToolIntent.skill_workspace_write, "save", params)
@@ -119,13 +131,15 @@ async def test_root_and_child_reuse_replay_atomicity_and_run_deletion(capable, m
         ]
 
 
-async def test_halt_during_helper_discards_result_and_refuses_later_calls(capable, monkeypatch):
+async def test_halt_during_helper_discards_result_and_refuses_later_calls(
+    capable: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     env = capable
     monkeypatch.setattr(get_settings(), "skill_script_runner_url", "http://private-runner")
     monkeypatch.setattr(get_settings(), "skill_script_runner_token", "test-token-" * 4)
     started, release = asyncio.Event(), asyncio.Event()
 
-    async def blocked(*args):
+    async def blocked(*args: Any) -> dict[str, Any]:
         started.set()
         await release.wait()
         return {"stdout": "late", "stderr": "", "exit_code": 0}
@@ -151,7 +165,9 @@ async def test_halt_during_helper_discards_result_and_refuses_later_calls(capabl
         await call(env, env.claim, ToolIntent.skill_workspace_list, "after-halt", {})
 
 
-async def test_guarded_root_and_child_execute_real_helper(capable, real_runner, monkeypatch):
+async def test_guarded_root_and_child_execute_real_helper(
+    capable: SimpleNamespace, real_runner: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     env = capable
     monkeypatch.setattr(get_settings(), "skill_script_runner_url", real_runner.url)
     monkeypatch.setattr(get_settings(), "skill_script_runner_token", real_runner.token)

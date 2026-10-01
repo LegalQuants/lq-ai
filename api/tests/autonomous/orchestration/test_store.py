@@ -3,14 +3,18 @@
 import asyncio
 from datetime import UTC, datetime
 from decimal import Decimal
-from uuid import uuid4
+from types import SimpleNamespace
+from typing import Any
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.autonomous.enums import ToolIntent
 from app.autonomous.orchestration.contracts import PreparedPlan
+from app.autonomous.orchestration.store import EffectReceipt
 from app.errors import Conflict, Forbidden
 from app.models.audit import AuditLog
 from app.models.autonomous import AutonomousSession
@@ -28,7 +32,13 @@ from app.schemas.autonomous import Phase
 pytestmark = pytest.mark.integration
 
 
-async def begin(env, key="analysis:one", *, amount="1", digest="b" * 64):
+async def begin(
+    env: SimpleNamespace,
+    key: str = "analysis:one",
+    *,
+    amount: str = "1",
+    digest: str = "b" * 64,
+) -> EffectReceipt:
     return await env.store.begin_effect(
         env.claim,
         effect_key=key,
@@ -39,7 +49,7 @@ async def begin(env, key="analysis:one", *, amount="1", digest="b" * 64):
     )
 
 
-async def expire(env):
+async def expire(env: SimpleNamespace) -> None:
     async with env.factory.begin() as db:
         await db.execute(
             update(Account)
@@ -48,7 +58,7 @@ async def expire(env):
         )
 
 
-async def audit_count(env, event):
+async def audit_count(env: SimpleNamespace, event: str) -> int:
     async with env.factory() as db:
         return await db.scalar(
             select(func.count())
@@ -60,7 +70,9 @@ async def audit_count(env, event):
         )
 
 
-async def test_approval_is_a_barrier_and_concurrent_duplicates_are_idempotent(env):
+async def test_approval_is_a_barrier_and_concurrent_duplicates_are_idempotent(
+    env: SimpleNamespace,
+) -> None:
     await env.store.save_plan(env.plan, actor_id=env.owner_id)
     with pytest.raises(Conflict):
         await env.store.claim(env.root_id, env.root_id, worker_id=uuid4(), seconds=60)
@@ -91,7 +103,9 @@ async def test_approval_is_a_barrier_and_concurrent_duplicates_are_idempotent(en
         )
 
 
-async def test_wrong_owner_stale_hash_and_rejected_plan_cannot_approve(env):
+async def test_wrong_owner_stale_hash_and_rejected_plan_cannot_approve(
+    env: SimpleNamespace,
+) -> None:
     await env.store.save_plan(env.plan, actor_id=env.owner_id)
     with pytest.raises(Forbidden):
         await env.store.approve(
@@ -108,7 +122,9 @@ async def test_wrong_owner_stale_hash_and_rejected_plan_cannot_approve(env):
     assert await audit_count(env, "rejected") == 1
 
 
-async def test_revised_plan_preserves_old_consent_but_requires_approval_again(env):
+async def test_revised_plan_preserves_old_consent_but_requires_approval_again(
+    env: SimpleNamespace,
+) -> None:
     await env.store.save_plan(env.plan, actor_id=env.owner_id)
     await env.store.approve(
         env.root_id, actor_id=env.owner_id, revision=1, plan_hash=env.plan.approval_hash()
@@ -131,7 +147,9 @@ async def test_revised_plan_preserves_old_consent_but_requires_approval_again(en
     )
 
 
-async def test_concurrent_child_admission_is_one_batch_with_fixed_allocations(ready):
+async def test_concurrent_child_admission_is_one_batch_with_fixed_allocations(
+    ready: SimpleNamespace,
+) -> None:
     env = ready
     results = await asyncio.gather(*(env.store.admit_children(env.claim) for _ in range(3)))
     assert results[0] == results[1] == results[2] == tuple(c.dispatch_id for c in env.plan.children)
@@ -167,7 +185,7 @@ async def test_concurrent_child_admission_is_one_batch_with_fixed_allocations(re
         await env.store.save_plan(revised, actor_id=env.owner_id)
 
 
-async def test_one_active_root_per_owner_is_database_enforced(env):
+async def test_one_active_root_per_owner_is_database_enforced(env: SimpleNamespace) -> None:
     await env.store.save_plan(env.plan, actor_id=env.owner_id)
     async with env.factory.begin() as db:
         other = AutonomousSession(
@@ -183,7 +201,7 @@ async def test_one_active_root_per_owner_is_database_enforced(env):
         await env.store.save_plan(another, actor_id=env.owner_id)
 
 
-async def test_expired_or_halted_plan_cannot_start(env):
+async def test_expired_or_halted_plan_cannot_start(env: SimpleNamespace) -> None:
     expired = PreparedPlan.model_validate(
         {**env.plan.model_dump(), "deadline": datetime(2000, 1, 1, tzinfo=UTC)}
     )
@@ -197,7 +215,9 @@ async def test_expired_or_halted_plan_cannot_start(env):
         )
 
 
-async def test_only_one_worker_claim_wins_and_stale_generation_cannot_admit(ready):
+async def test_only_one_worker_claim_wins_and_stale_generation_cannot_admit(
+    ready: SimpleNamespace,
+) -> None:
     env = ready
     await expire(env)
     claims = await asyncio.gather(
@@ -215,7 +235,9 @@ async def test_only_one_worker_claim_wins_and_stale_generation_cannot_admit(read
     assert (await begin(env)).status == "admitted"
 
 
-async def test_duplicate_effect_and_double_settlement_cannot_spend_twice(ready):
+async def test_duplicate_effect_and_double_settlement_cannot_spend_twice(
+    ready: SimpleNamespace,
+) -> None:
     env = ready
     attempts = await asyncio.gather(begin(env), begin(env), return_exceptions=True)
     assert sum(isinstance(x, Conflict) for x in attempts) == 1
@@ -244,7 +266,9 @@ async def test_duplicate_effect_and_double_settlement_cannot_spend_twice(ready):
         )
 
 
-async def test_unresolved_effect_becomes_uncertain_and_keeps_reservation(ready):
+async def test_unresolved_effect_becomes_uncertain_and_keeps_reservation(
+    ready: SimpleNamespace,
+) -> None:
     env = ready
     await begin(env)
     await expire(env)
@@ -264,7 +288,7 @@ async def test_unresolved_effect_becomes_uncertain_and_keeps_reservation(ready):
         await begin(env, "analysis:two")
 
 
-async def test_completed_receipt_survives_new_worker_generation(ready):
+async def test_completed_receipt_survives_new_worker_generation(ready: SimpleNamespace) -> None:
     env = ready
     await begin(env)
     await env.store.complete_effect(
@@ -279,7 +303,9 @@ async def test_completed_receipt_survives_new_worker_generation(ready):
     assert await audit_count(env, "effect_admitted") == 1
 
 
-async def test_halt_blocks_new_calls_but_allows_one_admitted_completion(ready):
+async def test_halt_blocks_new_calls_but_allows_one_admitted_completion(
+    ready: SimpleNamespace,
+) -> None:
     env = ready
     await begin(env)
     await env.store.halt(env.root_id, actor_id=env.owner_id)
@@ -291,7 +317,9 @@ async def test_halt_blocks_new_calls_but_allows_one_admitted_completion(ready):
 
 
 @pytest.mark.parametrize("revocation", ["policy", "optout", "archive"])
-async def test_current_revocation_stops_admission_but_halt_stays_reachable(ready, revocation):
+async def test_current_revocation_stops_admission_but_halt_stays_reachable(
+    ready: SimpleNamespace, revocation: str
+) -> None:
     env = ready
     if revocation == "policy":
         env.policy.valid = False
@@ -313,7 +341,7 @@ async def test_current_revocation_stops_admission_but_halt_stays_reachable(ready
     assert await audit_count(env, "halted") == 1
 
 
-async def test_stronger_project_floor_revokes_weaker_plan(env):
+async def test_stronger_project_floor_revokes_weaker_plan(env: SimpleNamespace) -> None:
     scope = env.plan.root.model_copy(update={"minimum_inference_tier": 3})
     env.plan = env.plan.model_copy(
         update={
@@ -339,8 +367,8 @@ async def test_stronger_project_floor_revokes_weaker_plan(env):
     "project_floor,plan_floor,allowed", [(None, 4, True), (3, 2, True), (2, 3, False)]
 )
 async def test_plan_preparation_uses_gateway_tier_direction(
-    env, project_floor, plan_floor, allowed
-):
+    env: SimpleNamespace, project_floor: int | None, plan_floor: int, allowed: bool
+) -> None:
     async with env.factory.begin() as db:
         await db.execute(
             update(Project)
@@ -361,7 +389,7 @@ async def test_plan_preparation_uses_gateway_tier_direction(
             await env.store.save_plan(env.plan, actor_id=env.owner_id)
 
 
-async def test_budget_reservation_and_observed_overrun_are_honest(ready):
+async def test_budget_reservation_and_observed_overrun_are_honest(ready: SimpleNamespace) -> None:
     env = ready
     with pytest.raises(Conflict):
         await begin(env, amount="2.0001")
@@ -381,10 +409,12 @@ async def test_budget_reservation_and_observed_overrun_are_honest(ready):
         assert root.status == "halted" and root.stop_reason == "observed_budget_overrun"
 
 
-async def test_audit_failure_rolls_back_effect_and_reservation(ready, monkeypatch):
+async def test_audit_failure_rolls_back_effect_and_reservation(
+    ready: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     env = ready
 
-    async def fail(*args, **kwargs):
+    async def fail(*args: Any, **kwargs: Any) -> None:
         raise RuntimeError("fixture audit failure")
 
     monkeypatch.setattr("app.autonomous.orchestration.store._audit", fail)
@@ -395,7 +425,7 @@ async def test_audit_failure_rolls_back_effect_and_reservation(ready, monkeypatc
         assert (await db.get(Account, env.root_id)).reserved_usd == 0
 
 
-async def test_hierarchy_rejects_cross_project_depth_and_mutation(ready):
+async def test_hierarchy_rejects_cross_project_depth_and_mutation(ready: SimpleNamespace) -> None:
     env = ready
     children = await env.store.admit_children(env.claim)
     async with env.factory() as db:
@@ -441,7 +471,7 @@ async def test_hierarchy_rejects_cross_project_depth_and_mutation(ready):
             )
 
 
-async def test_audit_contains_no_plan_or_result_text(ready):
+async def test_audit_contains_no_plan_or_result_text(ready: SimpleNamespace) -> None:
     env = ready
     await begin(env)
     await env.store.complete_effect(
@@ -465,7 +495,7 @@ async def test_audit_contains_no_plan_or_result_text(ready):
     assert "Fixture" not in str(details)
 
 
-async def test_deleted_children_are_not_silently_readmitted(ready):
+async def test_deleted_children_are_not_silently_readmitted(ready: SimpleNamespace) -> None:
     env = ready
     children = await env.store.admit_children(env.claim)
     async with env.factory.begin() as db:
@@ -474,7 +504,7 @@ async def test_deleted_children_are_not_silently_readmitted(ready):
         await env.store.admit_children(env.claim)
 
 
-async def test_effect_identity_includes_phase_and_intent(ready):
+async def test_effect_identity_includes_phase_and_intent(ready: SimpleNamespace) -> None:
     env = ready
     await begin(env)
     await env.store.complete_effect(
@@ -491,7 +521,9 @@ async def test_effect_identity_includes_phase_and_intent(ready):
         )
 
 
-async def test_recovery_after_halt_and_optout_keeps_uncertainty_visible(ready):
+async def test_recovery_after_halt_and_optout_keeps_uncertainty_visible(
+    ready: SimpleNamespace,
+) -> None:
     env = ready
     await begin(env)
     await env.store.halt(env.root_id, actor_id=env.owner_id)
@@ -508,10 +540,12 @@ async def test_recovery_after_halt_and_optout_keeps_uncertainty_visible(ready):
         assert (await db.get(Account, env.root_id)).reserved_usd == 1
 
 
-async def test_child_admission_audit_failure_rolls_back_whole_batch(ready, monkeypatch):
+async def test_child_admission_audit_failure_rolls_back_whole_batch(
+    ready: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     env = ready
 
-    async def fail(*args, **kwargs):
+    async def fail(*args: Any, **kwargs: Any) -> None:
         raise RuntimeError("fixture admission audit failure")
 
     monkeypatch.setattr("app.autonomous.orchestration.store._audit", fail)
@@ -535,7 +569,7 @@ async def test_child_admission_audit_failure_rolls_back_whole_batch(ready, monke
         )
 
 
-async def test_tampered_durable_consent_refuses_child_admission(ready):
+async def test_tampered_durable_consent_refuses_child_admission(ready: SimpleNamespace) -> None:
     env = ready
     async with env.factory.begin() as db:
         stored = await db.get(PlanRow, (env.root_id, 1))
@@ -545,7 +579,9 @@ async def test_tampered_durable_consent_refuses_child_admission(ready):
     assert await audit_count(env, "children_admitted") == 0
 
 
-async def test_prior_planning_cost_is_not_reset_by_plan_storage_or_revision(env):
+async def test_prior_planning_cost_is_not_reset_by_plan_storage_or_revision(
+    env: SimpleNamespace,
+) -> None:
     async with env.factory.begin() as db:
         await db.execute(
             update(AutonomousSession)
@@ -567,7 +603,7 @@ async def test_prior_planning_cost_is_not_reset_by_plan_storage_or_revision(env)
         await env.store.save_plan(too_small, actor_id=env.owner_id)
 
 
-async def test_initial_allowance_cannot_discard_prior_spend(env):
+async def test_initial_allowance_cannot_discard_prior_spend(env: SimpleNamespace) -> None:
     async with env.factory.begin() as db:
         await db.execute(
             update(AutonomousSession)
@@ -580,7 +616,7 @@ async def test_initial_allowance_cannot_discard_prior_spend(env):
         assert await db.get(Root, env.root_id) is None
 
 
-async def test_child_phase_transaction_does_not_lock_its_parent(ready):
+async def test_child_phase_transaction_does_not_lock_its_parent(ready: SimpleNamespace) -> None:
     env = ready
     children = await env.store.admit_children(env.claim)
     async with env.factory.begin() as child_db:
@@ -590,7 +626,7 @@ async def test_child_phase_transaction_does_not_lock_its_parent(ready):
             .values(current_phase="analysis")
         )
 
-        async def halt_parent():
+        async def halt_parent() -> None:
             async with env.factory.begin() as root_db:
                 await root_db.execute(
                     update(AutonomousSession)
@@ -603,7 +639,9 @@ async def test_child_phase_transaction_does_not_lock_its_parent(ready):
         await asyncio.wait_for(halt_parent(), timeout=2)
 
 
-async def test_release_preserves_completed_receipt_and_fences_old_worker(ready):
+async def test_release_preserves_completed_receipt_and_fences_old_worker(
+    ready: SimpleNamespace,
+) -> None:
     env = ready
     await begin(env)
     receipt = await env.store.complete_effect(
@@ -651,7 +689,9 @@ async def test_release_preserves_completed_receipt_and_fences_old_worker(ready):
         ("orphan_reservation", "1"),
     ],
 )
-async def test_release_refuses_outstanding_effect_or_reservation(ready, pending_status, amount):
+async def test_release_refuses_outstanding_effect_or_reservation(
+    ready: SimpleNamespace, pending_status: str, amount: str
+) -> None:
     env = ready
     if pending_status == "orphan_reservation":
         async with env.factory.begin() as db:
@@ -682,7 +722,9 @@ async def test_release_refuses_outstanding_effect_or_reservation(ready, pending_
 
 
 @pytest.mark.parametrize("revocation", ["policy", "halt", "optout", "archive", "project_policy"])
-async def test_release_allows_revoked_cleanup_but_not_execution(ready, revocation):
+async def test_release_allows_revoked_cleanup_but_not_execution(
+    ready: SimpleNamespace, revocation: str
+) -> None:
     env = ready
     if revocation == "policy":
         env.policy.valid = False
@@ -718,13 +760,15 @@ async def test_release_allows_revoked_cleanup_but_not_execution(ready, revocatio
         await env.store.claim(env.root_id, env.root_id, worker_id=uuid4(), seconds=60)
 
 
-async def test_release_audit_failure_rolls_back_ownership_and_audit(ready, monkeypatch):
+async def test_release_audit_failure_rolls_back_ownership_and_audit(
+    ready: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from app.autonomous.orchestration import store
 
     env = ready
     original = store._audit
 
-    async def fail(db, root, event, **details):
+    async def fail(db: AsyncSession, root: Root, event: str, **details: Any) -> None:
         await original(db, root, event, **details)
         if event == "claim_released":
             raise RuntimeError("release audit fixture failure")
@@ -742,7 +786,9 @@ async def test_release_audit_failure_rolls_back_ownership_and_audit(ready, monke
     await begin(env)
 
 
-async def test_release_expired_or_wrong_claim_cannot_clear_ownership(ready):
+async def test_release_expired_or_wrong_claim_cannot_clear_ownership(
+    ready: SimpleNamespace,
+) -> None:
     from dataclasses import replace
 
     env = ready
@@ -764,7 +810,9 @@ async def test_release_expired_or_wrong_claim_cannot_clear_ownership(ready):
         )
 
 
-async def test_release_waiting_parent_and_child_ownership_are_independent(ready):
+async def test_release_waiting_parent_and_child_ownership_are_independent(
+    ready: SimpleNamespace,
+) -> None:
     env = ready
     children = await env.store.admit_children(env.claim)
     await env.store.release_claim(env.claim)
@@ -785,8 +833,10 @@ async def test_release_waiting_parent_and_child_ownership_are_independent(ready)
         assert (await db.get(Root, env.root_id)).admitted_revision == 1
 
 
-async def test_release_racing_effect_admission_has_one_safe_winner(ready):
+async def test_release_racing_effect_admission_has_one_safe_winner(ready: SimpleNamespace) -> None:
     env = ready
+    released: BaseException | None
+    admitted: EffectReceipt | BaseException
     released, admitted = await asyncio.gather(
         env.store.release_claim(env.claim), begin(env), return_exceptions=True
     )
@@ -807,12 +857,14 @@ async def test_release_racing_effect_admission_has_one_safe_winner(ready):
             )
 
 
-async def test_release_rechecks_expiry_after_waiting_for_account_lock(ready, monkeypatch):
+async def test_release_rechecks_expiry_after_waiting_for_account_lock(
+    ready: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     env = ready
     waiting = asyncio.Event()
     original = env.store._account
 
-    async def observe_lock(db, root_id, session_id):
+    async def observe_lock(db: AsyncSession, root_id: UUID, session_id: UUID) -> Account:
         waiting.set()
         return await original(db, root_id, session_id)
 
@@ -823,7 +875,7 @@ async def test_release_rechecks_expiry_after_waiting_for_account_lock(ready, mon
                 select(Account).where(Account.session_id == env.root_id).with_for_update()
             )
 
-            async def release():
+            async def release() -> None:
                 with pytest.raises(Conflict, match="expired"):
                     await env.store.release_claim(env.claim)
 
@@ -845,7 +897,9 @@ async def test_release_rechecks_expiry_after_waiting_for_account_lock(ready, mon
     "state",
     ["running", "waiting_children", "halted", "completed", "failed", "expired", "uncertain"],
 )
-async def test_expired_idle_cleanup_preserves_lifecycle_and_completed_receipts(ready, state):
+async def test_expired_idle_cleanup_preserves_lifecycle_and_completed_receipts(
+    ready: SimpleNamespace, state: str
+) -> None:
     env = ready
     await begin(env)
     await env.store.complete_effect(
@@ -892,8 +946,8 @@ async def test_expired_idle_cleanup_preserves_lifecycle_and_completed_receipts(r
     "revocation", ["policy", "optout", "archive", "project_policy", "halt", "deadline"]
 )
 async def test_expired_claim_cleanup_requires_no_execution_authority(
-    ready, revocation, monkeypatch
-):
+    ready: SimpleNamespace, revocation: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     env = ready
     if revocation == "policy":
         env.policy.valid = False
@@ -902,7 +956,7 @@ async def test_expired_claim_cleanup_requires_no_execution_authority(
     elif revocation == "deadline":
         from app.autonomous.orchestration import store
 
-        async def past_deadline(db):
+        async def past_deadline(db: AsyncSession) -> datetime:
             return env.plan.deadline
 
         monkeypatch.setattr(store, "_now", past_deadline)
@@ -937,8 +991,8 @@ async def test_expired_claim_cleanup_requires_no_execution_authority(
     [("admitted", "1"), ("admitted", "0"), ("uncertain", "1"), ("uncertain", "0"), (None, "1")],
 )
 async def test_expired_claim_cleanup_retains_uncertainty_and_orphan_reservations(
-    ready, pending, amount
-):
+    ready: SimpleNamespace, pending: str | None, amount: str
+) -> None:
     env = ready
     if pending is not None:
         await begin(env, amount=amount)
@@ -968,7 +1022,9 @@ async def test_expired_claim_cleanup_retains_uncertainty_and_orphan_reservations
         await env.store.claim(env.root_id, env.root_id, worker_id=uuid4(), seconds=60)
 
 
-async def test_expired_child_cleanup_leaves_live_parent_and_sibling_alone(ready):
+async def test_expired_child_cleanup_leaves_live_parent_and_sibling_alone(
+    ready: SimpleNamespace,
+) -> None:
     env = ready
     children = await env.store.admit_children(env.claim)
     claims = [
@@ -997,7 +1053,7 @@ async def test_expired_child_cleanup_leaves_live_parent_and_sibling_alone(ready)
             ) == (before.worker_id, before.generation, before.lease_until, before.attempt_deadline)
 
 
-async def test_competing_expired_claim_recovery_fences_once(ready):
+async def test_competing_expired_claim_recovery_fences_once(ready: SimpleNamespace) -> None:
     env = ready
     await expire(env)
     results = await asyncio.gather(
@@ -1009,7 +1065,7 @@ async def test_competing_expired_claim_recovery_fences_once(ready):
         assert (await db.get(Account, env.root_id)).generation == env.claim.generation + 1
 
 
-async def test_expiry_recovery_cannot_clear_a_replacement_claim(ready):
+async def test_expiry_recovery_cannot_clear_a_replacement_claim(ready: SimpleNamespace) -> None:
     from app.autonomous.orchestration.store import WorkerClaim
 
     env = ready
@@ -1027,7 +1083,9 @@ async def test_expiry_recovery_cannot_clear_a_replacement_claim(ready):
     await env.store.renew_claim(replacement, seconds=60)
 
 
-async def test_expiry_recovery_audit_failure_rolls_back_whole_tree(ready, monkeypatch):
+async def test_expiry_recovery_audit_failure_rolls_back_whole_tree(
+    ready: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from app.autonomous.orchestration import store
 
     env = ready
@@ -1048,7 +1106,7 @@ async def test_expiry_recovery_audit_failure_rolls_back_whole_tree(ready, monkey
     original = store._audit
     calls = 0
 
-    async def fail(db, root, event, **details):
+    async def fail(db: AsyncSession, root: Root, event: str, **details: Any) -> None:
         nonlocal calls
         await original(db, root, event, **details)
         if event == "claim_expired":
@@ -1072,7 +1130,9 @@ async def test_expiry_recovery_audit_failure_rolls_back_whole_tree(ready, monkey
     assert await audit_count(env, "effect_uncertain") == 0
 
 
-async def test_orphan_reservation_without_prior_stop_reason_remains_visible(ready):
+async def test_orphan_reservation_without_prior_stop_reason_remains_visible(
+    ready: SimpleNamespace,
+) -> None:
     env = ready
     async with env.factory.begin() as db:
         account = await db.get(Account, env.root_id)
