@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "skill": "action-items-from-client-alert",
+  "fixture": "informational-alert",
+  "status": "provisional",
+  "provenance": "Ranges derived from skills/action-items-from-client-alert/SKILL.md (Output skeleton; informational alerts do not manufacture mandatory items; no invented deadlines) and test-plan.md Scenario 4 (no-deadline alert: sparse action items, bottom line explains relevance despite no immediate actions). The mandatory-bucket ceiling is the regression signal: a run that manufactures dated mandatory obligations from this fixture is miscalibrated. NOT observed from a live run; first live run calibrates.",
+  "assertions": {
+    "required_sections": [
+      "Action Items from Client Alert",
+      "Context summary",
+      "Notes on this extraction"
+    ],
+    "metrics": [
+      {
+        "id": "mandatory_buckets",
+        "kind": "section_items",
+        "section": "Mandatory action items",
+        "min": 0,
+        "max": 3
+      },
+      {
+        "id": "no_invented_specific_deadlines",
+        "kind": "regex_count",
+        "pattern": "must (?:be )?(?:comply|complete[d]?|file[d]?|register(?:ed)?) (?:by|before|no later than) (?:january|february|march|april|may|june|july|august|september|october|november|december)",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "id": "alert_referenced",
+        "kind": "regex_count",
+        "pattern": "consequential|liquidated",
+        "min": 1,
+        "max": null
+      }
+    ],
+    "min_chars": 700,
+    "max_chars": 25000
+  }
+}

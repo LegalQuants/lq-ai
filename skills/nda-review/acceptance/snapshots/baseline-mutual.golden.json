@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "skill": "nda-review",
+  "fixture": "baseline-mutual",
+  "status": "provisional",
+  "provenance": "Ranges derived from skills/nda-review/SKILL.md (Output template: fixed sections, omit-if-empty severity sections, clause citations on every finding) and test-plan.md Scenario 1 (routine mutual NDA: 0 critical, 0-2 material, 2-6 minor). NOT observed from a live run; first live run calibrates (see tests/golden/README.md).",
+  "assertions": {
+    "required_sections": [
+      "NDA Review",
+      "Bottom line",
+      "Recommended next steps",
+      "Items requiring human judgment"
+    ],
+    "metrics": [
+      {
+        "id": "critical_issues",
+        "kind": "section_items",
+        "section": "Critical issues",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "id": "material_issues",
+        "kind": "section_items",
+        "section": "Material issues",
+        "min": 0,
+        "max": 3
+      },
+      {
+        "id": "minor_issues",
+        "kind": "section_items",
+        "section": "Minor issues and observations",
+        "min": 0,
+        "max": 8
+      },
+      {
+        "id": "clause_citations",
+        "kind": "citation_count",
+        "min": 2,
+        "max": null
+      }
+    ],
+    "min_chars": 700,
+    "max_chars": 20000
+  }
+}

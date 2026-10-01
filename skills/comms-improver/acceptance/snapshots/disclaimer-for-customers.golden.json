@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "skill": "comms-improver",
+  "fixture": "disclaimer-for-customers",
+  "status": "provisional",
+  "provenance": "Ranges derived from skills/comms-improver/SKILL.md (Output sections; preserve_specific_terms input: the exact phrase 'not a safety device' must survive; Terms simplified or preserved section documents the handling) and test-plan.md Scenario 1 (meaningfully simpler, legal effect unchanged). NOT observed from a live run; first live run calibrates.",
+  "assertions": {
+    "required_sections": [
+      "Comms Improver",
+      "Rewritten text",
+      "What was changed",
+      "Terms simplified or preserved",
+      "Preservation-of-meaning concerns"
+    ],
+    "metrics": [
+      {
+        "id": "protected_phrase_preserved",
+        "kind": "regex_count",
+        "pattern": "not a safety device",
+        "min": 1,
+        "max": null
+      },
+      {
+        "id": "independent_safety_measures_preserved",
+        "kind": "regex_count",
+        "pattern": "smoke|carbon.monoxide|detector",
+        "min": 1,
+        "max": null
+      }
+    ],
+    "min_chars": 600,
+    "max_chars": 15000
+  }
+}
