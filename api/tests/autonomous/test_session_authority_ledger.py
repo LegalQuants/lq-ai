@@ -19,15 +19,19 @@ app.citation.authority import point.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from collections.abc import AsyncIterator
+from decimal import Decimal
 
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.autonomous import ledger_bridge
 from app.autonomous.ledger_bridge import build_session_ledger
 from app.citation.authority import store_authority_text
+from app.citation.verification import VerificationResult
 from app.models.autonomous import AutonomousSession
 from app.models.message_authority_citation import MessageAuthorityCitation
 from app.models.user import User
@@ -337,3 +341,373 @@ async def test_autonomous_missing_content_kind_falls_back_to_unknown_not_statute
     assert len(rows) == 1
     assert rows[0].content_kind == "unknown"
     assert rows[0].content_kind != "statute"
+
+
+# ---------------------------------------------------------------------------
+# DE-371: autonomous-path SUPPORTED tier (budgeted whole-body paraphrase judge)
+# ---------------------------------------------------------------------------
+
+_FABRICATED_QUOTE = "the statute expressly permits price fixing"
+
+_SUPPORTED_RESULT = VerificationResult(
+    verified=True, method="paraphrase_judge", confidence=0.9, partial=True
+)
+_MISS_RESULT = VerificationResult(verified=False, method=None, confidence=None)
+
+
+async def _fetch_rows(
+    db: AsyncSession, external_ref: str = "USCODE-2022-title15"
+) -> list[MessageAuthorityCitation]:
+    return list(
+        (
+            await db.execute(
+                select(MessageAuthorityCitation).where(
+                    MessageAuthorityCitation.external_ref == external_ref
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+async def test_locate_hit_calls_verify_with_gateway_none(
+    db_session: AsyncSession,
+    fake_storage: dict[str, bytes],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """DE-371: on a locate hit, verify() must run verbatim-only (gateway=None) —
+    the judge stage is structurally unreachable after a successful locate, so
+    passing the real gateway through would be dishonest. PASS row unchanged."""
+    from app.citation.verification import verify as real_verify
+
+    seen_gateways: list[object] = []
+
+    async def _spy(cand: object, target: object, **kwargs: object) -> VerificationResult:
+        seen_gateways.append(kwargs.get("gateway"))
+        return await real_verify(cand, target, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(ledger_bridge, "verify", _spy)
+
+    sess = await _make_session(db_session)
+    await store_authority_text(
+        db_session,
+        source_type="govinfo",
+        external_ref="USCODE-2022-title15",
+        text=_BODY,
+    )
+    findings = [
+        {
+            "text": "The statute bars restraint of trade.",
+            "citations": [{"quote": "in restraint of trade", "source": 1}],
+        }
+    ]
+    out = await build_session_ledger(
+        db_session,
+        session=sess,
+        work_product_text="… in restraint of trade …",
+        findings=findings,
+        evidence=_evidence(),
+        gateway=object(),  # a live gateway must still NOT reach verify()
+    )
+    assert out is not None and out["pass_count"] >= 1 and out["fail_count"] == 0
+    assert seen_gateways == [None]
+
+
+async def test_locate_miss_judge_supported_writes_supported_row(
+    db_session: AsyncSession,
+    fake_storage: dict[str, bytes],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """DE-371: locate miss + supporting judge verdict → SUPPORTED row
+    (paraphrase_judge, partial=True, whole-body offsets), no FAIL row, and the
+    gate buckets it SUPPORTED (supported_only, not flagged)."""
+    judge_calls: list[dict[str, object]] = []
+
+    async def _fake_judge(
+        *, passage: str, authority_text: str, gateway: object, judge_model: str
+    ) -> VerificationResult:
+        judge_calls.append({"passage": passage, "authority_text": authority_text})
+        return _SUPPORTED_RESULT
+
+    monkeypatch.setattr(ledger_bridge, "judge_authority_content", _fake_judge)
+
+    sess = await _make_session(db_session)
+    await store_authority_text(
+        db_session,
+        source_type="govinfo",
+        external_ref="USCODE-2022-title15",
+        text=_BODY,
+    )
+    findings = [
+        {
+            "text": "paraphrase",
+            "citations": [{"quote": _FABRICATED_QUOTE, "source": 1}],
+        }
+    ]
+    out = await build_session_ledger(
+        db_session,
+        session=sess,
+        work_product_text="…",
+        findings=findings,
+        evidence=_evidence(),
+        gateway=object(),
+    )
+    assert out is not None
+    assert out["supported_count"] == 1
+    assert out["fail_count"] == 0
+    assert out["gate_status"] == "supported_only"
+    assert judge_calls == [{"passage": _FABRICATED_QUOTE, "authority_text": _BODY}]
+
+    rows = await _fetch_rows(db_session)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.verified is True
+    assert row.verification_method == "paraphrase_judge"
+    assert row.partial is True
+    assert row.verification_confidence == pytest.approx(0.9)
+    # Whole-body placeholder offsets, exactly like chat's Pass B rows.
+    assert row.source_offset_start == 0
+    assert row.source_offset_end == len(_BODY)
+
+
+async def test_locate_miss_judge_unsupported_keeps_fail_row(
+    db_session: AsyncSession,
+    fake_storage: dict[str, bytes],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """DE-371: locate miss + non-supporting verdict → FAIL row, unchanged shape."""
+
+    async def _fake_judge(**kwargs: object) -> VerificationResult:
+        return _MISS_RESULT
+
+    monkeypatch.setattr(ledger_bridge, "judge_authority_content", _fake_judge)
+
+    sess = await _make_session(db_session)
+    await store_authority_text(
+        db_session,
+        source_type="govinfo",
+        external_ref="USCODE-2022-title15",
+        text=_BODY,
+    )
+    findings = [
+        {
+            "text": "bogus",
+            "citations": [{"quote": _FABRICATED_QUOTE, "source": 1}],
+        }
+    ]
+    out = await build_session_ledger(
+        db_session,
+        session=sess,
+        work_product_text="…",
+        findings=findings,
+        evidence=_evidence(),
+        gateway=object(),
+    )
+    assert out is not None and out["fail_count"] >= 1 and out["gate_status"] == "flagged"
+
+    rows = await _fetch_rows(db_session)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.verified is False
+    assert row.verification_method is None
+    assert row.verification_confidence is None
+    assert row.partial is False
+    assert row.source_offset_start == 0
+    assert row.source_offset_end == len(_FABRICATED_QUOTE)
+
+
+async def test_locate_miss_judge_raises_keeps_fail_row(
+    db_session: AsyncSession,
+    fake_storage: dict[str, bytes],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """DE-371: a raising judge (documented never to raise, but defended) keeps
+    the FAIL row — fail-closed."""
+
+    async def _raising_judge(**kwargs: object) -> VerificationResult:
+        raise RuntimeError("judge exploded")
+
+    monkeypatch.setattr(ledger_bridge, "judge_authority_content", _raising_judge)
+
+    sess = await _make_session(db_session)
+    await store_authority_text(
+        db_session,
+        source_type="govinfo",
+        external_ref="USCODE-2022-title15",
+        text=_BODY,
+    )
+    findings = [
+        {
+            "text": "bogus",
+            "citations": [{"quote": _FABRICATED_QUOTE, "source": 1}],
+        }
+    ]
+    out = await build_session_ledger(
+        db_session,
+        session=sess,
+        work_product_text="…",
+        findings=findings,
+        evidence=_evidence(),
+        gateway=object(),
+    )
+    assert out is not None and out["fail_count"] >= 1 and out["gate_status"] == "flagged"
+
+    rows = await _fetch_rows(db_session)
+    assert len(rows) == 1 and rows[0].verified is False
+
+
+async def test_budget_exhaustion_mid_turn_skips_later_judges(
+    db_session: AsyncSession,
+    fake_storage: dict[str, bytes],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """DE-371: cumulative spend against AUTHORITY_CONTENT_JUDGE_BUDGET_USD —
+    once the pre-flight estimate would exceed the budget, later misses skip the
+    judge, keep FAIL rows, and log the budget-exhausted event."""
+    judge_calls: list[str] = []
+
+    # Each call estimated at 0.20 USD against the 0.25 budget: the first miss
+    # is judged (0.20 <= 0.25), the second would total 0.40 > 0.25 → skipped.
+    async def _fake_estimate(db: object, *, judge_model: str, authority_text: str) -> Decimal:
+        return Decimal("0.20")
+
+    async def _fake_judge(
+        *, passage: str, authority_text: str, gateway: object, judge_model: str
+    ) -> VerificationResult:
+        judge_calls.append(passage)
+        return _SUPPORTED_RESULT
+
+    monkeypatch.setattr(ledger_bridge, "estimate_authority_content_cost_usd", _fake_estimate)
+    monkeypatch.setattr(ledger_bridge, "judge_authority_content", _fake_judge)
+
+    sess = await _make_session(db_session)
+    await store_authority_text(
+        db_session,
+        source_type="govinfo",
+        external_ref="USCODE-2022-title15",
+        text=_BODY,
+    )
+    second_quote = "another quote that appears nowhere in the body"
+    findings = [
+        {
+            "text": "bogus",
+            "citations": [
+                {"quote": _FABRICATED_QUOTE, "source": 1},
+                {"quote": second_quote, "source": 1},
+            ],
+        }
+    ]
+    with caplog.at_level(logging.INFO, logger="app.autonomous.ledger_bridge"):
+        out = await build_session_ledger(
+            db_session,
+            session=sess,
+            work_product_text="…",
+            findings=findings,
+            evidence=_evidence(),
+            gateway=object(),
+        )
+    assert out is not None
+    # First miss judged → SUPPORTED; second skipped on budget → FAIL.
+    assert judge_calls == [_FABRICATED_QUOTE]
+    assert out["supported_count"] == 1
+    assert out["fail_count"] == 1
+    assert any(
+        getattr(r, "event", None) == "autonomous_authority_citation_judge_budget_exhausted"
+        for r in caplog.records
+    )
+
+    rows = await _fetch_rows(db_session)
+    by_quote = {r.source_text: r for r in rows}
+    assert by_quote[_FABRICATED_QUOTE].verified is True
+    assert by_quote[second_quote].verified is False
+
+
+async def test_gateway_none_keeps_fail_rows_without_judge(
+    db_session: AsyncSession,
+    fake_storage: dict[str, bytes],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """DE-371 regression: gateway=None → judge never invoked; FAIL rows exactly
+    as before (test_fabricated_authority_quote_flags_gate covers the gate)."""
+
+    async def _must_not_run(**kwargs: object) -> VerificationResult:
+        raise AssertionError("judge must not be called when gateway is None")
+
+    monkeypatch.setattr(ledger_bridge, "judge_authority_content", _must_not_run)
+
+    sess = await _make_session(db_session)
+    await store_authority_text(
+        db_session,
+        source_type="govinfo",
+        external_ref="USCODE-2022-title15",
+        text=_BODY,
+    )
+    findings = [
+        {
+            "text": "bogus",
+            "citations": [{"quote": _FABRICATED_QUOTE, "source": 1}],
+        }
+    ]
+    out = await build_session_ledger(
+        db_session,
+        session=sess,
+        work_product_text="…",
+        findings=findings,
+        evidence=_evidence(),
+        gateway=None,
+    )
+    assert out is not None and out["fail_count"] >= 1 and out["gate_status"] == "flagged"
+
+    rows = await _fetch_rows(db_session)
+    assert len(rows) == 1
+    assert rows[0].verified is False
+    assert rows[0].verification_method is None
+
+
+async def test_cost_estimate_error_keeps_fail_row(
+    db_session: AsyncSession,
+    fake_storage: dict[str, bytes],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """DE-371 regression: a raising pre-flight cost estimate must degrade to
+    "no judge, keep the FAIL row" — not skip the item entirely (zero rows would
+    read as fiduciary_grade at the gate)."""
+
+    async def _raising_estimate(db: object, *, judge_model: str, authority_text: str) -> Decimal:
+        raise RuntimeError("routing-log query exploded")
+
+    async def _must_not_run(**kwargs: object) -> VerificationResult:
+        raise AssertionError("judge must not be called when the cost estimate fails")
+
+    monkeypatch.setattr(ledger_bridge, "estimate_authority_content_cost_usd", _raising_estimate)
+    monkeypatch.setattr(ledger_bridge, "judge_authority_content", _must_not_run)
+
+    sess = await _make_session(db_session)
+    await store_authority_text(
+        db_session,
+        source_type="govinfo",
+        external_ref="USCODE-2022-title15",
+        text=_BODY,
+    )
+    findings = [
+        {
+            "text": "bogus",
+            "citations": [{"quote": _FABRICATED_QUOTE, "source": 1}],
+        }
+    ]
+    out = await build_session_ledger(
+        db_session,
+        session=sess,
+        work_product_text="…",
+        findings=findings,
+        evidence=_evidence(),
+        gateway=object(),
+    )
+    assert out is not None and out["fail_count"] >= 1 and out["gate_status"] == "flagged"
+
+    rows = await _fetch_rows(db_session)
+    assert len(rows) == 1
+    assert rows[0].verified is False
+    assert rows[0].verification_method is None
