@@ -110,8 +110,19 @@ async def run_tabular_execution(
             "execution_id": str(execution_id),
             "columns": columns_state,
             "judge_model": judge_model,
+            # DE-331: the operator-confirmed cost ceiling (persisted as
+            # cost_estimate_usd from the request's confirmed_cost_usd).
+            # Decimal-as-string for state serializability; None means no
+            # ceiling was confirmed → no mid-run ensemble halt applies.
+            "confirmed_cost_usd": (
+                format(execution.cost_estimate_usd, "f")
+                if execution.cost_estimate_usd is not None
+                else None
+            ),
             "documents": [],
             "per_cell_results": [],
+            "ensemble_halted_at_ceiling": False,
+            "ensemble_halted_cells": 0,
             "error": None,
         }
 

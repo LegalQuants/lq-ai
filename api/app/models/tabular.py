@@ -6,16 +6,24 @@ landing in M3. Each row is one tabular execution — a row-per-document
 by column-per-spec grid run as a LangGraph workflow on the
 ``arq:m3a6`` queue (Decision C-3 from the Phase C prep doc).
 
-One table (migration ``0036_tabular_executions.py``):
+Two tables:
 
-* :class:`TabularExecution` — one row per execution. Status lifecycle
-  is ``pending -> running -> completed | failed | cancelled``.
+* :class:`TabularExecution` (migration ``0036_tabular_executions.py``)
+  — one row per execution. Status lifecycle is
+  ``pending -> running -> completed | failed | cancelled``.
   ``parent_execution_id`` is non-NULL on bulk-op sibling rows
   (Decision C-9; bulk ops spawn siblings rather than mutating the
   original grid).
+* :class:`TabularCellCitation` (migration
+  ``0066_tabular_cell_citations.py``, DE-309) — offset-bearing
+  Citation-Engine provenance rows for grounded tabular cells. One row
+  per (cell, cited chunk) pair whose extracted value was deterministically
+  located in the chunk's canonical text. Fail-closed: an unlocatable
+  value mints NO row (the cell renders unverified) — a row's existence
+  is itself the verification claim.
 
-The CHECK constraint on ``status`` is enforced at the storage layer
-(migration 0036) so application bugs can't insert invalid enum values.
+The CHECK constraints on ``status`` / offsets / method are enforced at
+the storage layer so application bugs can't insert invalid values.
 """
 
 from __future__ import annotations
@@ -25,7 +33,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, Text, text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, Numeric, Text, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -144,4 +152,100 @@ class TabularExecution(Base):
             f"<TabularExecution id={self.id} user_id={self.user_id} "
             f"status={self.status!r} docs={len(self.document_ids)} "
             f"cols={len(self.columns)}>"
+        )
+
+
+class TabularCellCitation(Base):
+    """One offset-bearing Citation-Engine provenance row for a tabular cell — DE-309.
+
+    Minted by the tabular executor's aggregate node when a grounded
+    cell's extracted value was deterministically located (verbatim,
+    ``locate_passage`` + the verification cascade's Stages 1-2 with
+    ``gateway=None``) inside a cited chunk's canonical text. One row per
+    (cell, cited chunk) hit; a cell citing two chunks whose value
+    locates in both mints two rows.
+
+    Fail-closed legal semantics (per the DE-309 research memo): a row
+    is written **only** from a successful deterministic match. An
+    unlocatable value mints no row and the cell renders unverified —
+    never a fake offset row. ``verification_method`` is therefore NOT
+    NULL: there is no unverified state representable in this table.
+
+    Cell identity mirrors how cells are keyed in
+    ``tabular_executions.results``: rows are keyed by ``document_id``
+    (the grid row) and cells by ``column_name`` (the grid column), so
+    ``(execution_id, document_id, column_name)`` addresses one cell.
+
+    ``document_id`` / ``chunk_id`` are deliberately NOT foreign keys —
+    matching ``tabular_executions.document_ids``' snapshot posture: a
+    later re-ingest or hard delete of the source must not cascade-clear
+    the provenance audit row. The read side already tolerates stale
+    chunk references (navigation fields stay null).
+
+    ``source_offset_start`` / ``source_offset_end`` are character
+    offsets into the cited chunk's ``document_chunks.content`` — the
+    same text the read side serves as the citation's ``source_text``,
+    so ``source_text[start:end]`` re-derives the located value.
+    """
+
+    __tablename__ = "tabular_cell_citations"
+    __table_args__ = (
+        CheckConstraint(
+            "source_offset_start >= 0",
+            name="chk_tabular_cell_citations_offset_start_nonneg",
+        ),
+        CheckConstraint(
+            "source_offset_end > source_offset_start",
+            name="chk_tabular_cell_citations_offset_end_gt_start",
+        ),
+        CheckConstraint(
+            "verification_method IN "
+            "('exact_match', 'tolerant_match', 'paraphrase_judge', "
+            "'ensemble_strict', 'ensemble_majority')",
+            name="chk_tabular_cell_citations_method_values",
+        ),
+        CheckConstraint(
+            "verification_confidence IS NULL OR "
+            "(verification_confidence >= 0 AND verification_confidence <= 1)",
+            name="chk_tabular_cell_citations_confidence_range",
+        ),
+        Index("ix_tabular_cell_citations_execution_id", "execution_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    execution_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "tabular_executions.id",
+            ondelete="CASCADE",
+            name="fk_tabular_cell_citations_execution_id",
+        ),
+        nullable=False,
+    )
+    document_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    column_name: Mapped[str] = mapped_column(Text, nullable=False)
+    chunk_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    source_offset_start: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_offset_end: Mapped[int] = mapped_column(Integer, nullable=False)
+    verification_method: Mapped[str] = mapped_column(Text, nullable=False)
+    verification_confidence: Mapped[Decimal | None] = mapped_column(
+        Numeric(3, 2),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<TabularCellCitation id={self.id} execution_id={self.execution_id} "
+            f"column={self.column_name!r} chunk_id={self.chunk_id} "
+            f"span=[{self.source_offset_start}:{self.source_offset_end}] "
+            f"method={self.verification_method!r}>"
         )
