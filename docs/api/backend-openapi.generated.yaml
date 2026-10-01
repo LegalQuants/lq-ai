@@ -4493,6 +4493,17 @@ components:
             type: string
           - type: 'null'
           title: Description
+        max_egress_tier:
+          anyOf:
+          - enum:
+            - 1
+            - 2
+            - 3
+            - 4
+            - 5
+            type: integer
+          - type: 'null'
+          title: Max Egress Tier
         minimum_inference_tier:
           anyOf:
           - enum:
@@ -4582,6 +4593,11 @@ components:
           default: false
           title: Is Sandbox
           type: boolean
+        max_egress_tier:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Max Egress Tier
         minimum_inference_tier:
           anyOf:
           - type: integer
@@ -4654,6 +4670,17 @@ components:
             type: string
           - type: 'null'
           title: Description
+        max_egress_tier:
+          anyOf:
+          - enum:
+            - 1
+            - 2
+            - 3
+            - 4
+            - 5
+            type: integer
+          - type: 'null'
+          title: Max Egress Tier
         minimum_inference_tier:
           anyOf:
           - enum:
