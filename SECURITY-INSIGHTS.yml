@@ -1,0 +1,110 @@
+# OpenSSF Security Insights for LQ.AI (DE-222; roadmap item 3.4).
+#
+# Conforms to the OSSF security-insights specification v2 (spec release
+# v2.2.0; the schema-version below is the schema series identifier the
+# v2.2.0 published examples use). Spec: https://github.com/ossf/security-insights-spec
+#
+# Filename note: the v2 spec's canonical filename is `security-insights.yml`;
+# this repository keeps the `SECURITY-INSIGHTS.yml` name that DE-222 and the
+# mini-PRD (docs/contribute/mini-prds/openssf-scorecard-and-badges.md)
+# specify, which is also the v1-era convention most third-party tooling
+# greps for. The content follows the v2 schema either way.
+#
+# Every URL below points at a real artifact in this repository or its
+# release infrastructure — see docs/security/best-practices-criteria.md
+# for the criterion-by-criterion evidence map.
+
+header:
+  schema-version: 2.0.0
+  last-updated: "2026-07-25"
+  last-reviewed: "2026-07-25"
+  url: https://github.com/LegalQuants/lq-ai/raw/main/SECURITY-INSIGHTS.yml
+
+project:
+  name: LQ.AI
+  homepage: https://github.com/LegalQuants/lq-ai
+  administrators:
+    - name: Kevin Keller
+      affiliation: LegalQuants
+      primary: true
+  documentation:
+    quickstart-guide: https://github.com/LegalQuants/lq-ai/blob/main/README.md
+    detailed-guide: https://github.com/LegalQuants/lq-ai/blob/main/docs/PRD.md
+    code-of-conduct: https://github.com/LegalQuants/lq-ai/blob/main/CODE_OF_CONDUCT.md
+    signature-verification: https://github.com/LegalQuants/lq-ai/blob/main/docs/security/README.md
+  repositories:
+    - name: lq-ai
+      url: https://github.com/LegalQuants/lq-ai
+      comment: |
+        Monorepo: api/ (FastAPI backend), gateway/ (Inference Gateway — the
+        security boundary), web/ (OpenWebUI fork), skills/ (open-source
+        legal skills), deploy/ and docs/.
+  vulnerability-reporting:
+    reports-accepted: true
+    bug-bounty-available: false
+    contact:
+      name: LQ.AI security team
+      email: security@legalquants.com
+      primary: true
+    policy: https://github.com/LegalQuants/lq-ai/blob/main/SECURITY.md
+    comment: |
+      Private reports via security@legalquants.com or GitHub Security
+      Advisories. Commitments (per SECURITY.md): acknowledge within 72
+      hours; initial assessment within 7 business days; critical fixes
+      within 30 days, high within 60, medium within 90. Coordinated
+      disclosure with reporter credit; safe harbor for good-faith research.
+
+repository:
+  url: https://github.com/LegalQuants/lq-ai
+  status: active
+  bug-fixes-only: false
+  accepts-change-request: true
+  accepts-automated-change-request: true # Dependabot (pip, npm, github-actions)
+  no-third-party-packages: false
+  core-team:
+    - name: Kevin Keller
+      affiliation: LegalQuants
+      primary: true
+  documentation:
+    contributing-guide: https://github.com/LegalQuants/lq-ai/blob/main/CONTRIBUTING.md
+    security-policy: https://github.com/LegalQuants/lq-ai/blob/main/SECURITY.md
+    dependency-management-policy: https://github.com/LegalQuants/lq-ai/blob/main/docs/security/dependencies.md
+  license:
+    url: https://github.com/LegalQuants/lq-ai/blob/main/LICENSE
+    expression: Apache-2.0
+  release:
+    changelog: https://github.com/LegalQuants/lq-ai/releases
+    automated-pipeline: true # .github/workflows/release.yml on v*.*.* tags
+    attestations:
+      - name: SLSA build provenance
+        predicate-uri: https://slsa.dev/provenance/v1
+        location: https://github.com/LegalQuants/lq-ai/attestations
+        comment: |
+          Generated per container image by actions/attest-build-provenance
+          in .github/workflows/release.yml and pushed to the registry.
+          Verify with `gh attestation verify` or cosign; see
+          docs/security/README.md.
+      - name: SPDX SBOM (signed cosign attestation)
+        predicate-uri: https://spdx.dev/Document
+        location: https://github.com/orgs/LegalQuants/packages?repo_name=lq-ai
+        comment: |
+          anchore/sbom-action generates an SPDX-JSON SBOM per image; the
+          release pipeline verifies it is non-empty, then attaches it as a
+          cosign attestation (`cosign attest --type spdxjson`) on the image.
+    distribution-points:
+      - uri: https://github.com/orgs/LegalQuants/packages?repo_name=lq-ai
+        comment: Container images (api, gateway, web, proxy) on GHCR, cosign-signed.
+      - uri: https://github.com/LegalQuants/lq-ai/releases
+        comment: GitHub Releases (release notes; desktop launcher .dmg for macOS).
+  security:
+    assessments:
+      self:
+        evidence: https://github.com/LegalQuants/lq-ai/blob/main/docs/security/threat-model.md
+        comment: |
+          STRIDE threat model maintained in-repo, alongside the wider
+          docs/security/ set: cryptography.md, encrypted-keys.md,
+          audit-logging.md, dependencies.md, boundary-registers.md.
+          Continuous posture checks in CI: OpenSSF Scorecard
+          (.github/workflows/scorecard.yml), CodeQL SAST
+          (.github/workflows/codeql.yml), Dependabot SCA
+          (.github/dependabot.yml).

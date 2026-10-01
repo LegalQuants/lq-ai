@@ -1,0 +1,72 @@
+# OpenSSF Scorecard analysis (DE-222; roadmap item 3.4).
+#
+# Runs ossf/scorecard-action against the default branch and:
+#   - publishes results to the OpenSSF REST API (publish_results: true),
+#     which powers the README badge and the scorecard.dev viewer page;
+#   - uploads the SARIF to GitHub code scanning so per-check findings
+#     appear under Security → Code scanning;
+#   - keeps the raw SARIF as a short-lived Actions artifact for debugging.
+#
+# Triggers: weekly cron (score freshness), push to main (score reflects
+# merged state promptly), branch_protection_rule (re-score immediately when
+# a maintainer changes branch-protection settings — the Branch-Protection
+# check is maintainer-settings-driven, not PR-driven), and manual dispatch.
+#
+# publish_results requires the repository to be public and the job to have
+# id-token: write (OIDC proof to the OpenSSF publish endpoint). Per the
+# fail-closed posture in docs/security/, no step is continue-on-error.
+#
+# Maintainer follow-ups that this workflow cannot do by itself (branch
+# protection tiers, Best Practices badge enrollment) are checklisted in
+# docs/security/best-practices-criteria.md.
+
+name: Scorecard
+
+on:
+  # Re-run when branch-protection settings change so the score updates
+  # without waiting for the next cron tick.
+  branch_protection_rule:
+  schedule:
+    - cron: "30 2 * * 1" # weekly, Mondays 02:30 UTC
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Default-deny; the analysis job declares its own write scopes.
+permissions:
+  contents: read
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # upload SARIF to code scanning
+      id-token: write # OIDC token for publish_results (OpenSSF publish endpoint)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Run Scorecard analysis
+        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      # Short-retention debugging artifact; the durable copies are the
+      # code-scanning upload below and the published OpenSSF result.
+      - name: Upload SARIF as workflow artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: scorecard-sarif
+          path: results.sarif
+          retention-days: 5
+
+      - name: Upload SARIF to code scanning
+        uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4.36.3
+        with:
+          sarif_file: results.sarif
