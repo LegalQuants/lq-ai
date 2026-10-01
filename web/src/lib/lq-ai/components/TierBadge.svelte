@@ -13,17 +13,14 @@
 	 * The component continues to dispatch a Svelte "open" event so existing
 	 * callers using `on:open` don't need to change.
 	 *
-	 * Tone mapping (closest match from TrustPill's palette):
-	 *   Tier 1 (was emerald) → sage
-	 *   Tier 2 (was sky)     → neutral
-	 *   Tier 3 (was amber)   → amber
-	 *   Tier 4 (was orange)  → amber
-	 *   Tier 5 (was rose)    → red
-	 *   unknown              → neutral
+	 * Tone + description per tier come from `chat/tierDescriptions.ts` — the
+	 * single source of truth also consumed by TierDetailsPanel and
+	 * MessageBubble's tier hover-popover, so the three don't drift.
 	 */
 	import { createEventDispatcher } from 'svelte';
 	import TrustPill from './TrustPill.svelte';
 	import type { TrustTone } from './TrustPill.svelte';
+	import { TIER_DESCRIPTIONS } from '../chat/tierDescriptions';
 
 	export let tier: 1 | 2 | 3 | 4 | 5 | null | undefined = null;
 	export let provider: string | null | undefined = null;
@@ -37,31 +34,11 @@
 
 	const dispatch = createEventDispatcher<{ open: void }>();
 
-	const tierTone: Record<number, TrustTone> = {
-		1: 'sage',
-		2: 'neutral',
-		3: 'amber',
-		4: 'amber',
-		5: 'red'
-	};
-
-	/**
-	 * Plain-English description per tier — surfaced in the hover title so
-	 * non-technical users learn what each tier means without having to
-	 * click through to the TierDetailsPanel. Matches the framing in PRD
-	 * §1.5.2 (lower number = stronger security).
-	 */
-	const tierDescription: Record<number, string> = {
-		1: 'Local-only inference — runs on this computer. Your data never leaves the deployment.',
-		2: 'Customer-hosted cloud inference — runs in your own cloud account.',
-		3: 'Enterprise managed inference — provider has signed ZDR / no-training commitments.',
-		4: 'Standard cloud API — provider terms govern data handling.',
-		5: 'Consumer or free tier — the provider may train on your data.'
-	};
-
 	$: label = tier ? `Tier ${tier}` : 'Tier ?';
-	$: tone = (tier ? tierTone[tier] : 'neutral') as TrustTone;
-	$: description = tier ? tierDescription[tier] : 'Tier unknown — routing source not yet resolved.';
+	$: tone = (tier ? TIER_DESCRIPTIONS[tier].tone : 'neutral') as TrustTone;
+	$: description = tier
+		? TIER_DESCRIPTIONS[tier].blurb
+		: 'Tier unknown — routing source not yet resolved.';
 	$: title = provider
 		? `${label} — ${provider}\n${description}\n(click for details)`
 		: `${label}\n${description}\n(click for details)`;
