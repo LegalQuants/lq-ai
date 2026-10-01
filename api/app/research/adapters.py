@@ -206,23 +206,33 @@ class EdgarAdapter:
 class EurLexAdapter:
     """Normalises EUR-Lex gateway payloads into ``FetchedAuthority`` objects.
 
-    Handles the single EUR-Lex tool operation exposed by the gateway:
+    Handles the two EUR-Lex tool operations exposed by the gateway:
 
     ``get_authority``
         Payload: ``{external_ref, title, url, text, content_kind?}``
         Returns a fully-hydrated ``FetchedAuthority`` with the retrieved
         EU legislation or CJEU case-law text.
 
-    EUR-Lex has no full-text search endpoint wired through the gateway —
-    retrieval is by CELEX id only, so this adapter is a thin carry-through:
-    the gateway adapter already derives ``content_kind`` from the CELEX
-    descriptor (sector digit) and passes it through in the payload; this
-    adapter just reads it, falling back to ``"eu_legislation"`` if absent.
+    ``search_authority`` (DE-374)
+        Payload: ``{results: [{external_ref, title, url}], count}``
+        Returns a ``FetchedAuthority`` from the *first* result. EUR-Lex
+        search results carry no document body (same contract as GovInfo/
+        EDGAR search) — ``citable_text`` is the title only and is NOT
+        quotable as document text; call ``get_authority`` with the CELEX
+        ``external_ref`` to fetch the body.
+
+    ``content_kind``: the gateway adapter derives it from the CELEX
+    descriptor (sector digit) on ``get_authority`` and passes it through in
+    the payload; this adapter just reads it, falling back to
+    ``"eu_legislation"`` if absent (search results carry no kind field, so
+    they always fall back).
     """
 
     def from_response(self, op: str, payload: dict[str, Any]) -> FetchedAuthority:
         if op == "get_authority":
             return self._from_get_authority(payload)
+        if op == "search_authority":
+            return self._from_search_authority(payload)
         raise ValueError(f"EurLexAdapter: unsupported op {op!r}")
 
     def _from_get_authority(self, payload: dict[str, Any]) -> FetchedAuthority:
@@ -238,4 +248,21 @@ class EurLexAdapter:
             url=url,
             external_ref=external_ref,
             content_kind=content_kind,
+        )
+
+    def _from_search_authority(self, payload: dict[str, Any]) -> FetchedAuthority:
+        results: list[dict[str, Any]] = payload.get("results") or []
+        if not results:
+            raise ValueError("EurLexAdapter: search_authority payload has no results")
+        first = results[0]
+        title: str = first.get("title") or ""
+        url: str = first.get("url") or ""
+        external_ref: str = first.get("external_ref") or ""
+        return FetchedAuthority(
+            citable_text=title,  # search has no quotable body; only get_authority does
+            label=title,
+            subtitle="",
+            url=url,
+            external_ref=external_ref,
+            content_kind="eu_legislation",
         )
