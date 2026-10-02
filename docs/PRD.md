@@ -5165,17 +5165,15 @@ Pure `web/` work with no API, DB or gateway surface. The only structural wrinkle
 
 Roadmap 4.3 wired `--cov-fail-under` coverage gates into CI (`.github/workflows/ci.yml`), set — per the ratchet-don't-aspire pattern in the engineering-discipline testing survey — at *measured* coverage, not the documented targets. Measured 2026-07-25: **api 81.49%** (12242/15023 statements) — clears the documented 80% target, so the api gate enforces the target itself (`--cov-fail-under=80`), no delta. **Gateway 88.94%** (4464/5019 statements) — below the documented 90% target, so the gateway gate is a no-decrease ratchet at the measured floor (`--cov-fail-under=88`; floored to the integer because coverage.py compares the exact value, so a gate of 89 would fail today's 88.94%). DE-395 closes the gateway 88→90 gap. The uncovered mass is concentrated (per-module, same run): `app/cli.py` 0%, `app/db.py` 71%, `app/config_writer.py` 75%, `app/providers/tool/mcp.py` 75%, `app/observability.py` 76%, `app/main.py` 80%, `app/providers/tool/govinfo.py` 84%, `app/tool_egress_log.py` 84%. Plan: test the untested `cli.py` entry points and the `config_writer` error branches first (those two alone are ~105 of the 555 missed statements), re-measure, and bump the ci.yml floor to each newly measured integer (88 → 89 → 90) rather than jumping; when 90 is measured, flip the gateway row in HONEST-STATE §8 from "ratchet" to "at target" and close this DE. Raising the *targets* themselves (e.g. api beyond 80) is out of scope here.
 
----
-
-## 10. Appendices
-
-#### DE-389 — OCR normalization layer violates its documented idempotence contract
+#### DE-396 — OCR normalization layer violates its documented idempotence contract
 
 **Priority:** P2 · **Effort:** S · **Status (2026-07-25): filed (found by the DE-230 property suite; pinned as strict xfail).**
 
 `api/app/citation/normalization.py`'s OCR confusion layer (`was_ocrd=True`) documents idempotence "for every input", and the Stage-2 tolerant verifier relies on it — but the `l→1`/`O→0` substitutions run as single passes, and a substitution can create a new digit adjacency that only a second pass would rewrite: `normalize("Ol5") == "O15"` while `normalize("O15") == "015"` (likewise `ll5→l15→115`, `5lO→51O→510`). Both comparison sides get the same single pass today, so per-run verification outcomes stay internally consistent; the risk is cross-run canonical-form drift for chained-confusion sequences in OCR'd documents. Pinned by `api/tests/property/test_normalization_properties.py::test_ocr_layer_idempotence_violation_is_pinned` (strict xfail, 4 cases). Fix requires a maintainer semantics call — fixed-point iteration or rule reordering both change verifier-visible canonical forms for OCR'd documents, so the pinned cases must be re-baselined deliberately, not silently.
 
 ---
+
+## 10. Appendices
 
 ### Appendix A — Glossary
 

@@ -80,8 +80,25 @@ def test_quote_style_never_changes_canonical_form(text: str) -> None:
     assert normalize(curled) == normalize(text)
 
 
+@pytest.mark.parametrize(
+    ("text", "first_pass", "second_pass"),
+    [
+        ("Ol5", "O15", "015"),
+        ("ll5", "l15", "115"),
+        ("5lO", "51O", "510"),
+        ("Oll5", "Ol15", "O115"),
+    ],
+)
+def test_ocr_layer_known_one_pass_outputs(text: str, first_pass: str, second_pass: str) -> None:
+    """Pin the observed bug so a different failure cannot pass as the known one."""
+
+    assert normalize(text, was_ocrd=True) == first_pass
+    assert normalize(first_pass, was_ocrd=True) == second_pass
+
+
 @pytest.mark.xfail(
     strict=True,
+    raises=AssertionError,
     reason=(
         "DE-230 property-test finding: the OCR layer is NOT idempotent, "
         "contradicting the module docstring ('The function is idempotent "
