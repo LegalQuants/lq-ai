@@ -6,12 +6,14 @@
 	import { autonomousApi } from '$lib/lq-ai/api';
 
 	$: pathname = $page.url.pathname;
+	$: orchestrationReceipt = /^\/lq-ai\/autonomous\/orchestration\/[^/]+\/?$/.test(pathname);
 
 	const NOTIFICATIONS_HREF = '/lq-ai/autonomous/notifications';
 
 	const navLinks = [
 		{ href: '/lq-ai/autonomous/configure',      label: 'Configure',     exact: false },
 		{ href: '/lq-ai/autonomous',               label: 'Sessions',      exact: true  },
+		{ href: '/lq-ai/autonomous/matters',        label: 'Matter intake', exact: false },
 		{ href: '/lq-ai/autonomous/memory',         label: 'Memory',        exact: false },
 		{ href: '/lq-ai/autonomous/precedents',     label: 'Precedents',    exact: false },
 		{ href: '/lq-ai/autonomous/proposals',      label: 'Proposals',     exact: false },
@@ -39,7 +41,7 @@
 
 	onMount(async () => {
 		await initPreferences();
-		if (!$preferences.autonomous_enabled) {
+		if (!$preferences.autonomous_enabled && !orchestrationReceipt) {
 			goto('/lq-ai/settings/autonomous');
 			return;
 		}
@@ -67,7 +69,7 @@
 	}
 </script>
 
-{#if $preferences.autonomous_enabled}
+{#if $preferences.autonomous_enabled || orchestrationReceipt}
 	<div class="admin-shell">
 		<nav class="admin-nav" aria-label="Autonomous navigation">
 			<ul class="admin-nav-list">

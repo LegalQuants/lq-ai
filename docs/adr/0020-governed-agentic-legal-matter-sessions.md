@@ -3,7 +3,13 @@
 **Status:** Accepted (2026-06-28) — maintainer-accepted. Implementation PRs (WS-D PR1+) carry **security review** per CODEOWNERS (the autonomous governance chokepoint; the citation/audit/ledger surface in PR2).
 **Date:** 2026-06-28
 **Owner:** Fiduciary-grade agentic legal work milestone — Phase 2 (WS-D), feature branch `docs/adr-0020-agentic-matter-sessions`
-**Supersedes / relates to:** [ADR 0013](0013-project-context-and-memory.md) (project context is the only thing the autonomous layer may write back), [ADR 0014](0014-gateway-egress-boundary-for-tool-providers.md) (where external retrieval egresses), [ADR 0015](0015-governed-tool-calling-model.md) (the closed-set governed tool-calling model this ADR builds the loop on), [ADR 0016](0016-transparency-and-governance-invariants.md) (P3 no-raw-payload, P6 one governance path), [ADR 0018](0018-citation-ledger-and-fiduciary-grade-output.md) (the WS-A ledger + WS-B fiduciary gate this session produces in PR2), and the [fiduciary-grade mini-PRD](../proposals/fiduciary-grade-agentic-legal-work.md) WS-D.
+**Supersedes / relates to:** [ADR 0013](0013-autonomous-layer-design-influences.md) (the autonomous substrate and user-owned memory/precedent proposals), [ADR 0014](0014-gateway-egress-boundary-for-tool-providers.md) (where external retrieval egresses), [ADR 0015](0015-governed-tool-calling-model.md) (the closed-set governed tool-calling model this ADR builds the loop on), [ADR 0016](0016-transparency-and-governance-invariants.md) (P3 no-raw-payload, P6 one governance path), [ADR 0018](0018-citation-ledger-and-fiduciary-grade-output.md) (the WS-A ledger + WS-B fiduciary gate this session produces in PR2), and the [fiduciary-grade mini-PRD](../proposals/fiduciary-grade-agentic-legal-work.md) WS-D.
+
+**Accepted extension (2026-09-20):** [ADR 0035](0035-governed-orchestration-run-tree.md)
+adds approval-gated parallel children for issue #563. For the orchestrator
+profile, it extends D2/D4/D7 with durable waits, tree-wide budget reservations
+and internal child delivery with root-owned user output. The bounded fictional
+chat profile exercises this run tree; ordinary single-session behavior remains.
 
 ## Context
 

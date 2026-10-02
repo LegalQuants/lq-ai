@@ -254,6 +254,8 @@ class ChatCompletionResponse(BaseModel):
     # --- LQ.AI extensions ---------------------------------------------------
     routed_inference_tier: int | None = Field(default=None, ge=1, le=5)
     routed_provider: str | None = None
+    routed_model: str | None = None
+    """Gateway-resolved native model; upstream response.model may use a version alias."""
     cost_estimate: float | None = None
     anonymization_applied: bool | None = None
     lq_ai_applied_skills: list[str] | None = None

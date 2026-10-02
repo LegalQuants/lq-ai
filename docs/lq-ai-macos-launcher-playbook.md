@@ -26,7 +26,7 @@ The single best shortcut: **copy Donna's `desktop/` directory wholesale and adap
 Add `.github/workflows/release.yml` that builds and pushes your runtime images **multi-arch**
 (`linux/amd64,linux/arm64`) to `ghcr.io/<your-namespace>/lq-ai-*` on a `v*` tag or manual dispatch.
 You publish whatever the stack needs as images — at minimum **`api`**, **`gateway`**, and **`web`**
-(your reference frontend); Postgres/Redis/MinIO use stock public images. Bake what the dev stack
+(your reference frontend); Postgres/Redis/RustFS use stock public images. Bake what the dev stack
 mounts at runtime **into** the images so no bind-mounts are needed:
 - the **skills corpus** into the api image (`COPY skills /skills`, `ENV LQ_AI_SKILLS_DIR=/skills`) —
   Donna had to do this in a wrapper; you do it in your own api Dockerfile. **[confirm in lq-ai: skills

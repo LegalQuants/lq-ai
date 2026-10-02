@@ -76,6 +76,50 @@ tags:
 # ============================================================
 paths:
 
+  /api/v1/skill-workspaces:
+    get:
+      tags: [skills]
+      summary: List the caller's saved skill work, including after execution is disabled
+      parameters:
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
+      responses:
+        '200':
+          description: Up to 50 owner-scoped workspaces; file metadata only
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/SavedSkillWorkspace'}
+  /api/v1/skill-workspaces/{workspace_id}:
+    parameters:
+      - {name: workspace_id, in: path, required: true, schema: {type: string, format: uuid}}
+    delete:
+      tags: [skills]
+      summary: Reset all files in one owned skill workspace
+      responses:
+        '204': {description: Saved work deleted; empty response}
+        '404': {description: Workspace absent or not owned}
+  /api/v1/skill-workspaces/{workspace_id}/files/{name}:
+    parameters:
+      - {name: workspace_id, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: name, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [skills]
+      summary: Read an owned saved file as unverified text
+      responses:
+        '200':
+          description: File metadata and UTF-8 content
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - {$ref: '#/components/schemas/SavedSkillFile'}
+                  - type: object
+                    required: [content]
+                    properties:
+                      content: {type: string, description: At most 64 KiB UTF-8}
+        '404': {description: File absent or workspace not owned}
+
   # ----------- AUTH -----------
   /api/v1/auth/login:
     post:
@@ -332,7 +376,7 @@ paths:
       description: |
         Bearer-authenticated. Returns the current status of the export
         job. When `status=completed` and the bundle has not yet expired,
-        `download_url` is a presigned MinIO URL valid for 24 hours. A
+        `download_url` is a presigned S3-compatible URL valid for 24 hours. A
         404 covers both "no such job" and "job belongs to another user"
         (does not leak existence cross-user).
       parameters:
@@ -919,6 +963,11 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Chat'}
+        '404':
+          description: Project (if `project_id` was provided) not found.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
 
   /api/v1/chats/{chat_id}:
     parameters:
@@ -1957,7 +2006,7 @@ paths:
       tags: [files]
       summary: Upload a file
       description: |
-        Streaming multipart upload. The body is streamed to MinIO without
+        Streaming multipart upload. The body is streamed to S3-compatible storage without
         loading the whole file into memory; a SHA-256 is computed as bytes
         flow past, and metadata is persisted with `ingestion_status='pending'`.
         The document pipeline (Task C5) picks the row up asynchronously
@@ -2048,7 +2097,7 @@ paths:
       tags: [files]
       summary: Soft-delete a file
       description: |
-        Sets `deleted_at` on the row; the MinIO object is left in place
+        Sets `deleted_at` on the row; the object-store object is left in place
         and reaped later by D6 (per-user export+delete) or a future GC
         sweep, per `docs/adr/0005-file-storage-soft-delete-and-key-scheme.md`.
         Idempotent: deleting an already-soft-deleted or missing file
@@ -3865,7 +3914,10 @@ paths:
         '404':
           description: Chat or pending tool-call not found (id-probing-safe)
         '409':
-          description: Tool-call already resolved or confirmation expired
+          description: >-
+            Tool-call already resolved or confirmation expired, or the
+            encrypted resume payload could not be decrypted (DE-358 item 5 —
+            the row is consumed and the resume is denied; never replayable)
 
   # ============================================================
   # M3-D1 — slack-bridge persistence surface
@@ -4955,6 +5007,154 @@ paths:
           description: Not authenticated
         '404':
           description: Notification not found
+
+  # ADR 0035: bounded model-backed orchestration chat.
+  # Canonical detailed shapes are generated
+  # alongside these handlers. These paths add no public child-spawn authority.
+  /api/v1/autonomous/orchestration/chat-runs:
+    get:
+      tags: [autonomous]
+      summary: Read owner-scoped model demo configuration and planning quote
+      responses:
+        '200':
+          description: Disabled by default; enabled response includes fictional packet, direct model route, configured project and accounted caps. Does not dispatch inference.
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/ChatCapabilities'
+        '403': {description: Required skill, pricing, capacity or gateway protection unavailable}
+    post:
+      tags: [autonomous]
+      summary: Persist a bounded planning root and enqueue one model planning call
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './backend-openapi.generated.yaml#/components/schemas/ChatPlanRequest'
+      responses:
+        '202':
+          description: Durable planning state; request_id is idempotent; no children until separate approval
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/ChatRunRead'
+        '403': {description: Demo disabled, opt-in absent, wrong demo project or inference preflight refused}
+        '404': {description: Owned active project not found}
+        '409': {description: Active owner run or conflicting request identity}
+  /api/v1/autonomous/orchestration/chat-runs/{root_id}:
+    parameters:
+      - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      tags: [autonomous]
+      summary: Read retained planning, proposed plan, results and skill receipts
+      responses:
+        '200':
+          description: Owner-only; readable after disablement; tree is null before a valid proposal. Fictional agreement text is included only when the installed fixture matches this run's pinned digest.
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/ChatRunRead'
+        '404': {description: Model run absent or owned by another user}
+  /api/v1/autonomous/orchestration/chat-runs/{root_id}/halt:
+    parameters:
+      - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [autonomous]
+      summary: Halt planning or execution, including after opt-out or disablement
+      responses:
+        '200':
+          description: Retained receipts and charges; no new child or synthesis calls
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/ChatRunRead'
+        '404': {description: Model run absent or owned by another user}
+  /api/v1/autonomous/orchestration/{root_id}/tree:
+    parameters:
+      - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      tags: [autonomous]
+      summary: Inspect owned plan, progress, budgets, receipts and unverified outcomes
+      responses:
+        '200':
+          description: Readable after opt-out, halt or feature disablement
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/TreeRead'
+        '404': {description: Root absent or owned by another user}
+  /api/v1/autonomous/orchestration/{root_id}/approve:
+    parameters:
+      - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [autonomous]
+      summary: Approve the exact revision and hash before worker wakeup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './backend-openapi.generated.yaml#/components/schemas/ApprovalRequest'
+      responses:
+        '200':
+          description: Durable approval; a lost queue wakeup is recovered by the sweep
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/TreeRead'
+        '409': {description: Stale revision/hash or conflicting transition}
+  /api/v1/autonomous/orchestration/{root_id}/reject:
+    parameters:
+      - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [autonomous]
+      summary: Reject an awaiting plan revision without executing children
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './backend-openapi.generated.yaml#/components/schemas/RejectionRequest'
+      responses:
+        '200':
+          description: Rejected plan and retained history
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/TreeRead'
+        '409': {description: Stale revision or execution already started}
+  /api/v1/autonomous/orchestration/{root_id}/halt:
+    parameters:
+      - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [autonomous]
+      summary: Halt an owned tree, including after opt-out or feature disablement
+      responses:
+        '200':
+          description: Deterministic partial state; no fresh synthesis call after halt
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/TreeRead'
+        '404': {description: Root absent or owned by another user}
+
+  /api/v1/autonomous/orchestration/{root_id}/files/{session_id}/{name}:
+    parameters:
+      - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: session_id, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: name, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [autonomous]
+      summary: Inspect a private or shared working file in an owned run
+      responses:
+        '200':
+          description: Bounded UTF-8 contents and revision; readable after halt or opt-out
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/WorkspaceContent'
+        '404': {description: File absent, belongs to another run or owner}
 
   /api/v1/autonomous/run-now:
     post:
@@ -6700,15 +6900,25 @@ components:
         Request body for ``POST /autonomous/run-now``.  Spawns one
         ``trigger_kind='manual'`` session.  Exactly one of ``playbook_id``
         / ``skill_ref`` must be set (zero or both → 422).  ``target_kb_id``
-        / ``project_id`` are optional scope.  ``max_cost_usd`` is the
+        is optional scope. ``project_id`` is optional for query-less runs
+        and required when ``query`` is supplied. ``max_cost_usd`` is the
         per-run cap (NULL → fall back to the config default).  A manual
         run has no schedule/watch row to inherit ``emit_artifacts`` from,
-        so this body IS the opt-in source.
+        so this body IS the opt-in source.  ``query`` (item 1.6 — matter
+        intake) is an optional free-text matter description; when present
+        it is trimmed, requires an owned project, lands in
+        ``session.params["query"]``, and the executor routes
+        the run through the ADR-0020 matter loop, when omitted the
+        query-less path is unchanged.
       properties:
         playbook_id: {type: string, format: uuid, nullable: true}
         skill_ref: {type: string, nullable: true}
         target_kb_id: {type: string, format: uuid, nullable: true}
-        project_id: {type: string, format: uuid, nullable: true}
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Required when query is supplied; must identify an owned project.
         max_cost_usd: {type: string, nullable: true}
         emit_artifacts:
           type: boolean
@@ -6716,6 +6926,17 @@ components:
           description: |
             Opt-in document-grade artifact emission (Donna #8) for this
             one-off run; default off so existing callers are unchanged.
+        query:
+          type: string
+          nullable: true
+          minLength: 1
+          maxLength: 10000
+          description: |
+            Optional free-text matter description (item 1.6). Whitespace is
+            stripped; blank text is rejected. Requires an owned project_id.
+            Copied into ``session.params["query"]`` so the executor runs the
+            ADR-0020 matter loop with this as the goal. Omitted or null keeps
+            the existing query-less behavior.
 
     AutonomousScheduleListResponse:
       type: object
@@ -7680,6 +7901,28 @@ components:
             Per-column override of the skill-level tier floor. High-stakes
             columns can demand Tier 4+ while routine columns route Tier 1.
 
+    SavedSkillFile:
+      type: object
+      required: [name, revision, size_bytes, updated_at]
+      properties:
+        name: {type: string}
+        revision: {type: string, format: uuid}
+        size_bytes: {type: integer}
+        updated_at: {type: string, format: date-time}
+    SavedSkillWorkspace:
+      type: object
+      required: [id, skill_name, project_id, project_name, format_version, files]
+      properties:
+        id: {type: string, format: uuid}
+        skill_name: {type: string}
+        project_id: {type: [string, 'null'], format: uuid}
+        project_name: {type: [string, 'null']}
+        format_version: {type: integer, minimum: 1, maximum: 1000}
+        files:
+          type: array
+          maxItems: 32
+          items: {$ref: '#/components/schemas/SavedSkillFile'}
+
     Skill:
       allOf:
         - $ref: '#/components/schemas/SkillSummary'
@@ -7700,6 +7943,15 @@ components:
                 slug → id.
             content_yaml: {type: string, description: "Frontmatter YAML"}
             content_md: {type: string, description: "Body markdown"}
+            script_files:
+              type: array
+              description: Declared installed helper source and supporting text; not executable request inputs
+              items:
+                type: object
+                required: [path, content]
+                properties:
+                  path: {type: string}
+                  content: {type: string}
             reference_files:
               type: array
               items:

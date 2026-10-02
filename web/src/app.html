@@ -44,15 +44,21 @@
 			// On page load or when changing themes, best to add inline in `head` to avoid FOUC
 			(() => {
 				const metaThemeColorTag = document.querySelector('meta[name="theme-color"]');
-				const prefersDarkTheme = window.matchMedia('(prefers-color-scheme: dark)').matches;
 
 				if (!localStorage?.theme) {
 					localStorage.theme = 'system';
 				}
 
 				if (localStorage.theme === 'system') {
-					document.documentElement.classList.add(prefersDarkTheme ? 'dark' : 'light');
-					metaThemeColorTag.setAttribute('content', prefersDarkTheme ? '#171717' : '#ffffff');
+					// LQ.AI: dark mode isn't a supported deployment theme, and most
+					// LQ.AI-authored components (ChatPanel, AppSidebar, etc.) have no
+					// dark: styling at all. Resolving 'system' to the OS color-scheme
+					// preference silently applied the `dark` class for any visitor
+					// with OS dark mode on, which only a few leftover dark: classes
+					// inherited from upstream OpenWebUI (e.g. MessageBubble.svelte)
+					// reacted to — producing a half-light/half-dark UI. Always light.
+					document.documentElement.classList.add('light');
+					metaThemeColorTag.setAttribute('content', '#ffffff');
 				} else if (localStorage.theme === 'oled-dark') {
 					document.documentElement.style.setProperty('--color-gray-800', '#101010');
 					document.documentElement.style.setProperty('--color-gray-850', '#050505');
@@ -81,19 +87,6 @@
 				preload.setAttribute('fetchpriority', 'high');
 				document.head.appendChild(preload);
 
-				window.matchMedia('(prefers-color-scheme: dark)').addListener((e) => {
-					if (localStorage.theme === 'system') {
-						if (e.matches) {
-							document.documentElement.classList.add('dark');
-							document.documentElement.classList.remove('light');
-							metaThemeColorTag.setAttribute('content', '#171717');
-						} else {
-							document.documentElement.classList.add('light');
-							document.documentElement.classList.remove('dark');
-							metaThemeColorTag.setAttribute('content', '#ffffff');
-						}
-					}
-				});
 				const isDarkMode = document.documentElement.classList.contains('dark');
 
 				const logo = document.createElement('img');

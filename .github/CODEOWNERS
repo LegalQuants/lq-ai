@@ -29,6 +29,9 @@
 /gateway/                      @legalquants/maintainers @legalquants/security
 /docs/security/                @legalquants/security @legalquants/maintainers
 /.github/workflows/            @legalquants/maintainers @legalquants/security
+/script_runner/                @legalquants/maintainers @legalquants/security
+/api/app/skills/                @legalquants/maintainers @legalquants/security
+/deploy/compose.skill-runner.yml @legalquants/maintainers @legalquants/security
 
 # ---------- Compliance documentation ----------
 # Compliance Alignment Pack mappings affect procurement posture;

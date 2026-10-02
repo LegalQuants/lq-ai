@@ -49,6 +49,7 @@ from app.providers import (
     ProviderHTTPError,
     ProviderModelNotFound,
     ProviderNetworkError,
+    ProviderTimeoutError,
     ProviderUnsupportedError,
 )
 from app.providers.ollama import (
@@ -799,3 +800,47 @@ async def test_health_check_reports_unreachable_on_network_error() -> None:
         await adapter.aclose()
     assert health.reachable is False
     assert health.error is not None
+
+
+# --- #318 follow-through: client timeouts are labelled, not "upstream" -------
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_client_timeout_raises_provider_timeout_error() -> None:
+    """A client-side timeout (slow local model) raises
+    :class:`ProviderTimeoutError` — a :class:`ProviderNetworkError` subclass
+    (wire code unchanged) the routing log labels ``client_timeout:`` so an
+    operator can tell a too-tight ``timeout_s`` from Ollama being down."""
+
+    respx.post(f"{OLLAMA_BASE}/api/chat").mock(side_effect=httpx.ReadTimeout("read timed out"))
+    adapter = _make_adapter()
+    try:
+        with pytest.raises(ProviderTimeoutError) as excinfo:
+            await adapter.chat_completion(_basic_request(), model="llama3.1", stream=False)
+    finally:
+        await adapter.aclose()
+    exc = excinfo.value
+    assert isinstance(exc, ProviderNetworkError)
+    assert exc.code == "provider_unavailable"
+    assert "client-side timeout" in exc.message
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_streaming_client_timeout_raises_provider_timeout_error() -> None:
+    """The streaming path labels a client-side timeout the same way."""
+
+    respx.post(f"{OLLAMA_BASE}/api/chat").mock(side_effect=httpx.ReadTimeout("read timed out"))
+    adapter = _make_adapter()
+    try:
+        stream = await adapter.chat_completion(
+            _basic_request(stream=True), model="llama3.1", stream=True
+        )
+        assert not isinstance(stream, ChatCompletionResponse)
+        with pytest.raises(ProviderTimeoutError) as excinfo:
+            async for _chunk in stream:
+                pass
+    finally:
+        await adapter.aclose()
+    assert "client-side timeout" in excinfo.value.message

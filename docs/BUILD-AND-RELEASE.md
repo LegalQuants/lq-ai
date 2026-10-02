@@ -23,8 +23,9 @@ launcher pulls those images), then the desktop release.
 
 ## ⭐ Manual steps checklist (Kevin only — these cannot be automated)
 
-CI runs on **`origin` = `github.com/LegalQuants/lq-ai`**, so the secrets and package visibility live
-there. Do these once (secrets/visibility), then per-release (cut the tags).
+CI runs in **`github.com/LegalQuants/lq-ai`**, so the secrets and package visibility live there.
+Check `git remote -v` before pushing tags: a fork checkout may call that repository something other
+than `origin`. Do these once (secrets/visibility), then per-release (cut the tags).
 
 ### 1. Apple signing secrets (5) on the `LegalQuants/lq-ai` repo
 
@@ -81,13 +82,13 @@ API for this):
    administrators"), an **org owner** (not a plain member) must first enable public packages at
    `https://github.com/organizations/LegalQuants/settings/packages` → *Package creation* → allow
    **Public**.
-2. **Per-package.** Then for each of `lq-ai-api`, `lq-ai-gateway`, `lq-ai-web`: org → Packages →
+2. **Per-package.** Then for each of `lq-ai-api`, `lq-ai-gateway`, `lq-ai-web`, `lq-ai-proxy`: org → Packages →
    package → *Package settings* → *Change visibility* → **Public**.
 
 Verify anonymous pull (200 = public):
 
 ```bash
-for img in lq-ai-api lq-ai-gateway lq-ai-web; do
+for img in lq-ai-api lq-ai-gateway lq-ai-web lq-ai-proxy; do
   TOKEN=$(curl -s "https://ghcr.io/token?scope=repository:legalquants/$img:pull" \
     | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
   code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" \
@@ -98,14 +99,88 @@ done
 
 ### 3. Cut the release
 
+> **Versioning policy: [ADR 0025](adr/0025-release-versioning-and-pipeline-ordering.md).**
+> `api`, `gateway`, `web`, and `proxy` share one release version — the `vX.Y.Z` image
+> tag — and are bumped together on every release, including patch releases where only
+> one component substantively changed. Before tagging, set **both**
+> `api/app/__init__.py` and `gateway/app/__init__.py` to `X.Y.Z`; the
+> `version-consistency` job in `release.yml` fails the tag push if they disagree with
+> each other or with the tag. `web/package.json` tracks the OpenWebUI fork upstream and
+> is **not** bumped to match.
+>
+> The desktop launcher versions independently (`desktop-vX.Y.Z`) and records which
+> `vX.Y.Z` image set it ships against — see *Image ↔ launcher relationship* below.
+
+#### 3a. Decide the number first
+
+The number is **computed from what is on `main`**, not chosen from a milestone.
+Milestones are planning tools; they do not decide the version.
+
+```bash
+# What has landed since the last release?
+#   --merged main: web/ is a fork of OpenWebUI, and rebasing it brought upstream's
+#   own vX.Y.Z tags into this repo (v0.9.2, v0.11.0). They are not reachable from
+#   main, and without this filter they sort above the real last release. release.yml's
+#   breaking-change gate applies the same filter.
+git log "$(git tag --list 'v*.*.*' --merged main --sort=-v:refname \
+             | grep -v '^desktop-' | head -1)"..main --no-merges --oneline
+```
+
+Read that list and ask one question of each entry: **does a working install need a
+human to touch it after this upgrade?** A new environment variable, a changed
+config key, a manual migration step, a required header, a removed endpoint — all
+yes. Bug fixes, dependency bumps and output-side hardening — no.
+
+- **Any "yes" in the list → the next release is a minor bump** (`0.6.x` → `0.7.0`).
+- **All "no" → patch** (`0.6.2` → `0.6.3`).
+
+A breaking PR does **not** wait for a `0.7.0` milestone to exist before merging.
+Merging it is what makes the next release `0.7.0`.
+
+Apply the **`breaking-change`** label at review time, so this is a lookup rather
+than an act of memory:
+
+```bash
+gh pr list -R LegalQuants/lq-ai --label breaking-change --state merged --limit 100 \
+  --json number,title,mergedAt
+```
+
+`release.yml`'s `version-consistency` job enforces this on tag push: it walks the
+commit range back to the previous release tag, intersects the PR numbers it finds
+with the `breaking-change` label, and **fails a patch tag** when any turn up. The
+override is `[allow-breaking-in-patch]` in the tagged commit message — justify it
+in the release PR.
+
+> The gate is only as good as the labelling. An unlabelled breaking PR is
+> invisible to it, so the label goes on at review time, not at release time.
+
+> ⚠️ **Once a breaking change is on `main`, you can no longer cut a patch from
+> `main`.** If an urgent fix has to ship *without* also shipping that change,
+> branch from the last release tag, cherry-pick the fix, and cut from there:
+>
+> ```bash
+> git checkout -b release/0.6.x v0.6.1
+> git cherry-pick <fix-sha>
+> # bump api + gateway __version__ to 0.6.2, commit, then tag from this branch
+> ```
+>
+> This is deliberately manual — see ADR 0025 *Cadence* on why a standing
+> release-branch discipline isn't worth its overhead at current capacity.
+
+#### 3b. Tag
+
 ```bash
 # (a) Images first — tag from a ref that CONTAINS the release Dockerfiles + release.yml (main):
-git tag vX.Y.Z && git push origin vX.Y.Z
+# Replace origin with the LegalQuants remote shown by git remote -v in a fork checkout.
+# Verify the fetched main commit contains the reviewed release PR and rehearsal evidence.
+git fetch origin main
+RELEASE_COMMIT=$(git rev-parse origin/main)
+git tag -a vX.Y.Z "$RELEASE_COMMIT" -m "Release vX.Y.Z" && git push origin vX.Y.Z
 #   …or dispatch: gh workflow run release.yml -R LegalQuants/lq-ai
-# release.yml then publishes multi-arch lq-ai-{api,gateway,web}:vX.Y.Z (+ :latest).
+# release.yml then publishes multi-arch lq-ai-{api,gateway,web,proxy}:vX.Y.Z (+ :latest).
 
 # (b) The macOS app — separate tag, runs on macos-14, needs the 5 Apple secrets:
-git tag desktop-vX.Y.Z && git push origin desktop-vX.Y.Z
+git tag -a desktop-vX.Y.Z "$RELEASE_COMMIT" -m "Desktop release vX.Y.Z" && git push origin desktop-vX.Y.Z
 #   …or dispatch: gh workflow run desktop-release.yml -R LegalQuants/lq-ai -f tag=desktop-vX.Y.Z
 ```
 
@@ -120,10 +195,12 @@ git tag desktop-vX.Y.Z && git push origin desktop-vX.Y.Z
 
 - The launcher renders an `.env` at runtime and runs `docker-compose.release.yml` under its own compose
   project (`lq-ai-desktop`), pulling `ghcr.io/${LQ_AI_IMAGE_NAMESPACE:-legalquants}/lq-ai-<svc>:${LQ_AI_IMAGE_TAG}`.
-- **`LQ_AI_IMAGE_TAG`** pins the image version the launcher runs. The launcher config persists a tag
-  (default the version we ship the app at); a hand-run stack pins it in `.env`
-  ([`.env.release.example`](../.env.release.example)). Pin to a released `vX.Y.Z` for reproducibility;
-  `latest` follows the newest published images.
+- **`LQ_AI_IMAGE_TAG`** pins the image version the launcher runs. The desktop release workflow
+  converts `desktop-vX.Y.Z` to `vX.Y.Z` and bakes it into the main process at build time. New installs
+  persist that exact tag; each launcher upgrade aligns the encrypted config and generated `.env` to
+  its baked release tag. Local developer builds retain `latest`. This implements ADR 0025 decision 2
+  and gives ADR 0037's migration walk a known target. A hand-run stack pins the same value in
+  [`.env.release.example`](../.env.release.example).
 - **`LQ_AI_IMAGE_NAMESPACE`** (default `legalquants`) overrides the GHCR namespace for forks/mirrors
   that publish `lq-ai-{api,gateway,web}` elsewhere — set it in `.env` (hand-run) so the compose pulls
   from your namespace.

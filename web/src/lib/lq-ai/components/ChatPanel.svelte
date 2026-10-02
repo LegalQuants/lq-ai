@@ -40,6 +40,70 @@
 			slashIndex
 		};
 	}
+
+	/**
+	 * Per-chat model-selection persistence (bugfix: model-selection-persist-
+	 * refresh). `modelByChat` was a component-local `Record` with no
+	 * persistence, so a full page refresh remounted the component, reset
+	 * modelByChat to `{}`, and currentModelId's reactive fallback silently
+	 * picked the picker's default — discarding the user's choice. Mirrors
+	 * ReceiptsDrawer.svelte's storageKeyForChat/readPersistedOpen/
+	 * writePersistedOpen convention (same file also uses a per-chat
+	 * localStorage key prefix, same optional injectable Storage param for
+	 * testability).
+	 *
+	 * All three helpers treat persistence as best-effort: a `Storage`
+	 * that throws (Safari private mode, a disabled-storage policy, a
+	 * quota-exceeded write) must never break chat selection, so the
+	 * read/write helpers swallow the exception and fall through to the
+	 * existing default-selection behaviour.
+	 */
+	const MODEL_STORAGE_KEY_PREFIX = 'lq_ai_chat_model_';
+
+	export function modelStorageKeyForChat(chatId: string): string {
+		return `${MODEL_STORAGE_KEY_PREFIX}${chatId}`;
+	}
+
+	export function readPersistedModel(chatId: string, storage?: Storage): string | null {
+		const store = storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
+		if (!store) return null;
+		try {
+			return store.getItem(modelStorageKeyForChat(chatId));
+		} catch {
+			return null;
+		}
+	}
+
+	export function writePersistedModel(chatId: string, modelId: string, storage?: Storage): void {
+		const store = storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
+		if (!store) return;
+		try {
+			store.setItem(modelStorageKeyForChat(chatId), modelId);
+		} catch {
+			/* best-effort: private-mode / quota / disabled storage — skip */
+		}
+	}
+
+	/**
+	 * Pure resolver for a chat's remembered model choice: return the
+	 * persisted id only when it is still in the supplied catalog.
+	 *
+	 * A model the operator has since removed from the gateway must not be
+	 * shown by the picker — `selectModel()` never ran for this session, so
+	 * `currentModelId` would surface the stale id while the send path
+	 * (`MessageCreate.model`) falls back to the default alias. The picker
+	 * would then display one model and the request would use another.
+	 * Gating on `availableIds` keeps the two in lockstep.
+	 */
+	export function readAvailablePersistedModel(
+		chatId: string,
+		availableIds: readonly string[],
+		storage?: Storage
+	): string | null {
+		const persisted = readPersistedModel(chatId, storage);
+		if (persisted === null) return null;
+		return availableIds.includes(persisted) ? persisted : null;
+	}
 </script>
 
 <script lang="ts">
@@ -61,7 +125,7 @@
 	 * surfaced per-message.
 	 */
 	import { get } from 'svelte/store';
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 
 	import {
@@ -84,6 +148,7 @@
 	} from '$lib/lq-ai/stores';
 	import { consumeMessageStream } from '$lib/lq-ai/sse/parser';
 	import { buildAuthorizeUrl, type PendingGate } from '$lib/lq-ai/chat/toolGate';
+	import { canAttachChatFile, selectFileIdsForSend } from '$lib/lq-ai/chat/attachedFiles';
 	import type { Chat, FileMeta, Message, Project, Skill } from '$lib/lq-ai/types';
 
 	import ChatSidebar from '$lib/lq-ai/components/ChatSidebar.svelte';
@@ -169,6 +234,20 @@
 	let chatFiles: FileMeta[] = [];
 	let projectFiles: FileMeta[] = [];
 	let uploading = false;
+
+	// In-flight ingestion-status polls, keyed by file id, so detach, chat
+	// switch, and teardown can stop them (files attached in chat A must not
+	// keep polling — or get sent — after switching to chat B).
+	let filePollAborts: Record<string, AbortController> = {};
+
+	function abortFilePolls(): void {
+		for (const controller of Object.values(filePollAborts)) controller.abort();
+		filePollAborts = {};
+	}
+
+	onDestroy(abortFilePolls);
+
+	$: attachLimitReached = !canAttachChatFile(chatFiles.length);
 
 	let streamingMessageId: string | null = null;
 	let streamAbort: AbortController | null = null;
@@ -319,6 +398,7 @@
 		const chat = $activeChatStore;
 		if (!chat) return;
 		modelByChat = { ...modelByChat, [chat.id]: id };
+		writePersistedModel(chat.id, id);
 	}
 
 	async function selectChat(chat: Chat) {
@@ -330,6 +410,24 @@
 		attachedSkillNames = [];
 		attachmentSources = {};
 		skillInputs = {};
+		// Attached files are per-chat draft state too — reset them (and stop
+		// their status polls) so chat A's files are never sent from chat B.
+		abortFilePolls();
+		chatFiles = [];
+		// Hydrate this chat's remembered model choice from localStorage if we
+		// don't already have one in-memory (survives a page refresh; a
+		// same-session choice already in modelByChat always wins). Only accept
+		// a persisted id the current catalog still offers, so the picker can
+		// never show a model the send path would silently drop.
+		if (!(chat.id in modelByChat)) {
+			const persisted = readAvailablePersistedModel(
+				chat.id,
+				availableModels.data.map((m) => m.id)
+			);
+			if (persisted) {
+				modelByChat = { ...modelByChat, [chat.id]: persisted };
+			}
+		}
 		// Load messages.
 		try {
 			const page = await messagesApi.listMessages(chat.id, { limit: 100 });
@@ -436,12 +534,26 @@
 
 	// ---- file panel handlers ----
 	async function uploadAttached(file: File) {
+		// The backend 422s the whole send when file_ids exceeds the cap
+		// (MESSAGE_FILE_IDS_MAX_LEN), so block the attach up front; the panel
+		// shows the limit notice + disables the upload button in parallel.
+		if (!canAttachChatFile(chatFiles.length)) return;
+		// The active chat can change while the upload is in flight; capture the
+		// target so chat A's file is never appended to (or sent from) chat B.
+		const targetChatId = $activeChatStore?.id ?? null;
 		uploading = true;
 		try {
 			const uploaded = await filesApi.uploadFile(file, {
 				project_id: $activeChatStore?.project_id ?? undefined
 			});
+			// Re-check after the await: the chat may have changed, and a
+			// parallel upload may have taken the last slot under the cap.
+			if (($activeChatStore?.id ?? null) !== targetChatId) return;
+			if (!canAttachChatFile(chatFiles.length)) return;
 			chatFiles = [...chatFiles, uploaded];
+			// Ingestion is async; poll so the chip flips pending -> ready (or
+			// failed) instead of showing a stale "pending" forever.
+			void pollAttachedStatus(uploaded.id);
 		} catch (e) {
 			console.error('lq-ai: upload failed', e);
 		} finally {
@@ -449,9 +561,37 @@
 		}
 	}
 
+	// Poll a chat-attached file's ingestion status until it reaches a terminal
+	// state, patching the matching chatFiles entry so the panel chip updates.
+	// The per-file AbortController stops the loop on detach, chat switch, and
+	// component teardown (abortFilePolls / onDestroy).
+	async function pollAttachedStatus(id: string): Promise<void> {
+		const controller = new AbortController();
+		filePollAborts[id]?.abort();
+		filePollAborts = { ...filePollAborts, [id]: controller };
+		const result = await filesApi.pollFileStatus(id, {
+			signal: controller.signal,
+			onStatus: (latest) => {
+				chatFiles = chatFiles.map((f) =>
+					f.id === id ? { ...f, ingestion_status: latest.ingestion_status } : f
+				);
+			}
+		});
+		if (filePollAborts[id] === controller) {
+			const next = { ...filePollAborts };
+			delete next[id];
+			filePollAborts = next;
+		}
+		if (result.outcome === 'timeout') {
+			// Leave the last known status in place — don't fabricate 'failed'.
+			console.warn('lq-ai: file ingestion status poll timed out', id);
+		}
+	}
+
 	async function detachFile(file: FileMeta) {
 		// Per the spec the M1 attached-files panel manages chat-local state;
 		// the full file-row is left in place and can be re-attached later.
+		filePollAborts[file.id]?.abort();
 		chatFiles = chatFiles.filter((f) => f.id !== file.id);
 	}
 
@@ -641,6 +781,11 @@
 					// Issue #207 finding 4 — only send set_sticky on a real toggle
 					// change; otherwise leave the chat's sticky set unchanged.
 					set_sticky: stickyDirty ? stickyEnabled : undefined,
+					// Chat-scoped attached files — the backend injects each ready
+					// file's canonical text as a system block (chats.py). Ownership
+					// is validated server-side; files with no text are skipped.
+					// selectFileIdsForSend drops 'failed' files and caps at 16.
+					file_ids: selectFileIdsForSend(chatFiles),
 					stream: true
 				},
 				streamAbort.signal
@@ -1164,6 +1309,7 @@
 			{chatFiles}
 			{projectFiles}
 			{uploading}
+			{attachLimitReached}
 			onUpload={uploadAttached}
 			onDetach={detachFile}
 		/>

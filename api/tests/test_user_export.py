@@ -14,7 +14,7 @@ import io
 import json
 import uuid
 import zipfile
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -30,7 +30,7 @@ from app.security import create_access_token, hash_password
 from app.workers.user_export import build_export_zip_for_test, export_gc_job
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -279,15 +279,15 @@ async def test_export_gc_clears_expired_rows(
 
     # Patch the storage delete and the session factory to use the test
     # session; arq's cron entry point goes through these.
-    from contextlib import asynccontextmanager
+    from contextlib import AbstractAsyncContextManager, asynccontextmanager
 
     monkeypatch.setattr("app.workers.user_export.delete_object", _fake_delete)
 
     @asynccontextmanager
-    async def _factory_cm():
+    async def _factory_cm() -> AsyncIterator[AsyncSession]:
         yield db_session
 
-    def _factory_callable():
+    def _factory_callable() -> AbstractAsyncContextManager[AsyncSession]:
         return _factory_cm()
 
     monkeypatch.setattr("app.workers.user_export.get_session_factory", lambda: _factory_callable)
@@ -298,7 +298,10 @@ async def test_export_gc_clears_expired_rows(
     assert len(deleted) >= 1
 
     # The expired row's storage_key is cleared; the fresh row is untouched.
-    await db_session.refresh(expired := await db_session.get(UserExportJob, expired_id))
-    await db_session.refresh(fresh := await db_session.get(UserExportJob, fresh_id))
-    assert expired.storage_key is None
-    assert fresh.storage_key is not None
+    expired_row = await db_session.get(UserExportJob, expired_id)
+    fresh_row = await db_session.get(UserExportJob, fresh_id)
+    assert expired_row is not None and fresh_row is not None
+    await db_session.refresh(expired_row)
+    await db_session.refresh(fresh_row)
+    assert expired_row.storage_key is None
+    assert fresh_row.storage_key is not None

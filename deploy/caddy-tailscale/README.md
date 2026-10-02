@@ -22,6 +22,17 @@ terminated by the host's **Tailscale** rather than by the proxy itself.
 If you need a publicly reachable URL, use one of the `reverse-proxy` recipes
 instead.
 
+## Why use this
+
+This Tailscale and Caddy recipe provides a private deployment pattern. By
+isolating your LQ.AI instance within an encrypted Tailscale mesh network, your
+server doesn't require open firewall ports. Caddy acts as a plain reverse proxy
+on loopback, while the host's Tailscale terminates TLS with valid,
+auto-renewing HTTPS certificates and zero manual DNS configuration (Caddy
+itself issues no certificates — see "How it works"). The result is easy and
+secure remote access. You should still follow best practices in securing the
+underlying server running LQ.AI.
+
 ## How it works
 
 ```
@@ -50,7 +61,24 @@ container. Caddy is given no tailnet identity — the host owns that.
 
 ## Quick start (recommended — gives you HTTPS)
 
-1. Bring up the stack with this overlay composed onto the base file:
+1. Edit your `.env` to include the following variables:
+
+| ENV Variable | Notes |
+| ------------ | ----- |
+| `CADDY_BIND_ADDR=127.0.0.1` | This is the address you will point to for tailscale serve in conjunction with the below port. |
+| `CADDY_HOST_PORT=80` |  Host port Caddy listens on. 80 is the default so URLs don't need an explicit port; pick a free non-privileged port (e.g. 8080) if something else already owns 80 on the host, and remember to update the `tailscale serve` upstream target accordingly.|
+| `PUBLIC_LQ_AI_API_BASE_URL=/lq-ai-api/v1` | Tells the browser client which base URL to call — baked into the web bundle at image-build time. Only needed if you use the LQ.AI shell; must match the Caddyfile route (see "Why the `/lq-ai-api/v1` prefix?" below). |
+
+2. Rebuild the web bundle so Vite bakes `PUBLIC_LQ_AI_API_BASE_URL` in
+   (build-time, not runtime — skipping this leaves LQ.AI-shell calls pointing
+   at `localhost:8000`; see "Using the LQ.AI shell over the tailnet"):
+   ```bash
+   docker compose \
+     -f docker-compose.yml \
+     -f deploy/caddy-tailscale/docker-compose.proxy.yml \
+     build web
+   ```
+3. Bring up the stack with this overlay composed onto the base file:
    ```bash
    docker compose \
      -f docker-compose.yml \
@@ -58,7 +86,7 @@ container. Caddy is given no tailnet identity — the host owns that.
      up -d
    ```
    <!-- Adjust the overlay filename if yours differs from docker-compose.proxy.yml. -->
-2. Run this **once** on the host (not in a container):
+4. Run this **once** on the host (not in a container):
    ```bash
    sudo tailscale serve --bg --https=443 http://127.0.0.1:80
    ```
@@ -66,7 +94,7 @@ container. Caddy is given no tailnet identity — the host owns that.
    reboots. It terminates HTTPS with a valid, auto-renewing certificate for your
    tailnet name (publicly trusted — no `-k` needed) and proxies to Caddy on
    loopback.
-3. Open the UI from any device on your tailnet:
+5. Open the UI from any device on your tailnet:
    ```
    https://<host>.<tailnet>.ts.net
    ```
@@ -140,7 +168,7 @@ chat surface) are handled automatically by Caddy's `reverse_proxy`.
 This only matters if you use the LQ.AI shell at `/lq-ai`. If you only use
 OpenWebUI's shell at `/`, skip this — the default
 `PUBLIC_LQ_AI_API_BASE_URL=http://localhost:8000/api/v1` is fine, because the
-LQ.AI client never gets called. 
+LQ.AI client never gets called.
 
 To make `/lq-ai` work from any tailnet device (not just the Docker host), set:
 
@@ -156,7 +184,8 @@ docker compose -f docker-compose.yml -f deploy/caddy-tailscale/docker-compose.pr
 ```
 
 Leaving it as `http://localhost:8000/...` breaks LQ.AI-shell calls from any
-device that is not the Docker host itself. The .env.example in this directory already has this changed. 
+device that is not the Docker host itself. Set it in your root `.env` (quick
+start, step 1).
 
 ## Alternative: bind Caddy straight to the tailnet (HTTP only)
 

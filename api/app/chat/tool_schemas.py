@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.mcp.service import list_cached_tools, list_servers
 from app.research.registry import SOURCE_REGISTRY, resolve_available_sources
 from app.research.service import _resolve_provider as research_resolve_provider, get_capabilities
+from app.skills.binding import SkillBinding
 
 log = logging.getLogger(__name__)
 
@@ -210,7 +211,7 @@ def parse_mcp_function_name(name: str) -> tuple[str, str] | None:
 @dataclass(frozen=True)
 class ToolSpec:
     function_name: str
-    kind: Literal["research", "mcp", "authority"]
+    kind: Literal["research", "mcp", "authority", "skill"]
     provider: str
     tool: str
     read_only: bool
@@ -218,6 +219,7 @@ class ToolSpec:
     requires_confirmation: bool
     parameters: dict[str, Any]
     description: str = ""
+    skill_binding: SkillBinding | None = None
 
 
 @dataclass

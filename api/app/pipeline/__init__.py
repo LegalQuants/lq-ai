@@ -8,7 +8,7 @@ This package contains the pieces of the document-pipeline service:
 * :mod:`app.pipeline.chunker` — character-precise sliding-window chunker
   that produces ``Chunk`` records whose offsets slice the canonical
   text byte-for-byte.
-* :mod:`app.pipeline.ingest` — orchestration: pull bytes from MinIO,
+* :mod:`app.pipeline.ingest` — orchestration: pull bytes from object storage,
   parse, chunk, persist to the DB, flip ``files.ingestion_status``.
 
 The orchestration is invoked by :mod:`app.workers.document_pipeline`,

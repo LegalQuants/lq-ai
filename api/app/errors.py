@@ -463,6 +463,10 @@ class ProviderUnavailable(LQAIError):
     Backend pass-through of the gateway's ``provider_unavailable`` code.
     The gateway has already exhausted fallback; there's nothing the
     backend can do but surface it.
+
+    Also raised by the chat SSE generators when a turn completes with no
+    content and no error (issue #503): an empty turn is a failure the
+    client must be told about, never an empty answer.
     """
 
     code = CODE_PROVIDER_UNAVAILABLE

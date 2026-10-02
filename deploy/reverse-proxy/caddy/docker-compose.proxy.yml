@@ -1,0 +1,54 @@
+# LQ.AI reverse-proxy overlay — Caddy with automatic Let's Encrypt TLS.
+#
+# Compose onto the base stack from the REPO ROOT:
+#
+#   docker compose \
+#     -f docker-compose.yml \
+#     -f deploy/reverse-proxy/caddy/docker-compose.proxy.yml \
+#     up -d
+#
+# Requires LQ_AI_FQDN and LQ_AI_ACME_EMAIL in the root .env (see
+# .env.example in this directory). Ports 80 and 443 must be reachable
+# from the internet: 80 for the ACME HTTP-01 challenge and the
+# HTTP→HTTPS redirect, 443 for the site itself.
+
+name: lq-ai
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      # web's first boot can take minutes (model/asset warm-up); don't hold
+      # the front door down on it. `service_started` gives Caddy DNS
+      # resolution; until web actually listens, Caddy answers 502, which
+      # recovers on its own. Same rationale as deploy/caddy-tailscale.
+      web:
+        condition: service_started
+      api:
+        condition: service_healthy
+    environment:
+      LQ_AI_FQDN: ${LQ_AI_FQDN:?LQ_AI_FQDN is required — public DNS name of this host}
+      LQ_AI_ACME_EMAIL: ${LQ_AI_ACME_EMAIL:?LQ_AI_ACME_EMAIL is required — ACME account email}
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    volumes:
+      # /data holds the ACME account key and issued certificates. Losing it
+      # forces re-issuance (rate-limited!) — keep this volume.
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+
+volumes:
+  caddy-data:
+  caddy-config:
+
+configs:
+  caddyfile:
+    # Relative to the FIRST -f file's directory (the repo root), matching
+    # the convention in deploy/caddy-tailscale/docker-compose.proxy.yml.
+    file: ./deploy/reverse-proxy/caddy/Caddyfile

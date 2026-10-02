@@ -40,7 +40,7 @@ docs/security/
 
 **`airgap-verify.yml`** — a CI workflow that:
 
-1. Brings up `docker compose --profile local up -d` (the Mode 2 profile defined in [`docker-compose.yml`](../../../docker-compose.yml) services `postgres`, `redis`, `minio`, `gateway`, `api`, `ingest-worker`, `web`, `ollama`, `paddleocr`).
+1. Brings up `docker compose --profile local up -d` (the Mode 2 profile defined in [`docker-compose.yml`](../../../docker-compose.yml) services `postgres`, `redis`, `rustfs`, `gateway`, `api`, `ingest-worker`, `web`, `ollama`, `paddleocr`).
 2. Pulls down a small open-weight model into Ollama (e.g., `llama3.2:1b` for CI speed) so a representative chat can complete in seconds.
 3. Applies a deny-all-egress network policy to the compose network via `scripts/airgap/deny-egress.sh` (iptables/nftables in the runner; or a sidecar container with NET_ADMIN that programs iptables on the compose bridge).
 4. Starts an egress capture via `nicolaka/netshoot` running tcpdump on the bridge, writing to a pcap.

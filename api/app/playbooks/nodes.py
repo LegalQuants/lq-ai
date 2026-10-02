@@ -33,7 +33,6 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -41,6 +40,7 @@ from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.gateway import GatewayClient
+from app.graph_types import AsyncStateNode
 from app.models.document import DocumentChunk
 from app.models.playbook import PlaybookExecution
 from app.observability_helpers import get_tracer, record_attributes
@@ -87,7 +87,7 @@ _CONFIDENCE_NUMERIC: dict[str, float] = {"high": 0.9, "medium": 0.7, "low": 0.5}
 
 def make_retrieve_node(
     db: AsyncSession,
-) -> Callable[[PlaybookExecutionState], Awaitable[dict[str, Any]]]:
+) -> AsyncStateNode[PlaybookExecutionState]:
     """Build the retrieve node bound to a DB session."""
 
     async def retrieve_node(state: PlaybookExecutionState) -> dict[str, Any]:
@@ -270,7 +270,7 @@ def make_classify_node(
     *,
     gateway: GatewayClient,
     judge_model: str,
-) -> Callable[[PlaybookExecutionState], Awaitable[dict[str, Any]]]:
+) -> AsyncStateNode[PlaybookExecutionState]:
     """Build the classify node bound to a gateway client + model alias."""
 
     async def classify_node(state: PlaybookExecutionState) -> dict[str, Any]:
@@ -406,7 +406,7 @@ def make_redline_node(
     *,
     gateway: GatewayClient,
     judge_model: str,
-) -> Callable[[PlaybookExecutionState], Awaitable[dict[str, Any]]]:
+) -> AsyncStateNode[PlaybookExecutionState]:
     """Build the redline node bound to a gateway client + model alias.
 
     Iterates :func:`classify_node`'s ``per_position_results`` and runs a
@@ -487,7 +487,7 @@ def _build_redline_messages(
 
 def make_compile_node(
     db: AsyncSession,
-) -> Callable[[PlaybookExecutionState], Awaitable[dict[str, Any]]]:
+) -> AsyncStateNode[PlaybookExecutionState]:
     """Build the compile node bound to a DB session.
 
     The compile node writes the assembled results into

@@ -5,7 +5,7 @@ import pytest
 import respx
 
 from app.clients.gateway import GatewayClient
-from app.schemas.gateway import ChatCompletionRequest
+from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
 
 GW = "http://gw.test"
 
@@ -69,7 +69,7 @@ async def test_call_tool_maps_gateway_4xx_envelope() -> None:
 def test_api_chat_request_carries_tools() -> None:
     req = ChatCompletionRequest(
         model="smart",
-        messages=[{"role": "user", "content": "hi"}],
+        messages=[ChatCompletionMessage(role="user", content="hi")],
         tools=[{"type": "function", "function": {"name": "x", "parameters": {}}}],
         tool_choice="auto",
     )

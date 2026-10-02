@@ -24,11 +24,30 @@ Design notes
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from typing import Any
 
 log = logging.getLogger(__name__)
+
+
+async def enqueue_orchestration_job(root_id: uuid.UUID, session_id: uuid.UUID) -> bool:
+    """Best-effort wakeup after durable commit; the bounded sweep repairs loss."""
+    try:
+        async with asyncio.timeout(3):
+            pool = await _get_m3a6_pool()
+            await pool.enqueue_job(
+                "orchestration_session_job",
+                str(root_id),
+                str(session_id),
+                _job_id=f"orchestration:{session_id}",
+            )
+        return True
+    except Exception:
+        log.warning("Orchestration wakeup deferred to recovery sweep", exc_info=False)
+        return False
+
 
 # Job-function name on the worker side. Must match the function name
 # in :mod:`app.workers.document_pipeline`.
@@ -42,7 +61,7 @@ embeddings) and from the ingest-completion hook."""
 EXPORT_USER_DATA_JOB_NAME = "export_user_data_job"
 """D6 — GDPR Article 20 export job. Triggered by the API when a user
 calls ``POST /api/v1/users/me/export``; the worker assembles the ZIP
-and writes it to MinIO under ``exports/<user_id>/<job_id>.zip``."""
+and writes it to object storage under ``exports/<user_id>/<job_id>.zip``."""
 
 EASY_PLAYBOOK_JOB_NAME = "easy_playbook_generation_job"
 """M3-A6 Phase 5 — Easy Playbook generation pipeline. Triggered by

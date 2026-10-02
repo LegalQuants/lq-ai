@@ -4,7 +4,7 @@ import type { PortConfig } from './types'
 export interface LauncherConfig {
 	secrets: GeneratedSecrets
 	ports: PortConfig
-	/** Published image tag to run, e.g. "latest" or "v0.4.0". */
+	/** Published image tag baked into this launcher release. */
 	imageTag: string
 	/** GHCR namespace the images live under (default "legalquants"). */
 	imageNamespace: string

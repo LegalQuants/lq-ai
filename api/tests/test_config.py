@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.config import Settings, get_settings
+from app.config import DEV_JWT_SECRET, Settings, assert_production_secrets, get_settings
 
 
 @pytest.mark.unit
@@ -113,3 +113,40 @@ def test_get_settings_is_cached() -> None:
     get_settings.cache_clear()
     c = get_settings()
     assert c is not a
+
+
+@pytest.mark.unit
+def test_assert_production_secrets_refuses_dev_jwt_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Startup must fail closed when JWT_SECRET is the published dev default
+    and dev mode is off (#288, API-04)."""
+    monkeypatch.setenv("JWT_SECRET", DEV_JWT_SECRET)
+    monkeypatch.delenv("LQ_AI_DEV_MODE", raising=False)
+    s = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert s.jwt_secret == DEV_JWT_SECRET
+    assert s.lq_ai_dev_mode is False
+    with pytest.raises(RuntimeError, match="published development default"):
+        assert_production_secrets(s)
+
+
+@pytest.mark.unit
+def test_assert_production_secrets_allows_dev_default_in_dev_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The dev default is fine when LQ_AI_DEV_MODE is on."""
+    monkeypatch.setenv("JWT_SECRET", DEV_JWT_SECRET)
+    monkeypatch.setenv("LQ_AI_DEV_MODE", "true")
+    s = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert_production_secrets(s)  # does not raise
+
+
+@pytest.mark.unit
+def test_assert_production_secrets_allows_real_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A non-default secret is accepted even outside dev mode."""
+    monkeypatch.setenv("JWT_SECRET", "a-strong-random-production-secret")
+    monkeypatch.delenv("LQ_AI_DEV_MODE", raising=False)
+    s = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert_production_secrets(s)  # does not raise

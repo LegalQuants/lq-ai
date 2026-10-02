@@ -1,0 +1,69 @@
+# LQ.AI reverse-proxy overlay — Traefik v3 with automatic Let's Encrypt TLS.
+#
+# Compose onto the base stack from the REPO ROOT:
+#
+#   docker compose \
+#     -f docker-compose.yml \
+#     -f deploy/reverse-proxy/traefik/docker-compose.proxy.yml \
+#     up -d
+#
+# Requires LQ_AI_FQDN and LQ_AI_ACME_EMAIL in the root .env (see
+# .env.example in this directory). Ports 80 and 443 must be reachable
+# from the internet: 80 for the ACME HTTP-01 challenge and the
+# HTTP→HTTPS redirect, 443 for the site itself.
+#
+# Config style: Traefik's static configuration is passed as command-line
+# flags below; the routing rules live in a dynamic file-provider config.
+# This keeps the recipe parameterized without granting Traefik access to the
+# Docker API or mounting /var/run/docker.sock.
+
+name: lq-ai
+
+services:
+  traefik:
+    image: traefik:v3
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_started
+      api:
+        condition: service_healthy
+    environment:
+      # The dynamic file-provider template reads this value at load time.
+      LQ_AI_FQDN: ${LQ_AI_FQDN:?LQ_AI_FQDN is required — public DNS name of this host}
+    command:
+      # --- provider: explicit routes; no Docker API access required ---
+      - "--providers.file.directory=/etc/traefik/dynamic"
+      - "--providers.file.watch=true"
+      # --- entrypoints: 80 redirects to 443 ---
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.websecure.address=:443"
+      # Traefik v3 defaults readTimeout to 60s, which cuts off large
+      # document uploads on slow links; allow up to 10 minutes to read a
+      # client request. (writeTimeout stays 0 = unlimited, so long
+      # streamed LLM generations are never cut off by Traefik.)
+      - "--entrypoints.websecure.transport.respondingTimeouts.readTimeout=600s"
+      # --- ACME (Let's Encrypt), HTTP-01 on port 80 ---
+      - "--certificatesresolvers.letsencrypt.acme.email=${LQ_AI_ACME_EMAIL:?LQ_AI_ACME_EMAIL is required — ACME account email}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      # While iterating, uncomment to use the Let's Encrypt STAGING CA so
+      # failed attempts don't burn production rate limits (staging certs
+      # are not browser-trusted):
+      # - "--certificatesresolvers.letsencrypt.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
+    volumes:
+      # Mount the directory, rather than one file, so Traefik's file watcher
+      # continues to work when an editor replaces a file atomically.
+      - ./deploy/reverse-proxy/traefik/dynamic:/etc/traefik/dynamic:ro
+      # acme.json holds the ACME account key and issued certificates.
+      # Losing it forces re-issuance (rate-limited!) — keep this volume.
+      - traefik-letsencrypt:/letsencrypt
+    ports:
+      - "80:80"
+      - "443:443"
+
+volumes:
+  traefik-letsencrypt:

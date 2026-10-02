@@ -11,13 +11,28 @@ requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
 authors = [{ name = "LegalQuants" }]
 dependencies = [
-    "fastapi>=0.115,<0.117",
-    "uvicorn[standard]>=0.32,<0.48",
+    "fastapi>=0.141.1,<0.142",
+    "uvicorn[standard]>=0.52.1,<0.53",
     "pydantic>=2.7,<3",
     "pydantic-settings>=2.4,<3",
-    "sqlalchemy[asyncio]>=2.0.30,<2.1",
-    "asyncpg>=0.29,<0.31",
-    "alembic>=1.13,<2",
+    "sqlalchemy[asyncio]>=2.0.51,<2.1",
+    # The asyncpg window is a CROSS-SERVICE INVARIANT, not a local choice: it
+    # must move in lockstep with gateway/pyproject.toml's, whose comment
+    # records why (one asyncpg ABI per container image in a multi-service
+    # deployment). This bump is paired with the identical bump in gateway/.
+    "asyncpg>=0.31.0,<0.32",
+    # starlette is fastapi's ASGI layer and is imported nowhere in api/app
+    # directly — it is pinned explicitly because 0.48.0 carries 10 known
+    # advisories with no in-range fix (GHSA-7f5h-v6xp-fcq8,
+    # GHSA-82w8-qh3p-5jfq, GHSA-86qp-5c8j-p5mr, GHSA-jp82-jpqv-5vv3,
+    # GHSA-wqp7-x3pw-xc5r, GHSA-x746-7m8f-x49c, PYSEC-2026-161,
+    # PYSEC-2026-1942, PYSEC-2026-2280, PYSEC-2026-2281). Without an explicit
+    # floor the resolver is free to sit on the vulnerable build for as long as
+    # fastapi's own range allows, which is exactly what happened here: the
+    # advisory sat unremediated in this lock while fastapi stayed on 0.116.
+    # Mirrors the same explicit pin in gateway/pyproject.toml.
+    "starlette>=1.4.1,<1.7",
+    "alembic>=1.19.0,<2",
     "psycopg2-binary>=2.9,<3",
     "greenlet>=3.0,<4",
     # A4 dependencies — readiness wiring + clients used at startup.
@@ -27,7 +42,7 @@ dependencies = [
     # `aioboto3` is an asyncio wrapper over botocore; required because the
     # backend's storage path (Task C4) is async and we don't want to block
     # the event loop on file I/O. Pulls boto3/botocore transitively.
-    "aioboto3>=13.0,<14",
+    "aioboto3>=15.5.0,<16",
     # httpx is FastAPI's recommended async HTTP client and is used by the
     # gateway client. Already a transitive of fastapi/starlette test deps,
     # declared explicitly here because we use it at runtime, not just in tests.
@@ -41,7 +56,7 @@ dependencies = [
     # The [crypto] extra ships the PyCA cryptography backend that pyjwt
     # uses for signing — keeps a future move from HS256 to RS256/EdDSA
     # to a config change rather than a dep change.
-    "pyjwt[crypto]>=2.9,<3",
+    "pyjwt[crypto]>=2.13.0,<3",
     # email-validator: Pydantic's EmailStr requires this at validation time.
     # Used by LoginRequest to reject obviously-malformed addresses before
     # we hit the database. Tiny dep; pulls dnspython transitively.
@@ -79,7 +94,7 @@ dependencies = [
     # worker. MIT-licensed; small dep footprint (just redis-py which
     # we already have, plus click). Avoids Celery's complexity at
     # M1 scale; ADR 0006 §2 records the call.
-    "arq>=0.25,<0.27",
+    "arq>=0.28.0,<0.29",
     # C6 — tiktoken: BPE tokenizer for OpenAI's text-embedding-3-* family.
     # Used by app.knowledge.embed.count_tokens to populate
     # document_chunks.tokens during the embed-on-write path. ADR 0008
@@ -112,21 +127,18 @@ dependencies = [
     # verifier's `fuzz.ratio` against normalized text with threshold
     # 95. MIT-licensed; C-extension backbone, no runtime config needed.
     "rapidfuzz~=3.5",
-    # M3-A2 — LangGraph powers the Playbook executor workflow (retrieve
-    # → classify → redline → compile) per the M3 plan's M3-1 decision
-    # ("LangGraph runtime lives in api/, not a separate service"). The
-    # same runtime is reused by the M3-C2 Tabular Review workflow and the
-    # M4 autonomous executor (api/app/autonomous/), so the SBOM cost is
-    # amortized across three features. MIT-licensed; transitive deps are
-    # mostly LangChain-core types (already permissive licenses, no new
-    # SBOM family beyond LangGraph + LangChain-core).
-    # M4-0.1 — held at 0.2 for M4. langgraph 1.x re-types StateGraph as
-    # generic, so our `add_node` node factories (typed -> Awaitable[dict])
-    # fail mypy [call-overload] (this is what dependabot #68 tripped on).
-    # The break is type-only — every runtime API we use is unchanged — and
-    # the autonomous executor needs no 1.x-only API. Migration of all three
-    # executors deferred to DE-319. Floor pinned to the validated 0.2.76.
-    "langgraph>=0.2.76,<0.3",
+    # DE-319 / #524 — one maintained runtime for playbook, tabular and
+    # autonomous execution. The 1.x family adds prebuilt/protocol packages
+    # and upgrades Core/checkpoint; review the actual frozen lock as SBOM
+    # changes. All three graphs retain their existing phase behavior;
+    # checkpoint activation belongs to the later #563 integration.
+    "langgraph>=1,<2",
+    # ADR 0035 demonstration: the previously tested saver is now a runtime
+    # dependency. It stays dormant unless the operator enables the demo and
+    # applies orchestration migration 0067. Existing executors retain
+    # their checkpoint-free behavior; psycopg2 remains the migration driver.
+    "langgraph-checkpoint-postgres==3.1.2",
+    "psycopg[binary]>=3.2,<4",
     # M3-C4 — openpyxl powers the Tabular Review XLSX export
     # (GET /tabular/executions/{id}/export?format=xlsx). Each grid cell
     # gets a Comment with its citation source so operators can pivot
@@ -147,12 +159,23 @@ dependencies = [
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
+    # pytest-xdist distributes the test suite across one worker per available
+    # CPU so the 4-core ubuntu-latest runner runs ~4× as many tests in parallel.
+    # Tests are already isolated via per-test transaction rollback (conftest.py),
+    # so parallelisation is safe. Each worker gets its own session-scoped DB and
+    # Alembic migration run. Dev-extra only; not in the runtime SBOM.
+    # Used by PyPI's Warehouse on the same stack (SQLAlchemy + Alembic + Postgres).
+    "pytest-xdist>=3.5",
+    # Coverage gate (roadmap 4.3). Enforced in CI via --cov-fail-under=80 —
+    # the documented target, which measured coverage clears (81.49% on
+    # 2026-07-25). See .github/workflows/ci.yml.
+    "pytest-cov>=7.1",
     "httpx>=0.27",
     # Pinned exactly: ruff's formatter output changes across releases, so an
     # unpinned floor let CI (which resolves latest) drift ahead of dev venvs
     # and fail `ruff format --check` on code that was clean locally. Pin so
     # local == CI. Bump deliberately (and reformat) when upgrading.
-    "ruff==0.15.17",
+    "ruff==0.16.8",
     "mypy>=1.11",
     # PyYAML type stubs — pyyaml has no inline typings, so mypy needs the
     # types-PyYAML package to type-check `app.skills.loader` etc.
@@ -166,6 +189,9 @@ dev = [
     # Same pin family the gateway already uses.
     "types-PyYAML>=6.0",
 ]
+# Compatibility extra for saved test commands; saver dependencies now ship
+# with the disabled-by-default demonstration runtime.
+orchestration-test = []
 
 # Note: a `[project.scripts]` console-script entry was considered for
 # the CLI but the current Dockerfile installs the package metadata only
@@ -179,6 +205,18 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
+
+[tool.uv]
+# Reviewed transitive minimums for the LangGraph family. A broad 1.x runtime
+# range alone still admits dependencies preceding these fixes. Constraints
+# restrict existing transitive packages without declaring unused direct APIs.
+# Checkpoint: GHSA-fjqc-hq36-qh5p (JSON loading); SDK: GHSA-fvww-7h3r-vfhp
+# (custom resource auth). Neither feature is activated by this migration.
+constraint-dependencies = [
+    "langchain-core>=1.6.3",
+    "langgraph-checkpoint>=4.1.1",
+    "langgraph-sdk>=0.4.4",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

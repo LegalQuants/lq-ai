@@ -27,6 +27,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.skills.capabilities import SkillCapabilities
+
 # All built-in M1 skills are filesystem-canonical; user/team-scope forks
 # land later and gain ``user`` / ``team`` values for ``scope``. C1 only
 # delivers the ``builtin`` scope.
@@ -90,6 +92,8 @@ class LQAIFrontmatter(BaseModel):
     """
 
     model_config = ConfigDict(extra="allow")
+
+    capabilities: SkillCapabilities = Field(default_factory=SkillCapabilities)
 
     title: str | None = None
     """Human-readable display name for the UI. Defaults to ``name``
@@ -264,6 +268,7 @@ class Skill(SkillSummary):
     content_md: str
     reference_files: list[SkillFile] = Field(default_factory=list)
     example_files: list[SkillFile] = Field(default_factory=list)
+    script_files: list[SkillFile] = Field(default_factory=list)
 
 
 # --- Skill inputs (PRD §3.4 skill-input-form pattern) -----------------------

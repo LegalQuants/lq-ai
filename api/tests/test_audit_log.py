@@ -15,13 +15,13 @@ follow-on D3-coverage commit.
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit import audit_action
@@ -31,7 +31,7 @@ from app.models import AuditLog, Project, User
 from app.security import create_access_token, hash_password
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -409,3 +409,26 @@ async def test_audit_log_endpoint_without_bearer_returns_401(
 ) -> None:
     resp = await client.get("/api/v1/admin/audit-log")
     assert resp.status_code == 401
+
+
+@pytest.mark.integration
+async def test_explicit_audit_events_record_write_time_within_one_transaction(
+    db_session: AsyncSession,
+    regular_user: User,
+) -> None:
+    """Phase/effect events in one atomic commit must retain their write order."""
+    first = await audit_action(
+        db_session,
+        user_id=regular_user.id,
+        action="fixture.started",
+        resource_type="fixture",
+        timestamp=func.clock_timestamp(),
+    )
+    second = await audit_action(
+        db_session,
+        user_id=regular_user.id,
+        action="fixture.completed",
+        resource_type="fixture",
+        timestamp=func.clock_timestamp(),
+    )
+    assert second.timestamp > first.timestamp

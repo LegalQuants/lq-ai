@@ -74,6 +74,7 @@ from app.providers import (
     OpenAIAdapter,
     ProviderAdapter,
 )
+from app.providers.base_url_policy import ProviderEgressRefused, validate_llm_base_url
 from app.providers.tool.base import ToolProviderAdapter
 from app.providers.tool.courtlistener import CourtListenerToolAdapter
 from app.providers.tool.echo import EchoToolAdapter
@@ -132,6 +133,15 @@ def _resolve_mcp_config_path() -> Path | None:
 
 
 def build_adapter(provider: ProviderConfig) -> ProviderAdapter | None:
+    from app.config_revision import configuration_revision
+
+    adapter = _build_adapter(provider)
+    if adapter is not None:
+        adapter.configuration_revision = configuration_revision(provider)
+    return adapter
+
+
+def _build_adapter(provider: ProviderConfig) -> ProviderAdapter | None:
     """Construct the adapter for one provider, or ``None`` if no live
     adapter can be built.
 
@@ -161,6 +171,11 @@ def build_adapter(provider: ProviderConfig) -> ProviderAdapter | None:
 
     if not provider.enabled:
         return None
+    # Egress guard (#288, GW-04): the prompt-carrying LLM path must not send
+    # cleartext to a public host or use a non-http(s) scheme. Validate before
+    # building any adapter so a bad base_url fails at startup — matching the
+    # build-time validation the tool path already does.
+    validate_llm_base_url(provider.base_url)
     if provider.type == "anthropic":
         return AnthropicAdapter.from_config(provider)
     if provider.type in ("openai", "openai_compatible"):
@@ -181,6 +196,15 @@ def build_adapter(provider: ProviderConfig) -> ProviderAdapter | None:
 
 
 def build_tool_adapter(provider: ToolProviderConfig) -> ToolProviderAdapter | None:
+    from app.config_revision import configuration_revision
+
+    adapter = _build_tool_adapter(provider)
+    if adapter is not None:
+        adapter.configuration_revision = configuration_revision(provider)
+    return adapter
+
+
+def _build_tool_adapter(provider: ToolProviderConfig) -> ToolProviderAdapter | None:
     """Construct the tool adapter for one provider, or ``None`` if disabled
     or no adapter exists for the type. Validates the base_url against the
     provider's egress policy at build time so a misconfig fails at startup."""
@@ -261,6 +285,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     for provider in config.providers:
         try:
             adapter = build_adapter(provider)
+        except ProviderEgressRefused as exc:
+            # Deliberate: an egress-policy violation is fatal at startup.
+            # Skipping the provider would let the router fall through to the
+            # next candidate in the chain, silently sending prompts somewhere
+            # the operator did not choose.
+            logger.error(
+                "refusing to start: provider %r (type=%s) has a base_url that "
+                "violates LLM egress policy: %s",
+                provider.name,
+                provider.type,
+                exc.reason,
+            )
+            raise
         except ValueError as exc:
             # Missing/unresolvable key for a supported provider — non-fatal
             # at startup; the provider is skipped and chat requests routing

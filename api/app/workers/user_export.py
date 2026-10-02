@@ -1,7 +1,7 @@
 """User-data export worker — Task D6 (GDPR Article 20).
 
 Builds a ZIP archive of every piece of data the LQ.AI backend stores
-about one user, uploads it to MinIO under
+about one user, uploads it to object storage under
 ``exports/<user_id>/<job_id>.zip``, and updates the
 :class:`UserExportJob` row with the resulting key + 7-day expiry.
 
@@ -225,6 +225,8 @@ original bytes for any files you uploaded.
 - `skills.json`          — empty under M1; skills are filesystem-canonical
                             (see ADR 0004) and live in the deployment's
                             `skills/` directory rather than the database.
+- `skill_workspaces.json` — your optional saved skill work, including file
+                            contents, namespaces and revisions.
 
 ## Validity
 
@@ -360,6 +362,32 @@ async def _build_zip(session: AsyncSession, user: User) -> bytes:
         # Skills — empty under M1 (filesystem-canonical per ADR 0004).
         zf.writestr("skills.json", json.dumps([], indent=2))
 
+        from app.models.skill_workspace import SkillWorkspace, SkillWorkspaceFile
+        from app.skills.workspace import metadata
+
+        saved_work = []
+        for workspace in await session.scalars(
+            select(SkillWorkspace)
+            .where(SkillWorkspace.owner_id == user.id)
+            .order_by(SkillWorkspace.id)
+        ):
+            workspace_files = await session.scalars(
+                select(SkillWorkspaceFile)
+                .where(SkillWorkspaceFile.workspace_id == workspace.id)
+                .order_by(SkillWorkspaceFile.name)
+            )
+            saved_work.append(
+                {
+                    "id": str(workspace.id),
+                    "skill_key": workspace.skill_key,
+                    "skill_name": workspace.skill_name,
+                    "format_version": workspace.format_version,
+                    "project_id": str(workspace.project_id) if workspace.project_id else None,
+                    "files": [{**metadata(row), "content": row.content} for row in workspace_files],
+                }
+            )
+        zf.writestr("skill_workspaces.json", json.dumps(saved_work, ensure_ascii=False, indent=2))
+
     return buffer.getvalue()
 
 
@@ -476,7 +504,7 @@ async def export_gc_job(ctx: dict[str, Any]) -> dict[str, Any]:
 async def build_export_zip_for_test(session: AsyncSession, user: User) -> bytes:
     """Test-only entry point that returns raw ZIP bytes.
 
-    Tests that don't need MinIO can call this and inspect the archive
+    Tests that don't need object storage can call this and inspect the archive
     directly via :mod:`zipfile` rather than spinning up arq.
     """
 

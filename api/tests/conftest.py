@@ -38,7 +38,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 if TYPE_CHECKING:
-    pass
+    from sqlalchemy.orm import Session, SessionTransaction
 
 API_DIR = Path(__file__).resolve().parent.parent
 
@@ -145,10 +145,11 @@ async def db_session(test_engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
         )
 
         @event.listens_for(session.sync_session, "after_transaction_end")
-        def restart_savepoint(sess, trans):
+        def restart_savepoint(sess: Session, trans: SessionTransaction) -> None:
             # When the inner SAVEPOINT ends (either commit or rollback),
             # immediately start a new one so the session can keep working.
-            if trans.nested and not trans._parent.nested:
+            if trans.nested and trans.parent is not None and not trans.parent.nested:
+                assert conn.sync_connection is not None
                 conn.sync_connection.begin_nested()
 
         try:

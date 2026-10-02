@@ -1,13 +1,12 @@
-"""S3 / MinIO async client for the api/ service.
+"""S3-compatible async client for the api/ service.
 
 Uses ``aioboto3`` so file uploads, downloads, and metadata operations stay
 on the asyncio event loop. The full upload/download surface lands in Task
 C4 (this module); A4's prerequisites (session-builder, ``ensure_bucket``,
 ``check_storage``) are unchanged.
 
-We talk to MinIO with path-style addressing (``http://minio:9000/<bucket>/<key>``)
-because virtual-hosted-style requires DNS magic that MinIO does not provide
-inside the Compose network.
+We use path-style addressing because it works consistently across the bundled
+RustFS service and operator-supplied S3-compatible endpoints.
 
 Streaming I/O
 -------------
@@ -25,7 +24,7 @@ chunks and the caller's ``StreamingResponse`` flushes them out.
 Object key
 ----------
 
-Per ADR 0005 we use the bare file UUID as the MinIO object key. Callers
+Per ADR 0005 we use the bare file UUID as the object key. Callers
 pass the key in (the handler computes it as ``str(file.id)``); this module
 does not synthesize keys.
 """
@@ -67,7 +66,7 @@ class StreamUploadResult:
     Attributes:
         size_bytes: The total number of bytes that flowed past.
         sha256_hex: Hex-encoded SHA-256 of the bytes (lowercase).
-        storage_path: The MinIO object key the bytes were written to.
+        storage_path: The S3 object key the bytes were written to.
     """
 
     size_bytes: int
@@ -160,7 +159,7 @@ async def stream_upload(
     content_type: str,
     max_size_bytes: int,
 ) -> StreamUploadResult:
-    """Stream chunks from ``chunks`` to MinIO at ``storage_path``.
+    """Stream chunks from ``chunks`` to S3-compatible storage at ``storage_path``.
 
     Builds parts of ``MULTIPART_PART_SIZE`` from the inbound chunk
     iterator and pushes them as a multipart upload. Computes SHA-256
@@ -169,11 +168,11 @@ async def stream_upload(
 
     Raises :class:`app.errors.PayloadTooLarge` the instant the running
     byte count exceeds ``max_size_bytes``. The in-progress multipart
-    upload is aborted in that case so MinIO does not retain orphan
+    upload is aborted in that case so the object store does not retain orphan
     parts.
 
     Args:
-        storage_path: MinIO object key (per ADR 0005 this is the bare
+        storage_path: S3 object key (per ADR 0005 this is the bare
             file UUID).
         chunks: Async iterator yielding ``bytes`` of arbitrary size; an
             empty iteration is allowed (the resulting object is empty).
@@ -190,7 +189,7 @@ async def stream_upload(
 
     Raises:
         :class:`PayloadTooLarge`: Stream exceeded ``max_size_bytes``.
-        :class:`InternalError`: MinIO returned an unexpected error.
+        :class:`InternalError`: the S3-compatible store returned an unexpected error.
     """
 
     if max_size_bytes <= 0:
@@ -344,7 +343,7 @@ async def _abort_multipart_safe(
 
 @asynccontextmanager
 async def stream_download(*, storage_path: str) -> AsyncIterator[AsyncIterator[bytes]]:
-    """Open a streaming GET from MinIO; yield an async byte-iterator.
+    """Open a streaming GET from object storage; yield an async byte-iterator.
 
     The yielded iterator must be consumed within the ``async with`` block
     — the underlying S3 client and HTTP response are scoped to it.
@@ -356,7 +355,7 @@ async def stream_download(*, storage_path: str) -> AsyncIterator[AsyncIterator[b
                 ...
 
     Raises:
-        :class:`InternalError`: object missing or MinIO error.
+        :class:`InternalError`: object missing or S3-compatible store error.
     """
 
     settings = get_settings()
@@ -410,12 +409,12 @@ async def stream_download(*, storage_path: str) -> AsyncIterator[AsyncIterator[b
 
 
 # ---------------------------------------------------------------------------
-# Delete (hard delete of the MinIO object)
+# Delete (hard delete of the object-store object)
 # ---------------------------------------------------------------------------
 
 
 async def delete_object(*, storage_path: str) -> None:
-    """Hard-delete the MinIO object at ``storage_path``.
+    """Hard-delete the object-store object at ``storage_path``.
 
     Per ADR 0005, the user-facing DELETE endpoint flips ``deleted_at``
     on the row and does NOT call this function — the bytes outlive the

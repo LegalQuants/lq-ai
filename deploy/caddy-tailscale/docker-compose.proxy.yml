@@ -27,7 +27,7 @@ services:
   # to know anything about Tailscale.
   #
   # Caddy routes:
-  #   /api/v1/*  → api:8000   (FastAPI backend; ADR 0002 owns auth)
+  #   /lq-ai-api/v1/*  → api:8000   (FastAPI backend; ADR 0002 owns auth)
   #   /*         → web:8080   (OpenWebUI fork — LQ.AI web shell)
   #
   # The gateway is intentionally NOT exposed via Caddy: per PRD §4 it

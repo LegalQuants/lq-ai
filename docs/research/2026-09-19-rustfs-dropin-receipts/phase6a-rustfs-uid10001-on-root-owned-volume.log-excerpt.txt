@@ -1,0 +1,19 @@
+2026-09-19T09:19:34.548 WARN  Profiling export is enabled but this binary was built without Pyroscope support
+2026-09-19T09:19:34.558 WARN  reliable_rename failed. src_file_path: "/proc/self/fd/9/./.rustfs.sys/tmp", dst_file_path: "/proc/self/fd/9/./.rustfs.sys/tmp-old/eac69780-d806-4972-82e3-baeaa7
+2026-09-19T09:19:34.558 WARN  Disk local startup operation failed  error=FileAccessDenied  {"event": "disk_local_startup_cleanup", "state": "failed"}
+2026-09-19T09:19:34.559 WARN  Local disk startup cleanup failed  error=FileAccessDenied  {"event": "disk_local_startup_cleanup", "state": "failed"}
+2026-09-19T09:19:34.564 WARN  reliable_rename failed. src_file_path: "/proc/self/fd/12/./.rustfs.sys/tmp", dst_file_path: "/proc/self/fd/12/./.rustfs.sys/tmp-old/a8e2c749-c49c-4c58-aecd-412d
+2026-09-19T09:19:34.564 WARN  Disk local startup operation failed  error=FileAccessDenied  {"event": "disk_local_startup_cleanup", "state": "failed"}
+2026-09-19T09:19:34.564 WARN  Local disk startup cleanup failed  error=FileAccessDenied  {"event": "disk_local_startup_cleanup", "state": "failed"}
+2026-09-19T09:19:34.592 WARN  rename rollback incomplete; preserve recovery material  {"event": "set_disk_rename_rollback", "state": "recovery_required"}
+2026-09-19T09:19:34.592 WARN  rename rollback inspection requested; recovery remains incomplete  {"event": "set_disk_rename_rollback", "state": "recovery_required"}
+2026-09-19T09:19:34.593 ERROR save_config_with_opts: err: FileAccessDenied, file: pool.bin
+2026-09-19T09:19:34.593 ERROR Pool metadata writes blocked  {"event": "decommission_state", "state": "pool_metadata_blocked", "reason": "transaction_unknown"}
+2026-09-19T09:19:34.593 ERROR init err: Io error: store init failed during save_validated_pool_meta: Io error: prepare_cas: pool metadata writes remain blocked pending fenced transaction rec
+2026-09-19T09:19:34.593 ERROR retry after  5 second
+2026-09-19T09:19:39.595 ERROR init err: Io error: store init failed during save_validated_pool_meta: pool metadata writes remain blocked pending fenced transaction recovery (transaction_unkn
+2026-09-19T09:19:39.595 ERROR retry after  5 second
+2026-09-19T09:19:44.598 ERROR init err: Io error: store init failed during save_validated_pool_meta: pool metadata writes remain blocked pending fenced transaction recovery (transaction_unkn
+2026-09-19T09:19:44.598 ERROR retry after  5 second
+2026-09-19T09:19:49.599 ERROR init err: Io error: store init failed during save_validated_pool_meta: pool metadata writes remain blocked pending fenced transaction recovery (transaction_unkn
+2026-09-19T09:19:49.599 ERROR retry after  5 second

@@ -1,0 +1,47 @@
+# Dynamic routing for the LQ.AI Traefik reference configuration.
+# LQ_AI_FQDN is provided to the Traefik container by the Compose overlay.
+
+http:
+  routers:
+    lq-api:
+      rule: 'Host(`{{ env "LQ_AI_FQDN" }}`) && PathPrefix(`/lq-ai-api/v1`)'
+      entryPoints:
+        - websecure
+      middlewares:
+        - lq-api-strip
+        - lq-api-restore
+      service: lq-api
+      tls:
+        certResolver: letsencrypt
+
+    lq-web:
+      rule: 'Host(`{{ env "LQ_AI_FQDN" }}`)'
+      entryPoints:
+        - websecure
+      service: lq-web
+      tls:
+        certResolver: letsencrypt
+
+  middlewares:
+    lq-api-strip:
+      stripPrefix:
+        prefixes:
+          - /lq-ai-api/v1
+    lq-api-restore:
+      addPrefix:
+        prefix: /api/v1
+
+  services:
+    lq-api:
+      loadBalancer:
+        servers:
+          - url: http://api:8000
+        responseForwarding:
+          flushInterval: "-1ms"
+
+    lq-web:
+      loadBalancer:
+        servers:
+          - url: http://web:8080
+        responseForwarding:
+          flushInterval: "-1ms"

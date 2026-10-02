@@ -67,6 +67,7 @@ from app.providers.base import (
     ProviderHealth,
     ProviderHTTPError,
     ProviderNetworkError,
+    ProviderTimeoutError,
 )
 from app.providers.openai_schema import (
     ChatCompletionChunk,
@@ -113,9 +114,15 @@ _LQ_AI_MESSAGE_EXTENSION_KEYS = frozenset({"lq_ai_skip_anonymization"})
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_TIMEOUT_SECONDS = 60.0
+DEFAULT_TIMEOUT_SECONDS = 600.0
 """Default per-request timeout. ``timeout_s`` on each provider entry
-overrides; if absent we use this default."""
+overrides; if absent we use this default.
+
+600s rather than the earlier 60s, matching the Anthropic adapter: long
+drafting and document-production turns run for minutes, and a 60s
+client-side cut-off surfaced as a provider outage (#318, #503). Shared
+by the Azure OpenAI adapter. The api's gateway-client timeout
+(``LQ_AI_GATEWAY_TIMEOUT_SECONDS``, default 900s) must stay looser."""
 
 
 class OpenAIAdapter(ProviderAdapter):
@@ -268,6 +275,15 @@ class OpenAIAdapter(ProviderAdapter):
                 json=body,
                 headers=self._auth_headers(),
             )
+        except httpx.TimeoutException as exc:
+            # Our own timeout elapsed — not an upstream failure. Same
+            # distinct class as the Anthropic adapter so the routing log
+            # labels it ``client_timeout:`` rather than ``upstream_error:``.
+            raise ProviderTimeoutError(
+                f"timed out after {self._timeout:g}s waiting for OpenAI "
+                "(client-side timeout; raise timeout_s for long generations)",
+                details={"provider": self.name, "timeout_s": self._timeout},
+            ) from exc
         except httpx.HTTPError as exc:
             raise ProviderNetworkError(
                 f"failed to reach OpenAI: {type(exc).__name__}",
@@ -324,6 +340,15 @@ class OpenAIAdapter(ProviderAdapter):
                 json=body,
                 headers=self._auth_headers(),
             )
+        except httpx.TimeoutException as exc:
+            # Our own timeout elapsed — not an upstream failure. Same
+            # distinct class as the Anthropic adapter so the routing log
+            # labels it ``client_timeout:`` rather than ``upstream_error:``.
+            raise ProviderTimeoutError(
+                f"timed out after {self._timeout:g}s waiting for OpenAI "
+                "(client-side timeout; raise timeout_s for long generations)",
+                details={"provider": self.name, "timeout_s": self._timeout},
+            ) from exc
         except httpx.HTTPError as exc:
             raise ProviderNetworkError(
                 f"failed to reach OpenAI: {type(exc).__name__}",
@@ -611,6 +636,13 @@ async def _openai_stream_iter(
                     # the whole stream. The route handler still emits
                     # [DONE] when the iterator finishes.
                     continue
+    except httpx.TimeoutException as exc:
+        # Our own timeout elapsed mid-stream — see the unary path.
+        raise ProviderTimeoutError(
+            "timed out waiting for OpenAI stream "
+            "(client-side timeout; raise timeout_s for long generations)",
+            details={"provider": provider_name},
+        ) from exc
     except httpx.HTTPError as exc:
         raise ProviderNetworkError(
             f"failed to stream from OpenAI: {type(exc).__name__}",

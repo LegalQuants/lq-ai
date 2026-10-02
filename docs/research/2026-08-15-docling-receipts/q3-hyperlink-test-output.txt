@@ -1,0 +1,4 @@
+Hyperlink edge test output (2026-08-15, docling 2.120.1, throwaway venv):
+json_default_mode: ok 2053 bytes
+text items with hyperlink field set: 0
+DONE

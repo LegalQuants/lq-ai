@@ -79,21 +79,6 @@ def test_expand_env_vars_walks_nested_structures(monkeypatch: pytest.MonkeyPatch
 # --- load_config: happy path on the real example -----------------------------
 
 
-@pytest.fixture
-def example_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Set the env vars referenced by ``gateway.yaml.example``.
-
-    The example references several optional ``${VAR:-default}`` placeholders
-    (no env action needed) and one or two required ``${VAR}`` placeholders
-    that we satisfy here so the parse succeeds in tests.
-    """
-
-    monkeypatch.setenv("GCP_PROJECT_ID", "test-project")
-    monkeypatch.setenv("AWS_REGION", "us-east-1")
-    monkeypatch.setenv("AZURE_OPENAI_RESOURCE", "test-openai")
-    monkeypatch.setenv("LQ_AI_VERSION", "0.1.0-test")
-
-
 @pytest.mark.unit
 def test_load_config_parses_example(example_env: None) -> None:
     config = load_config(EXAMPLE_CONFIG)

@@ -26,7 +26,7 @@ export function resolvePorts(preferred: PortConfig, isFree: IsPortFree): PortCon
 		gateway: pick(preferred.gateway),
 		postgres: pick(preferred.postgres),
 		redis: pick(preferred.redis),
-		minioApi: pick(preferred.minioApi),
-		minioConsole: pick(preferred.minioConsole)
+		objectStoreApi: pick(preferred.objectStoreApi),
+		objectStoreConsole: pick(preferred.objectStoreConsole)
 	}
 }

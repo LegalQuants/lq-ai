@@ -28,6 +28,6 @@
 		>
 			Open WebUI
 		</a>
-		(forked at v0.9.2; see ADR&nbsp;0001).
+		(forked at v0.11.0; see ADR&nbsp;0001).
 	</span>
 </footer>

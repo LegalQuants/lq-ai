@@ -291,6 +291,35 @@ def _load_one(folder: Path, source: SkillSource = "built-in") -> SkillRecord:
 
     reference_paths = _list_subfolder_files(folder / _REFERENCE_DIR)
     example_paths = _list_subfolder_files(folder / _EXAMPLES_DIR)
+    script_paths: list[Path] = []
+    capabilities = frontmatter.lq_ai.capabilities if frontmatter.lq_ai else None
+    if capabilities and capabilities.scripts:
+        script_dir = folder / "scripts"
+        if script_dir.is_symlink():
+            raise LoaderError(folder.name, "script bundles cannot contain symlinks")
+        total = 0
+        for path in sorted(script_dir.rglob("*")):
+            if path.is_symlink() or not path.resolve().is_relative_to(folder.resolve()):
+                raise LoaderError(folder.name, "script bundles cannot contain symlinks")
+            if not path.is_file():
+                continue
+            # First runtime supports Python source and text data only. No hidden
+            # imports, binaries or writable packages are mounted from the host.
+            if path.suffix not in {".py", ".json", ".txt", ".md"} or any(
+                part.startswith(".") for part in path.relative_to(script_dir).parts
+            ):
+                raise LoaderError(folder.name, "unsupported bundled script file")
+            try:
+                body_bytes = path.read_bytes()
+                body_bytes.decode("utf-8")
+            except (OSError, UnicodeError) as exc:
+                raise LoaderError(folder.name, "unreadable bundled script file") from exc
+            total += len(body_bytes)
+            if len(body_bytes) > 65536 or total > 1048576 or len(script_paths) >= 32:
+                raise LoaderError(folder.name, "script bundle exceeds size limits")
+            script_paths.append(path)
+        if any(script_dir / f"{s.name}.py" not in script_paths for s in capabilities.scripts):
+            raise LoaderError(folder.name, "declared script is missing")
 
     return SkillRecord(
         name=frontmatter.name,
@@ -301,6 +330,7 @@ def _load_one(folder: Path, source: SkillSource = "built-in") -> SkillRecord:
         source=source,
         reference_paths=tuple(reference_paths),
         example_paths=tuple(example_paths),
+        script_paths=tuple(script_paths),
     )
 
 

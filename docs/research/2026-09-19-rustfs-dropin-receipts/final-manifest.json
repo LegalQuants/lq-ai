@@ -1,0 +1,324 @@
+{
+ "0af91ad3-1251-4616-8bdc-a3629cde4ee8": {
+  "content_type": "application/pdf",
+  "declared_content_type": "application/pdf",
+  "etag": "\"13c5a52d9e88932d3737660154dcb0aa-1\"",
+  "sha256": "bdba1252dabf978371986c1884287d47fc4076efea2dc94577ec55f2785906e3",
+  "size": 16384
+ },
+ "0e87db15-b8a3-43eb-96d0-981ee97ca629": {
+  "content_type": "application/pdf",
+  "declared_content_type": "application/pdf",
+  "etag": "\"dbf72b1c96b56a8036fa8b34bcf35a1f-1\"",
+  "sha256": "766c46008835e62b9656ebd302fe443f50f35c2e13bb7f0ea8056686467dacfc",
+  "size": 22528
+ },
+ "0ee21eaf-ce31-4b3f-8692-14b1ac5d2956": {
+  "content_type": "application/pdf",
+  "declared_content_type": "application/pdf",
+  "etag": "\"ce4ef7c1a70299d0725896b440dbcfee-1\"",
+  "sha256": "48aa732d0ab53f468bae7c5e41cee60d1e3ed1a96a69e18465a5c65ad93a4087",
+  "size": 19456
+ },
+ "141c53e9-3189-45a6-821b-c3a7b76b0bbf": {
+  "content_type": "text/plain",
+  "declared_content_type": "text/plain",
+  "etag": "\"abe5caef2e538e048da24955295e96f6-1\"",
+  "sha256": "733fd54e747938375c5bb142286afe4836e7b7a6eba9e3178ad388f427dbedff",
+  "size": 18432
+ },
+ "1d3d9789-675f-4461-accc-f184d20f6a71": {
+  "content_type": "application/pdf",
+  "declared_content_type": "application/pdf",
+  "etag": "\"a31d46ad1f0b1e89783de22d06e784c6-1\"",
+  "sha256": "917378c8736c6f0382e49862ea3eccfecb2b6fcfb78639be97895ea9dec60aa5",
+  "size": 34816
+ },
+ "22f8a88b-ef47-4eef-9a82-3008d3b4b3cc": {
+  "content_type": "text/plain",
+  "declared_content_type": "text/plain",
+  "etag": "\"e336beb15fc5852ee7fd1b4df647ece4-1\"",
+  "sha256": "96da85da9936ccf7a7d9c99bb145619f734a1c5bf2e7aa695566890d73c5c592",
+  "size": 33792
+ },
+ "2a6f92ad-88a8-4d31-8a34-443ee07417ba": {
+  "content_type": "application/pdf",
+  "declared_content_type": "application/pdf",
+  "etag": "\"6f6fb195378ddfabb7c0182d8d8744c8-1\"",
+  "sha256": "0ca9b69b66afad9fdb429ed10b9aaae62e536de08828f9a6152aded3c5e76512",
+  "size": 37888
+ },
+ "2fbb6a98-e52b-467b-a914-c0bdd07c115f": {
+  "content_type": "text/plain",
+  "declared_content_type": "text/plain",
+  "etag": "\"b573612214e76d87278c3499b431ff90-1\"",
+  "sha256": "2db426a0dfa48c5d4021029fab87e924dbb9988e200c286d138d40435ac87d5d",
+  "size": 3072
+ },
+ "36de63a7-7cf6-45db-bee8-13655bc39582": {
+  "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "declared_content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "etag": "\"3d261159bf1ff0565cce3c8cbb0e9618-1\"",
+  "sha256": "9c26fdf769a2d599ca7f495b6604290a81ac4861b5a4b5582408eae9ee591b9d",
+  "size": 35840
+ },
+ "374f4548-c460-4bbd-9dfe-e2f4c9e6cc90": {
+  "content_type": "application/pdf",
+  "declared_content_type": "application/pdf",
+  "etag": "\"834da17911eec5c4b710dc6e332d30c2-1\"",
+  "sha256": "a1e7935959cb1d273cf9457fa0d2a2cc1b36ecda817bd2b2d84a5c4fa3e2da9c",
+  "size": 40960
+ },
+ "429f0f40-569c-40c8-b5fb-9f05cd838f9f": {
+  "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "declared_content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "etag": "\"b92609bb6c5900142a37a58a49d7c0d1-1\"",
+  "sha256": "0eab004742cddde3043fc1617a2e1ada26fcc65224b729bd5dd817b4dd2dafb4",
+  "size": 11264
+ },
+ "439538c4-3fdd-4f40-a785-218e5c87a3dd": {
+  "content_type": "text/plain",
+  "declared_content_type": "text/plain",
+  "etag": "\"a96b01c610c5c01a492efb64780c9ce0-1\"",
+  "sha256": "b63e182609f9423b10159fc30d98cd4e85e6efca79e8f9acfce5db964cef3718",
+  "size": 39936
+ },
+ "54782af4-ab7d-434f-82e5-aec5d9df9b91": {
+  "content_type": "text/plain",
+  "declared_content_type": "text/plain",
+  "etag": "\"f984b7228b787621a9be88802ccdf5fb-1\"",
+  "sha256": "89c4fe67fb76b4448e2d03cdedcfef3360b9529a0ef5cdc95e1b7cc6c828b416",
+  "size": 27648
+ },
+ "625571b7-f8d9-40d3-bfb7-f2e6a1f8c78e": {
+  "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "declared_content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "etag": "\"70dfd9c7a0177cbfa1ce6806a5df38c0-1\"",
+  "sha256": "e1e000f4f12e551b287cb692862a9831e1a4a424b560bb2e156f73f66bd4ba88",
+  "size": 38912
+ },
+ "62aeea9d-7bcf-4a41-9d4e-3da2c3d07682": {
+  "content_type": "application/pdf",
+  "declared_content_type": "application/pdf",
+  "etag": "\"ed973584f675fa83019f5b2c2035b485-1\"",
+  "sha256": "d275434635f872139ef11fff650dffeb3b84f88b1d8b5a683ae98a00dc5b9fa2",
+  "size": 4096
+ },
+ "63e64f85-6d8e-46ec-9aca-21792e70bd01": {
+  "content_type": "text/plain",
+  "declared_content_type": "text/plain",
+  "etag": "\"3022ebee533cd22d1bfac430da113e49-1\"",
+  "sha256": "1ea7071c4b5ade05b00418055eaaba4d822f4e69f72e146f1d7a0e5ee5ad0bd4",
+  "size": 9216
+ },
+ "66f0fd8d-a732-4c8c-b89e-15a297b19928": {
+  "content_type": "text/plain",
+  "declared_content_type": "text/plain",
+  "etag": "\"23a7a1d60fce42ec511cc41d948baf15-1\"",
+  "sha256": "af42515cf80a40f130e1b7003c60c9cf3b214feae50314dc3873dce907e7e667",
+  "size": 12
+ },
+ "68d052ad-c677-45af-a281-6bc39e3e3f6b": {
+  "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "declared_content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "etag": "\"34c6185f037d3ee1872d6f1db0dd2b83-1\"",
+  "sha256": "807bd56b98ed6bce6dab6ef001b89ee34e5708fb71bf210867b6969d4bc9426a",
+  "size": 5120
+ },
+ "84880135-d78c-4a2b-9d30-b9496081bb95": {
+  "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "declared_content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "etag": "\"abb33473280cd3712350ac4a96e2ac66-1\"",
+  "sha256": "c3f53dec2805a2073618d3d5bfd450d88eee812647e09588fa3ccbe5d0b8f521",
+  "size": 2048
+ },
+ "98f5c8dd-6bad-4fd0-a51f-65d449f37e46": {
+  "content_type": "text/plain",
+  "declared_content_type": "text/plain",
+  "etag": "\"1297adc210c7963ad3c367474c021776-1\"",
+  "sha256": "0312efc23333208d841bea67a078064c4dd68cd028cde57dc22aa470aa86146b",
+  "size": 36864
+ },
+ "a1407c51-528d-4f07-92f9-1d0cca4304b8": {
+  "content_type": "text/plain",
+  "declared_content_type": "text/plain",
+  "etag": "\"4c1a71e0954d96b175251aaf1075b5ee-1\"",
+  "sha256": "1f31e4249e465b028a11893bfad634fc5fa102acebf89dd09d5447192561865c",
+  "size": 15360
+ },
+ "a289c476-5935-47c0-8982-42e3fb5e88c5": {
+  "content_type": "text/plain",
+  "declared_content_type": "text/plain",
+  "etag": "\"59adb24ef3cdbe0297f05b395827453f-1\"",
+  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "size": 0
+ },
+ "a4200078-79d0-42cc-b9c4-2e3afc1e3784": {
+  "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "declared_content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "etag": "\"8dec694175436ce4acaab9e76522be4c-1\"",
+  "sha256": "1d8495b69d86d79d5d91e0886a423709a859743f8ada325021b4a701d4022dbc",
+  "size": 14336
+ },
+ "a78d9d1c-1ccd-4033-894f-958dd3114aac": {
+  "content_type": "application/pdf",
+  "declared_content_type": "application/pdf",
+  "etag": "\"98784a7316043aa0659f4cc90aa2146b-1\"",
+  "sha256": "9f4b938e0438d2cee86baeb7d6a65d60adaa97787f8d9291141840ae78058ef2",
+  "size": 13312
+ },
+ "ad2f1a10-4235-4d4c-b134-be35d8140e27": {
+  "content_type": "application/pdf",
+  "declared_content_type": "application/pdf",
+  "etag": "\"9b547098d293f5402562d82152da291d-1\"",
+  "sha256": "09c2b513a927aeeebcab21f1fc803ec384ffacb0315b3b9c34069cfaa18a4a52",
+  "size": 7168
+ },
+ "ae99feaa-6325-46a2-8604-0f2e7ab48e01": {
+  "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "declared_content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "etag": "\"84e583b73c223e40845a6f9b0569a907-1\"",
+  "sha256": "6580ed7733643ff19d16bf00e007c478224fe702432b526084b106a7bf29abd9",
+  "size": 17408
+ },
+ "afd71848-1997-4ec6-907e-754133096529": {
+  "content_type": "application/pdf",
+  "declared_content_type": "application/pdf",
+  "etag": "\"21c2a619f0f68c766b40c2a029caf8bf-1\"",
+  "sha256": "e0fb8199a60df1df95517116dd14425e235d39a9d2ed476dd2f0d28136aacd05",
+  "size": 28672
+ },
+ "afe910ce-1ede-42d0-9d09-4a99b8848852": {
+  "content_type": "application/pdf",
+  "declared_content_type": "application/pdf",
+  "etag": "\"62eccd3c8d1358764a01d978e55df8f8-1\"",
+  "sha256": "0e53c2cc4988ae55567aba24b806bc40872023a35f64f94496e1dcf5a62870d0",
+  "size": 10240
+ },
+ "b087610a-bf58-443f-b670-47b415b4b0fe": {
+  "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "declared_content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "etag": "\"34574b6dbd23c86bfabfb49243d92e39-1\"",
+  "sha256": "267317a48e44365aa56d71be51c2eedc4c9924e961bdf6d790b14bd3b31ebc1d",
+  "size": 29696
+ },
+ "b97b93ff-d72e-4b49-bd5d-4fd9e06fbda8": {
+  "content_type": "application/pdf",
+  "declared_content_type": "application/pdf",
+  "etag": "\"de715a98352e92811eb180fbf3e99601-3\"",
+  "sha256": "6a692befe22eb0b6262329698651ffad1e01194ec624924f14bb496e1fc59c65",
+  "size": 20971523
+ },
+ "be95bee7-de74-48e6-8e09-b142790734cd": {
+  "content_type": "application/pdf",
+  "declared_content_type": "application/pdf",
+  "etag": "\"ea274ba2a9b9852f4cfcaca11a4ccc89-1\"",
+  "sha256": "e18a15d71006ba7a777e8cb4be54b28b005b22edd80000d04d8bb0bbc951a0f1",
+  "size": 25600
+ },
+ "c0360d9e-da84-48fb-b3f8-0269d60e99e7": {
+  "content_type": "text/plain",
+  "declared_content_type": "text/plain",
+  "etag": "\"768ac82ab6e4fd457a2665f5ab4eaa27-1\"",
+  "sha256": "3761d16c9bd6b609ba101bc3eacb4e7466608ffdcc73348c239e67db8f82d157",
+  "size": 24576
+ },
+ "c24d024a-ee79-4154-85c8-bdd7acbccc9b": {
+  "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "declared_content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "etag": "\"0bac08cf59a1bdc33ef7513b0a5c7fba-1\"",
+  "sha256": "1b4bf719195c1c7dc825047f413d28d7403f57a6670bff245c68afeeef0335f7",
+  "size": 20480
+ },
+ "c29a7166-6e9f-49ba-8fc0-acc7d6948794": {
+  "content_type": "application/pdf",
+  "declared_content_type": "application/pdf",
+  "etag": "\"21678893bd215bc1b4cb4f16a099b339-2\"",
+  "sha256": "378dd192fb02e3b80210c945c9506b724329a95786d8d1c4dc2ce16fc0c10dfa",
+  "size": 9437184
+ },
+ "c2c81284-7692-494d-b93b-7bd6c76a6482": {
+  "content_type": "application/pdf",
+  "declared_content_type": "application/pdf",
+  "etag": "\"f65ae78a3ab8de338e9cf7f106413ade-1\"",
+  "sha256": "ff47a49db381f49c60a134905731098cdfb06df5492adddcc78b7f88fe0ae490",
+  "size": 1024
+ },
+ "c43c63d8-ffee-47bb-8852-a749a375e851": {
+  "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "declared_content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "etag": "\"283d5a755f2e5bb593002fa9804938d0-1\"",
+  "sha256": "fa8f92c0e1378945b466cb3234d1147e76ecf390a8bde4d20feb06858ea70c34",
+  "size": 32768
+ },
+ "d5902945-8db0-4f3e-aa60-bfa8e9c369d4": {
+  "content_type": "text/plain",
+  "declared_content_type": "text/plain",
+  "etag": "\"5d9e6f8b6f6cd9e1b67b2d549fb9f433-1\"",
+  "sha256": "f9a8dedbdb8f219f61461b775c8ac94285ec1b7c6c616d146037ac103abc31cb",
+  "size": 12288
+ },
+ "daead25a-9dd0-4707-9882-624c2f428539": {
+  "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "declared_content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "etag": "\"8afaa7ed42ce939b59fbf141528c611e-1\"",
+  "sha256": "02fc6b2c4ceee627bcadc31dfb606bcb63195d99da65f6e24cad1d557bdfc55c",
+  "size": 8192
+ },
+ "de402cd7-b1e2-4aa6-ad2d-57389f8305f1": {
+  "content_type": "text/plain",
+  "declared_content_type": "text/plain",
+  "etag": "\"cfe6a74122254799151734566d96ec58-1\"",
+  "sha256": "14f5f0045fab53d412f7bfd6580bf5aa47fb48ded9e75e15ee19f73581e18cf9",
+  "size": 30720
+ },
+ "e670c187-2b00-4a0d-8506-e17956f8a118": {
+  "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "declared_content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "etag": "\"80b64a561571d3780d292ba65c620b02-1\"",
+  "sha256": "b721476c815b9c0cdd42a86c63f036afe9125fdfa483e7465d123aaeeb17afa0",
+  "size": 23552
+ },
+ "ea69bed5-d77b-43d6-8e9d-e4297edef18c": {
+  "content_type": "text/plain",
+  "declared_content_type": "text/plain",
+  "etag": "\"fd790e593c361bc3dc5346676d207ccb-1\"",
+  "sha256": "adc84f1a07de3250245d69e45d006769eea089f0406206c8d250ee37d48e6d3b",
+  "size": 21504
+ },
+ "ef8a25e3-bc23-46b8-b006-be8da89aee66": {
+  "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "declared_content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "etag": "\"8c50bd7aacc64ce0fe0d73d55376d111-1\"",
+  "sha256": "e04156a85cf4656f8a7c69082e3b3eeec94c0a11e7efb8e4d132926688af1ff0",
+  "size": 26624
+ },
+ "exports/1810709c-3c31-4c8e-af3f-f9a8edb73a8e/22fe6e15-95f3-4d49-b803-1c4f34014d7c.zip": {
+  "content_type": "application/zip",
+  "declared_content_type": "application/zip",
+  "etag": "\"54870f6f348445ed63136c7a6705679c\"",
+  "sha256": "82d9cb555174c7ba373a4885ad19964dcfa1bdab2fa803f79d795e55db413c23",
+  "size": 5004
+ },
+ "exports/a398f0e6-8f26-441a-a55f-2518fc293bd0/90f083fc-13b1-47de-8558-20b742ea1d4e.zip": {
+  "content_type": "application/zip",
+  "declared_content_type": "application/zip",
+  "etag": "\"1843c55b1dafe3310cf58fedaa4ea704\"",
+  "sha256": "867856abfc7e18d221cdb7e46358c12f1c892d1b30f6eafc49280a868e02dda4",
+  "size": 5004
+ },
+ "exports/eae3bdc9-7834-4f93-aaab-5bb10b66c868/fcf69e85-27cb-4b6f-8792-c2310f2c1c4d.zip": {
+  "content_type": "application/zip",
+  "declared_content_type": "application/zip",
+  "etag": "\"0d45c9e364c4473a1f7882b2c8b6dc34\"",
+  "sha256": "44fe0600a8066f38ae7e5d4724b6cb603b21328a979457018a3a6f292272cfad",
+  "size": 104
+ },
+ "f99e15da-9276-48b5-bf00-c0f3bdb30059": {
+  "content_type": "text/plain",
+  "declared_content_type": "text/plain",
+  "etag": "\"35bae0b9c8653d06cef6836d9c1f6d61-1\"",
+  "sha256": "d025ec62d8dbb7ea0d2fb3dae0bc3f038c2bf9a239e09293a28889f393ed8514",
+  "size": 6144
+ }
+}

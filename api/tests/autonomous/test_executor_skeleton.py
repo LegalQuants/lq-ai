@@ -132,6 +132,15 @@ def test_phase_grants_exact_membership() -> None:
             ToolIntent.retrieve_authority,
             # WS-D PR1: the agentic planner decision call; analysis-only.
             ToolIntent.plan,
+            # ADR 0035 D8a: internal working files additionally require
+            # approved orchestration scope, a worker claim and durable effects.
+            ToolIntent.workspace_read,
+            ToolIntent.workspace_write,
+            ToolIntent.workspace_share,
+            ToolIntent.skill_workspace_list,
+            ToolIntent.skill_workspace_read,
+            ToolIntent.skill_workspace_write,
+            ToolIntent.run_bundled_script,
         }
     )
 
@@ -146,6 +155,13 @@ def test_phase_grants_exact_membership() -> None:
             # Donna #8: emit_artifact granted at drafting ONLY (the memo is
             # synthesized work product).
             ToolIntent.emit_artifact,
+            ToolIntent.workspace_read,
+            ToolIntent.workspace_write,
+            ToolIntent.workspace_share,
+            ToolIntent.skill_workspace_list,
+            ToolIntent.skill_workspace_read,
+            ToolIntent.skill_workspace_write,
+            ToolIntent.run_bundled_script,
         }
     )
 
@@ -163,10 +179,11 @@ def test_phase_grants_covers_all_phases() -> None:
 
 @pytest.mark.unit
 def test_tool_intent_members() -> None:
-    """ToolIntent has exactly the twelve members specified (M4-B2 adds
+    """ToolIntent has exactly the nineteen members specified (M4-B2 adds
     propose_precedent; Donna #8 adds emit_artifact; PR5a adds the two
     external-tool intents retrieve_caselaw + call_mcp_tool;
-    WS-D PR1 adds plan; WS-E PR1a adds retrieve_authority)."""
+    WS-D PR1 adds plan; WS-E PR1a adds retrieve_authority;
+    ADR 0035 adds per-run files and four optional skill operations)."""
     expected = {
         "retrieve_chunks",
         "run_skill",
@@ -183,6 +200,13 @@ def test_tool_intent_members() -> None:
         "plan",
         # WS-E PR1a: govinfo authority retrieval.
         "retrieve_authority",
+        "workspace_read",
+        "workspace_write",
+        "workspace_share",
+        "skill_workspace_list",
+        "skill_workspace_read",
+        "skill_workspace_write",
+        "run_bundled_script",
     }
     actual = {m.value for m in ToolIntent}
     assert actual == expected
@@ -366,7 +390,7 @@ async def test_executor_persists_failed_status_on_mid_graph_error(
     # Without this commit, rollback() would wipe the row and the re-fetch in the
     # executor's crash handler would return None, skipping the status update.
     await db_session.commit()
-    executor_mod.make_intake_node = _exploding_intake  # type: ignore[assignment]
+    executor_mod.make_intake_node = _exploding_intake
     try:
         gateway = _StubGateway()
         # Should NOT raise — exception is caught and persisted.
@@ -376,7 +400,7 @@ async def test_executor_persists_failed_status_on_mid_graph_error(
             gateway=gateway,  # type: ignore[arg-type]
         )
     finally:
-        executor_mod.make_intake_node = original_make_intake  # type: ignore[assignment]
+        executor_mod.make_intake_node = original_make_intake
 
     # C1b: rollback() detaches the in-memory row; re-fetch by PK to see the
     # committed failed status.
@@ -417,7 +441,7 @@ async def test_executor_persists_failed_status_on_state_dict_error(
 
         return _node
 
-    executor_mod.make_intake_node = _error_state_intake  # type: ignore[assignment]
+    executor_mod.make_intake_node = _error_state_intake
     try:
         gateway = _StubGateway()
         # Should NOT raise — state-dict errors are handled by the executor.
@@ -427,7 +451,7 @@ async def test_executor_persists_failed_status_on_state_dict_error(
             gateway=gateway,  # type: ignore[arg-type]
         )
     finally:
-        executor_mod.make_intake_node = original_make_intake  # type: ignore[assignment]
+        executor_mod.make_intake_node = original_make_intake
 
     await db_session.refresh(session)
     assert session.status == "failed", (
@@ -482,7 +506,7 @@ async def test_executor_rollback_called_on_mid_graph_error(
     # Commit the row into the outer test transaction so the executor's rollback()
     # (C1b) only removes executor-owned changes (not the session row itself).
     await db_session.commit()
-    executor_mod.make_intake_node = _exploding_intake  # type: ignore[assignment]
+    executor_mod.make_intake_node = _exploding_intake
     try:
         gateway = _StubGateway()
         with patch.object(db_session, "rollback", side_effect=_spy_rollback):
@@ -493,7 +517,7 @@ async def test_executor_rollback_called_on_mid_graph_error(
                 gateway=gateway,  # type: ignore[arg-type]
             )
     finally:
-        executor_mod.make_intake_node = original_make_intake  # type: ignore[assignment]
+        executor_mod.make_intake_node = original_make_intake
 
     assert rollback_call_count >= 1, (
         "C1b: executor must call db.rollback() in the crash handler before committing "

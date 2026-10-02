@@ -14,7 +14,9 @@ Wire-format differences worth knowing
   ``messages: [{role: "user"|"assistant", ...}]``. Multiple system
   messages concatenate with a blank line.
 * Anthropic requires ``max_tokens``. OpenAI doesn't. The adapter falls
-  back to :data:`DEFAULT_MAX_TOKENS` (4096) when the caller omits it.
+  back to the provider's configured ``default_max_tokens`` — or
+  :data:`DEFAULT_MAX_TOKENS` (16384) when unconfigured — when the caller
+  omits it.
 * Anthropic requires ``anthropic-version`` on every request; we pin
   :data:`ANTHROPIC_API_VERSION`.
 * Anthropic returns ``stop_reason`` in {``end_turn``, ``max_tokens``,
@@ -50,6 +52,7 @@ from app.providers.base import (
     ProviderHealth,
     ProviderHTTPError,
     ProviderNetworkError,
+    ProviderTimeoutError,
     ProviderUnsupportedError,
 )
 from app.providers.openai_schema import (
@@ -73,15 +76,45 @@ ANTHROPIC_API_VERSION = "2023-06-01"
 """Pinned Anthropic API version. Update deliberately; bump in lockstep
 with changes to the request/response translation below."""
 
-DEFAULT_TIMEOUT_SECONDS = 60.0
+DEFAULT_TIMEOUT_SECONDS = 600.0
 """Default per-request timeout. PRD §4.4 / gateway.yaml.example exposes
-``timeout_s`` on each provider; if absent we use this default."""
+``timeout_s`` on each provider; if absent we use this default.
 
-DEFAULT_MAX_TOKENS = 4096
+600s rather than the earlier 60s: frontier drafting responses of
+4-16K output tokens routinely exceed 60s of generation time, and a
+client-side timeout mid-generation surfaced as a provider outage even
+though Anthropic was healthy (#318). A measured document-production
+turn over a ~47k-token case file took 370s (#503), so 300s would still
+have cut real work off. Operators wanting a tighter budget set
+``timeout_s`` on the provider entry, which still overrides this.
+
+Deliberate consequence: the router treats a client timeout as
+fallback-eligible (:func:`app.router.is_fallback_eligible`), so a hung
+connection now waits the full budget before the next provider is
+tried. The api's own gateway-client timeout must stay looser than this
+(``LQ_AI_GATEWAY_TIMEOUT_SECONDS``, default 900s) or it fires first and
+this adapter's label never appears."""
+
+DEFAULT_MAX_TOKENS = 16384
 """Anthropic Messages requires ``max_tokens``. When the OpenAI-format
-request omits it, the gateway sends this default. Keeping it modest
-(rather than the per-model ceiling) avoids accidentally enormous
-responses on requests that didn't specify a budget."""
+request omits it, the gateway sends this default (ADR 0027 D1).
+
+16384 rather than the earlier 4096. Two independent findings: drafting
+workloads routinely need 8-16K output tokens and were truncated at ~4K
+(#317); and on a model with adaptive thinking on by default the whole
+4096 budget can be spent on reasoning tokens, leaving nothing visible —
+measured at an identical budget, ``claude-opus-4-7`` spent 0 thinking
+tokens and returned 11,518 characters while ``claude-opus-5`` spent all
+4096 and returned none (#503). ``max_tokens`` is a ceiling, not a spend,
+so the raise costs nothing on turns that don't use it. The value equals
+the documented ``request_validation.max_max_tokens`` example so the
+default never exceeds the documented ceiling (which is enforced nowhere
+today — DE-392).
+
+A caller wanting a different budget sets ``max_tokens`` on the request;
+an operator can move the default per provider via ``default_max_tokens``
+on the provider entry (see :meth:`AnthropicAdapter.from_config`) — an
+escape hatch, not the tuning axis (ADR 0027 D2)."""
 
 STOP_REASON_MAP: dict[str, FinishReason] = {
     "end_turn": "stop",
@@ -110,12 +143,14 @@ class AnthropicAdapter(ProviderAdapter):
         base_url: str,
         api_key: str,
         timeout_s: float = DEFAULT_TIMEOUT_SECONDS,
+        default_max_tokens: int = DEFAULT_MAX_TOKENS,
         client: httpx.AsyncClient | None = None,
     ) -> None:
         self.name = name
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self._timeout = timeout_s
+        self._default_max_tokens = default_max_tokens
         self._owns_client = client is None
         self._client = client or httpx.AsyncClient(
             base_url=self._base_url,
@@ -180,11 +215,39 @@ class AnthropicAdapter(ProviderAdapter):
         timeout_raw = extra.get("timeout_s")
         timeout_s = float(timeout_raw) if timeout_raw is not None else DEFAULT_TIMEOUT_SECONDS
 
+        # ``default_max_tokens`` mirrors ``timeout_s``: a per-provider
+        # operator escape hatch (ADR 0027 D2) that lives in extra-allow
+        # territory, so read it defensively via ``model_extra``. Falls
+        # back to the module constant when absent. A malformed or
+        # non-positive value is a config error surfaced at startup, like a
+        # missing key, rather than silently replaced. It is deliberately
+        # NOT clamped to ``request_validation.max_max_tokens``: that ceiling
+        # is enforced on no request path today, and clamping against a
+        # freshly constructed config would ignore the operator's own value
+        # anyway (DE-392 decides enforce-or-remove).
+        default_max_tokens_raw = extra.get("default_max_tokens")
+        if default_max_tokens_raw is None:
+            default_max_tokens = DEFAULT_MAX_TOKENS
+        else:
+            try:
+                default_max_tokens = int(default_max_tokens_raw)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"Anthropic provider {provider.name!r}: default_max_tokens must be "
+                    f"an integer, got {default_max_tokens_raw!r}"
+                ) from exc
+            if default_max_tokens < 1:
+                raise ValueError(
+                    f"Anthropic provider {provider.name!r}: default_max_tokens must be "
+                    f">= 1, got {default_max_tokens}"
+                )
+
         return cls(
             name=provider.name,
             base_url=provider.base_url,
             api_key=api_key,
             timeout_s=timeout_s,
+            default_max_tokens=default_max_tokens,
             client=client,
         )
 
@@ -206,7 +269,12 @@ class AnthropicAdapter(ProviderAdapter):
         subclass; the route handler maps these to HTTP responses.
         """
 
-        anthropic_body = _to_anthropic_request(request, model=model, stream=stream)
+        anthropic_body = _to_anthropic_request(
+            request,
+            model=model,
+            stream=stream,
+            default_max_tokens=self._default_max_tokens,
+        )
 
         if stream:
             return _anthropic_stream_iter(
@@ -313,6 +381,15 @@ class AnthropicAdapter(ProviderAdapter):
                 json=anthropic_body,
                 headers=self._auth_headers(),
             )
+        except httpx.TimeoutException as exc:
+            # Our own timeout elapsed — not an upstream failure. Raise the
+            # distinct subclass so the routing log can tell a too-tight
+            # timeout_s from an Anthropic outage.
+            raise ProviderTimeoutError(
+                f"timed out after {self._timeout:g}s waiting for Anthropic "
+                "(client-side timeout; raise timeout_s for long generations)",
+                details={"provider": self.name, "timeout_s": self._timeout},
+            ) from exc
         except httpx.HTTPError as exc:
             raise ProviderNetworkError(
                 f"failed to reach Anthropic: {type(exc).__name__}",
@@ -340,6 +417,7 @@ def _to_anthropic_request(
     *,
     model: str,
     stream: bool,
+    default_max_tokens: int = DEFAULT_MAX_TOKENS,
 ) -> dict[str, Any]:
     """Build the Anthropic ``/v1/messages`` request body.
 
@@ -356,7 +434,8 @@ def _to_anthropic_request(
       ``tool_choice`` is mapped: ``auto``->``{type:auto}``, ``required``->``{type:any}``,
       ``none``->drop tools, forced function->``{type:tool,name}``.
     * ``max_tokens`` is required by Anthropic; we substitute
-      :data:`DEFAULT_MAX_TOKENS` if the caller omits it.
+      ``default_max_tokens`` (the provider's configured default, falling
+      back to :data:`DEFAULT_MAX_TOKENS`) if the caller omits it.
     * ``temperature`` and ``top_p`` are forwarded if set; otherwise
       Anthropic uses its defaults.
     * ``stop`` (OpenAI) becomes ``stop_sequences`` (Anthropic, list-only).
@@ -414,7 +493,7 @@ def _to_anthropic_request(
     body: dict[str, Any] = {
         "model": model,
         "messages": chat_messages,
-        "max_tokens": request.max_tokens or DEFAULT_MAX_TOKENS,
+        "max_tokens": request.max_tokens or default_max_tokens,
         "stream": stream,
     }
     if system_chunks:
@@ -575,6 +654,9 @@ async def _anthropic_stream_iter(
 
     * One initial chunk with ``delta.role = "assistant"``.
     * One chunk per text delta with ``delta.content = "<text piece>"``.
+    * One chunk per completed ``tool_use`` block with
+      ``delta.tool_calls`` (DE-358 item 1: accumulated from
+      ``input_json_delta`` fragments, emitted at ``content_block_stop``).
     * One final chunk with ``finish_reason`` set, ``delta`` empty, and
       a ``usage`` block.
 
@@ -590,6 +672,14 @@ async def _anthropic_stream_iter(
     prompt_tokens = 0
     completion_tokens = 0
     role_emitted = False
+    # DE-358 item 1: accumulate streamed ``tool_use`` blocks. Anthropic
+    # streams a tool call as ``content_block_start`` (id + name), then
+    # ``input_json_delta`` fragments of the arguments JSON, closed by
+    # ``content_block_stop`` — at which point we emit one OpenAI-shaped
+    # ``tool_calls`` delta, mirroring the non-streaming bridge in
+    # :func:`_from_anthropic_response`. Keyed by Anthropic block index.
+    tool_blocks: dict[int, dict[str, Any]] = {}
+    next_tool_index = 0
 
     try:
         async with client.stream("POST", "/v1/messages", json=body, headers=headers) as response:
@@ -632,6 +722,19 @@ async def _anthropic_stream_iter(
                         )
                     continue
 
+                if kind == "content_block_start":
+                    block = parsed.get("content_block") or {}
+                    block_index = parsed.get("index")
+                    if block.get("type") == "tool_use" and isinstance(block_index, int):
+                        tool_blocks[block_index] = {
+                            "openai_index": next_tool_index,
+                            "id": str(block.get("id", "")),
+                            "name": str(block.get("name", "")),
+                            "parts": [],
+                        }
+                        next_tool_index += 1
+                    continue
+
                 if kind == "content_block_delta":
                     delta_block = parsed.get("delta") or {}
                     if delta_block.get("type") == "text_delta":
@@ -643,6 +746,43 @@ async def _anthropic_stream_iter(
                                 model=response_model,
                                 delta=ChatCompletionDelta(content=text),
                             )
+                    elif delta_block.get("type") == "input_json_delta":
+                        block_index = parsed.get("index")
+                        state = (
+                            tool_blocks.get(block_index) if isinstance(block_index, int) else None
+                        )
+                        if state is not None:
+                            state["parts"].append(str(delta_block.get("partial_json", "")))
+                    continue
+
+                if kind == "content_block_stop":
+                    block_index = parsed.get("index")
+                    state = (
+                        tool_blocks.pop(block_index, None) if isinstance(block_index, int) else None
+                    )
+                    if state is not None:
+                        yield _make_chunk(
+                            response_id=response_id,
+                            created=created,
+                            model=response_model,
+                            delta=ChatCompletionDelta(
+                                tool_calls=[
+                                    {
+                                        "index": state["openai_index"],
+                                        "id": state["id"],
+                                        "type": "function",
+                                        "function": {
+                                            "name": state["name"],
+                                            # OpenAI streams arguments as a
+                                            # JSON string; empty input maps
+                                            # to "{}" like the non-streaming
+                                            # bridge's json.dumps(input or {}).
+                                            "arguments": "".join(state["parts"]) or "{}",
+                                        },
+                                    }
+                                ]
+                            ),
+                        )
                     continue
 
                 if kind == "message_delta":
@@ -662,6 +802,14 @@ async def _anthropic_stream_iter(
                     continue
 
                 # ping / unknown -> ignore
+    except httpx.TimeoutException as exc:
+        # Our own timeout elapsed mid-stream — not an upstream failure.
+        # See the unary path for the rationale behind the distinct class.
+        raise ProviderTimeoutError(
+            "timed out waiting for Anthropic stream "
+            "(client-side timeout; raise timeout_s for long generations)",
+            details={"provider": provider_name},
+        ) from exc
     except httpx.HTTPError as exc:
         raise ProviderNetworkError(
             f"failed to stream from Anthropic: {type(exc).__name__}",

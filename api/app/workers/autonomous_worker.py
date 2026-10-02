@@ -44,6 +44,7 @@ from app.autonomous.executor import run_autonomous_session
 from app.config import get_settings
 from app.db.session import get_session_factory
 from app.models.autonomous import AutonomousSchedule, AutonomousSession
+from app.models.orchestration import OrchestrationRoot
 from app.models.user import User
 from app.workers.queue import enqueue_autonomous_session_job
 
@@ -103,6 +104,11 @@ async def autonomous_session_job(ctx: dict[str, Any], session_id: str) -> dict[s
                 },
             )
             return {"session_id": session_id, "status": "missing"}
+
+        if await db.get(OrchestrationRoot, session.root_session_id) is not None:
+            # A legacy queue delivery must never bypass orchestration consent,
+            # checkpoints or child-only internal delivery.
+            return {"session_id": session_id, "status": "governed_orchestration_only"}
 
         try:
             await run_autonomous_session(
@@ -206,6 +212,9 @@ async def _run_idle_sweep(
     # Postgres supports as named args only in its own SQL syntax — use positional
     # form instead so the expression compiles correctly across all SA versions.
     paused_candidates_stmt = select(AutonomousSession).where(
+        ~select(OrchestrationRoot.session_id)
+        .where(OrchestrationRoot.session_id == AutonomousSession.root_session_id)
+        .exists(),
         AutonomousSession.status == "running",
         AutonomousSession.halt_state == "paused",
         AutonomousSession.last_activity_at
@@ -229,6 +238,9 @@ async def _run_idle_sweep(
     # Candidate: status='running', halt_state='running',
     #             last_activity_at < now - idle_halt_minutes minutes
     running_candidates_stmt = select(AutonomousSession).where(
+        ~select(OrchestrationRoot.session_id)
+        .where(OrchestrationRoot.session_id == AutonomousSession.root_session_id)
+        .exists(),
         AutonomousSession.status == "running",
         AutonomousSession.halt_state == "running",
         AutonomousSession.last_activity_at

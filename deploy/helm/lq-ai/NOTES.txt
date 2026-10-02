@@ -10,7 +10,7 @@ Verification of release artifacts (per docs/security/README.md):
 Components installed:
 - Postgres (pgvector/pgvector:pg16) — primary store
 - Redis (redis:7-alpine)             — cache + queue
-- MinIO (minio/minio:latest)         — object storage
+- RustFS (rustfs/rustfs:1.0.0)       — S3-compatible object storage
 - Gateway                            — Inference Gateway (security boundary)
 - API                                — FastAPI backend
 - Web                                — OpenWebUI fork
@@ -30,3 +30,9 @@ If you forked LQ.AI and want to use operator-controlled cosign signing
 Configure your providers:
   helm get values {{ .Release.Name }} -n {{ .Release.Namespace }}
 Edit gateway.config in values.yaml and helm upgrade.
+
+Upgrading from a chart that installed MinIO:
+  The old api deployment used MINIO_* variables that the api never read, so
+  its MinIO PVC should be empty. Treat RustFS as a fresh store; confirm the old
+  claim contains no objects before deleting it. If you deliberately wired that
+  claim yourself, stop and follow docs/releases/v0.8.0.md instead.

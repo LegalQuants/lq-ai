@@ -16,10 +16,15 @@ from decimal import Decimal
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LogLevel = Literal["debug", "info", "warning", "warn", "error", "critical"]
+
+# Published development default for the JWT signing secret. Refused at startup
+# outside dev mode (see ``assert_production_secrets``) so a deployment can never
+# silently ship with a public signing key.
+DEV_JWT_SECRET = "dev-jwt-secret-change-me"
 
 
 class Settings(BaseSettings):
@@ -52,10 +57,10 @@ class Settings(BaseSettings):
         description="Redis URL used for sessions, queues, and rate limits.",
     )
 
-    # ----- MinIO / S3 -----
+    # ----- S3-compatible object storage -----
     s3_endpoint_url: str = Field(
         default="http://localhost:9000",
-        description="S3-compatible endpoint URL (MinIO in Compose; S3 in prod).",
+        description="S3-compatible endpoint URL (RustFS in Compose; operator-supplied S3 allowed).",
     )
     s3_access_key: str = Field(default="", description="S3 access key.")
     s3_secret_key: str = Field(default="", description="S3 secret key.")
@@ -155,13 +160,19 @@ class Settings(BaseSettings):
     # on long-context models can raise the budget; set it to 0 to disable
     # history replay entirely (revert to single-turn requests).
     lq_ai_chat_history_token_budget: int = Field(
-        default=6_000,
+        default=64_000,
         ge=0,
         description=(
             "Approximate token budget (~4 chars/token) for prior chat turns "
             "replayed to the model. 0 disables multi-turn history."
         ),
     )
+    # Raised from 6,000 (issue #503): at 6k a ~47,000-token case file supplied
+    # in turn 1 was silently gone by turn 2, on models whose context windows
+    # are 200k-1M, and nothing in the response said trimming had occurred.
+    # This raises a ceiling; the category fix — not counting injected
+    # attached-document blocks (``_format_attached_files_block``) against the
+    # *chat-history* budget at all — is DE-391.
     lq_ai_chat_history_max_messages: int = Field(
         default=20,
         ge=0,
@@ -173,7 +184,7 @@ class Settings(BaseSettings):
 
     # ----- JWT (per ADR 0002 — backend owns auth) -----
     jwt_secret: str = Field(
-        default="dev-jwt-secret-change-me",
+        default=DEV_JWT_SECRET,
         description="Signing secret for JWT access and refresh tokens.",
     )
     jwt_access_token_ttl_seconds: int = Field(
@@ -240,6 +251,47 @@ class Settings(BaseSettings):
         ),
         validation_alias=AliasChoices("LQ_AI_AUTONOMOUS_DEFAULT_MODEL"),
     )
+
+    orchestration_chat_enabled: bool = Field(
+        default=False, validation_alias="LQ_AI_ORCHESTRATION_CHAT_ENABLED"
+    )
+    orchestration_chat_project_id: str = Field(
+        default="", validation_alias="LQ_AI_ORCHESTRATION_CHAT_PROJECT_ID"
+    )
+    orchestration_chat_provider: str = Field(
+        default="", validation_alias="LQ_AI_ORCHESTRATION_CHAT_PROVIDER"
+    )
+    orchestration_chat_model: str = Field(
+        default="", validation_alias="LQ_AI_ORCHESTRATION_CHAT_MODEL"
+    )
+    orchestration_chat_budget_usd: Decimal = Field(
+        default=Decimal("2.0000"),
+        gt=0,
+        max_digits=10,
+        decimal_places=4,
+        validation_alias="LQ_AI_ORCHESTRATION_CHAT_BUDGET_USD",
+    )
+    orchestration_chat_minimum_tier: int = Field(
+        default=1, ge=1, le=5, validation_alias="LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER"
+    )
+    orchestration_chat_timeout_seconds: int = Field(
+        default=120, ge=1, le=900, validation_alias="LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS"
+    )
+
+    orchestration_deployment_children: int | None = Field(
+        default=None,
+        ge=1,
+        le=32,
+        validation_alias="LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN",
+        description="Explicit shared child capacity. Required before enabling the demonstration.",
+    )
+
+    @field_validator("orchestration_deployment_children", mode="before")
+    @classmethod
+    def empty_orchestration_capacity(cls, value: object) -> object:
+        # Compose forwards an unset optional setting as an empty string.
+        # It remains unconfigured; enabling without a limit still refuses.
+        return None if value == "" else value
 
     # M-Sec.1 — MFA-mandatory deployment flag per PRD §5.1. When True,
     # the backend treats any authenticated user without MFA enrolled
@@ -391,6 +443,18 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("LQ_AI_CHAT_TOOL_CALL_CAP", "CHAT_TOOL_CALL_CAP"),
     )
 
+    # Optional skill data/tools. Bundled execution is confined to a separately
+    # configured local broker; no command or host-process fallback exists.
+    skill_workspaces_enabled: bool = Field(
+        default=False, validation_alias="LQ_AI_SKILL_WORKSPACES_ENABLED"
+    )
+    skill_script_runner_url: str | None = Field(
+        default=None, validation_alias="LQ_AI_SKILL_SCRIPT_RUNNER_URL"
+    )
+    skill_script_runner_token: str = Field(
+        default="", repr=False, validation_alias="LQ_AI_SKILL_SCRIPT_RUNNER_TOKEN"
+    )
+
     # ----- Operational -----
     log_level: LogLevel = Field(default="info", description="Log level for the api/ service.")
     lq_ai_dev_mode: bool = Field(
@@ -470,6 +534,27 @@ def get_settings() -> Settings:
     monkeypatching environment variables.
     """
     return Settings()
+
+
+def assert_production_secrets(settings: Settings) -> None:
+    """Fail closed at startup if a known development default is used in prod.
+
+    Called from the app lifespan startup gate (``app.main.lifespan``), NOT as a
+    Settings validator — construction with the published defaults must stay
+    valid so ``test_config`` and any Settings() in tests keep working. The
+    guard fires only when the process actually starts serving.
+
+    ``jwt_secret`` signs and verifies every access/MFA token; shipping the
+    published default (``DEV_JWT_SECRET``) lets an attacker forge a token for
+    any user. Refuse to boot unless the operator sets a real secret, or opts
+    into ``LQ_AI_DEV_MODE`` for local development.
+    """
+    if settings.jwt_secret == DEV_JWT_SECRET and not settings.lq_ai_dev_mode:
+        raise RuntimeError(
+            "Refusing to start: JWT_SECRET is the published development default "
+            f"({DEV_JWT_SECRET!r}). Set JWT_SECRET to a strong random secret, or "
+            "set LQ_AI_DEV_MODE=true for local development."
+        )
 
 
 def is_allowed_return_url(url: str, settings: Settings) -> bool:

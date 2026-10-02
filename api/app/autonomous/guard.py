@@ -79,9 +79,10 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Protocol
 
 import sqlalchemy as sa
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -89,7 +90,11 @@ from app.autonomous.audit import autonomous_audit
 from app.autonomous.cost import estimate_tool_cost
 from app.autonomous.enums import PHASE_GRANTS, HaltState, Phase, ToolIntent
 from app.autonomous.notify_email import send_notification_email
-from app.errors import CostCapReached, SessionHalted, ToolNotGranted
+from app.autonomous.orchestration.contracts import ExecutionScope
+from app.autonomous.orchestration.inference import InferenceBinding
+from app.autonomous.orchestration.sources import SourceBinding
+from app.autonomous.orchestration.workspace import WORKSPACE_INTENTS, WorkspaceAccess
+from app.errors import Conflict, CostCapReached, SessionHalted, ToolNotGranted
 from app.models.autonomous import (
     AutonomousArtifact,
     AutonomousFinding,
@@ -98,8 +103,12 @@ from app.models.autonomous import (
     AutonomousSession,
     PrecedentEntry,
 )
+from app.models.file import File as FileModel
+from app.models.knowledge import KnowledgeBase
 from app.models.user import User
 from app.observability_helpers import get_tracer, record_attributes
+from app.skills.binding import bind_record
+from app.skills.tools import SKILL_TOOL_INTENTS, SkillTools, current_registry, parse_skill_tool
 
 log = logging.getLogger(__name__)
 
@@ -157,12 +166,34 @@ class ToolResult:
     charged the R4 estimate, but its outcome is honest)."""
 
 
+class GuardedEffect(Protocol):
+    """Application-owned effect accounting at R4 and before outcome writes.
+
+    Admission commits in a separate short transaction. Settlement joins the
+    caller's transaction so its receipt, audit and local outcome commit together.
+    Implementations must never acquire control-row locks across provider I/O.
+    """
+
+    async def admit(
+        self, intent: ToolIntent, params: dict[str, Any]
+    ) -> tuple[Decimal, ToolResult | None]: ...
+
+    async def settle(self, db: AsyncSession, result: ToolResult) -> None: ...
+
+
 async def guarded_tool_call(
     session: AutonomousSession,
     intent: ToolIntent,
     params: dict[str, Any],
     db: AsyncSession,
     gateway: Any,
+    *,
+    execution_scope: ExecutionScope | None = None,
+    effect: GuardedEffect | None = None,
+    source_binding: SourceBinding | None = None,
+    inference_binding: InferenceBinding | None = None,
+    workspace_access: WorkspaceAccess | None = None,
+    skill_tools: SkillTools | None = None,
 ) -> ToolResult:
     """Single chokepoint for every autonomous tool invocation.
 
@@ -182,6 +213,14 @@ async def guarded_tool_call(
         db: An open :class:`~sqlalchemy.ext.asyncio.AsyncSession`.
         gateway: The Inference Gateway client (used by A3.3b inference
             handlers; not used by local-intent handlers).
+        execution_scope: Server-resolved approved scope for orchestration.
+            Narrows supported calls at R6; does not replace durable approval,
+            current policy validation, worker fencing or effect admission.
+        effect: Internal adapter hook for durable R4 admission and atomic outcome
+            settlement. Requires execution_scope; the store's allocation replaces
+            the legacy session cap for this path. No provider I/O in settlement.
+        source_binding: Internal exact authority-source selection and pricing.
+            Requires both a durable effect and approved scope. Never model params.
 
     Returns:
         A :class:`ToolResult` on success.
@@ -195,6 +234,10 @@ async def guarded_tool_call(
             ``max_cost_usd`` (R4).
     """
     with _tracer.start_as_current_span("autonomous.tool_call") as span:
+        if source_binding is not None and (
+            execution_scope is None or effect is None or intent != ToolIntent.retrieve_authority
+        ):
+            raise ToolNotGranted("source bindings require a durable scoped authority call")
         # COUNTS + TYPES ONLY — never raw values or document text
         record_attributes(
             span,
@@ -209,12 +252,22 @@ async def guarded_tool_call(
         # ── R5 temporal ─────────────────────────────────────────────────────
         # Re-read halt_state from the DB so an external signal that arrives
         # after the executor started is honoured at the next tool boundary.
-        await db.refresh(session, ["halt_state"])
+        await db.refresh(
+            session,
+            ["halt_state", "current_phase", "status"]
+            if execution_scope is not None
+            else ["halt_state"],
+        )
         if session.halt_state == HaltState.halt_requested:
             session.halt_state = str(HaltState.halted)
             await autonomous_audit(db, session, "halted", reason="external_halt")
             record_attributes(span, **{"autonomous.outcome": "external_halt"})
             raise SessionHalted("session halted externally", reason="external_halt")
+
+        if execution_scope is not None and (
+            session.halt_state != HaltState.running or session.status != "running"
+        ):
+            raise SessionHalted("orchestration session is stopped", reason="external_halt")
 
         # ── R6 contextual ───────────────────────────────────────────────────
         # Compare intent against the grant set for the current phase.
@@ -235,14 +288,71 @@ async def guarded_tool_call(
                 phase=str(session.current_phase),
             )
 
+        if execution_scope is not None:
+            from app.autonomous.orchestration.boundary import constrain_call
+
+            try:
+                params = await constrain_call(
+                    db, session, intent, params, execution_scope, source_binding, inference_binding
+                )
+            except ToolNotGranted:
+                await autonomous_audit(
+                    db, session, "tool_call", tool=str(intent), outcome="tool_not_granted"
+                )
+                record_attributes(span, **{"autonomous.outcome": "tool_not_granted"})
+                raise
+
+        if intent in WORKSPACE_INTENTS and (
+            execution_scope is None
+            or effect is None
+            or workspace_access is None
+            or workspace_access.claim.session_id != session.id
+            or workspace_access.claim.root_id != session.root_session_id
+        ):
+            raise ToolNotGranted("Workspace tools require durable orchestration authority")
+
+        skill_binding = None
+        if intent in SKILL_TOOL_INTENTS:
+            skill_tools = skill_tools or SkillTools(current_registry())
+            name = (
+                execution_scope.skill.name
+                if execution_scope
+                else (session.params or {}).get("skill_ref")
+            )
+            record = skill_tools.registry.current().get(name) if isinstance(name, str) else None
+            if record is None:
+                raise ToolNotGranted("A current installed skill is required")
+            skill_binding = bind_record(record)
+            if execution_scope and (
+                effect is None or skill_binding.digest != execution_scope.skill.digest
+            ):
+                raise ToolNotGranted("Skill tools require the approved pinned skill")
+            params = parse_skill_tool(intent, params)
+
         # ── R4 economic ─────────────────────────────────────────────────────
+        if inference_binding is not None and (
+            execution_scope is None
+            or effect is None
+            or intent not in {ToolIntent.run_skill, ToolIntent.plan}
+        ):
+            raise ToolNotGranted("inference bindings require a durable scoped inference call")
         # Estimate cost ONCE here — used both for the cap check AND passed
         # into _dispatch so inference handlers use the same Decimal value
         # that R4 checked.  This prevents any divergence between what R4
         # permitted and what the session is charged (no double-charge).
-        estimate = await estimate_tool_cost(intent, params, db)
+        if effect is not None:
+            if execution_scope is None:
+                raise ToolNotGranted("durable effects require an approved execution scope")
+            # The store's allocated account is the orchestration R4 authority.
+            # A completed receipt must remain recoverable at an exhausted cap;
+            # it incurs neither another provider call nor another session charge.
+            estimate, cached = await effect.admit(intent, params)
+            if cached is not None:
+                return cached
+        else:
+            estimate = await estimate_tool_cost(intent, params, db)
         projected = session.cost_total_usd + estimate
-        if session.max_cost_usd is not None and projected > session.max_cost_usd:
+        if effect is None and session.max_cost_usd is not None and projected > session.max_cost_usd:
             session.cost_cap_reached = True
             session.halt_state = str(HaltState.halted)
             await autonomous_audit(
@@ -275,6 +385,37 @@ async def guarded_tool_call(
                 gateway=gateway,
                 estimate=estimate,
                 span=span,
+                source_binding=source_binding,
+                maximum_egress_tier=(
+                    execution_scope.maximum_egress_tier if execution_scope else None
+                ),
+            )
+        elif intent in WORKSPACE_INTENTS:
+            assert workspace_access is not None
+            result = await workspace_access.execute(db, intent, params)
+        elif intent in SKILL_TOOL_INTENTS:
+            assert skill_tools is not None and skill_binding is not None
+            result = await skill_tools.execute(
+                db,
+                binding=skill_binding,
+                owner_id=session.user_id,
+                project_id=session.project_id,
+                intent=intent,
+                params=params,
+            )
+            if intent == ToolIntent.run_bundled_script:
+                await db.refresh(session, attribute_names=["halt_state"])
+                if session.halt_state != HaltState.running:
+                    raise SessionHalted(
+                        "session halted during script execution", reason="external_halt"
+                    )
+        elif inference_binding is not None:
+            result = await _handle_gateway_inference(
+                intent,
+                params,
+                gateway=gateway,
+                estimated_cost=estimate,
+                inference_binding=inference_binding,
             )
         else:
             # Local writes (emit_finding/propose_memory/…) and local retrieval
@@ -283,6 +424,11 @@ async def guarded_tool_call(
             result = await _dispatch(
                 intent, params, gateway=gateway, db=db, session=session, estimated_cost=estimate
             )
+
+        # Fence and settle BEFORE flushing the session's outcome. The caller
+        # commits both together; stale/failed settlement rolls back local writes.
+        if effect is not None:
+            await effect.settle(db, result)
 
         # ── record cost + outcome ────────────────────────────────────────────
         session.cost_total_usd += result.cost_usd
@@ -368,6 +514,8 @@ async def _governed_external_dispatch(
     gateway: Any,
     estimate: Decimal,
     span: Any,
+    source_binding: SourceBinding | None = None,
+    maximum_egress_tier: int | None = None,
 ) -> ToolResult:
     """Route an external-tool intent through ``governed_tool_invocation``.
 
@@ -376,20 +524,31 @@ async def _governed_external_dispatch(
     shared helper, annotating the caller-owned ``autonomous.tool_call`` span
     (D-a1).  The ``estimate`` from R4 is forwarded verbatim as
     ``estimated_cost`` (single-estimate invariant — the helper never
-    re-estimates).  ``max_allowed_tier=None`` because an
-    :class:`~app.models.autonomous.AutonomousSession` carries no per-session
-    tier ceiling in v1 (the gateway still enforces the ceiling on the actual
-    call — defence in depth).  ``origin="autonomous"`` and there is no
+    re-estimates). Bound orchestration sources use their fixed provider/tier
+    and approved ceiling through dispatch; legacy sessions retain a None ceiling.
+    ``origin="autonomous"`` and there is no
     per-user OAuth token (D-a5).
     """
     # Local import: governance.py imports ToolResult from this module, so a
     # top-level import here would be circular.
     from app.tools.governance import governed_tool_invocation, resolve_provider_tier
 
-    provider, tool = await _resolve_external_call(intent, params, gateway)
-    provider_tier = await resolve_provider_tier(provider)
+    if source_binding is None:
+        provider, tool = await _resolve_external_call(intent, params, gateway)
+        provider_tier = await resolve_provider_tier(provider)
+    else:
+        provider, tool = source_binding.source.name, source_binding.operation
+        provider_tier = source_binding.source.egress_tier
 
     async def _dispatch_closure() -> ToolResult:
+        if source_binding is not None:
+            return await _handle_retrieve_authority(
+                params,
+                db=db,
+                gateway=gateway,
+                source_binding=source_binding,
+                maximum_egress_tier=maximum_egress_tier,
+            )
         return await _dispatch(
             intent, params, gateway=gateway, db=db, session=session, estimated_cost=estimate
         )
@@ -401,7 +560,7 @@ async def _governed_external_dispatch(
         tool=tool,
         intent=intent,
         provider_tier=provider_tier,
-        max_allowed_tier=None,  # AutonomousSession has no tier ceiling in v1
+        max_allowed_tier=maximum_egress_tier,
         estimated_cost=estimate,  # single-estimate — forwarded, never re-estimated
         dispatch=_dispatch_closure,
         span=span,
@@ -574,7 +733,7 @@ async def _dispatch(
         return ToolResult(cost_usd=Decimal("0"), data={"notification_id": str(note.id)})
 
     if intent == ToolIntent.retrieve_chunks:
-        return await _handle_retrieve_chunks(params, db=db)
+        return await _handle_retrieve_chunks(params, db=db, owner_id=session.user_id)
 
     if intent in (ToolIntent.run_skill, ToolIntent.run_playbook, ToolIntent.plan):
         return await _handle_gateway_inference(
@@ -743,6 +902,8 @@ async def _handle_retrieve_authority(
     *,
     db: AsyncSession,
     gateway: Any,
+    source_binding: SourceBinding | None = None,
+    maximum_egress_tier: int | None = None,
 ) -> ToolResult:
     """Handle ``retrieve_authority`` — GovInfo authority retrieval via gateway.
 
@@ -812,13 +973,17 @@ async def _handle_retrieve_authority(
     # ── Validate: source enabled (belt-and-suspenders; _resolve_external_call
     # already checked, but validate again before the gateway call so a race
     # or param-mutation between the two can never bypass source validation).
-    sources = await resolve_available_sources(gateway)
-    enabled_map = {s.type: s for s in sources if s.enabled}
-    source = enabled_map.get(source_type)
-    if source is None:
-        raise ValueError(
-            f"_handle_retrieve_authority: source {source_type!r} not available or disabled"
-        )
+    if source_binding is None:
+        sources = await resolve_available_sources(gateway)
+        enabled_map = {s.type: s for s in sources if s.enabled}
+        source = enabled_map.get(source_type)
+        if source is None:
+            raise ValueError(
+                f"_handle_retrieve_authority: source {source_type!r} not available or disabled"
+            )
+        provider_name = str(source.name)
+    else:
+        provider_name = source_binding.source.name
 
     # ── Validate: op ∈ source's registered ops ──────────────────────────────
     spec = SOURCE_REGISTRY.get(source_type)
@@ -829,12 +994,46 @@ async def _handle_retrieve_authority(
         )
 
     # ── One egress (ADR 0014): call through gateway only ────────────────────
-    provider_name = str(source.name)
-    result: dict[str, Any] = await gateway.call_tool(provider_name, op, args)
+    result: dict[str, Any]
+    if source_binding is None:
+        result = await gateway.call_tool(provider_name, op, args)
+    else:
+        result = await gateway.call_tool(
+            provider_name,
+            op,
+            args,
+            max_allowed_tier=maximum_egress_tier,
+            configuration_revision=source_binding.gateway_revision,
+            require_anonymization=source_binding.anonymization_expected,
+        )
+        if (
+            result.get("provider") != provider_name
+            or result.get("tool") != op
+            or type(result.get("tier")) is not int
+            or result["tier"] != source_binding.source.egress_tier
+            or not isinstance(result.get("payload"), dict)
+            or result.get("anonymization_applied") is not source_binding.anonymization_expected
+        ):
+            raise ValueError("Authority response differs from admitted provider binding")
     # GatewayClient.call_tool returns the envelope {provider, tool, payload, tier};
     # the actual GovInfo fields live under result["payload"].  Match the
     # sibling convention in _handle_call_mcp_tool and research/service.py.
     payload: dict[str, Any] = result.get("payload") or {}
+    if source_binding is not None and op == "search_authority":
+        # Preserve every candidate and distinguish a successful empty search
+        # from missing/malformed results. The legacy adapter extracts only the
+        # first result and raises on empty, unsuitable for parallel research.
+        results = payload.get("results")
+        if not isinstance(results, list) or any(not isinstance(r, dict) for r in results):
+            raise ValueError("Authority search response is malformed")
+        return ToolResult(
+            cost_usd=source_binding.cost_usd,
+            data={
+                "source": source_type,
+                "results": results,
+                "anonymization_applied": source_binding.anonymization_expected,
+            },
+        )
 
     # ── Normalise via adapter ────────────────────────────────────────────────
     if spec.adapter is None:
@@ -852,6 +1051,17 @@ async def _handle_retrieve_authority(
         "content_kind": authority.content_kind,
         "source": params["source"],  # registry source name, for delivery verification
     }
+    if source_binding is not None:
+        # The bounded durable receipt carries evidence for the parent. Do not
+        # add an untracked object-storage write to this one admitted provider
+        # call or publish a child's evidence into the shared authority cache.
+        return ToolResult(
+            cost_usd=source_binding.cost_usd,
+            data={
+                "authority": authority_data,
+                "anonymization_applied": source_binding.anonymization_expected,
+            },
+        )
 
     # ── PR1b: non-fatal cache write ──────────────────────────────────────────
     # Best-effort: any failure (including ValueError for a bad external_ref)
@@ -987,8 +1197,16 @@ async def _handle_emit_artifact(
             cost_usd=Decimal("0"), outcome="skipped", data={"skipped": "no_target_kb"}
         )
     # Parse BEFORE the upload: a malformed kb_id must fail here, not at the
-    # KB-attach insert after the bytes have already landed in MinIO (orphan).
+    # KB-attach insert after the bytes have already landed in object storage (orphan).
     kb_uuid = uuid.UUID(str(kb_id))
+    # Ownership gate, on the same reasoning and at the same spot. The id came
+    # from ``session.params`` — copied there by schedule/watch/run-now from
+    # caller input — so the session owner must actually own the target KB
+    # (and it must not be archived) before any byte is uploaded. This is the
+    # write-path twin of the ``retrieve_chunks`` gate (#288, AG-01): a
+    # foreign id raises ``ValueError`` and the executor fails the session
+    # closed rather than attaching a file to another user's knowledge base.
+    await _assert_kb_owned(db, kb_uuid, session.user_id)
 
     # ── extract + sanitize (inner keys are LLM-emitted) ──────────────────
     # Strip NUL bytes: "\u0000" is valid JSON (LLM-emittable) but Postgres
@@ -1017,7 +1235,7 @@ async def _handle_emit_artifact(
     # ── upload FIRST — no DB rows on storage failure ─────────────────────
     # Mirrors the gateway_error honesty pattern: an artifact the user
     # cannot download must never appear as a File row. A failed-late
-    # orphan MinIO object is acceptable — the same non-reaped class as
+    # orphan object-store object is acceptable — the same non-reaped class as
     # ADR 0005's soft-deleted file bytes.
     try:
         await upload_bytes(storage_path=str(file_id), body=body, content_type=mime)
@@ -1149,13 +1367,69 @@ async def _handle_emit_artifact(
     return ToolResult(cost_usd=Decimal("0"), data=data)
 
 
+async def _assert_kb_owned(db: AsyncSession, kb_id: uuid.UUID, owner_id: uuid.UUID) -> None:
+    """Reject a model-supplied ``kb_id`` the session owner does not own.
+
+    :func:`hybrid_search` and the since-fetch scope only by ``kb_id`` and rely
+    on the *handler* having verified ownership upstream (per the retrieval
+    module's contract). In the autonomous loop the planner's ``kb_id`` is
+    model-controlled and therefore prompt-injectable, so the check has to
+    happen here or an injected document could steer retrieval at another
+    tenant's KB (#288, AG-01). 404-shaped (not-found) message so cross-user
+    probing can't tell "exists, not yours" from "doesn't exist".
+
+    Predicates mirror :func:`app.api.knowledge_bases._load_visible_kb` — owner
+    scope **and** ``archived_at IS NULL`` — so the autonomous path cannot reach
+    a KB the HTTP surface would treat as gone. ``ValueError`` rather than that
+    helper's HTTP ``NotFound``: a chokepoint failure becomes ``session.error``
+    text, not a response.
+    """
+    owned = (
+        await db.execute(
+            select(KnowledgeBase.id).where(
+                KnowledgeBase.id == kb_id,
+                KnowledgeBase.owner_id == owner_id,
+                KnowledgeBase.archived_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if owned is None:
+        raise ValueError(f"knowledge base {kb_id} is not accessible to this session")
+
+
+async def _assert_file_owned(db: AsyncSession, file_id: uuid.UUID, owner_id: uuid.UUID) -> None:
+    """Reject a model-supplied ``file_id`` the session owner does not own
+    (#288, AG-01). See :func:`_assert_kb_owned` for the rationale.
+
+    Predicates mirror :func:`app.api.files._load_visible_file` — owner scope
+    **and** ``deleted_at IS NULL``, so a soft-deleted (tombstoned) file is
+    unreachable here just as it is over HTTP.
+    """
+    owned = (
+        await db.execute(
+            select(FileModel.id).where(
+                FileModel.id == file_id,
+                FileModel.owner_id == owner_id,
+                FileModel.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if owned is None:
+        raise ValueError(f"file {file_id} is not accessible to this session")
+
+
 async def _handle_retrieve_chunks(
     params: dict[str, Any],
     *,
     db: AsyncSession,
+    owner_id: uuid.UUID,
 ) -> ToolResult:
     """Handle ``retrieve_chunks`` — hybrid KB search OR file-scoped OR
     since-scoped fetch.  Zero cost (local retrieval).
+
+    ``owner_id`` is the owning session's ``user_id``; every model-supplied
+    ``kb_id``/``file_id`` is checked against it before retrieval so a
+    prompt-injected document cannot reach another tenant's data (#288, AG-01).
 
     Three modes (mutually exclusive at the top level):
 
@@ -1204,10 +1478,12 @@ async def _handle_retrieve_chunks(
 
     # Mode 2: file-scoped fetch.
     if file_id_raw is not None:
+        await _assert_file_owned(db, uuid.UUID(str(file_id_raw)), owner_id)
         return await _handle_retrieve_chunks_by_file(file_id_raw, db=db)
 
     # Mode 3: since + kb_id scoped fetch.
     if since_raw is not None and kb_id_raw is not None:
+        await _assert_kb_owned(db, uuid.UUID(str(kb_id_raw)), owner_id)
         return await _handle_retrieve_chunks_since(since_raw, kb_id_raw, db=db)
 
     # Mode 1: query-based hybrid search (existing path — unchanged).
@@ -1217,6 +1493,17 @@ async def _handle_retrieve_chunks(
             "`file_id` (file-scoped fetch), or `since` + `kb_id` "
             "(KB-scoped fetch of files attached after a cutoff)."
         )
+    # Mode 1 requires kb_id. Fail CLOSED on a missing one rather than falling
+    # through to the downstream handler: a model-supplied params dict that
+    # omits kb_id must never reach retrieval with no ownership check applied
+    # (#288, AG-01). The downstream handler would also reject it, but the
+    # ownership gate has to be the thing that refuses, not a later accident.
+    if kb_id_raw is None:
+        raise ValueError(
+            "_handle_retrieve_chunks: `query` mode requires `kb_id` so the "
+            "search can be scoped to a knowledge base this session owns."
+        )
+    await _assert_kb_owned(db, uuid.UUID(str(kb_id_raw)), owner_id)
     return await _handle_retrieve_chunks_query(params, db=db)
 
 
@@ -1489,6 +1776,7 @@ async def _handle_gateway_inference(
     *,
     gateway: Any,
     estimated_cost: Decimal,
+    inference_binding: InferenceBinding | None = None,
 ) -> ToolResult:
     """Handle ``run_skill`` and ``run_playbook`` via a gateway chat-completion.
 
@@ -1533,11 +1821,23 @@ async def _handle_gateway_inference(
         max_tokens=max_tokens,
         anonymize=anonymize,
         lq_ai_purpose="autonomous_executor",
+        minimum_inference_tier=params.get("minimum_inference_tier"),
+        lq_ai_project_minimum_inference_tier=params.get("lq_ai_project_minimum_inference_tier"),
+        lq_ai_privileged=params.get("lq_ai_privileged", False),
     )
 
     try:
-        response = await gateway.chat_completion(request)
+        if inference_binding is not None:
+            response = await gateway.chat_completion(
+                request, configuration_revision=inference_binding.gateway_revision
+            )
+        else:
+            response = await gateway.chat_completion(request)
     except Exception as exc:
+        if inference_binding is not None:
+            # Error bodies can echo private prompt data. The adapter will mark
+            # the admitted effect uncertain after rollback; keep this path quiet.
+            raise Conflict(message="Bound inference provider outcome is uncertain") from None
         log.warning(
             "autonomous gateway inference error for %s: %s",
             intent,
@@ -1560,6 +1860,11 @@ async def _handle_gateway_inference(
                 "token_counts": {"prompt_tokens": 0, "completion_tokens": 0},
             },
         )
+
+    if inference_binding is not None:
+        from app.autonomous.orchestration.inference import bound_result
+
+        return bound_result(inference_binding, response, intent=str(intent))
 
     try:
         choices = response.choices

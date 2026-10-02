@@ -228,6 +228,7 @@ async def test_executor_emits_playbook_execute_and_position_spans(
     )
     exec_span = execute_spans[0]
 
+    assert exec_span.attributes is not None
     assert str(exec_span.attributes.get("playbook.id")) == str(playbook.id), (
         f"playbook.id mismatch: {exec_span.attributes.get('playbook.id')!r}"
     )
@@ -248,6 +249,7 @@ async def test_executor_emits_playbook_execute_and_position_spans(
         f"All span names: {span_names}"
     )
     for pos_span in position_spans:
+        assert pos_span.attributes is not None
         assert pos_span.attributes.get("playbook.position.id") is not None, (
             "playbook.position.id attribute missing from position span"
         )

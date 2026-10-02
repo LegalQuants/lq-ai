@@ -57,8 +57,13 @@ from typing import Protocol
 
 from app.config import GatewayConfig
 from app.config_holder import MutableConfigHolder
-from app.config_writer import delete_provider_key, upsert_provider_key
+from app.config_writer import (
+    ProviderKeyMutationError,
+    delete_provider_key,
+    upsert_provider_key,
+)
 from app.providers import ProviderAdapter
+from app.providers.base_url_policy import ProviderEgressRefused
 from app.secrets import MasterKeyMissing, ProviderKeyResolver, encrypt_value
 
 logger = logging.getLogger(__name__)
@@ -324,6 +329,15 @@ async def apply_provider_key(
     else:
         try:
             new_adapter = build_adapter(provider)
+        except ProviderEgressRefused as exc:
+            # The key was written, but this provider's base_url is refused by
+            # egress policy; report it rather than 500 after a successful
+            # write. Must sit ahead of the ValueError arm below —
+            # ProviderKeyMutationError subclasses ValueError.
+            raise ProviderKeyMutationError(
+                f"provider {provider_name!r} base_url violates egress policy: {exc.reason}",
+                http_status=409,
+            ) from exc
         except ValueError:
             # A supported, enabled provider whose key still won't resolve.
             # We just wrote the encrypted key, so this is unexpected; treat
