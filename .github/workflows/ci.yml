@@ -184,6 +184,10 @@ jobs:
         # (12242/15023 statements) — clears the documented 80% target, so
         # the gate enforces the target itself.
         run: pytest -n auto -q --cov=app --cov-report=term --cov-fail-under=80
+        env:
+          # DE-230: bounded, derandomized Hypothesis profile for the
+          # property suite (tests/property/conftest.py registers it).
+          HYPOTHESIS_PROFILE: ci
 
       - name: Build reviewed helper acceptance images
         working-directory: ${{ github.workspace }}
@@ -250,6 +254,10 @@ jobs:
       # Delta tracked as PRD §9 DE-395.
       - name: pytest (coverage gate ≥88%)
         run: pytest -q --cov=app --cov-report=term --cov-fail-under=88
+        env:
+          # DE-230: bounded, derandomized Hypothesis profile for the
+          # property suite (tests/property/conftest.py registers it).
+          HYPOTHESIS_PROFILE: ci
 
       - name: PII fixture integrity (keyless)
         working-directory: ${{ github.workspace }}
