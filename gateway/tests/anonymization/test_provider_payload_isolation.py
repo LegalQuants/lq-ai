@@ -5,10 +5,10 @@ is only sound if the provider *cannot* know the pseudonym → original
 mapping. Two structural guarantees make that true, and this module
 pins both deterministically (stub analyzer — no spaCy, not slow):
 
-1. After ``pre_anonymize_request`` runs, the serialized request (the
-   object every provider adapter builds its outbound payload from)
-   contains pseudonyms only — no original entity text, in message
-   content or in nested skill inputs.
+1. After ``pre_anonymize_request`` runs, eligible chat messages and
+   nested skill inputs contain pseudonyms only. Retrieved source chunks
+   marked ``lq_ai_skip_anonymization=True`` remain verbatim by design;
+   the provider can see any originals in those chunks.
 2. The request object carries no reference to the mapper or its
    reverse table at all — the mapping lives exclusively in the
    in-process ``PseudonymMapper`` the middleware returns to the
@@ -96,6 +96,31 @@ def test_skill_inputs_are_pseudonymized_in_serialized_request() -> None:
     inputs = request.lq_ai_skill_inputs["nda-review"]
     assert inputs["party"] == "PERSON_0001"
     assert inputs["nested"]["firm"] == ["ORGANIZATION_0001"]
+
+
+def test_retrieval_context_bypasses_anonymization_in_provider_request() -> None:
+    """The reported engine rates do not cover source chunks sent verbatim."""
+
+    source = "Retrieved source: John Smith retained Acme LLP."
+    request = ChatCompletionRequest(
+        model="smart",
+        messages=[
+            ChatCompletionMessage(role="system", content=source, lq_ai_skip_anonymization=True),
+            ChatCompletionMessage(role="user", content="Summarize John Smith's obligations."),
+        ],
+    )
+
+    mapper = pre_anonymize_request(
+        chat_request=request,
+        config=AnonymizationConfig(enabled=True, apply_at_tiers=[3, 4, 5]),
+        routed_tier=4,
+        anonymizer=Anonymizer(analyzer=_StubAnalyzer()),
+    )
+
+    assert mapper is not None
+    assert request.messages[0].content == source
+    assert request.messages[1].content == "Summarize PERSON_0001's obligations."
+    assert source in request.model_dump_json()
 
 
 def test_request_object_holds_no_reference_to_the_mapper() -> None:

@@ -5012,17 +5012,15 @@ The gateway `Router`'s `_tool_rate_limiter` (`gateway/app/router.py`) is a singl
 
 `desktop/package.json` is bumped by hand each release (0.6.0 → 0.6.1 at v0.6.1), but `desktop/package-lock.json` still carries `"version": "0.5.2"` at its top level (and in `packages[""].version`) — it was never regenerated when `package.json` moved to 0.6.0 at the v0.6.0 cut, and the v0.6.1 bump left it untouched (hand-editing the lockfile version risks desyncing the resolved dependency tree, so it was deliberately not patched inline). npm keeps the lockfile version in sync only on `npm install`. The desktop app itself versions on its own `desktop-vX.Y.Z` tag track (independent of the lock's stale field), so this is cosmetic/hygiene, not a build correctness bug — but it makes the lockfile a misleading provenance artifact. Fix: run `npm install` in `desktop/` (no dependency changes intended — just let npm rewrite the version field), verify the diff is version-only, and commit; then fold a "regenerate the lockfile" step into the release checklist so `package.json` and the lock never drift again.
 
----
-
-## 10. Appendices
-
-#### DE-390 — Anonymization layer never pseudonymizes ORGANIZATION entities (Presidio default suppression)
+#### DE-397 — Anonymization layer never pseudonymizes ORGANIZATION entities (Presidio default suppression)
 
 **Priority:** P1 · **Effort:** S · **Status (2026-07-25): filed (measured by the DE-240 harness — 10/10 organization names survive anonymization).**
 
 The DE-240 leakage harness measured a 100% miss rate for organization names through the pre-egress anonymization path, and root-caused it: raw spaCy detects the ORG entities, but Presidio's default `AnalyzerEngine` NLP configuration ships `ORGANIZATION` in `labels_to_ignore` (a deliberate upstream precision choice — ORG detection is noisy), and `gateway/app/anonymization/engine.py` never overrides it. For a legal product, organization names in privileged documents are often exactly the sensitive identifier an operator enables the layer to protect. Fix requires a maintainer decision inside the security boundary: un-suppress ORGANIZATION (accepting the precision cost — likely over-pseudonymization of common nouns spaCy mislabels), gate it behind a config flag (e.g. `anonymize_organizations: true|false` defaulting per the committee's risk posture), or document the exclusion prominently in the operator-facing anonymization docs. Whichever lands must re-run the DE-240 harness and update the published rates + the DE-282 calibration plan. Related finding recorded in the rates doc: `ENABLED_DEFAULT_RECOGNIZERS` in `engine.py` is descriptive-only (several undocumented Presidio defaults are active) — documentation drift worth fixing in the same pass.
 
 ---
+
+## 10. Appendices
 
 ### Appendix A — Glossary
 

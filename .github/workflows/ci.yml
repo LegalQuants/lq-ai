@@ -154,3 +154,7 @@ jobs:
 
       - name: pytest
         run: pytest -q
+
+      - name: PII fixture integrity (keyless)
+        working-directory: ${{ github.workspace }}
+        run: python -m pytest tests/pii/test_fixture_integrity.py -q

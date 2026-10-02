@@ -24,7 +24,8 @@ Presidio `AnalyzerEngine` (spaCy `en_core_web_lg` backbone) and scores the
 anonymized output:
 
 - **Full leak** — the expected entity value survives verbatim (case-sensitive
-  substring) in the anonymized text. The provider would receive the exact PII string.
+  substring) in the anonymized text. If this text is provider-bound, the provider
+  would receive the exact PII string.
 - **Partial leak** — the full value is broken up, but a *significant token* of it
   survives (length ≥ 4, excluding generic structural/corporate words like "Avenue"
   or "Corporation"). The provider would receive an identifying fragment.
@@ -33,6 +34,16 @@ The unit of measurement is the expected entity occurrence, not the corpus entry.
 This measures **leakage, not classification accuracy**: an entity substituted under
 the "wrong" type (e.g. a passport number caught by the bank-number recognizer)
 still counts as protected, because the original text never reaches the provider.
+
+**Scope of these rates:** the harness measures only text handed to
+`Anonymizer.pseudonymize_into`, such as eligible chat messages and skill inputs.
+It does not measure the complete request sent to a provider. In particular,
+retrieved source chunks are carried in a system message marked
+`lq_ai_skip_anonymization=True` and reach the provider verbatim for citation
+grounding ([M2-1 decision](../security/anonymization.md#retrieval-context-skip-m2-d2)).
+If those chunks contain PII, the class rates below do not describe that exposure.
+The gateway also leaves tool messages untouched. These numbers must not be used
+as end-to-end, provider-payload leakage probabilities.
 
 Corpus classes mirror the recognizer set the gateway actually registers — six kept
 Presidio defaults (`PERSON`, `ORGANIZATION`, `EMAIL_ADDRESS`, `PHONE_NUMBER`,
@@ -221,6 +232,11 @@ count on them:
   operator's environment), the leakage question is moot by construction.
   Privileged chats and per-request opt-outs skip anonymization entirely —
   those paths send original text by design (PRD §4.7 Decision A).
+- **Message scope:** even when anonymization runs, retrieved source chunks
+  marked `lq_ai_skip_anonymization=True` and tool messages remain unchanged.
+  The deterministic request-path test in
+  `gateway/tests/anonymization/test_provider_payload_isolation.py` pins the
+  retrieval exception. The rates above apply to eligible chat/skill text only.
 
 ## Adversarial extraction (response path)
 
@@ -236,8 +252,9 @@ false-positive on a legitimate round-trip.
 
 Two structural guarantees are pinned without any live model:
 
-- the serialized provider-bound request contains pseudonyms only, and carries no
-  reference to the mapper or its reverse table
+- eligible chat and skill-input strings in the serialized request contain
+  pseudonyms and no originals, while retrieved source chunks remain verbatim;
+  the request carries no reference to the mapper or its reverse table
   (`gateway/tests/anonymization/test_provider_payload_isolation.py`);
 - the mapper never reaches logs or audit rows
   (`gateway/tests/anonymization/test_round_trip.py`, invariant 4).
@@ -262,6 +279,9 @@ the normal gateway `pytest -q` suite) gates on two things only:
    must not rot), and
 2. **no targeted class's full-leak rate worsens by more than 5 percentage
    points** versus the committed baseline.
+
+CI also runs the keyless `tests/pii/test_fixture_integrity.py` checks against
+the corpus, baseline, and extraction fixtures.
 
 The absolute rates are deliberately not gated — they are informational until
 DE-282 calibrates recognizer accuracy on a real legal-document corpus. The pin
