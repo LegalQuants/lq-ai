@@ -276,7 +276,8 @@ A pass is evidence, not proof — model outputs are nondeterministic.
 the normal gateway `pytest -q` suite) gates on two things only:
 
 1. the harness runs and scores the complete corpus (the measurement capability
-   must not rot), and
+   must not rot), including a fingerprint of the labeled samples against the
+   committed baseline, and
 2. **no targeted class's full-leak rate worsens by more than 5 percentage
    points** versus the committed baseline.
 

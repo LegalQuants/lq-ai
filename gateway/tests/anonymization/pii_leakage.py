@@ -40,6 +40,7 @@ format-variant behavior on synthetic values).
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -142,6 +143,15 @@ def load_corpus(path: Path = CORPUS_PATH) -> dict[str, Any]:
                     f"does not appear in the entry text"
                 )
     return corpus
+
+
+def corpus_entries_sha256(corpus: dict[str, Any]) -> str:
+    """Fingerprint the labeled samples, independent of JSON formatting."""
+
+    entries = json.dumps(
+        corpus["entries"], sort_keys=True, ensure_ascii=False, separators=(",", ":")
+    )
+    return hashlib.sha256(entries.encode("utf-8")).hexdigest()
 
 
 def significant_tokens(value: str) -> list[str]:
@@ -271,6 +281,7 @@ def build_report(
             "generated": date.today().isoformat(),
             "corpus_schema_version": corpus["schema_version"],
             "corpus_entries": len(corpus["entries"]),
+            "corpus_entries_sha256": corpus_entries_sha256(corpus),
             "expected_entities": len(outcomes),
             "drift_threshold_points": DRIFT_THRESHOLD_POINTS,
             "versions": {

@@ -100,7 +100,7 @@ def test_report_attributes_the_measured_configuration(report: dict[str, Any]) ->
     assert not (set(DISABLED_DEFAULT_RECOGNIZERS) & recognizer_names)
 
 
-def test_corpus_matches_baseline_shape(report: dict[str, Any], baseline: dict[str, Any]) -> None:
+def test_corpus_matches_baseline(report: dict[str, Any], baseline: dict[str, Any]) -> None:
     """Corpus changes require a deliberate baseline regeneration."""
 
     assert report["metadata"]["corpus_entries"] == baseline["metadata"]["corpus_entries"], (
@@ -109,6 +109,13 @@ def test_corpus_matches_baseline_shape(report: dict[str, Any], baseline: dict[st
         "--write-baseline (and refresh docs/quality/pii-leakage-rates.md)."
     )
     assert report["metadata"]["expected_entities"] == baseline["metadata"]["expected_entities"]
+    assert (
+        report["metadata"]["corpus_entries_sha256"] == baseline["metadata"]["corpus_entries_sha256"]
+    ), (
+        "Corpus samples changed vs the committed baseline. If deliberate, regenerate: "
+        "cd gateway && python -m tests.anonymization.pii_leakage --write-baseline "
+        "(and refresh docs/quality/pii-leakage-rates.md)."
+    )
 
 
 def test_targeted_full_leak_rates_do_not_regress(

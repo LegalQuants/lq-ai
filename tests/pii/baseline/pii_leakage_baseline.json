@@ -131,6 +131,7 @@
   },
   "metadata": {
     "corpus_entries": 71,
+    "corpus_entries_sha256": "ff721fb2ba021778ed4b2c652f52915f448df57ee855ffa22c95b4b11325fd26",
     "corpus_schema_version": 1,
     "drift_threshold_points": 5.0,
     "expected_entities": 80,

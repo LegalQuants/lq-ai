@@ -14,6 +14,7 @@ the live test would flag legitimate rehydrated responses as leaks.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -82,7 +83,7 @@ def test_corpus_covers_every_recognizer_target_class() -> None:
 
 
 def test_baseline_is_committed_and_covers_targeted_classes() -> None:
-    """The anti-regression baseline exists and matches the corpus scale."""
+    """The anti-regression baseline matches the committed corpus samples."""
 
     corpus = _load(CORPUS_PATH)
     baseline = _load(BASELINE_PATH)
@@ -90,6 +91,13 @@ def test_baseline_is_committed_and_covers_targeted_classes() -> None:
     assert baseline["metadata"]["corpus_entries"] == len(corpus["entries"])
     expected_total = sum(len(e["expected_entities"]) for e in corpus["entries"])
     assert baseline["metadata"]["expected_entities"] == expected_total
+    entries = json.dumps(
+        corpus["entries"], sort_keys=True, ensure_ascii=False, separators=(",", ":")
+    )
+    assert (
+        baseline["metadata"]["corpus_entries_sha256"]
+        == hashlib.sha256(entries.encode("utf-8")).hexdigest()
+    )
 
     baseline_targeted = {n for n, c in baseline["classes"].items() if c["targeted"]}
     assert baseline_targeted == TARGETED_CLASSES
