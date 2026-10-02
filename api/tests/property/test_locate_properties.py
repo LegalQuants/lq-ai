@@ -17,13 +17,16 @@ still "verifying" it.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from hypothesis import assume, given, strategies as st
 
 from app.citation.caselaw import locate_passage
 from app.citation.extraction import locate_in_chunk
 
+_SURROGATE_CATEGORY: Literal["Cs"] = "Cs"
 any_text = st.text(
-    alphabet=st.characters(exclude_categories=("Cs",)),
+    alphabet=st.characters(exclude_categories=(_SURROGATE_CATEGORY,)),
     max_size=300,
 )
 

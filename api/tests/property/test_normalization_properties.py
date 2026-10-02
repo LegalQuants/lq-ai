@@ -21,6 +21,8 @@ idempotence contract — see
 
 from __future__ import annotations
 
+from typing import Literal
+
 import pytest
 from hypothesis import given, strategies as st
 
@@ -29,9 +31,10 @@ from app.citation.normalization import normalize
 # Arbitrary unicode minus surrogates (unencodable), plus a bias toward
 # the characters the normalizer actually treats specially.
 _special = "‘’“” \t\r\n '\"OolrnmM015"
+_SURROGATE_CATEGORY: Literal["Cs"] = "Cs"
 any_text = st.text(
     alphabet=st.one_of(
-        st.characters(exclude_categories=("Cs",)),
+        st.characters(exclude_categories=(_SURROGATE_CATEGORY,)),
         st.sampled_from(_special),
     ),
     max_size=200,
