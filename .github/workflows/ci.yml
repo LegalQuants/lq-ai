@@ -259,6 +259,10 @@ jobs:
           # property suite (tests/property/conftest.py registers it).
           HYPOTHESIS_PROFILE: ci
 
+      - name: PII fixture integrity (keyless)
+        working-directory: ${{ github.workspace }}
+        run: python -m pytest tests/pii/test_fixture_integrity.py -q
+
   release-image-checks:
     name: Release image (skills corpus)
     runs-on: ubuntu-latest
