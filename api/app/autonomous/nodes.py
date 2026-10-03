@@ -276,6 +276,21 @@ async def _run_analysis_loop(
             Exception
         ) as exc:  # invariant #5 / C1: bad arg → non-fatal failed observation, no DB poison
             observations.append(f"{decision.next_intent.value} → failed ({type(exc).__name__})")
+            # Close the attempt in the audit trail. The chokepoint writes a
+            # ``started`` row before it dispatches and its closing row only
+            # after the handler returns, so a handler that raises left
+            # ``started`` with nothing after it, and an argument rejected by
+            # validate_action_args left no row at all. Either way the receipt
+            # could not tell a failed call from one still in flight. Counts
+            # and types only (P3): the exception class name, never its text.
+            await autonomous_audit(
+                db,
+                session,
+                "tool_call",
+                tool=str(decision.next_intent),
+                outcome="error",
+                error_type=type(exc).__name__,
+            )
         trace.append(
             {
                 "step": str(steps),
