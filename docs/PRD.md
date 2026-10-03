@@ -5165,9 +5165,11 @@ Roadmap 4.3 wired `--cov-fail-under` coverage gates into CI (`.github/workflows/
 
 #### DE-396 — OCR normalization layer violates its documented idempotence contract
 
-**Priority:** P2 · **Effort:** S · **Status (2026-07-25): filed (found by the DE-230 property suite; pinned as strict xfail).**
+**Priority:** P2 · **Effort:** S · **Status (2026-10-03): resolved (implemented fixed-point loop, see #652).**
 
-`api/app/citation/normalization.py`'s OCR confusion layer (`was_ocrd=True`) documents idempotence "for every input", and the Stage-2 tolerant verifier relies on it — but the `l→1`/`O→0` substitutions run as single passes, and a substitution can create a new digit adjacency that only a second pass would rewrite: `normalize("Ol5") == "O15"` while `normalize("O15") == "015"` (likewise `ll5→l15→115`, `5lO→51O→510`). Both comparison sides get the same single pass today, so per-run verification outcomes stay internally consistent; the risk is cross-run canonical-form drift for chained-confusion sequences in OCR'd documents. Pinned by `api/tests/property/test_normalization_properties.py::test_ocr_layer_idempotence_violation_is_pinned` (strict xfail, 4 cases). Fix requires a maintainer semantics call — fixed-point iteration or rule reordering both change verifier-visible canonical forms for OCR'd documents, so the pinned cases must be re-baselined deliberately, not silently.
+Before #652, the OCR confusion layer (`was_ocrd=True`) documented idempotence but applied the `O→0` and `l→1` digit-adjacency substitutions only once per call. A substitution could expose a new adjacency for the next call: `normalize("Ol5", was_ocrd=True)` produced `O15` then `015`; the other pinned chains were `ll5→l15→115`, `5lO→51O→510`, and `Oll5→Ol15→O115→0115`. Stage 2 normalized both comparison sides, so one verification run remained internally consistent, but canonical forms could drift across runs. The former strict-xfail property test pinned these four counterexamples; #652 replaces it with passing canonical-output and OCR-mode idempotence tests.
+
+**Resolution (2026-10-03):** The OCR digit-adjacency substitutions now run to a fixed point in one call. The canonical outputs are `Ol5` → `015`, `ll5` → `115`, `5lO` → `510`, and `Oll5` → `0115`. Unrelated OCR letters and non-OCR outputs remain unchanged. A focused Stage 2 test verifies that OCR quote `5lO` matches source `510` via `tolerant_match` and that `5x0` remains unverified; the 95 threshold is unchanged.
 
 #### DE-397 — Anonymization layer never pseudonymizes ORGANIZATION entities (Presidio default suppression)
 
