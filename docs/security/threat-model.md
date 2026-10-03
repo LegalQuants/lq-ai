@@ -57,6 +57,7 @@ The boundary the STRIDE table below does not draw is the one between the operato
 - [ADR 0007 Skill prompt assembly](../adr/0007-skill-prompt-assembly.md) — the untrusted-input envelope (amendment of 2026-09-02) and what it does not do.
 - [Encrypted-at-rest provider keys workflow](encrypted-keys.md) — master-key bootstrap and rotation.
 - [Vulnerability disclosure policy](../../SECURITY.md) — coordinated disclosure process.
+- [Boundary registers](boundary-registers.md) — a separate, orthogonal catalog that restrains *autonomous work* (economic, temporal, contextual limits, and how each is enforced) rather than the STRIDE threats above, which cover the five production services as they exist today.
 
 ## Update cadence
 

@@ -29,6 +29,16 @@ That is also the structural posture of the project. The work product an operator
 
 **Effort key:** S = under a day; M = a few days; L = more than a week.
 
+**Which row fits you:** row 3 (acceptance tests for the built-in skills) is written for a
+practicing attorney and read against real, anonymized documents rather than code. Rows 1
+and 6 (Procurement-Readiness Pack, NIST AI RMF mapping) read closer to a compliance,
+procurement, or AI-governance background than an engineering one. Rows 2, 4, 5, and 7
+assume an engineering background at S-to-M effort — the OWASP LLM Top 10 mapping, the
+OpenSSF Scorecard badges, the air-gap install verification test, and the reverse-proxy and
+TLS recipes. Row 8, the community skill installer UI, is a mid-level Svelte + FastAPI
+engineering item. This list only carries S and M items by design; anything larger goes
+through a discussion first rather than sitting on a public board.
+
 **Foundation readiness** reflects how much of the supporting code, documentation, or convention is already shipped. **High** means the contributor reads existing source, fills the gap, and submits the PR. **Medium-High** means one or two ancillary decisions are still open and the maintainer will resolve them during review.
 
 ## How to claim one

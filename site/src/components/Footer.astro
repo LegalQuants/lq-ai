@@ -1,0 +1,87 @@
+---
+/**
+ * Footer override.
+ *
+ * Order, top to bottom:
+ *   1. the stamp — the commit the page was checked against, and every source
+ *      file linked at that commit;
+ *   2. "Edit this page" (the canonical file under `docs/site/`, on GitHub);
+ *   3. previous / next, which Starlight builds from the sidebar;
+ *   4. one project line.
+ *
+ * Starlight's own `Pagination` component is reused rather than re-implemented,
+ * so its `rel="prev"`/`rel="next"` semantics and focus order are unchanged.
+ *
+ * The edit link is derived here rather than taken from
+ * `Astro.locals.starlightRoute.editUrl`. Starlight builds that URL by appending
+ * `entry.filePath` to `editLink.baseUrl`, and our entries live in the generated
+ * `src/content/docs/` tree, so the default would point at a path that is not in
+ * the repository. Stripping that prefix gives the page's real `docs/site/` path.
+ * A page with a frontmatter `editUrl` (which the generators can set for pages
+ * that have no single hand-written source) wins over the derived one.
+ */
+import Pagination from 'virtual:starlight/components/Pagination';
+
+import Stamp from './Stamp.astro';
+import { EDIT_BASE, toDocsSitePath } from '../repo.mjs';
+
+const { entry, editUrl } = Astro.locals.starlightRoute;
+const { checkedAgainst, sourceFiles, editUrl: frontmatterEditUrl } = entry.data;
+
+const docsSitePath = toDocsSitePath(entry.filePath);
+const editHref =
+  typeof frontmatterEditUrl === 'string'
+    ? frontmatterEditUrl
+    : docsSitePath
+      ? EDIT_BASE + docsSitePath
+      : editUrl?.href;
+---
+
+<footer class="lq-footer">
+  <Stamp checkedAgainst={checkedAgainst} sourceFiles={sourceFiles} />
+
+  {
+    editHref && (
+      <p class="lq-footer__edit">
+        <a href={editHref}>Edit this page on GitHub</a>
+      </p>
+    )
+  }
+
+  <Pagination />
+
+  <p class="lq-footer__project">An LQ Labs project · LegalQuants · Apache 2.0</p>
+</footer>
+
+<style>
+  @layer starlight.core {
+    .lq-footer {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .lq-footer__edit {
+      margin: 0;
+      font-size: var(--sl-text-sm);
+    }
+
+    .lq-footer__edit a {
+      color: var(--sl-color-gray-3);
+      text-underline-offset: 0.2em;
+    }
+
+    .lq-footer__edit a:hover,
+    .lq-footer__edit a:focus-visible {
+      color: var(--sl-color-text-accent);
+    }
+
+    .lq-footer__project {
+      margin: 0;
+      padding-top: 1rem;
+      border-top: 1px solid var(--sl-color-hairline-light);
+      font-size: var(--sl-text-xs);
+      color: var(--sl-color-gray-3);
+    }
+  }
+</style>
