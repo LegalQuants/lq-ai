@@ -8,15 +8,11 @@ The properties pin:
 
 * canonical-form invariants (no smart quotes, no ``\\r``, single-space
   whitespace only, stripped ends) for both OCR modes;
-* idempotence for the always-on layer (``was_ocrd=False``);
+* idempotence for both the always-on layer (``was_ocrd=False``) and
+  the OCR layer (``was_ocrd=True``) — fixed by DE-230;
 * comparison-insensitivity to whitespace layout and quote style — the
   differences Stage 2 exists to forgive must never change the
   canonical form.
-
-KNOWN BUG (found by this suite; deliberately NOT fixed here): the
-OCR layer (``was_ocrd=True``) violates the module's documented
-idempotence contract — see
-:func:`test_ocr_layer_idempotence_violation_is_pinned` below.
 """
 
 from __future__ import annotations
@@ -57,13 +53,17 @@ def test_normalized_output_is_canonical_form(text: str, was_ocrd: bool) -> None:
     assert out == out.strip()
 
 
-@given(text=any_text)
-def test_always_on_layer_is_idempotent(text: str) -> None:
-    """normalize(normalize(t)) == normalize(t) for the non-OCR path,
-    per the module's documented contract."""
+@given(text=any_text, was_ocrd=st.booleans())
+def test_normalization_is_idempotent(text: str, was_ocrd: bool) -> None:
+    """normalize(normalize(t)) == normalize(t) for both the always-on
+    and the OCR layers, per the module's documented contract.
 
-    once = normalize(text)
-    assert normalize(once) == once
+    This property now covers ``was_ocrd=True`` — the fixed-point loop
+    introduced in DE-230 guarantees convergence on the first call.
+    """
+
+    once = normalize(text, was_ocrd=was_ocrd)
+    assert normalize(once, was_ocrd=was_ocrd) == once
 
 
 @given(text=any_text)
@@ -84,46 +84,28 @@ def test_quote_style_never_changes_canonical_form(text: str) -> None:
 
 
 @pytest.mark.parametrize(
-    ("text", "first_pass", "second_pass"),
+    ("text", "canonical"),
     [
-        ("Ol5", "O15", "015"),
-        ("ll5", "l15", "115"),
-        ("5lO", "51O", "510"),
-        ("Oll5", "Ol15", "O115"),
+        # Basic single confusion
+        ("Ol5", "015"),
+        ("ll5", "115"),
+        ("5lO", "510"),
+        # Chained confusion — the key case fixed by DE-230
+        # Old single-pass: "Oll5" -> "Ol15" -> "O115" (3 passes needed)
+        # Fixed: reaches "0115" in one normalize() call
+        ("Oll5", "0115"),
+        # Negative cases: letters not adjacent to digits are preserved
+        ("Ollx", "Ollx"),
+        ("Office", "Office"),
+        ("liability", "liability"),
     ],
 )
-def test_ocr_layer_known_one_pass_outputs(text: str, first_pass: str, second_pass: str) -> None:
-    """Pin the observed bug so a different failure cannot pass as the known one."""
+def test_ocr_layer_canonical_outputs(text: str, canonical: str) -> None:
+    """The OCR layer reaches the fixed-point canonical form in one normalize() call.
 
-    assert normalize(text, was_ocrd=True) == first_pass
-    assert normalize(first_pass, was_ocrd=True) == second_pass
-
-
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason=(
-        "DE-230 property-test finding: the OCR layer is NOT idempotent, "
-        "contradicting the module docstring ('The function is idempotent "
-        "... for every input') that the Stage-2 verifier relies on. The "
-        "l→1 and O→0 substitutions run in one pass each; a substitution "
-        "can create a *new* digit adjacency that only the next pass "
-        "rewrites: normalize('Ol5', was_ocrd=True) == 'O15' but "
-        "normalize('O15', was_ocrd=True) == '015'. Left unfixed "
-        "deliberately — fixing (e.g. iterating the OCR rules to a fixed "
-        "point, or applying digit-adjacency rules right-to-left) changes "
-        "verifier-visible canonical forms and needs a maintainer call on "
-        "the desired semantics."
-    ),
-)
-@pytest.mark.parametrize("text", ["Ol5", "ll5", "5lO", "Oll5"])
-def test_ocr_layer_idempotence_violation_is_pinned(text: str) -> None:
-    """Pinned counterexamples for the OCR-layer idempotence violation.
-
-    strict xfail: if this ever XPASSes, the bug was fixed — delete this
-    test and extend :func:`test_always_on_layer_is_idempotent` to cover
-    ``was_ocrd=True``.
+    Covers the DE-230 regression: chained OCR confusions (e.g. ``Oll5``) must
+    resolve to the fully-substituted form (``0115``) in a single call, not
+    require repeated calls.
     """
 
-    once = normalize(text, was_ocrd=True)
-    assert normalize(once, was_ocrd=True) == once
+    assert normalize(text, was_ocrd=True) == canonical
