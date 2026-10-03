@@ -1,0 +1,74 @@
+# Supported hosting shapes for LQ.AI — read by the /operate/ hub (J22:
+# "which of these hosting combinations is mine?").
+#
+# status is one of:
+#   recipe published  — a page or in-repo README walks you through it
+#   known to work      — reported working, but no recipe walks you through it
+#   not tried           — not documented in the repository as of the checked commit
+#
+# recipe is a site route (relative to /operate/) or null.
+# source is the repo-relative file the row is checked against, or null when
+# the row's status is "not tried" for lack of any documentation.
+
+shapes:
+  - topology: macOS desktop app (Docker Desktop, Apple Silicon)
+    status: recipe published
+    recipe: install-macos/
+    source: docs/INSTALL-MAC.md
+
+  - topology: Docker Compose, cloud provider keys (Mode 1)
+    status: recipe published
+    recipe: install-docker-compose/
+    source: README.md
+
+  - topology: Docker Compose, local-only inference (Mode 2, --profile local)
+    status: recipe published
+    recipe: air-gapped/
+    source: README.md
+    notes: >-
+      the compose stack brings this up; no CI job in this repository yet
+      measures its network behavior — see the page for the egress-inventory gap.
+
+  - topology: Kubernetes via the in-repo Helm chart
+    status: recipe published
+    recipe: install-helm/
+    source: deploy/helm/lq-ai/
+    notes: >-
+      the chart has no Deployment for the ingest-worker or arq-worker
+      background workers — document ingestion and queued jobs do not run on
+      it yet (PRD DE-327). See the page before you rely on it for anything
+      beyond chat.
+
+  - topology: Reverse proxy + TLS, private tailnet (Caddy + Tailscale)
+    status: recipe published
+    recipe: reverse-proxy-tls/
+    source: deploy/caddy-tailscale/README.md
+
+  - topology: Reverse proxy + TLS, public domain (Caddy, Traefik, or nginx with a public certificate)
+    status: recipe published
+    recipe: reverse-proxy-tls/
+    source: deploy/reverse-proxy/README.md
+    notes: >-
+      Caddy, Traefik and nginx overlays under deploy/reverse-proxy/, labelled
+      by their README as reference configurations rather than a supported
+      production distribution; not deployed against a public domain for
+      this site.
+
+  - topology: Remote GPU host running Ollama, reached over a tailnet
+    status: recipe published
+    recipe: recipes/tailnet-ollama/
+    source: deploy/tailnet-ollama/README.md
+
+  - topology: Windows host
+    status: not tried
+    recipe: null
+    source: null
+    notes: not documented in the repository as of the checked commit.
+
+  - topology: Hosted on a corporate cloud VM or Kubernetes cluster (Azure, AWS, GCP)
+    status: not tried
+    recipe: null
+    source: null
+    notes: >-
+      not documented in the repository as of the checked commit — distinct
+      from the Azure OpenAI *inference provider* adapter, which is shipped.

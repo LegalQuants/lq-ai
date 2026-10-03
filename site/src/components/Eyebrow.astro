@@ -1,0 +1,20 @@
+---
+/**
+ * Eyebrow — a mono, uppercase, accent-coloured caption.
+ *
+ * Used above a page title to name the namespace the reader is in. It is a
+ * caption, not a heading: it carries no heading level, so it cannot break the
+ * H1 → H2 outline the page's own headings make.
+ */
+interface Props {
+  /** The caption text. */
+  text: string;
+  /** Element to render. Keep it a non-heading. */
+  as?: 'span' | 'p' | 'div';
+  class?: string;
+}
+
+const { text, as: Tag = 'p', class: className } = Astro.props;
+---
+
+<Tag class:list={['lq-eyebrow', className]}>{text}</Tag>

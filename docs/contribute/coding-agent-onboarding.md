@@ -6,6 +6,16 @@
 
 ---
 
+## In short
+
+- Work from this guide and [CLAUDE.md](../../CLAUDE.md); read the cited files and confirm a request's problem is real before writing anything.
+- Work one task at a time, in a separate test environment — verify migrations against a throwaway database, and never run `docker compose down -v` or other volume-wiping commands against the live dev stack; there is no throwaway alternative for that one, it is forbidden outright.
+- When a task hides an architectural, scope, or authorization decision, stop and put the choice to a maintainer instead of deciding unilaterally.
+- A finished task reports evidence, not a summary: what changed, how it was tested, and links to the files touched — say plainly whether that came from reading code, a run against simulated services, or the running app.
+- Every commit carries a DCO sign-off; an external contributor pushes only to their own fork and opens a PR — a maintainer reviews the gates and merges it.
+
+---
+
 ## 0. The 60-second orientation
 
 LQ.AI is an **open-source, self-hosted AI platform for in-house legal teams**. Three services talk over HTTP via OpenAPI contracts — no shared in-process code:
@@ -121,9 +131,13 @@ database via the conftest fixture, so workers are fully isolated),
 and **Web** (`npm run check:lq-ai` and `npm run test:frontend -- --run`). The
 path-triggered Stack smoke workflow also runs on PRs that change the specified
 API/Gateway/Web dependency manifests and locks, Dockerfiles, compose, API
-migrations, its script, or its workflow. Current PR CI does not enforce coverage
-no-decrease or run browser end-to-end tests. A new endpoint needs unit +
-integration + OpenAPI-conformance tests; a bug fix needs a regression test.
+migrations, its script, or its workflow. PR CI enforces coverage as a ratchet
+(`.github/workflows/ci.yml`): `--cov-fail-under=80` for `api/` and
+`--cov-fail-under=88` for `gateway/`, each pinned at or below the measured
+figure so a PR that lowers coverage fails. The deterministic Cypress track
+runs nightly and on manual dispatch (`.github/workflows/e2e.yml`), not on
+every PR. A new endpoint needs unit + integration + OpenAPI-conformance
+tests; a bug fix needs a regression test.
 
 ### Test-suite collision guards (miss these and the **whole** api suite crashes at collection)
 
@@ -195,6 +209,21 @@ Stop and put the decision to the human when:
 - A change touches the **gateway or an authz path** and you're unsure of the security implication.
 
 The friction is the point. An undocumented decision compounds across every task that follows it.
+
+---
+
+## 9. Reading the documentation site as plain text
+
+If your first contact with the project is the published documentation site rather than a
+clone, you don't need to render HTML to read it. Per [ADR 0028, decision
+4](../adr/0028-documentation-site-generator-and-hosting.md#decision), the site build owns
+the machine-readable surface: every page is also served as plain Markdown at its own URL
+with `.md` appended, so a page's URL and its machine-readable twin differ only by that
+suffix. The build may also publish `llms.txt` at the site root (every page with a one-line
+description, grouped by namespace) and `llms-full.txt` (every page's full text
+concatenated in sidebar order), but ADR 0028 is explicit that the `.md` routes are the
+guaranteed surface — the `.txt` files depend on a plugin and must not be assumed present
+without checking.
 
 ---
 

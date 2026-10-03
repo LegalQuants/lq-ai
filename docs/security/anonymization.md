@@ -6,6 +6,17 @@
 
 ---
 
+## In short
+
+An optional gateway feature swaps names, organizations, emails, phone numbers, bank numbers, locations, and case/matter numbers for labels before a chat or skill request reaches an AI model, then restores them in the response. It ships off by default.
+
+- **When it runs.** The example config turns it on for tiers 3-5 and leaves Tier 1 (local) inference out; it also always skips privileged chats and retrieved source documents.
+- **What it can miss.** It only redacts entities it detects; recall and precision on real legal documents haven't been measured, so treat this as a mitigation, not a guarantee. Several identifier types (Social Security, passport, driver's license, IBAN, IP, cryptocurrency, medical license numbers) aren't recognized by default.
+- **What the status flag means.** A logged "ran" status means the pass executed, not that anything was found and replaced.
+- **If a miss is unacceptable**, route that matter to Tier 1 instead.
+
+---
+
 ## What's validated vs what's unvalidated
 
 This section exists because LQ.AI's [founding transparency principle](../PRD.md#13-transparency-as-a-founding-principle) requires us to be explicit about where this layer has been measured and where it has not — so practicing attorneys can make informed professional judgments about confidentiality posture per matter.
@@ -30,13 +41,13 @@ Specifically, the following are unmeasured:
 
 ### Why this matters — a miss is a silent confidentiality incident
 
-For citation verification, a miss surfaces in the user interface as an "unverified" chip — the lawyer sees the system's uncertainty and can react. For anonymization, **a miss is silent**: a PERSON name slips through, the unredacted text reaches the model provider, the response comes back rehydrated as if nothing happened, and the lawyer has no in-app signal that client confidentiality was breached. Operational telemetry cannot recover the leak post-hoc — by the time the miss is observable, the unredacted content has already been transmitted, logged, and possibly used in provider-side training (depending on the routed [Inference Tier](../PRD.md#152-the-inference-tier-model)).
+For citation verification, a miss surfaces in the user interface as an "unverified" chip — the lawyer sees the system's uncertainty and can react. For anonymization, **a miss is silent**: a PERSON name slips through, the unredacted text reaches the model provider, the response comes back rehydrated as if nothing happened, and the lawyer has no in-app signal that client confidentiality was breached. Operational telemetry cannot recover the leak post-hoc — by the time the miss is observable, the unredacted content has already been transmitted, logged, and possibly used in provider-side training (depending on the routed [Inference Tier](../PRD.md#152-the-inference-choice-spectrum-five-tiers)).
 
 This is a meaningfully different load-bearing posture than the citation-verification layer's "wrong answers visibly marked unverified" story. We document it explicitly so practicing attorneys can apply the **professional-judgment standard** that confidentiality work warrants — and so the project does not overclaim a privacy guarantee it has not yet empirically supported.
 
 ### What to do if you can't accept the unvalidated risk
 
-Operators with confidentiality requirements that demand validated PII recognition (e.g., privileged matter work, regulated-data practices, or any matter where a single PII miss is unacceptable) have one principal mitigation today: **route to a Tier 1 (fully local) inference path** so the question is moot. Per [PRD §1.5.2](../PRD.md#152-the-inference-tier-model), Tier 1 keeps the chat content inside the operator's environment — Ollama via `docker compose --profile local up` is the default — and no provider call leaves the deployment at all. The Anonymization Layer still runs (the pseudonym/rehydrate round-trip is observable in logs for the operator's own audit), but its failure mode shifts from "leak to a third party" to "leak inside your own infrastructure," which is a categorically different risk surface.
+Operators with confidentiality requirements that demand validated PII recognition (e.g., privileged matter work, regulated-data practices, or any matter where a single PII miss is unacceptable) have one principal mitigation today: **route to a Tier 1 (fully local) inference path** so the question is moot. Per [PRD §1.5.2](../PRD.md#152-the-inference-choice-spectrum-five-tiers), Tier 1 keeps the chat content inside the operator's environment — Ollama via `docker compose --profile local up` is the default — and no provider call leaves the deployment at all. With the shipped defaults the Anonymization Layer does **not** run on a Tier 1 route: `anonymization.enabled` defaults to `false`, and the tier gate (`routed_tier in apply_at_tiers`, `gateway/app/anonymization/middleware.py`) skips Tier 1 under the `gateway.yaml.example` value `apply_at_tiers: [3, 4, 5]` — the code default for `apply_at_tiers` (`AnonymizationConfig`, `gateway/app/config.py`) is an empty list, which fires at no tier until the operator sets one. An operator who enables the layer and adds `1` to `apply_at_tiers` gets the pseudonym/rehydrate round-trip on local inference too, but its failure mode is then "leak inside your own infrastructure" rather than "leak to a third party," which is a categorically different risk surface.
 
 Other paths to consider (without full Tier 1 routing):
 
@@ -66,8 +77,8 @@ The gateway's `AnalyzerEngine` runs with this configuration (`gateway/app/anonym
 | `ORGANIZATION` | Presidio default (spaCy NER) | Corporate entities, firms, agencies. | Surfaces under Presidio's `ORG` label internally. |
 | `EMAIL_ADDRESS` | Presidio default | Counsel email, party email in correspondence. | Requires a recognized TLD; `.example` test addresses won't match. |
 | `PHONE_NUMBER` | Presidio default | Contact numbers in correspondence. | US conventions catch best; international support varies. |
-| `US_BANK_NUMBER` | Presidio default | Bank account numbers in settlement statements, escrow docs. | Mapped to the `ACCOUNT_NUMBER` pseudonym domain so the operator's mental model is generic. |
-| `LOCATION` | Presidio default (spaCy NER) | Addresses, courthouses, jurisdictions. | Mapped to the `ADDRESS` pseudonym domain. |
+| `US_BANK_NUMBER` | Presidio default | Bank account numbers in settlement statements, escrow docs. | Pseudonyms carry the detector label verbatim (`US_BANK_NUMBER_0001`); there is no rename to an `ACCOUNT_NUMBER` domain. |
+| `LOCATION` | Presidio default (spaCy NER) | Addresses, courthouses, jurisdictions. | Pseudonyms carry the detector label verbatim (`LOCATION_0001`); there is no rename to an `ADDRESS` domain. |
 | `CASE_NUMBER` | **Custom** — `CaseNumberRecognizer` | Federal/state reporter cites (`Smith v. Jones, 123 F.3d 456 (9th Cir. 2024)`), `In re X` form, docket numbers (`Case No. 1:24-cv-00123`). | Requires structural anchoring; bare case captions intentionally not matched. |
 | `MATTER_NUMBER` | **Custom** — `MatterNumberRecognizer` | Alpha-year-sequence (`LQ-2026-0042`), dotted (`2026.0042`). | Deployment-specific; defaults are conservative — extend per the "Customizing" section below. |
 
@@ -189,7 +200,7 @@ All four conditions must hold; the first that fails short-circuits to a no-op fo
 | Condition | Source | Default |
 |---|---|---|
 | `gateway.yaml` `anonymization.enabled = true` | Operator config | **false** — feature flag stays off until the deployment opts in. |
-| Request's routed tier is in `anonymization.apply_at_tiers` | Operator config | `[3, 4, 5]` — local Tier 1 / Tier 2 inference skips because the data never leaves the operator's environment. |
+| Request's routed tier is in `anonymization.apply_at_tiers` | Operator config | `[]` in code (`AnonymizationConfig.apply_at_tiers`, `gateway/app/config.py`) — an unset list fires at no tier. `gateway.yaml.example` sets `[3, 4, 5]` so local Tier 1 / Tier 2 inference skips because the data never leaves the operator's environment. |
 | Request's `lq_ai_privileged` is `false` | Backend forwards `Project.privileged` | False for chats outside any project, or in non-privileged projects. |
 | Request's `anonymize` is `true` | Per-call body field | True. Callers send `anonymize: false` only when they need the raw text on the provider call (evaluation, raw-passthrough scenarios). |
 
@@ -200,15 +211,15 @@ All four conditions must hold; the first that fails short-circuits to a no-op fo
 
 ### What the post-pass touches
 
-**Non-streaming.** Each `choices[*].message.content` is rehydrated in place. The response body the caller sees has only originals, never pseudonyms.
+**Non-streaming.** Each `choices[*].message.content` is rehydrated in place. Every pseudonym the mapper assigned is replaced by its original; a pseudonym-shaped string the model produces that the mapper never assigned (e.g. an invented `PERSON_0009`) is left as-is.
 
-**Streaming.** Each SSE chunk's `choices[*].delta.content` is fed through a per-stream `StreamingRehydrator`. The rehydrator holds the tail of the stream when it ends in a partial pseudonym (e.g. `PERSON_` or `PERSON_0001` with no trailing space — could grow to `PERSON_00010`). Held text emits as soon as the pattern crystallizes or fails to grow. At `[DONE]`, any held tail flushes as a synthesized terminal chunk so the caller doesn't lose the last fragment. The buffer is bounded by the length of one in-flight pseudonym (~25 chars in practice), so streaming latency is unaffected.
+**Streaming.** Each SSE chunk's `choices[*].delta.content` is fed through a per-stream `StreamingRehydrator`. The rehydrator holds the tail of the stream when it ends in a partial pseudonym (e.g. `PERSON_` or `PERSON_0001` with no trailing space — could grow to `PERSON_00010`). Held text emits as soon as the pattern crystallizes or fails to grow. At `[DONE]`, any held tail flushes as a synthesized terminal chunk so the caller doesn't lose the last fragment. The hold pattern (`_PARTIAL_PSEUDONYM_AT_END`, `[A-Z][A-Z_]*(?:_\d*)?$` in `gateway/app/anonymization/middleware.py`) has no fixed length cap: any trailing run of uppercase letters and underscores, optionally followed by `_` and digits, is held until a non-matching character arrives or the stream flushes at `[DONE]`. For ordinary prose the held tail is one pseudonym long, but a long all-caps run (a shouted heading, an `ALL_CAPS_IDENTIFIER`) is held for its full length, so emission of that text is delayed until the run ends.
 
 Per **Decision D**: the middleware rehydrates response **content** only. Citation rehydration is incidental — the api/'s downstream citation extraction operates on already-rehydrated content, so cite quotes naturally carry originals. The gateway never touches `message_citations` rows directly.
 
 ### Audit log
 
-Every routed request writes one row to `inference_routing_log`. The middleware sets `anonymization_applied = true` on every row whose request passed all four firing conditions — including rows where the upstream later failed (the substitution did happen; the provider just then returned an error). Tier-floor refusals (which short-circuit before the pre-pass) leave the flag `false` because no substitution happened.
+Every routed request writes one row to `inference_routing_log`. The flag is written as `anon_mapper is not None` (`gateway/app/api/inference.py`): it is `true` on every row whose request passed all four firing conditions and so had a mapper allocated by the pre-pass — including rows where the upstream later failed (the pre-pass ran; the provider then returned an error). It does **not** record that any entity was detected or any text substituted: an eligible request in which the analyzer found nothing still gets `true`. Tier-floor refusals (which short-circuit before the pre-pass) and skipped requests leave the flag `false` because no mapper was allocated.
 
 ### Where mappings live
 
@@ -280,7 +291,7 @@ The format is locked by M2-A3. Operators who need a different format (longer cou
 
 The M2-C3 round-trip test suite (`gateway/tests/anonymization/test_round_trip.py`) pins four invariants the Anonymization Layer must hold. Each runs against the **real** Presidio `AnalyzerEngine` so the tests catch real entity-detection regressions, not just substitution-logic regressions. The suite is `pytest -m slow` because the first spaCy load is ~2-3s; CI runs it on every PR touching `gateway/app/anonymization/`.
 
-1. **Byte-for-byte round-trip.** Any text that runs through `pseudonymize_into(text, mapper)` followed by `rehydrate(substituted_text, mapper)` returns the original `text` byte-for-byte. The mapper carries the round-trip; no information is lost in the substitution step.
+1. **Round-trip.** Text that runs through `pseudonymize_into(text, mapper)` followed by `rehydrate(substituted_text, mapper)` returns the original `text` for every mapped span; the mapper carries the round-trip and no information is lost in the substitution step. This is not a universal byte-for-byte guarantee: `Anonymizer.rehydrate` is a plain `str.replace` over the mapper's assignments, so a literal token such as `PERSON_0001` already present in the input collides with an active `PERSON_0001` assignment and is replaced by that entity's original too (see [DE-274](#pseudonym-collision-surfaces--de-274)). No escaping scheme exists today.
 2. **Cross-conversation stability within a request.** A single `PseudonymMapper` shared across multiple message-content passes assigns the same pseudonym to the same `(entity_type, original)` pair every time. Same name in messages 1 and 5 of one request → same pseudonym in both.
 3. **Per-request isolation.** Two independent `PseudonymMapper` instances produce independent pseudonym spaces — `mapper_A.assign("PERSON", "John")` and `mapper_B.assign("PERSON", "John")` both yield `PERSON_0001` but the mappings live in disjoint state. Production request scoping (one mapper per request, dropped on response) is verified by this invariant.
 4. **In-process-only persistence.** After a representative request completes, no pseudonym-shaped string appears in `caplog`-captured log records OR in the `inference_routing_log` audit row payload. The mapper is in-process, in-memory, and never escapes to any persistent surface (logs, DB, S3-compatible object storage, telemetry).
@@ -295,7 +306,7 @@ The suite also covers entity-overlap handling (`John Smith Jr.` collapses to one
 
 The current pseudonym format `{ENTITY_TYPE}_{NNNN}` is deterministic and operator-readable, which is the right trade-off for legibility. The cost is two distinct collision surfaces, both pinned by the M2-C3 round-trip test suite so a future change is visible in CI:
 
-**1. Source-document collision.** If a source document happens to **literally** contain a string matching this pattern (e.g., a contract template using `PERSON_0001` as a placeholder, or a procedural doc referencing `EMAIL_ADDRESS_0023` from a different system), the rehydrator's behavior today is best-effort: `Anonymizer.rehydrate` uses `str.replace` per known mapping; a literal `PERSON_0001` in source text that does NOT match an active mapper entry passes through unchanged (the safe path). The literal string is preserved in the user-visible content. The risk is forward-looking: as the engine evolves (e.g., adding logging of unmatched pseudonym-shaped strings for operator debugging), a literal source pseudonym could surface in logs as a (minor) leak path.
+**1. Source-document collision.** If a source document happens to **literally** contain a string matching this pattern (e.g., a contract template using `PERSON_0001` as a placeholder, or a procedural doc referencing `EMAIL_ADDRESS_0023` from a different system), the rehydrator's behavior today is best-effort: `Anonymizer.rehydrate` uses `str.replace` per known mapping; a literal `PERSON_0001` in source text that does NOT match an active mapper entry passes through unchanged (the safe path). The literal string is preserved in the user-visible content. If the literal DOES match an active mapper entry (the request also produced a real `PERSON_0001`), `str.replace` rewrites the literal to that entity's original as well — the round-trip is not byte-for-byte for that input. The risk is forward-looking: as the engine evolves (e.g., adding logging of unmatched pseudonym-shaped strings for operator debugging), a literal source pseudonym could surface in logs as a (minor) leak path.
 
 **2. Cross-mapper collision.** Two parallel mappers both produce `PERSON_0001` for their respective first PERSON span — there is no per-request salt in the format, so the pseudonym strings are not globally distinct across mappers. Production isolation works today **only because mappers are per-request and dropped on function exit** — there is no production path that rehydrates one request's output against another request's mapper. A future architectural change that, for any reason, cached or shared mappers across requests would silently leak originals across the request boundary. Isolation is currently **scope-enforced**, not collision-prevented.
 

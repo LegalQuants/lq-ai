@@ -2,6 +2,13 @@
 
 > **Status:** Stub at v1 launch. The Procurement-Readiness Pack — pre-filled SIG Lite and CAIQ questionnaires, plus a cover letter template — is tracked as [DE-086](../PRD.md#de-086--procurement-readiness-pack) and is welcomed as a community contribution.
 
+## In short
+
+- Base every answer on what's actually running in your own deployment — a planned feature or a written policy is not evidence that a control is working.
+- For a provider's retention terms, contracts, or certifications, get current evidence from that provider directly; LQ.AI's own settings can't confirm those commitments on the provider's behalf.
+- What's here today is a starter, not the full pack: [`sig-lite.md`](sig-lite.md) answers the SIG Lite questions tied to privileged-matter handling and the M3 external integrations (the Word add-in, the Slack/Teams bridges); CAIQ and a cover letter template are still [DE-086](../PRD.md#de-086--procurement-readiness-pack).
+- Replace every `[OPERATOR-CONFIGURABLE]` marker with your deployment's actual answer, and keep each question, response, and evidence reference together.
+
 Procurement reviews are one of the highest-leverage adoption barriers for any tool deployed in enterprise environments — including open-source software the operator runs themselves. In-house counsel evaluating LQ.AI for use in their organization typically need to satisfy their procurement team's standard intake process, which involves SIG Lite (Standardized Information Gathering Lite from Shared Assessments), CAIQ (Consensus Assessments Initiative Questionnaire from Cloud Security Alliance), or a custom enterprise security questionnaire.
 
 The Procurement-Readiness Pack is the project's contribution to that work: pre-filled responses for the most common procurement questionnaires, with operator-overridable fields for items that depend on specific deployment configuration.

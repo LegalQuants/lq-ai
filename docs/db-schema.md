@@ -10,7 +10,7 @@ This document is structured by subsystem; tables that span subsystems (audit log
 
 ## Conventions
 
-- **Primary keys:** all tables use UUID v7 (`uuid_generate_v7()`) as primary keys for time-ordered insertion. Where v7 is unavailable, v4 is acceptable.
+- **Primary keys:** the DDL blocks in this document are written with UUID v7 (`uuid_generate_v7()`) defaults for time-ordered insertion. The shipped migrations (`api/alembic/versions/`) instead default every primary key to `gen_random_uuid()` (UUIDv4, via the `pgcrypto` extension enabled in `0001_initial.py`) because the project has not taken on the `pg_uuidv7` extension dependency. Read the v7 defaults below as design intent, not as the deployed schema: primary keys are **not** time-ordered, so order by `created_at` / `timestamp`, never by `id`.
 - **Timestamps:** `TIMESTAMPTZ` (with timezone). `created_at` and `updated_at` are required on every entity table; `updated_at` is set by trigger on UPDATE.
 - **Soft deletes:** entities that should retain history use `deleted_at TIMESTAMPTZ NULL`. Hard deletes are reserved for GDPR Article 17 requests after the grace period.
 - **Foreign keys:** named explicitly (`fk_<source_table>_<column>`); ON DELETE behavior specified.

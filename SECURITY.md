@@ -1,5 +1,13 @@
 # Security Policy
 
+## In short
+
+- **Don't file vulnerabilities as public GitHub issues.** Email admin@legalquants.com or open a private GitHub Security Advisory instead, with the affected version, reproduction steps, and likely impact.
+- We acknowledge reports within 72 hours, give an initial assessment within 7 business days, and aim to fix confirmed criticals within 30 days, high-severity within 60, and medium-severity within 90.
+- We agree the public disclosure timing with you, and credit you in the advisory unless you'd rather stay anonymous.
+- Not sure whether a finding needs the private path or can be discussed in the open? See "Judging whether a finding needs the private path" below — when in doubt, use the private path.
+- Good-faith research conducted under this policy is covered by our safe harbor: no legal action, no retaliation.
+
 ## Reporting a vulnerability
 
 **Do not file security vulnerabilities as public GitHub issues.** Public reports give attackers a head start; coordinated disclosure protects users while we develop a fix.
@@ -57,6 +65,21 @@ After a fix ships, we publish:
 - Operator-specific deployment configurations or operator-modified forks.
 - Social engineering attacks on LegalQuants employees or community members.
 - Theoretical attacks without a demonstrable exploit path against the project's threat model.
+
+## Judging whether a finding needs the private path
+
+This policy does not itself state a rule for the harder question a reporter with real findings has
+to answer alone: is *this specific* finding safe to work on in the open, or does it need the private
+path above? The project's only full security audit to date (#288, 22 findings) is the only precedent:
+its findings were remediated in public PRs, and [the v0.7.0 release notes](docs/releases/v0.7.0.md)
+record that "none is exploitable by a raw external attacker in the shipped default (every service
+binds to `127.0.0.1`)." Reading that precedent generally: **if a finding requires access an attacker
+cannot get in the deployment's shipped default configuration — an unexposed local port, a credential
+the operator already holds, a network position the shipped topology doesn't grant — public review is
+usually safer and faster than a private report sitting in a queue.** If a finding is exploitable by
+an attacker who has only what the shipped default exposes, use the private, coordinated path above.
+When you are not sure which side of the line a finding falls on, the private path is the conservative
+default.
 
 ## What we will not do
 
