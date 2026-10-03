@@ -87,6 +87,16 @@ ProjectDescription = Annotated[
 InferenceTier = Literal[1, 2, 3, 4, 5]
 """Per PRD §1.5.2 the tier spectrum is 1-5 inclusive."""
 
+EgressTier = Literal[1, 2, 3, 4, 5]
+"""Matter-scoped tool-egress ceiling (DE-358 item 6 / AG-03, issue #593).
+
+Same 1-5 spectrum as :data:`InferenceTier`, but an independent policy:
+the numeric ``min()`` of the operator default
+(``LQ_AI_TOOL_MAX_EGRESS_TIER``), the project value, and the
+orchestration ``ExecutionScope`` value is the ceiling for gateway tool
+egress on that matter. Independent of ``minimum_inference_tier`` and of
+``privileged``."""
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -154,6 +164,10 @@ class ProjectCreateRequest(BaseModel):
     context_md: str | None = None
     privileged: bool = False
     minimum_inference_tier: InferenceTier | None = None
+    # DE-358 item 6 / AG-03 (issue #593): optional matter-scoped ceiling
+    # for gateway tool egress. ``None`` means "no project-level ceiling" —
+    # the operator default and any orchestration scope still apply.
+    max_egress_tier: EgressTier | None = None
 
     @model_validator(mode="after")
     def _validate_context_size(self) -> Self:
@@ -199,6 +213,9 @@ class ProjectUpdateRequest(BaseModel):
     privileged: bool | None = None
     # ``int | None`` so the caller can clear the tier explicitly.
     minimum_inference_tier: InferenceTier | None = None
+    # ``EgressTier | None`` so the caller can clear the ceiling explicitly.
+    # Independent of ``minimum_inference_tier`` and ``privileged``.
+    max_egress_tier: EgressTier | None = None
     archived: bool | None = None
     """When set, archive (true) or unarchive (false) the project. The
     OpenAPI sketch has a separate DELETE for soft-delete; this field is
@@ -239,6 +256,9 @@ class ProjectResponse(BaseModel):
     context_md: str | None = None
     privileged: bool
     minimum_inference_tier: int | None = None
+    # DE-358 item 6 / AG-03 (issue #593): the matter-scoped tool-egress
+    # ceiling, 1-5, or ``None`` when the project sets none.
+    max_egress_tier: int | None = None
     # Wave D.2 Task 2.2: surface the per-user try-it sandbox flag so the
     # frontend can render a "non-billable" badge and route messages
     # appropriately without a second round-trip. ``False`` for the regular

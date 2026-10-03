@@ -148,6 +148,7 @@ from app.security.encryption import (
     encrypt_payload_envelope,
 )
 from app.skills.registry import MutableSkillRegistry, SkillRegistry
+from app.tools.governance import resolve_resumed_ceiling, resolve_tool_egress_ceiling
 from app.workers.queue import enqueue_treatment_derivation_job
 
 router = APIRouter(prefix="/chats", tags=["chats"])
@@ -384,6 +385,22 @@ async def _load_visible_chat(
             details={"chat_id": str(chat_id)},
         )
     return row
+
+
+async def _resolve_proposal_ceiling(
+    db: AsyncSession, *, project_id: uuid.UUID | None
+) -> int | None:
+    """Resolve the egress ceiling to stamp on a pending tool-call row.
+
+    Issue #593: a proposed call records the policy in force at proposal
+    time; the approve path re-resolves and executes under
+    ``min(original, current)``.  Returns ``None`` when unconstrained — and
+    also when the policy lookup raises (fail-closed is enforced at approve
+    time via ``ceiling_source="unresolved"``, so a ``NULL`` proposal ceiling
+    never silently authorizes a call).
+    """
+    ceiling, _source = await resolve_tool_egress_ceiling(db, project_id=project_id)
+    return ceiling
 
 
 async def _load_visible_project_for_chat(
@@ -2034,7 +2051,7 @@ async def resume_tool_call(
         ) from exc
 
     # Owner-scoped chat load — 404 on cross-user.
-    await _load_visible_chat(db, cid, user.id, include_archived=False)
+    chat = await _load_visible_chat(db, cid, user.id, include_archived=False)
 
     # Parse decision body.
     try:
@@ -2213,6 +2230,18 @@ async def resume_tool_call(
                 #   the actual approved execution, stamped confirmation_state=
                 #   "approved" / outcome="executed".  This is the authoritative
                 #   record that the tool ran with user approval.
+                #
+                # Issue #593: re-resolve the CURRENT egress policy and execute
+                # under min(proposal-time ceiling, current ceiling).  An
+                # unreadable current policy fail-closes inside
+                # governed_tool_invocation (ceiling_source="unresolved":
+                # no dispatch, refused audit row).
+                current_ceiling, current_source = await resolve_tool_egress_ceiling(
+                    db, project_id=chat.project_id
+                )
+                egress_ceiling = resolve_resumed_ceiling(
+                    pending.max_egress_tier, current_ceiling, current_source
+                )
                 try:
                     result = await execute_tool(
                         db,
@@ -2226,6 +2255,7 @@ async def resume_tool_call(
                         chat_id=cid,
                         request_id=request_id,
                         confirmation_state="approved",
+                        egress_ceiling=egress_ceiling,
                     )
                     # Update the gate row's confirmation_state to "approved"
                     # (the confirmation-REQUEST lifecycle: pending_confirmation →
@@ -2374,6 +2404,8 @@ async def resume_tool_call(
                     ),
                     status="pending",
                     expires_at=datetime.now(UTC) + CONFIRM_TTL,
+                    # Issue #593: proposal-time egress ceiling (see above).
+                    max_egress_tier=await _resolve_proposal_ceiling(db, project_id=chat.project_id),
                 )
                 db.add(pending_row2)
                 await db.flush()
@@ -3263,6 +3295,10 @@ async def _non_streaming_response(
                 ),
                 status="pending",
                 expires_at=datetime.now(UTC) + CONFIRM_TTL,
+                # Issue #593: proposal-time egress ceiling; the approve path
+                # re-resolves current policy and executes under
+                # min(original, current).
+                max_egress_tier=await _resolve_proposal_ceiling(db, project_id=chat.project_id),
             )
             db.add(pending_row)
             await db.flush()
@@ -3593,6 +3629,10 @@ async def _stream_response(
                         ),
                         status="pending",
                         expires_at=datetime.now(UTC) + CONFIRM_TTL,
+                        # Issue #593: proposal-time egress ceiling (see above).
+                        max_egress_tier=await _resolve_proposal_ceiling(
+                            db, project_id=chat.project_id
+                        ),
                     )
                     db.add(pending_row)
                     await db.flush()

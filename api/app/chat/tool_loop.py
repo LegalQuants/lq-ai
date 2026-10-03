@@ -56,7 +56,11 @@ from app.models.user import User
 from app.research import service as research_service
 from app.research.registry import SOURCE_REGISTRY, resolve_available_sources
 from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
-from app.tools.governance import governed_tool_invocation, resolve_provider_tier
+from app.tools.governance import (
+    governed_tool_invocation,
+    resolve_provider_tier,
+    resolve_tool_egress_ceiling,
+)
 
 log = logging.getLogger(__name__)
 
@@ -328,26 +332,38 @@ async def _dispatch_research(
     args: dict[str, Any],
     cluster_cache: dict[Any, Any],
     request_id: str | None,
+    max_allowed_tier: int | None = None,
 ) -> ToolResult:
     """Dispatch a research (CourtListener) tool call.
 
     Checks/fills ``cluster_cache`` for ``get_cluster`` and ``read_opinion``
     to avoid redundant gateway round-trips within a single turn.
 
+    ``max_allowed_tier`` is the resolved egress ceiling (issue #593),
+    forwarded to the research service so the gateway enforces the same
+    number the API applied. ``None`` means unconstrained.
+
     Cost is ``Decimal("0")`` in v1 — DE-344 defers per-provider tool cost.
     """
     op = spec.tool
     data: Any
     if op == "verify_citations":
-        data = await research_service.verify_citations(args["text"], request_id=request_id)
+        data = await research_service.verify_citations(
+            args["text"], request_id=request_id, max_allowed_tier=max_allowed_tier
+        )
     elif op == "search_case_law":
-        data = await research_service.search_case_law(args, request_id=request_id)
+        data = await research_service.search_case_law(
+            args, request_id=request_id, max_allowed_tier=max_allowed_tier
+        )
     elif op == "get_cluster":
         key = ("cluster", int(args["cluster_id"]))
         cached = cluster_cache.get(key)
         if cached is None:
             data = await research_service.get_cluster(
-                db, cluster_id=int(args["cluster_id"]), request_id=request_id
+                db,
+                cluster_id=int(args["cluster_id"]),
+                request_id=request_id,
+                max_allowed_tier=max_allowed_tier,
             )
             cluster_cache[key] = data
         else:
@@ -414,6 +430,7 @@ async def _dispatch_authority(
     args: dict[str, Any],
     gateway: Any,
     request_id: str | None,
+    max_allowed_tier: int | None = None,
 ) -> ToolResult:
     """Dispatch an authority op (search_authority/get_authority) via the gateway.
 
@@ -464,7 +481,9 @@ async def _dispatch_authority(
         gateway, source_type, request_id=request_id
     )
     call_args = {k: v for k, v in args.items() if k != "source"}
-    result = await gateway.call_tool(provider_name, spec.tool, call_args)
+    result = await gateway.call_tool(
+        provider_name, spec.tool, call_args, max_allowed_tier=max_allowed_tier
+    )
     payload = result.get("payload") if isinstance(result, dict) else None
 
     try:
@@ -550,6 +569,7 @@ async def _dispatch_mcp(
     args: dict[str, Any],
     server_auth_map: dict[str, str],
     request_id: str | None,
+    max_allowed_tier: int | None = None,
 ) -> ToolResult:
     """Dispatch an MCP tool call through the gateway.
 
@@ -559,6 +579,10 @@ async def _dispatch_mcp(
 
     For ``none``/``bearer`` servers, ``user_token=None`` is passed to the
     gateway call.
+
+    ``max_allowed_tier`` is the resolved egress ceiling (issue #593) — the
+    gateway enforces the same number the API applied. ``None`` means
+    unconstrained.
 
     Cost is ``Decimal("0")`` in v1 — DE-344 defers per-provider tool cost.
     """
@@ -582,7 +606,7 @@ async def _dispatch_mcp(
         spec.provider,
         spec.tool,
         args,
-        max_allowed_tier=None,
+        max_allowed_tier=max_allowed_tier,
         user_token=user_token,
         request_id=request_id,
     )
@@ -607,6 +631,7 @@ async def execute_tool(
     chat_id: UUID | None = None,
     request_id: str | None = None,
     confirmation_state: str = "not_required",
+    egress_ceiling: tuple[int | None, str | None] | None = None,
 ) -> ToolResult:
     """Execute a single approved read_only tool call through the governance substrate.
 
@@ -633,14 +658,22 @@ async def execute_tool(
             the EXECUTING audit row is stamped ``approved``/``executed``
             (separate from the gate row, which is the confirmation-request
             lifecycle record).
+        egress_ceiling: Pre-resolved ``(ceiling, source)`` pair, as returned
+            by :func:`app.tools.governance.resolve_tool_egress_ceiling`.
+            The approve (resume) path passes
+            ``min(original_proposal_ceiling, current_policy_ceiling)``.
+            When ``None`` (normal chat path), the ceiling is resolved from
+            the chat's current ``project_id`` at call time.
 
     Returns:
         :class:`~app.autonomous.guard.ToolResult` on success.
 
     Raises:
         :class:`~app.errors.ToolTierRefused`: When the provider's tier exceeds
-            ``max_allowed_tier`` (``None`` in the chat path, so this only fires
-            when the governance config explicitly blocks the call).
+            the resolved ``max_allowed_tier`` (``None`` only when no ceiling
+            is set anywhere — no project, no operator default — in which
+            case calls are unconstrained), or when the ceiling policy itself
+            cannot be resolved (fail-closed, ``ceiling_source="unresolved"``).
         :class:`~app.errors.MCPAuthorizationRequired`: When the MCP server
             requires OAuth and no valid token is stored.
     """
@@ -673,6 +706,22 @@ async def execute_tool(
         0 if spec.kind == "skill" else await resolve_provider_tier(provider, request_id=request_id)
     )
 
+    # DE-358 item 6 / AG-03 (issue #593): resolve the matter-scoped egress
+    # ceiling once per call. The same value reaches
+    # ``governed_tool_invocation`` (tier check + audit row) and every
+    # governed gateway ``call_tool`` below, so API and gateway can never
+    # disagree. Skills execute locally and bypass the gateway, so the
+    # ceiling is irrelevant to them (provider_tier=0 always passes).
+    if egress_ceiling is not None:
+        ceiling, ceiling_source = egress_ceiling
+    else:
+        from sqlalchemy import select
+
+        from app.models.chat import Chat
+
+        project_id = await db.scalar(select(Chat.project_id).where(Chat.id == chat_id))
+        ceiling, ceiling_source = await resolve_tool_egress_ceiling(db, project_id=project_id)
+
     async def _dispatch() -> ToolResult:
         if spec.kind == "skill":
             from sqlalchemy import select
@@ -692,11 +741,24 @@ async def execute_tool(
                 params=args,
             )
         elif spec.kind == "research":
-            return await _dispatch_research(db, spec, args, cluster_cache, request_id)
+            return await _dispatch_research(
+                db, spec, args, cluster_cache, request_id, max_allowed_tier=ceiling
+            )
         elif spec.kind == "authority":
-            return await _dispatch_authority(db, spec, args, gateway, request_id)
+            return await _dispatch_authority(
+                db, spec, args, gateway, request_id, max_allowed_tier=ceiling
+            )
         else:
-            return await _dispatch_mcp(db, user, gateway, spec, args, server_auth_map, request_id)
+            return await _dispatch_mcp(
+                db,
+                user,
+                gateway,
+                spec,
+                args,
+                server_auth_map,
+                request_id,
+                max_allowed_tier=ceiling,
+            )
 
     return await governed_tool_invocation(
         db,
@@ -705,7 +767,8 @@ async def execute_tool(
         tool=spec.tool,
         intent=intent,
         provider_tier=provider_tier,
-        max_allowed_tier=None,  # chat path: no per-session tier ceiling in v1
+        max_allowed_tier=ceiling,
+        ceiling_source=ceiling_source,
         estimated_cost=estimated_cost,
         dispatch=_dispatch,
         span=None,  # OTel for chat tool-path is a follow-on DE
