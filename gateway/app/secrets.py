@@ -21,23 +21,45 @@ the operator (e.g., via :func:`generate_master_key`). The operator
 stores it however they store other small high-value secrets — a
 password manager, a hardware token, a one-line entry in their
 secrets vault. The gateway never persists it.
+
+File-mounted delivery (#590, GW-06):
+
+Every secret ``NAME`` may alternatively be supplied via ``NAME_FILE``,
+whose value is a filesystem path to a file containing the secret
+(Docker Swarm/K8s secret mounts, Vault agent templates, systemd
+``LoadCredential=``). Setting both ``NAME`` and ``NAME_FILE`` is a
+configuration error — :class:`SecretSourceConflict` is raised rather
+than silently preferring one source. File values are stripped of
+surrounding whitespace (secret managers commonly append a trailing
+newline); an empty-after-strip file raises :class:`SecretFileError`.
+World/group-readable files log a warning (expected ``0400``/``0600``)
+but still load, so sloppy dev mounts do not hard-fail. Secret values
+never appear in log messages or exceptions — only the variable name
+and path.
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import secrets
 from dataclasses import dataclass
+from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "MASTER_KEY_ENV",
     "DecryptError",
     "MasterKeyMissing",
     "ProviderKeyResolver",
+    "SecretFileError",
+    "SecretSourceConflict",
     "encrypt_value",
     "generate_master_key",
+    "resolve_secret",
 ]
 
 
@@ -57,6 +79,88 @@ class DecryptError(RuntimeError):
     encryption rejects both with the same error). The message names the
     provider so the operator can find the offending entry.
     """
+
+
+class SecretSourceConflict(RuntimeError):
+    """Raised when both ``NAME`` and ``NAME_FILE`` are set.
+
+    The operator must choose one delivery path; the gateway refuses to
+    guess so a stale env value can never silently shadow a rotated file
+    (or vice versa). The message names the variable only, never values.
+    """
+
+
+class SecretFileError(RuntimeError):
+    """Raised when a ``NAME_FILE`` path is missing, unreadable, or empty.
+
+    The message names the variable and path only — never the file
+    contents — so it is safe to surface in startup logs.
+    """
+
+
+def _read_secret_file(*, var_name: str, path_str: str) -> str:
+    """Read and strip a file-mounted secret.
+
+    Raises :class:`SecretFileError` for missing paths, directories,
+    read failures, and empty-after-strip contents. Logs a warning when
+    the file is group/world-readable (expected ``0400``/``0600``) but
+    still loads it.
+    """
+
+    path = Path(path_str)
+    if not path.exists() or not path.is_file():
+        raise SecretFileError(
+            f"{var_name}_FILE points at {path_str!r}, which is missing or not a regular file."
+        )
+    try:
+        mode = path.stat().st_mode
+    except OSError as exc:
+        raise SecretFileError(
+            f"cannot stat secret file for {var_name}_FILE at {path_str!r}: {exc.strerror or exc}"
+        ) from exc
+    if mode & 0o077:
+        logger.warning(
+            "secret file for %s at %r is group/world-accessible (mode %o); "
+            "expected 0400 or 0600 owned by the service user",
+            var_name,
+            path_str,
+            mode & 0o777,
+        )
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise SecretFileError(
+            f"cannot read secret file for {var_name}_FILE at {path_str!r}: {exc.strerror or exc}"
+        ) from exc
+    value = raw.strip()
+    if not value:
+        raise SecretFileError(f"secret file for {var_name}_FILE at {path_str!r} is empty.")
+    return value
+
+
+def resolve_secret(var_name: str, env: dict[str, str] | None = None) -> str | None:
+    """Resolve one secret from ``NAME`` or ``NAME_FILE``.
+
+    Returns the secret value, or ``None`` when neither source is set.
+    Raises :class:`SecretSourceConflict` when both are set and
+    :class:`SecretFileError` when the file source cannot be read.
+    ``env`` defaults to :data:`os.environ`; tests pass an explicit dict
+    to stay hermetic.
+    """
+
+    source = env if env is not None else dict(os.environ)
+    direct = source.get(var_name)
+    file_path = source.get(f"{var_name}_FILE")
+    direct_set = bool(direct)
+    file_set = bool(file_path and file_path.strip())
+    if direct_set and file_set:
+        raise SecretSourceConflict(
+            f"{var_name} and {var_name}_FILE are both set; choose one delivery path."
+        )
+    if file_set:
+        assert file_path is not None
+        return _read_secret_file(var_name=var_name, path_str=file_path.strip())
+    return direct or None
 
 
 def generate_master_key() -> str:
@@ -97,7 +201,7 @@ def _fernet_from(master_key: str) -> Fernet:
         raise MasterKeyMissing(
             f"{MASTER_KEY_ENV} is not set. Generate a master key with "
             f"`python -m gateway.cli generate-master-key` and export it "
-            f"before starting the gateway."
+            f"(or mount it via {MASTER_KEY_ENV}_FILE) before starting the gateway."
         )
     try:
         return Fernet(master_key.encode("ascii") if isinstance(master_key, str) else master_key)
@@ -138,14 +242,30 @@ class ProviderKeyResolver:
     def from_environ(cls) -> ProviderKeyResolver:
         """Build a resolver from process environment.
 
-        The master key is taken from :envvar:`LQ_AI_GATEWAY_MASTER_KEY`;
-        :data:`None` when unset (which is fine when no provider uses
-        the encrypted path).
+        The master key is taken from :envvar:`LQ_AI_GATEWAY_MASTER_KEY`
+        or ``LQ_AI_GATEWAY_MASTER_KEY_FILE``; :data:`None` when unset
+        (which is fine when no provider uses the encrypted path).
+        A conflicting or unreadable file source raises immediately so
+        the gateway refuses to start rather than running half-configured.
         """
 
         return cls(
-            master_key=os.environ.get(MASTER_KEY_ENV) or None,
+            master_key=resolve_secret(MASTER_KEY_ENV),
             env=dict(os.environ),
+        )
+
+    @classmethod
+    def from_env_dict(cls, env: dict[str, str]) -> ProviderKeyResolver:
+        """Build a resolver from an explicit env mapping (adapters/tests).
+
+        Mirrors :meth:`from_environ` but reads ``MASTER_KEY_ENV`` via
+        :func:`resolve_secret` against the supplied mapping so
+        ``*_FILE`` delivery works when adapters pass ``env=`` explicitly.
+        """
+
+        return cls(
+            master_key=resolve_secret(MASTER_KEY_ENV, env),
+            env=dict(env),
         )
 
     def resolve(
@@ -163,8 +283,13 @@ class ProviderKeyResolver:
            Raises :class:`MasterKeyMissing` if the master key is unset
            or malformed; raises :class:`DecryptError` if the ciphertext
            doesn't decrypt under the configured master key.
-        2. ``api_key_env`` set → look up that env var; ``""`` if unset.
-           This is the existing path; preserved for backward
+        2. ``api_key_env`` set → look up that env var or its ``_FILE``
+           sibling (``ANTHROPIC_API_KEY`` / ``ANTHROPIC_API_KEY_FILE``);
+           ``""`` if unset. A missing/unreadable/empty file degrades to
+           ``""`` with a warning so the provider is skipped like any
+           other missing key; setting both ``NAME`` and ``NAME_FILE``
+           raises :class:`SecretSourceConflict` (ambiguous — fail, never
+           guess). The env-only form is preserved for backward
            compatibility per ADR 0011.
         3. Both unset → ``""`` (legitimately keyless provider).
 
@@ -185,7 +310,15 @@ class ProviderKeyResolver:
                     f"token was generated with a different one."
                 ) from exc
         if api_key_env:
-            return self.env.get(api_key_env, "")
+            try:
+                return resolve_secret(api_key_env, self.env) or ""
+            except SecretFileError as exc:
+                logger.warning(
+                    "skipping provider %r: %s",
+                    provider_name,
+                    exc,
+                )
+                return ""
         return ""
 
 

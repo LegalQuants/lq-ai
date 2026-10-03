@@ -32,14 +32,14 @@ No application-layer database-column encryption. The PostgreSQL `pgcrypto` exten
 ### Master key for Fernet-wrapped provider keys (`LQ_AI_GATEWAY_MASTER_KEY`)
 
 - **Generation:** operator-controlled via `python -m gateway.cli generate-master-key`. See [encrypted-keys.md §One-time bootstrap](encrypted-keys.md#one-time-bootstrap).
-- **Storage:** operator's secrets vault. Gateway reads the plaintext master key from `LQ_AI_GATEWAY_MASTER_KEY` at process start ([`gateway/app/secrets.py:45`](../../gateway/app/secrets.py)); never on disk after the encryption helper exits.
+- **Storage:** operator's secrets vault. Gateway reads the plaintext master key from `LQ_AI_GATEWAY_MASTER_KEY` (or `LQ_AI_GATEWAY_MASTER_KEY_FILE`, #590) at process start ([`gateway/app/secrets.py`](../../gateway/app/secrets.py)); never on disk after the encryption helper exits.
 - **Rotation:** re-encrypt every provider key under the new master before restarting the gateway with the new value. Fernet has no in-band rotation primitive; the operator runs the encryption CLI once per provider with the new master, swaps the `api_key_encrypted` tokens in `gateway.yaml`, then restarts.
 - **Disclosure impact:** an attacker with the master key can decrypt every `api_key_encrypted` in `gateway.yaml`. Treat as "rotate master + re-encrypt all provider keys."
 
 ### Gateway shared secret (`LQ_AI_GATEWAY_KEY`)
 
 - **Generation:** operator-supplied at deployment time. Recommended: `openssl rand -hex 32` ([`deploy/helm/lq-ai/values-example.yaml:10`](../../deploy/helm/lq-ai/values-example.yaml)).
-- **Storage:** Kubernetes Secret `lq-ai-auth` key `gateway-key` ([`deploy/helm/lq-ai/values.yaml:65`](../../deploy/helm/lq-ai/values.yaml); referenced from [`deploy/helm/lq-ai/templates/deployment-gateway.yaml:29-31`](../../deploy/helm/lq-ai/templates/deployment-gateway.yaml) and [`deploy/helm/lq-ai/templates/deployment-api.yaml:52`](../../deploy/helm/lq-ai/templates/deployment-api.yaml)). For Docker Compose: `.env` `LQ_AI_GATEWAY_KEY`.
+- **Storage:** Kubernetes Secret `lq-ai-auth` key `gateway-key` ([`deploy/helm/lq-ai/values.yaml:65`](../../deploy/helm/lq-ai/values.yaml); referenced from [`deploy/helm/lq-ai/templates/deployment-gateway.yaml:29-31`](../../deploy/helm/lq-ai/templates/deployment-gateway.yaml) and [`deploy/helm/lq-ai/templates/deployment-api.yaml:52`](../../deploy/helm/lq-ai/templates/deployment-api.yaml)). For Docker Compose: `.env` `LQ_AI_GATEWAY_KEY` or `LQ_AI_GATEWAY_KEY_FILE` pointing at a `0400`/`0600` mount (#590).
 - **Rotation:** the gateway picks up new admin-managed configuration via the hot-reload path ([ADR 0010](../adr/0010-gateway-config-hot-reload.md)); the shared-secret env var itself requires a coordinated restart of both api and gateway with the new value.
 - **Disclosure impact:** an attacker with this key can call the gateway directly, bypassing api-level audit logging.
 

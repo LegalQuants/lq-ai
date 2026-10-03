@@ -150,3 +150,41 @@ def test_assert_production_secrets_allows_real_secret(
     monkeypatch.delenv("LQ_AI_DEV_MODE", raising=False)
     s = Settings(_env_file=None)  # type: ignore[call-arg]
     assert_production_secrets(s)  # does not raise
+
+
+@pytest.mark.unit
+def test_gateway_key_file_resolves(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """LQ_AI_GATEWAY_KEY_FILE delivers the shared secret (#590)."""
+    from pathlib import Path
+
+    secret_file = tmp_path / "gateway-key.txt"
+    secret_file.write_text("file-gateway-key\n", encoding="utf-8")
+    monkeypatch.delenv("LQ_AI_GATEWAY_KEY", raising=False)
+    monkeypatch.setenv("LQ_AI_GATEWAY_KEY_FILE", str(secret_file))
+    s = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert s.lq_ai_gateway_key == "file-gateway-key"
+    Path(secret_file).unlink()
+
+
+@pytest.mark.unit
+def test_gateway_key_file_conflict_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """Both KEY and KEY_FILE set → fail closed, never silently prefer one."""
+    from pydantic import ValidationError
+
+    secret_file = tmp_path / "gateway-key.txt"
+    secret_file.write_text("file-value", encoding="utf-8")
+    monkeypatch.setenv("LQ_AI_GATEWAY_KEY", "env-value")
+    monkeypatch.setenv("LQ_AI_GATEWAY_KEY_FILE", str(secret_file))
+    with pytest.raises(ValidationError, match="both set"):
+        Settings(_env_file=None)  # type: ignore[call-arg]
+
+
+@pytest.mark.unit
+def test_gateway_key_file_missing_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """Missing file → fail closed (silently disabling auth would be worse)."""
+    from pydantic import ValidationError
+
+    monkeypatch.delenv("LQ_AI_GATEWAY_KEY", raising=False)
+    monkeypatch.setenv("LQ_AI_GATEWAY_KEY_FILE", str(tmp_path / "missing.txt"))
+    with pytest.raises(ValidationError, match="missing or not a regular file"):
+        Settings(_env_file=None)  # type: ignore[call-arg]

@@ -30,6 +30,10 @@ server:
 gateway_auth:
   enabled: true
   api_key_env: LQ_AI_GATEWAY_KEY
+  # File delivery (#590): set LQ_AI_GATEWAY_KEY_FILE to a mounted secret
+  # path INSTEAD of LQ_AI_GATEWAY_KEY (never both). Same convention covers
+  # every provider api_key_env below (e.g. ANTHROPIC_API_KEY_FILE) and the
+  # master key (LQ_AI_GATEWAY_MASTER_KEY_FILE).
   # Backend services must include X-LQ-AI-Gateway-Key header
   #
   # The gateway uses the SAME shared secret in the reverse direction
