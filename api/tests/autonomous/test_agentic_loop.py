@@ -106,6 +106,17 @@ def _tool_started_calls(rows: list[Any], tool: str) -> int:
     )
 
 
+def _tool_error_rows(rows: list[Any], tool: str) -> list[dict[str, Any]]:
+    """Details of the ``error`` audit rows for a specific tool intent."""
+    return [
+        r.details
+        for r in rows
+        if r.action == "autonomous_session.tool_call"
+        and (r.details or {}).get("tool") == tool
+        and (r.details or {}).get("outcome") == "error"
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Invariant 1 — query-less session is byte-identical to today's behaviour
 # ---------------------------------------------------------------------------
@@ -401,9 +412,13 @@ async def test_foreign_kb_denial_is_nonfatal_loop_observation(
     assert not result.get("analysis_evidence")
     assert _CHUNK_TEXT_DEFAULT not in all_prompt_text
 
-    # The ``started`` audit row was written before the gate refused
+    # The ``started`` audit row was written before the gate refused, and the
+    # failed attempt is closed by one ``error`` row naming the exception type
+    # (never its message), so the receipt does not show a call left in flight.
     rows = await _audit_rows(db_session, str(seeded_matter_session.id))
-    assert _tool_started_calls(rows, "retrieve_chunks") >= 1
+    assert _tool_started_calls(rows, "retrieve_chunks") == 1
+    errors = _tool_error_rows(rows, "retrieve_chunks")
+    assert errors == [{"tool": "retrieve_chunks", "outcome": "error", "error_type": "ValueError"}]
 
 
 # ---------------------------------------------------------------------------
@@ -449,6 +464,13 @@ async def test_bad_top_k_is_nonfatal_validation_observation(
 
     action_decisions = [d for d in trace["decisions"] if d.get("intent") == "retrieve_chunks"]
     assert len(action_decisions) == 1
+
+    # The rejected attempt never reached the chokepoint (no ``started`` row),
+    # but it is still audited: one ``error`` row.
+    rows = await _audit_rows(db_session, str(seeded_matter_session.id))
+    assert _tool_started_calls(rows, "retrieve_chunks") == 0
+    errors = _tool_error_rows(rows, "retrieve_chunks")
+    assert errors == [{"tool": "retrieve_chunks", "outcome": "error", "error_type": "ValueError"}]
 
 
 # ---------------------------------------------------------------------------
