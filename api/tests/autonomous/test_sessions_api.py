@@ -526,6 +526,41 @@ async def test_detail_unauth_returns_401(
 
 
 @pytest.mark.integration
+async def test_receipt_orders_rows_written_in_one_transaction(
+    db_session: AsyncSession,
+    user_a: User,
+) -> None:
+    """Rows flushed inside ONE transaction keep their write order and get
+    distinct, increasing timestamps.
+
+    Regression: ``audit_log.timestamp`` defaulted to ``now()``, which is the
+    transaction start time. The executor flushes a session's audit rows and
+    commits once, so every row carried the same timestamp, ``ORDER BY
+    timestamp`` had no defined order, and each receipt entry showed the
+    session's start time. Migration 0069 switches the default to
+    ``clock_timestamp()``.
+    """
+    from datetime import datetime
+    from itertools import pairwise
+
+    from app.autonomous.audit import autonomous_audit
+    from app.autonomous.receipt import build_receipt
+
+    sess = await _make_session(db_session, user=user_a)
+
+    tools = [f"tool_{i:02d}" for i in range(40)]
+    for tool in tools:
+        await autonomous_audit(db_session, sess, "tool_call", tool=tool, outcome="started")
+
+    receipt = await build_receipt(sess, db_session)
+
+    calls = receipt["tool_calls"]
+    assert [c["tool"] for c in calls] == tools
+    stamps = [datetime.fromisoformat(c["timestamp"]) for c in calls]
+    assert all(a < b for a, b in pairwise(stamps))
+
+
+@pytest.mark.integration
 async def test_receipt_assembles_phase_transitions_and_tool_calls(
     db_session: AsyncSession,
     user_a: User,

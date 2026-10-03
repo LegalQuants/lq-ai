@@ -38,10 +38,13 @@ class AuditLog(Base):
         primary_key=True,
         server_default=text("gen_random_uuid()"),
     )
+    # clock_timestamp(), not now(): now() is fixed at transaction start, so
+    # rows flushed inside one transaction (an autonomous session commits
+    # once) would all share a timestamp and have no defined order.
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        server_default=text("now()"),
+        server_default=text("clock_timestamp()"),
     )
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
