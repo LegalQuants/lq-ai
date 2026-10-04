@@ -8,6 +8,17 @@ deployment overlay for controlled evaluation. Production script enablement
 requires the [ADR D8c/D8d confidentiality gates](../adr/0035-governed-orchestration-run-tree.md#d8d--confidentiality-must-survive-compromised-helper-output),
 which remain pending after ratification.
 
+## On-demand reference files
+
+Not an optional capability and not covered by the switches below. A filesystem
+skill that ships a `references/` folder gets one read-only tool,
+`skill_reference_read`, which returns one of that skill's own listed files (UTF-8,
+at most 64 KiB, at most 64 files). It makes no outbound call and stores nothing.
+A chat read is recorded in `tool_call_log` like any other skill tool call; a
+background run records it in the session's audit trail. To withhold a file from
+the model, remove it from the installed skill. See the
+[authoring guide](../skill-authoring-guide.md#reference-and-references).
+
 ## Persistent workspaces
 
 Apply migration **0068** through the normal deployment migration process and

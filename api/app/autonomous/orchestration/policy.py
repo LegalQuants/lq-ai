@@ -55,6 +55,7 @@ _RESEARCH_INTENTS = frozenset(
         ToolIntent.skill_workspace_read,
         ToolIntent.skill_workspace_write,
         ToolIntent.run_bundled_script,
+        ToolIntent.skill_reference_read,
     }
 )
 
@@ -157,6 +158,18 @@ class PinnedSkill:
     bundle_digest: str | None = None
 
 
+def on_demand_index(paths: list[str]) -> str:
+    """The prompt block that names a skill's on-demand reference files."""
+    return (
+        "## Reference files available on request\n\n"
+        "These files belong to this skill and are not included here. When the task calls "
+        "for one, read it with the `skill_reference_read` tool (in chat the tool's name "
+        "carries a prefix and ends in `skill_reference_read`). If no such tool is offered, "
+        "say which file you could not read; do not guess its contents.\n\n"
+        + "\n".join(f"- {path}" for path in paths)
+    )
+
+
 def load_pinned_skill(record: SkillRecord) -> PinnedSkill:
     """Hash exactly the loaded instructions, metadata and all supporting files.
 
@@ -166,11 +179,18 @@ def load_pinned_skill(record: SkillRecord) -> PinnedSkill:
     mutable skill slug after admission.
     """
     try:
-        current = _load_one(record.folder, source=record.source)
+        current = _load_one(record.folder, source=record.source, quiet=True)
         if current != record:
             raise ValueError("registry and disk differ")
         files = []
-        for path in sorted((*record.reference_paths, *record.example_paths, *record.script_paths)):
+        for path in sorted(
+            (
+                *record.reference_paths,
+                *record.example_paths,
+                *record.script_paths,
+                *record.on_demand_paths,
+            )
+        ):
             if not path.resolve().is_relative_to(record.folder.resolve()):
                 raise ValueError("supporting file outside skill folder")
             files.append((path.relative_to(record.folder).as_posix(), path.read_text("utf-8")))
@@ -183,10 +203,15 @@ def load_pinned_skill(record: SkillRecord) -> PinnedSkill:
     # Build the prompt from the same bytes that were hashed. Do not materialise
     # or ask the gateway to resolve this slug again after authority checks.
     instructions = f"---\n{record.raw_yaml}\n---\n{record.body}"
+    # ``references/`` files are hashed above, so a read returns pinned bytes,
+    # but only their names enter the prompt: the model reads one on request.
+    on_demand = {path.relative_to(record.folder).as_posix() for path in record.on_demand_paths}
     for relative_path, content in files:
-        if relative_path.startswith("scripts/"):
+        if relative_path.startswith("scripts/") or relative_path in on_demand:
             continue
         instructions += f"\n\n## Supporting file: {relative_path}\n\n{content}"
+    if on_demand:
+        instructions += "\n\n" + on_demand_index(sorted(on_demand))
     scripts = [(p, c) for p, c in files if p.startswith("scripts/")]
     bundle_digest = (
         hashlib.sha256(

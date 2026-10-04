@@ -149,6 +149,7 @@ def _skill_from_user_skill(row: UserSkill) -> dict[str, Any]:
         "content_md": row.body,
         "reference_files": [],
         "example_files": [],
+        "on_demand_files": [],
     }
     return payload
 

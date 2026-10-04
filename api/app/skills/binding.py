@@ -25,6 +25,9 @@ class SkillBinding:
     digest: str
     capabilities: SkillCapabilities
     bundle_digest: str | None = None
+    reference_paths: tuple[str, ...] = ()
+    """The skill's on-demand ``references/`` files, as paths relative to the
+    skill folder. Their contents are covered by ``digest``."""
 
 
 def bind_record(record: SkillRecord) -> SkillBinding:
@@ -39,6 +42,9 @@ def bind_record(record: SkillRecord) -> SkillBinding:
         if record.frontmatter.lq_ai
         else SkillCapabilities(),
         bundle_digest=pinned.bundle_digest,
+        reference_paths=tuple(
+            path.relative_to(record.folder).as_posix() for path in record.on_demand_paths
+        ),
     )
 
 

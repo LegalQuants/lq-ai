@@ -210,28 +210,40 @@ async def _run_analysis_loop(
         available_sources = []
 
     from app.config import get_settings
+    from app.errors import ToolNotGranted
     from app.skills.binding import bind_record
     from app.skills.tools import SKILL_TOOL_MODELS, SkillTools, current_registry
 
     allowed = PLANNER_ALLOWLIST
     skill_tool_schemas = None
     settings = get_settings()
-    if settings.skill_workspaces_enabled or settings.skill_script_runner_url:
+    optional_enabled = bool(settings.skill_workspaces_enabled or settings.skill_script_runner_url)
+    try:
         registry = current_registry()
-        record = registry.current().get(str(params.get("skill_ref") or ""))
-        if record is not None:
-            binding = bind_record(record)
-            optional = SkillTools(registry, settings).available(binding)
-            allowed = frozenset((*allowed, *optional))
-            if optional:
-                skill_tool_schemas = {
-                    "instructions": record.body,
-                    "helpers": [s.model_dump() for s in binding.capabilities.scripts],
-                    "tools": {
-                        intent.value: SKILL_TOOL_MODELS[intent].model_json_schema()
-                        for intent in optional
-                    },
-                }
+    except ToolNotGranted:
+        # Only the operator-enabled tools require a registry to be present.
+        if optional_enabled:
+            raise
+        registry = None
+    record = (
+        registry.current().get(str(params.get("skill_ref") or "")) if registry is not None else None
+    )
+    # A skill's on-demand reference files need no operator switch; the other
+    # optional tools do. A skill with neither is not bound here at all.
+    if registry is not None and record is not None and (optional_enabled or record.on_demand_paths):
+        binding = bind_record(record)
+        optional = SkillTools(registry, settings).available(binding)
+        allowed = frozenset((*allowed, *optional))
+        if optional:
+            skill_tool_schemas = {
+                "instructions": record.body,
+                "helpers": [s.model_dump() for s in binding.capabilities.scripts],
+                "reference_files": list(binding.reference_paths),
+                "tools": {
+                    intent.value: SKILL_TOOL_MODELS[intent].model_json_schema()
+                    for intent in optional
+                },
+            }
 
     while steps < max_steps:
         plan_res = await guarded_tool_call(

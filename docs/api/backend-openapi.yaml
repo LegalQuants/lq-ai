@@ -7968,6 +7968,19 @@ components:
                 properties:
                   path: {type: string}
                   content: {type: string}
+            on_demand_files:
+              type: array
+              description: >-
+                The skill's ``references/`` files. Listed by path and never
+                sent with the prompt; the model reads one at a time through
+                the ``skill_reference_read`` tool. Contents are not returned
+                here.
+              items:
+                type: object
+                required: [path, size_bytes]
+                properties:
+                  path: {type: string}
+                  size_bytes: {type: integer}
             columns:
               type: array
               nullable: true
