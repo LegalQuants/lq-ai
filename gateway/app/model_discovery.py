@@ -477,7 +477,9 @@ class ModelDiscoverer:
         also supported here: the catalog endpoint is the same shape and
         most local servers expose it. Local servers without a key are
         called with no Authorization header, matching the OpenAIAdapter
-        behavior.
+        behavior. An entry that names a key source which does not resolve
+        is skipped, also matching the adapter: it has no live adapter, so
+        its catalog must not be offered (or the service contacted keyless).
         """
 
         cached = await self.cache.get(
@@ -518,7 +520,8 @@ class ModelDiscoverer:
                 type(exc).__name__,
             )
             return []
-        if not api_key and provider.type == "openai":
+        key_declared = bool(provider.api_key_env or provider.api_key_encrypted)
+        if not api_key and (provider.type == "openai" or key_declared):
             logger.info(
                 "openai discovery skipped for provider %r: no key configured",
                 provider.name,
