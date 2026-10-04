@@ -38,8 +38,9 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import ColumnElement, Select, Text, and_, func, select
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from sqlalchemy import ColumnElement, Select, Text, and_, func, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import AdminUser
@@ -1026,6 +1027,235 @@ async def update_user_role(
         email=target.email,
         role=target.role,
         is_admin=target.is_admin,
+    )
+
+
+# ---------------------------------------------------------------------------
+# User provisioning — POST /admin/users, POST /admin/users/{id}/reset-password
+# ---------------------------------------------------------------------------
+# The RBAC surface shipped with a list endpoint and a role-patch endpoint but
+# no way to *create* a user: there is no signup, no invite, and `app/cli.py`
+# exposes only `reset-admin-password`. A deployment's second user therefore
+# required a hand-written bcrypt INSERT. These two handlers close that gap
+# using the machinery the first-run bootstrap already relies on
+# (`app.admin_bootstrap.generate_password` + `must_change_password=True`), so
+# a provisioned user is forced through `/auth/change-password` on first login
+# exactly like the bootstrap admin.
+#
+# The generated password is returned in the response body **once** and is
+# never persisted, logged, or written to the audit row — only its bcrypt hash
+# reaches the database.
+
+
+class AdminUserCreateRequest(BaseModel):
+    """``POST /admin/users`` body."""
+
+    email: EmailStr
+    display_name: str | None = Field(default=None, max_length=200)
+    role: str = Field(
+        default="member",
+        description="One of admin / member / viewer / auditor.",
+    )
+
+
+class AdminUserCreatedResponse(BaseModel):
+    """``POST /admin/users`` response — carries the initial password once.
+
+    ``initial_password`` is the only time the plaintext exists outside the
+    creating admin's screen. It is not recoverable; use
+    ``POST /admin/users/{id}/reset-password`` to mint a new one.
+    """
+
+    user_id: str
+    email: str
+    display_name: str | None
+    role: str
+    is_admin: bool
+    must_change_password: bool
+    initial_password: str
+
+
+class AdminPasswordResetResponse(BaseModel):
+    """``POST /admin/users/{id}/reset-password`` response."""
+
+    user_id: str
+    email: str
+    initial_password: str
+    sessions_revoked: int
+
+
+@router.post(
+    "/users",
+    response_model=AdminUserCreatedResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a user with a generated initial password (admin-only)",
+)
+async def create_user(
+    body: AdminUserCreateRequest,
+    request: Request,
+    admin: AdminUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AdminUserCreatedResponse:
+    """POST /api/v1/admin/users — provision a user.
+
+    Admin-only. Generates a CSPRNG initial password, stores only its bcrypt
+    hash, and sets ``must_change_password=True`` so the new user is forced to
+    rotate it on first login. ``is_admin`` is derived from ``role`` (True iff
+    ``role='admin'``), keeping the two admin signals in sync exactly as
+    :func:`update_user_role` and the first-run bootstrap do.
+
+    Returns 201 with the plaintext password, which is never stored or logged.
+    Returns 409 if the email is already taken — ``users.email`` is CITEXT, so
+    the collision is case-insensitive.
+    """
+
+    from app.admin_bootstrap import generate_password
+    from app.audit import audit_action
+    from app.errors import Conflict
+    from app.security import hash_password
+
+    if body.role not in _ROLE_ENUM:
+        raise HTTPException(
+            status_code=422,
+            detail=f"role must be one of {sorted(_ROLE_ENUM)}",
+        )
+
+    display_name = (body.display_name or "").strip() or None
+    plaintext = generate_password()
+
+    # Race-safe insert on the unique CITEXT `email` column, mirroring
+    # `ensure_first_run_admin`. A lost race yields no row, which we surface
+    # as the same 409 an up-front existence check would have produced.
+    stmt = (
+        pg_insert(UserORM)
+        .values(
+            email=str(body.email),
+            display_name=display_name,
+            hashed_password=hash_password(plaintext),
+            is_admin=body.role == "admin",
+            role=body.role,
+            mfa_enabled=False,
+            must_change_password=True,
+        )
+        .on_conflict_do_nothing(index_elements=["email"])
+        .returning(UserORM.id)
+    )
+    inserted_id = (await db.execute(stmt)).scalar_one_or_none()
+
+    if inserted_id is None:
+        # Nothing was written (ON CONFLICT DO NOTHING), so there is no dirty
+        # state to roll back — `get_db`'s session context manager discards
+        # the transaction when the error propagates.
+        raise Conflict(
+            message="A user with that email already exists.",
+            details={"email": str(body.email)},
+        )
+
+    # The audit row records who was created, by whom, and with what role —
+    # never the password.
+    await audit_action(
+        db,
+        user_id=admin.id,
+        action="user.created",
+        resource_type="user",
+        resource_id=str(inserted_id),
+        request=request,
+        details={
+            "target_user_email": str(body.email),
+            "role": body.role,
+            "is_admin": body.role == "admin",
+        },
+    )
+    await db.commit()
+
+    return AdminUserCreatedResponse(
+        user_id=str(inserted_id),
+        email=str(body.email),
+        display_name=display_name,
+        role=body.role,
+        is_admin=body.role == "admin",
+        must_change_password=True,
+        initial_password=plaintext,
+    )
+
+
+@router.post(
+    "/users/{user_id}/reset-password",
+    response_model=AdminPasswordResetResponse,
+    summary="Reset a user's password to a generated value (admin-only)",
+)
+async def reset_user_password(
+    user_id: str,
+    request: Request,
+    admin: AdminUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AdminPasswordResetResponse:
+    """POST /api/v1/admin/users/{user_id}/reset-password — mint a new password.
+
+    Admin-only. Generates a fresh CSPRNG password, sets
+    ``must_change_password=True``, and revokes every active refresh session
+    for the target user so an attacker holding a stolen refresh token cannot
+    outlive the reset. This is the same revocation the self-service
+    ``/auth/change-password`` path performs.
+
+    Note that access tokens are stateless JWTs and remain valid until they
+    expire; deployments that raise ``JWT_ACCESS_TOKEN_TTL_SECONDS`` above the
+    default widen that window.
+    """
+
+    from app.admin_bootstrap import generate_password
+    from app.audit import audit_action
+    from app.errors import NotFound
+    from app.models.user import UserSession
+    from app.security import hash_password
+
+    try:
+        target_uuid = _uuid_mod.UUID(user_id)
+    except (TypeError, ValueError):
+        raise NotFound(message="user not found") from None
+
+    target = await db.get(UserORM, target_uuid)
+    if target is None or target.deleted_at is not None:
+        raise NotFound(message="user not found")
+
+    plaintext = generate_password()
+    target.hashed_password = hash_password(plaintext)
+    target.must_change_password = True
+
+    # RETURNING rather than `rowcount` so the count is typed and portable.
+    revoked_ids = (
+        (
+            await db.execute(
+                update(UserSession)
+                .where(UserSession.user_id == target.id, UserSession.revoked_at.is_(None))
+                .values(revoked_at=func.now())
+                .returning(UserSession.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    sessions_revoked = len(revoked_ids)
+
+    await audit_action(
+        db,
+        user_id=admin.id,
+        action="user.password_reset",
+        resource_type="user",
+        resource_id=str(target.id),
+        request=request,
+        details={
+            "target_user_email": target.email,
+            "sessions_revoked": sessions_revoked,
+        },
+    )
+    await db.commit()
+
+    return AdminPasswordResetResponse(
+        user_id=str(target.id),
+        email=target.email,
+        initial_password=plaintext,
+        sessions_revoked=sessions_revoked,
     )
 
 
