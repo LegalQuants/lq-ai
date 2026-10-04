@@ -117,6 +117,15 @@ def _tool_error_rows(rows: list[Any], tool: str) -> list[dict[str, Any]]:
     ]
 
 
+def _tool_outcomes(rows: list[Any], tool: str) -> list[str]:
+    """Audit outcomes for one tool, independent of row ordering."""
+    return sorted(
+        str((r.details or {}).get("outcome"))
+        for r in rows
+        if r.action == "autonomous_session.tool_call" and (r.details or {}).get("tool") == tool
+    )
+
+
 # ---------------------------------------------------------------------------
 # Invariant 1 — query-less session is byte-identical to today's behaviour
 # ---------------------------------------------------------------------------
@@ -471,6 +480,59 @@ async def test_bad_top_k_is_nonfatal_validation_observation(
     assert _tool_started_calls(rows, "retrieve_chunks") == 0
     errors = _tool_error_rows(rows, "retrieve_chunks")
     assert errors == [{"tool": "retrieve_chunks", "outcome": "error", "error_type": "ValueError"}]
+
+
+@pytest.mark.parametrize("processing_step", ["summarize_observation", "collect_evidence"])
+async def test_postprocessing_failure_does_not_audit_successful_tool_as_error(
+    db_session: AsyncSession,
+    seeded_matter_session: AutonomousSession,
+    kb_with_one_indexed_file: KbOneFile,
+    monkeypatch: pytest.MonkeyPatch,
+    processing_step: str,
+) -> None:
+    """A failed observation/evidence transform must not relabel a successful dispatch."""
+    # The shared KB fixture has a different owner from seeded_matter_session.
+    # Match them here so the real guarded retrieval reaches its success row.
+    seeded_matter_session.user_id = kb_with_one_indexed_file.owner_id
+    await db_session.flush()
+    gw = _ScriptedGateway(
+        [
+            {
+                "next_intent": "retrieve_chunks",
+                "args": {"kb_id": str(kb_with_one_indexed_file.kb_id), "query": "confidential"},
+                "rationale": "gather clause context",
+            },
+            {"done": True, "rationale": "enough evidence"},
+        ]
+    )
+
+    def fail_postprocessing(*_args: Any, **_kwargs: Any) -> Any:
+        raise RuntimeError("postprocessing failed")
+
+    monkeypatch.setattr(f"app.autonomous.nodes.{processing_step}", fail_postprocessing)
+    result = await make_analysis_node(db_session, gw)(
+        {
+            "session_id": str(seeded_matter_session.id),
+            "query": "Is the assignment clause enforceable?",
+            "retrieved_chunks": [],
+        }
+    )
+
+    assert result.get("analysis_content") is not None
+    trace = result["analysis_plan_trace"]
+    assert trace["steps"] == 1
+    assert trace["halt_reason"] == "planner_done"
+    planner_text = "\n".join(
+        m.content
+        for req in gw.captured_requests
+        for m in req.messages
+        if isinstance(m.content, str)
+    )
+    assert "retrieve_chunks → postprocessing failed (RuntimeError)" in planner_text
+
+    rows = await _audit_rows(db_session, str(seeded_matter_session.id))
+    assert _tool_outcomes(rows, "retrieve_chunks") == ["started", "success"]
+    assert _tool_error_rows(rows, "retrieve_chunks") == []
 
 
 # ---------------------------------------------------------------------------
