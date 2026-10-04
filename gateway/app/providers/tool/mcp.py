@@ -14,11 +14,14 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
+import httpx
+
 from app.config import ToolProviderConfig
 from app.providers.base import ProviderHealth
 from app.providers.tool.base import (
     ToolProviderAdapter,
     ToolProviderError,
+    ToolProviderHTTPError,
     ToolProviderNetworkError,
     ToolResult,
     ToolSpec,
@@ -48,6 +51,54 @@ def _default_session_factory() -> SessionFactory:
             yield session
 
     return factory
+
+
+_MAX_CAUSES = 3
+_MAX_CAUSE_CHARS = 200
+
+
+def _causes(exc: BaseException) -> list[BaseException]:
+    """The exceptions inside ``exc``, flattening nested exception groups.
+
+    The MCP SDK runs each session in task groups, so whatever goes wrong
+    inside one arrives wrapped: ``str()`` of the wrapper is only "unhandled
+    errors in a TaskGroup (1 sub-exception)", for a rate limit, a timeout and
+    a protocol error alike.
+    """
+    if isinstance(exc, BaseExceptionGroup):
+        return [cause for inner in exc.exceptions for cause in _causes(inner)]
+    return [exc]
+
+
+def _describe(cause: BaseException) -> str:
+    """One cause in words that are safe to return to the caller.
+
+    An HTTP refusal is reported as its status and the host only: the request
+    URL and the response body stay out of the message.
+    """
+    if isinstance(cause, httpx.HTTPStatusError):
+        response = cause.response
+        reason = f" {response.reason_phrase}" if response.reason_phrase else ""
+        return f"HTTP {response.status_code}{reason} from {cause.request.url.host}"
+    text = " ".join(str(cause).split())[:_MAX_CAUSE_CHARS]
+    return f"{type(cause).__name__}: {text}" if text else type(cause).__name__
+
+
+def _session_error(exc: Exception) -> ToolProviderError:
+    """Turn a session failure into the error the gateway reports for it."""
+    causes = _causes(exc)
+    # An error this adapter raised inside the session is already the answer.
+    if len(causes) == 1 and isinstance(causes[0], ToolProviderError):
+        return causes[0]
+    described = "; ".join(_describe(cause) for cause in causes[:_MAX_CAUSES])
+    if len(causes) > _MAX_CAUSES:
+        described += f"; and {len(causes) - _MAX_CAUSES} more"
+    message = f"mcp session error: {described}"
+    statuses = [c.response.status_code for c in causes if isinstance(c, httpx.HTTPStatusError)]
+    if statuses:
+        # Carries the status, so a 429 from the server reaches the caller as a 429.
+        return ToolProviderHTTPError(message, upstream_status=statuses[0])
+    return ToolProviderNetworkError(message)
 
 
 def _map_flags(annotations: Any) -> tuple[bool, bool, bool]:
@@ -138,7 +189,7 @@ class MCPToolProviderAdapter(ToolProviderAdapter):
         except ToolProviderError:
             raise
         except Exception as exc:  # transport/protocol failure
-            raise ToolProviderNetworkError(f"mcp session error: {exc}") from exc
+            raise _session_error(exc) from exc
 
     async def list_tools(self, *, user_token: str | None = None) -> list[ToolSpec]:
         # user_token extends the ABC signature; base ABC updated in PR4a Task 4
