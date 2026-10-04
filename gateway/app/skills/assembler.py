@@ -46,7 +46,7 @@ Reference files
 ---------------
 
 Each skill's ``reference_files`` (markdown text in the skill's
-``reference/`` folder) is appended to that skill's section under a
+``reference/`` or ``references/`` folder) is appended to that skill's section under a
 clear ``## Reference: <path>`` header. Reference content is verbatim;
 the model sees both the skill's instructions and the reference exhibits
 in one block.

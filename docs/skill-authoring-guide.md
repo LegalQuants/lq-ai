@@ -38,6 +38,8 @@ my-skill/
 
 `SKILL.md` is the operational instruction the model executes when the skill is attached to a chat. Everything in `SKILL.md` becomes part of the prompt; everything in `reference/` is optionally surfaced when the skill's workflow references it. `examples/` are documentation for users and reviewers; they do not become part of the prompt by default.
 
+The loader also reads a `references/` folder, the name the Agent Skills convention and many community skills use, and treats it the same way. New skills in this repository use `reference/`.
+
 **Optional execution (#563).** Declared `scripts/` helpers
 can run through the private bundled-helper broker when an operator enables their
 exact installed version. Merely including a script does not enable execution.

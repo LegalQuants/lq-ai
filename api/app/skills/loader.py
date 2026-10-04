@@ -47,7 +47,9 @@ _FRONTMATTER_RE: Final = re.compile(
 
 # File names treated specially when scanning a skill folder.
 _SKILL_FILE_NAME = "SKILL.md"
-_REFERENCE_DIR = "reference"
+# ``reference/`` is the documented name. ``references/`` is what the Agent
+# Skills convention uses, and most community skills ship it, so both are read.
+_REFERENCE_DIRS: Final[tuple[str, ...]] = ("reference", "references")
 _EXAMPLES_DIR = "examples"
 
 # Files / folders that are not part of a skill at all and must be skipped
@@ -289,7 +291,9 @@ def _load_one(folder: Path, source: SkillSource = "built-in") -> SkillRecord:
             f"frontmatter validation failed: {loc} — {msg}",
         ) from exc
 
-    reference_paths = _list_subfolder_files(folder / _REFERENCE_DIR)
+    reference_paths = [
+        path for name in _REFERENCE_DIRS for path in _list_subfolder_files(folder / name)
+    ]
     example_paths = _list_subfolder_files(folder / _EXAMPLES_DIR)
     script_paths: list[Path] = []
     capabilities = frontmatter.lq_ai.capabilities if frontmatter.lq_ai else None
@@ -335,7 +339,7 @@ def _load_one(folder: Path, source: SkillSource = "built-in") -> SkillRecord:
 
 
 def _list_subfolder_files(subfolder: Path) -> list[Path]:
-    """List markdown / text files in a skill's reference/ or examples/ dir.
+    """List markdown / text files in a skill's reference or examples dir.
 
     Returns a sorted list of absolute paths. Subdirectories are walked
     recursively (some skills may organise reference material into

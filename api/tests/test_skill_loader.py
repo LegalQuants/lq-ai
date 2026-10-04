@@ -316,6 +316,39 @@ def test_load_one_returns_record_with_paths(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
+def test_load_one_reads_a_references_folder(tmp_path: Path) -> None:
+    """Reference files in ``references/`` load like those in ``reference/``.
+
+    ``references/`` is the Agent Skills name and the one most community
+    skills use; a skill that shipped it used to load with no reference
+    files at all.
+    """
+
+    folder = tmp_path / "demo"
+    folder.mkdir()
+    (folder / "SKILL.md").write_text(
+        "---\nname: demo\ndescription: A demo skill for the test.\n---\n# Body\n"
+    )
+    (folder / "reference").mkdir()
+    (folder / "reference" / "a.md").write_text("ref-a")
+    (folder / "references" / "topic").mkdir(parents=True)
+    (folder / "references" / "b.md").write_text("ref-b")
+    (folder / "references" / "topic" / "c.md").write_text("ref-c")
+
+    rec = _load_one(folder)
+    assert rec.reference_paths == (
+        folder / "reference" / "a.md",
+        folder / "references" / "b.md",
+        folder / "references" / "topic" / "c.md",
+    )
+    assert [(f.path, f.content) for f in rec.materialise().reference_files] == [
+        ("reference/a.md", "ref-a"),
+        ("references/b.md", "ref-b"),
+        ("references/topic/c.md", "ref-c"),
+    ]
+
+
+@pytest.mark.unit
 def test_load_one_rejects_missing_frontmatter(tmp_path: Path) -> None:
     """A SKILL.md without `---` delimiters raises LoaderError."""
 
