@@ -31,7 +31,7 @@
 		audit:
 			'Audit log — this action was recorded for compliance and review. Click to view the entry.',
 		enhanced:
-			'Enhanced Prompt — the AI rewrote your short prompt into a structured legal prompt before answering. Click to compare.',
+			'Enhanced Prompt — the AI rewrote your short prompt into a structured legal prompt before answering. Hover to compare.',
 		caselaw:
 			'Case law — this answer drew on external legal sources (e.g. CourtListener). Click to view sources consulted.'
 	};
