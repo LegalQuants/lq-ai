@@ -16,7 +16,15 @@ from app.autonomous.enums import ToolIntent
 from app.config import Settings, get_settings
 from app.errors import ToolNotGranted
 from app.skills.binding import SkillBinding, revalidate_binding
-from app.skills.capabilities import EmptyInput, FileRead, FileWrite, ScriptInput, StrictModel
+from app.skills.capabilities import (
+    MAX_FILE_BYTES,
+    EmptyInput,
+    FileRead,
+    FileWrite,
+    ReferenceRead,
+    ScriptInput,
+    StrictModel,
+)
 from app.skills.registry import MutableSkillRegistry
 from app.skills.workspace import check_owner, workspace_operation
 
@@ -28,6 +36,7 @@ SKILL_TOOL_MODELS: dict[ToolIntent, type[StrictModel]] = {
     ToolIntent.skill_workspace_read: FileRead,
     ToolIntent.skill_workspace_write: FileWrite,
     ToolIntent.run_bundled_script: ScriptInput,
+    ToolIntent.skill_reference_read: ReferenceRead,
 }
 SKILL_TOOL_INTENTS = frozenset(SKILL_TOOL_MODELS)
 
@@ -69,6 +78,10 @@ class SkillTools:
             and self.settings.skill_script_runner_token
         ):
             intents.append(ToolIntent.run_bundled_script)
+        # Needs no operator switch: it returns only text the installed skill
+        # already ships, the same class of content ``reference/`` preloads.
+        if binding.reference_paths:
+            intents.append(ToolIntent.skill_reference_read)
         return tuple(intents)
 
     async def execute(
@@ -94,6 +107,8 @@ class SkillTools:
             # the calling prompt/receipt. Orchestration separately fences settlement.
             await revalidate_binding(db, owner_id, binding, self.registry)
             await check_owner(db, owner_id, project_id)
+        elif intent == ToolIntent.skill_reference_read:
+            result = self.read_reference(binding, ReferenceRead.model_validate(params))
         else:
             operation = intent.value.removeprefix("skill_workspace_")
             result = await workspace_operation(
@@ -114,6 +129,37 @@ class SkillTools:
             data=result,
             outcome=outcome,
         )
+
+    def read_reference(self, binding: SkillBinding, request: ReferenceRead) -> dict[str, Any]:
+        """Return one listed ``references/`` file of the bound skill.
+
+        The path is looked up in the list the loader built; it is never joined
+        to a directory. ``execute`` has just revalidated the binding, which
+        re-hashes the skill's files, so the bytes read here are the pinned ones.
+        """
+        if request.path not in binding.reference_paths:
+            return {"error": "file_unavailable"}
+        source, _, name = binding.key.partition(":")
+        record = self.registry.current().get(name)
+        if record is None or record.source != source:
+            return {"error": "file_unavailable"}
+        path = next(
+            (
+                p
+                for p in record.on_demand_paths
+                if p.relative_to(record.folder).as_posix() == request.path
+            ),
+            None,
+        )
+        if path is None or path.is_symlink():
+            return {"error": "file_unavailable"}
+        try:
+            data = path.read_bytes()
+            if len(data) > MAX_FILE_BYTES:
+                return {"error": "file_unavailable"}
+            return {"path": request.path, "content": data.decode("utf-8")}
+        except (OSError, UnicodeError):
+            return {"error": "file_unavailable"}
 
     async def run_script(self, binding: SkillBinding, request: ScriptInput) -> dict[str, Any]:
         if request.script not in {script.name for script in binding.capabilities.scripts}:

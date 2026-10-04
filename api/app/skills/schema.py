@@ -240,6 +240,15 @@ class SkillFile(BaseModel):
     content: str
 
 
+class SkillFileRef(BaseModel):
+    """A file the skill ships that is read on request, not sent with the prompt."""
+
+    path: str
+    """Path relative to the skill folder, e.g. ``references/checklist.md``."""
+
+    size_bytes: int
+
+
 class Skill(SkillSummary):
     """The shape ``GET /api/v1/skills/{name}`` returns.
 
@@ -269,6 +278,9 @@ class Skill(SkillSummary):
     reference_files: list[SkillFile] = Field(default_factory=list)
     example_files: list[SkillFile] = Field(default_factory=list)
     script_files: list[SkillFile] = Field(default_factory=list)
+    on_demand_files: list[SkillFileRef] = Field(default_factory=list)
+    """The skill's ``references/`` files. Listed, never inlined: the model
+    reads one with ``skill_reference_read`` when the task calls for it."""
 
 
 # --- Skill inputs (PRD §3.4 skill-input-form pattern) -----------------------
@@ -456,6 +468,7 @@ __all__ = [
     "LQAIFrontmatter",
     "Skill",
     "SkillFile",
+    "SkillFileRef",
     "SkillFrontmatter",
     "SkillInputDef",
     "SkillInputs",

@@ -6417,6 +6417,7 @@ components:
       - skill_workspace_read
       - skill_workspace_write
       - run_bundled_script
+      - skill_reference_read
       - plan
       - retrieve_authority
       - workspace_read

@@ -125,6 +125,14 @@ class SkillFile(BaseModel):
     content: str
 
 
+class SkillFileRef(BaseModel):
+    """A skill file that is listed in the prompt and read on request."""
+
+    model_config = ConfigDict(extra="allow")
+
+    path: str
+
+
 class Skill(BaseModel):
     """Cached skill content, mirroring ``api/`` 's ``Skill`` shape.
 
@@ -149,6 +157,7 @@ class Skill(BaseModel):
     output_format: str | None = None
     reference_files: list[SkillFile] = Field(default_factory=list)
     example_files: list[SkillFile] = Field(default_factory=list)
+    on_demand_files: list[SkillFileRef] = Field(default_factory=list)
 
 
 # --- Cache -------------------------------------------------------------------

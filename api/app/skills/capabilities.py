@@ -14,6 +14,9 @@ MAX_FILE_BYTES = 65536
 MAX_FILES = 32
 MAX_WORKSPACE_BYTES = 1048576
 MAX_INPUT_BYTES = 65536
+MAX_REFERENCE_FILES = 64
+REFERENCE_PATH_PATTERN = r"^references(/[A-Za-z0-9_][A-Za-z0-9_.-]{0,95}){1,6}$"
+ReferencePath = Annotated[str, Field(pattern=REFERENCE_PATH_PATTERN, max_length=255)]
 
 
 class StrictModel(BaseModel):
@@ -39,6 +42,12 @@ class SkillCapabilities(StrictModel):
 
 class FileRead(StrictModel):
     name: FileName
+
+
+class ReferenceRead(StrictModel):
+    """One of the skill's own ``references/`` files, by its listed path."""
+
+    path: ReferencePath
 
 
 class FileWrite(FileRead):
