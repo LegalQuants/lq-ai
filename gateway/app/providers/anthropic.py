@@ -186,10 +186,7 @@ class AnthropicAdapter(ProviderAdapter):
             )
         if key_resolver is None:
             env_lookup = env if env is not None else dict(os.environ)
-            key_resolver = ProviderKeyResolver(
-                master_key=env_lookup.get("LQ_AI_GATEWAY_MASTER_KEY") or None,
-                env=env_lookup,
-            )
+            key_resolver = ProviderKeyResolver.from_env_dict(env_lookup)
         # api_key_env defaults to ANTHROPIC_API_KEY when neither key
         # source is set on the provider entry; the resolver returns ""
         # if the env var is unset, which we treat as a config error.
