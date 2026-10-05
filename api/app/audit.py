@@ -145,7 +145,7 @@ async def audit_action(
     ip_address, user_agent, request_id = _client_metadata(request)
 
     row = AuditLog(
-        # Ordinary audit rows retain their existing transaction-time default.
+        # Omitted timestamps use the database's wall-clock insert-time default.
         **({"timestamp": timestamp} if timestamp is not None else {}),
         user_id=user_id,
         action=action,

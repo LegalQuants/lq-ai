@@ -8,9 +8,9 @@ start of the transaction. Every row written inside one transaction therefore
 carried the same timestamp: an autonomous session, whose executor flushes its
 audit rows and commits once, produced a receipt in which every phase
 transition and tool call showed the session's start time, in an order the
-database was free to choose. ``clock_timestamp()`` advances within a
-transaction, so each row records when it was written and ``ORDER BY
-timestamp`` returns the rows in the order they happened.
+database was free to choose. ``clock_timestamp()`` records the wall-clock
+time of each insert rather than the transaction start time. It is not a
+monotonic sequence and does not guarantee write order.
 
 Only the column default changes. Existing rows keep their timestamps.
 """

@@ -39,8 +39,8 @@ class AuditLog(Base):
         server_default=text("gen_random_uuid()"),
     )
     # clock_timestamp(), not now(): now() is fixed at transaction start, so
-    # rows flushed inside one transaction (an autonomous session commits
-    # once) would all share a timestamp and have no defined order.
+    # rows flushed inside one transaction would show its start time rather
+    # than their insert times. Wall-clock timestamps do not guarantee order.
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
