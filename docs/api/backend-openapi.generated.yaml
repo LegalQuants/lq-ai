@@ -2646,6 +2646,14 @@ components:
           format: uuid
           title: Id
           type: string
+        ingestion_error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Why ingestion failed, e.g. ``unsupported_type``, ``decode_error``
+            or ``parse_failed``. Set only when ``ingestion_status`` is ``failed``;
+            otherwise null.
+          title: Ingestion Error
         ingestion_status:
           enum:
           - pending
