@@ -1,5 +1,6 @@
 """Unit tests for MCPToolProviderAdapter (Task 3 — injected fake session, no network)."""
 
+import json
 from contextlib import asynccontextmanager
 
 import pytest
@@ -279,7 +280,7 @@ async def test_session_error_names_a_failure_raised_while_the_session_is_in_use(
     adapter = _failing_adapter(TimeoutError("read timed out"), monkeypatch, in_body=True)
     with pytest.raises(ToolProviderNetworkError) as caught:
         await adapter.invoke_tool("x", {}, request_id="r1")
-    assert caught.value.message == "mcp session error: TimeoutError: read timed out"
+    assert caught.value.message == "mcp session error: TimeoutError"
     assert "TaskGroup" not in caught.value.message
 
 
@@ -293,8 +294,7 @@ async def test_session_error_lists_several_causes_and_caps_them(
     with pytest.raises(ToolProviderNetworkError) as caught:
         await _failing_adapter(wrapped, monkeypatch).list_tools()
     assert caught.value.message == (
-        "mcp session error: ConnectionError: cause 0; ConnectionError: cause 1; "
-        "ConnectionError: cause 2; and 2 more"
+        "mcp session error: ConnectionError; ConnectionError; ConnectionError; and 2 more"
     )
 
 
@@ -306,7 +306,7 @@ async def test_session_error_names_the_type_of_an_unwrapped_failure(
 
     with pytest.raises(ToolProviderNetworkError) as caught:
         await _failing_adapter(ConnectionError("refused"), monkeypatch).list_tools()
-    assert caught.value.message == "mcp session error: ConnectionError: refused"
+    assert caught.value.message == "mcp session error: ConnectionError"
 
 
 @pytest.mark.unit
@@ -321,3 +321,58 @@ async def test_a_tool_provider_error_inside_a_task_group_is_not_relabelled(
         await adapter.invoke_tool("x", {}, request_id="r1")
     assert caught.value is inner
     assert not isinstance(caught.value, ToolProviderNetworkError)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("in_body", [False, True], ids=["connect", "anyio-task-group"])
+@pytest.mark.parametrize("nested", [False, True], ids=["unwrapped", "nested-groups"])
+async def test_session_error_does_not_expose_generic_exception_messages(
+    monkeypatch: pytest.MonkeyPatch, *, in_body: bool, nested: bool
+) -> None:
+    from app.providers.tool.base import ToolProviderNetworkError
+
+    sensitive = (
+        "Authorization: Bearer synthetic-token; "
+        "https://mcp.acme.example/private?api_key=synthetic-key; "
+        "response body: confidential synthetic document"
+    )
+    error: Exception = ValueError(sensitive)
+    if nested:
+        error = ExceptionGroup("sensitive wrapper " + sensitive, [ExceptionGroup("inner", [error])])
+    adapter = _failing_adapter(error, monkeypatch, in_body=in_body)
+    with pytest.raises(ToolProviderNetworkError) as caught:
+        await adapter.invoke_tool("x", {}, request_id="r1")
+
+    envelope = json.dumps(caught.value.to_envelope())
+    for secret in (
+        "synthetic-token",
+        "synthetic-key",
+        "confidential synthetic document",
+        "/private",
+    ):
+        assert secret not in envelope
+    assert caught.value.message == "mcp session error: ValueError"
+
+
+@pytest.mark.unit
+async def test_mixed_session_error_preserves_http_status_without_exposing_other_messages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.providers.tool.base import ToolProviderHTTPError
+
+    wrapped = ExceptionGroup(
+        "outer", [ExceptionGroup("inner", [_status_error(429), RuntimeError("synthetic-secret")])]
+    )
+    with pytest.raises(ToolProviderHTTPError) as caught:
+        await _failing_adapter(wrapped, monkeypatch, in_body=True).invoke_tool(
+            "x", {}, request_id="r1"
+        )
+
+    envelope = json.dumps(caught.value.to_envelope())
+    assert "synthetic-secret" not in envelope
+    assert "secret=1" not in envelope
+    assert "body that must not be echoed" not in envelope
+    assert caught.value.message == (
+        "mcp session error: HTTP 429 Too Many Requests from mcp.acme.example; RuntimeError"
+    )
+    assert caught.value.upstream_status == 429

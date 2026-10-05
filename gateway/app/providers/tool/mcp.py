@@ -54,7 +54,6 @@ def _default_session_factory() -> SessionFactory:
 
 
 _MAX_CAUSES = 3
-_MAX_CAUSE_CHARS = 200
 
 
 def _causes(exc: BaseException) -> list[BaseException]:
@@ -74,14 +73,14 @@ def _describe(cause: BaseException) -> str:
     """One cause in words that are safe to return to the caller.
 
     An HTTP refusal is reported as its status and the host only: the request
-    URL and the response body stay out of the message.
+    URL and the response body stay out of the message. Other exceptions are
+    reported by type only; their messages can contain credentials or content.
     """
     if isinstance(cause, httpx.HTTPStatusError):
         response = cause.response
         reason = f" {response.reason_phrase}" if response.reason_phrase else ""
         return f"HTTP {response.status_code}{reason} from {cause.request.url.host}"
-    text = " ".join(str(cause).split())[:_MAX_CAUSE_CHARS]
-    return f"{type(cause).__name__}: {text}" if text else type(cause).__name__
+    return type(cause).__name__
 
 
 def _session_error(exc: Exception) -> ToolProviderError:
