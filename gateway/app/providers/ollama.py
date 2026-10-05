@@ -539,7 +539,7 @@ def _tool_calls_from_ollama(raw: Any, *, start_index: int = 0) -> list[dict[str,
     if not isinstance(raw, list):
         return []
     out: list[dict[str, Any]] = []
-    for offset, item in enumerate(raw):
+    for item in raw:
         if not isinstance(item, dict):
             continue
         function = item.get("function")
@@ -551,7 +551,7 @@ def _tool_calls_from_ollama(raw: Any, *, start_index: int = 0) -> list[dict[str,
         call_id = item.get("id")
         out.append(
             {
-                "index": start_index + offset,
+                "index": start_index + len(out),
                 "id": call_id if isinstance(call_id, str) and call_id else _new_call_id(),
                 "type": "function",
                 "function": {"name": str(function.get("name") or ""), "arguments": arguments},

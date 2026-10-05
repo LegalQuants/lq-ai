@@ -166,6 +166,35 @@ async def test_streaming_tool_calls_emit_indexed_delta_and_tool_calls_finish() -
 
 @pytest.mark.unit
 @respx.mock
+async def test_streaming_skipped_entries_do_not_reuse_tool_call_indexes() -> None:
+    frames = [
+        {
+            "message": {
+                "tool_calls": [None, OLLAMA_CALL, {"function": None}],
+            },
+            "done": False,
+        },
+        {"message": {"tool_calls": [OLLAMA_CALL]}, "done": False},
+        {"message": {"content": ""}, "done": True, "done_reason": "stop"},
+    ]
+    respx.post(f"{OLLAMA_BASE}/api/chat").mock(
+        return_value=httpx.Response(200, text="".join(json.dumps(frame) + "\n" for frame in frames))
+    )
+    adapter = OllamaAdapter(name="ollama-test", base_url=OLLAMA_BASE)
+    try:
+        chunks = await _stream(adapter, _request(stream=True))
+    finally:
+        await adapter.aclose()
+
+    calls = [call for chunk in chunks for call in chunk.choices[0].delta.tool_calls or []]
+    assert [call["index"] for call in calls] == [0, 1]
+    assert len({call["id"] for call in calls}) == 2
+    assert all(call["function"]["name"] == "search" for call in calls)
+    assert chunks[-1].choices[0].finish_reason == "tool_calls"
+
+
+@pytest.mark.unit
+@respx.mock
 async def test_streaming_without_tool_calls_still_finishes_stop() -> None:
     body = (
         f'{{"model":"{MODEL}","message":{{"role":"assistant","content":"Hi"}},"done":false}}\n'
