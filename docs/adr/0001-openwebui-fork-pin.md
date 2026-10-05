@@ -74,6 +74,46 @@ Considerations:
 
 **Tracking upstream changes:** maintainers subscribe to the OpenWebUI release feed and the security advisories feed. New CVEs in our pinned version trigger an out-of-cadence rebase if the fix is non-trivial to backport.
 
+**Determining a deployment's current end-user count.** The branding clause's carve-out is a
+rolling 30-day count, not a one-time check, and LQ.AI has no report that answers the
+license's question directly, but it does have one that gets close: `GET
+/api/v1/admin/usage?group_by=user&date_from=<30 days ago>` (`docs/api/backend-openapi.yaml`)
+returns one row per user who ran an inference call in the window — the number of rows is a
+rolling-30-day active-user floor, not the license's exact "individual natural persons with
+direct access" test (it counts users who ran inference, not every person with access, and
+rows with no user id are coalesced into a single `anonymous` bucket). An operator with
+database access can approximate the count directly against the `users` table's
+`last_login_at` column (`docs/db-schema.md`):
+
+```sql
+SELECT count(*) FROM users
+WHERE last_login_at > now() - interval '30 days'
+  AND deleted_at IS NULL;
+```
+
+This counts authenticated accounts in the trailing 30 days, not the license's natural-person
+test exactly (a shared account undercounts, several accounts for one person overcounts) —
+treat it as a floor to check periodically, not a compliance instrument. Crossing fifty
+end users produces no in-app signal; nothing warns a deployment that the carve-out it was
+relying on has lapsed.
+
+**Skills bundled from the community catalog.** A deployment that bundles skills from
+`skills/community/` (the `legalquants/lq-skills` submodule) carries obligations independent
+of the branding clause above. [`NOTICES.md`](../../NOTICES.md) carries one row for the whole
+submodule and points elsewhere for the detail: the license is the per-skill `LICENSE` file
+in each skill's own folder, and the attribution requirement is the author named in that
+skill's `SKILL.md` frontmatter `author` field. There is no per-skill row in this repository
+to check — open the skill's folder in
+[`LegalQuants/lq-skills`](https://github.com/LegalQuants/lq-skills) before promising a
+client that a skill's authorship or licensing is resolved.
+
+**Apache 2.0, for LQ.AI's own code.** Redistributing a modified copy of LQ.AI's own code
+(outside `web/`) requires retaining the copyright and license notices and stating, in the
+modified files, that they were changed (`LICENSE` §4). The repository does not currently
+carry a root-level `NOTICE` file, so there is nothing to propagate under that specific
+clause today — if one is added later, redistributing under a different license without
+carrying it forward would itself be a license violation.
+
 ---
 
 *Superseding this ADR requires an explicit follow-on ADR. Updating the pinned version (e.g., v0.9.2 → v0.10.0 at the next quarterly rebase) is an in-place edit to this document — record the new version, the date, and a one-line rationale in a "Revisions" section at the bottom.*

@@ -209,8 +209,17 @@ scratch/
 # ---------- Generated artifacts ----------
 docs/_build/
 docs/build/
-site/
 *.generated.md
+# Documentation site (site/, ADR 0028): dependencies, build output and the
+# content collection that `npm run sync` regenerates from docs/site/.
+site/node_modules/
+site/dist/
+site/.astro/
+site/src/content/docs/
+site/public/_repo/
+site/.sync-manifest.json
+# Design-QA screenshots (site/scripts/screenshot.mjs). A local look, not an artifact.
+site/.screens/
 
 # ---------- Tool-specific ----------
 # Pre-commit

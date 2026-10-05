@@ -50,7 +50,7 @@ Read the workflows yourself: [.github/workflows/ci.yml](../.github/workflows/ci.
 | Not in CI | Where it lives | Closed by |
 |---|---|---|
 | Cypress E2E (all 13 specs) | `web/cypress/e2e/` | roadmap 4.2 |
-| Coverage measurement or gate (no `--cov` anywhere in workflows) | — | roadmap 4.3 |
+| Coverage gate — now enforced: `ci.yml` runs `--cov-fail-under=80` (api) and `--cov-fail-under=88` (gateway) as a ratchet | `.github/workflows/ci.yml` | done (was roadmap 4.3) |
 | Provider-marked tests (`pytest -m provider`) | `gateway/tests/test_anthropic_provider.py`, `test_inference_anthropic.py`, `test_courtlistener_live.py` | operator-run only (need real API keys) |
 | Cross-cutting contract tests | `tests/` | not wired into any workflow |
 | Slack/Teams bridge suites | `slack-bridge/tests/`, `teams-bridge/tests/` | not wired into any workflow |
@@ -141,7 +141,7 @@ Known non-deterministic tests. A flake stays listed until the fix merges with a 
 
 | Gap | Impact | Closed by |
 |---|---|---|
-| Cypress not in CI | the 13 E2E specs only run when someone runs them | roadmap 4.2 |
+| Cypress not on PR CI | the deterministic E2E specs run nightly and on manual dispatch (`.github/workflows/e2e.yml`), not per PR | partly done (was roadmap 4.2) |
 | No coverage measurement/gate | the 80% api / 90% gateway targets are aspirational; no floor is enforced | roadmap 4.3 (ratchet from measured floor) |
 | Bridge, word-addin, and cross-cutting `tests/` suites not in any workflow | regressions in those packages land silently | fold into 4.2/4.3 wiring |
 | No mutation / property-based / a11y / contract / chaos / perf testing | see the engineering-discipline roadmap | 4.4–4.9, DE-229/230/231/232, DE-250/251/252/253 |

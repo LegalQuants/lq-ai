@@ -30,6 +30,17 @@ Community leaders are responsible for clarifying and enforcing our standards of 
 
 Community leaders have the right and responsibility to remove, edit, or reject comments, commits, code, wiki edits, issues, and other contributions that are not aligned to this Code of Conduct, and will communicate reasons for moderation decisions when appropriate.
 
+## Applying this to skill review
+
+This Code of Conduct governs both of LQ.AI's contribution tracks equally. Skill review can
+produce real substantive disagreement between a practicing-attorney reviewer and a
+contributor — over a severity calibration, a piece of recommended language, whether a
+pattern a skill surfaces is actually unusual — and that disagreement is part of the value
+the review process is supposed to produce, not a symptom of something going wrong. The
+expectation is that disagreement stays focused on the work and on what best serves the
+in-house counsel using the skill, never on the contributor's identity, credentials, or
+background.
+
 ## Scope
 
 This Code of Conduct applies within all community spaces, and also applies when an individual is officially representing the community in public spaces. Examples of representing our community include using an official e-mail address, posting via an official social media account, or acting as an appointed representative at an online or offline event.
