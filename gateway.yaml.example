@@ -204,6 +204,9 @@ providers:
   - name: vllm-local
     type: openai_compatible  # vLLM exposes OpenAI-compatible API
     base_url: http://vllm:8000/v1
+    # Empty: a keyless local server. For a hosted OpenAI-compatible service,
+    # name its key variable here; if that variable is not set the provider
+    # is skipped at startup with a warning, like any other missing key.
     api_key_env: ''
     tier: 1
     models:
