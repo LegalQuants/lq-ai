@@ -281,6 +281,14 @@ class Skill(SkillSummary):
     on_demand_files: list[SkillFileRef] = Field(default_factory=list)
     """The skill's ``references/`` files. Listed, never inlined: the model
     reads one with ``skill_reference_read`` when the task calls for it."""
+    reference_read_enabled: bool = True
+    """Effective host runtime-read policy; independent of human inspection."""
+
+
+class SkillInspection(Skill):
+    """Human-only inspection response; never used by the gateway resolver."""
+
+    on_demand_contents: list[SkillFile] = Field(default_factory=list)
 
 
 # --- Skill inputs (PRD §3.4 skill-input-form pattern) -----------------------

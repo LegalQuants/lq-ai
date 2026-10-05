@@ -1,5 +1,16 @@
 components:
   schemas:
+    AdminConfigResponse:
+      additionalProperties: true
+      description: Preserve gateway configuration and add the API host's resource
+        policy.
+      properties:
+        skill_resource_policy:
+          $ref: '#/components/schemas/SkillResourcePolicy'
+      required:
+      - skill_resource_policy
+      title: AdminConfigResponse
+      type: object
     AdminUserListResponse:
       description: Paginated user list for ``GET /api/v1/admin/users``.
       properties:
@@ -5306,6 +5317,151 @@ components:
       maxLength: 256
       minLength: 1
       type: string
+    Skill:
+      description: 'The shape ``GET /api/v1/skills/{name}`` returns.
+
+
+        Mirrors ``Skill`` in ``docs/api/backend-openapi.yaml`` (which is an
+
+        ``allOf`` of ``SkillSummary`` plus body fields). ``content_yaml`` is
+
+        the raw frontmatter block (re-emitted, not the source bytes), and
+
+        ``content_md`` is the body markdown. Reference and example files
+
+        are loaded lazily — only when this shape is materialised.
+
+
+        Wave D.2 — ``id`` surfaces the underlying ``user_skills.id`` row UUID
+
+        when the resolved scope is ``user`` or ``team``. Built-in
+
+        (filesystem-canonical) skills have no DB row and return ``None``.
+
+        The skill detail page''s Versions tab needs this id to call the
+
+        audit-history endpoint; surfacing it on the detail GET avoids a
+
+        second round-trip to look it up by slug.'
+      properties:
+        author:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Author
+        content_md:
+          title: Content Md
+          type: string
+        content_yaml:
+          title: Content Yaml
+          type: string
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        ensemble_verification:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Ensemble Verification
+        example_files:
+          items:
+            $ref: '#/components/schemas/SkillFile'
+          title: Example Files
+          type: array
+        id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Id
+        jurisdiction:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Jurisdiction
+        minimum_inference_tier:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Minimum Inference Tier
+        name:
+          title: Name
+          type: string
+        on_demand_files:
+          items:
+            $ref: '#/components/schemas/SkillFileRef'
+          title: On Demand Files
+          type: array
+        output_format:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Output Format
+        reference_files:
+          items:
+            $ref: '#/components/schemas/SkillFile'
+          title: Reference Files
+          type: array
+        reference_read_enabled:
+          default: true
+          title: Reference Read Enabled
+          type: boolean
+        scope:
+          enum:
+          - builtin
+          - user
+          - team
+          title: Scope
+          type: string
+        script_files:
+          items:
+            $ref: '#/components/schemas/SkillFile'
+          title: Script Files
+          type: array
+        source:
+          default: built-in
+          enum:
+          - built-in
+          - community
+          - user
+          - team
+          title: Source
+          type: string
+        tags:
+          items:
+            type: string
+          title: Tags
+          type: array
+        title:
+          title: Title
+          type: string
+        tool_usage:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Tool Usage
+        unavailable_tool_usage:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Unavailable Tool Usage
+        version:
+          title: Version
+          type: string
+      required:
+      - name
+      - version
+      - scope
+      - title
+      - content_yaml
+      - content_md
+      title: Skill
+      type: object
     SkillAutocompleteItem:
       description: 'One row in the autocomplete response.
 
@@ -5365,6 +5521,35 @@ components:
       required:
       - results
       title: SkillAutocompleteResponse
+      type: object
+    SkillFile:
+      description: A reference or example file relative to the skill folder.
+      properties:
+        content:
+          title: Content
+          type: string
+        path:
+          title: Path
+          type: string
+      required:
+      - path
+      - content
+      title: SkillFile
+      type: object
+    SkillFileRef:
+      description: A file the skill ships that is read on request, not sent with the
+        prompt.
+      properties:
+        path:
+          title: Path
+          type: string
+        size_bytes:
+          title: Size Bytes
+          type: integer
+      required:
+      - path
+      - size_bytes
+      title: SkillFileRef
       type: object
     SkillForkBody:
       additionalProperties: false
@@ -5461,6 +5646,132 @@ components:
       - name
       title: SkillInputs
       type: object
+    SkillInspection:
+      description: Human-only inspection response; never used by the gateway resolver.
+      properties:
+        author:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Author
+        content_md:
+          title: Content Md
+          type: string
+        content_yaml:
+          title: Content Yaml
+          type: string
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        ensemble_verification:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Ensemble Verification
+        example_files:
+          items:
+            $ref: '#/components/schemas/SkillFile'
+          title: Example Files
+          type: array
+        id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Id
+        jurisdiction:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Jurisdiction
+        minimum_inference_tier:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Minimum Inference Tier
+        name:
+          title: Name
+          type: string
+        on_demand_contents:
+          items:
+            $ref: '#/components/schemas/SkillFile'
+          title: On Demand Contents
+          type: array
+        on_demand_files:
+          items:
+            $ref: '#/components/schemas/SkillFileRef'
+          title: On Demand Files
+          type: array
+        output_format:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Output Format
+        reference_files:
+          items:
+            $ref: '#/components/schemas/SkillFile'
+          title: Reference Files
+          type: array
+        reference_read_enabled:
+          default: true
+          title: Reference Read Enabled
+          type: boolean
+        scope:
+          enum:
+          - builtin
+          - user
+          - team
+          title: Scope
+          type: string
+        script_files:
+          items:
+            $ref: '#/components/schemas/SkillFile'
+          title: Script Files
+          type: array
+        source:
+          default: built-in
+          enum:
+          - built-in
+          - community
+          - user
+          - team
+          title: Source
+          type: string
+        tags:
+          items:
+            type: string
+          title: Tags
+          type: array
+        title:
+          title: Title
+          type: string
+        tool_usage:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Tool Usage
+        unavailable_tool_usage:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Unavailable Tool Usage
+        version:
+          title: Version
+          type: string
+      required:
+      - name
+      - version
+      - scope
+      - title
+      - content_yaml
+      - content_md
+      title: SkillInspection
+      type: object
     SkillPin:
       additionalProperties: false
       properties:
@@ -5472,6 +5783,28 @@ components:
       - name
       - digest
       title: SkillPin
+      type: object
+    SkillResourcePolicy:
+      description: Current API/worker host policy for installed skill reference reads.
+      properties:
+        max_file_bytes:
+          title: Max File Bytes
+          type: integer
+        max_files:
+          title: Max Files
+          type: integer
+        reference_read_enabled:
+          title: Reference Read Enabled
+          type: boolean
+        scope:
+          title: Scope
+          type: string
+      required:
+      - reference_read_enabled
+      - max_files
+      - max_file_bytes
+      - scope
+      title: SkillResourcePolicy
       type: object
     SlackWorkspaceCreate:
       additionalProperties: false
@@ -7767,9 +8100,7 @@ paths:
           content:
             application/json:
               schema:
-                additionalProperties: true
-                title: Response Get Admin Config Api V1 Admin Config Get
-                type: object
+                $ref: '#/components/schemas/AdminConfigResponse'
           description: Successful Response
       security:
       - OAuth2PasswordBearer: []
@@ -14001,7 +14332,8 @@ paths:
         '200':
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/Skill'
           description: Successful Response
         '422':
           content:
@@ -14020,19 +14352,11 @@ paths:
         files.
 
 
-        Same shape as ``GET /skills/{skill_name}`` (the user-facing read
+        Adds bounded installed ``references/`` contents for human inspection,
 
-        endpoint). PRD §3.4 names this endpoint explicitly as the contract
+        including when runtime reads are disabled. Applies the D8.1b resolution
 
-        the "view this skill" affordance + the skill inspector side panel
-
-        target; exposing it under a distinct URL lets the frontend use URL
-
-        semantics ("/contents") to signal inspection intent, even though
-
-        the response body is the same as the base GET. Applies the same
-
-        D8.1b resolution stack (user > team > built-in).'
+        stack (user > team > built-in); DB shadows have no filesystem resources.'
       operationId: get_skill_contents_api_v1_skills__skill_name__contents_get
       parameters:
       - in: path
@@ -14045,7 +14369,8 @@ paths:
         '200':
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/SkillInspection'
           description: Successful Response
         '422':
           content:

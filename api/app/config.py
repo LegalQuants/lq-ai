@@ -445,6 +445,13 @@ class Settings(BaseSettings):
 
     # Optional skill data/tools. Bundled execution is confined to a separately
     # configured local broker; no command or host-process fallback exists.
+    skill_reference_read_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "LQ_AI_SKILL_REFERENCE_READ_ENABLED", "SKILL_REFERENCE_READ_ENABLED"
+        ),
+        description="Allow activated skills to read installed references/. Human inspection remains available.",
+    )
     skill_workspaces_enabled: bool = Field(
         default=False, validation_alias="LQ_AI_SKILL_WORKSPACES_ENABLED"
     )

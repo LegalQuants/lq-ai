@@ -10,13 +10,27 @@ which remain pending after ratification.
 
 ## On-demand reference files
 
-Not an optional capability and not covered by the switches below. A filesystem
+Ordinary reads are default-on for enabled, trusted installed skills, separately
+from the storage and script switches below. Set
+`LQ_AI_SKILL_REFERENCE_READ_ENABLED=false` (bare alias
+`SKILL_REFERENCE_READ_ENABLED`) on the API and arq worker and restart affected
+processes to disable model reads. A filesystem
 skill that ships a `references/` folder gets one read-only tool,
 `skill_reference_read`, which returns one of that skill's own listed files (UTF-8,
-at most 64 KiB, at most 64 files). It makes no outbound call and stores nothing.
+at most 64 KiB, at most 64 files). The file read makes no outbound call; its
+contents enter the governed conversation as a tool result.
 A chat read is recorded in `tool_call_log` like any other skill tool call; a
-background run records it in the session's audit trail. To withhold a file from
-the model, remove it from the installed skill. See the
+background run records metadata in the session's audit trail; read contents are
+not audit payloads. Skill metadata exposes `reference_read_enabled` and
+`GET /api/v1/admin/config` exposes the read-only, environment-backed
+`skill_resource_policy`. This is not a runtime-editable switch. Authorized human
+inspection through `/api/v1/skills/{name}/contents` (`on_demand_contents`) remains
+available when model reads are off. Disable the skill or model reads, or remove
+a particular installed file, to withhold model access. No proprietary capability
+declaration is required. Exact pin, selected scope and current-policy checks
+bound reads; text cannot expand grants. The 64-file/64-KiB and safe ASCII path
+limits are the initial LQ profile; assets, broader paths and larger-resource
+access remain compatibility follow-up work. See the
 [authoring guide](../skill-authoring-guide.md#reference-and-references).
 
 ## Persistent workspaces

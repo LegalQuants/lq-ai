@@ -211,7 +211,7 @@ async def _run_analysis_loop(
 
     from app.config import get_settings
     from app.errors import ToolNotGranted
-    from app.skills.binding import bind_record
+    from app.skills.binding import resolve_binding
     from app.skills.tools import SKILL_TOOL_MODELS, SkillTools, current_registry
 
     allowed = PLANNER_ALLOWLIST
@@ -228,15 +228,18 @@ async def _run_analysis_loop(
     record = (
         registry.current().get(str(params.get("skill_ref") or "")) if registry is not None else None
     )
-    # A skill's on-demand reference files need no operator switch; the other
-    # optional tools do. A skill with neither is not bound here at all.
-    if registry is not None and record is not None and (optional_enabled or record.on_demand_paths):
-        binding = bind_record(record)
-        optional = SkillTools(registry, settings).available(binding)
+    if (
+        registry is not None
+        and record is not None
+        and (optional_enabled or (settings.skill_reference_read_enabled and record.on_demand_paths))
+    ):
+        binding = await resolve_binding(db, session.user_id, record.name, registry)
+        optional = SkillTools(registry, settings).available(binding) if binding else ()
         allowed = frozenset((*allowed, *optional))
         if optional:
+            assert binding is not None
             skill_tool_schemas = {
-                "instructions": record.body,
+                "instructions": binding.instructions,
                 "helpers": [s.model_dump() for s in binding.capabilities.scripts],
                 "reference_files": list(binding.reference_paths),
                 "tools": {

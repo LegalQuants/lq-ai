@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -156,6 +156,7 @@ class PinnedSkill:
     pin: SkillPin
     instructions: str
     bundle_digest: str | None = None
+    reference_contents: tuple[tuple[str, str], ...] = field(default=(), repr=False, compare=False)
 
 
 def on_demand_index(paths: list[str]) -> str:
@@ -178,6 +179,8 @@ def load_pinned_skill(record: SkillRecord) -> PinnedSkill:
     The executor must use this same artifact, not ask the gateway to resolve a
     mutable skill slug after admission.
     """
+    from app.skills.references import read_reference_snapshot
+
     try:
         current = _load_one(record.folder, source=record.source, quiet=True)
         if current != record:
@@ -193,7 +196,12 @@ def load_pinned_skill(record: SkillRecord) -> PinnedSkill:
         ):
             if not path.resolve().is_relative_to(record.folder.resolve()):
                 raise ValueError("supporting file outside skill folder")
-            files.append((path.relative_to(record.folder).as_posix(), path.read_text("utf-8")))
+            content = (
+                read_reference_snapshot(record.folder, path)
+                if path in record.on_demand_paths
+                else path.read_text("utf-8")
+            )
+            files.append((path.relative_to(record.folder).as_posix(), content))
         artifact = (record.name, record.source, record.raw_yaml, record.body, files)
         digest = hashlib.sha256(
             json.dumps(artifact, ensure_ascii=False, separators=(",", ":")).encode()
@@ -220,7 +228,12 @@ def load_pinned_skill(record: SkillRecord) -> PinnedSkill:
         if scripts
         else None
     )
-    return PinnedSkill(SkillPin(name=record.name, digest=digest), instructions, bundle_digest)
+    return PinnedSkill(
+        SkillPin(name=record.name, digest=digest),
+        instructions,
+        bundle_digest,
+        tuple((path, content) for path, content in files if path in on_demand),
+    )
 
 
 def skill_pin(record: SkillRecord) -> SkillPin:

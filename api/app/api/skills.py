@@ -36,6 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import ActiveUser
 from app.audit import audit_action
+from app.config import get_settings
 from app.db.session import get_db
 from app.errors import NotFound
 from app.models.chat import Chat, Message
@@ -44,8 +45,10 @@ from app.models.user_skill import UserSkill
 from app.skills.connectors import resolve_available_connectors, unavailable_tool_usage
 from app.skills.registry import MutableSkillRegistry
 from app.skills.schema import (
+    Skill,
     SkillFrontmatter,
     SkillInputs,
+    SkillInspection,
     extract_inputs,
     filter_summary_for_response,
 )
@@ -150,6 +153,7 @@ def _skill_from_user_skill(row: UserSkill) -> dict[str, Any]:
         "reference_files": [],
         "example_files": [],
         "on_demand_files": [],
+        "reference_read_enabled": get_settings().skill_reference_read_enabled,
     }
     return payload
 
@@ -554,7 +558,7 @@ async def autocomplete_skills(
     )
 
 
-@router.get("/{skill_name}")
+@router.get("/{skill_name}", response_model=Skill)
 async def get_skill(
     request: Request,
     skill_name: str,
@@ -586,23 +590,27 @@ async def _resolve_full_skill_payload(
     db: AsyncSession,
     user_id: uuid.UUID,
     skill_name: str,
+    inspect_references: bool = False,
 ) -> dict[str, Any]:
     """Apply the D8.1b resolution stack and return the full Skill payload.
 
-    Shared between ``GET /skills/{name}`` and ``GET /skills/{name}/contents``
-    (which return the same shape — PRD §3.4 names the contents endpoint
-    explicitly as the inspector backend; ``/skills/{name}`` already
-    returns the same data, so contents is an alias the frontend can
-    target by URL semantics).
+    Only the human contents endpoint opts into installed-reference snapshots.
+    User/team shadows never inherit filesystem resources from a built-in.
     """
 
     shadow = await _load_user_shadow(db, user_id=user_id, slug=skill_name)
     if shadow is not None:
-        return _skill_from_user_skill(shadow)
+        payload = _skill_from_user_skill(shadow)
+        if inspect_references:
+            payload["on_demand_contents"] = []
+        return payload
 
     team_shadow = await _load_team_shadow(db, user_id=user_id, slug=skill_name)
     if team_shadow is not None:
-        return _skill_from_user_skill(team_shadow)
+        payload = _skill_from_user_skill(team_shadow)
+        if inspect_references:
+            payload["on_demand_contents"] = []
+        return payload
 
     holder = _registry(request)
     registry = holder.current()
@@ -617,6 +625,16 @@ async def _resolve_full_skill_payload(
     skill.unavailable_tool_usage = unavailable_tool_usage(skill.tool_usage, available)
 
     raw = skill.model_dump()
+    raw["reference_read_enabled"] = get_settings().skill_reference_read_enabled
+    if inspect_references:
+        from app.skills.binding import bind_record
+
+        record = registry.get(skill_name)
+        assert record is not None
+        snapshot = bind_record(record)
+        raw["on_demand_contents"] = [
+            {"path": path, "content": content} for path, content in snapshot.reference_contents
+        ]
     # Keep tool_usage and unavailable_tool_usage even when None/[] — both are
     # meaningful verdicts ([] = "all connectors available"; None = "unknown").
     # Preserve the existing None/empty-tags filtering for all other keys.
@@ -630,6 +648,7 @@ async def _resolve_full_skill_payload(
 
 @router.get(
     "/{skill_name}/contents",
+    response_model=SkillInspection,
     summary="Full skill contents for the skill inspector (PRD §3.4)",
 )
 async def get_skill_contents(
@@ -640,17 +659,13 @@ async def get_skill_contents(
 ) -> JSONResponse:
     """Return the full skill payload — SKILL.md + reference + example files.
 
-    Same shape as ``GET /skills/{skill_name}`` (the user-facing read
-    endpoint). PRD §3.4 names this endpoint explicitly as the contract
-    the "view this skill" affordance + the skill inspector side panel
-    target; exposing it under a distinct URL lets the frontend use URL
-    semantics ("/contents") to signal inspection intent, even though
-    the response body is the same as the base GET. Applies the same
-    D8.1b resolution stack (user > team > built-in).
+    Adds bounded installed ``references/`` contents for human inspection,
+    including when runtime reads are disabled. Applies the D8.1b resolution
+    stack (user > team > built-in); DB shadows have no filesystem resources.
     """
 
     payload = await _resolve_full_skill_payload(
-        request, db=db, user_id=user.id, skill_name=skill_name
+        request, db=db, user_id=user.id, skill_name=skill_name, inspect_references=True
     )
     return JSONResponse(content=payload)
 

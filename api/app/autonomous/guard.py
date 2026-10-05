@@ -107,7 +107,7 @@ from app.models.file import File as FileModel
 from app.models.knowledge import KnowledgeBase
 from app.models.user import User
 from app.observability_helpers import get_tracer, record_attributes
-from app.skills.binding import bind_record
+from app.skills.binding import resolve_binding
 from app.skills.tools import SKILL_TOOL_INTENTS, SkillTools, current_registry, parse_skill_tool
 
 log = logging.getLogger(__name__)
@@ -322,7 +322,11 @@ async def guarded_tool_call(
             record = skill_tools.registry.current().get(name) if isinstance(name, str) else None
             if record is None:
                 raise ToolNotGranted("A current installed skill is required")
-            skill_binding = bind_record(record)
+            skill_binding = await resolve_binding(
+                db, session.user_id, record.name, skill_tools.registry
+            )
+            if skill_binding is None or intent not in skill_tools.available(skill_binding):
+                raise ToolNotGranted("Optional skill capability is not enabled")
             if execution_scope and (
                 effect is None or skill_binding.digest != execution_scope.skill.digest
             ):

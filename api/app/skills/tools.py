@@ -17,7 +17,6 @@ from app.config import Settings, get_settings
 from app.errors import ToolNotGranted
 from app.skills.binding import SkillBinding, revalidate_binding
 from app.skills.capabilities import (
-    MAX_FILE_BYTES,
     EmptyInput,
     FileRead,
     FileWrite,
@@ -78,9 +77,7 @@ class SkillTools:
             and self.settings.skill_script_runner_token
         ):
             intents.append(ToolIntent.run_bundled_script)
-        # Needs no operator switch: it returns only text the installed skill
-        # already ships, the same class of content ``reference/`` preloads.
-        if binding.reference_paths:
+        if self.settings.skill_reference_read_enabled and binding.reference_paths:
             intents.append(ToolIntent.skill_reference_read)
         return tuple(intents)
 
@@ -133,33 +130,15 @@ class SkillTools:
     def read_reference(self, binding: SkillBinding, request: ReferenceRead) -> dict[str, Any]:
         """Return one listed ``references/`` file of the bound skill.
 
-        The path is looked up in the list the loader built; it is never joined
-        to a directory. ``execute`` has just revalidated the binding, which
-        re-hashes the skill's files, so the bytes read here are the pinned ones.
+        ``execute`` revalidates access and the digest. Return the bytes from
+        that digest's original snapshot, with no subsequent disk read.
         """
         if request.path not in binding.reference_paths:
             return {"error": "file_unavailable"}
-        source, _, name = binding.key.partition(":")
-        record = self.registry.current().get(name)
-        if record is None or record.source != source:
+        content = dict(binding.reference_contents).get(request.path)
+        if content is None:
             return {"error": "file_unavailable"}
-        path = next(
-            (
-                p
-                for p in record.on_demand_paths
-                if p.relative_to(record.folder).as_posix() == request.path
-            ),
-            None,
-        )
-        if path is None or path.is_symlink():
-            return {"error": "file_unavailable"}
-        try:
-            data = path.read_bytes()
-            if len(data) > MAX_FILE_BYTES:
-                return {"error": "file_unavailable"}
-            return {"path": request.path, "content": data.decode("utf-8")}
-        except (OSError, UnicodeError):
-            return {"error": "file_unavailable"}
+        return {"path": request.path, "content": content}
 
     async def run_script(self, binding: SkillBinding, request: ScriptInput) -> dict[str, Any]:
         if request.script not in {script.name for script in binding.capabilities.scripts}:

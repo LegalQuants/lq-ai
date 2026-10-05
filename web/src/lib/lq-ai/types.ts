@@ -495,6 +495,11 @@ export interface SkillReferenceFile {
 	content: string;
 }
 
+export interface SkillResourceFile {
+	path: string;
+	size_bytes: number;
+}
+
 export interface Skill extends SkillSummary {
 	/**
 	 * Wave D.2 — underlying ``user_skills.id`` row UUID for user/team scope;
@@ -509,6 +514,11 @@ export interface Skill extends SkillSummary {
 	reference_files?: SkillReferenceFile[];
 	example_files?: SkillReferenceFile[];
 	script_files?: SkillReferenceFile[];
+	/** Available on-demand references; file contents are fetched only for human inspection. */
+	on_demand_files?: SkillResourceFile[];
+	reference_read_enabled?: boolean;
+	/** Present on the human-facing /contents response, never model-facing metadata. */
+	on_demand_contents?: SkillReferenceFile[];
 	/**
 	 * Parsed inputs from the frontmatter. The OpenAPI sketch surfaces only
 	 * `content_yaml` (the raw frontmatter); we parse it client-side to drive

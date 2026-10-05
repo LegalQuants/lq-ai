@@ -302,10 +302,10 @@ async def test_get_skill_minimal_skill_has_empty_reference_lists(
 
 
 @pytest.mark.integration
-async def test_contents_returns_same_shape_as_base_get(client: AsyncClient, db_user: User) -> None:
-    """``/skills/{name}/contents`` and ``/skills/{name}`` return the same
-    payload — the contents URL is the frontend-targeted alias PRD §3.4
-    names as the contract behind the skill inspector."""
+async def test_contents_extends_detail_with_human_reference_contents(
+    client: AsyncClient, db_user: User
+) -> None:
+    """Inspection retains detail metadata and adds explicit reference contents."""
 
     token = _bearer(db_user)
     headers = {"Authorization": f"Bearer {token}"}
@@ -314,7 +314,9 @@ async def test_contents_returns_same_shape_as_base_get(client: AsyncClient, db_u
     contents = await client.get("/api/v1/skills/alpha-test-skill/contents", headers=headers)
     assert base.status_code == 200
     assert contents.status_code == 200
-    assert base.json() == contents.json()
+    inspected = contents.json()
+    assert inspected.pop("on_demand_contents") == []
+    assert base.json() == inspected
 
 
 @pytest.mark.integration

@@ -516,6 +516,22 @@ This is the single most differentiated capability in the product. Specified in d
 
 ### 3.4 Skill Library and Skill Creator
 
+**Proposed compatibility clarification (#658; maintainer-directed 2026-10-06,
+pending human review and merge).** Ordinary reference reads are default-on for
+an enabled, trusted installed skill, without proprietary capability frontmatter.
+Host policy can disable model reads while retaining authorized human inspection.
+Each invocation checks current policy and exact installed/pinned resource scope;
+resource data cannot grant execution, storage or external-access authority.
+
+The #658 increment supports admitted `references/` UTF-8 files only: at most 64
+files, 64 KiB per file, safe ASCII paths, no hidden names or symlinks. These are
+LQ implementation limits, not Agent Skills format constraints. Legacy eager
+`reference/` loading remains unchanged. Assets, broader packaged paths, Unicode
+names, bounded large-resource reading and complete-list discovery belong to the
+unnumbered Agent Skills compatibility DE associated with #658 and epic #662.
+See the [authoring guide](skill-authoring-guide.md#reference-and-references) and
+[operator notes](deploy/skill-capabilities.md#on-demand-reference-files).
+
 **Accepted optional extension, implemented on main but disabled by default:**
 [ADR 0035 D8b–D8d](adr/0035-governed-orchestration-run-tree.md#d8b--optional-persistent-skill-workspaces)
 specifies persistent skill workspaces and reviewed, installed Python helpers.

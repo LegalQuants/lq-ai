@@ -45,7 +45,11 @@ async def extend_chat_tools(
         name
         for name in dict.fromkeys(skill_names)
         if optional
-        or ((record := registry.current().get(name)) is not None and record.on_demand_paths)
+        or (
+            settings.skill_reference_read_enabled
+            and (record := registry.current().get(name)) is not None
+            and record.on_demand_paths
+        )
     ]
     if not names:
         return

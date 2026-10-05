@@ -49,10 +49,15 @@
 	{#if error}
 		<p class="lq-text-body" style="color: var(--lq-error);">Couldn't load skill: {error}</p>
 	{:else if skill}
-		<header style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: var(--lq-space-4);">
+		<header
+			style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: var(--lq-space-4);"
+		>
 			<div>
 				<h1 class="lq-text-page-h">{skill.title ?? skill.name}</h1>
-				<p class="lq-text-caption" style="color: var(--lq-text-tertiary); margin-top: var(--lq-space-1);">
+				<p
+					class="lq-text-caption"
+					style="color: var(--lq-text-tertiary); margin-top: var(--lq-space-1);"
+				>
 					{skill.name}{skill.version ? ` · v${skill.version}` : ''}
 				</p>
 			</div>
@@ -60,10 +65,12 @@
 				<a
 					href={`/lq-ai/skills/new?fork=${encodeURIComponent(skill.name)}`}
 					class="lq-btn-ghost"
-					aria-label={`Fork ${skill.title ?? skill.name} as my own`}
-				>🔱 Fork as my own</a>
+					aria-label={`Fork ${skill.title ?? skill.name} as my own`}>🔱 Fork as my own</a
+				>
 				{#if skill.scope !== 'builtin'}
-					<a href={`/lq-ai/skills/${encodeURIComponent(skill.name)}/edit`} class="lq-btn-primary">Edit</a>
+					<a href={`/lq-ai/skills/${encodeURIComponent(skill.name)}/edit`} class="lq-btn-primary"
+						>Edit</a
+					>
 				{/if}
 			</div>
 		</header>
@@ -77,9 +84,12 @@
 				</article>
 				{#if usageNote.uses.length > 0}
 					<div class="lq-tool-usage" data-testid="skill-tool-usage">
-						<span class="lq-tool-usage-label">Uses:</span> {usageNote.uses.join(', ')}
+						<span class="lq-tool-usage-label">Uses:</span>
+						{usageNote.uses.join(', ')}
 						{#if usageNote.warning}
-							<p class="lq-tool-usage-warning" data-testid="skill-tool-usage-warning">⚠ {usageNote.warning}</p>
+							<p class="lq-tool-usage-warning" data-testid="skill-tool-usage-warning">
+								⚠ {usageNote.warning}
+							</p>
 						{/if}
 					</div>
 				{/if}
@@ -89,6 +99,9 @@
 					contentMd={skill.content_md}
 					contentYaml={skill.content_yaml}
 					scriptFiles={skill.script_files ?? []}
+					referenceFiles={skill.reference_files ?? []}
+					onDemandFiles={skill.on_demand_files ?? []}
+					referenceReadEnabled={skill.reference_read_enabled}
 				/>
 			{:else if activeTab === 'try'}
 				<SkillTryItTab skillSlug={skill.name} />

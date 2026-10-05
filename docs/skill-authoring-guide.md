@@ -51,7 +51,16 @@ For `references/`, tell the model in `SKILL.md` which file answers which kind of
 
 A file is listed only if it can be returned: UTF-8 text of at most 64 KiB, in a path made of letters, digits, `_`, `.` and `-`, with no hidden names and no symlinks. At most 64 files are listed. A file that does not qualify is left out and named in a warning in the API log; the skill still loads. The files are part of the skill's pinned digest, so a file edited on disk mid-run is refused until the skill is reloaded.
 
-Reading needs no operator setting and no `lq_ai.capabilities` declaration: it returns only text the installed skill already ships. A chat with such a skill attached runs through the tool loop, so the model behind it must support tool calls. Database (user and team) skills have no files and get no read tool.
+Ordinary reads are default-on for an enabled, trusted installed skill, without
+`lq_ai.capabilities` or experimental `allowed-tools`. Operators can disable model
+reads with `LQ_AI_SKILL_REFERENCE_READ_ENABLED=false` (bare alias
+`SKILL_REFERENCE_READ_ENABLED`). Metadata exposes `reference_read_enabled`;
+authorized human inspection remains available through the supporting-file UI and
+`/api/v1/skills/{name}/contents` in `on_demand_contents`. This grants no script
+execution, persistence or external access. The caps and safe-path subset above
+are #658's limited LQ profile, not Agent Skills format requirements. Assets,
+broader paths, Unicode names and large-resource/list paging remain follow-up
+work; omitted resources must not be described as read. A chat with such a skill attached runs through the tool loop, so the model behind it must support tool calls. Database (user and team) skills have no files and get no read tool.
 
 **Optional execution (#563).** Declared `scripts/` helpers
 can run through the private bundled-helper broker when an operator enables their
