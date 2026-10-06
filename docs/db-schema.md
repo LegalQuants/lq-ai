@@ -1237,8 +1237,8 @@ The most consequential table in the schema. Every privilege-affecting action lan
 
 ```sql
 CREATE TABLE audit_log (
-    id                    UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
-    timestamp             TIMESTAMPTZ NOT NULL DEFAULT now(),
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    timestamp             TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),  -- wall-clock insert time, not transaction start (0069)
     user_id               UUID REFERENCES users(id) ON DELETE SET NULL,
     action                TEXT NOT NULL,           -- e.g. 'chat.create', 'message.send', 'skill.fork'
     resource_type         TEXT NOT NULL,           -- e.g. 'chat', 'project', 'skill'
@@ -1265,10 +1265,11 @@ CREATE INDEX idx_audit_log_tier ON audit_log(routed_inference_tier, timestamp DE
 
 The audit log is **append-only** at the application layer; the database does not enforce this directly (the maintainer-team can add a trigger if desired).
 
-The shared `audit_action` writer explicitly stamps `clock_timestamp()` at insert
-time. The schema default stays `now()`, but transaction-start timestamps cannot
-order multiple phase/effect events committed together; the writer records when
-each event is written without splitting its atomic transaction.
+The `timestamp` default records wall-clock insert time with `clock_timestamp()`
+(migration 0069). The shared `audit_action` writer uses this default unless the
+caller supplies an explicit timestamp; audit rows still share the caller's
+atomic transaction. Wall-clock values may tie or move backwards if the clock is
+adjusted, so timestamp sorting does not guarantee write order.
 
 **`details` JSONB conventions.**
 

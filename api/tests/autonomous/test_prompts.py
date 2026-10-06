@@ -139,7 +139,9 @@ async def test_artifact_instruction_absent_when_flag_off(
 
 @pytest.mark.asyncio
 async def test_assemble_messages_raises_when_playbook_soft_deleted(
-    db_session: AsyncSession, session_with_playbook_id, sample_chunks
+    db_session: AsyncSession,
+    session_with_playbook_id: AutonomousSession,
+    sample_chunks: list[dict[str, object]],
 ) -> None:
     """Soft-deleted playbooks are refused, not analysed."""
     from datetime import UTC, datetime

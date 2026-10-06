@@ -1,14 +1,17 @@
 """Actual store/guard with direct inference bindings and stub gateway responses."""
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from decimal import Decimal
 from types import SimpleNamespace
+from typing import Any
 from uuid import uuid4
 
 import pytest
 import pytest_asyncio
 
+from app.autonomous.guard import ToolResult
 from app.autonomous.orchestration.effects import GuardedEffects
 from app.autonomous.orchestration.inference import InferenceRoutes
 from app.autonomous.orchestration.policy import InferencePolicy
@@ -20,11 +23,12 @@ from app.models.orchestration import (
     OrchestrationRoot as Root,
 )
 from app.schemas.autonomous import Phase
+from app.schemas.gateway import ChatCompletionRequest
 
 
 class Gateway:
-    def __init__(self):
-        self.config = {
+    def __init__(self) -> None:
+        self.config: dict[str, Any] = {
             "configuration_revision": "a" * 64,
             "providers": [
                 {
@@ -43,22 +47,24 @@ class Gateway:
             },
             "anonymization": {"enabled": True, "apply_at_tiers": [1]},
         }
-        self.requests = []
+        self.requests: list[ChatCompletionRequest] = []
         self.config_reads = 0
-        self.config_hook = None
-        self.response_changes = {}
+        self.config_hook: Callable[[], Awaitable[None]] | None = None
+        self.response_changes: dict[str, Any] = {}
         self.prompt_tokens, self.completion_tokens = 10, 5
         self.entered = asyncio.Event()
         self.release = asyncio.Event()
         self.release.set()
 
-    async def get_admin_config(self):
+    async def get_admin_config(self) -> dict[str, Any]:
         self.config_reads += 1
         if self.config_hook:
             await self.config_hook()
         return deepcopy(self.config)
 
-    async def chat_completion(self, request, *, configuration_revision):
+    async def chat_completion(
+        self, request: ChatCompletionRequest, *, configuration_revision: str
+    ) -> SimpleNamespace:
         assert configuration_revision == self.config["configuration_revision"]
         self.requests.append(request)
         self.entered.set()
@@ -82,7 +88,7 @@ class Gateway:
 
 
 @pytest_asyncio.fixture
-async def inference_env(policy_env):
+async def inference_env(policy_env: SimpleNamespace) -> SimpleNamespace:
     env = policy_env
     policy = InferencePolicy(
         provider="selected", native_model="native", max_input_bytes=32768, max_output_tokens=256
@@ -102,13 +108,17 @@ async def inference_env(policy_env):
     return env
 
 
-async def infer(env, *, key="infer:one", inputs=None):
+async def infer(
+    env: SimpleNamespace, *, key: str = "infer:one", inputs: dict[str, Any] | None = None
+) -> ToolResult:
     return await env.effects.infer(
         env.claim, effect_key=key, phase=Phase.analysis, inputs=inputs or {}
     )
 
 
-async def test_direct_route_and_conservative_accounting_are_recoverable(inference_env):
+async def test_direct_route_and_conservative_accounting_are_recoverable(
+    inference_env: SimpleNamespace,
+) -> None:
     env = inference_env
     result = await infer(env, inputs={"model": "unpriced", "max_tokens": 99999})
     request = env.gateway.requests[0]
@@ -147,7 +157,9 @@ async def test_direct_route_and_conservative_accounting_are_recoverable(inferenc
         "revision_malformed",
     ],
 )
-async def test_unavailable_route_or_pricing_refuses_before_admission(inference_env, mutation):
+async def test_unavailable_route_or_pricing_refuses_before_admission(
+    inference_env: SimpleNamespace, mutation: str
+) -> None:
     env = inference_env
     config = env.gateway.config
     if mutation == "unpriced":
@@ -187,7 +199,9 @@ async def test_unavailable_route_or_pricing_refuses_before_admission(inference_e
 
 
 @pytest.mark.parametrize("layer", ["pair", "provider", "type"])
-async def test_tier_overrides_follow_gateway_precedence(inference_env, layer):
+async def test_tier_overrides_follow_gateway_precedence(
+    inference_env: SimpleNamespace, layer: str
+) -> None:
     env = inference_env
     env.gateway.config["providers"][0]["tier"] = 5
     tiers = env.gateway.config["inference_tiers"]
@@ -203,7 +217,7 @@ async def test_tier_overrides_follow_gateway_precedence(inference_env, layer):
     assert len(env.gateway.requests) == 1
 
 
-async def test_explicit_free_rates_and_equivalent_spellings(inference_env):
+async def test_explicit_free_rates_and_equivalent_spellings(inference_env: SimpleNamespace) -> None:
     env = inference_env
     rates = env.gateway.config["cost_tracking"]["rates"]["selected/native"]
     rates.update(input_per_mtok=0, output_per_mtok="0.00000000")
@@ -213,7 +227,7 @@ async def test_explicit_free_rates_and_equivalent_spellings(inference_env):
     assert len(env.gateway.requests) == 1
 
 
-async def test_changed_price_cannot_reuse_effect_key(inference_env):
+async def test_changed_price_cannot_reuse_effect_key(inference_env: SimpleNamespace) -> None:
     env = inference_env
     await infer(env)
     env.gateway.config["cost_tracking"]["rates"]["selected/native"]["output_per_mtok"] = "8"
@@ -233,7 +247,9 @@ async def test_changed_price_cannot_reuse_effect_key(inference_env):
         {"choices": []},
     ],
 )
-async def test_untrusted_response_retains_uncertain_reservation(inference_env, patch):
+async def test_untrusted_response_retains_uncertain_reservation(
+    inference_env: SimpleNamespace, patch: dict[str, Any]
+) -> None:
     env = inference_env
     env.gateway.response_changes = patch
     with pytest.raises(ValidationError, match="untrusted"):
@@ -247,7 +263,9 @@ async def test_untrusted_response_retains_uncertain_reservation(inference_env, p
         )
 
 
-async def test_observed_usage_overrun_is_recorded_in_full_and_stops_root(inference_env):
+async def test_observed_usage_overrun_is_recorded_in_full_and_stops_root(
+    inference_env: SimpleNamespace,
+) -> None:
     env = inference_env
     env.gateway.completion_tokens = 1000000
     result = await infer(env)
@@ -261,10 +279,12 @@ async def test_observed_usage_overrun_is_recorded_in_full_and_stops_root(inferen
     assert len(env.gateway.requests) == 1
 
 
-async def test_config_io_releases_control_locks_and_halt_prevents_dispatch(inference_env):
+async def test_config_io_releases_control_locks_and_halt_prevents_dispatch(
+    inference_env: SimpleNamespace,
+) -> None:
     env = inference_env
 
-    async def halt():
+    async def halt() -> None:
         await asyncio.wait_for(env.store.halt(env.root_id, actor_id=env.owner_id), timeout=2)
 
     env.gateway.config_hook = halt
@@ -273,10 +293,10 @@ async def test_config_io_releases_control_locks_and_halt_prevents_dispatch(infer
     assert not env.gateway.requests
 
 
-async def test_revocation_during_config_read_refuses(inference_env):
+async def test_revocation_during_config_read_refuses(inference_env: SimpleNamespace) -> None:
     env = inference_env
 
-    async def revoke():
+    async def revoke() -> None:
         env.config.current = None
 
     env.gateway.config_hook = revoke
@@ -285,14 +305,14 @@ async def test_revocation_during_config_read_refuses(inference_env):
     assert not env.gateway.requests
 
 
-async def test_input_limit_refuses_before_config_io(inference_env):
+async def test_input_limit_refuses_before_config_io(inference_env: SimpleNamespace) -> None:
     env = inference_env
     with pytest.raises(Forbidden, match="byte limit"):
         await infer(env, inputs={"text": "x" * 33000})
     assert env.gateway.config_reads == 0
 
 
-async def test_cancellation_keeps_quote_reserved(inference_env):
+async def test_cancellation_keeps_quote_reserved(inference_env: SimpleNamespace) -> None:
     env = inference_env
     env.gateway.release.clear()
     task = asyncio.create_task(infer(env))
@@ -306,10 +326,12 @@ async def test_cancellation_keeps_quote_reserved(inference_env):
         assert (await db.get(Account, env.root_id)).reserved_usd == effect.reserved_usd
 
 
-async def test_transport_failure_does_not_echo_provider_error_text(inference_env, caplog):
+async def test_transport_failure_does_not_echo_provider_error_text(
+    inference_env: SimpleNamespace, caplog: pytest.LogCaptureFixture
+) -> None:
     env = inference_env
 
-    async def fail(request, **kwargs):
+    async def fail(request: ChatCompletionRequest, **kwargs: Any) -> SimpleNamespace:
         raise RuntimeError("PRIVATE_PROMPT_ECHO")
 
     env.gateway.chat_completion = fail
@@ -323,7 +345,7 @@ async def test_transport_failure_does_not_echo_provider_error_text(inference_env
         assert (await db.get(Account, env.root_id)).reserved_usd == effect.reserved_usd
 
 
-async def test_gateway_revision_refusal_is_not_replayed(inference_env):
+async def test_gateway_revision_refusal_is_not_replayed(inference_env: SimpleNamespace) -> None:
     import respx
 
     from app.clients.gateway import GatewayClient

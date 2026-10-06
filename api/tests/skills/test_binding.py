@@ -4,20 +4,25 @@ import json
 import shutil
 import zipfile
 from dataclasses import replace
+from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import delete
-from sqlalchemy.ext.asyncio import async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.autonomous.enums import ToolIntent
+from app.autonomous.guard import ToolResult
 from app.errors import Forbidden, ToolNotGranted
 from app.models.team import Team, TeamMember
 from app.models.user import User
 from app.models.user_skill import UserSkill
-from app.skills.binding import bind_record, resolve_binding, revalidate_binding
+from app.skills.binding import SkillBinding, bind_record, resolve_binding, revalidate_binding
 from app.skills.capabilities import SkillCapabilities
 from app.skills.loader import load_registry
+from app.skills.registry import MutableSkillRegistry
+from app.skills.tools import SkillTools
 from app.skills.workspace import workspace_operation
 from app.workers.user_export import build_export_zip_for_test
 from tests.skills.test_capabilities import (
@@ -29,13 +34,15 @@ from tests.skills.test_capabilities import (
 )
 
 
-async def test_concurrent_creation_uses_revision_conflict(test_engine, skill_tools, binding):
+async def test_concurrent_creation_uses_revision_conflict(
+    test_engine: AsyncEngine, skill_tools: SkillTools, binding: SkillBinding
+) -> None:
     factory = async_sessionmaker(test_engine, expire_on_commit=False)
     owner = make_user()
     async with factory.begin() as db:
         db.add(owner)
 
-    async def create(content):
+    async def create(content: str) -> ToolResult:
         async with factory.begin() as db:
             return await skill_tools.execute(
                 db,
@@ -55,12 +62,19 @@ async def test_concurrent_creation_uses_revision_conflict(test_engine, skill_too
             await db.execute(delete(User).where(User.id == owner.id))
 
 
-async def test_total_quota_versions_and_export(db_session, binding):
+async def test_total_quota_versions_and_export(
+    db_session: AsyncSession, binding: SkillBinding
+) -> None:
     owner, other = make_user(), make_user()
     db_session.add_all([owner, other])
     await db_session.flush()
 
-    async def call(operation, params, selected=binding, actor=owner):
+    async def call(
+        operation: str,
+        params: dict[str, Any],
+        selected: SkillBinding = binding,
+        actor: User = owner,
+    ) -> dict[str, Any]:
         return await workspace_operation(
             db_session,
             binding=selected,
@@ -93,8 +107,8 @@ async def test_total_quota_versions_and_export(db_session, binding):
 
 
 async def test_database_shadow_and_team_revocation_do_not_alias(
-    db_session, skill_registry, binding
-):
+    db_session: AsyncSession, skill_registry: MutableSkillRegistry, binding: SkillBinding
+) -> None:
     owner = make_user()
     db_session.add(owner)
     await db_session.flush()
@@ -111,6 +125,7 @@ async def test_database_shadow_and_team_revocation_do_not_alias(
     db_session.add(row)
     await db_session.flush()
     shadow = await resolve_binding(db_session, owner.id, binding.name, skill_registry)
+    assert shadow is not None
     assert shadow.key == f"user:{row.id}" and shadow.key != binding.key
     row.frontmatter_extra = {
         "capabilities": {"scripts": [{"name": "generated", "description": "No"}]}
@@ -127,20 +142,21 @@ async def test_database_shadow_and_team_revocation_do_not_alias(
     db_session.add(member)
     await db_session.flush()
     team_binding = await resolve_binding(db_session, owner.id, binding.name, skill_registry)
+    assert team_binding is not None
     assert team_binding.key == f"team:{row.id}"
     await db_session.delete(member)
     await db_session.flush()
     with pytest.raises(ToolNotGranted, match="revoked"):
         await revalidate_binding(db_session, owner.id, team_binding, skill_registry)
-    assert (
-        await resolve_binding(db_session, owner.id, binding.name, skill_registry)
-    ).key == binding.key
+    restored = await resolve_binding(db_session, owner.id, binding.name, skill_registry)
+    assert restored is not None and restored.key == binding.key
 
 
-def test_script_changes_missing_helpers_and_symlinks_refuse(tmp_path):
+def test_script_changes_missing_helpers_and_symlinks_refuse(tmp_path: Path) -> None:
     folder = tmp_path / "saved-notes-demo"
     shutil.copytree(ROOT / "skills/saved-notes-demo", folder)
     record = load_registry(tmp_path).get(folder.name)
+    assert record is not None
     original = bind_record(record)
     helper = folder / "scripts/summarize_notes.py"
     helper.write_text(helper.read_text() + "\n# Changed installed source\n")

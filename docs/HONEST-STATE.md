@@ -20,7 +20,7 @@ Status markers reference the roadmap milestones (M1 → M4) documented in [READM
 
 **M1 — Foundation (shipped).** Self-hostable conversational legal AI on the starter skills, with the engineering surfaces (audit, tier enforcement, projects/matters, knowledge bases + ingestion, saved prompts, receipts, the skill-creator pipeline) that later milestones build on. Provider adapters: Anthropic, OpenAI, Ollama (local Tier 1).
 
-**M2 — Citation Engine + Anonymization Layer (shipped).** The four-stage citation verification cascade (exact → tolerant → paraphrase judge → ensemble) and the gateway anonymization middleware (Presidio + custom legal recognizers, streaming-aware rehydration, privileged + retrieval skips) both ship operational. The Azure OpenAI provider adapter rounds out the provider set.
+**M2 — Citation Engine + Anonymization Layer (shipped).** Citation verification (exact → tolerant → a single paraphrase judge or configured ensemble, with budget fallback to the single judge) and the gateway anonymization middleware (Presidio + custom legal recognizers, streaming-aware rehydration, privileged + retrieval skips) both ship operational. The Azure OpenAI provider adapter rounds out the provider set.
 
 **M3 — Playbooks · Tabular Review · Word add-in · Slack/Teams intake bridge (shipped, with two honest caveats).**
 - **Playbooks** and **Tabular / multi-document review** ship operational end-to-end (real execution against documents, with cost tracking and export).
@@ -72,6 +72,7 @@ The Inference Gateway is the security boundary — the only component holding pr
 | Capability | Status | Verification |
 |---|---|---|
 | Inference gateway with provider routing | M1 | `gateway/app/router.py` |
+| API/worker gateway HTTP timeout (ADR 0027): default 900s, operator override `LQ_AI_GATEWAY_TIMEOUT_SECONDS`, connect capped at the shorter of 10s and the configured value; API budget must exceed adapter budgets | post-v0.8.0 | `api/app/config.py`; `api/app/clients/gateway.py`; `.env.example` / `.env.release.example`; both Compose recipes; `cd api && pytest tests/test_gateway_timeout_setting.py` |
 | Anthropic / OpenAI / Ollama provider adapters | M1 | `gateway/app/providers/{anthropic,openai,ollama}.py`; Ollama via `docker compose --profile local` |
 | Azure OpenAI provider adapter | M2 | `gateway/app/providers/azure_openai.py` ([DE-267](PRD.md#9-deferred-enhancements-and-identified-future-work), closed in M2) |
 | Google Vertex AI / AWS Bedrock provider adapters | deferred (community-friendly) | Wire-format specs in PRD §9 (DE-034 / DE-035) |
@@ -87,14 +88,14 @@ The Inference Gateway is the security boundary — the only component holding pr
 
 ## 3. M2 — Citation Engine and Anonymization Layer (shipped)
 
-### 3.1 Citation Engine — 4-stage cascade
+### 3.1 Citation Engine — matching and semantic verification
 
 Character-level verification of every model-emitted citation against source documents; failed citations surface as "unverified" rather than confident wrong text.
 
-- **Cascade** (`api/app/citation/verification.py`): Stage 1 `verify_exact_match` → Stage 2 `verify_tolerant_match` (rapidfuzz ≥95 + normalization) → Stage 3 `verify_paraphrase` (LLM judge via gateway) → Stage 4 `verify_ensemble` (N-model parallel, strict/majority, cost-budget fallback to Stage 3).
+- **Verification** (`api/app/citation/verification.py`): `verify_exact_match` → `verify_tolerant_match` (rapidfuzz ≥95 + normalization) → semantic judging via `verify_paraphrase` or configured `verify_ensemble` (N-model parallel, strict/majority). The ensemble replaces the single judge when enabled and budget permits; it falls back to the single judge when budget does not permit it.
 - **Endpoint:** `GET /api/v1/chats/{chat_id}/messages/{message_id}/citations`; rows persist in `message_citations` (migrations `0025`–`0027`). Candidates that miss every stage are not persisted — the UI reads the absence as "unverified" (red).
 - **Verify:** `cd api && pytest tests/citation/ tests/test_chat_citations.py`; full reference in [`docs/citation-engine.md`](citation-engine.md).
-- **Known limitation:** a quote spanning two retrieved chunks silently drops at extraction ([DE-277](PRD.md#9-deferred-enhancements-and-identified-future-work); pinned by `api/tests/citation/test_edge_cases.py`).
+- **Chunk-boundary handling:** [DE-277](PRD.md#de-277--citation-extractor-fallback-to-document-scan-on-chunk-boundary-miss) is resolved with a full-document extraction fallback when the caller supplies the parent document text (`api/app/citation/extraction.py`). A successful fallback logs `citation_chunk_mismatch`; a candidate still drops if the text is unavailable or the quote cannot be located. Matching and semantic support do not establish the correctness of unquoted reasoning.
 
 ### 3.2 Anonymization Layer — gateway middleware
 

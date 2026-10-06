@@ -92,10 +92,13 @@ REQUEST_ID_HEADER = "X-Request-Id"
 TIER_RESPONSE_HEADER = "X-LQ-AI-Routed-Inference-Tier"
 """Response header set by the gateway (B4) carrying the routed Inference Tier."""
 
-DEFAULT_TIMEOUT_SECONDS = 60.0
-"""Default per-request timeout. Streaming overrides this (the stream is
-expected to take longer than a single API call). Health check overrides
-to a tight value separately."""
+DEFAULT_TIMEOUT_SECONDS = 900.0
+"""Default HTTP timeout for direct construction, per ADR 0027.
+
+The process-global factory reads ``LQ_AI_GATEWAY_TIMEOUT_SECONDS``.
+Streaming inherits the same timeout; connection establishment is capped
+at 10 seconds. Health and configuration probes retain their short overrides.
+"""
 
 
 def _structured_log_extra(**fields: Any) -> dict[str, Any]:
@@ -151,7 +154,7 @@ class GatewayClient:
         self._timeout = timeout
         self._client = httpx.AsyncClient(
             base_url=self._base_url,
-            timeout=timeout,
+            timeout=httpx.Timeout(timeout, connect=min(timeout, 10.0)),
             headers={GATEWAY_KEY_HEADER: self._gateway_key} if self._gateway_key else {},
         )
 
@@ -1592,6 +1595,7 @@ def get_gateway_client() -> GatewayClient:
         _client = GatewayClient(
             base_url=settings.lq_ai_gateway_url,
             gateway_key=settings.lq_ai_gateway_key,
+            timeout=settings.lq_ai_gateway_timeout_seconds,
         )
     return _client
 

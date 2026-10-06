@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import delete as _real_delete, select
+from sqlalchemy import Delete, delete as _real_delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.citation.treatment import derive_treatment_for_message
@@ -62,7 +62,7 @@ async def _seed_two_cluster_turn(db: AsyncSession) -> uuid.UUID:
     return msg.id
 
 
-async def test_concurrent_insert_conflict_isolates_and_reuses(db_session: AsyncSession):
+async def test_concurrent_insert_conflict_isolates_and_reuses(db_session: AsyncSession) -> None:
     """One cluster's parent INSERT conflicts with a concurrently-inserted row;
     the other cluster still derives + links, and the conflicting cluster reuses
     the winner's row instead of poisoning the session."""
@@ -125,12 +125,16 @@ async def test_concurrent_insert_conflict_isolates_and_reuses(db_session: AsyncS
         .scalars()
         .all()
     }
-    by_cluster = {cc_map[e.message_caselaw_citation_id]: rows[e.treatment_id] for e in entries}
+    by_cluster: dict[int, CitationTreatment] = {}
+    for e in entries:
+        assert e.message_caselaw_citation_id is not None
+        assert e.treatment_id is not None
+        by_cluster[cc_map[e.message_caselaw_citation_id]] = rows[e.treatment_id]
     assert by_cluster[7001].cited_by_count == 99  # reused the winner, did not overwrite
     assert by_cluster[7002].cited_by_count == 5  # derived normally
 
 
-async def test_concurrent_judge_write_last_writer_wins(db_session: AsyncSession):
+async def test_concurrent_judge_write_last_writer_wins(db_session: AsyncSession) -> None:
     """With the in-savepoint DELETE restored, a concurrently-staged winner signal is
     overwritten by last-writer-wins. The committed state must be CONSISTENT: parent
     derived_method='citation_graph+judge', judged_count == len(signals), and
@@ -299,7 +303,7 @@ async def test_judge_write_conflict_skip_restores_parent(
     # `false()` so SQLAlchemy's ORM `evaluate` mode can handle it in Python without
     # falling back to `fetch` mode, which issues a sync SELECT during savepoint
     # teardown and raises MissingGreenlet in the async context.
-    def _noop_delete(model: type) -> object:  # type: ignore[type-arg]
+    def _noop_delete(model: type[CitationTreatmentSignal]) -> Delete:
         return _real_delete(model).where(model.treatment_id.is_(None))
 
     monkeypatch.setattr("app.citation.treatment.delete", _noop_delete)

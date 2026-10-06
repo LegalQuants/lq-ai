@@ -1,12 +1,15 @@
 """Root deadlines end clean waits without erasing uncertainty or prior outcomes."""
 
 import asyncio
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
+from types import SimpleNamespace
+from typing import Any
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import func, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.autonomous.enums import ToolIntent
 from app.autonomous.orchestration import store
@@ -26,14 +29,14 @@ from app.schemas.autonomous import Phase
 pytestmark = pytest.mark.integration
 
 
-def due(env, monkeypatch):
-    async def clock(db):
+def due(env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def clock(db: AsyncSession) -> datetime:
         return env.plan.deadline
 
     monkeypatch.setattr(store, "_now", clock)
 
 
-async def audits(env, event):
+async def audits(env: SimpleNamespace, event: str) -> int | None:
     async with env.factory() as db:
         return await db.scalar(
             select(func.count())
@@ -45,7 +48,7 @@ async def audits(env, event):
         )
 
 
-async def effect(env, *, amount="1"):
+async def effect(env: SimpleNamespace, *, amount: str = "1") -> None:
     await env.store.begin_effect(
         env.claim,
         effect_key="analysis:one",
@@ -56,7 +59,7 @@ async def effect(env, *, amount="1"):
     )
 
 
-async def prepare(env, state):
+async def prepare(env: SimpleNamespace, state: str) -> None:
     await env.store.save_plan(env.plan, actor_id=env.owner_id)
     if state == "awaiting_approval":
         return
@@ -71,7 +74,9 @@ async def prepare(env, state):
 
 
 @pytest.mark.parametrize("state", ["awaiting_approval", "queued", "running", "waiting_children"])
-async def test_clean_deadline_ends_active_and_waiting_roots_once(env, monkeypatch, state):
+async def test_clean_deadline_ends_active_and_waiting_roots_once(
+    env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, state: str
+) -> None:
     await prepare(env, state)
     async with env.factory() as db:
         session = await db.get(AutonomousSession, env.root_id)
@@ -110,7 +115,9 @@ async def test_clean_deadline_ends_active_and_waiting_roots_once(env, monkeypatc
 @pytest.mark.parametrize(
     "state", ["halted", "completed", "failed", "rejected", "expired", "uncertain"]
 )
-async def test_deadline_preserves_prior_clean_outcome_and_receipt(ready, monkeypatch, state):
+async def test_deadline_preserves_prior_clean_outcome_and_receipt(
+    ready: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, state: str
+) -> None:
     env = ready
     await effect(env)
     await env.store.complete_effect(
@@ -150,8 +157,13 @@ async def test_deadline_preserves_prior_clean_outcome_and_receipt(ready, monkeyp
 )
 @pytest.mark.parametrize("child_run", [False, True])
 async def test_deadline_never_hides_unresolved_accounting(
-    ready, monkeypatch, pending, owned, amount, child_run
-):
+    ready: SimpleNamespace,
+    monkeypatch: pytest.MonkeyPatch,
+    pending: str | None,
+    owned: bool,
+    amount: str,
+    child_run: bool,
+) -> None:
     env = ready
     if child_run:
         children = await env.store.admit_children(env.claim)
@@ -186,8 +198,8 @@ async def test_deadline_never_hides_unresolved_accounting(
 
 @pytest.mark.parametrize("revocation", ["policy", "optout", "archive", "project_policy"])
 async def test_deadline_cleanup_does_not_require_execution_permission(
-    ready, monkeypatch, revocation
-):
+    ready: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, revocation: str
+) -> None:
     env = ready
     if revocation == "policy":
         env.policy.valid = False
@@ -217,8 +229,8 @@ async def test_deadline_cleanup_does_not_require_execution_permission(
 
 @pytest.mark.parametrize("corruption", ["snapshot", "hash", "identity"])
 async def test_deadline_rejects_invalid_stored_plan_without_guessing(
-    ready, monkeypatch, corruption
-):
+    ready: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, corruption: str
+) -> None:
     env = ready
     async with env.factory.begin() as db:
         plan = await db.get(PlanRow, (env.root_id, 1))
@@ -239,13 +251,15 @@ async def test_deadline_rejects_invalid_stored_plan_without_guessing(
 
 
 @pytest.mark.parametrize("pending", [False, True])
-async def test_deadline_audit_failure_rolls_back_cleanup_and_lifecycle(ready, monkeypatch, pending):
+async def test_deadline_audit_failure_rolls_back_cleanup_and_lifecycle(
+    ready: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, pending: bool
+) -> None:
     env = ready
     if pending:
         await effect(env)
     original = store._audit
 
-    async def fail(db, root, event, **details):
+    async def fail(db: AsyncSession, root: Root, event: str, **details: Any) -> None:
         await original(db, root, event, **details)
         if event in {"root_expired", "deadline_uncertain"}:
             raise RuntimeError("deadline audit failed")
@@ -268,12 +282,16 @@ async def test_deadline_audit_failure_rolls_back_cleanup_and_lifecycle(ready, mo
         assert await audits(env, event) == 0
 
 
-async def test_plan_revision_and_expiry_race_uses_the_locked_current_plan(env, monkeypatch):
+async def test_plan_revision_and_expiry_race_uses_the_locked_current_plan(
+    env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     await prepare(env, "awaiting_approval")
     revised = env.plan.model_copy(
         update={"revision": 2, "deadline": env.plan.deadline + timedelta(hours=1)}
     )
     due(env, monkeypatch)
+    result: bool | BaseException
+    saved: BaseException | None
     result, saved = await asyncio.gather(
         env.store.expire_root(env.root_id),
         env.store.save_plan(revised, actor_id=env.owner_id),
@@ -292,7 +310,9 @@ async def test_plan_revision_and_expiry_race_uses_the_locked_current_plan(env, m
             assert root.status == "awaiting_approval" and root.current_revision == 2
 
 
-async def test_clean_expiration_preserves_charge_and_frees_owner_root_slot(ready, monkeypatch):
+async def test_clean_expiration_preserves_charge_and_frees_owner_root_slot(
+    ready: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     env = ready
     await effect(env)
     await env.store.complete_effect(
@@ -327,7 +347,9 @@ async def test_clean_expiration_preserves_charge_and_frees_owner_root_slot(ready
         assert receipt.status == "completed" and receipt.result == {"fixture": "done"}
 
 
-async def test_deadline_audits_new_reason_on_already_uncertain_root(ready, monkeypatch):
+async def test_deadline_audits_new_reason_on_already_uncertain_root(
+    ready: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     env = ready
     async with env.factory.begin() as db:
         root = await db.get(Root, env.root_id)

@@ -7,10 +7,11 @@ stubbed; only ID/step metadata enters framework state.
 
 import asyncio
 from collections import Counter
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from decimal import Decimal
 from types import SimpleNamespace
-from typing import TypedDict
+from typing import Any, TypedDict
 from uuid import uuid4
 
 import pytest
@@ -28,6 +29,7 @@ from app.errors import Conflict
 from app.models.autonomous import AutonomousSession
 from app.models.orchestration import OrchestrationAccount as Account, OrchestrationEffect as Effect
 from app.schemas.autonomous import Phase
+from app.schemas.gateway import ChatCompletionRequest
 
 pytestmark = pytest.mark.integration
 
@@ -41,13 +43,13 @@ class State(TypedDict, total=False):
 
 
 class Gateway:
-    def __init__(self):
-        self.calls = Counter()
+    def __init__(self) -> None:
+        self.calls: Counter[str | None] = Counter()
         self.entered = asyncio.Event()
         self.release = asyncio.Event()
         self.release.set()
 
-    async def chat_completion(self, request):
+    async def chat_completion(self, request: ChatCompletionRequest) -> SimpleNamespace:
         self.calls[request.messages[0].content] += 1
         self.entered.set()
         await asyncio.wait_for(self.release.wait(), timeout=5)
@@ -58,8 +60,10 @@ class Gateway:
 
 
 @asynccontextmanager
-async def graph_for(env, test_db_url, gateway, *, crash=None):
-    async def effect(step):
+async def graph_for(
+    env: SimpleNamespace, test_db_url: str, gateway: Gateway, *, crash: str | None = None
+) -> AsyncIterator[Any]:
+    async def effect(step: str) -> State:
         key = f"analysis:{step}"
         receipt = await env.store.begin_effect(
             env.claim,
@@ -93,10 +97,10 @@ async def graph_for(env, test_db_url, gateway, *, crash=None):
             raise InjectedCrash("receipt committed but node not checkpointed")
         return {"completed": step}
 
-    async def one(state: State):
+    async def one(state: State) -> State:
         return await effect("one")
 
-    async def two(state: State):
+    async def two(state: State) -> State:
         return await effect("two")
 
     serde = JsonPlusSerializer(
@@ -115,7 +119,7 @@ async def graph_for(env, test_db_url, gateway, *, crash=None):
         yield graph.compile(checkpointer=saver)
 
 
-async def expire(env):
+async def expire(env: SimpleNamespace) -> None:
     async with env.factory.begin() as db:
         await db.execute(
             update(Account)
@@ -125,12 +129,14 @@ async def expire(env):
 
 
 @pytest.fixture(autouse=True)
-def no_remote_traces(monkeypatch):
+def no_remote_traces(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LANGSMITH_TRACING", "false")
     monkeypatch.setenv("LANGCHAIN_TRACING_V2", "false")
 
 
-async def test_completed_effect_is_not_repeated_after_checkpoint_gap(ready, test_db_url):
+async def test_completed_effect_is_not_repeated_after_checkpoint_gap(
+    ready: SimpleNamespace, test_db_url: str
+) -> None:
     env, gateway = ready, Gateway()
     config = {"configurable": {"thread_id": str(uuid4())}}
     async with graph_for(env, test_db_url, gateway, crash="after_receipt") as graph:
@@ -144,7 +150,9 @@ async def test_completed_effect_is_not_repeated_after_checkpoint_gap(ready, test
     assert gateway.calls == {"one": 1, "two": 1}
 
 
-async def test_uncertain_provider_outcome_cannot_be_replayed(ready, test_db_url):
+async def test_uncertain_provider_outcome_cannot_be_replayed(
+    ready: SimpleNamespace, test_db_url: str
+) -> None:
     env, gateway = ready, Gateway()
     config = {"configurable": {"thread_id": str(uuid4())}}
     async with graph_for(env, test_db_url, gateway, crash="after_provider") as graph:
@@ -162,7 +170,9 @@ async def test_uncertain_provider_outcome_cannot_be_replayed(ready, test_db_url)
         assert (await db.get(Account, env.root_id)).reserved_usd == 1
 
 
-async def test_halt_commits_while_guarded_provider_call_is_waiting(ready, test_db_url):
+async def test_halt_commits_while_guarded_provider_call_is_waiting(
+    ready: SimpleNamespace, test_db_url: str
+) -> None:
     env, gateway = ready, Gateway()
     gateway.release.clear()
     config = {"configurable": {"thread_id": str(uuid4())}}

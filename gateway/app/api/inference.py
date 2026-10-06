@@ -1215,13 +1215,14 @@ async def _stream_openai_sse(
     """
 
     last_chunk: ChatCompletionChunk | None = None
-    # Issue #503: a stream can finish having emitted no text at all. That used
+    # Issue #503: a stream can finish having emitted no usable output. That used
     # to fall straight through to the success path below, so an upstream that
     # accepted the request and produced nothing was indistinguishable from a
     # genuinely empty answer — the client saw a clean [DONE] with no content,
     # no error and no routing metadata. Track it so the tail can refuse to call
     # that a success.
-    produced_content = False
+    # Tool calls are usable output even when the model emits no text (#649).
+    produced_output = False
     finish_reason_seen: str | None = None
     rehydrator: StreamingRehydrator | None = None
     if anon_mapper is not None and anonymizer is not None:
@@ -1240,8 +1241,8 @@ async def _stream_openai_sse(
                     choice.delta.content = rehydrator.process(choice.delta.content)
             last_chunk = chunk
             for choice in chunk.choices:
-                if choice.delta.content:
-                    produced_content = True
+                if choice.delta.content or choice.delta.tool_calls:
+                    produced_output = True
                 if choice.finish_reason:
                     finish_reason_seen = choice.finish_reason
             payload = chunk.model_dump(mode="json", exclude_none=True)
@@ -1277,7 +1278,7 @@ async def _stream_openai_sse(
             # (a pseudonym that crystallizes only at flush), so this tail is
             # real content the in-loop flag never saw. Count it, or the
             # empty-stream check below fires on a stream that delivered text.
-            produced_content = True
+            produced_output = True
             terminal = last_chunk.model_copy(deep=True)
             for choice in terminal.choices:
                 choice.delta.content = tail
@@ -1287,17 +1288,17 @@ async def _stream_openai_sse(
             payload = terminal.model_dump(mode="json", exclude_none=True)
             yield f"data: {json.dumps(payload, separators=(',', ':'))}\n\n".encode()
 
-    # Issue #503 — a stream that produced no visible text is a FAILURE, and the
+    # Issue #503 — a stream with neither text nor tool calls is a FAILURE, and the
     # client must be told. Before this, control fell through to the success tail
     # below: routing-log row with usage=None, clean [DONE], and a caller with no
     # way to distinguish "the provider broke" from "the model had nothing to
     # say". For a legal tool that ambiguity is the defect: an operator reading an
     # empty answer will blame the model.
     #
-    # Two shapes, one response. `length` with no text means the output budget was
+    # Two shapes, one response. `length` with no output means the output budget was
     # consumed by reasoning tokens, which needs naming explicitly because raising
     # max_tokens is the fix and nothing else in the response hints at it.
-    if not produced_content:
+    if not produced_output:
         if finish_reason_seen == "length":
             message = (
                 "The provider stopped at the output-token limit before emitting any "

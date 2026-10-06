@@ -1,8 +1,11 @@
 """Fresh configuration, exact source dispatch, and durable accounting on Postgres."""
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from decimal import Decimal
+from types import SimpleNamespace
+from typing import Any, NoReturn
 from uuid import uuid4
 
 import pytest
@@ -10,9 +13,10 @@ import pytest_asyncio
 from sqlalchemy import select
 
 from app.autonomous.enums import ToolIntent
-from app.autonomous.orchestration.contracts import ResourceScope
-from app.autonomous.orchestration.effects import GuardedEffects
-from app.autonomous.orchestration.sources import AuthoritySources
+from app.autonomous.guard import ToolResult
+from app.autonomous.orchestration.contracts import ExecutionScope, ResourceScope
+from app.autonomous.orchestration.effects import CostQuote, GuardedEffects
+from app.autonomous.orchestration.sources import AuthoritySources, SourceBinding
 from app.errors import Conflict, Forbidden, ToolNotGranted
 from app.models.autonomous import AutonomousSession
 from app.models.orchestration import OrchestrationAccount as Account, OrchestrationEffect as Effect
@@ -21,8 +25,8 @@ from app.schemas.autonomous import Phase
 
 
 class Gateway:
-    def __init__(self):
-        self.config = {
+    def __init__(self) -> None:
+        self.config: dict[str, Any] = {
             "configuration_revision": "a" * 64,
             "authority_anonymization_version": 1,
             "anonymization": {"enabled": True, "apply_at_tiers": [1, 2, 3, 4, 5]},
@@ -47,15 +51,15 @@ class Gateway:
             ],
         }
         self.config_reads = 0
-        self.calls = []
-        self.config_hook = None
+        self.calls: list[tuple[str, str, dict[str, Any], int | None]] = []
+        self.config_hook: Callable[[], Awaitable[None]] | None = None
         self.entered = asyncio.Event()
         self.release = asyncio.Event()
         self.release.set()
-        self.response_changes = {}
-        self.payload = {"results": []}
+        self.response_changes: dict[str, Any] = {}
+        self.payload: dict[str, Any] | None = {"results": []}
 
-    async def get_admin_config(self):
+    async def get_admin_config(self) -> dict[str, Any]:
         self.config_reads += 1
         if self.config_hook:
             await self.config_hook()
@@ -63,14 +67,14 @@ class Gateway:
 
     async def call_tool(
         self,
-        provider,
-        tool,
-        args,
+        provider: str,
+        tool: str,
+        args: dict[str, Any],
         *,
-        max_allowed_tier,
-        configuration_revision,
-        require_anonymization,
-    ):
+        max_allowed_tier: int | None,
+        configuration_revision: str | None,
+        require_anonymization: bool | None,
+    ) -> dict[str, Any]:
         assert configuration_revision == self.config["configuration_revision"]
         self.calls.append((provider, tool, deepcopy(args), max_allowed_tier))
         self.entered.set()
@@ -86,7 +90,7 @@ class Gateway:
 
 
 @pytest_asyncio.fixture
-async def source_env(policy_env):
+async def source_env(policy_env: SimpleNamespace) -> SimpleNamespace:
     env = policy_env
     grants = env.plan.root.grants.model_copy(
         update={"analysis": (ToolIntent.run_skill, ToolIntent.retrieve_authority)}
@@ -119,7 +123,9 @@ async def source_env(policy_env):
     env.gateway = Gateway()
     env.sources = AuthoritySources(gateway=env.gateway, operator=lambda: env.config.current)
 
-    def no_fallback(*args):
+    def no_fallback(
+        intent: ToolIntent, params: dict[str, Any], scope: ExecutionScope
+    ) -> CostQuote | None:
         pytest.fail("source pricing must not use legacy or inference quote resolvers")
 
     env.effects = GuardedEffects(
@@ -134,7 +140,7 @@ async def source_env(policy_env):
     return env
 
 
-async def start(env):
+async def start(env: SimpleNamespace) -> None:
     await env.store.save_plan(env.plan, actor_id=env.owner_id)
     await env.store.approve(
         env.root_id, actor_id=env.owner_id, revision=1, plan_hash=env.plan.approval_hash()
@@ -142,7 +148,7 @@ async def start(env):
     env.claim = await env.store.claim(env.root_id, env.root_id, worker_id=uuid4(), seconds=60)
 
 
-async def search(env, *, key="source:one", **changes):
+async def search(env: SimpleNamespace, *, key: str = "source:one", **changes: Any) -> ToolResult:
     return await env.effects.authority(
         env.claim,
         effect_key=key,
@@ -156,10 +162,12 @@ async def search(env, *, key="source:one", **changes):
     )
 
 
-async def test_exact_provider_price_ceiling_and_empty_success(source_env, monkeypatch):
+async def test_exact_provider_price_ceiling_and_empty_success(
+    source_env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     env = source_env
 
-    async def forbidden_resolution(*args, **kwargs):
+    async def forbidden_resolution(*args: Any, **kwargs: Any) -> NoReturn:
         pytest.fail("bound dispatch must never rediscover a provider or price")
 
     monkeypatch.setattr("app.autonomous.guard._resolve_external_call", forbidden_resolution)
@@ -210,7 +218,9 @@ async def test_exact_provider_price_ceiling_and_empty_success(source_env, monkey
         {"name": "renamed"},
     ],
 )
-async def test_unavailable_or_changed_config_never_admits(source_env, patch):
+async def test_unavailable_or_changed_config_never_admits(
+    source_env: SimpleNamespace, patch: dict[str, Any]
+) -> None:
     env = source_env
     await start(env)
     env.gateway.config["tool_providers"][1].update(patch)
@@ -223,7 +233,7 @@ async def test_unavailable_or_changed_config_never_admits(source_env, patch):
 
 
 @pytest.mark.parametrize("price", ["0", 0, 0.0])
-async def test_explicit_free_price(source_env, price):
+async def test_explicit_free_price(source_env: SimpleNamespace, price: str | int | float) -> None:
     env = source_env
     env.gateway.config["tool_providers"][1]["cost_per_call"] = price
     await start(env)
@@ -231,7 +241,7 @@ async def test_explicit_free_price(source_env, price):
     assert len(env.gateway.calls) == 1
 
 
-async def test_missing_price_and_duplicate_provider_refuse(source_env):
+async def test_missing_price_and_duplicate_provider_refuse(source_env: SimpleNamespace) -> None:
     env = source_env
     await start(env)
     entry = env.gateway.config["tool_providers"][1]
@@ -245,7 +255,9 @@ async def test_missing_price_and_duplicate_provider_refuse(source_env):
     assert not env.gateway.calls
 
 
-async def test_missing_gateway_revision_refuses_before_admission(source_env):
+async def test_missing_gateway_revision_refuses_before_admission(
+    source_env: SimpleNamespace,
+) -> None:
     env = source_env
     await start(env)
     del env.gateway.config["configuration_revision"]
@@ -257,7 +269,9 @@ async def test_missing_gateway_revision_refuses_before_admission(source_env):
 
 
 @pytest.mark.parametrize("changes", [{"source_name": "other-statutes"}, {"operation": "delete"}])
-async def test_unselected_source_or_operation_refuses_before_config_io(source_env, changes):
+async def test_unselected_source_or_operation_refuses_before_config_io(
+    source_env: SimpleNamespace, changes: dict[str, str]
+) -> None:
     env = source_env
     await start(env)
     with pytest.raises(Forbidden, match="outside approved scope"):
@@ -265,7 +279,7 @@ async def test_unselected_source_or_operation_refuses_before_config_io(source_en
     assert env.gateway.config_reads == 0
 
 
-def require_anonymization(env):
+def require_anonymization(env: SimpleNamespace) -> None:
     scope = env.plan.root.model_copy(update={"anonymize": True})
     env.plan = env.plan.model_copy(
         update={
@@ -275,7 +289,7 @@ def require_anonymization(env):
     )
 
 
-async def test_required_anonymization_is_bound_and_receipted(source_env):
+async def test_required_anonymization_is_bound_and_receipted(source_env: SimpleNamespace) -> None:
     env = source_env
     require_anonymization(env)
     await start(env)
@@ -288,7 +302,9 @@ async def test_required_anonymization_is_bound_and_receipted(source_env):
 @pytest.mark.parametrize(
     "mutation", ["provider", "disabled", "tiers", "malformed", "missing", "old_gateway"]
 )
-async def test_unavailable_anonymization_refuses_before_admission(source_env, mutation):
+async def test_unavailable_anonymization_refuses_before_admission(
+    source_env: SimpleNamespace, mutation: str
+) -> None:
     env = source_env
     require_anonymization(env)
     if mutation == "provider":
@@ -312,7 +328,9 @@ async def test_unavailable_anonymization_refuses_before_admission(source_env, mu
 
 
 @pytest.mark.parametrize("ack", [False, None, "true"])
-async def test_missing_or_wrong_anonymization_ack_is_uncertain(source_env, ack):
+async def test_missing_or_wrong_anonymization_ack_is_uncertain(
+    source_env: SimpleNamespace, ack: bool | str | None
+) -> None:
     env = source_env
     require_anonymization(env)
     await start(env)
@@ -328,7 +346,7 @@ async def test_missing_or_wrong_anonymization_ack_is_uncertain(source_env, ack):
         assert (await db.get(Account, env.root_id)).reserved_usd == effect.reserved_usd
 
 
-async def test_price_change_cannot_reuse_completed_effect_key(source_env):
+async def test_price_change_cannot_reuse_completed_effect_key(source_env: SimpleNamespace) -> None:
     env = source_env
     await start(env)
     await search(env)
@@ -339,7 +357,9 @@ async def test_price_change_cannot_reuse_completed_effect_key(source_env):
     assert (await search(env, key="source:two")).cost_usd == Decimal("0.25")
 
 
-async def test_equivalent_decimal_spellings_recover_same_receipt(source_env):
+async def test_equivalent_decimal_spellings_recover_same_receipt(
+    source_env: SimpleNamespace,
+) -> None:
     env = source_env
     await start(env)
     first = await search(env)
@@ -349,7 +369,9 @@ async def test_equivalent_decimal_spellings_recover_same_receipt(source_env):
 
 
 @pytest.mark.parametrize("source_type", ["edgar", "eurlex"])
-async def test_other_registered_authority_adapters_bind_exactly(source_env, source_type):
+async def test_other_registered_authority_adapters_bind_exactly(
+    source_env: SimpleNamespace, source_type: str
+) -> None:
     env = source_env
     operations = ("get_authority",)
     env.config.current = env.config.current.model_copy(
@@ -380,7 +402,9 @@ async def test_other_registered_authority_adapters_bind_exactly(source_env, sour
         await search(env, key="unsupported-search")
 
 
-async def test_cancelled_source_call_rolls_back_outcome_but_retains_reservation(source_env):
+async def test_cancelled_source_call_rolls_back_outcome_but_retains_reservation(
+    source_env: SimpleNamespace,
+) -> None:
     env = source_env
     await start(env)
     env.gateway.release.clear()
@@ -398,11 +422,13 @@ async def test_cancelled_source_call_rolls_back_outcome_but_retains_reservation(
         )
 
 
-async def test_config_io_holds_no_control_locks_and_halt_prevents_dispatch(source_env):
+async def test_config_io_holds_no_control_locks_and_halt_prevents_dispatch(
+    source_env: SimpleNamespace,
+) -> None:
     env = source_env
     await start(env)
 
-    async def halt():
+    async def halt() -> None:
         await asyncio.wait_for(env.store.halt(env.root_id, actor_id=env.owner_id), timeout=2)
 
     env.gateway.config_hook = halt
@@ -411,11 +437,11 @@ async def test_config_io_holds_no_control_locks_and_halt_prevents_dispatch(sourc
     assert not env.gateway.calls
 
 
-async def test_policy_revocation_during_config_io_refuses(source_env):
+async def test_policy_revocation_during_config_io_refuses(source_env: SimpleNamespace) -> None:
     env = source_env
     await start(env)
 
-    async def revoke():
+    async def revoke() -> None:
         env.config.current = None
 
     env.gateway.config_hook = revoke
@@ -425,7 +451,9 @@ async def test_policy_revocation_during_config_io_refuses(source_env):
 
 
 @pytest.mark.parametrize("patch", [{"provider": "other"}, {"tier": 3}, {"payload": None}])
-async def test_response_binding_mismatch_is_uncertain(source_env, patch):
+async def test_response_binding_mismatch_is_uncertain(
+    source_env: SimpleNamespace, patch: dict[str, Any]
+) -> None:
     env = source_env
     await start(env)
     env.gateway.response_changes = patch
@@ -440,17 +468,19 @@ async def test_response_binding_mismatch_is_uncertain(source_env, patch):
         )
 
 
-async def test_search_preserves_all_candidates(source_env):
+async def test_search_preserves_all_candidates(source_env: SimpleNamespace) -> None:
     env = source_env
     await start(env)
     env.gateway.payload = {"results": [{"package_id": "one"}, {"package_id": "two"}]}
     assert (await search(env)).data["results"] == env.gateway.payload["results"]
 
 
-async def test_get_authority_uses_same_bound_price_and_provider(source_env, monkeypatch):
+async def test_get_authority_uses_same_bound_price_and_provider(
+    source_env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     env = source_env
 
-    async def forbidden_cache(*args, **kwargs):
+    async def forbidden_cache(*args: Any, **kwargs: Any) -> NoReturn:
         pytest.fail("internal evidence must not trigger an untracked shared cache write")
 
     monkeypatch.setattr("app.citation.authority.store_authority_text", forbidden_cache)
@@ -466,7 +496,9 @@ async def test_get_authority_uses_same_bound_price_and_provider(source_env, monk
     assert env.gateway.calls[0][:2] == ("statutes", "get_authority")
 
 
-async def test_source_binding_is_required_even_with_scoped_guard(source_env):
+async def test_source_binding_is_required_even_with_scoped_guard(
+    source_env: SimpleNamespace,
+) -> None:
     from app.autonomous.guard import guarded_tool_call
 
     env = source_env
@@ -485,13 +517,15 @@ async def test_source_binding_is_required_even_with_scoped_guard(source_env):
     assert not env.gateway.calls
 
 
-async def test_binding_cannot_drop_required_anonymization(source_env, monkeypatch):
+async def test_binding_cannot_drop_required_anonymization(
+    source_env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     env = source_env
     require_anonymization(env)
     await start(env)
     original = env.sources.bind
 
-    async def tampered(*args, **kwargs):
+    async def tampered(*args: Any, **kwargs: Any) -> SourceBinding:
         binding = await original(*args, **kwargs)
         return binding.model_copy(update={"anonymization_expected": False})
 

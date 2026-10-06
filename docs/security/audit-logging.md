@@ -6,8 +6,8 @@
 
 Each audit event is a row in the `audit_log` table (see [docs/db-schema.md §audit_log](../db-schema.md) for the schema). Columns:
 
-- `id` — UUID v7 primary key; time-ordered so the natural row order matches event order.
-- `timestamp` — `TIMESTAMPTZ`, server-clock; default `now()` at insert.
+- `id` — UUID primary key, generated with `gen_random_uuid()`; it does not encode event order.
+- `timestamp` — `TIMESTAMPTZ`, server-clock; default `clock_timestamp()` records wall-clock insert time. Values may tie or move backwards if the clock is adjusted; they do not guarantee write order.
 - `user_id` — actor; FK to `users.id` with `ON DELETE SET NULL` so user deletion preserves the row but anonymises the actor.
 - `action` — verb-form event string (e.g. `chat.message_sent`, `project.create`); the canonical event-type field.
 - `resource_type` — noun the action was performed on (e.g. `chat`, `project`, `skill`).

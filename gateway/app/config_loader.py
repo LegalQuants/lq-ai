@@ -73,35 +73,37 @@ def _expand_scalar(value: str) -> Any:
 
     match = _ENV_PATTERN.fullmatch(value)
     if match is not None:
-        var = match.group("var")
-        default = match.group("default")
-        env_value = os.environ.get(var)
-        if env_value is not None:
-            raw = env_value
-        elif default is not None:
-            raw = default
-        else:
-            raise ConfigLoadError(
-                f"Required environment variable {var!r} referenced in gateway.yaml is not set"
-            )
+        raw = _resolve(match.group("var"), match.group("default"))
         # Re-parse through YAML so ``true``/``false``/``42`` become bool/int,
         # while plain strings remain strings.
         return yaml.safe_load(raw)
 
     # Partial substitution (e.g., ``https://${HOST}/v1``): always returns str.
     def _replace(m: re.Match[str]) -> str:
-        var = m.group("var")
-        default = m.group("default")
-        env_value = os.environ.get(var)
-        if env_value is not None:
-            return env_value
-        if default is not None:
-            return default
-        raise ConfigLoadError(
-            f"Required environment variable {var!r} referenced in gateway.yaml is not set"
-        )
+        return _resolve(m.group("var"), m.group("default"))
 
     return _ENV_PATTERN.sub(_replace, value)
+
+
+def _resolve(var: str, default: str | None) -> str:
+    """Resolve one placeholder with shell ``${VAR:-default}`` semantics.
+
+    The default applies when the variable is unset *or empty*, as in the
+    shell and docker compose, so an env file carrying ``VAR=`` does not
+    blank out a default. Without a default, an empty variable stays empty
+    and an unset one is an error.
+    """
+
+    env_value = os.environ.get(var)
+    if env_value:
+        return env_value
+    if default is not None:
+        return default
+    if env_value is not None:
+        return env_value
+    raise ConfigLoadError(
+        f"Required environment variable {var!r} referenced in gateway.yaml is not set"
+    )
 
 
 def expand_env_vars(value: Any) -> Any:

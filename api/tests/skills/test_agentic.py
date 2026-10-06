@@ -1,7 +1,9 @@
 import json
 from uuid import uuid4
 
+import pytest
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.autonomous.nodes import make_analysis_node
 from app.config import get_settings
@@ -9,13 +11,16 @@ from app.main import app
 from app.models.audit import AuditLog
 from app.models.autonomous import AutonomousSession
 from app.models.project import Project
+from app.skills.registry import MutableSkillRegistry
 from tests.autonomous.test_agentic_loop import _ScriptedGateway
 from tests.skills.test_capabilities import make_user, skill_registry as skill_registry
 
 
 async def test_background_planner_can_reuse_complete_saved_data(
-    db_session, skill_registry, monkeypatch
-):
+    db_session: AsyncSession,
+    skill_registry: MutableSkillRegistry,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     owner = make_user()
     owner.autonomous_enabled = True
     db_session.add(owner)

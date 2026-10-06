@@ -4,6 +4,7 @@ name: CI
 # pushes to the default branch so post-merge state is also validated.
 #
 # Scope (per docs/SESSION-HANDOFF-2026-05-12-wave-d1-close.md §4 item 2):
+#   - compliance: checked evidence paths/line ranges + checker regression tests
 #   - web/    : svelte-check + Vitest
 #   - api/    : ruff + mypy (standard mode) + pytest (with Postgres) + coverage gate
 #   - gateway/: ruff + mypy --strict + pytest + coverage gate
@@ -43,6 +44,21 @@ permissions:
   contents: read
 
 jobs:
+  compliance-citations:
+    name: Compliance citations (paths + line ranges)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Test citation checker
+        run: python -m unittest discover -s scripts/tests -p 'test_compliance_citations.py'
+      - name: Check compliance citations
+        run: python scripts/check-compliance-citations.py
+
   web-checks:
     name: Web (svelte-check + Vitest)
     runs-on: ubuntu-latest
@@ -173,7 +189,8 @@ jobs:
         run: ruff format --check api scripts script_runner
 
       - name: mypy (standard mode)
-        run: mypy app ../script_runner
+        # DE-284 — tests/ are type-checked alongside app/.
+        run: mypy app tests ../script_runner
 
       - name: pytest (coverage gate ≥80%)
         # -n auto: one worker per available CPU (4 on ubuntu-latest).
@@ -183,6 +200,10 @@ jobs:
         # (12242/15023 statements) — clears the documented 80% target, so
         # the gate enforces the target itself.
         run: pytest -n auto -q --cov=app --cov-report=term --cov-fail-under=80
+        env:
+          # DE-230: bounded, derandomized Hypothesis profile for the
+          # property suite (tests/property/conftest.py registers it).
+          HYPOTHESIS_PROFILE: ci
 
       - name: Build reviewed helper acceptance images
         working-directory: ${{ github.workspace }}
@@ -249,6 +270,14 @@ jobs:
       # Delta tracked as PRD §9 DE-395.
       - name: pytest (coverage gate ≥88%)
         run: pytest -q --cov=app --cov-report=term --cov-fail-under=88
+        env:
+          # DE-230: bounded, derandomized Hypothesis profile for the
+          # property suite (tests/property/conftest.py registers it).
+          HYPOTHESIS_PROFILE: ci
+
+      - name: PII fixture integrity (keyless)
+        working-directory: ${{ github.workspace }}
+        run: python -m pytest tests/pii/test_fixture_integrity.py -q
 
   release-image-checks:
     name: Release image (skills corpus)
