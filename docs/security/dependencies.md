@@ -27,6 +27,12 @@ The `web/` subsystem is out of scope here: its Python side still installs from t
 Two layers of automated dependency-vulnerability scanning:
 
 1. **GitHub Advisory Database / Dependabot.** [`.github/dependabot.yml`](../../.github/dependabot.yml) configures weekly scans for `api/` (uv), `gateway/` (uv), `web/` (npm), and `.github/workflows/` (actions). High and critical advisories open PRs automatically. For the uv ecosystems, updates arrive as lock-pinned bumps against `uv.lock` with a 7-day release-age cooldown, not range widenings. `web/` is **security-updates only** (`open-pull-requests-limit: 0`): it is a vendored OpenWebUI fork pinned by [ADR 0001](../adr/0001-openwebui-fork-pin.md), so routine version currency arrives with the quarterly rebase rather than between refreshes. Advisories against `web/` packages still open PRs — that limit constrains version updates only.
+
+   Container images are pinned by tag and multi-arch index digest (#301) and covered by two more ecosystems, which do version currency only (Dependabot has no security-update channel for docker):
+   - `docker`: the Dockerfiles in `api/`, `gateway/`, `slack-bridge/`, `teams-bridge/` and `proxy/`, plus the Helm chart's rustfs pin ([ADR 0036](../adr/0036-bundled-object-store-rustfs.md)).
+   - `docker-compose`: the root compose files.
+
+   Both refresh digests and allow patch tag moves only (minor and major tag bumps are ignored; 7-day cooldown). The exception is `ollama/ollama:latest` in `docker-compose.yml`: a refresh of `latest` is a real Ollama version upgrade, so it arrives as its own PR. The pinned bases in `web/Dockerfile` are not refreshed at all between rebases (`open-pull-requests-limit: 0`, and there is no advisory channel to fall back on), and the `# syntax=` directive pins are bumped by hand. Whether hosted Dependabot actually proposes digest-only refreshes for versioned tags is unconfirmed until the first docker PRs land (see the comment in `dependabot.yml`).
 2. **SBOM scanning.** The SBOM produced by the release workflow (per [docs/security/releases/README.md](releases/README.md)) is in SPDX JSON format and is parseable by any SCA tool. Operators evaluating a specific release can run `grype sbom:./api.spdx.json` (or equivalent) to check the dependency snapshot.
 
 ## Update cadence

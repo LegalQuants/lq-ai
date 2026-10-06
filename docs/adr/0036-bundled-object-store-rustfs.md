@@ -224,6 +224,26 @@ import still reported ready — [#7651](https://github.com/rustfs/rustfs/issues/
 is inside the `1.0.0` tag. The rehearsals in the upgrade plan and the upgrade
 guide's log check cover these.
 
+### Application and container rehearsal on Apple Silicon (2026-09-30)
+
+The [application migration receipt](../research/2026-09-30-v0.8.0-migration-rehearsal.md)
+records a fresh v0.7.1 Compose stack seeded through the application API: two
+active documents (including a 9.9 MB multipart object), one soft-deleted file,
+and one completed, unexpired export ZIP. All four objects have real Postgres
+records. Migration `0001` ran through the candidate API image and the pinned
+RustFS image on arm64, including the ownership change on the named volume.
+
+`plan → apply → up → verify` passed. Every object's SHA-256, byte size, ETag,
+and content type matched the baseline. Snapshot rollback plus restoration of
+the separate database backup returned the v0.7.1 stack to the same records
+and objects. API checks preserved active-file downloads and soft-delete 404s;
+the knowledge-base document list remained visible in the UI.
+
+This extends the earlier binary-level rehearsal with application records and
+actual arm64 containers. Its volume was created for the test; it does not
+supply the long-lived-installation or launcher-upgrade evidence required below.
+The receipt records the exact image mix and the limits of the UI check.
+
 ## Decision
 
 **Adopt RustFS as the bundled reference object store**, replacing MinIO in

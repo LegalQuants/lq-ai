@@ -15,7 +15,7 @@ For a specific matter, two further tables — `citation_ledger_entry` and `infer
 Each audit event is a row in the `audit_log` table (see [docs/db-schema.md §audit_log](../db-schema.md) for the schema). Columns:
 
 - `id` — UUID primary key, defaulted by `gen_random_uuid()` (random UUIDv4; **not** time-ordered). Do not infer chronology from the primary key: order by `timestamp`, adding `id` as a stable tie-breaker for repeatable display — a tie-breaker gives a deterministic order but does not reconstruct true event order when timestamps tie.
-- `timestamp` — `TIMESTAMPTZ`, server-clock; default `now()` at insert.
+- `timestamp` — `TIMESTAMPTZ`, server-clock; default `clock_timestamp()` records wall-clock insert time. Values may tie or move backwards if the clock is adjusted; they do not guarantee write order.
 - `user_id` — actor; FK to `users.id` with `ON DELETE SET NULL` so user deletion preserves the row but anonymises the actor.
 - `action` — verb-form event string (e.g. `chat.message_sent`, `kb.created`); the canonical event-type field.
 - `resource_type` — noun the action was performed on (e.g. `chat`, `project`, `skill`).

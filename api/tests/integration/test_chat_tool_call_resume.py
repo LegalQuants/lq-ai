@@ -19,9 +19,10 @@ from __future__ import annotations
 import contextlib
 import json as _json
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from typing import Literal
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -30,7 +31,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.autonomous.guard import ToolResult
-from app.chat.tool_loop import LoopFinal
+from app.chat.tool_loop import LoopConfirmation, LoopFinal
 from app.chat.tool_schemas import ChatToolAllowlist, ToolSpec
 from app.clients.gateway import GatewayClient, set_gateway_client
 from app.db.session import get_db
@@ -44,6 +45,7 @@ from app.security.encryption import (
     MCP_MASTER_KEY_ENV,
     PAYLOAD_ENVELOPE_MARKER,
     MCPTokenEncryptor,
+    decrypt_payload_envelope,
     encrypt_payload_envelope,
     generate_master_key,
 )
@@ -71,7 +73,7 @@ def mcp_master_key(monkeypatch: pytest.MonkeyPatch) -> str:
     return key
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -148,7 +150,7 @@ def _parse_sse_frames(body: bytes) -> list[dict]:
 def _make_tool_spec(
     *,
     function_name: str = "mcp__files__delete_doc",
-    kind: str = "mcp",
+    kind: Literal["research", "mcp", "authority"] = "mcp",
     provider: str = "files",
     tool: str = "delete_doc",
     destructive: bool = True,
@@ -175,6 +177,7 @@ async def _create_chat_and_pending(
     status: str = "pending",
     expires_delta: timedelta = timedelta(minutes=15),
     encrypted: bool = True,
+    skill_names: list[str] | None = None,
 ) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
     """Create a chat and a ChatPendingToolCall row. Returns (chat_id, pending_id, assistant_msg_id).
 
@@ -215,6 +218,8 @@ async def _create_chat_and_pending(
         "calls_used": 0,
         "model": "smart",
     }
+    if skill_names is not None:
+        state_payload["skill_names"] = skill_names
     if encrypted:
         stored_args = encrypt_payload_envelope(args_payload)
         stored_state = encrypt_payload_envelope(state_payload)
@@ -243,6 +248,62 @@ async def _create_chat_and_pending(
     await db_session.commit()
 
     return chat_id, pending_row.id, assistant_message_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_repeated_confirmation_retains_encrypted_skill_context(
+    client: AsyncClient,
+    db_user: User,
+    db_session: AsyncSession,
+) -> None:
+    """Attached skills survive decryption, loop resumption and the next human gate."""
+    skills = ["saved-notes-demo"]
+    chat_id, pending_id, _ = await _create_chat_and_pending(
+        db_session, user=db_user, client=client, skill_names=skills
+    )
+    spec = _make_tool_spec()
+    next_gate = LoopConfirmation(
+        spec=spec,
+        args={"doc_id": "second-document"},
+        tier=2,
+        args_summary="digest-only",
+        messages=[{"role": "user", "content": "Keep my saved notes"}],
+        calls_used=1,
+    )
+    with (
+        patch(
+            "app.api.chats.assemble_allowlist",
+            new=AsyncMock(return_value=ChatToolAllowlist(specs={spec.function_name: spec})),
+        ),
+        patch("app.api.chats.run_chat_tool_loop", new=AsyncMock(return_value=next_gate)),
+        patch("app.skills.chat_tools.extend_chat_tools", new=AsyncMock()) as extend_tools,
+    ):
+        response = await client.post(
+            f"/api/v1/chats/{chat_id}/tool-calls/{pending_id}",
+            headers=_h(db_user),
+            json={"decision": "deny"},
+        )
+
+    assert response.status_code == 200, response.text
+    extend_tools.assert_awaited_once()
+    assert extend_tools.await_args is not None
+    assert extend_tools.await_args.kwargs["skill_names"] == skills
+    gate = next(
+        frame
+        for frame in _parse_sse_frames(response.content)
+        if frame.get("type") == "tool_confirmation_required"
+    )
+    row = await db_session.get(ChatPendingToolCall, uuid.UUID(gate["pending_call_id"]))
+    assert row is not None
+    assert PAYLOAD_ENVELOPE_MARKER in row.resume_state
+    assert PAYLOAD_ENVELOPE_MARKER in row.tool_call_args
+    assert "saved-notes-demo" not in _json.dumps(row.resume_state)
+    state = decrypt_payload_envelope(row.resume_state)
+    assert state["skill_names"] == skills
+    assert state["calls_used"] == 1
+    assert state["messages"] == next_gate.messages
+    assert decrypt_payload_envelope(row.tool_call_args) == next_gate.args
 
 
 # ---------------------------------------------------------------------------
@@ -323,9 +384,7 @@ async def test_approve_executes_tool_and_streams_loop_final(
     )
 
     # Assert pending row is resolved.
-    await db_session.refresh(
-        await db_session.get(ChatPendingToolCall, pending_id)  # type: ignore[arg-type]
-    )
+    await db_session.refresh(await db_session.get(ChatPendingToolCall, pending_id))
     pending_row = await db_session.get(ChatPendingToolCall, pending_id)
     assert pending_row is not None
     assert pending_row.status == "resolved", f"Expected resolved, got {pending_row.status!r}"

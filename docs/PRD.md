@@ -516,15 +516,15 @@ This is the single most differentiated capability in the product. Specified in d
 
 ### 3.4 Skill Library and Skill Creator
 
-**Accepted optional extension, not shipped:**
+**Accepted optional extension, implemented on main but disabled by default:**
 [ADR 0035 D8b–D8d](adr/0035-governed-orchestration-run-tree.md#d8b--optional-persistent-skill-workspaces)
 specifies persistent skill workspaces and reviewed, installed Python helpers.
 Skills opt in separately to storage and execution. Generated-code execution is
 excluded; exact executable review, isolated jobs and protection against indirect
 disclosure through helper output or persisted reuse are required. The
 [capability summary](plans/issue-563-skill-capabilities.md) describes local behavior
-and pending security gates. ADR 0035 was ratified on 2026-09-20, so implementation
-publication may proceed; the M1 status below remains unchanged until the release
+and pending security gates. ADR 0035 was ratified on 2026-09-20; PR #596 merged
+the implementation. The M1 status below remains unchanged until release
 conditions are met.
 
 **M1 status:** Shipped. The Skill Library (browse built-in, user, and team scopes), Skill Creator (capture / wizard / fork), skill versions tab, per-version audit, Try-It sandbox, and slash-invoked skills with provenance pill are all wired end-to-end in Wave D.2. An operator can verify at `api/app/api/skills.py`; Cypress E2E coverage is in `web/cypress/e2e/wave-d2-skill-creator.cy.ts` (Tests 1–6). Skill script execution (`scripts/`) and autonomous skill self-improvement are deferred (M4). See [HONEST-STATE.md §1](HONEST-STATE.md#1-conversational-and-workspace-surface).
@@ -886,19 +886,30 @@ The scope-as-shipped is narrower than the original "ensemble runs on the whole a
 
 ### 3.10 Autonomous Layer (M4)
 
-**Accepted extension, not shipped:** [ADR 0035 — Governed orchestration](adr/0035-governed-orchestration-run-tree.md)
+**Experimental extension; production acceptance pending:** [ADR 0035 — Governed orchestration](adr/0035-governed-orchestration-run-tree.md)
 records the revised [#563](https://github.com/LegalQuants/lq-ai/issues/563) design:
 user approval of one topic batch before parallel child runs, inherited authority,
-durable recovery, shared accounted budgets and an inspectable run tree. The first
-visible profile is a technical orchestration demonstration with sample findings;
-substantive research quality is outside that acceptance scope. It proposes
-LangGraph for continuation, arq for scheduling and LQ-owned governance records;
+durable recovery, shared accounted budgets and an inspectable run tree. The
+sample-only workflow preview has been removed. The
+[bounded chat demonstration](plans/issue-563-chat-demonstration.md) adds
+one real gateway planning call, owner approval, one to four independent Contract
+QA child sessions and a model synthesis. It accepts one installed fictional
+agreement in one operator-configured demo project. Installed skill instructions,
+versions and digests are bound to actual child inference and retained receipts;
+substantive answer quality remains unverified. This uses LangGraph for continuation,
+arq for scheduling and LQ-owned governance records;
 the [feature PRD](prds/issue-563-governed-orchestration.md) defines requirements,
 acceptance criteria and release conditions. Optional skill storage
 and bundled helpers follow D8b–D8d, including the new confidentiality gates. The
 implementation may now be published for review; production acceptance and the
 remaining release conditions still apply. This decision does not change the M4
 status below.
+
+The chat demonstration remains off by default and separate from ordinary chat.
+Its [UAT runbook](runbooks/adr35-chat-uat.md) distinguishes controlled-provider
+regression tests, a real local-model browser run and human acceptance. Persistent
+skill workspaces, bundled helpers and live retrieval are not exercised by this
+profile. The earlier sample recording is historical evidence of workflow mechanics only.
 
 **M4 status: SHIPPED.** The opt-in background executor runs real in-loop work end-to-end. The five-phase LangGraph state machine (intake → analysis → drafting → ethics_review → delivery) lives in `api/app/autonomous/executor.py` (`run_autonomous_session`) + `nodes.py`; every external action routes through the single `guarded_tool_call` chokepoint (`api/app/autonomous/guard.py`) enforcing R5 (external halt + idle watchdog → `SessionHalted`), R6 (`PHASE_GRANTS` phase-gated tool grants → `ToolNotGranted`), and R4 (per-session **and** per-trigger cost cap → `CostCapReached`). The four primitives ship: watches (`api/app/autonomous/watch_trigger.py`, table `autonomous_watches` — migration `0039`), schedules (`api/app/autonomous/cron.py`, table `autonomous_schedules`), per-user memory (`autonomous_memory`), and the precedent board (`precedent_entries` — migration `0039`; `project_context_proposals` — migration `0041`). Honest per-session receipts carry `terminal_reason` (completed / cost_cap_reached / external_halt) via `api/app/autonomous/receipt.py` (`build_receipt` / `build_receipt_safe`). The layer is per-user opt-in, off by default (`User.autonomous_enabled` — migration `0044`), with a full web dashboard at `web/src/routes/lq-ai/autonomous/`. Migration head at M4 close is `0045`. See [HONEST-STATE.md §5](HONEST-STATE.md#5-m4--autonomous-layer-shipped). As of M4 close the **Contract Repository auto-relationship graph** (§3.16) and the MCP-client subsystem (§8.5) remained deferred; the **MCP-client subsystem subsequently shipped** in the legal-research + connectors milestone (#158–#193 — see [DE-200](#de-200--mcp-client-subsystem-in-the-lq-ai-backend) and [HONEST-STATE.md §5.5](HONEST-STATE.md)), while the contract relationship graph remains deferred.
 
@@ -3918,33 +3929,22 @@ Lavern is the closest public prior art for several LQ.AI roadmap commitments tha
 
 #### DE-294 — Cross-agent handoff validation for autonomous multi-agent flows
 
-**Issue #563 proposal:** [ADR 0035](adr/0035-governed-orchestration-run-tree.md)
-would make this validation a prerequisite for shipping its first multi-agent
-profile. It specifies the backend location, strict task/authority separation,
-current resource checks and metadata-only database audit in place of the older
-alternatives below. ADR 0035 was ratified on 2026-09-20; this DE remains
-unimplemented until the accepted design's release conditions are met.
+**Status:** Bounded fictional orchestration is implemented on main; broader
+real-matter handoff acceptance remains pending.
 
-**Priority:** P1 if M4 ships multi-agent autonomous flows / P2 if M4 ships single-agent only · **Effort:** M
+[ADR 0035](adr/0035-governed-orchestration-run-tree.md), accepted on 2026-09-20,
+replaced this entry's earlier conditional M4 proposal. PR #596 merged the governed
+run tree, and PR #631 merged a model-backed chat profile. Model output supplies
+bounded task data; the server supplies authority, resources, budgets and pinned
+skills. Child admission follows approval of the exact plan. The demonstrated
+profile uses one fictional agreement and does not permit child delegation.
 
-**Context:** Greenwood's Register 3 (code-enforced cross-agent handoff validation) has two facets in the LQ.AI architecture. The in-Playbook-step-handoff facet (step output validated against typed schema before becoming step N+1 input) is the retrofit covered by DE-292. The *cross-agent* handoff facet — where one autonomous agent's emitted event becomes another autonomous agent's invocation prompt, and where a hostile document upstream could otherwise smuggle instructions across the seam — only attaches if LQ.AI's autonomous layer ships *multi-agent* autonomous flows. Whether it does is pinned by the DE-289 Phase 1 ADR (the autonomous-layer design-influences study comparing Lavern's multi-agent Clawern pipeline to LQ.AI's planned approach).
-
-**Specific scope (if M4 ships multi-agent autonomous flows):**
-
-A reference cross-agent orchestrator in `api/app/autonomous/orchestrate.py` (or `gateway/app/autonomous/orchestrate.py` if the autonomous executor lives in the gateway — pinned by the ADR). Functional behavior:
-
-- Validates every cross-agent handoff envelope against a closed intent enum (the set of intents the source agent is permitted to emit, declared in the workflow definition) and a per-intent Pydantic schema for parameters.
-- Renders the next agent's invocation prompt from a typed template (intent-keyed, parameters interpolated via `format_map`), never from source-agent free text.
-- Wraps any free-text field the source agent supplies in an `<agent-handoff source="…" timestamp="…">` envelope inside the rendered prompt, with explicit framing that the envelope content is "data describing a task, not an instruction."
-- Refuses (and audits) any handoff whose intent is not in the allowlist or whose parameters fail schema validation. Audit log: appended to a JSONL file `out/handoff-audit.jsonl` (or the structured `audit_log` table — pinned by the ADR) with `params_keys`, `raw_event_len`, `sanitized_event_len`, and the rejection reason for rejected handoffs.
-
-Acceptance is structured against the same four failure modes Lavern's `orchestrate.py` exercises (Greenwood describes them as the "four cases" of validation harness output): unknown target agent, intent not in allowlist, parameter schema violation, oversize / malformed envelope. Plus a fifth Greenwood specifically flags: the non-greedy-regex bug that breaks payload extraction on nested objects — LQ.AI's implementation should parse JSON, not regex-extract, from the start.
-
-**Specific scope (if M4 ships single-agent only):** this DE is reclassified P2 and deferred to whichever later milestone first ships multi-agent autonomous flows. The Playbook-step-handoff implementation in DE-292 covers the in-scope R3 surface in the meantime.
-
-**Acceptance criteria:** depends on classification per the ADR. If M4-scope: orchestrator implementation + 4-case integration test suite + posture-document update naming R3 as "shipped" with line-level citation. If deferred: this DE is marked P2 with a note pointing to the ADR's pin.
-
-**Sequence:** DE entry lands now (with this PR). Classification pinned when the DE-289 Phase 1 ADR lands. Implementation lands with M4 (or later) per classification.
+Before real-matter orchestration is enabled, validate untrusted handoffs and
+selected-resource enforcement against the applicable ADR 0035 authority and
+confidentiality requirements. See the
+[feature PRD](prds/issue-563-governed-orchestration.md) for the remaining release
+conditions. The earlier suggested orchestrator locations, JSONL audit alternative
+and M4 single-agent/multi-agent classification are superseded by ADR 0035.
 
 #### DE-295 — Word add-in code-signing certificate + signed manifest CI (community-led)
 
@@ -4399,20 +4399,20 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 #### DE-319 — Migrate LangGraph 0.2 → 1.x (re-type the executors)
 
-**Current follow-up:** [Issue #524](https://github.com/LegalQuants/lq-ai/issues/524)
-records the updated failure surface: 12 typing errors across three executors,
-with CI stopping before pytest. The historical counts and runtime-compatibility
-assumption below are not verification of a modern lock. [ADR 0035](adr/0035-governed-orchestration-run-tree.md)
-keeps this migration separately reviewable and requires a reviewed, tested
-runtime baseline before activating the accepted durable LangGraph execution.
+**Priority:** P3 · **Effort:** S · **Status:** runtime migration merged with
+PR #596; [#524](https://github.com/LegalQuants/lq-ai/issues/524) is closed.
 
-**Priority:** P3 · **Effort:** S
+Playbook, tabular and single-session autonomous graphs share a LangGraph 1.x
+runtime. The application-owned `AsyncStateNode` protocol preserves the named
+`state` argument at all 12 node factories, resolving the typing failures without
+changing their behavior. The runtime migration is now in main; [ADR 0035](adr/0035-governed-orchestration-run-tree.md)
+requires review of this shared runtime change.
 
-**Context:** M4-0.1 evaluated Dependabot #68 (which widened the `langgraph` constraint to admit a 1.x release) and held the project at `langgraph>=0.2.76,<0.3` for M4. LangGraph 1.x re-typed `StateGraph` as `Generic[StateT, ...]` and changed the `add_node` overload set; our node factories are annotated to return `Awaitable[dict[str, Any]]`, which matches no 1.x overload → mypy `[call-overload]` (7 errors across `api/app/playbooks/executor.py` + `api/app/tabular/executor.py`, the failure #68 tripped on). The break is **type-checking only** — every runtime API used (`StateGraph`, `add_node`/`add_edge`/`add_conditional_edges`, `set_entry_point`, `compile`, `ainvoke`, `END`/`START`) is unchanged in 1.x, and the M4 autonomous executor (which mirrors the playbook executor — a plain phase state-machine, no checkpointing, no prebuilt agents) needs no 1.x-only API. So migrating was not justified for M4 (CLAUDE.md dependency-justification rule).
-
-**Specific scope:** Re-type the ~7 `add_node` call sites across **all three** executors that share the runtime — `api/app/playbooks/executor.py`, `api/app/tabular/executor.py`, and `api/app/autonomous/executor.py` (lands in M4) — by annotating node-factory returns against the graph's state type (the `total=False` TypedDicts already permit partial returns) per 1.x's `State -> Partial<State>` contract, **or** parametrize `StateGraph[StateT, ...]`. Then bump the pin to `>=1,<2`, confirm the `langgraph-checkpoint` / `langgraph-sdk` transitive pins resolve (SBOM churn), and re-run `ruff` + `mypy` + `pytest` for `api/`. Note: `warn_unused_ignores=true` means a blanket `# type: ignore` is not a clean fix.
-
-**When to ship:** Post-M4, low priority. Do all three executors in one PR since they share the runtime. No runtime behavior change expected; the gate is the full api test+type matrix.
+The lock resolves LangGraph 1.2.11, Core 1.6.3, checkpoint 4.2.0 and SDK 0.4.4;
+prebuilt 1.1.0 and protocol 0.0.19 enter the dependency inventory. Websockets stays
+at 16.1.1. The implementation PR records the compiled-graph, API, type/lint
+and container checks. Runtime
+migration alone does not authorize orchestration or helper enablement.
 
 ---
 
@@ -5102,6 +5102,15 @@ The document-ingestion pipeline (ADR [0006](adr/0006-document-pipeline-architect
 
 **Acceptance criteria:** a parser adapter interface behind the ADR 0006 ingestion step, with PyMuPDF as the default adapter and at least one opt-in adapter wired end-to-end (parse → `structured_content` populated → a consumer reads it); the parser selectable by configuration; its cost (image weight, model downloads) incurred only when enabled; documented in ADR 0006's successor and in `docs/HONEST-STATE.md`; the design ADR resolves the core-vs-operator-adapter open question. Depends on a concrete structured-output consumer being scoped first (§3.3). Adjacent, keep coherent: the DOCX-ingest mini-PRD ([`docs/contribute/mini-prds/docx-ingest-support.md`](contribute/mini-prds/docx-ingest-support.md), a Pandoc branch that also writes `structured_content`) and DE-332 (text/markdown ingest). Related: ADR 0026 (the removal that opened this), DE-271 (amend the Apache Tika fallback claim per the research), DE-351 (first-run timeout — closed by the ADR 0026 removal).
 
+#### DE-388 — Relocate untrusted content out of the model's instruction channel
+
+**Priority:** P1 · **Effort:** L (ADR + gateway/api change + adversarial evaluation) · **Status (2026-09-02): filed from an external security report (credit `rips4w`); the envelope hardening shipped, the relocation is open and ADR-gated.**
+
+Several untrusted-content paths still use `role="system"`: caller-supplied skill inputs (the gateway assembler's leftover-input block), retrieved knowledge-base chunks and attached per-message files (`api/app/api/chats.py`, with `lq_ai_skip_anonymization=True` under Decision M2-1 so document text reaches the provider verbatim for citation grounding), and attacker-influenced filenames in the same block. Chat tool results already use JSON-encoded `role="tool"` messages (`api/app/chat/tool_loop.py::tool_result_message`); the relocation work should preserve and evaluate that existing data path. The 2026-09 hardening (ADR 0007 amendment) gives the skill-input path envelope integrity — JSON encoding, a labelled source, an untrusted-content policy line, non-forgeable section markers — but a model reading attacker prose under a correctly labelled "untrusted" heading in the system message can still follow it. Envelope integrity is necessary, not sufficient.
+
+**Specific scope:** an ADR deciding (1) the data channel — a following user turn versus a synthetic tool-result block — per supported provider, since the message-shape contract differs by provider; (2) how the citation contract survives relocation (the Stage 1 verifier checks quotes byte-for-byte against `documents.normalized_content`, and the contract text currently lives inside the retrieval block header); (3) whether the anonymization skip posture changes; (4) ordering guarantees against replayed multi-turn history; (5) what evaluation result constitutes "fixed". Then the implementation across the assembler's leftover block, the chat retrieval and attachment blocks, and filenames, for every provider adapter; verify that existing tool-result messages retain their data-channel placement. **Testing must be adversarial, not structural:** a serialization round-trip proves the envelope holds and nothing about whether the model follows injected directives. The instruction-following evaluation corpus this needs does not exist in the repo — DE-110 is a dependency of this item, not a checkbox inside it. Two existing tests pin the current placement as the contract and will fail when this lands (`api/tests/test_chats_skills_forwarding.py`, the non-streaming and streaming attachment tests); a reviewer should read that as the fix working. Related: DE-110 (pattern library / corpus), DE-111 (structured output), DE-292 (retrieved-content trust rule in the authoring guide), Appendix E's prompt-injection objection, [`docs/security/threat-model.md`](security/threat-model.md) §"Untrusted document content".
+
+
 #### DE-389 — Run-now with a target KB never analyses (first-tick dead-end)
 
 **Priority:** P2 · **Effort:** S · **Status (2026-09-02): filed.**
@@ -5153,6 +5162,20 @@ Pure `web/` work with no API, DB or gateway surface. The only structural wrinkle
 **Priority:** P3 · **Effort:** S · **Status (2026-07-25): filed (roadmap 4.3 — coverage gate).**
 
 Roadmap 4.3 wired `--cov-fail-under` coverage gates into CI (`.github/workflows/ci.yml`), set — per the ratchet-don't-aspire pattern in the engineering-discipline testing survey — at *measured* coverage, not the documented targets. Measured 2026-07-25: **api 81.49%** (12242/15023 statements) — clears the documented 80% target, so the api gate enforces the target itself (`--cov-fail-under=80`), no delta. **Gateway 88.94%** (4464/5019 statements) — below the documented 90% target, so the gateway gate is a no-decrease ratchet at the measured floor (`--cov-fail-under=88`; floored to the integer because coverage.py compares the exact value, so a gate of 89 would fail today's 88.94%). DE-395 closes the gateway 88→90 gap. The uncovered mass is concentrated (per-module, same run): `app/cli.py` 0%, `app/db.py` 71%, `app/config_writer.py` 75%, `app/providers/tool/mcp.py` 75%, `app/observability.py` 76%, `app/main.py` 80%, `app/providers/tool/govinfo.py` 84%, `app/tool_egress_log.py` 84%. Plan: test the untested `cli.py` entry points and the `config_writer` error branches first (those two alone are ~105 of the 555 missed statements), re-measure, and bump the ci.yml floor to each newly measured integer (88 → 89 → 90) rather than jumping; when 90 is measured, flip the gateway row in HONEST-STATE §8 from "ratchet" to "at target" and close this DE. Raising the *targets* themselves (e.g. api beyond 80) is out of scope here.
+
+#### DE-396 — OCR normalization layer violates its documented idempotence contract
+
+**Priority:** P2 · **Effort:** S · **Status (2026-10-03): resolved (implemented fixed-point loop, see #652).**
+
+Before #652, the OCR confusion layer (`was_ocrd=True`) documented idempotence but applied the `O→0` and `l→1` digit-adjacency substitutions only once per call. A substitution could expose a new adjacency for the next call: `normalize("Ol5", was_ocrd=True)` produced `O15` then `015`; the other pinned chains were `ll5→l15→115`, `5lO→51O→510`, and `Oll5→Ol15→O115→0115`. Stage 2 normalized both comparison sides, so one verification run remained internally consistent, but canonical forms could drift across runs. The former strict-xfail property test pinned these four counterexamples; #652 replaces it with passing canonical-output and OCR-mode idempotence tests.
+
+**Resolution (2026-10-03):** The OCR digit-adjacency substitutions now run to a fixed point in one call. The canonical outputs are `Ol5` → `015`, `ll5` → `115`, `5lO` → `510`, and `Oll5` → `0115`. Unrelated OCR letters and non-OCR outputs remain unchanged. A focused Stage 2 test verifies that OCR quote `5lO` matches source `510` via `tolerant_match` and that `5x0` remains unverified; the 95 threshold is unchanged.
+
+#### DE-397 — Anonymization layer never pseudonymizes ORGANIZATION entities (Presidio default suppression)
+
+**Priority:** P1 · **Effort:** S · **Status (2026-07-25): filed (measured by the DE-240 harness — 10/10 organization names survive anonymization).**
+
+The DE-240 leakage harness measured a 100% miss rate for organization names through the pre-egress anonymization path, and root-caused it: raw spaCy detects the ORG entities, but Presidio's default `AnalyzerEngine` NLP configuration ships `ORGANIZATION` in `labels_to_ignore` (a deliberate upstream precision choice — ORG detection is noisy), and `gateway/app/anonymization/engine.py` never overrides it. For a legal product, organization names in privileged documents are often exactly the sensitive identifier an operator enables the layer to protect. Fix requires a maintainer decision inside the security boundary: un-suppress ORGANIZATION (accepting the precision cost — likely over-pseudonymization of common nouns spaCy mislabels), gate it behind a config flag (e.g. `anonymize_organizations: true|false` defaulting per the committee's risk posture), or document the exclusion prominently in the operator-facing anonymization docs. Whichever lands must re-run the DE-240 harness and update the published rates + the DE-282 calibration plan. Related finding recorded in the rates doc: `ENABLED_DEFAULT_RECOGNIZERS` in `engine.py` is descriptive-only (several undocumented Presidio defaults are active) — documentation drift worth fixing in the same pass.
 
 ---
 
@@ -5301,7 +5324,7 @@ This appendix addresses common objections an information-security or legal-opera
 
 #### Objection: "What about prompt injection from a malicious counterparty's document?"
 
-**Response.** This is the genuinely-hard problem in the AI-security space; no commercial competitor has a complete answer either. LQ.AI's defenses are: skill-prompt isolation conventions in the skill-authoring guide (delimited blocks instructing the model not to interpret document content as instructions); structured-output schemas that constrain what the model can produce (DE-111); ensemble verification (§3.8) for high-stakes operations; the prompt-injection pattern library (DE-110) once it ships; and the Citation Engine's verification step which would catch a successful injection that produced an unsupported citation. The honest answer is that a sophisticated injection might still affect outputs in ways the verification does not catch; the operator's defense is the human-in-the-loop review the legal profession already requires. We do not claim to be immune.
+**Response.** This is the genuinely-hard problem in the AI-security space; no commercial competitor has a complete answer either. LQ.AI's defenses today are: an **untrusted-content envelope** in the gateway's skill assembler — unconsumed caller-supplied skill inputs are JSON-encoded into a labelled data block under a policy stating they are data, not instructions; placeholder-consumed inputs remain in the skill text with input-created assembler headings backslash-escaped (`gateway/app/skills/assembler.py`; [ADR 0007, amendment of 2026-09-02](adr/0007-skill-prompt-assembly.md)); structured-output schemas that constrain what the model can produce (DE-111); ensemble verification (§3.8) for high-stakes operations; the prompt-injection pattern library (DE-110) once it ships; and the Citation Engine's verification step which would catch a successful injection that produced an unsupported citation. **What LQ.AI does not yet have is isolation:** skill inputs, retrieved knowledge-base chunks, and attached documents are still placed in the *system* message — the instruction channel — rather than in a data channel the model is told to treat as untrusted. The envelope preserves structure; it does not reduce the authority of those bytes. Relocating them is [DE-388](#9-deferred-enhancements-and-identified-future-work) and needs an ADR. The honest answer is that a sophisticated injection might still affect outputs in ways the verification does not catch; the operator's defense is the human-in-the-loop review the legal profession already requires. We do not claim to be immune.
 
 #### Objection: "How do we know the open-source code matches what's running?"
 

@@ -197,8 +197,8 @@ class ToolProviderConfig(BaseModel):
     allowlist: EgressAllowlistConfig
     rate_limit: ToolProviderRateLimitConfig = Field(default_factory=ToolProviderRateLimitConfig)
     anonymize_outbound: bool = True
-    """Default True per ADR 0014 D5. NOTE: PR1 parses but does not yet apply
-    the transform (no matter context exists); enforcement lands in WS3/WS4."""
+    """Default True per ADR 0014 D5. Required for checked authority-query
+    anonymization. Legacy calls do not yet apply this transform automatically."""
     enabled: bool = True
     user_agent: str | None = None
     """Descriptive ``User-Agent`` header value, required for ``type: edgar``

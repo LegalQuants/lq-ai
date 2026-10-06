@@ -225,6 +225,8 @@ original bytes for any files you uploaded.
 - `skills.json`          — empty under M1; skills are filesystem-canonical
                             (see ADR 0004) and live in the deployment's
                             `skills/` directory rather than the database.
+- `skill_workspaces.json` — your optional saved skill work, including file
+                            contents, namespaces and revisions.
 
 ## Validity
 
@@ -359,6 +361,32 @@ async def _build_zip(session: AsyncSession, user: User) -> bytes:
 
         # Skills — empty under M1 (filesystem-canonical per ADR 0004).
         zf.writestr("skills.json", json.dumps([], indent=2))
+
+        from app.models.skill_workspace import SkillWorkspace, SkillWorkspaceFile
+        from app.skills.workspace import metadata
+
+        saved_work = []
+        for workspace in await session.scalars(
+            select(SkillWorkspace)
+            .where(SkillWorkspace.owner_id == user.id)
+            .order_by(SkillWorkspace.id)
+        ):
+            workspace_files = await session.scalars(
+                select(SkillWorkspaceFile)
+                .where(SkillWorkspaceFile.workspace_id == workspace.id)
+                .order_by(SkillWorkspaceFile.name)
+            )
+            saved_work.append(
+                {
+                    "id": str(workspace.id),
+                    "skill_key": workspace.skill_key,
+                    "skill_name": workspace.skill_name,
+                    "format_version": workspace.format_version,
+                    "project_id": str(workspace.project_id) if workspace.project_id else None,
+                    "files": [{**metadata(row), "content": row.content} for row in workspace_files],
+                }
+            )
+        zf.writestr("skill_workspaces.json", json.dumps(saved_work, ensure_ascii=False, indent=2))
 
     return buffer.getvalue()
 

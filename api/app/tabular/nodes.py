@@ -34,7 +34,6 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -44,6 +43,7 @@ from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.citation.verification import verify
+from app.graph_types import AsyncStateNode
 from app.models.document import Document, DocumentChunk
 from app.models.file import File
 from app.models.tabular import TabularExecution
@@ -117,7 +117,7 @@ _VALID_CONFIDENCES: frozenset[str] = frozenset({"high", "medium", "low", "failed
 def make_load_documents_node(
     db: AsyncSession,
     document_ids: list[uuid.UUID],
-) -> Callable[[TabularExecutionState], Awaitable[dict[str, Any]]]:
+) -> AsyncStateNode[TabularExecutionState]:
     """Build the load-documents node bound to a DB session."""
 
     async def load_documents_node(state: TabularExecutionState) -> dict[str, Any]:
@@ -204,7 +204,7 @@ def make_extract_cells_node(
     db: AsyncSession,
     gateway: GatewayClient,
     judge_model: str,
-) -> Callable[[TabularExecutionState], Awaitable[dict[str, Any]]]:
+) -> AsyncStateNode[TabularExecutionState]:
     """Build the cell-extraction node bound to a DB session + gateway.
 
     Walks ``documents x columns`` sequentially; per cell, fetches the
@@ -569,7 +569,7 @@ async def _fetch_first_chunks(
 
 def make_aggregate_node(
     db: AsyncSession,
-) -> Callable[[TabularExecutionState], Awaitable[dict[str, Any]]]:
+) -> AsyncStateNode[TabularExecutionState]:
     """Build the aggregation node bound to a DB session.
 
     Groups ``state['per_cell_results']`` by document into the final

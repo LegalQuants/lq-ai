@@ -16,7 +16,7 @@ from decimal import Decimal
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LogLevel = Literal["debug", "info", "warning", "warn", "error", "critical"]
@@ -149,6 +149,18 @@ class Settings(BaseSettings):
         default="",
         description="Shared secret for backend ↔ gateway. Required in prod.",
     )
+    lq_ai_gateway_timeout_seconds: float = Field(
+        default=900.0,
+        gt=0,
+        allow_inf_nan=False,
+        description=(
+            "HTTP timeout in seconds for backend to Inference Gateway calls "
+            "(ADR 0027). Must exceed the gateway's adapter timeouts "
+            "(600 seconds by default) so the gateway can report failures first. "
+            "Connection establishment is capped at 10 seconds. "
+            "Restart API and workers after changing this deployment setting."
+        ),
+    )
 
     # ----- Chat history (multi-turn memory) -----
     # The chat send path (api/app/api/chats.py) replays prior turns of the
@@ -251,6 +263,47 @@ class Settings(BaseSettings):
         ),
         validation_alias=AliasChoices("LQ_AI_AUTONOMOUS_DEFAULT_MODEL"),
     )
+
+    orchestration_chat_enabled: bool = Field(
+        default=False, validation_alias="LQ_AI_ORCHESTRATION_CHAT_ENABLED"
+    )
+    orchestration_chat_project_id: str = Field(
+        default="", validation_alias="LQ_AI_ORCHESTRATION_CHAT_PROJECT_ID"
+    )
+    orchestration_chat_provider: str = Field(
+        default="", validation_alias="LQ_AI_ORCHESTRATION_CHAT_PROVIDER"
+    )
+    orchestration_chat_model: str = Field(
+        default="", validation_alias="LQ_AI_ORCHESTRATION_CHAT_MODEL"
+    )
+    orchestration_chat_budget_usd: Decimal = Field(
+        default=Decimal("2.0000"),
+        gt=0,
+        max_digits=10,
+        decimal_places=4,
+        validation_alias="LQ_AI_ORCHESTRATION_CHAT_BUDGET_USD",
+    )
+    orchestration_chat_minimum_tier: int = Field(
+        default=1, ge=1, le=5, validation_alias="LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER"
+    )
+    orchestration_chat_timeout_seconds: int = Field(
+        default=120, ge=1, le=900, validation_alias="LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS"
+    )
+
+    orchestration_deployment_children: int | None = Field(
+        default=None,
+        ge=1,
+        le=32,
+        validation_alias="LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN",
+        description="Explicit shared child capacity. Required before enabling the demonstration.",
+    )
+
+    @field_validator("orchestration_deployment_children", mode="before")
+    @classmethod
+    def empty_orchestration_capacity(cls, value: object) -> object:
+        # Compose forwards an unset optional setting as an empty string.
+        # It remains unconfigured; enabling without a limit still refuses.
+        return None if value == "" else value
 
     # M-Sec.1 — MFA-mandatory deployment flag per PRD §5.1. When True,
     # the backend treats any authenticated user without MFA enrolled
@@ -400,6 +453,18 @@ class Settings(BaseSettings):
         # (matching the autonomous settings convention) while keeping the bare
         # name working for any existing deployment that set it.
         validation_alias=AliasChoices("LQ_AI_CHAT_TOOL_CALL_CAP", "CHAT_TOOL_CALL_CAP"),
+    )
+
+    # Optional skill data/tools. Bundled execution is confined to a separately
+    # configured local broker; no command or host-process fallback exists.
+    skill_workspaces_enabled: bool = Field(
+        default=False, validation_alias="LQ_AI_SKILL_WORKSPACES_ENABLED"
+    )
+    skill_script_runner_url: str | None = Field(
+        default=None, validation_alias="LQ_AI_SKILL_SCRIPT_RUNNER_URL"
+    )
+    skill_script_runner_token: str = Field(
+        default="", repr=False, validation_alias="LQ_AI_SKILL_SCRIPT_RUNNER_TOKEN"
     )
 
     # ----- Operational -----

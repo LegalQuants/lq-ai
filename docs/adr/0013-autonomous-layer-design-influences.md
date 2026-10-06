@@ -49,10 +49,11 @@ A purpose-built durable-workflow engine (Temporal, or Celery beat) for the sched
 
 ### D1. Single-agent for M4 v1, designed to extend — **pins DE-294**
 
-**Proposed extension (not yet ratified):** [ADR 0035](0035-governed-orchestration-run-tree.md)
-would permit one approved batch of parallel, skill-backed child sessions for
-issue #563 and make DE-294 a prerequisite for shipping that profile. The M4
-single-session behavior below remains the current baseline.
+**Accepted extension (2026-09-20):** [ADR 0035](0035-governed-orchestration-run-tree.md)
+permits one approved batch of parallel child sessions for issue #563. A bounded
+fictional chat profile now exercises that run tree; real-matter handoff acceptance
+under DE-294 remains pending. The M4 single-session behavior below remains the
+baseline for ordinary autonomous sessions.
 
 M4/LQVern v1 ships **single-agent** autonomous flows: one agent per `autonomous_session`, running the §3.10 user stories (watches, scheduled scans, skill suggestions). This **delivers every committed §3.10 user story** without the agent-to-agent handoff surface, and lets the brakes + audit + OTel substrate be proven before any multi-agent orchestration. **DE-294 stays P2/deferred** (cross-agent handoff validation attaches to whichever later milestone first ships multi-agent flows). The executor's interfaces (typed session state, closed tool-intent enum) are designed so a multi-agent orchestrator can later wrap single-agent sessions without redesign — Clawern's debate protocol is the reference for that future increment, not a v1 deliverable.
 

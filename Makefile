@@ -102,16 +102,16 @@ api-test-all:
 
 .PHONY: api-lint
 api-lint:
-	api/.venv/bin/ruff check api scripts
-	cd api && .venv/bin/mypy app
+	api/.venv/bin/ruff check api scripts script_runner
+	cd api && .venv/bin/mypy app ../script_runner
 
 .PHONY: api-format
 api-format:
-	api/.venv/bin/ruff format api scripts
+	api/.venv/bin/ruff format api scripts script_runner
 
 .PHONY: api-format-check
 api-format-check:
-	api/.venv/bin/ruff format --check api scripts
+	api/.venv/bin/ruff format --check api scripts script_runner
 
 .PHONY: openapi
 openapi: ## Regenerate docs/api/backend-openapi.generated.yaml from the live app (DE-373)

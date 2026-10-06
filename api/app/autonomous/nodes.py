@@ -36,7 +36,6 @@ from __future__ import annotations
 
 import dataclasses
 import logging
-from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -61,6 +60,7 @@ from app.autonomous.state import AutonomousSessionState
 from app.autonomous.structured_output import parse_structured_output
 from app.config import DEFAULT_MAX_ANALYSIS_STEPS, get_settings
 from app.errors import AutonomousBrake
+from app.graph_types import AsyncStateNode
 from app.models.autonomous import AutonomousSession
 from app.research.registry import resolve_available_sources
 from app.schemas.autonomous import Phase
@@ -76,7 +76,7 @@ logger = logging.getLogger(__name__)
 def make_intake_node(
     db: AsyncSession,
     gateway: Any = None,
-) -> Callable[[AutonomousSessionState], Awaitable[dict[str, Any]]]:
+) -> AsyncStateNode[AutonomousSessionState]:
     """Build the intake-phase node bound to a DB session.
 
     The intake node transitions the session to :attr:`Phase.intake`
@@ -209,6 +209,30 @@ async def _run_analysis_loop(
         )
         available_sources = []
 
+    from app.config import get_settings
+    from app.skills.binding import bind_record
+    from app.skills.tools import SKILL_TOOL_MODELS, SkillTools, current_registry
+
+    allowed = PLANNER_ALLOWLIST
+    skill_tool_schemas = None
+    settings = get_settings()
+    if settings.skill_workspaces_enabled or settings.skill_script_runner_url:
+        registry = current_registry()
+        record = registry.current().get(str(params.get("skill_ref") or ""))
+        if record is not None:
+            binding = bind_record(record)
+            optional = SkillTools(registry, settings).available(binding)
+            allowed = frozenset((*allowed, *optional))
+            if optional:
+                skill_tool_schemas = {
+                    "instructions": record.body,
+                    "helpers": [s.model_dump() for s in binding.capabilities.scripts],
+                    "tools": {
+                        intent.value: SKILL_TOOL_MODELS[intent].model_json_schema()
+                        for intent in optional
+                    },
+                }
+
     while steps < max_steps:
         plan_res = await guarded_tool_call(
             session,
@@ -218,15 +242,16 @@ async def _run_analysis_loop(
                 "messages": build_planner_messages(
                     goal=query,
                     observations=observations,
-                    allowlist=PLANNER_ALLOWLIST,
+                    allowlist=allowed,
                     available_sources=available_sources,
+                    skill_tools=skill_tool_schemas,
                 ),
                 "anonymize": False,
             },
             db,
             gateway,
         )
-        decision = parse_planner_decision((plan_res.data or {}).get("content"))
+        decision = parse_planner_decision((plan_res.data or {}).get("content"), allowlist=allowed)
         if decision is None:
             halt_reason = "planner_unparseable"
             break
@@ -241,16 +266,41 @@ async def _run_analysis_loop(
         try:
             validate_action_args(decision.next_intent, decision.args)
             act = await guarded_tool_call(session, decision.next_intent, decision.args, db, gateway)
-            observations.append(
-                summarize_observation(decision.next_intent, decision.rationale, act)
-            )
-            evidence.extend(collect_evidence(decision.next_intent, act, start_n=len(evidence) + 1))
         except AutonomousBrake:
             raise  # brakes (SessionHalted/CostCapReached/ToolNotGranted) propagate
-        except (
-            Exception
-        ) as exc:  # invariant #5 / C1: bad arg → non-fatal failed observation, no DB poison
+        except Exception as exc:  # validation/dispatch failure is a non-fatal observation
             observations.append(f"{decision.next_intent.value} → failed ({type(exc).__name__})")
+            # Close the attempt in the audit trail. The chokepoint writes a
+            # ``started`` row before it dispatches and its closing row only
+            # after the handler returns, so a handler that raises left
+            # ``started`` with nothing after it, and an argument rejected by
+            # validate_action_args left no row at all. Either way the receipt
+            # could not tell a failed call from one still in flight. Counts
+            # and types only (P3): the exception class name, never its text.
+            await autonomous_audit(
+                db,
+                session,
+                "tool_call",
+                tool=str(decision.next_intent),
+                outcome="error",
+                error_type=type(exc).__name__,
+            )
+        else:
+            try:
+                observations.append(
+                    summarize_observation(decision.next_intent, decision.rationale, act)
+                )
+                evidence.extend(
+                    collect_evidence(decision.next_intent, act, start_n=len(evidence) + 1)
+                )
+            except AutonomousBrake:
+                raise
+            except Exception as exc:
+                # Dispatch already succeeded and has its closing audit row.
+                # Keep postprocessing failures non-fatal for the planner.
+                observations.append(
+                    f"{decision.next_intent.value} → postprocessing failed ({type(exc).__name__})"
+                )
         trace.append(
             {
                 "step": str(steps),
@@ -299,7 +349,7 @@ async def _run_analysis_loop(
 def make_analysis_node(
     db: AsyncSession,
     gateway: Any = None,
-) -> Callable[[AutonomousSessionState], Awaitable[dict[str, Any]]]:
+) -> AsyncStateNode[AutonomousSessionState]:
     """Build the analysis-phase node bound to a DB session.
 
     The analysis node transitions the session to :attr:`Phase.analysis`
@@ -420,7 +470,7 @@ def make_analysis_node(
 def make_drafting_node(
     db: AsyncSession,
     gateway: Any = None,
-) -> Callable[[AutonomousSessionState], Awaitable[dict[str, Any]]]:
+) -> AsyncStateNode[AutonomousSessionState]:
     """Build the drafting-phase node bound to a DB session.
 
     The drafting node transitions the session to :attr:`Phase.drafting`,
@@ -726,7 +776,7 @@ def make_drafting_node(
 def make_ethics_review_node(
     db: AsyncSession,
     gateway: Any = None,
-) -> Callable[[AutonomousSessionState], Awaitable[dict[str, Any]]]:
+) -> AsyncStateNode[AutonomousSessionState]:
     """Build the ethics-review-phase node bound to a DB session.
 
     The ethics-review node transitions the session to
@@ -794,7 +844,7 @@ def make_ethics_review_node(
 def make_delivery_node(
     db: AsyncSession,
     gateway: Any = None,
-) -> Callable[[AutonomousSessionState], Awaitable[dict[str, Any]]]:
+) -> AsyncStateNode[AutonomousSessionState]:
     """Build the delivery-phase node bound to a DB session.
 
     The delivery node transitions the session to :attr:`Phase.delivery`,

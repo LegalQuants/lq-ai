@@ -107,7 +107,7 @@ def test_malformed_envelope_missing_token_raises_encryption_error() -> None:
     with pytest.raises(MCPEncryptionError):
         decrypt_payload_envelope({PAYLOAD_ENVELOPE_MARKER: 1}, encryptor=enc)
     with pytest.raises(MCPEncryptionError):
-        decrypt_payload_envelope({PAYLOAD_ENVELOPE_MARKER: 1, "token": 42}, encryptor=enc)  # type: ignore[dict-item]
+        decrypt_payload_envelope({PAYLOAD_ENVELOPE_MARKER: 1, "token": 42}, encryptor=enc)
     with pytest.raises(MCPEncryptionError):
         decrypt_payload_envelope({PAYLOAD_ENVELOPE_MARKER: 1, "token": "café"}, encryptor=enc)
 

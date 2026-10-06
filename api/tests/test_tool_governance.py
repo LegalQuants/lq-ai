@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import AsyncIterator
 from decimal import Decimal
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -89,7 +90,7 @@ def _make_span() -> MagicMock:
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def _clear_tier_cache():
+async def _clear_tier_cache() -> AsyncIterator[None]:
     """Reset the process-level tier cache before every test."""
     _reset_provider_tier_cache_for_tests()
     yield
@@ -102,10 +103,12 @@ async def _clear_tier_cache():
 
 
 @pytest.mark.asyncio
-async def test_resolve_provider_tier_returns_configured_tier(monkeypatch):
+async def test_resolve_provider_tier_returns_configured_tier(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """resolve_provider_tier returns the egress_tier from the gateway config."""
 
-    async def _fake_get_admin_config(*, request_id=None):
+    async def _fake_get_admin_config(*, request_id: str | None = None) -> dict[str, Any]:
         return {
             "tool_providers": [
                 {"name": "courtlistener-prod", "type": "courtlistener", "egress_tier": 4},
@@ -126,10 +129,12 @@ async def test_resolve_provider_tier_returns_configured_tier(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_resolve_provider_tier_fail_safe_for_unknown_provider(monkeypatch):
+async def test_resolve_provider_tier_fail_safe_for_unknown_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """resolve_provider_tier returns _MAX_TIER when the provider is not listed."""
 
-    async def _fake_get_admin_config(*, request_id=None):
+    async def _fake_get_admin_config(*, request_id: str | None = None) -> dict[str, Any]:
         return {"tool_providers": [{"name": "other", "type": "mcp", "egress_tier": 1}]}
 
     class _FakeGW:
@@ -142,10 +147,12 @@ async def test_resolve_provider_tier_fail_safe_for_unknown_provider(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_resolve_provider_tier_fail_safe_on_gateway_error(monkeypatch):
+async def test_resolve_provider_tier_fail_safe_on_gateway_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """resolve_provider_tier returns _MAX_TIER when the gateway is unreachable."""
 
-    async def _fail_get_admin_config(*, request_id=None):
+    async def _fail_get_admin_config(*, request_id: str | None = None) -> dict[str, Any]:
         raise RuntimeError("gateway down")
 
     class _FakeGW:
@@ -158,11 +165,11 @@ async def test_resolve_provider_tier_fail_safe_on_gateway_error(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_resolve_provider_tier_process_cached(monkeypatch):
+async def test_resolve_provider_tier_process_cached(monkeypatch: pytest.MonkeyPatch) -> None:
     """resolve_provider_tier only calls get_admin_config once per process."""
     call_count = 0
 
-    async def _counting_get_admin_config(*, request_id=None):
+    async def _counting_get_admin_config(*, request_id: str | None = None) -> dict[str, Any]:
         nonlocal call_count
         call_count += 1
         return {"tool_providers": [{"name": "cl", "type": "courtlistener", "egress_tier": 3}]}
@@ -185,7 +192,7 @@ async def test_resolve_provider_tier_process_cached(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_tier_refusal_writes_row_and_raises(db_session: AsyncSession):
+async def test_tier_refusal_writes_row_and_raises(db_session: AsyncSession) -> None:
     """Tier refusal writes a refused_tier row, flushes, and raises ToolTierRefused.
 
     Dispatch must NOT be called.
@@ -231,7 +238,7 @@ async def test_tier_refusal_writes_row_and_raises(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_tier_refusal_no_dispatch_when_no_ceiling(db_session: AsyncSession):
+async def test_tier_refusal_no_dispatch_when_no_ceiling(db_session: AsyncSession) -> None:
     """When max_allowed_tier is None, no tier check is performed."""
     dispatch = _make_dispatch(cost=Decimal("0.05"))
 
@@ -252,7 +259,7 @@ async def test_tier_refusal_no_dispatch_when_no_ceiling(db_session: AsyncSession
 
 
 @pytest.mark.asyncio
-async def test_tier_refusal_no_raise_when_tier_eq_ceiling(db_session: AsyncSession):
+async def test_tier_refusal_no_raise_when_tier_eq_ceiling(db_session: AsyncSession) -> None:
     """provider_tier == max_allowed_tier is allowed (equal is not exceeding)."""
     dispatch = _make_dispatch(cost=Decimal("0.01"))
 
@@ -273,7 +280,7 @@ async def test_tier_refusal_no_raise_when_tier_eq_ceiling(db_session: AsyncSessi
 
 
 @pytest.mark.asyncio
-async def test_tier_refusal_annotates_span(db_session: AsyncSession):
+async def test_tier_refusal_annotates_span(db_session: AsyncSession) -> None:
     """On tier refusal the caller-supplied span is annotated (no raw args)."""
     dispatch = _make_dispatch()
     span = _make_span()
@@ -309,7 +316,7 @@ async def test_tier_refusal_annotates_span(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_happy_path_writes_pending_then_executed(db_session: AsyncSession):
+async def test_happy_path_writes_pending_then_executed(db_session: AsyncSession) -> None:
     """Happy path: pending row written, updated to executed with cost."""
     cost = Decimal("0.0312")
     dispatch = _make_dispatch(cost=cost)
@@ -350,7 +357,7 @@ async def test_happy_path_writes_pending_then_executed(db_session: AsyncSession)
 
 
 @pytest.mark.asyncio
-async def test_happy_path_no_raw_args_in_row(db_session: AsyncSession):
+async def test_happy_path_no_raw_args_in_row(db_session: AsyncSession) -> None:
     """No raw args or result payload must appear in ANY mapped column of the row.
 
     M3 hardening: scans every SQLAlchemy-mapped column value (not just repr,
@@ -397,7 +404,9 @@ async def test_happy_path_no_raw_args_in_row(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_no_sentinel_in_logs(db_session: AsyncSession, caplog: pytest.LogCaptureFixture):
+async def test_no_sentinel_in_logs(
+    db_session: AsyncSession, caplog: pytest.LogCaptureFixture
+) -> None:
     """Sentinel secret must not appear in ANY log record emitted at DEBUG or above.
 
     M4 hardening: drives both the happy path and the error path with the
@@ -456,7 +465,7 @@ async def test_no_sentinel_in_logs(db_session: AsyncSession, caplog: pytest.LogC
 
 
 @pytest.mark.asyncio
-async def test_happy_path_span_annotation(db_session: AsyncSession):
+async def test_happy_path_span_annotation(db_session: AsyncSession) -> None:
     """On success the span receives outcome/tier/cost_usd — no raw payloads."""
     cost = Decimal("0.05")
     dispatch = _make_dispatch(cost=cost)
@@ -490,7 +499,7 @@ async def test_happy_path_span_annotation(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_dispatch_raises_writes_error_row_and_reraises(db_session: AsyncSession):
+async def test_dispatch_raises_writes_error_row_and_reraises(db_session: AsyncSession) -> None:
     """When dispatch raises, the row is updated to error and the exception re-raised."""
     exc = RuntimeError("tool exploded")
     dispatch = _make_failing_dispatch(exc)
@@ -520,7 +529,7 @@ async def test_dispatch_raises_writes_error_row_and_reraises(db_session: AsyncSe
 
 
 @pytest.mark.asyncio
-async def test_denied_on_matching_exception_writes_denied_row(db_session: AsyncSession):
+async def test_denied_on_matching_exception_writes_denied_row(db_session: AsyncSession) -> None:
     """When dispatch raises an exception listed in denied_on, outcome='denied' (not 'error')."""
 
     class PolicyRefusal(Exception):
@@ -556,7 +565,7 @@ async def test_denied_on_matching_exception_writes_denied_row(db_session: AsyncS
 
 
 @pytest.mark.asyncio
-async def test_denied_on_non_matching_exception_writes_error_row(db_session: AsyncSession):
+async def test_denied_on_non_matching_exception_writes_error_row(db_session: AsyncSession) -> None:
     """When dispatch raises an exception NOT in denied_on, outcome='error' (unchanged)."""
 
     class PolicyRefusal(Exception):
@@ -592,7 +601,7 @@ async def test_denied_on_non_matching_exception_writes_error_row(db_session: Asy
 
 
 @pytest.mark.asyncio
-async def test_dispatch_raises_annotates_span(db_session: AsyncSession):
+async def test_dispatch_raises_annotates_span(db_session: AsyncSession) -> None:
     """On dispatch failure the span is annotated with outcome=error (not the exception)."""
     exc = ValueError("inner error")
     dispatch = _make_failing_dispatch(exc)
@@ -649,7 +658,7 @@ def _make_flush_commit_trackers(
 
 
 @pytest.mark.asyncio
-async def test_flush_not_commit_happy_path(db_session: AsyncSession):
+async def test_flush_not_commit_happy_path(db_session: AsyncSession) -> None:
     """Happy path: flush IS called, commit is NEVER called."""
     flush_calls, commit_calls = _make_flush_commit_trackers(db_session)
 
@@ -673,7 +682,7 @@ async def test_flush_not_commit_happy_path(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_flush_not_commit_tier_refusal(db_session: AsyncSession):
+async def test_flush_not_commit_tier_refusal(db_session: AsyncSession) -> None:
     """Tier-refusal path: flush IS called before the raise, commit is NEVER called."""
     flush_calls, commit_calls = _make_flush_commit_trackers(db_session)
 
@@ -698,7 +707,7 @@ async def test_flush_not_commit_tier_refusal(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_flush_not_commit_dispatch_raises(db_session: AsyncSession):
+async def test_flush_not_commit_dispatch_raises(db_session: AsyncSession) -> None:
     """Dispatch-raises path: flush IS called before the re-raise, commit is NEVER called."""
     flush_calls, commit_calls = _make_flush_commit_trackers(db_session)
 
@@ -741,7 +750,7 @@ def test_governance_module_has_no_estimate_tool_cost() -> None:
 
 
 @pytest.mark.asyncio
-async def test_single_estimate_cost_recorded_verbatim(db_session: AsyncSession):
+async def test_single_estimate_cost_recorded_verbatim(db_session: AsyncSession) -> None:
     """The helper records the caller's estimated_cost verbatim — never recomputes.
 
     Passes a distinctive estimated_cost and verifies the row's cost_usd equals
@@ -786,7 +795,7 @@ async def test_single_estimate_cost_recorded_verbatim(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_optional_ids_stored_in_row(db_session: AsyncSession):
+async def test_optional_ids_stored_in_row(db_session: AsyncSession) -> None:
     """chat_id, message_id, session_id, request_id land on the row."""
     # user_id has a FK to users — create a real user row
     user = User(

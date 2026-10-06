@@ -48,7 +48,9 @@ services:
   # ============================================================
 
   postgres:
-    image: pgvector/pgvector:pg16
+    # Digest-pinned for reproducible boots (matches the pin in
+    # docker-compose.yml). Bump the tag and digest together.
+    image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-lq_ai}
@@ -66,7 +68,9 @@ services:
       retries: 10
 
   redis:
-    image: redis:7-alpine
+    # Digest-pinned for reproducible boots (matches the pin in
+    # docker-compose.yml). Bump the tag and digest together.
+    image: redis:7-alpine@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
@@ -228,6 +232,7 @@ services:
       S3_BUCKET: ${S3_BUCKET:-lq-ai-files}
       S3_REGION: ${S3_REGION:-us-east-1}
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
+      LQ_AI_GATEWAY_TIMEOUT_SECONDS: ${LQ_AI_GATEWAY_TIMEOUT_SECONDS:-900}
       LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       JWT_ACCESS_TOKEN_TTL_SECONDS: ${JWT_ACCESS_TOKEN_TTL_SECONDS:-900}
@@ -240,6 +245,16 @@ services:
       # image already sets LQ_AI_SKILLS_DIR=/skills via ENV; set it here too
       # for clarity, matching the dev compose). No ./skills bind mount.
       LQ_AI_SKILLS_DIR: ${LQ_AI_SKILLS_DIR:-/skills}
+      # Bounded orchestration chat remains operator opt-in. Both processes use
+      # the same bounded deployment capacity when the flag is enabled.
+      LQ_AI_ORCHESTRATION_CHAT_ENABLED: ${LQ_AI_ORCHESTRATION_CHAT_ENABLED:-false}
+      LQ_AI_ORCHESTRATION_CHAT_PROJECT_ID: ${LQ_AI_ORCHESTRATION_CHAT_PROJECT_ID:-}
+      LQ_AI_ORCHESTRATION_CHAT_PROVIDER: ${LQ_AI_ORCHESTRATION_CHAT_PROVIDER:-}
+      LQ_AI_ORCHESTRATION_CHAT_MODEL: ${LQ_AI_ORCHESTRATION_CHAT_MODEL:-}
+      LQ_AI_ORCHESTRATION_CHAT_BUDGET_USD: ${LQ_AI_ORCHESTRATION_CHAT_BUDGET_USD:-2.0000}
+      LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER: ${LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER:-1}
+      LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS: ${LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS:-120}
+      LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN: ${LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN:-2}
       # Bridge secrets — bridges are excluded from the release stack, but the
       # api reads these (optional, default empty) so leaving them unset is fine.
       LQ_AI_BRIDGE_TOKEN: ${LQ_AI_BRIDGE_TOKEN:-}
@@ -287,6 +302,7 @@ services:
       LQ_AI_CHUNK_TARGET_CHARS: ${LQ_AI_CHUNK_TARGET_CHARS:-2000}
       LQ_AI_CHUNK_OVERLAP_CHARS: ${LQ_AI_CHUNK_OVERLAP_CHARS:-200}
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
+      LQ_AI_GATEWAY_TIMEOUT_SECONDS: ${LQ_AI_GATEWAY_TIMEOUT_SECONDS:-900}
       LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
@@ -319,10 +335,19 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       LQ_AI_SKIP_MIGRATIONS: "1"
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
+      LQ_AI_GATEWAY_TIMEOUT_SECONDS: ${LQ_AI_GATEWAY_TIMEOUT_SECONDS:-900}
       LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       # Skills corpus is baked at /skills (image ENV); set explicitly for clarity.
       LQ_AI_SKILLS_DIR: ${LQ_AI_SKILLS_DIR:-/skills}
+      LQ_AI_ORCHESTRATION_CHAT_ENABLED: ${LQ_AI_ORCHESTRATION_CHAT_ENABLED:-false}
+      LQ_AI_ORCHESTRATION_CHAT_PROJECT_ID: ${LQ_AI_ORCHESTRATION_CHAT_PROJECT_ID:-}
+      LQ_AI_ORCHESTRATION_CHAT_PROVIDER: ${LQ_AI_ORCHESTRATION_CHAT_PROVIDER:-}
+      LQ_AI_ORCHESTRATION_CHAT_MODEL: ${LQ_AI_ORCHESTRATION_CHAT_MODEL:-}
+      LQ_AI_ORCHESTRATION_CHAT_BUDGET_USD: ${LQ_AI_ORCHESTRATION_CHAT_BUDGET_USD:-2.0000}
+      LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER: ${LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER:-1}
+      LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS: ${LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS:-120}
+      LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN: ${LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN:-2}
       # Same key as the api service — worker code paths that touch
       # envelope-encrypted payloads (DE-358 item 5) or per-user MCP OAuth
       # tokens need it to decrypt/encrypt.

@@ -129,7 +129,10 @@ Earlier drafts asked the committee for four more decisions. They are withdrawn, 
 Pre-existing obligations this PRD names as dependencies and refuses to swallow:
 
 1. **Branding-obligations page — ship now, independent of the site** (Effort M). Assigned by ADR 0001 itself; the 50-user threshold appears nowhere else in the repo; the upstream fork refresh (#498) is the natural moment. The single highest-cost gap in the research.
-2. **Status-drift fix**: `GOVERNANCE.md` still says Proposed while ADR 0022 is Accepted; the `lq-ai-community` status notes are frozen at 2026-08-02. Two small human-merged PRs.
+2. **Status-drift follow-up**: PR #598 changed `GOVERNANCE.md` to Adopted,
+   matching accepted ADR 0022. The separate `lq-ai-community` status notes were
+   frozen at 2026-08-02 when this PRD was written; verify them in that repository
+   before treating that follow-up as closed.
 3. **Scoped API tokens**: PRD §5.1 promises them; the code has JWT session auth only. File the DE and the HONEST-STATE row — the one currently unregistered PRD-vs-code divergence.
 4. **Release-notes backfill**: 7 of 12 version tags have no GitHub Release (against PRD §7.8's "full changelog" commitment — second HONEST-STATE row); source material exists for all seven; Effort M. Plus a five-minute edit: v0.4.0's published Release still carries its DRAFT banner.
 5. **The founder loop-in.** The committee already decided it (2026-07-26, decision 4: bring Kevin up to date before any public release). A docs-site launch plausibly triggers it; there are two heavier items to bundle (the Apple signing identity SPOF named in ADR 0025; the standing CallDonna.ai transfer offer). Human task, not an agent's.

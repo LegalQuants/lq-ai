@@ -24,7 +24,7 @@ services:
   postgres:
     # Digest-pinned for reproducible boots (matches the pin in
     # .github/workflows/ci.yml). Bump the tag and digest together.
-    image: pgvector/pgvector:pg16@sha256:ad2e18408bf447f62092a8a5259e7df10505c5a0360bd1a1853ac8b8b0763da2
+    image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-lq_ai}
@@ -257,6 +257,7 @@ services:
       S3_REGION: ${S3_REGION:-us-east-1}
       # Inference Gateway
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
+      LQ_AI_GATEWAY_TIMEOUT_SECONDS: ${LQ_AI_GATEWAY_TIMEOUT_SECONDS:-900}
       LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
       # JWT (auth — per ADR 0002 the backend owns auth)
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
@@ -275,6 +276,17 @@ services:
       # not mutate it (skill authoring is a host-side / human-attestation
       # workflow per CLAUDE.md "Working with skills").
       LQ_AI_SKILLS_DIR: ${LQ_AI_SKILLS_DIR:-/skills}
+      LQ_AI_ORCHESTRATION_CHAT_ENABLED: ${LQ_AI_ORCHESTRATION_CHAT_ENABLED:-false}
+      LQ_AI_ORCHESTRATION_CHAT_PROJECT_ID: ${LQ_AI_ORCHESTRATION_CHAT_PROJECT_ID:-}
+      LQ_AI_ORCHESTRATION_CHAT_PROVIDER: ${LQ_AI_ORCHESTRATION_CHAT_PROVIDER:-}
+      LQ_AI_ORCHESTRATION_CHAT_MODEL: ${LQ_AI_ORCHESTRATION_CHAT_MODEL:-}
+      LQ_AI_ORCHESTRATION_CHAT_BUDGET_USD: ${LQ_AI_ORCHESTRATION_CHAT_BUDGET_USD:-2.0000}
+      LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER: ${LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER:-1}
+      LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS: ${LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS:-120}
+      LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN: ${LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN:-2}
+      LQ_AI_SKILL_WORKSPACES_ENABLED: ${LQ_AI_SKILL_WORKSPACES_ENABLED:-false}
+      LQ_AI_SKILL_SCRIPT_RUNNER_URL: ${LQ_AI_SKILL_SCRIPT_RUNNER_URL:-}
+      LQ_AI_SKILL_SCRIPT_RUNNER_TOKEN: ${LQ_AI_SKILL_SCRIPT_RUNNER_TOKEN:-}
       # M3-D1 slack-bridge integration. Both optional: only required for
       # operators who enable the `slack` compose profile. The api refuses
       # bridge traffic with 500 when either is unset.
@@ -344,6 +356,7 @@ services:
       # work with even on KBs configured for hybrid retrieval
       # (`hybrid_alpha < 1.0`).
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
+      LQ_AI_GATEWAY_TIMEOUT_SECONDS: ${LQ_AI_GATEWAY_TIMEOUT_SECONDS:-900}
       LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     # Persist Docling's Hugging Face model cache and EasyOCR's detection
@@ -410,6 +423,7 @@ services:
       # extractor which calls the inference gateway. Pre-wired now so
       # Phase 5 doesn't need a second docker-compose edit.
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
+      LQ_AI_GATEWAY_TIMEOUT_SECONDS: ${LQ_AI_GATEWAY_TIMEOUT_SECONDS:-900}
       LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       # Skills loader — the worker's on_startup installs the skill
@@ -419,6 +433,17 @@ services:
       # not mutate it (skill authoring is a host-side / human-attestation
       # workflow per CLAUDE.md "Working with skills").
       LQ_AI_SKILLS_DIR: ${LQ_AI_SKILLS_DIR:-/skills}
+      LQ_AI_ORCHESTRATION_CHAT_ENABLED: ${LQ_AI_ORCHESTRATION_CHAT_ENABLED:-false}
+      LQ_AI_ORCHESTRATION_CHAT_PROJECT_ID: ${LQ_AI_ORCHESTRATION_CHAT_PROJECT_ID:-}
+      LQ_AI_ORCHESTRATION_CHAT_PROVIDER: ${LQ_AI_ORCHESTRATION_CHAT_PROVIDER:-}
+      LQ_AI_ORCHESTRATION_CHAT_MODEL: ${LQ_AI_ORCHESTRATION_CHAT_MODEL:-}
+      LQ_AI_ORCHESTRATION_CHAT_BUDGET_USD: ${LQ_AI_ORCHESTRATION_CHAT_BUDGET_USD:-2.0000}
+      LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER: ${LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER:-1}
+      LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS: ${LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS:-120}
+      LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN: ${LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN:-2}
+      LQ_AI_SKILL_WORKSPACES_ENABLED: ${LQ_AI_SKILL_WORKSPACES_ENABLED:-false}
+      LQ_AI_SKILL_SCRIPT_RUNNER_URL: ${LQ_AI_SKILL_SCRIPT_RUNNER_URL:-}
+      LQ_AI_SKILL_SCRIPT_RUNNER_TOKEN: ${LQ_AI_SKILL_SCRIPT_RUNNER_TOKEN:-}
       # Same key as the api service — worker code paths that touch
       # envelope-encrypted payloads (DE-358 item 5) or per-user MCP
       # OAuth tokens need it to decrypt/encrypt.

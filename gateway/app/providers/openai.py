@@ -177,7 +177,10 @@ class OpenAIAdapter(ProviderAdapter):
         speak the OpenAI wire format). The API-key check is skipped when
         the provider is ``openai_compatible`` and no key source is
         configured — many local OpenAI-compatible servers don't require
-        a key.
+        a key. An ``openai_compatible`` entry that does name a key source
+        (``api_key_env`` or ``api_key_encrypted``) must resolve it, like
+        ``openai``: a hosted service declared with a key that is not set
+        is a missing key, not a keyless server.
 
         ``env`` defaults to :data:`os.environ`; tests override.
         ``key_resolver`` (ADR 0011) handles ``api_key_encrypted`` paths.
@@ -208,9 +211,11 @@ class OpenAIAdapter(ProviderAdapter):
             api_key_env=effective_env,
             api_key_encrypted=provider.api_key_encrypted,
         )
-        if not api_key and provider.type == "openai":
+        key_declared = bool(provider.api_key_env or provider.api_key_encrypted)
+        if not api_key and (provider.type == "openai" or key_declared):
+            label = "OpenAI" if provider.type == "openai" else "OpenAI-compatible"
             raise ValueError(
-                f"OpenAI provider {provider.name!r} requires either "
+                f"{label} provider {provider.name!r} requires either "
                 f"api_key_encrypted or environment variable "
                 f"{(effective_env or 'OPENAI_API_KEY')!r} to be set"
             )

@@ -133,6 +133,15 @@ def _resolve_mcp_config_path() -> Path | None:
 
 
 def build_adapter(provider: ProviderConfig) -> ProviderAdapter | None:
+    from app.config_revision import configuration_revision
+
+    adapter = _build_adapter(provider)
+    if adapter is not None:
+        adapter.configuration_revision = configuration_revision(provider)
+    return adapter
+
+
+def _build_adapter(provider: ProviderConfig) -> ProviderAdapter | None:
     """Construct the adapter for one provider, or ``None`` if no live
     adapter can be built.
 
@@ -187,6 +196,15 @@ def build_adapter(provider: ProviderConfig) -> ProviderAdapter | None:
 
 
 def build_tool_adapter(provider: ToolProviderConfig) -> ToolProviderAdapter | None:
+    from app.config_revision import configuration_revision
+
+    adapter = _build_tool_adapter(provider)
+    if adapter is not None:
+        adapter.configuration_revision = configuration_revision(provider)
+    return adapter
+
+
+def _build_tool_adapter(provider: ToolProviderConfig) -> ToolProviderAdapter | None:
     """Construct the tool adapter for one provider, or ``None`` if disabled
     or no adapter exists for the type. Validates the base_url against the
     provider's egress policy at build time so a misconfig fails at startup."""

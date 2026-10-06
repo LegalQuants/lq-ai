@@ -26,8 +26,9 @@ from __future__ import annotations
 import contextlib
 import json as _json
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
+from typing import Literal
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -84,7 +85,7 @@ def mcp_master_key(monkeypatch: pytest.MonkeyPatch) -> str:
     return key
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -157,7 +158,7 @@ def _parse_sse_frames(body: bytes) -> list[dict]:
 def _make_tool_spec(
     *,
     function_name: str = "mcp__files__delete_doc",
-    kind: str = "mcp",
+    kind: Literal["research", "mcp", "authority"] = "mcp",
     provider: str = "files",
     tool: str = "delete_doc",
     destructive: bool = True,
@@ -222,7 +223,7 @@ async def test_empty_allowlist_uses_single_shot_stream_path(
         routed_provider="anthropic-prod",
     )
 
-    async def _stream_gen(*_args, **_kwargs):
+    async def _stream_gen(*_args: object, **_kwargs: object) -> AsyncIterator[ChatCompletionChunk]:
         yield chunk
 
     empty_allowlist = ChatToolAllowlist(specs={})
@@ -402,7 +403,11 @@ async def test_loop_confirmation_emits_gate_event_and_persists_rows(
         resp = await client.post(
             f"/api/v1/chats/{chat_id}/messages",
             headers=headers,
-            json={"content": "delete doc abc123", "stream": True},
+            json={
+                "content": "delete doc abc123",
+                "stream": True,
+                "skills": ["saved-notes-demo"],
+            },
         )
 
     assert resp.status_code == 200, resp.text
@@ -454,6 +459,8 @@ async def test_loop_confirmation_emits_gate_event_and_persists_rows(
     decrypted_state = decrypt_payload_envelope(raw_state)
     assert decrypted_state["messages"] == [{"role": "user", "content": "delete the file"}]
     assert decrypted_state["calls_used"] == 0
+    assert decrypted_state["skill_names"] == ["saved-notes-demo"]
+    assert "saved-notes-demo" not in _json.dumps(raw_state)
 
     # Assert ToolCallLog row with pending_confirmation.
     assert pending_row.tool_call_log_id is not None, "tool_call_log_id not linked"

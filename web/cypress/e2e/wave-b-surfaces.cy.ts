@@ -31,7 +31,9 @@ describe('Wave B v2 — new surfaces', () => {
     cy.get('input[type="password"]').type(
       Cypress.env('LQAI_ADMIN_PASSWORD') || 'LQ-AI-smoke-test-Pw1!'
     );
+    cy.intercept('POST', '**/api/v1/auth/login').as('login');
     cy.get('button[type="submit"]').click();
+    cy.wait('@login', { timeout: 30000 }).its('response.statusCode').should('eq', 200);
     // If must-change-password gate fires (fresh password reset), log and continue.
     // CI smoke environments are expected to have a stable post-change password.
     cy.url().then((url) => {
@@ -41,7 +43,7 @@ describe('Wave B v2 — new surfaces', () => {
         );
       }
     });
-    cy.url().should('not.include', '/login');
+    cy.url({ timeout: 15000 }).should('not.include', '/login');
   });
 
   // ── Test 1 ───────────────────────────────────────────────────────────────────
@@ -73,14 +75,28 @@ describe('Wave B v2 — new surfaces', () => {
     // The SettingsToggleGroup for "Featured tools" renders a <fieldset> with
     // <legend> text "Featured tools". Inside, each option is a <label> wrapping
     // an <input type="radio">. We click the label whose text is "Inline toolbar only".
-    cy.contains('fieldset', 'Featured tools').within(() => {
+    cy.intercept('PATCH', '**/api/v1/users/me/preferences').as('savePreferences');
+    cy.contains('fieldset', 'Featured tools', { timeout: 60000 }).within(() => {
+      cy.contains('label', 'Inline toolbar only')
+        .find('input[type="radio"]')
+        .then(($input) => {
+          if ($input.is(':checked')) {
+            cy.contains('label', 'Prominent cards on dashboard').click();
+            cy.wait('@savePreferences', { timeout: 60000 })
+              .its('response.statusCode')
+              .should('eq', 200);
+          }
+        });
       cy.contains('label', 'Inline toolbar only').click();
     });
+    cy.wait('@savePreferences', { timeout: 60000 }).its('response.statusCode').should('eq', 200);
 
+    cy.intercept('GET', '**/api/v1/users/me').as('loadUser');
     cy.reload();
+    cy.wait('@loadUser', { timeout: 60000 }).its('response.statusCode').should('eq', 200);
 
     // After reload the radio for "Inline toolbar only" should be checked.
-    cy.contains('fieldset', 'Featured tools').within(() => {
+    cy.contains('fieldset', 'Featured tools', { timeout: 60000 }).within(() => {
       cy.contains('label', 'Inline toolbar only')
         .find('input[type="radio"]')
         .should('be.checked');
@@ -90,6 +106,7 @@ describe('Wave B v2 — new surfaces', () => {
     cy.contains('fieldset', 'Featured tools').within(() => {
       cy.contains('label', 'Prominent cards on dashboard').click();
     });
+    cy.wait('@savePreferences', { timeout: 60000 }).its('response.statusCode').should('eq', 200);
   });
 
   // ── Test 4 ───────────────────────────────────────────────────────────────────
@@ -128,8 +145,12 @@ describe('Wave B v2 — new surfaces', () => {
   // not be reachable in all smoke environments.
   it('✨ Enhance Prompt button opens the expansion panel', () => {
     cy.visit('/lq-ai/chats');
+    // The composer mounts only after a chat is selected.
+    cy.intercept('POST', '**/api/v1/chats').as('createChat');
+    cy.get('[data-testid="lq-ai-new-chat-btn"]').click();
+    cy.wait('@createChat', { timeout: 60000 }).its('response.statusCode').should('eq', 201);
     // Type a prompt so the ✨ button becomes enabled.
-    cy.get('[data-testid="lq-ai-composer-input"]').type(
+    cy.get('[data-testid="lq-ai-composer-input"]', { timeout: 15000 }).type(
       'review this NDA for unusual provisions'
     );
     // The enhance button is enabled only when composerText is non-empty.
@@ -153,19 +174,36 @@ describe('Wave B v2 — new surfaces', () => {
   // by default; clicking "View source" switches the tab and SkillSourceView renders
   // "Frontmatter" as the section heading.
   it('skill detail page renders SkillDetailTabs and tab switching works', () => {
+    const ts = Date.now();
+    const skillSlug = `cypress-skill-detail-${ts}`;
+
+    // A fresh stack has no user skills, so create the row this test opens.
+    getBearerToken((token) => {
+      cy.request({
+        method: 'POST',
+        url: `${API_BASE()}/api/v1/user-skills`,
+        headers: { Authorization: `Bearer ${token}` },
+        body: {
+          scope: 'user',
+          slug: skillSlug,
+          display_name: `Cypress skill detail ${ts}`,
+          description: 'Cypress fixture for skill detail tabs',
+          body: '# Cypress skill detail',
+          version: '1.0.0'
+        }
+      })
+        .its('status')
+        .should('eq', 201);
+    });
+
     cy.visit('/lq-ai/skills');
-    // Click the first skill name link — these are anchors with href="/lq-ai/skills/<slug>"
-    // (not /edit or /new). The skills list page uses data-testid="lq-ai-user-skill-row"
-    // rows; each title cell has an <a href="/lq-ai/skills/{slug}">.
-    cy.get('a[href^="/lq-ai/skills/"]')
-      .not('[href*="/edit"]')
-      .not('[href*="/new"]')
-      .first()
-      .click();
+    cy.intercept('GET', `**/api/v1/skills/${skillSlug}`).as('loadSkill');
+    cy.get(`a[href="/lq-ai/skills/${skillSlug}"]`).should('be.visible').click();
     cy.url().should('match', /\/lq-ai\/skills\/[^/]+$/);
+    cy.wait('@loadSkill', { timeout: 60000 }).its('response.statusCode').should('eq', 200);
 
     // SkillDetailTabs: the tablist container
-    cy.get('nav[role="tablist"][aria-label="Skill detail tabs"]').should('exist');
+    cy.get('nav[role="tablist"][aria-label="Skill detail tabs"]', { timeout: 15000 }).should('exist');
 
     // "Use it" tab is active by default (aria-selected="true")
     cy.contains('button[role="tab"]', 'Use it').should('have.attr', 'aria-selected', 'true');

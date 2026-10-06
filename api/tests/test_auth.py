@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
 
 import jwt as pyjwt
@@ -39,7 +39,7 @@ from app.models.user import User, UserSession
 from app.security import hash_password
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     """Build a FastAPI dependency override that yields the test session.
 
     The session has a SAVEPOINT-based join to an outer connection-level

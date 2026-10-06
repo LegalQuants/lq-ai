@@ -3,11 +3,12 @@
 	import { marked } from 'marked';
 	import DOMPurify from 'dompurify';
 	import { skillsApi } from '$lib/lq-ai/api';
-	import type { SkillInputs, SkillInputDef } from '$lib/lq-ai/types';
+	import type { SkillInputs, SkillInputDef, SkillReferenceFile } from '$lib/lq-ai/types';
 
 	export let slug: string;
 	export let contentMd: string;
 	export let contentYaml: string;
+	export let scriptFiles: SkillReferenceFile[] = [];
 
 	let inputs: SkillInputs | null = null;
 	let inputsError: string | null = null;
@@ -60,6 +61,17 @@
 </script>
 
 <div class="lq-source-view">
+	{#if scriptFiles.length > 0}
+		<section class="lq-source-section">
+			<h2 class="lq-text-label">Bundled helpers</h2>
+			{#each scriptFiles as file (file.path)}
+				<details>
+					<summary>{file.path}</summary>
+					<pre class="lq-yaml-block">{file.content}</pre>
+				</details>
+			{/each}
+		</section>
+	{/if}
 	<section class="lq-source-section">
 		<div class="lq-source-section-header">
 			<h2 class="lq-text-label">Frontmatter</h2>
@@ -116,7 +128,9 @@
 				</ul>
 			{/if}
 		{:else}
-			<p class="lq-text-body" style="color: var(--lq-text-secondary);">(This skill declares no inputs.)</p>
+			<p class="lq-text-body" style="color: var(--lq-text-secondary);">
+				(This skill declares no inputs.)
+			</p>
 		{/if}
 	</section>
 </div>
