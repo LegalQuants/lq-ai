@@ -17,6 +17,10 @@
 # CODEOWNERS only holds a PR if the branch ruleset requires
 # code-owner review. See ADR 0034 decision 5.
 #
+# The sole maintainer's own PRs merge under a logged ruleset
+# bypass (pull requests only, CI still required) until a second
+# maintainer joins the team. See ADR 0034 decision 5.
+#
 # References:
 # - PR review process: ../CONTRIBUTING.md#pull-request-process
 # - Review timelines:  ../CONTRIBUTING.md#review-timelines
@@ -40,7 +44,9 @@
 # security team exists, these paths are held for maintainer
 # review with the security-path checklist applied — which is
 # weaker than a dedicated security reviewer, and is stated that
-# way in CLAUDE.md rather than overclaimed.
+# way in CLAUDE.md rather than overclaimed. The maintainer's
+# own changes here are self-reviewed against that checklist
+# until a second maintainer exists.
 # TODO(ADR 0034): add @LegalQuants/lq-ai-security when staffed.
 /gateway/                      @LegalQuants/lq-ai-maintainers
 /docs/security/                @LegalQuants/lq-ai-maintainers

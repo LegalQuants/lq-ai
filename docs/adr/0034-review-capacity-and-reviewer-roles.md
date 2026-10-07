@@ -127,9 +127,24 @@ the metric ADR 0030's precondition P3 depends on.
   `required_approving_review_count: 1`, so that CODEOWNERS routing actually holds a PR. This is a
   repository-settings change, not a code change; it is an action item on this ADR's acceptance,
   recorded here so it cannot be quietly skipped.
+- **The rule binds every PR except the sole maintainer's own.** GitHub does not let an author
+  approve their own pull request, and today one maintainer does the reviewing. The review
+  requirement therefore lives in its own ruleset, with `lq-ai-maintainers` as a bypass actor in
+  *pull requests only* mode: the maintainer still opens a PR, CI still has to pass, and the merge
+  is recorded as a bypass in the audit log. The status checks and the history rules sit in a
+  separate ruleset with **no** bypass, so nobody skips CI. This is weaker than a second reviewer
+  and is stated that way. **The bypass is removed when a second maintainer joins the team** —
+  the moment ADR 0030's precondition P1 starts being measured — and from then on each
+  maintainer's PRs need the other's approval.
+- **Team membership means active review.** `lq-ai-maintainers` holds the people who review and
+  merge, which today is one person, so that a CODEOWNERS review request reaches someone who will
+  act on it. Organization owners keep their admin access independently of the team and remain
+  the backstop if the maintainer is unavailable.
 - Until a security team exists, a `gateway/` change is held for **maintainer review with the
   security-path checklist applied** — the honest version of the current claim, rather than the
-  stronger claim CLAUDE.md makes today. CLAUDE.md's wording is corrected to match.
+  stronger claim CLAUDE.md makes today. CLAUDE.md's wording is corrected to match. For the
+  maintainer's own security-path PRs that means a self-applied checklist under the bypass above,
+  until a second maintainer exists.
 
 ### 6. The principles-as-tests / review-bot proposal proceeds as a proposal
 
@@ -148,8 +163,13 @@ constraint is real, but automating review before there are reviewers solves the 
   attestation-vs-acceptance-run distinction. No Discord.
 - **.github/CODEOWNERS**: real team slugs; intent for specialist teams kept in comments.
 - **CLAUDE.md**: the security-routing sentence matches what is enforced.
-- **A repository-settings action item**: enable code-owner review and require one approval on
-  `main`. This ADR is not fully discharged until it is done.
+- **Three repository-settings action items**, none of which a PR can carry. This ADR is not fully
+  discharged until all three are done:
+  1. Split the `main` ruleset in two — status checks and history rules with no bypass; the
+     pull-request rule with code-owner review and one approval.
+  2. Add `lq-ai-maintainers` to the second ruleset as a bypass actor, *pull requests only*.
+  3. Set `lq-ai-maintainers` membership to the maintainers who actively review.
+- **A fourth, later**: remove the bypass when a second maintainer joins the team.
 - **ADR 0030 becomes measurable.** P1 gains a pipeline, P2 gains a pool, P3 gains a published
   number. That is the whole point of this ADR: it is the precondition machinery, and it is on the
   critical path for everything the trains promise.
@@ -170,6 +190,9 @@ constraint is real, but automating review before there are reviewers solves the 
 - **Leave the ruleset alone and rely on maintainer discipline** — rejected: it is exactly the
   "asserted, not enforced" pattern ADR 0029 exists to close, and it is asserted about the security
   boundary.
+- **Apply the one-approval rule to the maintainer's own PRs as well** — rejected for now: with one
+  active maintainer it either stops every maintainer PR or turns a second team member into a
+  rubber stamp. A logged bypass with a stated end condition is the honest version.
 
 ## Explicitly not decided
 
