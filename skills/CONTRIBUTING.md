@@ -107,13 +107,42 @@ Skills outside this catalog are also welcome — file an issue describing the us
 
 ---
 
+## Where does my contribution go?
+
+For jurisdiction and practice-area expansion, [ADR 0024](../docs/adr/0024-jurisdiction-and-practice-area-expansion.md)
+defines four routes:
+
+| Contribution shape | Route |
+|---|---|
+| Community work-product skill (S2) | [`LegalQuants/lq-skills`](https://github.com/LegalQuants/lq-skills/blob/main/CONTRIBUTING.md); `lq-ai/skills/` holds the curated first-party set. |
+| Authority source (S1) | `lq-ai` under [ADR 0021 D1–D6](../docs/adr/0021-content-source-registry-and-free-source-expansion.md), with the applicable gateway-egress security review. For authors outside the known-contributor circle, this includes the [external-contribution adversarial read](../docs/security/external-contribution-vetting.md). |
+| Corpus or statutory graph (S3) | An org-level repository under the DE-264 pattern; a maintainer decides placement per proposal. Operator-facing MCP wiring or live external lookups are S1-class changes in `lq-ai`. |
+| Practice area excluded by PRD §1.6 (S4) | A mini-PRD and committee-decided PRD amendment first; its S1/S2/S3 parts route normally once the amendment lands. |
+
+**Check the [contribution coverage map](../docs/contribute/coverage-map.md) before routing.**
+Compare the proposal with merged coverage and open claims across both repositories. The maintainer
+records or updates its jurisdiction, practice area, claim issue link, and status in the map in the
+same routing sweep, linking related or overlapping work.
+
+A proposal can have several parts: name each part and its route so they can proceed independently.
+Routing is a maintainer recommendation; a disputed route gets a second maintainer's review.
+These routes do not replace the applicable substantive or security review requirements.
+A separate community skill for a new domain, jurisdiction or regime follows S2 to `lq-skills`.
+A proposed change to an existing curated first-party skill follows this repository's existing
+review and attestation process; ask a maintainer to confirm whether the proposal is such a
+change or a separate community skill before routing it.
+Follow the contribution instructions in the destination repository. The process below applies
+to curated `lq-ai` skills containing legal substance.
+
+---
+
 ## The contribution process
 
 Skill contribution has five steps: claim, draft, attest, review, merge.
 
 ### 1. Claim
 
-**File or comment on a tracking issue first.** This avoids two contributors duplicating work on the same skill, surfaces any architectural or scope concerns early, and gives a maintainer the chance to flag related work.
+**Check the [contribution coverage map](../docs/contribute/coverage-map.md), then file or comment on a tracking issue first.** This avoids two contributors duplicating work on the same skill, surfaces any architectural or scope concerns early, and gives a maintainer the chance to flag related work.
 
 If a deferred-enhancement entry exists for the skill (e.g., DE-001 candidates, DE-002 regimes), comment on the existing issue or file a new one referencing the DE-### entry. If no entry exists, file an issue describing the skill: what it does, when it triggers, what inputs it takes, what output it produces, what perspective branching applies if any.
 
