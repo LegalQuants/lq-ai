@@ -1,7 +1,9 @@
 # ADR 0034 — Review capacity: the trusted-reviewer rung, maintainer promotion, the attorney pool, and an honest review SLA
 
-**Status:** Accepted (2026-10-04) — committee-ratified at the weekly call
-**Date:** 2026-09-09
+**Status:** Accepted (2026-10-04) — committee-ratified at the weekly call. Decision 5 was
+amended on 2026-10-07, after the call, to state the sole-maintainer bypass and the team
+membership rule.
+**Date:** 2026-09-09 (amended 2026-10-07)
 **Owner:** Maintainer team (houfu)
 **Related:** [ADR 0022 — committee governance and meeting records](0022-committee-governance-and-meeting-records.md),
 [ADR 0030 — pacing 1.0](0030-pacing-1.0-preconditions-and-named-trains.md),
