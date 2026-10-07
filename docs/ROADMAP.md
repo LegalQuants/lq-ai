@@ -275,7 +275,7 @@ Compliance Alignment Pack docs are stubs at v1 launch; per-framework alignment d
 
 | # | Item | Source | Complexity | Effort | Skill | Notes |
 |---|---|---|---|---|---|---|
-| 10.1 | DE-010 — Skill input form rendering for any skill | [DE-010](PRD.md#de-010--skill-input-form-rendering-for-any-skill) | 🟡 Medium | M | Frontend | Dynamic form generation from skill frontmatter. |
+| 10.1 | DE-010 — Skill input form rendering for any skill | [DE-010](PRD.md#de-010--skill-input-form-rendering-for-any-skill) | 🟡 Medium | M | Frontend | Dynamic form generation from skill frontmatter. Chat composer form implemented; Enhance Prompt review screen and a per-input file picker remain (see DE-010 status). |
 | 10.2 | DE-011 — Reasoning visibility configuration for Enhance Prompt | [DE-011](PRD.md#de-011--reasoning-visibility-configuration-for-enhance-prompt) | 🟢 Low | S | Frontend | Toggle + UI surface. |
 | 10.3 | DE-012 — Skill inspector side panel | [DE-012](PRD.md#de-012--skill-inspector-side-panel) | 🟡 Medium | M | Frontend | Side panel that surfaces the SKILL.md + references. |
 | 10.4 | DE-014 — Tone / Audience Settings on Skills | [DE-014](PRD.md#de-014--tone--audience-settings-on-skills) | 🟢 Low | S | Backend + Frontend | Per-skill tone defaults. |

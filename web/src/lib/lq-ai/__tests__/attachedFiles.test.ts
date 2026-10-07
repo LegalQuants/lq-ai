@@ -11,6 +11,8 @@ import { describe, expect, it } from 'vitest';
 import {
 	MAX_CHAT_ATTACHED_FILES,
 	canAttachChatFile,
+	processingFileNames,
+	readyFileNames,
 	selectFileIdsForSend
 } from '../chat/attachedFiles';
 import type { FileMeta, IngestionStatus } from '../types';
@@ -86,5 +88,21 @@ describe('selectFileIdsForSend', () => {
 		const ids = selectFileIdsForSend(files);
 		expect(ids).toHaveLength(16);
 		expect(ids).not.toContain('bad');
+	});
+});
+
+describe('readyFileNames / processingFileNames', () => {
+	// A skill's required document input may only lean on a file whose text
+	// the backend will actually inject, i.e. a 'ready' one.
+	const files = [meta('a', 'ready'), meta('b', 'failed'), meta('c', 'processing'), meta('d')];
+
+	it('counts only ready files as ready', () => {
+		expect(readyFileNames(files)).toEqual(['a.pdf']);
+		expect(readyFileNames([meta('c', 'pending')])).toEqual([]);
+	});
+
+	it('counts pending, processing and status-less files as processing, never failed ones', () => {
+		expect(processingFileNames(files)).toEqual(['c.pdf', 'd.pdf']);
+		expect(processingFileNames([meta('b', 'failed'), meta('a', 'ready')])).toEqual([]);
 	});
 });
