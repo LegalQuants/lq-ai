@@ -3268,7 +3268,7 @@ This subsection operationalizes the §1.9 engineering-discipline posture and the
 
 #### DE-225 — NIST AI RMF 1.0 Profile commitments
 
-> **Status: DRAFTED (AI-drafted, pending AI-governance-professional review).** Shipped as `docs/compliance/nist-ai-rmf-profile.md` (the mini-PRD's canonical filename; this entry's original `nist-ai-rmf-alignment.md` name is superseded) — all 72 AI RMF subcategories + the 12 AI 600-1 GenAI risks, with per-row ownership classes and resolving evidence paths; MEASURE gaps named honestly.
+> **Status: DRAFTED — professional attestation, counsel review, maintainer substantive/source review and release-state reconciliation PENDING.** Drafted as `docs/compliance/nist-ai-rmf-profile.md` (the mini-PRD's canonical filename; the original `nist-ai-rmf-alignment.md` name is superseded). The document contains all 72 AI RMF identifiers and 12 AI 600-1 risk rows; row coverage and evidence-path existence do not establish substantive alignment.
 
 **Priority:** P1 · **Effort:** M
 

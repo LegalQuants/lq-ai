@@ -2,6 +2,8 @@
 
 > Catalog of what LQ.AI ships today, what is deferred, and how to verify each. Maintained per release. **Current as of the fiduciary-grade agentic legal work milestone close (ADRs [0018](adr/0018-citation-ledger-and-fiduciary-grade-output.md)–[0021](adr/0021-content-source-registry-and-free-source-expansion.md)); migration head `0064`.** (Prior baselines: the legal-research + connectors (MCP) milestone close, #158–#193, head `0055`; before that, the M4 close plus the post-v0.4.0 "Donna" run, #115–#139, head `0047`.)
 
+> **Bounded local correction (2026-10-07):** Only the NIST draft status, test-strategy/coverage notes and DE-277 summary are reconciled here against ce57d6fa360ca18685e34acb8508a427d88c5494. The historical catalog baseline above is retained; a full catalog or planned-v0.8.1 assessment is not claimed.
+
 ## What this doc is
 
 This document catalogs what LQ.AI ships today, what is deferred, and how an operator can verify each. We publish it in source because the verification path for an open-source project terminates in code, not in a vendor's marketing claims. If you find a discrepancy between this doc and the codebase, the codebase is canonical; please [open an issue](https://github.com/LegalQuants/lq-ai/issues).
@@ -91,7 +93,7 @@ Character-level verification of every model-emitted citation against source docu
 - **Cascade** (`api/app/citation/verification.py`): Stage 1 `verify_exact_match` → Stage 2 `verify_tolerant_match` (rapidfuzz ≥95 + normalization) → Stage 3 `verify_paraphrase` (LLM judge via gateway) → Stage 4 `verify_ensemble` (N-model parallel, strict/majority, cost-budget fallback to Stage 3).
 - **Endpoint:** `GET /api/v1/chats/{chat_id}/messages/{message_id}/citations`; rows persist in `message_citations` (migrations `0025`–`0027`). Candidates that miss every stage are not persisted — the UI reads the absence as "unverified" (red).
 - **Verify:** `cd api && pytest tests/citation/ tests/test_chat_citations.py`; full reference in [`docs/citation-engine.md`](citation-engine.md).
-- **Known limitation:** a quote spanning two retrieved chunks silently drops at extraction ([DE-277](PRD.md#9-deferred-enhancements-and-identified-future-work); pinned by `api/tests/citation/test_edge_cases.py`).
+- **Chunk-boundary correction:** At the correction-review canon, DE-277 is resolved by a full-document fallback when normalized document text is available. No-text or unmatched candidates can still be dropped; this is not complete citation capture. Evidence: [extraction/fallback limits](https://github.com/LegalQuants/lq-ai/blob/ce57d6fa360ca18685e34acb8508a427d88c5494/api/app/citation/extraction.py#L194-L220); [resolved DE-277](https://github.com/LegalQuants/lq-ai/blob/ce57d6fa360ca18685e34acb8508a427d88c5494/docs/PRD.md#L2896-L2904).
 
 ### 3.2 Anonymization Layer — gateway middleware
 
@@ -263,12 +265,15 @@ The Compliance Alignment Pack at [`docs/compliance/`](compliance/) is a document
 | Threat model (STRIDE) / Architecture / Cryptography / Audit-logging / Encrypted-keys / Dependencies | M1 | `docs/security/*.md`, `docs/architecture.md` |
 | Security policy + coordinated disclosure | M1 | [`SECURITY.md`](../SECURITY.md) |
 | SOC2 / ISO 27001 / ISO 42001 / GDPR / HIPAA / FedRAMP alignment | stub | `docs/compliance/README.md` describes the format; per-framework docs land incrementally |
-| OWASP LLM Top 10 / NIST AI RMF profiles | not yet (community-friendly) | mini-PRDs at `docs/contribute/mini-prds/` |
+| NIST AI RMF 1.0 / Generative AI Profile | drafted — professional attestation, counsel review, maintainer source review and release reconciliation PENDING | [Draft profile](compliance/nist-ai-rmf-profile.md); identifier/path checks are not semantic assurance. |
+| OWASP LLM Top 10 profile | not yet (community-friendly) in this pinned PR snapshot | mini-PRDs at `docs/contribute/mini-prds/`; coordinate with its separate contribution. |
 | Procurement Pack (SIG Lite + CAIQ) | starter | `docs/procurement/sig-lite.md`; full pack [DE-086](PRD.md#9-deferred-enhancements-and-identified-future-work) |
 
 ---
 
 ## 8. Engineering-discipline state
+
+> **Bounded source update:** A documented [test strategy](https://github.com/LegalQuants/lq-ai/blob/ce57d6fa360ca18685e34acb8508a427d88c5494/docs/test-strategy.md) exists at the correction-review canon. The historical test counts elsewhere in this catalog were not re-counted by this correction pass; use that pinned inventory and release-specific CI evidence.
 
 Engineering rigor is measurable, not asserted. Test **file** counts below are verifiable without standing up the stack (`find … | wc -l`); pass counts run in CI (`.github/workflows/ci.yml`).
 
@@ -281,7 +286,7 @@ Engineering rigor is measurable, not asserted. Test **file** counts below are ve
 | Ruff lint + format (Python) | M1–M4 | `.github/workflows/ci.yml`: `ruff check api scripts` + `ruff format --check` |
 | mypy (api standard, gateway strict) | M1–M4 | CI `mypy app` per subsystem |
 | svelte-check (LQ.AI-owned code) | M1–M4 | `cd web && npm run check:lq-ai` (0 errors on `src/{lib,routes}/lq-ai/**`); inherited OpenWebUI debt tracked as DE-262 (§8.1) |
-| Coverage gate (target 80% api / 90% gateway) | not enforced | CI runs pytest but does not fail below threshold |
+| Coverage gate | historical snapshot originally recorded no threshold; bounded correction verified at ce57d6fa360ca18685e34acb8508a427d88c5494: 80% API / 88% gateway enforced, 90% gateway target still pending | [API coverage floor 80%](https://github.com/LegalQuants/lq-ai/blob/ce57d6fa360ca18685e34acb8508a427d88c5494/.github/workflows/ci.yml#L185-L185); [gateway coverage floor 88%](https://github.com/LegalQuants/lq-ai/blob/ce57d6fa360ca18685e34acb8508a427d88c5494/.github/workflows/ci.yml#L251-L251); [DE-395](https://github.com/LegalQuants/lq-ai/blob/ce57d6fa360ca18685e34acb8508a427d88c5494/docs/PRD.md#L5151-L5155) |
 | Mutation / property-based testing, eval harness, Cypress-in-CI | not yet | On the engineering-discipline roadmap |
 | OpenSSF Scorecard / Best Practices Badge | not yet (community-friendly) | mini-PRDs at `docs/contribute/mini-prds/` |
 | SLSA-3 provenance / Sigstore-signed images / SBOM per release | committed | `docs/security/releases/README.md` |

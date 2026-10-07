@@ -390,7 +390,7 @@ For procurement reviews, see:
 - [PRD §1.8 Security Posture](docs/PRD.md#18-security-posture) — the full security philosophy and tier model.
 - [PRD Appendix E — Pre-Empted Procurement Objections](docs/PRD.md#appendix-e--pre-empted-procurement-objections) — 17 common procurement-team objections with direct responses.
 - [docs/compliance/](docs/compliance/) — Compliance Alignment Pack (SOC 2, ISO 27001, ISO 42001, GDPR, HIPAA, FedRAMP).
-- [docs/compliance/nist-ai-rmf-profile.md](docs/compliance/nist-ai-rmf-profile.md) — NIST AI RMF 1.0 + Generative AI Profile (AI 600-1) profile: all 72 subcategories and 12 GAI risks mapped with per-row ownership and repo-path evidence (self-assessment, pending AI-governance-professional review).
+- [docs/compliance/nist-ai-rmf-profile.md](docs/compliance/nist-ai-rmf-profile.md) — draft NIST AI RMF 1.0 + Generative AI Profile mapping: 72 subcategory rows and 12 risk rows, with ownership/evidence notes. Professional attestation, counsel review, maintainer source review and release-state reconciliation remain pending; this is not procurement assurance.
 - [docs/security/](docs/security/) — SBOM, signed-release verification, build provenance, threat model, dependency security.
 
 ---
