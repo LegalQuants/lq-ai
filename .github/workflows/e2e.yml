@@ -38,6 +38,9 @@ jobs:
     name: Deterministic Cypress track against the compose stack
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    env:
+      PUBLIC_LQ_AI_API_BASE_URL: http://localhost:8000/api/v1
+      LQ_AI_CORS_ORIGINS: http://localhost:3000
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
