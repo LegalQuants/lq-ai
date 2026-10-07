@@ -116,7 +116,7 @@ visibly.
 | **Enforced** | 2026-10-31 | What the docs promise, CI enforces | D1, D2, D3, P1, F1, F2, R1; H1 fix shapes decided; first D4 batch; the ratification series on `main` |
 | **Honest Documents** | 2026-12-31 | Documents never fail silently | [ADR 0033](adr/0033-document-pipeline-honesty-and-ocr.md) — the honesty audit, OCR T1+T2 (DE-320/DE-387), the local embedding path (DE-355), chat attachments; remaining Mediums; the F3 lane decision |
 | *(checkpoint)* | first committee call of 2027 | Preconditions read against measured data | Met → the committee sets the date. Unmet → narrower scope or slower trains, decided publicly |
-| **First Run** | 2027-02-28 | The first run doesn't fight you | Lite mode (DE-388), the docs site, the F3 build if owned, desktop first-run, D4 batches 2–3, SSO/OIDC scoping (DE-390) |
+| **First Run** | 2027-02-28 | The first run doesn't fight you | Lite mode (DE-398), the docs site, the F3 build if owned, desktop first-run, D4 batches 2–3, SSO/OIDC scoping (DE-400) |
 | **Candidate** | 2027-04-30 | The acceptance lap | H3, R2, the H2 register complete, D4 complete, every F row green or labeled experimental |
 
 **Capacity, honestly.** The kept gate is 90–145 person-days; the vote-sequenced additions add
@@ -136,7 +136,7 @@ column, so that "post-1.0" is a queue rather than a wastebasket:
 | 6 | Per-framework compliance packs (SOC 2, ISO 27001, ISO 42001, GDPR, HIPAA, FedRAMP) |
 | 5 | DOCX tracked changes ([ADR 0017](adr/0017-docx-ingest-via-pandoc.md) governs; #272, #315) |
 | 5 | Email intake |
-| 5 | Principles-as-tests / review assistance (DE-391) |
+| 5 | Principles-as-tests / review assistance (DE-401) |
 | 5 | Jurisdiction packs ([ADR 0024](adr/0024-jurisdiction-and-practice-area-expansion.md)) |
 | 5 | Practice-management connectors (#529) |
 | 4 | The full Word add-in surface (DE-287 beyond the F3 slice) |

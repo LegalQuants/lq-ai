@@ -5211,7 +5211,7 @@ The DE-240 leakage harness measured a 100% miss rate for organization names thro
 
 ---
 
-#### DE-388 — Lite mode: a slim image for small teams
+#### DE-398 — Lite mode: a slim image for small teams
 
 **Priority:** P1 · **Effort:** L · **Status: filed 2026-09-09** (member survey: 4 votes for 1.0, the third-highest candidate; scheduled in the *First Run* train per [ADR 0030](adr/0030-pacing-1.0-preconditions-and-named-trains.md)).
 
@@ -5223,7 +5223,7 @@ The DE-240 leakage harness measured a 100% miss rate for organization names thro
 
 ---
 
-#### DE-389 — Document-dump ingest
+#### DE-399 — Document-dump ingest
 
 **Priority:** P2 · **Effort:** M–L (scoping first) · **Status: filed 2026-09-09** (member survey write-in, 4 mentions — the third-strongest write-in).
 
@@ -5235,7 +5235,7 @@ The DE-240 leakage harness measured a 100% miss rate for organization names thro
 
 ---
 
-#### DE-390 — SSO / OIDC for team deployments
+#### DE-400 — SSO / OIDC for team deployments
 
 **Priority:** P2 · **Effort:** L · **Status: filed 2026-09-09** (member survey write-in: multi-user and 2FA, 2 mentions; scoped in the *First Run* train).
 
@@ -5247,7 +5247,7 @@ The DE-240 leakage harness measured a 100% miss rate for organization names thro
 
 ---
 
-#### DE-391 — Principles-as-tests / review assistance
+#### DE-401 — Principles-as-tests / review assistance
 
 **Priority:** P3 · **Effort:** M · **Status: filed 2026-09-09 as a proposal, not a commitment** (member survey candidate c16: 1 for 1.0 · 5 post-1.0; [ADR 0034](adr/0034-review-capacity-and-reviewer-roles.md) decision 6).
 
