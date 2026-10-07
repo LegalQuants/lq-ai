@@ -1,7 +1,6 @@
 # ADR 0030 — Pacing 1.0: date preconditions, the January checkpoint, and named trains
 
-**Status:** Proposed (2026-09-09; tabled for decision at the LQAI Committee weekly call of
-2026-09-13)
+**Status:** Accepted (2026-10-04) — committee-ratified at the weekly call
 **Date:** 2026-09-09
 **Owner:** Maintainer team (houfu)
 **Related:** [ADR 0029 — definition of 1.0](0029-definition-of-1.0.md),
@@ -20,11 +19,12 @@ date until the capacity constraint is addressed," three for other framings (sett
 model first; anchor in demonstrated user need; settle the product definition first), one for the
 proposed date. The date did not carry. The structural answer did.
 
-The arithmetic behind that vote is not in dispute:
+The arithmetic behind that vote is not in dispute. As measured when this ADR was drafted
+(2026-09-09):
 
 - The kept 1.0 gate is **90–145 person-days** (52–81 build + 33–54 review + 5–10 attorney-days).
 - Observed throughput is **≈ 16 person-days per month**, maintainer-only.
-- Roughly **25 substantive PRs** are open, and most of one contributor's month-old queue is
+- Roughly **25 substantive PRs** were open, and most of one contributor's month-old queue was
   unreviewed. The binding constraint is **review**, not authorship.
 
 A date set against those numbers would be a date the project misses. But "no date" is not a plan
@@ -116,12 +116,11 @@ adjusting the other.
 - **PRD §7.8** gains a note that release *planning* uses named trains while release *numbering*
   stays computed per ADR 0025 — the two are not in tension, they are different objects.
 - **ROADMAP.md** gains the "Path to 1.0" section with the four trains and their contents.
-- GitHub milestones are renamed and created to match the train names; `road-to-1.0` labels attach
-  to gate items. The empty `v0.7.3` milestone becomes *Enforced*; `v0.7.2` (the in-motion
-  hardening cut, due 2026-09-30) is kept as-is and is **not** a train — it ships as whatever
-  number ADR 0025 computes.
-- The capacity arithmetic is published with the trains rather than held privately: each train
-  carries its own build + review estimate against observed throughput, so when a train ships
+- A GitHub milestone is created for each train, and a `road-to-1.0` label attaches to gate
+  items. Numbered release milestones are kept as release buckets and are **not** trains — a
+  release ships as whatever number ADR 0025 computes.
+- The capacity arithmetic is published with the trains rather than held privately: ROADMAP.md
+  states the gate's build + review estimate against observed throughput, so when a train ships
   thin, the reason is already on the page.
 
 ## Alternatives considered

@@ -1,7 +1,6 @@
 # ADR 0034 — Review capacity: the trusted-reviewer rung, maintainer promotion, the attorney pool, and an honest review SLA
 
-**Status:** Proposed (2026-09-09; tabled for decision at the LQAI Committee weekly call of
-2026-09-13)
+**Status:** Accepted (2026-10-04) — committee-ratified at the weekly call
 **Date:** 2026-09-09
 **Owner:** Maintainer team (houfu)
 **Related:** [ADR 0022 — committee governance and meeting records](0022-committee-governance-and-meeting-records.md),
@@ -105,13 +104,16 @@ indications are far more likely to convert against the lighter ask.
 
 CONTRIBUTING.md's SLA is replaced with one the project can meet and does measure:
 
-- A **first-response target** — the maintainer team's stated aim, with the current measured median
-  published alongside it, refreshed at the committee's checkpoints.
+- A **first-response target of 7 days** — the maintainer team's stated aim, with the measured
+  median published alongside it and refreshed at the committee's checkpoints. No median has been
+  published yet.
 - The **weekly review-slots practice**: a recurring block in which the open queue is worked in a
   published priority order (ratification docs → gate PRs → volunteer follow-ups and D4 →
   everything else).
 - **Escalation that exists**: the Discord references in CONTRIBUTING.md and skills/CONTRIBUTING.md
-  are removed in favour of GitHub Discussions and pinging a maintainer on the PR, closing #490.
+  are removed in favour of GitHub Discussions and pinging a maintainer on the PR. The remaining
+  references #490 lists (README, PRD §7.7, the issue-template contact link) go with them,
+  closing #490.
 
 A published target with a published measurement is honest whether or not the number is good.
 A published target alone, as today, is the failure mode ADR 0029 was written against — and it is
@@ -198,7 +200,7 @@ constraint is real, but automating review before there are reviewers solves the 
 
 - **Who the first trusted reviewers are** — nominations follow adoption; the survey's volunteers
   are approached individually, with consent before any public naming.
-- **The numeric first-response target** — set with the first published measurement rather than
-  guessed now, so the number means something.
+- **When the first measured median is published** — the target is 7 days (decision 4); the
+  number beside it arrives at a committee checkpoint, and no date is set for that here.
 - **Whether the committee also wants a separate security-reviewer role** — revisit when there is
   more than one candidate for it.

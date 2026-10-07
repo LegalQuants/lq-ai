@@ -1,6 +1,6 @@
 # ADR 0032 — The Word add-in 1.0 slice: scope, the DE-287 collision, and document-representation sequencing
 
-**Status:** Proposed (2026-09-09; opened for comment, not for decision at the 2026-09-13 call)
+**Status:** Accepted (2026-10-04) — committee-ratified at the weekly call
 **Date:** 2026-09-09
 **Owner:** Maintainer team (houfu)
 **Related:** [ADR 0029 F3](0029-definition-of-1.0.md),
@@ -27,7 +27,7 @@ surface.
 3. **The F3 slice itself** — skills-on-selection with redlines, which is neither of the above.
 
 Every review cycle spent on any one of these before the lane is chosen is a cycle spent against a
-constraint the project does not have to spare. This ADR opens for comment rather than decision:
+constraint the project does not have to spare. This ADR decides the process, not the outcome:
 the collision needs the contributor's and the fork's voices in the thread, not a committee vote
 taken without them.
 

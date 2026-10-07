@@ -1827,7 +1827,6 @@ PyMuPDF (AGPL) is used server-side only and not redistributed as a library; the 
 
 - **GitHub Issues** for bugs and feature requests.
 - **GitHub Discussions** for community Q&A.
-- **Discord** (LegalQuants-hosted) for synchronous community.
 - **Blog** at legalquants.com/blog for releases and roadmap updates.
 
 ### 7.8 Release Cadence and Supply-Chain Transparency
@@ -3813,6 +3812,8 @@ The practical consequence: an operator generating an MSA playbook gets a structu
 
 **Priority:** P2 · **Effort:** M (chat + skills) + M (playbook execution) + S (tier badge) = ~26–34 hours of Word-side feature work, on top of the M3 Phase B plumbing
 
+**Status (2026-10-04): the 1.0 slice is scoped by [ADR 0032](adr/0032-word-add-in-1.0-slice.md).** Running a skill on the selection or the document, with tracked-changes redlines written back, is the 1.0 slice (gate row F3 of [ADR 0029](adr/0029-definition-of-1.0.md)); in-Word chat, playbook execution and the tier badge stay post-1.0. Three lanes currently claim the Word surface — PR #314 (document-grounded chat), the downstream fork's `word-add-in-surfaces` branch, and the slice itself — and ADR 0032 decision 2 commits to choosing the canonical lane before more review is spent on any of them.
+
 **Context:** The M3 Implementation Plan originally scoped four feature-surface tasks inside the Word add-in: M3-B3 (chat against the open document), M3-B4 (skills in Word with tracked-changes + comments rendering), M3-B5 (playbook execution in Word), and M3-B6 (Inference Tier badge in the task pane). At the M3-A6 PR #57 close (2026-05-21) the M3 critical path was retightened: Phase B retains its plumbing (M3-B1 scaffold + M3-B2 OAuth + M3-B7 signed manifest + code-signing cert procurement + M3-B8 self-hosted JS bundle and version handshake) but defers the four Word-side feature tasks to M4 or to community contribution. The plumbing alone is enough to make the add-in installable and authenticated against an LQ.AI deployment; community contributors with existing Word plugin code can fork against that plumbing without LegalQuants needing to ship every feature surface in M3.
 
 The descope is risk-driven rather than scope-driven. Office.js feature work requires a Word client for live testing, an iterative debug loop against a Microsoft 365 tenant, and a tracked-changes + comments rendering surface that has no analog in the existing SvelteKit codebase. Combining that effort with M3's already-committed Tabular Review (Phase C) + Slack/Teams plumbing (Phase D) + acceptance pass (Phase E) made M3 schedule-risk-bearing. Splitting the feature surface to M4 (where the autonomous layer is the headline) preserves the v0.3.0 release window and matches the open-source-first posture of inviting community contributors into the add-in's user-facing tabs.
@@ -5215,7 +5216,7 @@ The DE-240 leakage harness measured a 100% miss rate for organization names thro
 
 **Priority:** P1 · **Effort:** L · **Status: filed 2026-09-09** (member survey: 4 votes for 1.0, the third-highest candidate; scheduled in the *First Run* train per [ADR 0030](adr/0030-pacing-1.0-preconditions-and-named-trains.md)).
 
-**Context:** The `api` image is roughly 12 GB, most of it Docling and torch — weight that [ADR 0026](adr/0026-document-ingestion-parser-and-docling.md) made removable by deleting the dead integration, and that [ADR 0033](adr/0033-document-pipeline-honesty-and-ocr.md) keeps removable by making heavy parsers opt-in adapters rather than baked-in defaults. A small in-house team evaluating LQ.AI pulls 12 GB before it can decide whether it wants the product. This is the single largest friction point in the first-run story, and the survey's write-in ordering (attorney-first UX polish first) says the first run is where the project is losing people.
+**Context:** The `api` image is roughly 12 GB, most of it Docling and torch — weight that [ADR 0026](adr/0026-document-ingestion-parser-and-docling.md) decided to remove with the dead integration (the dependency was still present on 2026-10-07), and that [ADR 0033](adr/0033-document-pipeline-honesty-and-ocr.md) keeps removable by making heavy parsers opt-in adapters rather than baked-in defaults. A small in-house team evaluating LQ.AI pulls 12 GB before it can decide whether it wants the product. This is the single largest friction point in the first-run story, and the survey's write-in ordering (attorney-first UX polish first) says the first run is where the project is losing people.
 
 **Specific scope:** a slim image variant carrying the application, the API and gateway, and the PyMuPDF default parser — with heavy parsers, OCR models and their transitive ML stack pulled only when an operator enables the corresponding adapter. Publish it alongside the full image with a documented choice between them; the desktop launcher's pinned image set (gate row R1) selects one deliberately.
 

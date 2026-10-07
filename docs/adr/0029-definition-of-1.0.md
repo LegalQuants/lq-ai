@@ -1,7 +1,7 @@
 # ADR 0029 — Definition of 1.0
 
-**Status:** Proposed (drafted 2026-08-17; amended 2026-09-09 against the closed member
-survey; tabled for decision at the LQAI Committee weekly call of 2026-09-13)
+**Status:** Accepted (2026-10-04) — committee-ratified at the weekly call (drafted
+2026-08-17; amended 2026-09-09 against the closed member survey)
 **Date:** 2026-08-17 (amended 2026-09-09)
 **Owner:** Maintainer team (houfu)
 **Related:** [ADR 0025 — release versioning](0025-release-versioning-and-pipeline-ordering.md),
@@ -58,7 +58,8 @@ The 2026-08-17 draft of this ADR was tabled for acknowledgment on 2026-08-24 and
 membership as a structured survey, which closed on 2026-09-04 with **9 ballots** (220 of 306
 possible positions explicit, 71.9%). Results are recorded here as aggregates only; individual
 ballots are not published. Where the survey settled a question, the decision below cites the
-count. Where it did not, this ADR says so and the committee decides at the call.
+count. Where it did not, this ADR says so, and the committee decided the question by accepting
+the ADR on 2026-10-04.
 
 The survey's own method ruling, recorded for the avoidance of doubt: **blanks are reported
 separately and never folded into either bucket**, explicit abstain-by-instruction is honored, and
@@ -225,7 +226,8 @@ which schedules it.
 The one defensible variation, recorded so the committee can take it deliberately rather than
 discover it later: admit **OCR tier 2** — the opt-in scanned-PDF adapter, 5–7 person-days, with a
 confirmed champion — as a fourth completion item **F4**. The release plan in ADR 0030 is the same
-either way; only what *blocks* the tag changes.
+either way; only what *blocks* the tag changes. **The variation was not taken**: the committee
+accepted this ADR as proposed on 2026-10-04, so the gate stays at F1–F3.
 
 ---
 
@@ -271,8 +273,6 @@ either way; only what *blocks* the tag changes.
 
 ## Explicitly not decided
 
-- **Whether OCR tier 2 becomes F4** — put to the committee in decision 9; the recommendation is
-  no, and the plan is unchanged either way.
 - **LTS / support windows for 1.x** — PRD §7.8's support-cadence language was already restated as
   best-effort by ADR 0025; whether 1.0 changes that is deferred until the gate is closer.
 - **Whether PRD §5.8's gateway target moves to 88% or the gate rises to 90%** — decision 4 (D1)

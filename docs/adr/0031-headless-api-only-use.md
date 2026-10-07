@@ -1,7 +1,6 @@
 # ADR 0031 — Headless / API-only use: acknowledged, not supported
 
-**Status:** Proposed (2026-09-09; tabled for decision at the LQAI Committee weekly call of
-2026-09-13)
+**Status:** Accepted (2026-10-04) — committee-ratified at the weekly call
 **Date:** 2026-09-09
 **Owner:** Maintainer team (houfu)
 **Related:** [ADR 0029 — definition of 1.0](0029-definition-of-1.0.md),
@@ -13,8 +12,9 @@
 
 ## Context
 
-The `api` and `gateway` services expose a 182-operation HTTP surface, and a stack of
-`postgres + redis + minio + gateway + api` boots and serves it without `web` ever starting. People
+The `api` and `gateway` services expose an HTTP surface of nearly two hundred operations (182 in
+the generated export when this ADR was drafted), and a stack of
+`postgres + redis + rustfs + gateway + api` boots and serves it without `web` ever starting. People
 have noticed. The question the survey put was whether that de-facto capability should become a
 supported product surface — a "headless edition" — or stay an unsupported side effect.
 
@@ -36,7 +36,7 @@ not have.
 ### 1. Headless use is acknowledged, not supported
 
 One honest page in the deployment documentation: a headless `api + gateway` stack boots today,
-here is the compose profile that does it, here is what works, **and there is no compatibility
+here are the services to start, here is what works, **and there is no compatibility
 promise**. The page exists so the answer is documented rather than repeated, not to invite
 dependency.
 
@@ -48,7 +48,7 @@ are not fixed on a promise; a PR with a test is welcome and is reviewed on its m
 
 ### 3. The OpenAPI export is a drift guard, not a public contract
 
-The 182-operation export stays CI-drift-guarded (DE-373) because that guard protects the
+The generated OpenAPI export stays CI-drift-guarded (DE-373) because that guard protects the
 project's *own* clients. It is **not** a public compatibility contract: **ADR 0025's patch and
 minor promises do not extend to third-party API clients.** A patch that is a blind upgrade for an
 operator may still break an unsanctioned client, and that is not a regression.
@@ -80,7 +80,8 @@ surface with a support promise stapled on.
 ## Consequences
 
 - A new page under the deployment docs describing the headless boot, explicitly labeled
-  unsupported. It is a factual description, not a quickstart.
+  unsupported. It is a factual description, not a quickstart. The page is not written yet; it
+  is item C20 of the documentation-site work plan (ADR 0028).
 - PRD §9 gains a note recording this decision and the revisit triggers.
 - The survey's own rule stands: **headless use never moves the 1.0 meter.** It is neither a gate
   row nor a candidate; it is a support-posture question that happens to have been asked at the

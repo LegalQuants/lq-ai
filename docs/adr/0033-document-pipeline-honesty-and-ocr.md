@@ -1,6 +1,6 @@
 # ADR 0033 — Document-pipeline honesty, the OCR un-deferral, and a local embedding path
 
-**Status:** Proposed (2026-09-09; opened for comment, not for decision at the 2026-09-13 call)
+**Status:** Accepted (2026-10-04) — committee-ratified at the weekly call
 **Date:** 2026-09-09
 **Owner:** Maintainer team (houfu)
 **Affected components:** `api/` (ingestion), `gateway/` (embedding alias — security path)
@@ -20,7 +20,8 @@ definition of 1.0 while asking for "a marquee capability" named *document-pipeli
 capability. The downstream fork runs OCR in production today. One comment asked for
 "government-grade on-prem."
 
-Against that, the pipeline currently fails **silently** in at least four ways:
+Against that, when this ADR was drafted the pipeline failed **silently** in at least four ways.
+Three remain; the fourth was closed on 2026-09-13:
 
 - A **scanned PDF** uploads "successfully", produces no extractable text, and never enters
   retrieval context. The user is told it worked.
@@ -28,9 +29,12 @@ Against that, the pipeline currently fails **silently** in at least four ways:
   message at upload time (DE-355). Search gets quietly worse.
 - A **still-ingesting attachment** has no visible state (#512), so a question asked too early is
   answered from nothing.
-- A **provider failure** can surface as an empty HTTP 200 rather than an error (#504, #503).
+- A **provider failure** could surface as an empty HTTP 200 rather than an error (#503).
+  **Closed**: #504 surfaces it as an error, and
+  [ADR 0027](0027-request-budgets-and-timeouts.md) records the rule.
 
-[ADR 0026](0026-document-ingestion-parser-and-docling.md) removed the dead Docling integration and
+[ADR 0026](0026-document-ingestion-parser-and-docling.md) decided to remove the dead Docling
+integration (the dependency was still in `api/pyproject.toml` on 2026-10-07) and
 **deferred** the pluggable/stronger ingester as DE-387, explicitly leaving open whether the seam
 belongs in core or in operator configuration. The survey overturned that deferral's priority — not
 its reasoning. This ADR takes up the question ADR 0026 parked, with the vote behind it.
@@ -52,7 +56,7 @@ below is not a new gate row; it is what the operating principle already requires
 | Scanned PDF uploads "successfully", never enters context | An explicit `needs_ocr` state on the document |
 | No embedding provider → silent FTS-only degradation | An actionable message **at upload time** (DE-355) |
 | Still-ingesting attachment has no visible state | Visible ingestion state (#512) |
-| Provider failure → empty HTTP 200 | An error (#504, #503) |
+| Provider failure → empty HTTP 200 | An error — **done** (#504, ADR 0027) |
 
 This binds at 1.0 under ADR 0029's operating principle. It is the cheapest work in this ADR and
 the only part of it that gates the tag.
@@ -66,8 +70,8 @@ Reversing the **priority** of the 2026-08-23 DE-387 / DE-320 deferral, which the
 - **T2 — an opt-in scanned-PDF OCR adapter** behind a small parser seam. 5–7 person-days.
   **Default off**; models fetched only when enabled, so the air-gap story and the image size are
   both intact. A champion is confirmed. This is the tier ADR 0029 decision 9 flags as the one
-  defensible candidate for admission to the gate as F4 — the committee's call, and the schedule
-  is the same either way.
+  defensible candidate for admission to the gate as F4. It was not admitted when ADR 0029 was
+  accepted, and the schedule is the same either way.
 - **T3 — the full pluggable parser** with a structured-output consumer. 12–20 person-days.
   **Post-1.0** unless a champion lands it.
 
@@ -107,8 +111,9 @@ here; one has changed:
   application code" precisely so a future local adapter could land. This is that adapter.
 
 **This is a `gateway/` change and therefore a security path** under
-[CODEOWNERS](../../.github/CODEOWNERS): it routes to security review, and it does not merge on a
-single maintainer approval.
+[CODEOWNERS](../../.github/CODEOWNERS): it is reviewed against the security-path checklist as
+[ADR 0034](0034-review-capacity-and-reviewer-roles.md) decision 5 describes, which is maintainer
+review until a security team exists.
 
 ---
 
@@ -116,10 +121,11 @@ single maintainer approval.
 
 - **ADR 0026 is amended** in its DE-387 disposition: the deferral's *priority* is reversed and the
   core-vs-operator seam question is answered (decision 3). Its reasoning about removing the dead
-  integration stands untouched.
+  integration stands untouched. ADR 0026 carries a notice pointing here.
 - **ADR 0008 is revised** by decision 5, on the record above rather than by silent extension.
-- DE-320, DE-355 and DE-387 status lines are updated; HONEST-STATE's ingest rows change from
-  "works" to what actually happens.
+  ADR 0008 carries a notice pointing here.
+- DE-320, DE-355 and DE-387 status lines are updated. HONEST-STATE's ingest rows change from
+  "works" to what actually happens as the honesty audit below reports; they are unchanged today.
 - The *Honest Documents* train (ADR 0030) carries this work: the honesty audit first — enumerate
   every silent-failure path and record a baseline count — then T1, T2 and the embedding path.
 - The audit's count is published and tracked down. "No silent failure" is a claim that needs a
@@ -149,4 +155,3 @@ single maintainer approval.
   and the air-gap requirement.
 - **Whether T3 ever ships** — champion-dependent, post-1.0.
 - **The outcome of the permissive-parser evaluation** — that is what the evaluation is for.
-- **Whether T2 becomes ADR 0029's F4** — put to the committee in ADR 0029 decision 9.
