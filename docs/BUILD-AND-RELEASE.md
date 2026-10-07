@@ -105,8 +105,10 @@ done
 > one component substantively changed. Before tagging, set **both**
 > `api/app/__init__.py` and `gateway/app/__init__.py` to `X.Y.Z`; the
 > `version-consistency` job in `release.yml` fails the tag push if they disagree with
-> each other or with the tag. `web/package.json` tracks the OpenWebUI fork upstream and
-> is **not** bumped to match.
+> each other or with the tag. Regenerate the committed backend OpenAPI export with
+> `make openapi` so its `info.version` matches the API version; the export drift guard
+> checks it in CI. `web/package.json` tracks the OpenWebUI fork upstream and is **not**
+> bumped to match.
 >
 > The desktop launcher versions independently (`desktop-vX.Y.Z`) and records which
 > `vX.Y.Z` image set it ships against — see *Image ↔ launcher relationship* below.
