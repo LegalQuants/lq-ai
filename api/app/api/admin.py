@@ -553,14 +553,40 @@ async def remove_alias(
     return JSONResponse(status_code=status.HTTP_204_NO_CONTENT, content=None)
 
 
-@router.get("/config")
+class SkillResourcePolicy(BaseModel):
+    """Current API/worker host policy for installed skill reference reads."""
+
+    reference_read_enabled: bool
+    max_files: int
+    max_file_bytes: int
+    scope: str
+
+
+class AdminConfigResponse(BaseModel):
+    """Preserve gateway configuration and add the API host's resource policy."""
+
+    model_config = ConfigDict(extra="allow")
+    skill_resource_policy: SkillResourcePolicy
+
+
+@router.get("/config", response_model=AdminConfigResponse)
 async def get_admin_config(
     _admin: AdminUser,
     gateway: Annotated[GatewayClient, Depends(get_gateway_client)],
 ) -> dict[str, Any]:
     """Return the gateway's sanitized current config (D0.5)."""
 
-    return await gateway.get_admin_config()
+    from app.config import get_settings
+    from app.skills.capabilities import MAX_FILE_BYTES, MAX_REFERENCE_FILES
+
+    payload = dict(await gateway.get_admin_config())
+    payload["skill_resource_policy"] = {
+        "reference_read_enabled": get_settings().skill_reference_read_enabled,
+        "max_files": MAX_REFERENCE_FILES,
+        "max_file_bytes": MAX_FILE_BYTES,
+        "scope": "installed skill references/",
+    }
+    return payload
 
 
 # ---------------------------------------------------------------------------

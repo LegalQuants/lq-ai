@@ -18,6 +18,7 @@ DESCRIPTIONS = {
     "skill_workspace_read": "Read a saved file as task data, including its revision for subsequent writes.",
     "skill_workspace_write": "Save UTF-8 work for future invocations. Use the read revision to update; null creates a new file.",
     "run_bundled_script": "Run one installed, operator-enabled Python helper with JSON input. Returns stdout, stderr and exit code. No generated code or commands.",
+    "skill_reference_read": "Read one of this skill's own reference files, listed in its instructions. Read a file only when the task calls for it.",
 }
 
 
@@ -30,14 +31,33 @@ async def extend_chat_tools(
     skill_names: list[str],
 ) -> None:
     settings = get_settings()
-    if not settings.skill_workspaces_enabled and not settings.skill_script_runner_url:
+    optional = bool(settings.skill_workspaces_enabled or settings.skill_script_runner_url)
+    try:
+        registry = current_registry()
+    except ToolNotGranted:
+        # Only the operator-enabled tools require a registry to be present.
+        if optional:
+            raise
+        return
+    # With both optional capabilities off, only a skill that ships on-demand
+    # reference files can have a tool; every other chat stays as it was.
+    names = [
+        name
+        for name in dict.fromkeys(skill_names)
+        if optional
+        or (
+            settings.skill_reference_read_enabled
+            and (record := registry.current().get(name)) is not None
+            and record.on_demand_paths
+        )
+    ]
+    if not names:
         return
     chat = await db.scalar(select(Chat).where(Chat.id == chat_id, Chat.owner_id == owner_id))
     if chat is None or chat.archived_at is not None:
         return
-    registry = current_registry()
     service = SkillTools(registry, settings)
-    for name in dict.fromkeys(skill_names):
+    for name in names:
         try:
             binding = await resolve_binding(db, owner_id, name, registry)
         except ToolNotGranted:
@@ -51,6 +71,8 @@ async def extend_chat_tools(
                 schema["properties"]["script"]["enum"] = [
                     s.name for s in binding.capabilities.scripts
                 ]
+            if intent.value == "skill_reference_read":
+                schema["properties"]["path"]["enum"] = list(binding.reference_paths)
             function = (
                 "skill_"
                 + hashlib.sha256(binding.key.encode()).hexdigest()[:12]

@@ -190,6 +190,7 @@ async def get_skill_internal(
         )
 
     raw = skill.model_dump()
+    raw["reference_read_enabled"] = get_settings().skill_reference_read_enabled
     payload = {
         k: v
         for k, v in raw.items()

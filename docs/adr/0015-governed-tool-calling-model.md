@@ -71,6 +71,20 @@ A tool whose metadata is `destructive` or `requires_confirmation` is **excluded 
 
 Mirroring ADR 0013 D6: every tool call emits an OTel span (`chat.tool_call` / `autonomous.tool_call`, attributes = tool/provider/tier/outcome/cost, counts and types only), writes a `tool_call_log` row, and surfaces in the UI as a **provenance pill** (which tool, which provider, which tier). Case-law answers additionally carry external-source citation provenance (ADR 0014 D5 + the citation engine), so a research answer is reproducible, not a bare chat bubble. A skill that uses tools **declares** that usage and its `minimum_inference_tier` in SKILL.md frontmatter — note that frontmatter is authored today but **not yet parsed/validated in code**, so WS5 must build the parser before the declaration is load-bearing.
 
+**Proposed clarification for #658 (maintainer-directed 2026-10-06; pending
+human review and merge).** Ordinary bundled-reference reads belong to activation
+of an enabled, trusted skill and are enabled by default under host policy. The
+exact installed/pinned resource index is their declaration; no proprietary
+`lq_ai.capabilities`, tier declaration or experimental `allowed-tools` field is
+required solely for these reads. Operators can disable model reference reading
+independently while retaining authorized human inspection. Current policy,
+selected skill scope and pin checks remain load-bearing on every invocation.
+Resource text cannot expand grants. Reads use governed invocation and
+metadata-only audit. Script execution, persistence, external access and
+delegation retain their separate enablement and approval controls. This narrow
+amendment does not assert new committee ratification or change this ADR's
+original acceptance status.
+
 ## Open questions (for the implementation plan / contributor)
 
 1. **Per-turn tool-call cap.** What is the default cap on tool calls per chat turn (cost + latency bound)? Pin in WS4 (a small integer, operator-overridable).

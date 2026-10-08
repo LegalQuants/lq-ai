@@ -58,6 +58,15 @@ export async function getSkill(name: string): Promise<Skill> {
 	return skill;
 }
 
+/** GET /api/v1/skills/{name}/contents — human-readable source, including on-demand references. */
+export async function getSkillContents(name: string): Promise<Skill> {
+	const skill = await apiRequest<Skill>(`/skills/${encodeURIComponent(name)}/contents`);
+	if (!skill.inputs && skill.content_yaml) {
+		skill.inputs = parseInputsFromYaml(skill.content_yaml);
+	}
+	return skill;
+}
+
 // ---------------------------------------------------------------------------
 // Frontmatter `inputs:` block parser.
 //

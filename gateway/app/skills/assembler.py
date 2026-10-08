@@ -51,6 +51,11 @@ clear ``## Reference: <path>`` header. Reference content is verbatim;
 the model sees both the skill's instructions and the reference exhibits
 in one block.
 
+A skill's ``on_demand_files`` (its ``references/`` folder) are different:
+only their paths are listed, under ``## Reference files available on
+request``. The backend offers a ``skill_reference_read`` tool that returns
+one file; the gateway never holds their contents.
+
 Required-input enforcement
 --------------------------
 
@@ -373,6 +378,20 @@ def _render_skill(skill: Skill, *, inputs: dict[str, Any]) -> _AssembledSkill:
     for ref in skill.reference_files:
         ref_body = interpolate(ref.content or "", inputs, consumed=consumed)
         parts.append(f"## Reference: {ref.path}\n\n{ref_body.strip()}\n")
+
+    # On-demand reference files — names only. The wording matches the block
+    # the backend writes for a pinned skill (``on_demand_index`` in
+    # ``api/app/autonomous/orchestration/policy.py``).
+    if skill.on_demand_files:
+        parts.append(
+            "## Reference files available on request\n\n"
+            "These files belong to this skill and are not included here. When the task calls "
+            "for one, read it with the `skill_reference_read` tool (in chat the tool's name "
+            "carries a prefix and ends in `skill_reference_read`). If no such tool is offered, "
+            "say which file you could not read; do not guess its contents.\n\n"
+            + "\n".join(f"- {ref.path}" for ref in skill.on_demand_files)
+            + "\n"
+        )
 
     # DE-328 (Option A) — surface caller-bound inputs that no
     # ``{{placeholder}}`` consumed. None of the built-in skill bodies use

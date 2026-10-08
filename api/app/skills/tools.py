@@ -16,7 +16,14 @@ from app.autonomous.enums import ToolIntent
 from app.config import Settings, get_settings
 from app.errors import ToolNotGranted
 from app.skills.binding import SkillBinding, revalidate_binding
-from app.skills.capabilities import EmptyInput, FileRead, FileWrite, ScriptInput, StrictModel
+from app.skills.capabilities import (
+    EmptyInput,
+    FileRead,
+    FileWrite,
+    ReferenceRead,
+    ScriptInput,
+    StrictModel,
+)
 from app.skills.registry import MutableSkillRegistry
 from app.skills.workspace import check_owner, workspace_operation
 
@@ -28,6 +35,7 @@ SKILL_TOOL_MODELS: dict[ToolIntent, type[StrictModel]] = {
     ToolIntent.skill_workspace_read: FileRead,
     ToolIntent.skill_workspace_write: FileWrite,
     ToolIntent.run_bundled_script: ScriptInput,
+    ToolIntent.skill_reference_read: ReferenceRead,
 }
 SKILL_TOOL_INTENTS = frozenset(SKILL_TOOL_MODELS)
 
@@ -69,6 +77,8 @@ class SkillTools:
             and self.settings.skill_script_runner_token
         ):
             intents.append(ToolIntent.run_bundled_script)
+        if self.settings.skill_reference_read_enabled and binding.reference_paths:
+            intents.append(ToolIntent.skill_reference_read)
         return tuple(intents)
 
     async def execute(
@@ -94,6 +104,8 @@ class SkillTools:
             # the calling prompt/receipt. Orchestration separately fences settlement.
             await revalidate_binding(db, owner_id, binding, self.registry)
             await check_owner(db, owner_id, project_id)
+        elif intent == ToolIntent.skill_reference_read:
+            result = self.read_reference(binding, ReferenceRead.model_validate(params))
         else:
             operation = intent.value.removeprefix("skill_workspace_")
             result = await workspace_operation(
@@ -114,6 +126,19 @@ class SkillTools:
             data=result,
             outcome=outcome,
         )
+
+    def read_reference(self, binding: SkillBinding, request: ReferenceRead) -> dict[str, Any]:
+        """Return one listed ``references/`` file of the bound skill.
+
+        ``execute`` revalidates access and the digest. Return the bytes from
+        that digest's original snapshot, with no subsequent disk read.
+        """
+        if request.path not in binding.reference_paths:
+            return {"error": "file_unavailable"}
+        content = dict(binding.reference_contents).get(request.path)
+        if content is None:
+            return {"error": "file_unavailable"}
+        return {"path": request.path, "content": content}
 
     async def run_script(self, binding: SkillBinding, request: ScriptInput) -> dict[str, Any]:
         if request.script not in {script.name for script in binding.capabilities.scripts}:

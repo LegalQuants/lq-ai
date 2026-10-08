@@ -25,9 +25,11 @@ A skill is a folder. The structure:
 ```
 my-skill/
 ├── SKILL.md              # Required. Main instruction file with frontmatter.
-├── reference/            # Optional. Reference material the skill cites.
+├── reference/            # Optional. Reference material sent with every prompt.
 │   ├── severity_rubric.md
 │   ├── report_structure.md
+│   └── ...
+├── references/           # Optional. Reference material read one file at a time.
 │   └── ...
 ├── examples/             # Required for review. Worked examples.
 │   ├── example_perspective_a.md
@@ -36,7 +38,29 @@ my-skill/
     └── ...
 ```
 
-`SKILL.md` is the operational instruction the model executes when the skill is attached to a chat. Everything in `SKILL.md` becomes part of the prompt; everything in `reference/` is optionally surfaced when the skill's workflow references it. `examples/` are documentation for users and reviewers; they do not become part of the prompt by default.
+`SKILL.md` is the operational instruction the model executes when the skill is attached to a chat. Everything in `SKILL.md` becomes part of the prompt; everything in `reference/` is appended to it, and files in `references/` are read on request (see below). `examples/` are documentation for users and reviewers; they do not become part of the prompt by default.
+
+### `reference/` and `references/`
+
+The two folder names behave differently.
+
+- **`reference/`** is sent with the prompt. Every file in it is appended to the skill's instructions each time the skill is used. Keep it small: a rubric, a report structure, the checklist the workflow always needs.
+- **`references/`** is read on request. This is the Agent Skills name, and it is what most community skills ship. The model is given the list of file paths and a `skill_reference_read` tool that returns one file. Nothing in the folder is sent unless the model asks for it. Use it for material only some tasks need: one file per jurisdiction, per regime, per scenario.
+
+For `references/`, tell the model in `SKILL.md` which file answers which kind of question, by path (`references/states/ca.md`). A read takes `{"path": "references/states/ca.md"}`; only paths in the skill's own list are accepted. In chat the function name carries a skill-specific prefix and ends in `skill_reference_read`; background execution uses the intent name.
+
+A file is listed only if it can be returned: UTF-8 text of at most 64 KiB, in a path made of letters, digits, `_`, `.` and `-`, with no hidden names and no symlinks. At most 64 files are listed. A file that does not qualify is left out and named in a warning in the API log; the skill still loads. The files are part of the skill's pinned digest, so a file edited on disk mid-run is refused until the skill is reloaded.
+
+Ordinary reads are default-on for an enabled, trusted installed skill, without
+`lq_ai.capabilities` or experimental `allowed-tools`. Operators can disable model
+reads with `LQ_AI_SKILL_REFERENCE_READ_ENABLED=false` (bare alias
+`SKILL_REFERENCE_READ_ENABLED`). Metadata exposes `reference_read_enabled`;
+authorized human inspection remains available through the supporting-file UI and
+`/api/v1/skills/{name}/contents` in `on_demand_contents`. This grants no script
+execution, persistence or external access. The caps and safe-path subset above
+are #658's limited LQ profile, not Agent Skills format requirements. Assets,
+broader paths, Unicode names and large-resource/list paging remain follow-up
+work; omitted resources must not be described as read. A chat with such a skill attached runs through the tool loop, so the model behind it must support tool calls. Database (user and team) skills have no files and get no read tool.
 
 **Optional execution (#563).** Declared `scripts/` helpers
 can run through the private bundled-helper broker when an operator enables their

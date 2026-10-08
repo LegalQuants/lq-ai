@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -55,6 +55,7 @@ _RESEARCH_INTENTS = frozenset(
         ToolIntent.skill_workspace_read,
         ToolIntent.skill_workspace_write,
         ToolIntent.run_bundled_script,
+        ToolIntent.skill_reference_read,
     }
 )
 
@@ -155,6 +156,19 @@ class PinnedSkill:
     pin: SkillPin
     instructions: str
     bundle_digest: str | None = None
+    reference_contents: tuple[tuple[str, str], ...] = field(default=(), repr=False, compare=False)
+
+
+def on_demand_index(paths: list[str]) -> str:
+    """The prompt block that names a skill's on-demand reference files."""
+    return (
+        "## Reference files available on request\n\n"
+        "These files belong to this skill and are not included here. When the task calls "
+        "for one, read it with the `skill_reference_read` tool (in chat the tool's name "
+        "carries a prefix and ends in `skill_reference_read`). If no such tool is offered, "
+        "say which file you could not read; do not guess its contents.\n\n"
+        + "\n".join(f"- {path}" for path in paths)
+    )
 
 
 def load_pinned_skill(record: SkillRecord) -> PinnedSkill:
@@ -165,15 +179,29 @@ def load_pinned_skill(record: SkillRecord) -> PinnedSkill:
     The executor must use this same artifact, not ask the gateway to resolve a
     mutable skill slug after admission.
     """
+    from app.skills.references import read_reference_snapshot
+
     try:
-        current = _load_one(record.folder, source=record.source)
+        current = _load_one(record.folder, source=record.source, quiet=True)
         if current != record:
             raise ValueError("registry and disk differ")
         files = []
-        for path in sorted((*record.reference_paths, *record.example_paths, *record.script_paths)):
+        for path in sorted(
+            (
+                *record.reference_paths,
+                *record.example_paths,
+                *record.script_paths,
+                *record.on_demand_paths,
+            )
+        ):
             if not path.resolve().is_relative_to(record.folder.resolve()):
                 raise ValueError("supporting file outside skill folder")
-            files.append((path.relative_to(record.folder).as_posix(), path.read_text("utf-8")))
+            content = (
+                read_reference_snapshot(record.folder, path)
+                if path in record.on_demand_paths
+                else path.read_text("utf-8")
+            )
+            files.append((path.relative_to(record.folder).as_posix(), content))
         artifact = (record.name, record.source, record.raw_yaml, record.body, files)
         digest = hashlib.sha256(
             json.dumps(artifact, ensure_ascii=False, separators=(",", ":")).encode()
@@ -183,10 +211,15 @@ def load_pinned_skill(record: SkillRecord) -> PinnedSkill:
     # Build the prompt from the same bytes that were hashed. Do not materialise
     # or ask the gateway to resolve this slug again after authority checks.
     instructions = f"---\n{record.raw_yaml}\n---\n{record.body}"
+    # ``references/`` files are hashed above, so a read returns pinned bytes,
+    # but only their names enter the prompt: the model reads one on request.
+    on_demand = {path.relative_to(record.folder).as_posix() for path in record.on_demand_paths}
     for relative_path, content in files:
-        if relative_path.startswith("scripts/"):
+        if relative_path.startswith("scripts/") or relative_path in on_demand:
             continue
         instructions += f"\n\n## Supporting file: {relative_path}\n\n{content}"
+    if on_demand:
+        instructions += "\n\n" + on_demand_index(sorted(on_demand))
     scripts = [(p, c) for p, c in files if p.startswith("scripts/")]
     bundle_digest = (
         hashlib.sha256(
@@ -195,7 +228,12 @@ def load_pinned_skill(record: SkillRecord) -> PinnedSkill:
         if scripts
         else None
     )
-    return PinnedSkill(SkillPin(name=record.name, digest=digest), instructions, bundle_digest)
+    return PinnedSkill(
+        SkillPin(name=record.name, digest=digest),
+        instructions,
+        bundle_digest,
+        tuple((path, content) for path, content in files if path in on_demand),
+    )
 
 
 def skill_pin(record: SkillRecord) -> SkillPin:

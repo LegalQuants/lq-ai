@@ -316,6 +316,73 @@ def test_load_one_returns_record_with_paths(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
+def test_load_one_lists_references_for_on_demand_reading(tmp_path: Path) -> None:
+    """``references/`` files are listed by path and never inlined.
+
+    ``references/`` is the Agent Skills name and the one most community
+    skills use. Those skills expect the model to open one file when the task
+    needs it, so the loader keeps them apart from ``reference/``, whose
+    files are sent with the prompt.
+    """
+
+    folder = tmp_path / "demo"
+    folder.mkdir()
+    (folder / "SKILL.md").write_text(
+        "---\nname: demo\ndescription: A demo skill for the test.\n---\n# Body\n"
+    )
+    (folder / "reference").mkdir()
+    (folder / "reference" / "a.md").write_text("ref-a")
+    (folder / "references" / "topic").mkdir(parents=True)
+    (folder / "references" / "b.md").write_text("ref-b")
+    (folder / "references" / "topic" / "c.md").write_text("ref-c!")
+
+    rec = _load_one(folder)
+    assert rec.reference_paths == (folder / "reference" / "a.md",)
+    assert rec.on_demand_paths == (
+        folder / "references" / "b.md",
+        folder / "references" / "topic" / "c.md",
+    )
+    skill = rec.materialise()
+    assert [(f.path, f.content) for f in skill.reference_files] == [("reference/a.md", "ref-a")]
+    assert [(f.path, f.size_bytes) for f in skill.on_demand_files] == [
+        ("references/b.md", 5),
+        ("references/topic/c.md", 6),
+    ]
+
+
+@pytest.mark.unit
+def test_on_demand_listing_leaves_out_what_cannot_be_read(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A file the read tool could not return is not listed, and the skill
+    still loads with the rest."""
+
+    folder = tmp_path / "demo"
+    refs = folder / "references"
+    refs.mkdir(parents=True)
+    (folder / "SKILL.md").write_text(
+        "---\nname: demo\ndescription: A demo skill for the test.\n---\n# Body\n"
+    )
+    outside = tmp_path / "secret.md"
+    outside.write_text("not part of the skill")
+    (refs / "good.md").write_text("fine")
+    (refs / "big.json").write_text("x" * 65537)
+    (refs / "binary.bin").write_bytes(b"\xff\xfe\x00\x01")
+    (refs / ".hidden.md").write_text("hidden")
+    (refs / "has space.md").write_text("bad name")
+    (refs / "link.md").symlink_to(outside)
+
+    with caplog.at_level("WARNING"):
+        rec = _load_one(folder)
+
+    assert rec.on_demand_paths == (refs / "good.md",)
+    warned = " ".join(r.getMessage() for r in caplog.records)
+    for name in ("big.json", "binary.bin", "has space.md", "link.md"):
+        assert name in warned
+    assert ".hidden.md" not in warned
+
+
+@pytest.mark.unit
 def test_load_one_rejects_missing_frontmatter(tmp_path: Path) -> None:
     """A SKILL.md without `---` delimiters raises LoaderError."""
 

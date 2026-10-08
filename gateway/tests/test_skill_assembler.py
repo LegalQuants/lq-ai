@@ -253,6 +253,35 @@ def test_assemble_includes_reference_files_in_separate_blocks() -> None:
     assert "ref b" in out
 
 
+@pytest.mark.unit
+def test_assemble_lists_on_demand_files_by_name_only() -> None:
+    """A skill's ``references/`` files are named in the prompt, not inlined:
+    the model reads one through the backend's ``skill_reference_read`` tool."""
+
+    skill = Skill.model_validate(
+        {
+            "name": "alpha",
+            "title": "Alpha",
+            "content_md": "Body content here",
+            "content_yaml": "name: alpha\n",
+            "reference_files": [{"path": "reference/a.md", "content": "ref a"}],
+            "on_demand_files": [
+                {"path": "references/checklist.md", "size_bytes": 4470},
+                {"path": "references/states/ca.md", "size_bytes": 10777},
+            ],
+        }
+    )
+    out = assemble_skill_prompt([skill])
+    assert "## Reference: reference/a.md" in out
+    assert "## Reference files available on request" in out
+    assert "- references/checklist.md\n- references/states/ca.md" in out
+    assert "skill_reference_read" in out
+    assert "## Reference: references/" not in out
+
+    # No block for a skill that ships none.
+    assert "available on request" not in assemble_skill_prompt([_basic_skill()])
+
+
 # --- DE-328: unconsumed inputs surfaced as a labelled block ------------------
 
 

@@ -323,6 +323,12 @@ async def test_admin_config_proxy(client: AsyncClient, admin_user: User) -> None
     assert res.status_code == 200
     body = res.json()
     assert body["providers"][0]["name"] == "anthropic-prod"
+    assert body["skill_resource_policy"] == {
+        "reference_read_enabled": True,
+        "max_files": 64,
+        "max_file_bytes": 65536,
+        "scope": "installed skill references/",
+    }
 
 
 @pytest.mark.unit
