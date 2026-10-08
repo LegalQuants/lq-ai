@@ -1,0 +1,10 @@
+FICTIONAL QA FIXTURE — not a legal template or advice.
+
+ExampleCo and SampleCo exchange fictional information solely to evaluate a
+fictional transaction. Each agrees not to disclose that information to unrelated
+people. Information already public is excluded. The evaluation ends after
+30 days, when each returns the fictional information received from the other.
+
+This text is deliberately short so the release rehearsal can check the skill
+form, file ingestion, input binding and completed-answer path independently of
+a long-document workload.
