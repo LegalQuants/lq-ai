@@ -1,0 +1,42 @@
+[
+  {
+    "applied_skills": [],
+    "autonomous_session_id": null,
+    "chat_id": "9a1fa3b9-71e4-4151-8766-66c469ecbd2c",
+    "citations": [],
+    "completion_tokens": null,
+    "content": "How much annual leave do staff get?",
+    "cost_estimate": null,
+    "created_at": "2026-10-08T19:29:00.178881Z",
+    "error_code": null,
+    "id": "a6536ba9-32a8-4314-b337-e74d1617ce4d",
+    "is_enhanced": false,
+    "kind": "user",
+    "prompt_tokens": null,
+    "requested_model": null,
+    "role": "user",
+    "routed_inference_tier": null,
+    "routed_model": null,
+    "routed_provider": null
+  },
+  {
+    "applied_skills": [],
+    "autonomous_session_id": "56181ee6-4a05-41dc-84fa-79e61fbc7acb",
+    "chat_id": "9a1fa3b9-71e4-4151-8766-66c469ecbd2c",
+    "citations": [],
+    "completion_tokens": 120,
+    "content": "## Leave\n\nThe entitlement is \"eighteen (18) days of annual leave\" (Source: [1]).\n\nThe knowledge bases say nothing found about a sabbatical.",
+    "cost_estimate": 0.2754,
+    "created_at": "2026-10-08T19:29:00.178882Z",
+    "error_code": null,
+    "id": "82ae5f98-fe34-4444-a4fd-4f3ce900014c",
+    "is_enhanced": false,
+    "kind": "run",
+    "prompt_tokens": 80,
+    "requested_model": "selected/native",
+    "role": "assistant",
+    "routed_inference_tier": 1,
+    "routed_model": "native",
+    "routed_provider": "selected"
+  }
+]

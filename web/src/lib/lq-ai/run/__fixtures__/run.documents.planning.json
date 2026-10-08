@@ -1,16 +1,18 @@
 {
-  "chat_id": "95f75653-3b51-4aba-a9b0-7614eddb8429",
+  "answered_directly": false,
+  "chat_id": "89cf9b67-e953-46e6-bc99-553b43252ecb",
+  "direct_answer": null,
   "effects": [],
   "evidence": "citations",
   "evidence_result": null,
-  "message_id": "2aabffbf-be62-4471-a74f-10bce6c185b7",
+  "message_id": "739f42f7-08cc-4e4e-8610-fbcf0b483a39",
   "packet": null,
   "planning": {
     "attempt_timeout_seconds": 300,
     "budget_usd": "10.0000",
-    "child_skill_version": "1.0.0",
-    "contract_version": 2,
-    "deadline": "2026-10-06T17:41:43.813464Z",
+    "child_skill_version": "2",
+    "contract_version": 3,
+    "deadline": "2026-10-08T21:28:56.563232Z",
     "delegation_grants": {
       "analysis": [
         "plan",
@@ -32,15 +34,15 @@
     "documents": [
       {
         "attached_for_run": false,
-        "document_id": "71a16d78-61f3-49a3-888b-dce8a8eb87fe",
-        "file_id": "62803688-7e2f-45eb-8916-3f31285da37b",
+        "document_id": "9a0806dd-b739-4428-bcdd-44112a494ef7",
+        "file_id": "16bf4111-5c73-4389-b26f-749a074cec32",
         "filename": "msa.txt",
         "number": 1
       },
       {
         "attached_for_run": true,
-        "document_id": "69e6ff81-8f5a-4aeb-8e5d-c82b221fae43",
-        "file_id": "01829cfd-51e4-4c99-a342-78551f7fe56e",
+        "document_id": "b6a1b3fc-b086-4a92-a189-51b7e248d1c1",
+        "file_id": "081c4430-f88a-473d-968f-edaf07d06c65",
         "filename": "dpa.md",
         "number": 2
       }
@@ -50,13 +52,13 @@
     "max_active_children": 2,
     "max_children": 2,
     "model": "selected/native",
-    "owner_id": "9b785cbf-7ea3-4058-85b0-13d909648e79",
+    "owner_id": "93fbb15a-0ce7-4f86-9692-d4c81cc147e8",
     "packet_digest": null,
-    "plan_id": "25484912-3d0c-47a9-a773-71f2518659ce",
+    "plan_id": "c2a4d6c6-cb3d-41bb-becc-62612c809f07",
     "planning_allowance_usd": "0.5781",
-    "policy_version": "ded1f0223bd15b73d32dc85ae2591e833edbf9291a197787ef3a711d9501ee18",
-    "profile": "contract_qa_documents_v1",
-    "project_id": "79cacec3-76ab-477d-8677-16cdfb90bcc3",
+    "policy_version": "f7d6f1a73467a9a44e6592e24b980c4bc0d1f6e8be5084b7f9803ce59f0864ca",
+    "profile": "new_harness_v1",
+    "project_id": "33f58c70-de9e-47d8-98e9-cad3921234d9",
     "root": {
       "anonymize": true,
       "grants": {
@@ -73,25 +75,36 @@
       "privileged": false,
       "resources": {
         "document_ids": [
-          "69e6ff81-8f5a-4aeb-8e5d-c82b221fae43",
-          "71a16d78-61f3-49a3-888b-dce8a8eb87fe"
+          "9a0806dd-b739-4428-bcdd-44112a494ef7",
+          "b6a1b3fc-b086-4a92-a189-51b7e248d1c1"
         ],
         "source_names": []
       },
       "skill": {
-        "digest": "e69ed6b299051ad349c84ef823a420b34a52d26428a66c563c697cedb46b3d99",
-        "name": "contract-questions-orchestrator"
+        "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+        "kind": "prompt",
+        "name": "new_harness/orchestrator.v2"
       }
     },
     "root_allowance_usd": "1.1562",
-    "root_id": "0af72083-9da6-43f5-ac02-0e4aa4486ffa",
-    "root_skill_version": "1.0.0"
+    "root_id": "59cb66bd-3795-4b84-86ee-868d38da51b0",
+    "root_skill_version": "2",
+    "terms": {
+      "answer_chars": 16384,
+      "planning": "tool",
+      "read_chars": 40000,
+      "task_answer_chars": 12000,
+      "task_turns": 5
+    },
+    "thread": [],
+    "today": "2026-10-08"
   },
-  "profile": "contract_qa_documents_v1",
-  "profile_title": "Contract Questions on your documents",
-  "reads": "Only the documents you select for this run. No other matter files or live sources.",
+  "profile": "new_harness_v1",
+  "profile_title": "New harness",
+  "reads": "Your request, this chat's recent messages, the documents you select, if any, and in a matter the knowledge bases attached to it. No other files and no live sources.",
   "reserved_usd": "0.0000",
-  "root_id": "0af72083-9da6-43f5-ac02-0e4aa4486ffa",
+  "root_id": "59cb66bd-3795-4b84-86ee-868d38da51b0",
+  "sources": [],
   "spent_usd": "0.0000",
   "status": "planning",
   "stop_reason": null,

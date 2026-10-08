@@ -1,0 +1,147 @@
+{
+  "answered_directly": false,
+  "chat_id": "586fcb10-2c24-4fee-82c7-ebc4c56fd56a",
+  "direct_answer": null,
+  "effects": [
+    {
+      "accounting": {
+        "anonymization_applied": true,
+        "basis": "conservative-estimate-or-reported-usage-v1",
+        "charged_usd": "0.0715",
+        "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
+        "estimated_prompt_tokens": 11173,
+        "messages_digest": "5be2bed06108470f23783232fb9b501944d83959b72ae2469f5f9aa76b5633f0",
+        "model": "native",
+        "provider": "selected",
+        "reported_usage_cost_usd": "0.0003",
+        "reserved_usd": "0.0715",
+        "tier": 1
+      },
+      "charged_usd": "0.0715",
+      "completed_at": "2026-10-08T19:29:00.073999Z",
+      "created_at": "2026-10-08T19:29:00.062106Z",
+      "effect_key": "chat:plan:v1",
+      "intent": "plan",
+      "outcome": "success",
+      "reserved_usd": "0.0715",
+      "skill": {
+        "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+        "kind": "prompt",
+        "name": "new_harness/orchestrator.v2",
+        "version": "2"
+      },
+      "status": "completed",
+      "step": {
+        "kind": "planning",
+        "label": null,
+        "reason": null,
+        "summary": null,
+        "tool": null
+      }
+    }
+  ],
+  "evidence": "unverified",
+  "evidence_result": null,
+  "message_id": "1a03d127-28b2-42b8-a8f4-a10bbccdc7ea",
+  "packet": null,
+  "planning": {
+    "attempt_timeout_seconds": 300,
+    "budget_usd": "10.0000",
+    "child_skill_version": "2",
+    "contract_version": 3,
+    "deadline": "2026-10-08T21:29:00.019764Z",
+    "delegation_grants": {
+      "analysis": [
+        "plan",
+        "retrieve_chunks",
+        "run_skill",
+        "workspace_read",
+        "workspace_write"
+      ],
+      "delivery": [],
+      "drafting": [
+        "run_skill",
+        "workspace_read",
+        "workspace_share",
+        "workspace_write"
+      ],
+      "ethics_review": [],
+      "intake": []
+    },
+    "documents": [],
+    "gateway_revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "goal": "Can she end it early?",
+    "max_active_children": 2,
+    "max_children": 2,
+    "model": "selected/native",
+    "owner_id": "cd2d5dcb-3c7e-41bf-957e-82d2342daa62",
+    "packet_digest": null,
+    "plan_id": "2aa14f7e-d89a-4ac1-b07a-cb027c0f1705",
+    "planning_allowance_usd": "0.5781",
+    "policy_version": "f7d6f1a73467a9a44e6592e24b980c4bc0d1f6e8be5084b7f9803ce59f0864ca",
+    "profile": "new_harness_v1",
+    "project_id": "5b838029-645e-48c4-9c84-72bb6496607c",
+    "root": {
+      "anonymize": true,
+      "grants": {
+        "analysis": [
+          "plan"
+        ],
+        "delivery": [],
+        "drafting": [],
+        "ethics_review": [],
+        "intake": []
+      },
+      "maximum_egress_tier": 0,
+      "minimum_inference_tier": 1,
+      "privileged": false,
+      "resources": {
+        "document_ids": [],
+        "source_names": []
+      },
+      "skill": {
+        "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+        "kind": "prompt",
+        "name": "new_harness/orchestrator.v2"
+      }
+    },
+    "root_allowance_usd": "1.1562",
+    "root_id": "d2dc97c7-cc05-46e9-8845-db0e226a1479",
+    "root_skill_version": "2",
+    "terms": {
+      "answer_chars": 16384,
+      "planning": "tool",
+      "read_chars": 40000,
+      "task_answer_chars": 12000,
+      "task_turns": 5
+    },
+    "thread": [
+      {
+        "content": "Thanks, that helps.",
+        "cut": false,
+        "role": "user"
+      },
+      {
+        "content": "You're welcome.\n\nNothing was read or searched for this reply: it rests on this conversation only.",
+        "cut": false,
+        "role": "assistant"
+      },
+      {
+        "content": "Compare the two.",
+        "cut": false,
+        "role": "user"
+      }
+    ],
+    "today": "2026-10-08"
+  },
+  "profile": "new_harness_v1",
+  "profile_title": "New harness",
+  "reads": "Your request, this chat's recent messages, the documents you select, if any, and in a matter the knowledge bases attached to it. No other files and no live sources.",
+  "reserved_usd": "0.0000",
+  "root_id": "d2dc97c7-cc05-46e9-8845-db0e226a1479",
+  "sources": [],
+  "spent_usd": "0.0715",
+  "status": "failed",
+  "stop_reason": "plan_has_placeholders",
+  "tree": null
+}

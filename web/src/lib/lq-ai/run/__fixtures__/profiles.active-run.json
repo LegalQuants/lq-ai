@@ -1,56 +1,17 @@
 {
   "active_run": {
-    "chat_id": "dbf12c8b-dff3-4370-a79c-0b629b82c71e",
+    "chat_id": "2ced403c-e8df-4e78-ac9f-dbf55de94193",
     "chat_title": "Explain payment, renewal and termination questions independently.",
-    "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+    "message_id": "7d4fc011-f17e-47a8-94cf-9b43cc8eb5ae",
     "profile": "model_demo_v1",
-    "root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+    "root_id": "4828be8b-dfc3-44a1-8ed9-281371eb594b",
     "status": "planning"
   },
-  "chat_id": "805d10f8-716a-4af8-93ab-8d5eb9fb2f5f",
+  "chat_id": "a54994d7-0780-49e3-a6b7-dca62437511c",
+  "composer_profile": "new_harness_v1",
   "profiles": [
     {
-      "attempt_timeout_seconds": null,
-      "available": false,
-      "budget_usd": null,
-      "child_allowance_usd": null,
-      "child_turn_limit": 5,
-      "documents": "selected",
-      "evidence": "citations",
-      "max_children": null,
-      "max_documents": 8,
-      "model": null,
-      "planning_allowance_usd": null,
-      "planning_notice": "Propose plan authorizes one model call within the displayed total cap. The planning call receives your request only, not earlier messages. Child work requires separate approval.",
-      "profile": "contract_qa_documents_v1",
-      "reads": "Only the documents you select for this run. No other matter files or live sources.",
-      "reason": "operator_disabled",
-      "reason_text": "The operator has not enabled this profile.",
-      "root_allowance_usd": null,
-      "summary": "Splits a request into Contract QA tasks on documents you select from this matter.",
-      "title": "Contract Questions on your documents",
-      "tools": [
-        {
-          "label": "Read a selected document",
-          "name": "read_document",
-          "phase": "analysis",
-          "registered": true
-        },
-        {
-          "label": "Read back a working note",
-          "name": "read_note",
-          "phase": "analysis",
-          "registered": true
-        },
-        {
-          "label": "Save a working note",
-          "name": "save_note",
-          "phase": "analysis",
-          "registered": true
-        }
-      ]
-    },
-    {
+      "answers_directly": false,
       "attempt_timeout_seconds": 120,
       "available": false,
       "budget_usd": "2.0000",
@@ -58,16 +19,36 @@
       "child_turn_limit": 2,
       "documents": "packet",
       "evidence": "unverified",
+      "instructions": [
+        {
+          "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d",
+          "kind": "skill",
+          "name": "orchestration-chat-demo",
+          "role": "orchestrator",
+          "version": "1.0.0"
+        },
+        {
+          "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42",
+          "kind": "skill",
+          "name": "contract-qa",
+          "role": "sub-agent",
+          "version": "1.0.0"
+        }
+      ],
       "max_children": 2,
       "max_documents": null,
+      "min_documents": 0,
       "model": "selected/native",
       "planning_allowance_usd": "0.2478",
-      "planning_notice": "Propose plan authorizes one model call within the displayed total cap. The planning call receives your request only, not earlier messages. Child work requires separate approval.",
+      "planning_notice": "Sending asks the model for a plan: one model call within the displayed total cap. The planning call receives your request only, not earlier messages. Nothing else runs until you approve the plan.",
       "profile": "model_demo_v1",
+      "pseudonymized": true,
       "reads": "The installed fictional vendor agreement only. No matter documents or live sources.",
       "reason": "active_run",
       "reason_text": "Another run of yours is still active. One run can be active at a time.",
+      "reasoning_effort": null,
       "root_allowance_usd": "0.4956",
+      "routed_tier": 1,
       "summary": "Splits a request into Contract QA tasks on a fictional vendor agreement.",
       "title": "Contract Questions Orchestrator",
       "tools": [
@@ -90,7 +71,75 @@
           "registered": true
         }
       ]
+    },
+    {
+      "answers_directly": true,
+      "attempt_timeout_seconds": null,
+      "available": false,
+      "budget_usd": null,
+      "child_allowance_usd": null,
+      "child_turn_limit": 5,
+      "documents": "optional",
+      "evidence": "citations",
+      "instructions": [
+        {
+          "digest": null,
+          "kind": "prompt",
+          "name": "new_harness/orchestrator.v2",
+          "role": "orchestrator",
+          "version": null
+        },
+        {
+          "digest": null,
+          "kind": "prompt",
+          "name": "new_harness/subagent.v2",
+          "role": "sub-agent",
+          "version": null
+        }
+      ],
+      "max_children": null,
+      "max_documents": 8,
+      "min_documents": 0,
+      "model": null,
+      "planning_allowance_usd": null,
+      "planning_notice": "Sending makes one model call within the displayed total cap. It receives your request, this chat's recent messages, and the names of the documents you selected and of the matter's knowledge bases. It either answers a request that needs nothing read, or proposes a plan. Nothing else runs until you approve the plan.",
+      "profile": "new_harness_v1",
+      "pseudonymized": null,
+      "reads": "Your request, this chat's recent messages, the documents you select, if any, and in a matter the knowledge bases attached to it. No other files and no live sources.",
+      "reason": "operator_disabled",
+      "reason_text": "The operator has not enabled New harness.",
+      "reasoning_effort": null,
+      "root_allowance_usd": null,
+      "routed_tier": null,
+      "summary": "Answers a request that needs nothing read. Otherwise plans it as one to four tasks, runs the tasks you approve, and combines their results into one answer.",
+      "title": "New harness",
+      "tools": [
+        {
+          "label": "Read a selected document",
+          "name": "read_document",
+          "phase": "analysis",
+          "registered": true
+        },
+        {
+          "label": "Read back a working note",
+          "name": "read_note",
+          "phase": "analysis",
+          "registered": true
+        },
+        {
+          "label": "Save a working note",
+          "name": "save_note",
+          "phase": "analysis",
+          "registered": true
+        },
+        {
+          "label": "Search the matter's knowledge bases",
+          "name": "search_knowledge_base",
+          "phase": "analysis",
+          "registered": true
+        }
+      ]
     }
   ],
-  "project_id": "b22c0441-fdff-4498-8c52-63eb6db913dd"
+  "project_id": "257b6084-1540-496f-b45c-c2628aa70572"
 }

@@ -1,0 +1,30 @@
+{
+  "chat_id": "1b83268e-2d93-49c8-94a0-4716a1e28ff8",
+  "documents": [
+    {
+      "attached_to_project": false,
+      "characters": 68,
+      "file_id": "a06c0494-1f3d-4cd2-9020-8c6d86dec055",
+      "filename": "msa.txt",
+      "mime_type": "text/plain",
+      "reason": "in_a_matter",
+      "selectable": false,
+      "size_bytes": 68
+    },
+    {
+      "attached_to_project": false,
+      "characters": 20,
+      "file_id": "7b964b0e-3305-443d-a69d-abdd50820d4f",
+      "filename": "loose-note.txt",
+      "mime_type": "text/plain",
+      "reason": null,
+      "selectable": true,
+      "size_bytes": 20
+    }
+  ],
+  "knowledge_bases": [],
+  "knowledge_bases_omitted": 0,
+  "max_documents": 8,
+  "project_id": null,
+  "suggested_file_ids": []
+}

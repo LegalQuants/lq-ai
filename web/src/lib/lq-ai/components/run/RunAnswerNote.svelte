@@ -6,16 +6,18 @@
 	 * answer whose quotations were matched against the documents the owner selected,
 	 * reported in counts. The citation chips and ledger under the answer show each
 	 * individual result. This line never calls an answer verified, correct or advice.
+	 *
+	 * A run that read no document says so: the run's planning snapshot lists none.
 	 */
-	import type { OrchestrationChatRun } from '$lib/lq-ai/api/orchestration';
 	import {
 		evidenceGate,
 		evidenceHint,
 		evidenceState,
 		evidenceStatement
 	} from '$lib/lq-ai/run/evidence';
+	import type { EvidenceInput } from '$lib/lq-ai/run/evidence';
 
-	export let run: Pick<OrchestrationChatRun, 'evidence' | 'evidence_result'>;
+	export let run: EvidenceInput;
 
 	$: state = evidenceState(run);
 	$: statement = evidenceStatement(run);

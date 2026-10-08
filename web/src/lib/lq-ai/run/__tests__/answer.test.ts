@@ -590,6 +590,40 @@ describe('nothing a document could write gets through the Markdown step as marku
 	});
 });
 
+describe('the answer of a run the orchestrator gave by itself', () => {
+	// It is the run message's own content, like any answer, and gets the strict treatment of one:
+	// nothing was read for it, but it is model output all the same.
+	const recorded = thread('direct.completed');
+	const answer = recorded[1];
+
+	it('is the content of the run’s message, which names the run and has no plan behind it', () => {
+		expect(answer.kind).toBe('run');
+		expect(answer.role).toBe('assistant');
+		expect(answer.autonomous_session_id).toBeTruthy();
+		expect(answer.content.trim().length).toBeGreaterThan(0);
+	});
+
+	it('keeps the structure it was written with and is made of nothing else', () => {
+		expectOnlyStructure(runAnswerMarkup(answer.content), 'the recorded answer');
+	});
+
+	it.each(HOSTILE_STRINGS.map((text) => [text]))(
+		'shows %j, written into it by the model, as text',
+		(hostile) => {
+			for (const written of [
+				hostile,
+				`${answer.content}\n\n${hostile}`,
+				`Before ${hostile} after.\n\n${answer.content}`
+			]) {
+				const html = runAnswerMarkup(written);
+				expectOnlyStructure(html, `a direct answer with ${hostile}`);
+				// What was written is not turned into an element: no tag the Markdown did not make.
+				expect(html).not.toMatch(/<(?:img|script|iframe|svg)\b/i);
+			}
+		}
+	);
+});
+
 describe('what the sanitiser is told', () => {
 	// DOMPurify needs a DOM, so `runAnswerHtml` is not run here. What is checked is what it is called with.
 	const source = readFileSync(fileURLToPath(new URL('../answer.ts', import.meta.url)), 'utf8')

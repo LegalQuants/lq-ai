@@ -1,0 +1,138 @@
+{
+  "active_run": null,
+  "chat_id": "1b83268e-2d93-49c8-94a0-4716a1e28ff8",
+  "composer_profile": "new_harness_v1",
+  "profiles": [
+    {
+      "answers_directly": false,
+      "attempt_timeout_seconds": null,
+      "available": false,
+      "budget_usd": null,
+      "child_allowance_usd": null,
+      "child_turn_limit": 2,
+      "documents": "packet",
+      "evidence": "unverified",
+      "instructions": [
+        {
+          "digest": null,
+          "kind": "skill",
+          "name": "orchestration-chat-demo",
+          "role": "orchestrator",
+          "version": null
+        },
+        {
+          "digest": null,
+          "kind": "skill",
+          "name": "contract-qa",
+          "role": "sub-agent",
+          "version": null
+        }
+      ],
+      "max_children": null,
+      "max_documents": null,
+      "min_documents": 0,
+      "model": null,
+      "planning_allowance_usd": null,
+      "planning_notice": "Sending asks the model for a plan: one model call within the displayed total cap. The planning call receives your request only, not earlier messages. Nothing else runs until you approve the plan.",
+      "profile": "model_demo_v1",
+      "pseudonymized": null,
+      "reads": "The installed fictional vendor agreement only. No matter documents or live sources.",
+      "reason": "project_required",
+      "reason_text": "Contract Questions Orchestrator starts from a chat inside a matter. This chat has no matter.",
+      "reasoning_effort": null,
+      "root_allowance_usd": null,
+      "routed_tier": null,
+      "summary": "Splits a request into Contract QA tasks on a fictional vendor agreement.",
+      "title": "Contract Questions Orchestrator",
+      "tools": [
+        {
+          "label": "Read a selected document",
+          "name": "read_document",
+          "phase": "analysis",
+          "registered": true
+        },
+        {
+          "label": "Read back a working note",
+          "name": "read_note",
+          "phase": "analysis",
+          "registered": true
+        },
+        {
+          "label": "Save a working note",
+          "name": "save_note",
+          "phase": "analysis",
+          "registered": true
+        }
+      ]
+    },
+    {
+      "answers_directly": true,
+      "attempt_timeout_seconds": 300,
+      "available": true,
+      "budget_usd": "10.0000",
+      "child_allowance_usd": "3.4686",
+      "child_turn_limit": 5,
+      "documents": "optional",
+      "evidence": "citations",
+      "instructions": [
+        {
+          "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+          "kind": "prompt",
+          "name": "new_harness/orchestrator.v2",
+          "role": "orchestrator",
+          "version": "2"
+        },
+        {
+          "digest": "9a68b501e6b552f254f7f5127b291c1deef60e81f7d682bc23e265e3da7179aa",
+          "kind": "prompt",
+          "name": "new_harness/subagent.v2",
+          "role": "sub-agent",
+          "version": "2"
+        }
+      ],
+      "max_children": 2,
+      "max_documents": 8,
+      "min_documents": 0,
+      "model": "selected/native",
+      "planning_allowance_usd": "0.5781",
+      "planning_notice": "Sending makes one model call within the displayed total cap. It receives your request, this chat's recent messages, and the names of the documents you selected and of the matter's knowledge bases. It either answers a request that needs nothing read, or proposes a plan. Nothing else runs until you approve the plan.",
+      "profile": "new_harness_v1",
+      "pseudonymized": true,
+      "reads": "Your request, this chat's recent messages, the documents you select, if any, and in a matter the knowledge bases attached to it. No other files and no live sources.",
+      "reason": null,
+      "reason_text": null,
+      "reasoning_effort": null,
+      "root_allowance_usd": "1.1562",
+      "routed_tier": 1,
+      "summary": "Answers a request that needs nothing read. Otherwise plans it as one to four tasks, runs the tasks you approve, and combines their results into one answer.",
+      "title": "New harness",
+      "tools": [
+        {
+          "label": "Read a selected document",
+          "name": "read_document",
+          "phase": "analysis",
+          "registered": true
+        },
+        {
+          "label": "Read back a working note",
+          "name": "read_note",
+          "phase": "analysis",
+          "registered": true
+        },
+        {
+          "label": "Save a working note",
+          "name": "save_note",
+          "phase": "analysis",
+          "registered": true
+        },
+        {
+          "label": "Search the matter's knowledge bases",
+          "name": "search_knowledge_base",
+          "phase": "analysis",
+          "registered": true
+        }
+      ]
+    }
+  ],
+  "project_id": null
+}

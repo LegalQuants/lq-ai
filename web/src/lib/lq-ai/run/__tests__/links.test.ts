@@ -81,9 +81,7 @@ describe('receiptHrefForSession', () => {
 
 	it('links the root session of a governed run to its receipts', () => {
 		expect(receiptHrefForSession(session('model_demo_v1'))).toBe(receiptHref('root-1'));
-		expect(receiptHrefForSession(session('contract_qa_documents_v1', 'root-2'))).toBe(
-			receiptHref('root-2')
-		);
+		expect(receiptHrefForSession(session('new_harness_v1', 'root-2'))).toBe(receiptHref('root-2'));
 	});
 
 	it('links a root whose profile it has never heard of, since the registry grows faster than the client', () => {

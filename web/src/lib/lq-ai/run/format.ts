@@ -12,6 +12,39 @@ export function pluralise(count: number, one: string, many: string = `${one}s`):
 }
 
 /**
+ * The names of some knowledge bases, in the order they are listed. They are the owner's own
+ * text, returned as written apart from the spaces around them; a blank name is left out.
+ */
+export function knowledgeBaseNames(
+	list: readonly { name?: unknown }[] | null | undefined
+): string[] {
+	const names: string[] = [];
+	for (const item of list ?? []) {
+		const name = typeof item?.name === 'string' ? item.name.trim() : '';
+		if (name !== '') names.push(name);
+	}
+	return names;
+}
+
+/**
+ * A sentence that names things somebody wrote, in pieces: what comes before the names, the names, and
+ * what follows. The names are text of the owner's or a matter member's own, and may hold a comma or
+ * a control that reorders what is around it; kept apart, a component can draw each one by itself so
+ * that one name cannot pass for two or move the rest of the sentence. The sentence is the lead, the
+ * names joined with a comma and a space, and the tail.
+ */
+export interface NamedLine {
+	lead: string;
+	names: string[];
+	tail: string;
+}
+
+/** The sentence a `NamedLine` is, as plain text. */
+export function namedLineText(line: NamedLine): string {
+	return `${line.lead}${line.names.join(', ')}${line.tail}`;
+}
+
+/**
  * Look a server-supplied code up in a fixed table. Only the table's own keys
  * match, so a code such as `constructor` or `__proto__` finds nothing.
  */

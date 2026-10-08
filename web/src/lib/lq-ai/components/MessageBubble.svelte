@@ -272,140 +272,140 @@
 		{/if}
 
 		{#if hasAnswer}
-		<div class="rounded-lg px-3 py-2 {bubbleClasses} max-w-full">
-			{#if message.role === 'assistant'}
-				<div
-					class="prose prose-sm dark:prose-invert max-w-none"
-					data-testid="lq-ai-message-content"
-					use:decorateCitationsInline={{
-						citations: fetchedCitations ?? [],
-						enabled: !isStreaming
-					}}
-				>
-					{@html rendered}
-				</div>
-				{#if isStreaming}
-					<div class="mt-1 text-xs text-gray-500 italic">Streaming…</div>
+			<div class="rounded-lg px-3 py-2 {bubbleClasses} max-w-full">
+				{#if message.role === 'assistant'}
+					<div
+						class="prose prose-sm dark:prose-invert max-w-none"
+						data-testid="lq-ai-message-content"
+						use:decorateCitationsInline={{
+							citations: fetchedCitations ?? [],
+							enabled: !isStreaming
+						}}
+					>
+						{@html rendered}
+					</div>
+					{#if isStreaming}
+						<div class="mt-1 text-xs text-gray-500 italic">Streaming…</div>
+					{/if}
+				{:else}
+					<div class="whitespace-pre-wrap text-sm" data-testid="lq-ai-message-content">
+						{message.content}
+					</div>
 				{/if}
-			{:else}
-				<div class="whitespace-pre-wrap text-sm" data-testid="lq-ai-message-content">
-					{message.content}
-				</div>
-			{/if}
-		</div>
-
-		{#if gateForMessage}
-			<div class="mt-2 w-full max-w-full" data-testid="lq-ai-tool-gate">
-				<ToolGatePrompt
-					variant={gateForMessage.kind}
-					confirm={gateForMessage.kind === 'confirm' ? gateForMessage.frame : null}
-					connect={gateForMessage.kind === 'connect' ? gateForMessage.frame : null}
-					busy={gateBusy}
-					onApprove={onGateApprove}
-					onDeny={onGateDeny}
-					onConnect={onGateConnect}
-				/>
 			</div>
-		{/if}
 
-		{#if message.role === 'user' && message.is_enhanced}
-			<div
-				class="mt-1 flex items-center gap-2 flex-wrap justify-end"
-				data-testid="provenance-pill-enhanced"
-			>
-				<ProvenancePill
-					kind="enhanced"
-					summary="enhanced"
-					onTap={() => (enhancedDiffOpen = true)}
-				/>
-			</div>
-			{#if enhancedDiffOpen}
-				<EnhancedDiffModal
-					original={originalEnhancedPrompt}
-					enhanced={message.content}
-					on:close={() => (enhancedDiffOpen = false)}
-				/>
-			{/if}
-		{/if}
-
-		{#if message.role === 'assistant'}
-			<div class="mt-1 flex items-center gap-2 flex-wrap justify-start w-full">
-				<div class="flex items-center gap-2 flex-wrap">
-					{#if message.routed_inference_tier}
-						<TierBadge
-							tier={message.routed_inference_tier}
-							provider={message.routed_provider ?? null}
-							on:open={() => (tierDetailsOpen = true)}
-						/>
-					{/if}
-					<AppliedSkillsChip
-						appliedSkills={message.applied_skills ?? []}
-						onSkillClicked={onAppliedSkillClicked}
-					/>
-					{#if fetchedSources && fetchedSources.length > 0}
-						<ProvenancePill kind="caselaw" summary={sourcesPillLabel(fetchedSources.length)} />
-					{/if}
-					{#if ledgerBadge && (fetchedLedger?.entries.length || ledgerGate)}
-						<TrustPill
-							variant="audit"
-							tone={ledgerBadge.tone}
-							label={ledgerBadge.label}
-							onClick={() => (ledgerPanelOpen = true)}
-						/>
-					{/if}
-				</div>
-				<div class="flex items-center gap-1">
-					{#if $captureAffordanceInline}
-						<button
-							type="button"
-							class="text-base leading-none px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
-							aria-label={isStreaming
-								? 'Capture as skill (available when streaming completes)'
-								: 'Capture as skill'}
-							title={isStreaming
-								? 'Capture as skill (available when streaming completes)'
-								: 'Capture as skill'}
-							disabled={isStreaming}
-							data-testid="lq-ai-message-capture-inline"
-							on:click={() => (captureOpen = true)}>📝</button
-						>
-					{/if}
-					<MessageOverflowMenu
-						captureInOverflow={!$captureAffordanceInline}
-						captureDisabled={isStreaming}
-						onCapture={() => (captureOpen = true)}
+			{#if gateForMessage}
+				<div class="mt-2 w-full max-w-full" data-testid="lq-ai-tool-gate">
+					<ToolGatePrompt
+						variant={gateForMessage.kind}
+						confirm={gateForMessage.kind === 'confirm' ? gateForMessage.frame : null}
+						connect={gateForMessage.kind === 'connect' ? gateForMessage.frame : null}
+						busy={gateBusy}
+						onApprove={onGateApprove}
+						onDeny={onGateDeny}
+						onConnect={onGateConnect}
 					/>
 				</div>
-			</div>
-
-			{#if captureOpen}
-				<CaptureSkillModal sourceMessage={message} onClose={() => (captureOpen = false)} />
 			{/if}
 
-			{#if tierDetailsOpen}
-				<TierDetailsPanel
-					tier={message.routed_inference_tier ?? null}
-					provider={message.routed_provider ?? null}
-					model={message.routed_model ?? null}
-					requestedModel={message.requested_model ?? null}
-					promptTokens={message.prompt_tokens ?? null}
-					completionTokens={message.completion_tokens ?? null}
-					costEstimate={message.cost_estimate ?? null}
-					on:close={() => (tierDetailsOpen = false)}
-				/>
-			{/if}
-
-			{#if message.error_code}
+			{#if message.role === 'user' && message.is_enhanced}
 				<div
-					class="mt-2 px-2 py-1 rounded border border-rose-300 bg-rose-50 text-rose-800 text-xs max-w-full"
-					data-testid="lq-ai-message-error"
+					class="mt-1 flex items-center gap-2 flex-wrap justify-end"
+					data-testid="provenance-pill-enhanced"
 				>
-					Error: <strong>{message.error_code}</strong>. The assistant message was persisted with the
-					partial content above for audit.
+					<ProvenancePill
+						kind="enhanced"
+						summary="enhanced"
+						onTap={() => (enhancedDiffOpen = true)}
+					/>
 				</div>
+				{#if enhancedDiffOpen}
+					<EnhancedDiffModal
+						original={originalEnhancedPrompt}
+						enhanced={message.content}
+						on:close={() => (enhancedDiffOpen = false)}
+					/>
+				{/if}
 			{/if}
 
-			<!--
+			{#if message.role === 'assistant'}
+				<div class="mt-1 flex items-center gap-2 flex-wrap justify-start w-full">
+					<div class="flex items-center gap-2 flex-wrap">
+						{#if message.routed_inference_tier}
+							<TierBadge
+								tier={message.routed_inference_tier}
+								provider={message.routed_provider ?? null}
+								on:open={() => (tierDetailsOpen = true)}
+							/>
+						{/if}
+						<AppliedSkillsChip
+							appliedSkills={message.applied_skills ?? []}
+							onSkillClicked={onAppliedSkillClicked}
+						/>
+						{#if fetchedSources && fetchedSources.length > 0}
+							<ProvenancePill kind="caselaw" summary={sourcesPillLabel(fetchedSources.length)} />
+						{/if}
+						{#if ledgerBadge && (fetchedLedger?.entries.length || ledgerGate)}
+							<TrustPill
+								variant="audit"
+								tone={ledgerBadge.tone}
+								label={ledgerBadge.label}
+								onClick={() => (ledgerPanelOpen = true)}
+							/>
+						{/if}
+					</div>
+					<div class="flex items-center gap-1">
+						{#if $captureAffordanceInline}
+							<button
+								type="button"
+								class="text-base leading-none px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+								aria-label={isStreaming
+									? 'Capture as skill (available when streaming completes)'
+									: 'Capture as skill'}
+								title={isStreaming
+									? 'Capture as skill (available when streaming completes)'
+									: 'Capture as skill'}
+								disabled={isStreaming}
+								data-testid="lq-ai-message-capture-inline"
+								on:click={() => (captureOpen = true)}>📝</button
+							>
+						{/if}
+						<MessageOverflowMenu
+							captureInOverflow={!$captureAffordanceInline}
+							captureDisabled={isStreaming}
+							onCapture={() => (captureOpen = true)}
+						/>
+					</div>
+				</div>
+
+				{#if captureOpen}
+					<CaptureSkillModal sourceMessage={message} onClose={() => (captureOpen = false)} />
+				{/if}
+
+				{#if tierDetailsOpen}
+					<TierDetailsPanel
+						tier={message.routed_inference_tier ?? null}
+						provider={message.routed_provider ?? null}
+						model={message.routed_model ?? null}
+						requestedModel={message.requested_model ?? null}
+						promptTokens={message.prompt_tokens ?? null}
+						completionTokens={message.completion_tokens ?? null}
+						costEstimate={message.cost_estimate ?? null}
+						on:close={() => (tierDetailsOpen = false)}
+					/>
+				{/if}
+
+				{#if message.error_code}
+					<div
+						class="mt-2 px-2 py-1 rounded border border-rose-300 bg-rose-50 text-rose-800 text-xs max-w-full"
+						data-testid="lq-ai-message-error"
+					>
+						Error: <strong>{message.error_code}</strong>. The assistant message was persisted with
+						the partial content above for audit.
+					</div>
+				{/if}
+
+				<!--
 			M2-C2 — Citation Engine sidecar chip list. Renders one chip per
 			`"<quote>" (Source: [N])` marker the assistant emitted, joined
 			to its persisted MessageCitation row. Markers without a row are
@@ -414,25 +414,25 @@
 			message has no citation markers — older skills + non-RAG turns
 			stay visually unchanged.
 		-->
-			{#if fetchedCitations !== null}
-				<div data-testid="lq-ai-message-citations">
-					<M2Citations citations={fetchedCitations} messageContent={message.content} />
-				</div>
-			{/if}
+				{#if fetchedCitations !== null}
+					<div data-testid="lq-ai-message-citations">
+						<M2Citations citations={fetchedCitations} messageContent={message.content} />
+					</div>
+				{/if}
 
-			{#if fetchedSources && fetchedSources.length > 0}
-				<ToolSourcesPanel sources={fetchedSources} />
-			{/if}
+				{#if fetchedSources && fetchedSources.length > 0}
+					<ToolSourcesPanel sources={fetchedSources} />
+				{/if}
 
-			{#if fetchedLedger}
-				<CitationLedgerPanel
-					entries={fetchedLedger.entries}
-					gate={ledgerGate}
-					open={ledgerPanelOpen}
-					onClose={() => (ledgerPanelOpen = false)}
-				/>
+				{#if fetchedLedger}
+					<CitationLedgerPanel
+						entries={fetchedLedger.entries}
+						gate={ledgerGate}
+						open={ledgerPanelOpen}
+						onClose={() => (ledgerPanelOpen = false)}
+					/>
+				{/if}
 			{/if}
-		{/if}
 		{/if}
 	</div>
 {/if}

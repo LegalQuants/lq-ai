@@ -1,5 +1,7 @@
 {
-  "chat_id": "28bdd93a-776d-426f-b18d-5f5083fae2c3",
+  "answered_directly": false,
+  "chat_id": "54206ac3-2f24-47d3-90d2-0e3c6a7080e2",
+  "direct_answer": null,
   "effects": [
     {
       "accounting": {
@@ -8,6 +10,7 @@
         "charged_usd": "0.0647",
         "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
         "estimated_prompt_tokens": 7741,
+        "messages_digest": "55aa3571e348d90d5d0bd6874aba502d1969a0b7e25b3caf532694ef35915f54",
         "model": "native",
         "provider": "selected",
         "reported_usage_cost_usd": "0.0003",
@@ -15,8 +18,8 @@
         "tier": 1
       },
       "charged_usd": "0.0647",
-      "completed_at": "2026-10-06T15:41:40.206530Z",
-      "created_at": "2026-10-06T15:41:40.193075Z",
+      "completed_at": "2026-10-08T19:28:52.710047Z",
+      "created_at": "2026-10-08T19:28:52.696585Z",
       "effect_key": "chat:plan:v1",
       "intent": "plan",
       "outcome": "success",
@@ -38,14 +41,14 @@
   ],
   "evidence": "unverified",
   "evidence_result": null,
-  "message_id": "86c81265-517e-4139-ade7-a448bb5a5eac",
+  "message_id": "b80c09cf-8199-439a-8f9f-22938ae88014",
   "packet": "# Fictional vendor agreement \u2014 demo packet v1\n\nThis invented agreement is a software demonstration fixture. No party, service\nor obligation described here is real. Effective date: 1 January 2026.\n\n## \u00a71 Parties and service\nPaper Lantern Ltd (Customer) subscribes to the team scheduling service supplied\nby Cedar Cloud Ltd (Supplier) for up to 20 users.\n\n## \u00a72 Payment\nCustomer shall pay USD 200 per month, invoiced monthly in advance. Undisputed\ninvoices are payable within 30 days of receipt. Customer must notify Supplier\nof a disputed amount within 15 days of receipt and pay undisputed amounts on\ntime. Supplier may suspend service for an undisputed invoice remaining unpaid\n15 days after Supplier gives written notice. This agreement specifies no late\nfee and no procedure for resolving a disputed amount.\n\n## \u00a73 Implementation\nSupplier will provide two remote onboarding sessions within 20 business days\nafter Customer supplies the user list. Customer is responsible for validating\nimported data. No migration service, implementation milestone payment, or\ncompletion acceptance procedure is specified.\n\n## \u00a74 Support\nSupplier will acknowledge support requests within two business days. Support\nhours are 09:00\u201317:00 Singapore time on Singapore business days. This agreement\ndoes not specify a resolution deadline, uptime commitment or service credits.\n\n## \u00a75 Term and renewal\nThe initial term is 12 months from the Effective Date. The agreement renews for\nsuccessive 12-month periods unless either party gives written notice of\nnon-renewal at least 30 days before the current term ends. No limit on the number\nof renewals is specified.\n\n## \u00a76 Termination\nEither party may terminate for material breach if the breach remains uncured\n30 days after written notice describing the breach. Customer may terminate for\nconvenience on 60 days' written notice but remains liable for subscription fees\nthrough the end of the current term. Supplier will provide a CSV export of\nCustomer data within 10 business days after termination upon Customer's request.\nThe agreement does not specify how long that export request right remains open.\n\n## \u00a77 Surviving obligations\nAccrued payment obligations and the confidentiality obligations in \u00a78 survive\ntermination. There is no survival period stated for confidentiality.\n\n## \u00a78 Confidentiality\nEach party will use the other's confidential information only to perform this\nagreement and will disclose it only to personnel who need to know it for that\npurpose and are bound by confidentiality obligations.\n",
   "planning": {
     "attempt_timeout_seconds": 120,
     "budget_usd": "2.0000",
     "child_skill_version": "1.0.0",
     "contract_version": 2,
-    "deadline": "2026-10-06T16:41:40.127622Z",
+    "deadline": "2026-10-08T20:28:52.626177Z",
     "delegation_grants": {
       "analysis": [
         "plan",
@@ -67,8 +70,8 @@
     "documents": [
       {
         "attached_for_run": false,
-        "document_id": "8f5b4700-8d09-4e87-a052-e8a932cdf633",
-        "file_id": "cc813819-b925-4acd-9b5a-292e5a9c2911",
+        "document_id": "3de193d2-a546-409e-9a93-5b4b424e1223",
+        "file_id": "38d87aed-10f0-4aed-9b8b-bd635fb1d4cf",
         "filename": "fictional-vendor-agreement.md",
         "number": 1
       }
@@ -78,13 +81,13 @@
     "max_active_children": 2,
     "max_children": 2,
     "model": "selected/native",
-    "owner_id": "2100a257-2f6c-401b-9438-26bfab6d810d",
+    "owner_id": "18058260-5c67-45fe-b128-21f4f083ffaf",
     "packet_digest": "31621b3b2ac3b863a5fdfaf6f9e0021d24751e041654792d17b776d3d193b6db",
-    "plan_id": "3d43ca66-9545-4a3c-bf4e-a3045b37df14",
+    "plan_id": "eb8ec4b6-7109-4b3f-865f-811b0341a6d7",
     "planning_allowance_usd": "0.2478",
-    "policy_version": "285a641dc63e8115a58effdd8a86cbee8f32b066a102e46c8d1133204febf7df",
+    "policy_version": "62845ffe12b39981252b61b555d7ff8554312d5c219fb3dfbfad97c400a25755",
     "profile": "model_demo_v1",
-    "project_id": "8a2df348-40b6-447d-863d-236b10f0407f",
+    "project_id": "0991ebc3-c7f7-4756-baef-043ea45c1181",
     "root": {
       "anonymize": true,
       "grants": {
@@ -101,7 +104,7 @@
       "privileged": false,
       "resources": {
         "document_ids": [
-          "8f5b4700-8d09-4e87-a052-e8a932cdf633"
+          "3de193d2-a546-409e-9a93-5b4b424e1223"
         ],
         "source_names": []
       },
@@ -111,14 +114,15 @@
       }
     },
     "root_allowance_usd": "0.4956",
-    "root_id": "8dd53341-6baf-43fc-b0f4-6d7a698d61c9",
+    "root_id": "f9d01e5f-61ad-4776-ace0-0a225eb72255",
     "root_skill_version": "1.0.0"
   },
   "profile": "model_demo_v1",
   "profile_title": "Contract Questions Orchestrator",
   "reads": "The installed fictional vendor agreement only. No matter documents or live sources.",
   "reserved_usd": "0.0000",
-  "root_id": "8dd53341-6baf-43fc-b0f4-6d7a698d61c9",
+  "root_id": "f9d01e5f-61ad-4776-ace0-0a225eb72255",
+  "sources": [],
   "spent_usd": "0.0647",
   "status": "failed",
   "stop_reason": "invalid_proposal",

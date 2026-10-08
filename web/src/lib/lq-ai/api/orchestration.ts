@@ -42,6 +42,20 @@ export interface StepNote {
 	summary?: Record<string, unknown> | null;
 }
 
+/**
+ * What instructs one role of a run: an installed skill, or one of the engine's own
+ * versioned prompt files (ADR 0038 D3). The prompt's text is at `orchestrationApi.prompt`.
+ */
+export type InstructionKind = 'skill' | 'prompt';
+
+/** The skill or prompt a session is pinned to. `kind` is absent for a skill. */
+export interface PinnedInstruction {
+	name: string;
+	digest: string;
+	kind?: InstructionKind;
+	version?: string;
+}
+
 /** One durable effect (a model call, a tool call, a file write) with its receipt. */
 export interface RunEffect {
 	effect_key: string;
@@ -51,7 +65,7 @@ export interface RunEffect {
 	intent?: string;
 	created_at?: string;
 	completed_at?: string | null;
-	skill?: { name: string; version: string; digest: string } | null;
+	skill?: { name: string; version: string; digest: string; kind?: InstructionKind } | null;
 	accounting?: {
 		provider: string;
 		model: string;
@@ -99,6 +113,43 @@ export interface PlanDocument {
 	attached_for_run: boolean;
 }
 
+/**
+ * A knowledge base a run's tasks may search: one attached to the run's matter when the request
+ * was accepted. The name is the owner's own text, shown as text. Contract version 3.
+ */
+export interface KnowledgeBaseRef {
+	knowledge_base_id: string;
+	name: string;
+}
+
+/**
+ * The limits a run states to its models and is held to, frozen when the request was sent.
+ * Absent on a run recorded before they were frozen, which reads its profile's limits instead.
+ */
+export interface RunTerms {
+	task_turns: number;
+	task_answer_chars: number;
+	answer_chars: number;
+	read_chars: number;
+	/**
+	 * How the orchestrator hands over its plan. `text`: a JSON object in its reply. `tool`: one
+	 * call to `propose_plan`; under it, a reply with no call is the orchestrator's own answer.
+	 */
+	planning: 'text' | 'tool';
+}
+
+/**
+ * A knowledge-base file one of the run's searches found. `number` is what a quotation's
+ * `(Source: [N])` marker carries; numbers above the selected documents belong to these.
+ * `session_id` is the task whose search found it.
+ */
+export interface RunSource {
+	number: number;
+	file_id: string;
+	filename: string;
+	session_id: string;
+}
+
 /** Tool names granted to a task, by phase (`analysis`, `drafting`, ...). */
 export type PlanTools = Record<string, string[] | undefined>;
 
@@ -114,8 +165,12 @@ export interface PlanChild {
 	};
 	profile?: string;
 	execution?: {
-		resources?: { document_ids?: string[]; source_names?: string[] };
-		skill?: { name: string; digest: string };
+		resources?: {
+			document_ids?: string[];
+			source_names?: string[];
+			knowledge_base_ids?: string[];
+		};
+		skill?: PinnedInstruction;
 		[key: string]: unknown;
 	};
 	/** Granted tool names by phase (contract version 3). */
@@ -143,7 +198,9 @@ export interface OrchestrationTree {
 		contract_version?: number;
 		profile?: string | null;
 		documents?: PlanDocument[];
-		root: { skill: { name: string; digest: string } };
+		/** The knowledge bases the tasks may search; approving the plan is consent to it. */
+		knowledge_bases?: KnowledgeBaseRef[];
+		root: { skill: PinnedInstruction };
 		children: PlanChild[];
 	};
 	root: RunProgress;
@@ -160,10 +217,110 @@ export interface OrchestrationTree {
 	partial_summary: string | null;
 }
 
+/** One of the engine's own versioned prompt files (ADR 0038 D3). `text` is the system message. */
+export interface PromptRead {
+	/** `<family>/<role>.v<N>`, for example `new_harness/orchestrator.v1`. */
+	name: string;
+	family: string;
+	role: string;
+	version: number;
+	digest: string;
+	text: string;
+}
+
+/** Which model call of a session: the plan, one task's work, or the combine step. */
+export type TraceStepName = 'plan' | 'task' | 'combine';
+
+/**
+ * How a call's rebuilt opening compares with the digest recorded when it was sent:
+ * `matches`, `differs`, `not_recorded` (no digest was kept, or the call has not been
+ * made) or `not_rebuilt` (a skill-pinned session, or pinned text no longer installed).
+ */
+export type TraceCheck = 'matches' | 'differs' | 'not_recorded' | 'not_rebuilt';
+
+/** A session's pinned system message. `text` is null when the pinned text is no longer installed. */
+export interface TraceSystem {
+	kind: InstructionKind;
+	name: string;
+	version?: string | null;
+	digest: string;
+	text?: string | null;
+}
+
+/** What one model call was opened with. The opening is rebuilt from the run's records, not stored. */
+export interface TraceCall {
+	step: TraceStepName;
+	effect_key: string;
+	sent: boolean;
+	system: TraceSystem;
+	/** The opening user message; null where the read does not rebuild it. */
+	opening?: string | null;
+	/** The tool schemas offered, as the provider was sent them (`{type, function: {name, description, parameters}}`). */
+	tools?: Record<string, unknown>[];
+	check: TraceCheck;
+}
+
+export interface TraceToolCall {
+	id: string;
+	name: string;
+	/** The arguments as the model wrote them: text, never parsed here. */
+	arguments: string;
+}
+
+/** One model reply. `text` is model-written. A turn's `effect_key` is its step's in the run read. */
+export interface TraceTurn {
+	effect_key: string;
+	status: string;
+	text?: string | null;
+	finish_reason?: string | null;
+	tool_calls?: TraceToolCall[];
+}
+
+/**
+ * How one session of a run was set up, and what its model wrote back. `session_id` is the
+ * run's root for the orchestrator, or one task's session.
+ */
+export interface SessionTraceRead {
+	root_id: string;
+	session_id: string;
+	role: 'orchestrator' | 'sub-agent';
+	calls: TraceCall[];
+	turns: TraceTurn[];
+	note?: string;
+}
+
+/**
+ * The URL path of a prompt file, from its name `<family>/<role>.v<N>`: two segments,
+ * each URL-encoded. Null for a name that is not exactly two plain segments, so a name
+ * from a server never reaches the request as anything else (no empty, `.` or `..` part).
+ */
+export function promptPath(name: string): string | null {
+	if (typeof name !== 'string') return null;
+	const cut = name.indexOf('/');
+	if (cut === -1) return null;
+	const parts = [name.slice(0, cut), name.slice(cut + 1)];
+	for (const part of parts) {
+		if (part === '' || part === '.' || part === '..' || /[/\\]/.test(part)) return null;
+	}
+	return parts.map(encodeURIComponent).join('/');
+}
+
 const base = '/autonomous/orchestration';
 export const orchestrationApi = {
 	tree: (id: string, signal?: AbortSignal) =>
 		apiRequest<OrchestrationTree>(`${base}/${encodeURIComponent(id)}/tree`, { signal }),
+	/** How one session of a run was set up and what its model wrote. Owner-only. */
+	trace: (rootId: string, sessionId: string, signal?: AbortSignal) =>
+		apiRequest<SessionTraceRead>(
+			`${base}/${encodeURIComponent(rootId)}/sessions/${encodeURIComponent(sessionId)}/trace`,
+			{ signal }
+		),
+	/** The text of one engine prompt file, by name (`new_harness/orchestrator.v1`). */
+	prompt: async (name: string, signal?: AbortSignal) => {
+		const path = promptPath(name);
+		if (path === null) throw new Error('That is not the name of a prompt file.');
+		return apiRequest<PromptRead>(`${base}/prompts/${path}`, { signal });
+	},
 	file: (root: string, session: string, name: string, signal?: AbortSignal) =>
 		apiRequest<WorkspaceFile & { content: string }>(
 			`${base}/${encodeURIComponent(root)}/files/${encodeURIComponent(session)}/${encodeURIComponent(name)}`,
@@ -228,10 +385,32 @@ export interface EvidenceResult {
 	unmarked?: number;
 }
 
+/** One earlier message of the chat, as the planning call was shown it (contract version 3). */
+export interface ThreadMessage {
+	role: 'user' | 'assistant';
+	content: string;
+	/** True when the text was shortened to fit. */
+	cut: boolean;
+}
+
 export interface OrchestrationChatRun {
 	root_id: string;
 	status: string;
 	stop_reason: string | null;
+	/**
+	 * True when the orchestrator answered the request by itself: the run is completed with no
+	 * plan, no tasks and no approval, `tree` is null, and nothing was read or searched. The
+	 * answer is the chat message's content. Absent on runs read from an older server.
+	 */
+	answered_directly?: boolean;
+	/**
+	 * The orchestrator's own answer, set only when `answered_directly`: the text that is also the chat
+	 * message's content, for a view (the receipt page) that has no message beside it. A planned run's
+	 * answer stays `tree.result.summary`. Null for any other run, and absent on an older server.
+	 */
+	direct_answer?: string | null;
+	/** The knowledge-base files the run's searches found, by source number. Absent on older runs. */
+	sources?: RunSource[];
 	/** The registry profile id; absent on runs recorded before chat hosting. */
 	profile?: string;
 	profile_title?: string | null;
@@ -264,13 +443,39 @@ export interface OrchestrationChatRun {
 		contract_version?: number;
 		profile?: string | null;
 		documents?: PlanDocument[];
+		/** The knowledge bases attached to the run's matter when the request was accepted. */
+		knowledge_bases?: KnowledgeBaseRef[];
 		max_children?: number;
 		max_active_children?: number;
+		/**
+		 * The limits this run states and is held to, frozen when the request was sent. Null or
+		 * absent on a run recorded before they were frozen.
+		 */
+		terms?: RunTerms | null;
+		/** The chat's recent messages the planning call was shown; absent before contract version 3. */
+		thread?: ThreadMessage[];
+		/** The date the planning call was told (UTC, `YYYY-MM-DD`). */
+		today?: string;
+		/** The matter the run started in; null for a chat outside any matter. */
+		project_id?: string | null;
+		/** What the orchestrator session is pinned to: its skill, or its prompt file (`kind: "prompt"`). */
+		root?: { skill: PinnedInstruction; [key: string]: unknown };
 	};
 	effects: RunEffect[];
 	spent_usd: string;
 	reserved_usd: string;
 	tree: OrchestrationTree | null;
+}
+
+/** What instructs one role of a profile, before anything is sent. */
+export interface InstructionsRef {
+	role: 'orchestrator' | 'sub-agent';
+	kind: InstructionKind;
+	/** For a prompt, `<family>/<role>.v<N>`: its text is at `orchestrationApi.prompt(name)`. */
+	name: string;
+	/** Null until the route is priced. */
+	version?: string | null;
+	digest?: string | null;
 }
 
 /** One profile's availability for a chat, as the composer shows it. */
@@ -279,10 +484,18 @@ export interface ProfileAvailability {
 	title: string;
 	summary: string;
 	reads: string;
-	/** `packet`: a fixed document. `selected`: the owner picks documents. */
-	documents: 'packet' | 'selected';
+	/**
+	 * `packet`: a fixed document. `selected`: the owner picks one to eight.
+	 * `optional`: the owner picks none to eight, and a run with none reads no document.
+	 */
+	documents: 'packet' | 'selected' | 'optional';
 	evidence: RunEvidence;
 	available: boolean;
+	/**
+	 * Why the profile cannot be used here: `operator_disabled`, `not_configured`,
+	 * `autonomous_opt_in_required`, `chat_archived`, `project_required`,
+	 * `project_unavailable`, `project_not_permitted`, `route_unavailable` or `active_run`.
+	 */
 	reason?: string | null;
 	reason_text?: string | null;
 	planning_notice: string;
@@ -294,7 +507,22 @@ export interface ProfileAvailability {
 	max_children?: number | null;
 	attempt_timeout_seconds?: number | null;
 	child_turn_limit: number;
+	/** The fewest documents a request may name: 0 or 1. Absent on an older server. */
+	min_documents?: number;
 	max_documents?: number | null;
+	/** What instructs each role: an installed skill or an engine prompt file. */
+	instructions?: InstructionsRef[];
+	/** The inference tier the pinned route resolves to; null until the route is priced. */
+	routed_tier?: number | null;
+	/** Whether the gateway pseudonymizes calls on that route; null until it is priced. */
+	pseudonymized?: boolean | null;
+	/** Set only when the operator chose one. */
+	reasoning_effort?: string | null;
+	/**
+	 * True where the orchestrator may answer a request by itself: the reply is then delivered
+	 * with no plan and no approval, having read nothing. Absent on an older server.
+	 */
+	answers_directly?: boolean;
 	tools: RunTool[];
 }
 
@@ -312,6 +540,8 @@ export interface RunProfilesRead {
 	chat_id: string;
 	project_id: string | null;
 	profiles: ProfileAvailability[];
+	/** The one profile the composer offers as New harness; the server decides. */
+	composer_profile?: string | null;
 	active_run: ActiveRun | null;
 }
 
@@ -323,15 +553,35 @@ export interface RunDocument {
 	characters: number;
 	attached_to_project: boolean;
 	selectable: boolean;
-	/** `unsupported_type`, `not_ingested`, `ingestion_failed` or `no_text`. */
+	/**
+	 * `unsupported_type`, `not_ingested`, `ingestion_failed`, `no_text`, `in_a_matter`
+	 * (a file that belongs to a matter, listed from a chat that is in none), or
+	 * `in_another_matter` (a candidate that only another matter holds).
+	 */
 	reason?: string | null;
+}
+
+/** A knowledge base attached to the chat's matter, which a task of a run started here may search. */
+export interface RunKnowledgeBase {
+	knowledge_base_id: string;
+	name: string;
 }
 
 export interface RunDocumentsRead {
 	chat_id: string;
-	project_id: string;
+	/** Null for a chat outside any matter: only the chat's own files are listed and nothing is added to a matter. */
+	project_id: string | null;
 	max_documents: number;
 	documents: RunDocument[];
+	/**
+	 * The knowledge bases a task of a run started here may search: all of those attached to the
+	 * chat's matter, at most 16. They are not picked. Empty outside a matter. Absent on an older server.
+	 */
+	knowledge_bases?: RunKnowledgeBase[];
+	/** How many more are attached than one run lists. Those are not searched. */
+	knowledge_bases_omitted?: number;
+	/** The documents the last run in this chat read that can still be read, in that run's order. */
+	suggested_file_ids?: string[];
 }
 
 export interface StartRunBody {
@@ -339,7 +589,11 @@ export interface StartRunBody {
 	request_id: string;
 	profile: string;
 	goal: string;
-	/** Documents the run may read, in the owner's order (profiles that read a selection). */
+	/**
+	 * Documents the run may read, in the owner's order. Profiles that read a selection or
+	 * take an optional one are sent the list (possibly empty); a profile that reads a fixed
+	 * document is sent none, and the server refuses any.
+	 */
 	file_ids?: string[];
 }
 

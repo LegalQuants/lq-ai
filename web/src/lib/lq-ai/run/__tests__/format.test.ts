@@ -10,10 +10,29 @@ import {
 	formatUsd,
 	formatValue,
 	humanise,
+	namedLineText,
 	own,
 	pluralise
 } from '../format';
 import { run } from './fixtures';
+
+describe('namedLineText', () => {
+	it('is the lead, the names joined with a comma and a space, and the tail', () => {
+		expect(namedLineText({ lead: 'May search: ', names: ['A', 'B', 'C'], tail: '.' })).toBe(
+			'May search: A, B, C.'
+		);
+		expect(namedLineText({ lead: 'May search: ', names: ['A'], tail: '. More.' })).toBe(
+			'May search: A. More.'
+		);
+	});
+
+	it('hands the names back as they are, with nothing added to them', () => {
+		const names = ['<img src=x onerror=alert(1)>', 'a, b', '‮evil'];
+		const text = namedLineText({ lead: 'L: ', names, tail: '.' });
+		expect(text).toBe(`L: ${names.join(', ')}.`);
+		expect(names).toEqual(['<img src=x onerror=alert(1)>', 'a, b', '‮evil']);
+	});
+});
 
 describe('pluralise', () => {
 	it('says one of a thing in the singular and every other count in the plural', () => {

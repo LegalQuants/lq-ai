@@ -12,7 +12,21 @@ import { humanise, own, pluralise } from './format';
 /** The fields the status helpers read. A full run read satisfies it. */
 export type RunLike = Pick<OrchestrationChatRun, 'status' | 'stop_reason'> & {
 	tree?: OrchestrationTree | null;
+	/** What the run's intake says. Only its frozen `terms` are read here. */
+	planning?: { terms?: { planning?: string | null } | null } | null;
 };
+
+/**
+ * Whether the run's intake says the plan is handed over by one tool call. Under it the first
+ * model call may also answer by itself, so until it has replied nothing says a plan is coming.
+ * False for a run whose intake states no terms, which hands its plan over in the reply's text.
+ */
+export function plansByTool(run: Pick<RunLike, 'planning'>): boolean {
+	return run.planning?.terms?.planning === 'tool';
+}
+
+/** What a run says while its first model call is running and a plan is not certain to come of it. */
+export const READING_REQUEST = 'Reading your request…';
 
 /** Holds the owner's single run allowance (ADR 0035 D1). */
 export const ACTIVE_STATUSES: readonly string[] = [
@@ -88,7 +102,14 @@ export interface TaskCounts {
 
 /** Count a run's tasks by what they are doing. Safe on a missing tree. */
 export function taskCounts(tree: OrchestrationTree | null | undefined): TaskCounts {
-	const counts: TaskCounts = { total: 0, finished: 0, running: 0, waiting: 0, stopped: 0, failed: 0 };
+	const counts: TaskCounts = {
+		total: 0,
+		finished: 0,
+		running: 0,
+		waiting: 0,
+		stopped: 0,
+		failed: 0
+	};
 	for (const child of tree?.children ?? []) {
 		counts.total += 1;
 		switch (child.status) {
@@ -117,6 +138,9 @@ const STOP_REASONS: Record<string, string> = {
 	owner_halt: 'You halted the run.',
 	owner_closed: 'You closed the run.',
 	invalid_proposal: 'The model could not produce a usable plan.',
+	plan_not_handed_over:
+		'The model wrote its plan out as text instead of handing it over, so there is no plan to approve.',
+	plan_has_placeholders: 'The plan carried a placeholder that stands for a name or an identifier.',
 	unfunded_plan: 'The plan needs more tasks than the budget can fund.',
 	invalid_synthesis: 'The combined answer could not be produced.',
 	unresolved_effect: 'A provider call has no confirmed outcome.',
@@ -125,10 +149,25 @@ const STOP_REASONS: Record<string, string> = {
 	observed_budget_overrun: 'A call cost more than its allowance.'
 };
 
-/** A stop reason as one sentence. Unknown codes are humanised, never dropped. */
+/**
+ * A stop reason as one sentence. A code this client has no sentence for is humanised, never
+ * dropped: it is the record's own word for why the run stopped, so it is said in plain words.
+ * A code with no words in it (only underscores, say) is said as it came; one with nothing in
+ * it is no reason at all, and is null.
+ */
 export function stopReasonText(reason: string | null | undefined): string | null {
 	if (!reason) return null;
-	return own(STOP_REASONS, reason) ?? `${humanise(reason)}.`;
+	const known = own(STOP_REASONS, reason);
+	if (known) return known;
+	const words = humanise(reason);
+	if (words) return `${words}.`;
+	const plain = reason.trim();
+	return plain ? `${plain}.` : null;
+}
+
+/** Whether this client has a sentence of its own for a stop reason. */
+function isFamiliarReason(reason: string): boolean {
+	return own(STOP_REASONS, reason) !== undefined;
 }
 
 function taskHeadline(run: RunLike): string {
@@ -165,7 +204,7 @@ function failedHeadline(run: RunLike): string {
 export function runHeadline(run: RunLike): string {
 	switch (run.status) {
 		case 'planning':
-			return 'Proposing a plan…';
+			return plansByTool(run) ? READING_REQUEST : 'Proposing a plan…';
 		case 'awaiting_approval':
 			return 'Waiting for your approval';
 		case 'queued':
@@ -194,6 +233,36 @@ export function runHeadline(run: RunLike): string {
 	}
 }
 
+/** What heads a run message, and whether it is the experimental harness. */
+export interface RunTitle {
+	text: string;
+	/** True for a run whose orchestrator is instructed by an engine prompt file. */
+	experimental: boolean;
+}
+
+/**
+ * The heading of a run message. A run instructed by prompt files is New harness, and
+ * says which version of its prompt the run pinned and the model it was pinned to:
+ * "New harness v1 → provider/model". Any other run keeps its profile's title.
+ *
+ * The kind is read from the planning snapshot, which every run has, rather than from the
+ * plan, which a run that is still planning does not have yet.
+ */
+export function runTitle(
+	run: Pick<OrchestrationChatRun, 'profile_title'> & {
+		planning?: Partial<OrchestrationChatRun['planning']> | null;
+		tree?: OrchestrationTree | null;
+	}
+): RunTitle {
+	const title = (run.profile_title ?? '').trim() || 'Governed run';
+	const pinned = run.planning?.root?.skill ?? run.tree?.plan?.root?.skill;
+	if (pinned?.kind !== 'prompt') return { text: title, experimental: false };
+	const version = (run.planning?.root_skill_version ?? '').trim();
+	const model = (run.planning?.model ?? '').trim();
+	const named = version ? `${title} v${version}` : title;
+	return { text: model ? `${named} → ${model}` : named, experimental: true };
+}
+
 /** Explains `uncertain` in plain words, and what closing does (ADR 0038 D6). */
 export const UNCERTAIN_EXPLANATION =
 	'A provider call was sent but its outcome was never confirmed. The run stopped there and will not ' +
@@ -203,14 +272,36 @@ export const UNCERTAIN_EXPLANATION =
 	'readable.';
 
 /**
+ * The statuses that explain themselves in a sentence of their own, and so would say nothing of
+ * a stop reason this client has never seen. (A failed run's explanation is its reason; an
+ * unfamiliar status falls back to the reason too. A delivered answer has no reason to give.)
+ */
+const EXPLAINS_ITSELF: readonly string[] = ['rejected', 'halted', 'uncertain', 'closed', 'expired'];
+
+/**
  * A sentence or two that explains the state beyond the headline, or null when the
  * headline says enough. Plain text.
+ *
+ * A stop reason this client has never seen still shows: after what the status says, the code in
+ * plain words. The status is what is known to be true of the run, and the code is what the record
+ * says of why; neither is dropped for the other.
  */
 export function runDetail(run: RunLike): string | null {
+	const detail = statusDetail(run);
+	const reason = run.stop_reason;
+	if (!reason || isFamiliarReason(reason) || !EXPLAINS_ITSELF.includes(run.status)) return detail;
+	const added = stopReasonText(reason);
+	return detail && added ? `${detail} ${added}` : (detail ?? added);
+}
+
+function statusDetail(run: RunLike): string | null {
 	const counts = taskCounts(run.tree);
 	switch (run.status) {
 		case 'planning':
-			return 'The model is proposing bounded tasks. Nothing has been approved, and nothing else runs until you approve a plan.';
+			// Under a tool call the model may answer instead, so it is not said that a plan will come.
+			return plansByTool(run)
+				? 'One model call is reading your request. It will answer, or propose a plan. No task runs until you approve a plan.'
+				: 'The model is proposing bounded tasks. Nothing has been approved, and nothing else runs until you approve a plan.';
 		case 'awaiting_approval':
 			return 'Review the plan below. Nothing runs until you approve it.';
 		case 'queued':
@@ -246,6 +337,14 @@ export function runDetail(run: RunLike): string | null {
 			switch (run.stop_reason) {
 				case 'invalid_proposal':
 					return 'The planning call was paid for, but its reply could not be turned into a valid plan. No task ran. You can start a new run.';
+				case 'plan_not_handed_over':
+					return `${stopReasonText(run.stop_reason)} Nothing ran. Send the request again.`;
+				case 'plan_has_placeholders':
+					return (
+						`${stopReasonText(run.stop_reason)} This route is pseudonymized, and a placeholder in a plan ` +
+						'cannot be turned back into the real value, so the plan was refused. Nothing ran. ' +
+						'Try the request again without the name or identifier.'
+					);
 				case 'unfunded_plan':
 					return 'The model proposed more tasks than the total cap can fund at the per-task allowance. No task ran. A narrower request needs fewer tasks.';
 				case 'invalid_synthesis':

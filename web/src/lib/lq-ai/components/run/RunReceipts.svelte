@@ -7,46 +7,67 @@
 	 */
 	import type { OrchestrationChatRun } from '$lib/lq-ai/api/orchestration';
 	import { formatUsd } from '$lib/lq-ai/run/format';
+	import { orchestratorPin } from '$lib/lq-ai/run/plan';
+	import { stepContext } from '$lib/lq-ai/run/renderers';
 	import RunEffectReceipt from './RunEffectReceipt.svelte';
 
 	export let run: OrchestrationChatRun;
 
 	$: tree = run.tree;
 	$: effects = run.effects ?? [];
+	// What instructs the orchestrator: a skill, or one of the engine's own prompt files.
+	$: pin = orchestratorPin(run);
 </script>
 
 <details class="receipts" data-testid="lq-ai-run-receipts">
 	<summary>Receipts, digests and accounting</summary>
 	<dl>
-		<div><dt>Run</dt><dd><code>{run.root_id}</code></dd></div>
-		{#if run.profile}<div><dt>Profile</dt><dd>{run.profile}</dd></div>{/if}
-		<div><dt>Model</dt><dd>{run.planning.model}</dd></div>
+		<div>
+			<dt>Run</dt>
+			<dd><code>{run.root_id}</code></dd>
+		</div>
+		{#if run.profile}<div>
+				<dt>Profile</dt>
+				<dd>{run.profile}</dd>
+			</div>{/if}
+		<div>
+			<dt>Model</dt>
+			<dd>{run.planning.model}</dd>
+		</div>
 		<div>
 			<dt>Accounting</dt>
 			<dd>Spent {formatUsd(run.spent_usd)} · reserved {formatUsd(run.reserved_usd)}</dd>
 		</div>
 		{#if run.planning.packet_digest}
-			<div><dt>Document packet digest</dt><dd><code>{run.planning.packet_digest}</code></dd></div>
+			<div>
+				<dt>Document packet digest</dt>
+				<dd><code>{run.planning.packet_digest}</code></dd>
+			</div>
 		{/if}
 		<div>
 			<dt>Gateway configuration</dt>
 			<dd><code>{run.planning.gateway_revision}</code></dd>
 		</div>
 		{#if tree}
-			<div><dt>Plan digest</dt><dd><code>{tree.plan_hash}</code></dd></div>
 			<div>
-				<dt>Orchestrator skill</dt>
-				<dd>
-					{tree.plan.root.skill.name} v{run.planning.root_skill_version}
-					<code>{tree.plan.root.skill.digest}</code>
-				</dd>
+				<dt>Plan digest</dt>
+				<dd><code>{tree.plan_hash}</code></dd>
 			</div>
+			{#if pin}
+				<div>
+					<dt>{pin.label}</dt>
+					<dd>
+						{pin.text}
+						<code>{pin.digest}</code>
+					</dd>
+				</div>
+			{/if}
 		{/if}
 	</dl>
 	{#if effects.length > 0}
 		<h4>Orchestrator steps</h4>
 		{#each effects as effect}
-			<RunEffectReceipt {effect} />
+			<RunEffectReceipt {effect} context={stepContext(run)} />
 		{/each}
 	{/if}
 </details>

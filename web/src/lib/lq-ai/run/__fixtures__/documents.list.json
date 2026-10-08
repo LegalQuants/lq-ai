@@ -1,10 +1,10 @@
 {
-  "chat_id": "95f75653-3b51-4aba-a9b0-7614eddb8429",
+  "chat_id": "89cf9b67-e953-46e6-bc99-553b43252ecb",
   "documents": [
     {
       "attached_to_project": true,
       "characters": 244,
-      "file_id": "62803688-7e2f-45eb-8916-3f31285da37b",
+      "file_id": "16bf4111-5c73-4389-b26f-749a074cec32",
       "filename": "msa.txt",
       "mime_type": "text/plain",
       "reason": null,
@@ -14,7 +14,7 @@
     {
       "attached_to_project": false,
       "characters": 190,
-      "file_id": "01829cfd-51e4-4c99-a342-78551f7fe56e",
+      "file_id": "081c4430-f88a-473d-968f-edaf07d06c65",
       "filename": "dpa.md",
       "mime_type": "text/markdown",
       "reason": null,
@@ -24,7 +24,7 @@
     {
       "attached_to_project": true,
       "characters": 4,
-      "file_id": "e21f9e40-ff41-48c3-922d-2946aa17001c",
+      "file_id": "2e7b3ca5-9654-4993-9e25-c621d6ffe7a6",
       "filename": "draft.docx",
       "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       "reason": "unsupported_type",
@@ -34,7 +34,7 @@
     {
       "attached_to_project": true,
       "characters": 0,
-      "file_id": "eb22050d-ce71-471a-8d32-b0c1f5950d9c",
+      "file_id": "d79ba72a-51ab-4f03-9b8c-8a245fca9bee",
       "filename": "scan.pdf",
       "mime_type": "application/pdf",
       "reason": "not_ingested",
@@ -44,7 +44,7 @@
     {
       "attached_to_project": true,
       "characters": 0,
-      "file_id": "d448bd8d-8fe0-4848-a4b3-4966d5af85d0",
+      "file_id": "d5bef405-bc48-4827-8d2a-67c0da61c24a",
       "filename": "broken.pdf",
       "mime_type": "application/pdf",
       "reason": "ingestion_failed",
@@ -54,7 +54,7 @@
     {
       "attached_to_project": true,
       "characters": 2,
-      "file_id": "68981ce8-7762-4e4b-9862-d1ae348d34ce",
+      "file_id": "aafa7cd7-2832-454a-86d9-da8b37645cf0",
       "filename": "image-only.pdf",
       "mime_type": "application/pdf",
       "reason": "no_text",
@@ -62,6 +62,9 @@
       "size_bytes": 2
     }
   ],
+  "knowledge_bases": [],
+  "knowledge_bases_omitted": 0,
   "max_documents": 8,
-  "project_id": "79cacec3-76ab-477d-8677-16cdfb90bcc3"
+  "project_id": "33f58c70-de9e-47d8-98e9-cad3921234d9",
+  "suggested_file_ids": []
 }

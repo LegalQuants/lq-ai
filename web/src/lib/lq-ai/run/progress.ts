@@ -10,7 +10,7 @@
  */
 import type { OrchestrationChatRun, RunProgress } from '../api/orchestration';
 import { humanise, pluralise } from './format';
-import { describeEffect, type StepTone } from './renderers';
+import { describeEffect, stepContext, type StepContext, type StepTone } from './renderers';
 import { isActiveStatus, stopReasonText, taskCounts, type RunLike } from './status';
 
 export type ProgressStageId = 'plan' | 'approval' | 'tasks' | 'answer';
@@ -105,7 +105,8 @@ function stageDetail(run: RunLike, id: ProgressStageId, state: ProgressState): s
 				parts.push(`${counts.finished} of ${counts.total} finished`);
 				return parts.join(' · ');
 			}
-			if (state === 'stopped') return `${counts.finished} of ${counts.total} finished before the run stopped`;
+			if (state === 'stopped')
+				return `${counts.finished} of ${counts.total} finished before the run stopped`;
 			return null;
 		}
 		case 'answer': {
@@ -178,13 +179,16 @@ export function outcomeSummary(
 	return (outcome?.findings ?? []).some((finding) => finding.includes(summary)) ? null : summary;
 }
 
-/** The latest step of a task that has not finished, or null when it has nothing to report. */
-export function taskLatestStep(child: RunProgress): string | null {
+/**
+ * The latest step of a task that has not finished, or null when it has nothing to report. The
+ * `context` is the run the task is in: a step still in flight has no note to say what it was.
+ */
+export function taskLatestStep(child: RunProgress, context: StepContext = {}): string | null {
 	switch (child.status) {
 		case 'running': {
 			const last = child.effects?.[child.effects.length - 1];
 			if (!last) return 'Starting';
-			const view = describeEffect(last);
+			const view = describeEffect(last, context);
 			return view.tone === 'working' ? `${view.text}…` : view.text;
 		}
 		case 'queued':
@@ -209,13 +213,16 @@ export interface NowLine {
 export function currentSteps(run: OrchestrationChatRun): NowLine[] {
 	if (!isActiveStatus(run.status)) return [];
 	const tree = run.tree;
+	// Every step is read as the run it is in reads it.
+	const context = stepContext(run);
 	if (!tree) {
 		if (run.status === 'planning') {
 			return [{ who: null, text: 'Asking the model to propose tasks', tone: 'working' }];
 		}
 		const last = run.effects?.[run.effects.length - 1];
 		if (run.status === 'uncertain' && last) {
-			const view = describeEffect(last);
+			// The call with no outcome is the first one.
+			const view = describeEffect(last, context);
 			return [{ who: null, text: view.text, tone: view.tone }];
 		}
 		return [];
@@ -228,7 +235,7 @@ export function currentSteps(run: OrchestrationChatRun): NowLine[] {
 		const who = tree.plan.children[index]?.task.topic ?? null;
 		if (run.status === 'uncertain') {
 			if (stoppedHere) {
-				const view = describeEffect(stoppedHere);
+				const view = describeEffect(stoppedHere, context);
 				lines.push({ who, text: view.text, tone: view.tone });
 			}
 			return;
@@ -238,8 +245,12 @@ export function currentSteps(run: OrchestrationChatRun): NowLine[] {
 			lines.push({ who, text: 'Starting', tone: 'working' });
 			return;
 		}
-		const view = describeEffect(last);
-		lines.push({ who, text: view.tone === 'working' ? `${view.text}…` : view.text, tone: view.tone });
+		const view = describeEffect(last, context);
+		lines.push({
+			who,
+			text: view.tone === 'working' ? `${view.text}…` : view.text,
+			tone: view.tone
+		});
 	});
 	if (lines.length > 0) return lines;
 	const counts = taskCounts(tree);
@@ -249,8 +260,10 @@ export function currentSteps(run: OrchestrationChatRun): NowLine[] {
 		const since = (tree.root.effects ?? []).filter((effect) => !isPlanningStep(effect));
 		const last = since[since.length - 1];
 		if (!last) return [{ who: null, text: COLLECTING, tone: 'working' }];
-		const view = describeEffect(last);
-		return [{ who: null, text: view.tone === 'working' ? `${view.text}…` : view.text, tone: view.tone }];
+		const view = describeEffect(last, context);
+		return [
+			{ who: null, text: view.tone === 'working' ? `${view.text}…` : view.text, tone: view.tone }
+		];
 	}
 	return [];
 }

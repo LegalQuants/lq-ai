@@ -11,62 +11,127 @@
 	 *
 	 * Task text, file names and the goal come from the model or the owner and are
 	 * rendered as text only.
+	 *
+	 * Under the tasks, "How this run was set up" shows what the planning call was opened
+	 * with, read from the run's trace once the line is open, and "What the model wrote"
+	 * shows its reply.
 	 */
 	import { createEventDispatcher } from 'svelte';
+	import { orchestrationApi } from '$lib/lq-ai/api/orchestration';
+	import type { SessionTraceRead } from '$lib/lq-ai/api/orchestration';
+	import type { ActivityLine } from '$lib/lq-ai/run/activity';
 	import { formatDeadline, formatDuration, pluralise } from '$lib/lq-ai/run/format';
+	import { IDLE, shown } from '$lib/lq-ai/run/load';
+	import type { Load } from '$lib/lq-ai/run/load';
 	import { approvalSentence, type PlanView } from '$lib/lq-ai/run/plan';
+	import { replyTo, traceCall } from '$lib/lq-ai/run/trace';
+	import RunLine from './RunLine.svelte';
+	import RunNamedLine from './RunNamedLine.svelte';
+	import RunSetup from './RunSetup.svelte';
+	import RunWrote from './RunWrote.svelte';
 
 	export let view: PlanView;
+	/** The closed line: the summary the owner reads before opening the plan. */
+	export let line: ActivityLine;
 	/** `proposed` until approved; `rejected` once the owner rejected it. */
 	export let state: 'proposed' | 'approved' | 'rejected' = 'proposed';
 	/** True while the run is waiting for the owner's decision. */
 	export let awaiting = false;
+	/** Open while the run is being read as a receipt. Bound only to values that change with the run. */
+	export let expanded = false;
 	export let busy = false;
+	/** The run's root. Without it there is no trace to read, and no setup fold. */
+	export let rootId = '';
+	/** The read of the root's trace; the real API unless a test passes a stub. */
+	export let fetchTrace: typeof orchestrationApi.trace = orchestrationApi.trace;
+	/** Changes when Refresh is pressed on the run message: an open line reads its trace again. */
+	export let refreshKey = 0;
+	/** The trace as read so far. Handed in only to show a state without running the read. */
+	export let traceState: Load<SessionTraceRead> = IDLE;
 
 	const dispatch = createEventDispatcher<{
 		approve: { revision: number; planHash: string };
 		reject: { revision: number; planHash: string };
 	}>();
 
-	$: title =
-		state === 'approved' ? 'Approved plan' : state === 'rejected' ? 'Rejected plan' : 'Proposed plan';
+	// Whether this line is open now. The element is bound to it, so nothing that follows the
+	// run can open or close the line, with one exception that is a real change of state: the
+	// plan opens when it comes to wait for a decision, because the owner approves the exact
+	// plan shown, and closes again when the decision is made. In between, and after, it is
+	// the reader's.
+	let lineOpen = awaiting || expanded;
+	let wasAwaiting = awaiting;
+	$: if (awaiting !== wasAwaiting) {
+		wasAwaiting = awaiting;
+		lineOpen = awaiting || expanded;
+	}
+
+	$: trace = shown(traceState);
+	$: reply = replyTo(trace, traceCall(trace, 'plan'));
 </script>
 
 <details
 	class="plan"
-	open={awaiting}
+	bind:open={lineOpen}
 	data-testid="lq-ai-run-plan-card"
 	data-revision={view.revision}
 	data-state={state}
 >
 	<summary>
-		<span class="title">{title}</span>
-		<span class="meta">
-			revision {view.revision} · {pluralise(view.tasks.length, 'task')} · total cap {view.totalCap}
-		</span>
+		<RunLine
+			state={line.state}
+			label={line.label}
+			summary={line.summary}
+			meta={line.meta}
+			foldable
+		/>
 	</summary>
 
 	<div class="body">
 		<dl class="limits">
-			<div><dt>Total cap</dt><dd>{view.totalCap}</dd></div>
-			<div><dt>Combining the answers</dt><dd>{view.rootAllowance}</dd></div>
+			<div>
+				<dt>Total cap</dt>
+				<dd>{view.totalCap}</dd>
+			</div>
+			<div>
+				<dt>Combining the answers</dt>
+				<dd>{view.rootAllowance}</dd>
+			</div>
 			{#if view.planningAllowance}
-				<div><dt>Planning allowance</dt><dd>{view.planningAllowance}</dd></div>
+				<div>
+					<dt>Planning allowance</dt>
+					<dd>{view.planningAllowance}</dd>
+				</div>
 			{/if}
-			<div><dt>Deadline</dt><dd>{formatDeadline(view.deadline)}</dd></div>
+			<div>
+				<dt>Deadline</dt>
+				<dd>{formatDeadline(view.deadline)}</dd>
+			</div>
 			{#if view.attemptLimitSeconds}
 				<div>
 					<dt>Attempt limit</dt>
 					<dd>{formatDuration(view.attemptLimitSeconds)} per attempt</dd>
 				</div>
 			{/if}
-			<div><dt>At the same time</dt><dd>up to {view.maxActive}</dd></div>
+			<div>
+				<dt>At the same time</dt>
+				<dd>up to {view.maxActive}</dd>
+			</div>
 			{#if view.model}
-				<div><dt>Model</dt><dd>{view.model}</dd></div>
+				<div>
+					<dt>Model</dt>
+					<dd>{view.model}</dd>
+				</div>
 			{/if}
 		</dl>
 
 		{#if view.reads}<p class="reads"><strong>May read:</strong> {view.reads}</p>{/if}
+		<!-- Approving the plan is consent to this, so it is on the plan and not in a fold of it. -->
+		{#if view.knowledgeBases}
+			<p class="reads searches" data-testid="lq-ai-run-plan-knowledge-bases">
+				<RunNamedLine line={view.knowledgeBases} />
+			</p>
+		{/if}
 
 		<ol class="tasks">
 			{#each view.tasks as task}
@@ -74,7 +139,10 @@
 					<p class="topic">{task.topic}</p>
 					<p class="question">{task.question}</p>
 					<dl class="facts">
-						<div><dt>Skill</dt><dd>{task.skill}</dd></div>
+						<div>
+							<dt>{task.skillKind === 'prompt' ? 'System prompt' : 'Skill'}</dt>
+							<dd>{task.skill}</dd>
+						</div>
 						<div>
 							<dt>Tools it may call</dt>
 							<dd data-testid="lq-ai-run-plan-tools">
@@ -117,6 +185,19 @@
 			{/each}
 		</ol>
 
+		{#if rootId}
+			<RunSetup
+				{rootId}
+				sessionId={rootId}
+				step="plan"
+				{lineOpen}
+				{refreshKey}
+				{fetchTrace}
+				bind:state={traceState}
+			/>
+			{#if reply}<RunWrote turn={reply} />{/if}
+		{/if}
+
 		{#if awaiting}
 			<div class="actions">
 				<button
@@ -124,8 +205,7 @@
 					class="primary"
 					data-testid="lq-ai-run-approve"
 					disabled={busy}
-					on:click={() =>
-						dispatch('approve', { revision: view.revision, planHash: view.planHash })}
+					on:click={() => dispatch('approve', { revision: view.revision, planHash: view.planHash })}
 				>
 					Approve plan
 				</button>
@@ -134,8 +214,7 @@
 					class="secondary"
 					data-testid="lq-ai-run-reject"
 					disabled={busy}
-					on:click={() =>
-						dispatch('reject', { revision: view.revision, planHash: view.planHash })}
+					on:click={() => dispatch('reject', { revision: view.revision, planHash: view.planHash })}
 				>
 					Reject plan
 				</button>
@@ -143,7 +222,8 @@
 			<p class="note">{approvalSentence(view.revision)} Tasks cannot start further tasks.</p>
 			{#if view.planningCharge}
 				<p class="note">
-					Planning is already charged ({view.planningCharge}) and stays in the receipts if you reject.
+					Planning is already charged ({view.planningCharge}) and stays in the receipts if you
+					reject.
 				</p>
 			{/if}
 		{:else if state === 'approved'}
@@ -154,29 +234,24 @@
 
 <style>
 	.plan {
-		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius-lg);
-		background: var(--lq-canvas);
-		margin: 0.75rem 0;
+		margin: 0.1rem 0;
 	}
-	summary {
+	.plan > summary {
 		cursor: pointer;
-		padding: 0.6rem 0.9rem;
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.25rem 0.75rem;
-		align-items: baseline;
+		padding: 0.35rem 0;
+		list-style: none;
 	}
-	.title {
-		font-weight: 600;
-		font-size: 0.95rem;
+	.plan > summary::-webkit-details-marker {
+		display: none;
 	}
-	.meta {
-		font-size: 0.78rem;
-		color: var(--lq-text-secondary);
+	.plan > summary:focus-visible {
+		outline: 2px solid var(--lq-accent);
+		outline-offset: 2px;
 	}
 	.body {
-		padding: 0 0.9rem 0.9rem;
+		margin: 0.15rem 0 0.5rem 0.55rem;
+		padding: 0 0 0.5rem 1rem;
+		border-left: 2px solid var(--lq-accent-border);
 	}
 	dl {
 		margin: 0;

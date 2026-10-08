@@ -8,7 +8,18 @@
 import { describe, expect, it } from 'vitest';
 
 import type { OrchestrationChatRun, RunTool } from '../../api/orchestration';
-import { approvalSentence, planState, planView, type PlanView } from '../plan';
+import {
+	approvalSentence,
+	orchestratorPin,
+	pinnedText,
+	planState,
+	planView,
+	receiptPin,
+	searchLine,
+	searchLineParts,
+	type PlanView
+} from '../plan';
+import { formatUsd, namedLineText } from '../format';
 import { LEGACY_RUNS, allRuns, legacyRun, run } from './fixtures';
 
 /** A copy of a recorded run with `change` applied to it. */
@@ -110,7 +121,10 @@ describe('the plan of a new run on documents the owner selected', () => {
 			expect(task.tools).toEqual([READ_DOCUMENT, READ_NOTE, SAVE_NOTE]);
 			expect(task.turnLimit).toBe(5);
 			expect(task.budget).toBe('$3.4686');
-			expect(task.skill).toBe('contract-qa v1.0.0');
+			// Changed on purpose: New harness is instructed by an engine prompt file, not by the
+			// contract-qa skill, so the task names that file and the version the run pinned.
+			expect(task.skill).toBe('new_harness/subagent.v2 (version 2)');
+			expect(task.skillKind).toBe('prompt');
 		}
 	});
 
@@ -120,10 +134,15 @@ describe('the plan of a new run on documents the owner selected', () => {
 		expect(card.planningAllowance).toBe('$0.5781');
 		expect(card.attemptLimitSeconds).toBe(300);
 		expect(card.maxActive).toBe(2);
+		// Changed on purpose: the profile also reads the chat's recent messages, the documents
+		// are optional ("if any"), and in a matter it reads the knowledge bases attached to it.
 		expect(card.reads).toBe(
-			'Only the documents you select for this run. No other matter files or live sources.'
+			"Your request, this chat's recent messages, the documents you select, if any, and in a matter the knowledge bases attached to it. No other files and no live sources."
 		);
-		expect(card.planningCharge).toBe('$0.0552');
+		// What the planning effect was charged, read from the recording: it changes with
+		// the size of what the planning call is sent.
+		expect(card.planningCharge).toBe(formatUsd(recorded.effects[0].charged_usd));
+		expect(card.planningCharge).toMatch(/^\$0\.0\d+$/);
 	});
 
 	it('is the same plan once approved and delivered, now marked approved', () => {
@@ -307,12 +326,133 @@ describe('the skill a task runs', () => {
 		expect(view(value).tasks[0].skill).toBe('contract-qa');
 	});
 
+	it('is a skill for the fixed-document profile, and is named so', () => {
+		for (const task of view(base).tasks) expect(task.skillKind).toBe('skill');
+	});
+
 	it('says so when no skill was recorded, rather than leaving it blank', () => {
 		const value = edited(base, (copy) => {
 			delete copy.tree!.plan.children[0].execution;
 		});
 		expect(view(value).tasks[0].skill).toBe('Skill not recorded');
 		expect(view(value).tasks[1].skill).toBe('contract-qa v1.0.0');
+	});
+});
+
+describe('how a receipt names what instructed a call', () => {
+	it('says "Prompt file" for one of the engine’s prompt files, with its name', () => {
+		// The name already ends with the version, so the version is not said again.
+		expect(receiptPin({ name: 'new_harness/orchestrator.v2', version: '2', kind: 'prompt' })).toBe(
+			'Prompt file new_harness/orchestrator.v2'
+		);
+		expect(receiptPin({ name: 'new_harness/subagent.v2', version: '2', kind: 'prompt' })).toBe(
+			'Prompt file new_harness/subagent.v2'
+		);
+	});
+
+	it('leaves the version out only when the name ends with exactly that version', () => {
+		// Another version, a version that merely ends the same, and a name that holds it elsewhere.
+		expect(receiptPin({ name: 'new_harness/orchestrator.v2', version: '3', kind: 'prompt' })).toBe(
+			'Prompt file new_harness/orchestrator.v2 v3'
+		);
+		expect(receiptPin({ name: 'new_harness/orchestrator.v12', version: '2', kind: 'prompt' })).toBe(
+			'Prompt file new_harness/orchestrator.v12 v2'
+		);
+		expect(
+			receiptPin({ name: 'new_harness/orchestrator.v2.draft', version: '2', kind: 'prompt' })
+		).toBe('Prompt file new_harness/orchestrator.v2.draft v2');
+		// The same is true of a pin that is named as a skill.
+		expect(receiptPin({ name: 'contract-qa.v1', version: '1', kind: 'skill' })).toBe(
+			'Skill contract-qa.v1'
+		);
+		expect(receiptPin({ name: 'contract-qa', version: '1', kind: 'skill' })).toBe(
+			'Skill contract-qa v1'
+		);
+	});
+
+	it('says "Skill" for an installed skill, as it always did, with or without its kind', () => {
+		expect(receiptPin({ name: 'contract-qa', version: '1.0.0', kind: 'skill' })).toBe(
+			'Skill contract-qa v1.0.0'
+		);
+		expect(receiptPin({ name: 'contract-qa', version: '1.0.0' })).toBe('Skill contract-qa v1.0.0');
+		// A kind it has never seen is not a prompt file: it is named as a skill was before there were any.
+		expect(receiptPin({ name: 'x', version: '1', kind: 'something_new' })).toBe('Skill x v1');
+	});
+
+	it('leaves out a version the pin does not state, and names nothing for a pin with no name', () => {
+		for (const version of ['', '  ', null, undefined]) {
+			expect(receiptPin({ name: 'contract-qa', version }), String(version)).toBe(
+				'Skill contract-qa'
+			);
+			expect(receiptPin({ name: 'p/r.v1', version, kind: 'prompt' }), String(version)).toBe(
+				'Prompt file p/r.v1'
+			);
+		}
+		expect(receiptPin({ name: '' })).toBeNull();
+		expect(receiptPin(null)).toBeNull();
+		expect(receiptPin(undefined)).toBeNull();
+	});
+
+	it('names what each recorded effect was pinned to, by its kind', () => {
+		const prompted = run('direct.completed').effects[0].skill!;
+		expect(prompted.kind).toBe('prompt');
+		// The recorded pin's name ends with its version: the receipt says the file, once.
+		expect(prompted.name.endsWith(`.v${prompted.version}`)).toBe(true);
+		expect(receiptPin(prompted)).toBe(`Prompt file ${prompted.name}`);
+		const skilled = run('completed').effects.find((e) => e.skill)?.skill;
+		if (skilled) expect(receiptPin(skilled)).toBe(`Skill ${skilled.name} v${skilled.version}`);
+	});
+
+	it('hands the name and version back as the text they are', () => {
+		const hostile = '<img src=x onerror=alert(1)>';
+		expect(receiptPin({ name: hostile, version: hostile, kind: 'prompt' })).toBe(
+			`Prompt file ${hostile} v${hostile}`
+		);
+		// A name that ends with the version, hostile or not, is named as it is.
+		expect(receiptPin({ name: `${hostile}.v2`, version: '2', kind: 'prompt' })).toBe(
+			`Prompt file ${hostile}.v2`
+		);
+	});
+});
+
+describe('what a session is pinned to', () => {
+	it('names a skill with its version, and a prompt file with the version it pinned', () => {
+		expect(pinnedText({ name: 'contract-qa' }, '1.0.0')).toBe('contract-qa v1.0.0');
+		expect(pinnedText({ name: 'contract-qa', kind: 'skill' }, '1.0.0')).toBe('contract-qa v1.0.0');
+		expect(pinnedText({ name: 'new_harness/subagent.v1', kind: 'prompt' }, '1')).toBe(
+			'new_harness/subagent.v1 (version 1)'
+		);
+	});
+
+	it('is the name alone when no version was recorded, and nothing when there is no name', () => {
+		for (const version of ['', '  ', null, undefined]) {
+			expect(pinnedText({ name: 'contract-qa' }, version)).toBe('contract-qa');
+			expect(pinnedText({ name: 'p/r.v1', kind: 'prompt' }, version)).toBe('p/r.v1');
+		}
+		expect(pinnedText({ name: '' }, '1')).toBeNull();
+		expect(pinnedText(null, '1')).toBeNull();
+		expect(pinnedText(undefined, '1')).toBeNull();
+	});
+
+	it('calls the orchestrator’s pin a skill for the fixed-document profile', () => {
+		const pin = orchestratorPin(run('completed'))!;
+		expect(pin.label).toBe('Orchestrator skill');
+		expect(pin.text).toBe('orchestration-chat-demo v1.0.0');
+		expect(pin.digest).toBe(run('completed').tree!.plan.root.skill.digest);
+	});
+
+	it('calls it a prompt for New harness, with the digest the run pinned', () => {
+		const recorded = run('harness.completed');
+		const pin = orchestratorPin(recorded)!;
+		expect(pin.label).toBe('Orchestrator prompt');
+		expect(pin.text).toBe('new_harness/orchestrator.v2 (version 2)');
+		expect(pin.digest).toBe(recorded.tree!.plan.root.skill.digest);
+		expect(pin.digest).toBe(recorded.planning.root!.skill.digest);
+	});
+
+	it('has no pin to show for a run that has no plan yet', () => {
+		expect(orchestratorPin(run('harness.follow-up.planning'))).toBeNull();
+		expect(orchestratorPin(run('planning'))).toBeNull();
 	});
 });
 
@@ -329,11 +469,12 @@ describe('money, limits and the planning charge', () => {
 	});
 
 	it('finds the planning charge by the effect that paid for the plan', () => {
-		expect(view(base).planningCharge).toBe('$0.0552');
+		const charge = formatUsd(base.effects[0].charged_usd);
+		expect(view(base).planningCharge).toBe(charge);
 		const byKey = edited(base, (copy) => {
 			copy.effects[0].intent = 'something_else';
 		});
-		expect(view(byKey).planningCharge).toBe('$0.0552');
+		expect(view(byKey).planningCharge).toBe(charge);
 		const neither = edited(base, (copy) => {
 			copy.effects[0].intent = 'something_else';
 			copy.effects[0].effect_key = 'topic:t1';
@@ -372,6 +513,119 @@ describe('money, limits and the planning charge', () => {
 	});
 });
 
+describe('the knowledge bases the tasks of a plan may search', () => {
+	const awaiting = run('knowledge.awaiting-approval');
+	const NAMES = ['People policies', 'Travel'];
+
+	it('is one line that names them, for the owner to read before approving', () => {
+		expect(awaiting.status).toBe('awaiting_approval');
+		expect(awaiting.tree!.plan.knowledge_bases!.map((kb) => kb.name)).toEqual(NAMES);
+		expect(view(awaiting).knowledgeBasesLine).toBe('Tasks may search: People policies, Travel.');
+		expect(searchLine(NAMES)).toBe('Tasks may search: People policies, Travel.');
+		expect(searchLine(['Travel'])).toBe('Tasks may search: Travel.');
+	});
+
+	it('is the same line once the plan is approved and the run is delivered', () => {
+		const delivered = view(run('knowledge.completed'));
+		expect(delivered.approved).toBe(true);
+		expect(delivered.knowledgeBasesLine).toBe('Tasks may search: People policies, Travel.');
+	});
+
+	it('is the plan’s own list, and the intake’s only where the plan records none', () => {
+		const changed = edited(awaiting, (copy) => {
+			copy.tree!.plan.knowledge_bases = [{ knowledge_base_id: 'plan-kb', name: 'Plan’s list' }];
+			copy.planning.knowledge_bases = [{ knowledge_base_id: 'intake-kb', name: 'Intake’s list' }];
+		});
+		expect(view(changed).knowledgeBasesLine).toBe('Tasks may search: Plan’s list.');
+		const unrecorded = edited(awaiting, (copy) => {
+			delete copy.tree!.plan.knowledge_bases;
+		});
+		expect(view(unrecorded).knowledgeBasesLine).toBe('Tasks may search: People policies, Travel.');
+		// An empty list in the plan is the plan's word: it is not replaced by the intake's.
+		const none = edited(awaiting, (copy) => {
+			copy.tree!.plan.knowledge_bases = [];
+		});
+		expect(view(none).knowledgeBasesLine).toBeNull();
+	});
+
+	it('is nothing at all for a plan whose tasks may search none', () => {
+		for (const name of [
+			'awaiting-approval',
+			'completed',
+			'documents.awaiting-approval',
+			'harness.completed',
+			'harness.no-documents.awaiting-approval'
+		] as const) {
+			expect(view(run(name)).knowledgeBasesLine, name).toBeNull();
+		}
+		for (const name of LEGACY_RUNS) {
+			const recorded = legacyRun(name);
+			if (recorded.tree) expect(view(recorded).knowledgeBasesLine, name).toBeNull();
+		}
+		expect(searchLine([])).toBeNull();
+	});
+
+	it('is said only of the recorded plans that name knowledge bases', () => {
+		const said = allRuns()
+			.filter(({ run: value }) => value.tree && view(value).knowledgeBasesLine !== null)
+			.map(({ label }) => label);
+		expect(said).toEqual(['run.knowledge.awaiting-approval', 'run.knowledge.completed']);
+	});
+
+	it('leaves out a name with nothing in it, and hands the others back as written', () => {
+		const odd = edited(awaiting, (copy) => {
+			copy.tree!.plan.knowledge_bases = [
+				{ knowledge_base_id: 'a', name: '  Travel  ' },
+				{ knowledge_base_id: 'b', name: '' },
+				{ knowledge_base_id: 'c', name: '<img src=x onerror=alert(1)>' }
+			];
+		});
+		expect(view(odd).knowledgeBasesLine).toBe(
+			'Tasks may search: Travel, <img src=x onerror=alert(1)>.'
+		);
+	});
+
+	it('carries the same line in pieces, one item to a name, so that each name can be drawn by itself', () => {
+		expect(view(awaiting).knowledgeBases).toEqual({
+			lead: 'Tasks may search: ',
+			names: NAMES,
+			tail: '.'
+		});
+		expect(searchLineParts(['Travel'])).toEqual({
+			lead: 'Tasks may search: ',
+			names: ['Travel'],
+			tail: '.'
+		});
+		expect(searchLineParts([])).toBeNull();
+		// The pieces, put together, are the line; the two cannot say different things.
+		for (const { run: value, label } of allRuns()) {
+			if (!value.tree) continue;
+			const card = view(value);
+			expect(card.knowledgeBases === null, label).toBe(card.knowledgeBasesLine === null);
+			if (card.knowledgeBases)
+				expect(namedLineText(card.knowledgeBases), label).toBe(card.knowledgeBasesLine);
+		}
+	});
+
+	it('keeps a name with a comma in it as one item, and the names as written', () => {
+		const odd = edited(awaiting, (copy) => {
+			copy.tree!.plan.knowledge_bases = [
+				{ knowledge_base_id: 'a', name: '  Travel, Expenses  ' },
+				{ knowledge_base_id: 'b', name: '' },
+				{ knowledge_base_id: 'c', name: '‮evil' }
+			];
+		});
+		expect(view(odd).knowledgeBases!.names).toEqual(['Travel, Expenses', '‮evil']);
+	});
+
+	it('does not share the list it was given', () => {
+		const given = ['A', 'B'];
+		const parts = searchLineParts(given)!;
+		parts.names.push('C');
+		expect(given).toEqual(['A', 'B']);
+	});
+});
+
 describe('a run with no plan', () => {
 	const noPlan = [
 		'planning',
@@ -379,7 +633,14 @@ describe('a run with no plan', () => {
 		'unfunded-plan',
 		'uncertain-planning',
 		'closed-planning',
-		'documents.planning'
+		'documents.planning',
+		// An answer the orchestrator gave itself has no plan, and neither does a plan that was
+		// written out as text or carried a placeholder, or one still being asked for.
+		'direct.planning',
+		'direct.completed',
+		'plan-not-handed-over',
+		'plan-has-placeholders',
+		'knowledge.planning'
 	] as const;
 
 	it.each(noPlan)('run.%s has no plan card', (name) => {

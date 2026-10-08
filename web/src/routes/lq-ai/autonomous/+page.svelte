@@ -275,8 +275,7 @@
 						<td class="date-cell">{formatCreatedAt(session.created_at)}</td>
 						<td class="sessions-table-actions">
 							<a
-								href={receiptHrefForSession(session) ??
-									`/lq-ai/autonomous/sessions/${session.id}`}
+								href={receiptHrefForSession(session) ?? `/lq-ai/autonomous/sessions/${session.id}`}
 								class="action-link">View</a
 							>
 							{#if isHaltable(session.status)}

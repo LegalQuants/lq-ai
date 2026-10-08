@@ -1,0 +1,15 @@
+[
+  {
+    "created_at": "2026-10-08T19:29:00.903814+00:00",
+    "id": "d538e8d5-ea85-4327-af52-513c93993876",
+    "partial": false,
+    "source_file_id": "a32dff72-95e6-477c-a026-e4b457601c2a",
+    "source_offset_end": 94,
+    "source_offset_start": 60,
+    "source_page": null,
+    "source_text": "eighteen (18) days of annual leave",
+    "verification_confidence": 1.0,
+    "verification_method": "exact_match",
+    "verified": true
+  }
+]

@@ -13,8 +13,9 @@ import {
 	taskStatusLabel
 } from '../progress';
 import type { ProgressItem } from '../progress';
+import { stepContext } from '../renderers';
 import { isActiveStatus } from '../status';
-import { allRuns, legacyRun, run, withRun, withTasks } from './fixtures';
+import { allRuns, legacyRun, run, whileSearching, withRun, withTasks } from './fixtures';
 
 const states = (items: ProgressItem[]) => items.map((item) => `${item.id}:${item.state}`);
 
@@ -40,7 +41,9 @@ describe('runProgress on every recorded run', () => {
 			const at = items.findIndex((item) => item.state === 'current' || item.state === 'stopped');
 			if (at >= 0) {
 				expect(items.slice(0, at).every((item) => item.state === 'done')).toBe(true);
-				expect(items.slice(at + 1).every((item) => ['pending', 'skipped'].includes(item.state))).toBe(true);
+				expect(
+					items.slice(at + 1).every((item) => ['pending', 'skipped'].includes(item.state))
+				).toBe(true);
 			}
 		}
 	);
@@ -58,17 +61,29 @@ describe('runProgress states', () => {
 
 	it('waiting for approval', () => {
 		const items = runProgress(run('awaiting-approval'));
-		expect(states(items)).toEqual(['plan:done', 'approval:current', 'tasks:pending', 'answer:pending']);
+		expect(states(items)).toEqual([
+			'plan:done',
+			'approval:current',
+			'tasks:pending',
+			'answer:pending'
+		]);
 		expect(items[0].detail).toBe('2 tasks proposed');
 		expect(items[1].detail).toBe('Nothing runs until you approve');
 	});
 
 	it('tasks running', () => {
 		const items = runProgress(run('one-child-done'));
-		expect(states(items)).toEqual(['plan:done', 'approval:done', 'tasks:current', 'answer:pending']);
+		expect(states(items)).toEqual([
+			'plan:done',
+			'approval:done',
+			'tasks:current',
+			'answer:pending'
+		]);
 		expect(items[1].detail).toBe('You approved revision 1');
 		expect(items[2].detail).toBe('1 waiting to start · 1 of 2 finished');
-		const running = runProgress(withTasks(run('children-admitted'), ['running', 'running'], 'waiting_children'));
+		const running = runProgress(
+			withTasks(run('children-admitted'), ['running', 'running'], 'waiting_children')
+		);
 		expect(running[2].detail).toBe('2 running · 0 of 2 finished');
 	});
 
@@ -92,31 +107,91 @@ describe('runProgress states', () => {
 
 	it('a plan that could not be used stops at the plan and skips the rest', () => {
 		const items = runProgress(run('failed-plan'));
-		expect(states(items)).toEqual(['plan:stopped', 'approval:skipped', 'tasks:skipped', 'answer:skipped']);
+		expect(states(items)).toEqual([
+			'plan:stopped',
+			'approval:skipped',
+			'tasks:skipped',
+			'answer:skipped'
+		]);
 		expect(items[0].detail).toBe('The model could not produce a usable plan.');
 		expect(runProgress(run('unfunded-plan'))[0].detail).toBe(
 			'The plan needs more tasks than the budget can fund.'
 		);
 	});
 
+	it('a plan that was written out as text, or carried a placeholder, stops at the plan too, in its own sentence', () => {
+		for (const [name, detail] of [
+			[
+				'plan-not-handed-over',
+				'The model wrote its plan out as text instead of handing it over, so there is no plan to approve.'
+			],
+			[
+				'plan-has-placeholders',
+				'The plan carried a placeholder that stands for a name or an identifier.'
+			]
+		] as const) {
+			const items = runProgress(run(name));
+			expect(states(items), name).toEqual([
+				'plan:stopped',
+				'approval:skipped',
+				'tasks:skipped',
+				'answer:skipped'
+			]);
+			expect(items[0].detail, name).toBe(detail);
+		}
+	});
+
+	it('a plan that stopped for a reason the page has never seen says it in plain words, at the plan', () => {
+		const odd = structuredClone(run('failed-plan'));
+		odd.stop_reason = 'mystery_code';
+		const items = runProgress(odd);
+		expect(states(items)).toEqual([
+			'plan:stopped',
+			'approval:skipped',
+			'tasks:skipped',
+			'answer:skipped'
+		]);
+		expect(items[0].detail).toBe('Mystery code.');
+	});
+
 	it('a rejected plan stops at approval', () => {
 		const items = runProgress(run('rejected'));
-		expect(states(items)).toEqual(['plan:done', 'approval:stopped', 'tasks:skipped', 'answer:skipped']);
+		expect(states(items)).toEqual([
+			'plan:done',
+			'approval:stopped',
+			'tasks:skipped',
+			'answer:skipped'
+		]);
 		expect(items[1].detail).toBe('You rejected the plan');
 	});
 
 	it('a halted run stops at the tasks, saying how many finished', () => {
 		const items = runProgress(run('halted'));
-		expect(states(items)).toEqual(['plan:done', 'approval:done', 'tasks:stopped', 'answer:skipped']);
+		expect(states(items)).toEqual([
+			'plan:done',
+			'approval:done',
+			'tasks:stopped',
+			'answer:skipped'
+		]);
 		expect(items[2].detail).toBe('1 of 2 finished before the run stopped');
 	});
 
 	it('an uncertain run is still active, so its stage is current, and says why it is stuck', () => {
 		const planning = runProgress(run('uncertain-planning'));
-		expect(states(planning)).toEqual(['plan:current', 'approval:pending', 'tasks:pending', 'answer:pending']);
+		expect(states(planning)).toEqual([
+			'plan:current',
+			'approval:pending',
+			'tasks:pending',
+			'answer:pending'
+		]);
 		expect(planning[0].detail).toBe('A provider call has no confirmed outcome');
 		const child = runProgress(run('uncertain-child'));
-		expect(states(child)).toEqual(['plan:done', 'approval:done', 'tasks:current', 'answer:pending']);
+		expect(states(child)).toEqual([
+			'plan:done',
+			'approval:done',
+			'tasks:current',
+			'answer:pending'
+		]);
 		expect(child[2].detail).toBe('A provider call has no confirmed outcome');
 	});
 
@@ -128,13 +203,18 @@ describe('runProgress states', () => {
 			'tasks:stopped',
 			'answer:skipped'
 		]);
-		expect(runProgress(run('closed-child'))[2].detail).toBe('1 of 2 finished before the run stopped');
+		expect(runProgress(run('closed-child'))[2].detail).toBe(
+			'1 of 2 finished before the run stopped'
+		);
 	});
 
 	it('a combined answer that could not be produced stops at the answer', () => {
-		const failed = withRun(withTasks(run('children-admitted'), ['completed', 'completed'], 'failed'), {
-			stop_reason: 'invalid_synthesis'
-		});
+		const failed = withRun(
+			withTasks(run('children-admitted'), ['completed', 'completed'], 'failed'),
+			{
+				stop_reason: 'invalid_synthesis'
+			}
+		);
 		const items = runProgress(failed);
 		expect(states(items)).toEqual(['plan:done', 'approval:done', 'tasks:done', 'answer:stopped']);
 		expect(items[3].detail).toBe('The combined answer could not be produced.');
@@ -213,18 +293,61 @@ describe('currentSteps', () => {
 	});
 });
 
+describe('a task that is making a search whose call has no step note yet', () => {
+	const ONLY = [
+		['knowledge', 'Searched the knowledge bases'],
+		['documents', 'Read a document'],
+		['both', 'Read a document or searched the knowledge bases']
+	] as const;
+
+	it.each(ONLY)('says, while it is going and the plan lists %s, "%s"', (lists, said) => {
+		const value = whileSearching('admitted', lists);
+		const [line] = currentSteps(value);
+		expect(line).toEqual({
+			who: value.tree!.plan.children[0].task.topic,
+			text: `${said}…`,
+			tone: 'working'
+		});
+		expect(taskLatestStep(value.tree!.children[0], stepContext(value))).toBe(`${said}…`);
+	});
+
+	it.each(ONLY)('says, where it has no outcome and the plan lists %s, "%s"', (lists, said) => {
+		const value = whileSearching('uncertain', lists);
+		const lines = currentSteps(value);
+		expect(lines).toHaveLength(1);
+		expect(lines[0]).toMatchObject({ text: said, tone: 'uncertain' });
+	});
+
+	it('reads it as a document without the run, as it always did', () => {
+		const value = whileSearching('admitted');
+		expect(taskLatestStep(value.tree!.children[0])).toBe('Read a document…');
+	});
+});
+
 describe('task labels', () => {
 	it('words every task status and humanises one it does not know', () => {
 		expect(
-			['pending', 'queued', 'running', 'completed', 'failed', 'halted', 'stopped'].map(taskStatusLabel)
-		).toEqual(['Waiting', 'Waiting to start', 'Running', 'Done', 'Could not complete', 'Halted', 'Stopped']);
+			['pending', 'queued', 'running', 'completed', 'failed', 'halted', 'stopped'].map(
+				taskStatusLabel
+			)
+		).toEqual([
+			'Waiting',
+			'Waiting to start',
+			'Running',
+			'Done',
+			'Could not complete',
+			'Halted',
+			'Stopped'
+		]);
 		expect(taskStatusLabel('on_hold')).toBe('On hold');
 	});
 
 	it('gives a running task’s latest step, and a waiting one’s', () => {
 		const tree = withTasks(run('one-child-done'), ['running', 'queued'], 'running').tree;
 		expect(tree).not.toBeNull();
-		expect(taskLatestStep(tree!.children[0])).toBe('Shared the task’s findings with the orchestrator');
+		expect(taskLatestStep(tree!.children[0])).toBe(
+			'Shared the task’s findings with the orchestrator'
+		);
 		expect(taskLatestStep(tree!.children[1])).toBe('Waiting to start');
 		expect(taskLatestStep(run('completed').tree!.children[0])).toBeNull();
 	});
@@ -235,9 +358,13 @@ describe('outcomeSummary', () => {
 
 	it('is nothing when a finding already carries it, as a Markdown answer’s summary is its own first line', () => {
 		expect(
-			outcomeSummary(outcome('Notice is 30 days.', ['Notice is 30 days.\n\n> "at least 30 days" [§5]']))
+			outcomeSummary(
+				outcome('Notice is 30 days.', ['Notice is 30 days.\n\n> "at least 30 days" [§5]'])
+			)
 		).toBeNull();
-		expect(outcomeSummary(outcome('Notice is 30 days.', ['## Notice\n\nNotice is 30 days. [§5]']))).toBeNull();
+		expect(
+			outcomeSummary(outcome('Notice is 30 days.', ['## Notice\n\nNotice is 30 days. [§5]']))
+		).toBeNull();
 	});
 
 	it('is nothing when any one of several findings carries it', () => {
@@ -248,20 +375,25 @@ describe('outcomeSummary', () => {
 		expect(outcomeSummary(outcome('  Notice is 30 days.  ', ['Something else entirely.']))).toBe(
 			'Notice is 30 days.'
 		);
-		expect(outcomeSummary(outcome('Notice is 30 days.', ['Notice is 60 days.', 'Fees are due monthly.']))).toBe(
-			'Notice is 30 days.'
-		);
+		expect(
+			outcomeSummary(outcome('Notice is 30 days.', ['Notice is 60 days.', 'Fees are due monthly.']))
+		).toBe('Notice is 30 days.');
 	});
 
 	it('looks for the trimmed summary, so padding does not hide a match', () => {
-		expect(outcomeSummary(outcome('  Notice is 30 days.\n', ['See: Notice is 30 days. [§5]']))).toBeNull();
+		expect(
+			outcomeSummary(outcome('  Notice is 30 days.\n', ['See: Notice is 30 days. [§5]']))
+		).toBeNull();
 	});
 
 	it('is the summary for an outcome with no findings, such as an empty or a failed one', () => {
-		expect(outcomeSummary(outcome('The topic could not be completed within its approved limits.', []))).toBe(
-			'The topic could not be completed within its approved limits.'
-		);
-		const noFindings = { summary: 'No findings.' } as unknown as { summary: string; findings: string[] };
+		expect(
+			outcomeSummary(outcome('The topic could not be completed within its approved limits.', []))
+		).toBe('The topic could not be completed within its approved limits.');
+		const noFindings = { summary: 'No findings.' } as unknown as {
+			summary: string;
+			findings: string[];
+		};
 		expect(outcomeSummary(noFindings)).toBe('No findings.');
 	});
 
@@ -272,7 +404,10 @@ describe('outcomeSummary', () => {
 			expect(outcomeSummary(outcome(summary, ['A finding.'])), JSON.stringify(summary)).toBeNull();
 			expect(outcomeSummary(outcome(summary, [])), JSON.stringify(summary)).toBeNull();
 		}
-		const noSummary = { findings: ['A finding.'] } as unknown as { summary: string; findings: string[] };
+		const noSummary = { findings: ['A finding.'] } as unknown as {
+			summary: string;
+			findings: string[];
+		};
 		expect(outcomeSummary(noSummary)).toBeNull();
 	});
 
@@ -284,7 +419,14 @@ describe('outcomeSummary', () => {
 
 	it('hides the summary on every outcome recorded for this release, where the finding is the summary’s own answer', () => {
 		let seen = 0;
-		for (const name of ['one-child-done', 'completed', 'halted', 'uncertain-child', 'closed-child', 'documents.completed'] as const) {
+		for (const name of [
+			'one-child-done',
+			'completed',
+			'halted',
+			'uncertain-child',
+			'closed-child',
+			'documents.completed'
+		] as const) {
 			for (const child of run(name).tree!.children) {
 				if (!child.outcome) continue;
 				seen += 1;
@@ -299,7 +441,9 @@ describe('outcomeSummary', () => {
 	it('keeps the summary of the recorded outcome that has no findings, and of every one recorded before findings carried it', () => {
 		const failed = run('refusals-and-partial').tree!.children[1].outcome!;
 		expect(failed.findings).toEqual([]);
-		expect(outcomeSummary(failed)).toBe('The topic could not be completed within its approved limits.');
+		expect(outcomeSummary(failed)).toBe(
+			'The topic could not be completed within its approved limits.'
+		);
 		for (const name of ['model-run', 'stalled-model-run'] as const) {
 			for (const child of legacyRun(name).tree!.children) {
 				if (!child.outcome) continue;
@@ -308,4 +452,3 @@ describe('outcomeSummary', () => {
 		}
 	});
 });
-

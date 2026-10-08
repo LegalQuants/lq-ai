@@ -1,0 +1,142 @@
+{
+  "answered_directly": false,
+  "chat_id": "586fcb10-2c24-4fee-82c7-ebc4c56fd56a",
+  "direct_answer": null,
+  "effects": [
+    {
+      "accounting": {
+        "anonymization_applied": true,
+        "basis": "conservative-estimate-or-reported-usage-v1",
+        "charged_usd": "0.0715",
+        "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
+        "estimated_prompt_tokens": 11142,
+        "messages_digest": "0398102a10b92a2d868f8da42be7ce6ea7551b7ca430b963bafe9e5bf377c782",
+        "model": "native",
+        "provider": "selected",
+        "reported_usage_cost_usd": "0.0003",
+        "reserved_usd": "0.0715",
+        "tier": 1
+      },
+      "charged_usd": "0.0715",
+      "completed_at": "2026-10-08T19:28:59.992428Z",
+      "created_at": "2026-10-08T19:28:59.983416Z",
+      "effect_key": "chat:plan:v1",
+      "intent": "plan",
+      "outcome": "success",
+      "reserved_usd": "0.0715",
+      "skill": {
+        "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+        "kind": "prompt",
+        "name": "new_harness/orchestrator.v2",
+        "version": "2"
+      },
+      "status": "completed",
+      "step": {
+        "kind": "planning",
+        "label": null,
+        "reason": null,
+        "summary": null,
+        "tool": null
+      }
+    }
+  ],
+  "evidence": "unverified",
+  "evidence_result": null,
+  "message_id": "e2106f95-b0c3-472c-b08f-39d6568b76a5",
+  "packet": null,
+  "planning": {
+    "attempt_timeout_seconds": 300,
+    "budget_usd": "10.0000",
+    "child_skill_version": "2",
+    "contract_version": 3,
+    "deadline": "2026-10-08T21:28:59.949287Z",
+    "delegation_grants": {
+      "analysis": [
+        "plan",
+        "retrieve_chunks",
+        "run_skill",
+        "workspace_read",
+        "workspace_write"
+      ],
+      "delivery": [],
+      "drafting": [
+        "run_skill",
+        "workspace_read",
+        "workspace_share",
+        "workspace_write"
+      ],
+      "ethics_review": [],
+      "intake": []
+    },
+    "documents": [],
+    "gateway_revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "goal": "Compare the two.",
+    "max_active_children": 2,
+    "max_children": 2,
+    "model": "selected/native",
+    "owner_id": "cd2d5dcb-3c7e-41bf-957e-82d2342daa62",
+    "packet_digest": null,
+    "plan_id": "364ca498-c234-4304-9b52-928e41a050bc",
+    "planning_allowance_usd": "0.5781",
+    "policy_version": "f7d6f1a73467a9a44e6592e24b980c4bc0d1f6e8be5084b7f9803ce59f0864ca",
+    "profile": "new_harness_v1",
+    "project_id": "5b838029-645e-48c4-9c84-72bb6496607c",
+    "root": {
+      "anonymize": true,
+      "grants": {
+        "analysis": [
+          "plan"
+        ],
+        "delivery": [],
+        "drafting": [],
+        "ethics_review": [],
+        "intake": []
+      },
+      "maximum_egress_tier": 0,
+      "minimum_inference_tier": 1,
+      "privileged": false,
+      "resources": {
+        "document_ids": [],
+        "source_names": []
+      },
+      "skill": {
+        "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+        "kind": "prompt",
+        "name": "new_harness/orchestrator.v2"
+      }
+    },
+    "root_allowance_usd": "1.1562",
+    "root_id": "456e2070-81dc-4ed0-995f-8edeb07a1230",
+    "root_skill_version": "2",
+    "terms": {
+      "answer_chars": 16384,
+      "planning": "tool",
+      "read_chars": 40000,
+      "task_answer_chars": 12000,
+      "task_turns": 5
+    },
+    "thread": [
+      {
+        "content": "Thanks, that helps.",
+        "cut": false,
+        "role": "user"
+      },
+      {
+        "content": "You're welcome.\n\nNothing was read or searched for this reply: it rests on this conversation only.",
+        "cut": false,
+        "role": "assistant"
+      }
+    ],
+    "today": "2026-10-08"
+  },
+  "profile": "new_harness_v1",
+  "profile_title": "New harness",
+  "reads": "Your request, this chat's recent messages, the documents you select, if any, and in a matter the knowledge bases attached to it. No other files and no live sources.",
+  "reserved_usd": "0.0000",
+  "root_id": "456e2070-81dc-4ed0-995f-8edeb07a1230",
+  "sources": [],
+  "spent_usd": "0.0715",
+  "status": "failed",
+  "stop_reason": "plan_not_handed_over",
+  "tree": null
+}

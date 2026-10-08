@@ -1,18 +1,28 @@
 <script lang="ts">
 	/**
-	 * One task of an approved plan: its status, the step it is on, what it concluded,
-	 * its steps through the renderer registry, the files it saved with a content
-	 * preview, and its receipts. Steps open while the task is still working; files and
-	 * receipts are folded and one action away.
+	 * One task of an approved plan, as a line in the run's column. The closed line is
+	 * a live summary (topic, latest step, spend); opened, it shows the task's skill and
+	 * spend, its steps through the renderer registry, what it concluded, the files it
+	 * saved with a content preview, and its receipts.
 	 *
 	 * Findings, file names and file contents come from the model and the run's own
-	 * working files. They are rendered as text only.
+	 * working files. They are rendered as text only, and only under the fold.
+	 *
+	 * Under the line, "How this run was set up" reads the task's own trace once the line is
+	 * open, and the steps that were a model's reply carry a fold with what it wrote.
 	 */
 	import { orchestrationApi } from '$lib/lq-ai/api/orchestration';
-	import type { RunProgress, WorkspaceFile } from '$lib/lq-ai/api/orchestration';
+	import type { RunProgress, SessionTraceRead, WorkspaceFile } from '$lib/lq-ai/api/orchestration';
+	import type { ActivityLine } from '$lib/lq-ai/run/activity';
 	import { formatUsd } from '$lib/lq-ai/run/format';
-	import { outcomeSummary, taskLatestStep, taskStatusLabel } from '$lib/lq-ai/run/progress';
+	import { IDLE, shown } from '$lib/lq-ai/run/load';
+	import type { Load } from '$lib/lq-ai/run/load';
+	import { outcomeSummary } from '$lib/lq-ai/run/progress';
+	import type { StepContext } from '$lib/lq-ai/run/renderers';
+	import { finishedCalls, matchTurns } from '$lib/lq-ai/run/trace';
 	import RunEffectReceipt from './RunEffectReceipt.svelte';
+	import RunLine from './RunLine.svelte';
+	import RunSetup from './RunSetup.svelte';
 	import RunStepList from './RunStepList.svelte';
 
 	export let rootId: string;
@@ -22,20 +32,34 @@
 	/** The pinned skill and version, e.g. `contract-qa v1.0.0`. */
 	export let skill: string;
 	export let child: RunProgress;
-
-	// Decided once, when the card first appears: a task that is still working shows
-	// its steps. Later updates do not fight the owner folding or unfolding them.
-	let stepsOpen = ['pending', 'queued', 'running'].includes(child.status);
+	/**
+	 * What the run says of itself that a step does not: what its plan lists for the tasks to read
+	 * and search. A call that has not settled has no note saying which it was.
+	 */
+	export let context: StepContext = {};
+	/** The closed line. */
+	export let line: ActivityLine;
+	/** Open while the run is being read as a receipt. Bound only to a value that does not change on a poll. */
+	export let expanded = false;
+	/** The read of this task's trace; the real API unless a test passes a stub. */
+	export let fetchTrace: typeof orchestrationApi.trace = orchestrationApi.trace;
+	/** Changes when Refresh is pressed on the run message: an open line reads its trace again. */
+	export let refreshKey = 0;
+	/** The trace as read so far. Handed in only to show a state without running the read. */
+	export let traceState: Load<SessionTraceRead> = IDLE;
 
 	let opened: (WorkspaceFile & { content: string }) | null = null;
 	let fileError = '';
 	let reading = 0;
+	// Whether this line is open now. It starts as it is drawn and then is the reader's: the
+	// element is bound to it, so nothing that follows the run can open or close the line.
+	let lineOpen = expanded;
 
-	$: latest = taskLatestStep(child);
 	$: summary = outcomeSummary(child.outcome);
 	$: files = child.files ?? [];
 	$: effects = child.effects ?? [];
 	$: allowance = formatUsd(child.allocation_usd);
+	$: turns = matchTurns(effects, shown(traceState));
 
 	async function openFile(file: WorkspaceFile) {
 		const ticket = ++reading;
@@ -55,134 +79,140 @@
 	}
 </script>
 
-<article class="child" data-testid={`lq-ai-run-child-${index}`} data-status={child.status}>
-	<div class="head">
-		<h3><span class="n">{index}.</span> {topic}</h3>
-		<span class="tag {child.status}">{taskStatusLabel(child.status)}</span>
-	</div>
-	<p class="meta">
-		{skill} · spent {formatUsd(child.spent_usd)} of {allowance}
-		{#if Number(child.reserved_usd) > 0}· {formatUsd(child.reserved_usd)} reserved{/if}
-	</p>
-	{#if latest}<p class="latest"><span class="label">Latest step:</span> {latest}</p>{/if}
+<details
+	class="child"
+	bind:open={lineOpen}
+	data-testid={`lq-ai-run-child-${index}`}
+	data-status={child.status}
+>
+	<summary>
+		<RunLine
+			state={line.state}
+			label={line.label}
+			summary={line.summary}
+			meta={line.meta}
+			foldable
+		/>
+	</summary>
 
-	{#if child.outcome}
-		<div class="outcome {child.outcome.status}">
-			{#if summary}<p class="summary">{summary}</p>{/if}
-			{#each child.outcome.findings as finding}
-				<pre class="finding">{finding}</pre>
-			{/each}
-			<p class="note">Model-generated; unverified.</p>
-		</div>
-	{/if}
+	<div class="body">
+		<p class="topic"><span class="n">{index}.</span> {topic}</p>
+		<p class="meta">
+			{skill} · spent {formatUsd(child.spent_usd)} of {allowance}
+			{#if Number(child.reserved_usd) > 0}· {formatUsd(child.reserved_usd)} reserved{/if}
+		</p>
 
-	<details class="fold" open={stepsOpen}>
-		<summary>Steps ({effects.length})</summary>
-		<RunStepList {effects} />
-	</details>
+		<RunSetup
+			{rootId}
+			sessionId={child.session_id}
+			step="task"
+			{lineOpen}
+			{refreshKey}
+			calls={finishedCalls(effects)}
+			{fetchTrace}
+			bind:state={traceState}
+		/>
 
-	{#if files.length > 0}
-		<details class="fold">
-			<summary>Files ({files.length})</summary>
-			<ul class="files">
-				{#each files as file}
-					<li>
-						<button
-							class="file-link"
-							type="button"
-							data-testid="lq-ai-run-file"
-							on:click={() => openFile(file)}
-						>
-							{file.name} · revision {file.revision}{file.shared
-								? ' · shared with the orchestrator'
-								: ' · private notes'}
-						</button>
-					</li>
+		<RunStepList {effects} {turns} {context} />
+
+		{#if child.outcome}
+			<div class="outcome {child.outcome.status}">
+				{#if summary}<p class="summary">{summary}</p>{/if}
+				{#each child.outcome.findings as finding}
+					<pre class="finding">{finding}</pre>
 				{/each}
-			</ul>
-			{#if fileError}<p role="alert" class="error">{fileError}</p>{/if}
-			{#if opened}
-				<div
-					class="preview"
-					role="region"
-					aria-label="{opened.name} file contents"
-					data-testid="lq-ai-run-file-preview"
-				>
-					<div class="preview-head">
-						<div>
-							<p class="eyebrow">Saved run file</p>
-							<h4>{opened.name}</h4>
-							<p class="muted">
-								Revision {opened.revision} · {opened.shared
-									? 'Shared with the orchestrator'
-									: 'Private task notes'}
-							</p>
-						</div>
-						<button type="button" class="plain" on:click={closeFile}>Close file</button>
-					</div>
-					<pre class="file-content">{opened.content}</pre>
-				</div>
-			{/if}
-		</details>
-	{/if}
-
-	<details class="fold" data-testid={`lq-ai-run-child-${index}-receipts`}>
-		<summary>Receipts</summary>
-		<p class="muted">Session <code>{child.session_id}</code></p>
-		{#if effects.length === 0}
-			<p class="muted">No receipts yet.</p>
+				<p class="note">Model-generated; unverified.</p>
+			</div>
 		{/if}
-		{#each effects as effect}
-			<RunEffectReceipt {effect} />
-		{/each}
-	</details>
-</article>
+
+		{#if files.length > 0}
+			<details class="fold">
+				<summary>Files ({files.length})</summary>
+				<ul class="files">
+					{#each files as file}
+						<li>
+							<button
+								class="file-link"
+								type="button"
+								data-testid="lq-ai-run-file"
+								on:click={() => openFile(file)}
+							>
+								{file.name} · revision {file.revision}{file.shared
+									? ' · shared with the orchestrator'
+									: ' · private notes'}
+							</button>
+						</li>
+					{/each}
+				</ul>
+				{#if fileError}<p role="alert" class="error">{fileError}</p>{/if}
+				{#if opened}
+					<div
+						class="preview"
+						role="region"
+						aria-label="{opened.name} file contents"
+						data-testid="lq-ai-run-file-preview"
+					>
+						<div class="preview-head">
+							<div>
+								<p class="eyebrow">Saved run file</p>
+								<h4>{opened.name}</h4>
+								<p class="muted">
+									Revision {opened.revision} · {opened.shared
+										? 'Shared with the orchestrator'
+										: 'Private task notes'}
+								</p>
+							</div>
+							<button type="button" class="plain" on:click={closeFile}>Close file</button>
+						</div>
+						<pre class="file-content">{opened.content}</pre>
+					</div>
+				{/if}
+			</details>
+		{/if}
+
+		<details class="fold" data-testid={`lq-ai-run-child-${index}-receipts`}>
+			<summary>Receipts</summary>
+			<p class="muted">Session <code>{child.session_id}</code></p>
+			{#if effects.length === 0}
+				<p class="muted">No receipts yet.</p>
+			{/if}
+			{#each effects as effect}
+				<RunEffectReceipt {effect} {context} />
+			{/each}
+		</details>
+	</div>
+</details>
 
 <style>
 	.child {
-		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius-lg);
-		padding: 0.75rem 0.9rem;
-		background: var(--lq-canvas);
+		margin: 0.1rem 0;
 		min-width: 0;
 	}
-	.head {
-		display: flex;
-		align-items: baseline;
-		justify-content: space-between;
-		gap: 0.5rem;
-		flex-wrap: wrap;
+	.child > summary {
+		cursor: pointer;
+		padding: 0.35rem 0;
+		list-style: none;
 	}
-	h3 {
+	.child > summary::-webkit-details-marker {
+		display: none;
+	}
+	.child > summary:focus-visible {
+		outline: 2px solid var(--lq-accent);
+		outline-offset: 2px;
+	}
+	.body {
+		margin: 0.15rem 0 0.5rem 0.55rem;
+		padding: 0 0 0.25rem 1rem;
+		border-left: 2px solid var(--lq-accent-border);
+	}
+	.topic {
 		margin: 0;
-		font-size: 0.95rem;
+		font-size: 0.9rem;
 		font-weight: 600;
 		overflow-wrap: anywhere;
 	}
 	.n {
 		color: var(--lq-text-tertiary);
-	}
-	.tag {
-		padding: 0.1rem 0.55rem;
-		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius-pill);
-		font-size: 0.72rem;
-		color: var(--lq-text-secondary);
-		white-space: nowrap;
-	}
-	.tag.running {
-		border-color: var(--lq-accent-border);
-		background: var(--lq-accent-soft);
-		color: var(--lq-accent);
-	}
-	.tag.completed {
-		border-color: var(--lq-accent-border);
-		color: var(--lq-accent);
-	}
-	.tag.failed {
-		border-color: var(--lq-error-border);
-		background: var(--lq-error-soft);
-		color: var(--lq-error);
 	}
 	.meta,
 	.muted {
@@ -190,14 +220,6 @@
 		font-size: 0.75rem;
 		color: var(--lq-text-secondary);
 		overflow-wrap: anywhere;
-	}
-	.latest {
-		margin: 0.35rem 0;
-		font-size: 0.85rem;
-		overflow-wrap: anywhere;
-	}
-	.label {
-		font-weight: 600;
 	}
 	.outcome {
 		margin: 0.5rem 0;
@@ -224,15 +246,16 @@
 		font-size: 0.85rem;
 		line-height: 1.6;
 	}
+	/* "Model-generated; unverified." is a label to be read, so not in the faint colour. */
 	.note {
 		margin: 0.25rem 0 0;
 		font-size: 0.72rem;
-		color: var(--lq-text-tertiary);
+		color: var(--lq-text-secondary);
 	}
 	.fold {
 		margin-top: 0.4rem;
 	}
-	summary {
+	.fold > summary {
 		cursor: pointer;
 		font-size: 0.8rem;
 		padding: 0.25rem 0;

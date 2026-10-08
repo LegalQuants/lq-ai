@@ -13,8 +13,10 @@ import { fileURLToPath } from 'node:url';
 
 import type {
 	OrchestrationChatRun,
+	PromptRead,
 	RunDocumentsRead,
-	RunProfilesRead
+	RunProfilesRead,
+	SessionTraceRead
 } from '../../api/orchestration';
 import type { ChatLedger, Citation, Message } from '../../types';
 
@@ -28,9 +30,26 @@ export const run = (name: string): OrchestrationChatRun =>
 export const thread = (name: string): Message[] => fixture<Message[]>(`thread.${name}`);
 export const profiles = (name: string): RunProfilesRead =>
 	fixture<RunProfilesRead>(`profiles.${name}`);
-export const documents = (): RunDocumentsRead => fixture<RunDocumentsRead>('documents.list');
-/** The citation rows recorded for the delivered answer of `run.documents.completed`. */
-export const citations = (): Citation[] => fixture<Citation[]>('citations.documents');
+/**
+ * A recorded `run-documents` read: `list` (in a matter), `after-run`, `no-project`, or
+ * `knowledge-bases` (a matter with two knowledge bases attached and no files).
+ */
+export const documents = (name = 'list'): RunDocumentsRead =>
+	fixture<RunDocumentsRead>(`documents.${name}`);
+/**
+ * A recorded trace of one session: `root.planned`, `root.completed` (a plan handed over as a
+ * call to `propose_plan`), `root.direct` (a request the orchestrator answered itself),
+ * `child.completed` or `child.knowledge` (a task that searched the knowledge bases).
+ */
+export const trace = (name: string): SessionTraceRead => fixture<SessionTraceRead>(`trace.${name}`);
+/** A recorded prompt file: `orchestrator` or `subagent`. */
+export const prompt = (name: string): PromptRead => fixture<PromptRead>(`prompt.${name}`);
+/**
+ * The citation rows recorded for a delivered answer: those of `run.documents.completed`
+ * (`documents`, the default) or of `run.knowledge.completed` (`knowledge`).
+ */
+export const citations = (name: 'documents' | 'knowledge' = 'documents'): Citation[] =>
+	fixture<Citation[]>(`citations.${name}`);
 /** The ledger and gate recorded for the same answer. */
 export const ledger = (): ChatLedger => fixture<ChatLedger>('ledger.documents');
 
@@ -66,8 +85,28 @@ export const CURRENT_RUNS = [
 	'refusals-and-partial',
 	'documents.planning',
 	'documents.awaiting-approval',
-	'documents.completed'
+	'documents.completed',
+	// New harness, recorded after it became a chat model: a follow-up that is shown the
+	// thread, and runs with no documents at all.
+	'harness.completed',
+	'harness.follow-up.planning',
+	'harness.no-documents.awaiting-approval',
+	'harness.no-documents.completed',
+	// The orchestrator's first call may be answered in text: a run with no plan (still planning,
+	// then completed), and the two ways a plan handed over as a tool call can fail: by being
+	// written out as text instead, and by carrying a placeholder the gateway cannot restore.
+	'direct.planning',
+	'direct.completed',
+	'plan-not-handed-over',
+	'plan-has-placeholders',
+	// Tasks that may search the matter's knowledge bases, at each stage.
+	'knowledge.planning',
+	'knowledge.awaiting-approval',
+	'knowledge.completed'
 ] as const;
+
+/** The runs the orchestrator answered by itself: no plan, no tasks, `tree` is null. */
+export const DIRECT_RUNS = ['direct.completed'] as const;
 
 /** All runs, old and new, labelled. */
 export function allRuns(): { label: string; run: OrchestrationChatRun }[] {
@@ -101,5 +140,42 @@ export function withTasks(
 	});
 	copy.status = status;
 	copy.tree.status = status;
+	return copy;
+}
+
+/**
+ * The recorded knowledge run, stopped while its first task is making the search it made: the run
+ * is running (the call is `admitted`) or left `uncertain` (the call has no outcome), and the call
+ * is the task's last step, with no step note, because the server writes the note when a call
+ * settles. `lists` is what the plan lists for the tasks: knowledge bases (as recorded), documents,
+ * or both.
+ */
+export function whileSearching(
+	status: 'admitted' | 'uncertain',
+	lists: 'knowledge' | 'documents' | 'both' = 'knowledge'
+): OrchestrationChatRun {
+	// The recorded run has one task, the one that searched.
+	const copy = withTasks(
+		run('knowledge.completed'),
+		['running'],
+		status === 'admitted' ? 'running' : 'uncertain'
+	);
+	const tree = copy.tree!;
+	const [first] = tree.children;
+	const at = first.effects.findIndex((effect) => effect.step?.kind === 'knowledge_search');
+	first.effects = first.effects.slice(0, at + 1);
+	Object.assign(first.effects[at], {
+		status,
+		step: null,
+		outcome: null,
+		accounting: null,
+		completed_at: null,
+		charged_usd: null
+	});
+	first.outcome = null;
+	tree.result = null;
+	const listed = run('documents.completed').tree!.plan.documents;
+	if (lists !== 'knowledge') tree.plan.documents = structuredClone(listed);
+	if (lists === 'documents') tree.plan.knowledge_bases = [];
 	return copy;
 }

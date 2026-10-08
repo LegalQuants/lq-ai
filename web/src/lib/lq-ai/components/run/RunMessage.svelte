@@ -4,40 +4,45 @@
 	 *
 	 * Drives only from stored state: the thread message names the run
 	 * (`autonomous_session_id`) and the run read does the rest, so reloading the page
-	 * restores everything. The panel opens on the plain-language progress list with
-	 * the current step. The plan card, the tasks, the receipts and the digests sit
-	 * beneath it; receipts and accounting are folded, one action away, never removed.
+	 * restores everything. Under the status line the run is one column of lines (the
+	 * plan, a line per task, the answer), each a native fold whose closed line says
+	 * where that part is and which opens on its trace. Receipts and accounting are
+	 * one more fold at the foot of the column, one action away, never removed.
 	 *
 	 * `mode="thread"`: the answer, once delivered, is the message's own content and
 	 * is rendered by the message bubble beneath this panel with the assistant
 	 * treatment (skill chips, tier badge, citations, ledger). Its Markdown keeps its
 	 * structure, but raw HTML is shown as text and no image is loaded (`run/answer.ts`).
-	 * `mode="receipt"`: no thread around it, so the panel shows the answer itself, as text.
+	 * `mode="receipt"`: no thread around it, so the panel shows the answer itself, as text: the
+	 * combined answer of a plan, or, for a request the orchestrator answered by itself, its own.
 	 *
 	 * Every model- or document-derived string below (the goal, task text, reasons,
 	 * findings, file names and contents, summaries) is rendered with Svelte
 	 * interpolation. None of it is ever rendered as HTML.
+	 *
+	 * Under each line of the column, folds read how that part of the run was set up and
+	 * what its model wrote, only when a line is opened. `fetchTrace` is that read (the real
+	 * API unless a test passes a stub), and Refresh makes an open line read it again.
 	 */
 	import { createEventDispatcher, onMount } from 'svelte';
 	import { orchestrationApi, orchestrationChatApi } from '$lib/lq-ai/api/orchestration';
 	import type { OrchestrationChatRun } from '$lib/lq-ai/api/orchestration';
 	import type { Message } from '$lib/lq-ai/types';
 	import { availableActions } from '$lib/lq-ai/run/actions';
+	import { directAnswerText } from '$lib/lq-ai/run/activity';
 	import { CLOSE_RUN_NOTE } from '$lib/lq-ai/run/composer';
 	import { showsEvidence } from '$lib/lq-ai/run/evidence';
 	import { RunFollower } from '$lib/lq-ai/run/follow';
-	import { planState, planView } from '$lib/lq-ai/run/plan';
-	import { currentSteps, runProgress } from '$lib/lq-ai/run/progress';
+	import { planView } from '$lib/lq-ai/run/plan';
 	import {
 		isActiveStatus,
 		runDetail,
 		runHeadline,
+		runTitle,
 		shouldAnnounceSettled
 	} from '$lib/lq-ai/run/status';
+	import RunActivity from './RunActivity.svelte';
 	import RunAnswerNote from './RunAnswerNote.svelte';
-	import RunChildCard from './RunChildCard.svelte';
-	import RunPlanCard from './RunPlanCard.svelte';
-	import RunProgressList from './RunProgressList.svelte';
 	import RunReceipts from './RunReceipts.svelte';
 
 	/** The thread message that holds this run. Omit it on the receipt view. */
@@ -50,6 +55,8 @@
 	 * a run passed in is shown at once and replaced by the first read from the server.
 	 */
 	export let run: OrchestrationChatRun | null = null;
+	/** How a part of the run was set up and what its model wrote: the real read unless a test stubs it. */
+	export let fetchTrace: typeof orchestrationApi.trace = orchestrationApi.trace;
 
 	const dispatch = createEventDispatcher<{
 		/** The run reached a finished state; the message row should be read again. */
@@ -67,16 +74,20 @@
 	let previousStatus: string | null = null;
 	let settledFor = '';
 	let seenMessage: Message | null = message;
+	// Counts the presses of Refresh. A fold that has read a trace and is open reads it again.
+	let refreshKey = 0;
 
 	$: id = rootId ?? message?.autonomous_session_id ?? '';
 	$: tree = run?.tree ?? null;
-	$: actions = run ? availableActions(run) : { approve: false, reject: false, halt: false, close: false };
+	$: title = runTitle(run ?? { profile_title: null });
+	$: actions = run
+		? availableActions(run)
+		: { approve: false, reject: false, halt: false, close: false };
 	$: headline = run ? runHeadline(run) : '';
 	$: detail = run ? runDetail(run) : null;
-	$: progress = run ? runProgress(run) : [];
-	$: now = run ? currentSteps(run) : [];
 	$: plan = run ? planView(run) : null;
-	$: shownPlanState = run ? planState(run) : 'proposed';
+	// A run answered by the orchestrator itself has no combined answer; its own is on the run read.
+	$: directAnswer = run ? directAnswerText(run) : null;
 	$: showOverview =
 		!!tree &&
 		!tree.result &&
@@ -128,7 +139,9 @@
 			},
 			onError: (err, info) => {
 				if (next !== followed) return;
-				error = info.fatal ? describeError(err) : `Could not refresh the run: ${describeError(err)}`;
+				error = info.fatal
+					? describeError(err)
+					: `Could not refresh the run: ${describeError(err)}`;
 			}
 		});
 		follower.start();
@@ -149,11 +162,15 @@
 
 	async function refresh() {
 		error = '';
+		refreshKey += 1;
 		if (follower) await follower.refresh();
 		else if (id) restart(id);
 	}
 
-	async function act(kind: 'approve' | 'reject' | 'halt' | 'close', shown?: { revision: number; planHash: string }) {
+	async function act(
+		kind: 'approve' | 'reject' | 'halt' | 'close',
+		shown?: { revision: number; planHash: string }
+	) {
 		if (!run || busy) return;
 		busy = true;
 		actionError = '';
@@ -171,7 +188,8 @@
 					current.plan.revision !== shown.revision ||
 					current.plan_hash !== shown.planHash
 				) {
-					actionError = 'The plan changed while you were reading it. Review the new revision, then decide.';
+					actionError =
+						'The plan changed while you were reading it. Review the new revision, then decide.';
 				} else if (kind === 'approve') {
 					await orchestrationApi.approve(current);
 				} else {
@@ -195,7 +213,9 @@
 	aria-label="Governed run"
 >
 	<header class="head">
-		<span class="title">{run?.profile_title ?? 'Governed run'}</span>
+		<span class="title" data-testid="lq-ai-run-title"
+			>{title.text}{#if title.experimental}{' '}<span class="chip">experimental</span>{/if}</span
+		>
 		<button type="button" class="link" on:click={refresh} disabled={busy}>Refresh</button>
 	</header>
 
@@ -219,7 +239,17 @@
 		</p>
 		{#if detail}<p class="detail" class:warn={run.status === 'uncertain'}>{detail}</p>{/if}
 
-		<RunProgressList items={progress} {now} />
+		<RunActivity
+			{run}
+			{plan}
+			{mode}
+			awaiting={actions.approve}
+			{busy}
+			{fetchTrace}
+			{refreshKey}
+			on:approve={(event) => act('approve', event.detail)}
+			on:reject={(event) => act('reject', event.detail)}
+		/>
 
 		{#if actions.halt || actions.close}
 			<div class="controls">
@@ -252,35 +282,16 @@
 			</div>
 		{/if}
 
-		{#if plan}
-			<RunPlanCard
-				view={plan}
-				state={shownPlanState}
-				awaiting={actions.approve}
-				{busy}
-				on:approve={(event) => act('approve', event.detail)}
-				on:reject={(event) => act('reject', event.detail)}
-			/>
-		{/if}
-
-		{#if tree && tree.approved && tree.children.length > 0}
-			<section class="children" aria-label="Task progress">
-				{#each tree.children as child, position (child.session_id)}
-					<RunChildCard
-						rootId={run.root_id}
-						index={position + 1}
-						topic={plan?.tasks[position]?.topic ?? `Task ${position + 1}`}
-						skill={plan?.tasks[position]?.skill ?? 'Skill not recorded'}
-						{child}
-					/>
-				{/each}
-			</section>
-		{/if}
-
 		{#if mode === 'receipt' && tree?.result}
 			<section class="answer" aria-label="Combined answer">
 				<h3>Combined answer</h3>
 				<pre class="answer-text">{tree.result.summary}</pre>
+			</section>
+		{:else if mode === 'receipt' && directAnswer !== null}
+			<!-- Nothing was combined: the orchestrator answered by itself. The note beneath says so. -->
+			<section class="answer" aria-label="Direct answer">
+				<h3>Direct answer</h3>
+				<pre class="answer-text">{directAnswer}</pre>
 			</section>
 		{/if}
 
@@ -294,6 +305,8 @@
 			</section>
 		{/if}
 
+		<!-- In the thread the answer is drawn under this panel, so the note about its
+		     evidence comes last, next to it. On the receipt page the answer is above. -->
 		{#if mode === 'receipt'}
 			{#if showsEvidence(run)}<RunAnswerNote {run} />{/if}
 			<RunReceipts {run} />
@@ -310,10 +323,7 @@
 	.run {
 		width: 100%;
 		min-width: 0;
-		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius-lg);
-		padding: 0.75rem 0.9rem;
-		background: var(--lq-canvas);
+		padding: 0.25rem 0;
 		color: var(--lq-text);
 		margin-bottom: 0.5rem;
 	}
@@ -330,6 +340,18 @@
 		letter-spacing: 0.03em;
 		color: var(--lq-text-secondary);
 		overflow-wrap: anywhere;
+	}
+	.chip {
+		margin-left: 0.4rem;
+		padding: 1px 4px;
+		border-radius: var(--lq-radius-sm);
+		background: var(--lq-warn-soft);
+		color: var(--lq-warn);
+		border: 1px solid var(--lq-warn-border);
+		font-size: 10px;
+		font-weight: 400;
+		letter-spacing: normal;
+		font-family: ui-monospace, monospace;
 	}
 	.link {
 		background: none;
@@ -436,12 +458,6 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 1px solid var(--lq-accent);
-	}
-	.children {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
-		gap: 0.75rem;
-		margin: 0.75rem 0;
 	}
 	.answer,
 	.overview {

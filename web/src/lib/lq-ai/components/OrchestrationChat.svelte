@@ -2,14 +2,15 @@
 	/**
 	 * The receipt view of a governed run (ADR 0038 D1).
 	 *
-	 * Runs start from a chat inside a matter, with the Run control beside the model
-	 * picker, and live in that chat's thread. This page remains for runs that have no
+	 * Runs start from a chat, by choosing New harness in the model picker, and live
+	 * in that chat's thread. This page remains for runs that have no
 	 * chat, and as a stable address for any run's receipts: it shows the same run
 	 * components the thread does, without a chat around them. The intake form that used
 	 * to live here is gone.
 	 */
 	import { page } from '$app/stores';
 	import type { OrchestrationChatRun } from '$lib/lq-ai/api/orchestration';
+	import { RUNS_START_FROM_A_CHAT_TEXT } from '$lib/lq-ai/run/composer';
 	import { chatHref } from '$lib/lq-ai/run/links';
 	import RunMessage from './run/RunMessage.svelte';
 
@@ -36,10 +37,10 @@
 	{#if !id}
 		<section class="panel" data-testid="lq-ai-run-receipt-notice" aria-label="Where runs start">
 			<h2>Runs now start from a chat</h2>
-			<p>
-				Open a chat inside a matter and use the <strong>Run</strong> control beside the model picker.
-				The run then appears in that chat’s thread, where you review and approve its plan and follow
-				its progress.
+			<p data-testid="lq-ai-run-receipt-notice-text">
+				Open a chat and choose <strong>New harness</strong> in the model picker, then send your
+				request.
+				{RUNS_START_FROM_A_CHAT_TEXT}
 			</p>
 			<p class="links">
 				<a href="/lq-ai/matters">Open a matter</a>

@@ -1,0 +1,826 @@
+{
+  "answered_directly": false,
+  "chat_id": "9a1fa3b9-71e4-4151-8766-66c469ecbd2c",
+  "direct_answer": null,
+  "effects": [
+    {
+      "accounting": {
+        "anonymization_applied": true,
+        "basis": "conservative-estimate-or-reported-usage-v1",
+        "charged_usd": "0.0715",
+        "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
+        "estimated_prompt_tokens": 11161,
+        "messages_digest": "22891eabc53c92f827fb5e5d983bb197a45e93ea3a09b0e22fffc1701a728620",
+        "model": "native",
+        "provider": "selected",
+        "reported_usage_cost_usd": "0.0003",
+        "reserved_usd": "0.0715",
+        "tier": 1
+      },
+      "charged_usd": "0.0715",
+      "completed_at": "2026-10-08T19:29:00.230939Z",
+      "created_at": "2026-10-08T19:29:00.218620Z",
+      "effect_key": "chat:plan:v1",
+      "intent": "plan",
+      "outcome": "success",
+      "reserved_usd": "0.0715",
+      "skill": {
+        "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+        "kind": "prompt",
+        "name": "new_harness/orchestrator.v2",
+        "version": "2"
+      },
+      "status": "completed",
+      "step": {
+        "kind": "planning",
+        "label": null,
+        "reason": null,
+        "summary": null,
+        "tool": null
+      }
+    },
+    {
+      "accounting": null,
+      "charged_usd": "0.0000",
+      "completed_at": "2026-10-08T19:29:00.854135Z",
+      "created_at": "2026-10-08T19:29:00.840268Z",
+      "effect_key": "demo:collect:118d44db-4e57-4efc-8c4a-3e4890ec24c1:v1",
+      "intent": "workspace_read",
+      "outcome": "success",
+      "reserved_usd": "0.0000",
+      "skill": null,
+      "status": "completed",
+      "step": {
+        "kind": "findings_collected",
+        "label": null,
+        "reason": null,
+        "summary": null,
+        "tool": null
+      }
+    },
+    {
+      "accounting": {
+        "anonymization_applied": true,
+        "basis": "conservative-estimate-or-reported-usage-v1",
+        "charged_usd": "0.0686",
+        "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
+        "estimated_prompt_tokens": 9691,
+        "messages_digest": "799d37e9749db8f1c6b8e0e3f1debeba539cd931df1b7bd4e5ab42c20ce1f272",
+        "model": "native",
+        "provider": "selected",
+        "reported_usage_cost_usd": "0.0003",
+        "reserved_usd": "0.0686",
+        "tier": 1
+      },
+      "charged_usd": "0.0686",
+      "completed_at": "2026-10-08T19:29:00.878990Z",
+      "created_at": "2026-10-08T19:29:00.868962Z",
+      "effect_key": "demo:synthesis:v1",
+      "intent": "run_skill",
+      "outcome": "success",
+      "reserved_usd": "0.0686",
+      "skill": {
+        "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+        "kind": "prompt",
+        "name": "new_harness/orchestrator.v2",
+        "version": "2"
+      },
+      "status": "completed",
+      "step": {
+        "kind": "synthesis",
+        "label": null,
+        "reason": null,
+        "summary": null,
+        "tool": null
+      }
+    }
+  ],
+  "evidence": "citations",
+  "evidence_result": {
+    "checked": 1,
+    "gate_status": "fiduciary_grade",
+    "matched": 1,
+    "unmarked": 0,
+    "unmatched": 0,
+    "unresolved": 0
+  },
+  "message_id": "82ae5f98-fe34-4444-a4fd-4f3ce900014c",
+  "packet": null,
+  "planning": {
+    "attempt_timeout_seconds": 300,
+    "budget_usd": "10.0000",
+    "child_skill_version": "2",
+    "contract_version": 3,
+    "deadline": "2026-10-08T21:29:00.174089Z",
+    "delegation_grants": {
+      "analysis": [
+        "plan",
+        "retrieve_chunks",
+        "run_skill",
+        "workspace_read",
+        "workspace_write"
+      ],
+      "delivery": [],
+      "drafting": [
+        "run_skill",
+        "workspace_read",
+        "workspace_share",
+        "workspace_write"
+      ],
+      "ethics_review": [],
+      "intake": []
+    },
+    "documents": [],
+    "gateway_revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "goal": "How much annual leave do staff get?",
+    "knowledge_bases": [
+      {
+        "knowledge_base_id": "6b0f3c05-5e2f-4672-ae09-2cda771d530c",
+        "name": "People policies"
+      },
+      {
+        "knowledge_base_id": "0934c89d-7f94-466b-8956-8acc2ebadcfe",
+        "name": "Travel"
+      }
+    ],
+    "max_active_children": 2,
+    "max_children": 2,
+    "model": "selected/native",
+    "owner_id": "cd2d5dcb-3c7e-41bf-957e-82d2342daa62",
+    "packet_digest": null,
+    "plan_id": "8abfb7ba-4ae5-4bea-8526-14606ce705fc",
+    "planning_allowance_usd": "0.5781",
+    "policy_version": "f7d6f1a73467a9a44e6592e24b980c4bc0d1f6e8be5084b7f9803ce59f0864ca",
+    "profile": "new_harness_v1",
+    "project_id": "5b838029-645e-48c4-9c84-72bb6496607c",
+    "root": {
+      "anonymize": true,
+      "grants": {
+        "analysis": [
+          "plan"
+        ],
+        "delivery": [],
+        "drafting": [],
+        "ethics_review": [],
+        "intake": []
+      },
+      "maximum_egress_tier": 0,
+      "minimum_inference_tier": 1,
+      "privileged": false,
+      "resources": {
+        "document_ids": [],
+        "knowledge_base_ids": [
+          "0934c89d-7f94-466b-8956-8acc2ebadcfe",
+          "6b0f3c05-5e2f-4672-ae09-2cda771d530c"
+        ],
+        "source_names": []
+      },
+      "skill": {
+        "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+        "kind": "prompt",
+        "name": "new_harness/orchestrator.v2"
+      }
+    },
+    "root_allowance_usd": "1.1562",
+    "root_id": "56181ee6-4a05-41dc-84fa-79e61fbc7acb",
+    "root_skill_version": "2",
+    "terms": {
+      "answer_chars": 16384,
+      "planning": "tool",
+      "read_chars": 40000,
+      "task_answer_chars": 12000,
+      "task_turns": 5
+    },
+    "thread": [],
+    "today": "2026-10-08"
+  },
+  "profile": "new_harness_v1",
+  "profile_title": "New harness",
+  "reads": "Your request, this chat's recent messages, the documents you select, if any, and in a matter the knowledge bases attached to it. No other files and no live sources.",
+  "reserved_usd": "0.0000",
+  "root_id": "56181ee6-4a05-41dc-84fa-79e61fbc7acb",
+  "sources": [
+    {
+      "file_id": "a32dff72-95e6-477c-a026-e4b457601c2a",
+      "filename": "leave-policy.txt",
+      "number": 1,
+      "session_id": "118d44db-4e57-4efc-8c4a-3e4890ec24c1"
+    }
+  ],
+  "spent_usd": "0.2754",
+  "status": "completed",
+  "stop_reason": null,
+  "tree": {
+    "approved": true,
+    "children": [
+      {
+        "allocation_usd": "3.4686",
+        "effects": [
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-08T19:29:00.427902Z",
+            "created_at": "2026-10-08T19:29:00.410221Z",
+            "effect_key": "demo:notes:create:v1",
+            "intent": "workspace_write",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "notes_started",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-08T19:29:00.467090Z",
+            "created_at": "2026-10-08T19:29:00.446808Z",
+            "effect_key": "demo:notes:read:v1",
+            "intent": "workspace_read",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "notes_read",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          },
+          {
+            "accounting": {
+              "anonymization_applied": true,
+              "basis": "conservative-estimate-or-reported-usage-v1",
+              "charged_usd": "0.0667",
+              "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
+              "estimated_prompt_tokens": 8772,
+              "messages_digest": "713a537a282ab0e4c5b72608d9cec8e46bbd5ef2ae03801073a6e8059516a528",
+              "model": "native",
+              "provider": "selected",
+              "reported_usage_cost_usd": "0.0003",
+              "reserved_usd": "0.0667",
+              "tier": 1
+            },
+            "charged_usd": "0.0667",
+            "completed_at": "2026-10-08T19:29:00.524417Z",
+            "created_at": "2026-10-08T19:29:00.512339Z",
+            "effect_key": "topic:t1",
+            "intent": "run_skill",
+            "outcome": "success",
+            "reserved_usd": "0.0667",
+            "skill": {
+              "digest": "9a68b501e6b552f254f7f5127b291c1deef60e81f7d682bc23e265e3da7179aa",
+              "kind": "prompt",
+              "name": "new_harness/subagent.v2",
+              "version": "2"
+            },
+            "status": "completed",
+            "step": {
+              "kind": "model_turn",
+              "label": null,
+              "reason": null,
+              "summary": {
+                "finish_reason": "tool_calls",
+                "tool_calls": 2,
+                "turn": 1
+              },
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-08T19:29:00.555947Z",
+            "created_at": "2026-10-08T19:29:00.535138Z",
+            "effect_key": "topic:t1:c0",
+            "intent": "retrieve_chunks",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "knowledge_search",
+              "label": "Search the matter's knowledge bases",
+              "reason": "Find the leave entitlement.",
+              "summary": {
+                "failed": 0,
+                "listed": 2,
+                "passages": 1,
+                "searched": 2,
+                "sources": [
+                  {
+                    "document_id": "0dbdfd9c-0a0b-49d8-92a7-6dcb0d59aaab",
+                    "file_id": "a32dff72-95e6-477c-a026-e4b457601c2a",
+                    "filename": "leave-policy.txt",
+                    "number": 1
+                  }
+                ],
+                "withheld": 0
+              },
+              "tool": "search_knowledge_base"
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-08T19:29:00.579657Z",
+            "created_at": "2026-10-08T19:29:00.567175Z",
+            "effect_key": "topic:t1:c1",
+            "intent": "retrieve_chunks",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "knowledge_search",
+              "label": "Search the matter's knowledge bases",
+              "reason": "Check for a sabbatical rule.",
+              "summary": {
+                "failed": 0,
+                "listed": 2,
+                "passages": 0,
+                "searched": 2,
+                "sources": [],
+                "withheld": 0
+              },
+              "tool": "search_knowledge_base"
+            }
+          },
+          {
+            "accounting": {
+              "anonymization_applied": true,
+              "basis": "conservative-estimate-or-reported-usage-v1",
+              "charged_usd": "0.0686",
+              "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
+              "estimated_prompt_tokens": 9707,
+              "messages_digest": "f7f657280c2d488d7a8fd58af79d6e4c0e3742c298d94aed1c71329c301e950f",
+              "model": "native",
+              "provider": "selected",
+              "reported_usage_cost_usd": "0.0003",
+              "reserved_usd": "0.0686",
+              "tier": 1
+            },
+            "charged_usd": "0.0686",
+            "completed_at": "2026-10-08T19:29:00.605624Z",
+            "created_at": "2026-10-08T19:29:00.595216Z",
+            "effect_key": "topic:t2",
+            "intent": "run_skill",
+            "outcome": "success",
+            "reserved_usd": "0.0686",
+            "skill": {
+              "digest": "9a68b501e6b552f254f7f5127b291c1deef60e81f7d682bc23e265e3da7179aa",
+              "kind": "prompt",
+              "name": "new_harness/subagent.v2",
+              "version": "2"
+            },
+            "status": "completed",
+            "step": {
+              "kind": "model_turn",
+              "label": null,
+              "reason": null,
+              "summary": {
+                "finish_reason": "stop",
+                "tool_calls": 0,
+                "turn": 2
+              },
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-08T19:29:00.632046Z",
+            "created_at": "2026-10-08T19:29:00.616435Z",
+            "effect_key": "demo:findings:write:v1",
+            "intent": "workspace_write",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "findings_saved",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-08T19:29:00.656734Z",
+            "created_at": "2026-10-08T19:29:00.641496Z",
+            "effect_key": "demo:notes:update:v1",
+            "intent": "workspace_write",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "notes_updated",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-08T19:29:00.694589Z",
+            "created_at": "2026-10-08T19:29:00.676736Z",
+            "effect_key": "demo:findings:read:v1",
+            "intent": "workspace_read",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "findings_read",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-08T19:29:00.725954Z",
+            "created_at": "2026-10-08T19:29:00.707935Z",
+            "effect_key": "demo:findings:share:v1",
+            "intent": "workspace_share",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "findings_shared",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          }
+        ],
+        "files": [
+          {
+            "digest": "e6ddafeb8a9bccd68c6b75fd7d0cf3aa3ad4c087a19b8b256553e96ec489131c",
+            "name": "findings.json",
+            "revision": 1,
+            "session_id": "118d44db-4e57-4efc-8c4a-3e4890ec24c1",
+            "shared": true,
+            "size_bytes": 351,
+            "updated_at": "2026-10-08T19:29:00.722220Z"
+          },
+          {
+            "digest": "994618400903d94dde27513f2fcf04b77f561f0483a6761e47c8958c1d8367af",
+            "name": "notes.md",
+            "revision": 2,
+            "session_id": "118d44db-4e57-4efc-8c4a-3e4890ec24c1",
+            "shared": false,
+            "size_bytes": 149,
+            "updated_at": "2026-10-08T19:29:00.652950Z"
+          }
+        ],
+        "outcome": {
+          "artifact": {
+            "digest": "e6ddafeb8a9bccd68c6b75fd7d0cf3aa3ad4c087a19b8b256553e96ec489131c",
+            "name": "findings.json",
+            "revision": 1,
+            "session_id": "118d44db-4e57-4efc-8c4a-3e4890ec24c1"
+          },
+          "failure_code": null,
+          "findings": [
+            "Each employee gets \"eighteen (18) days of annual leave\" (Source: [1]). A search for a sabbatical rule found nothing."
+          ],
+          "status": "completed",
+          "summary": "Each employee gets \"eighteen (18) days of annual leave\" (Source: [1]). A search for a sabbatical rule found nothing.",
+          "verification": "unverified"
+        },
+        "phase": "delivery",
+        "reserved_usd": "0.0000",
+        "session_id": "118d44db-4e57-4efc-8c4a-3e4890ec24c1",
+        "spent_usd": "0.1353",
+        "status": "completed",
+        "tools": [
+          {
+            "label": "Read back a working note",
+            "name": "read_note",
+            "phase": "analysis",
+            "registered": true
+          },
+          {
+            "label": "Save a working note",
+            "name": "save_note",
+            "phase": "analysis",
+            "registered": true
+          },
+          {
+            "label": "Search the matter's knowledge bases",
+            "name": "search_knowledge_base",
+            "phase": "analysis",
+            "registered": true
+          }
+        ],
+        "turn_limit": 5,
+        "updated_at": "2026-10-08T19:29:00.765436Z"
+      }
+    ],
+    "mode": "new_harness_v1",
+    "partial_summary": null,
+    "plan": {
+      "attempt_timeout_seconds": 300,
+      "budget_usd": "10.0000",
+      "children": [
+        {
+          "budget_usd": "3.4686",
+          "dispatch_id": "118d44db-4e57-4efc-8c4a-3e4890ec24c1",
+          "execution": {
+            "anonymize": true,
+            "grants": {
+              "analysis": [
+                "plan",
+                "retrieve_chunks",
+                "run_skill",
+                "workspace_read",
+                "workspace_write"
+              ],
+              "delivery": [],
+              "drafting": [
+                "run_skill",
+                "workspace_read",
+                "workspace_share",
+                "workspace_write"
+              ],
+              "ethics_review": [],
+              "intake": []
+            },
+            "maximum_egress_tier": 0,
+            "minimum_inference_tier": 1,
+            "privileged": false,
+            "resources": {
+              "document_ids": [],
+              "knowledge_base_ids": [
+                "0934c89d-7f94-466b-8956-8acc2ebadcfe",
+                "6b0f3c05-5e2f-4672-ae09-2cda771d530c"
+              ],
+              "source_names": []
+            },
+            "skill": {
+              "digest": "9a68b501e6b552f254f7f5127b291c1deef60e81f7d682bc23e265e3da7179aa",
+              "kind": "prompt",
+              "name": "new_harness/subagent.v2"
+            }
+          },
+          "profile": "research",
+          "task": {
+            "boundaries": "Only the fictional agreement",
+            "output_contract": "A clause-based answer",
+            "question": "What must Customer pay and when?",
+            "stopping_condition": "One answer",
+            "topic": "Payments"
+          },
+          "tools": {
+            "analysis": [
+              "read_note",
+              "save_note",
+              "search_knowledge_base"
+            ],
+            "delivery": [],
+            "drafting": [],
+            "ethics_review": [],
+            "intake": []
+          },
+          "turn_limit": 5
+        }
+      ],
+      "contract_version": 3,
+      "deadline": "2026-10-08T21:29:00.174089Z",
+      "delegation_grants": {
+        "analysis": [
+          "plan",
+          "retrieve_chunks",
+          "run_skill",
+          "workspace_read",
+          "workspace_write"
+        ],
+        "delivery": [],
+        "drafting": [
+          "run_skill",
+          "workspace_read",
+          "workspace_share",
+          "workspace_write"
+        ],
+        "ethics_review": [],
+        "intake": []
+      },
+      "documents": [],
+      "goal": "How much annual leave do staff get?",
+      "knowledge_bases": [
+        {
+          "knowledge_base_id": "6b0f3c05-5e2f-4672-ae09-2cda771d530c",
+          "name": "People policies"
+        },
+        {
+          "knowledge_base_id": "0934c89d-7f94-466b-8956-8acc2ebadcfe",
+          "name": "Travel"
+        }
+      ],
+      "max_active_children": 2,
+      "owner_id": "cd2d5dcb-3c7e-41bf-957e-82d2342daa62",
+      "plan_id": "8abfb7ba-4ae5-4bea-8526-14606ce705fc",
+      "planning_digest": "3e758ac3794f8e286848315ea3497894bd04f1655cec804e2f6f7b9e993bc470",
+      "policy_version": "f7d6f1a73467a9a44e6592e24b980c4bc0d1f6e8be5084b7f9803ce59f0864ca",
+      "profile": "new_harness_v1",
+      "project_id": "5b838029-645e-48c4-9c84-72bb6496607c",
+      "revision": 1,
+      "root": {
+        "anonymize": true,
+        "grants": {
+          "analysis": [
+            "plan",
+            "retrieve_chunks",
+            "run_skill",
+            "workspace_read",
+            "workspace_write"
+          ],
+          "delivery": [],
+          "drafting": [
+            "run_skill",
+            "workspace_read",
+            "workspace_share",
+            "workspace_write"
+          ],
+          "ethics_review": [],
+          "intake": []
+        },
+        "maximum_egress_tier": 0,
+        "minimum_inference_tier": 1,
+        "privileged": false,
+        "resources": {
+          "document_ids": [],
+          "knowledge_base_ids": [
+            "0934c89d-7f94-466b-8956-8acc2ebadcfe",
+            "6b0f3c05-5e2f-4672-ae09-2cda771d530c"
+          ],
+          "source_names": []
+        },
+        "skill": {
+          "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+          "kind": "prompt",
+          "name": "new_harness/orchestrator.v2"
+        }
+      },
+      "root_allowance_usd": "1.1562",
+      "root_id": "56181ee6-4a05-41dc-84fa-79e61fbc7acb"
+    },
+    "plan_hash": "9e786dbffc872aa9e22410b3ce2a9a73befc9d47338ed49a95a56f331cd74299",
+    "reserved_usd": "0.0000",
+    "result": {
+      "coverage": "complete",
+      "kind": "orchestration_demonstration",
+      "summary": "## Leave\n\nThe entitlement is \"eighteen (18) days of annual leave\" (Source: [1]).\n\nThe knowledge bases say nothing found about a sabbatical.",
+      "topics": [
+        {
+          "outcome": {
+            "artifact": {
+              "digest": "e6ddafeb8a9bccd68c6b75fd7d0cf3aa3ad4c087a19b8b256553e96ec489131c",
+              "name": "findings.json",
+              "revision": 1,
+              "session_id": "118d44db-4e57-4efc-8c4a-3e4890ec24c1"
+            },
+            "failure_code": null,
+            "findings": [
+              "Each employee gets \"eighteen (18) days of annual leave\" (Source: [1]). A search for a sabbatical rule found nothing."
+            ],
+            "status": "completed",
+            "summary": "Each employee gets \"eighteen (18) days of annual leave\" (Source: [1]). A search for a sabbatical rule found nothing.",
+            "verification": "unverified"
+          },
+          "session_id": "118d44db-4e57-4efc-8c4a-3e4890ec24c1",
+          "topic": "Payments"
+        }
+      ],
+      "verification": "unverified"
+    },
+    "root": {
+      "allocation_usd": "1.1562",
+      "effects": [
+        {
+          "accounting": {
+            "anonymization_applied": true,
+            "basis": "conservative-estimate-or-reported-usage-v1",
+            "charged_usd": "0.0715",
+            "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
+            "estimated_prompt_tokens": 11161,
+            "messages_digest": "22891eabc53c92f827fb5e5d983bb197a45e93ea3a09b0e22fffc1701a728620",
+            "model": "native",
+            "provider": "selected",
+            "reported_usage_cost_usd": "0.0003",
+            "reserved_usd": "0.0715",
+            "tier": 1
+          },
+          "charged_usd": "0.0715",
+          "completed_at": "2026-10-08T19:29:00.230939Z",
+          "created_at": "2026-10-08T19:29:00.218620Z",
+          "effect_key": "chat:plan:v1",
+          "intent": "plan",
+          "outcome": "success",
+          "reserved_usd": "0.0715",
+          "skill": {
+            "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+            "kind": "prompt",
+            "name": "new_harness/orchestrator.v2",
+            "version": "2"
+          },
+          "status": "completed",
+          "step": {
+            "kind": "planning",
+            "label": null,
+            "reason": null,
+            "summary": null,
+            "tool": null
+          }
+        },
+        {
+          "accounting": null,
+          "charged_usd": "0.0000",
+          "completed_at": "2026-10-08T19:29:00.854135Z",
+          "created_at": "2026-10-08T19:29:00.840268Z",
+          "effect_key": "demo:collect:118d44db-4e57-4efc-8c4a-3e4890ec24c1:v1",
+          "intent": "workspace_read",
+          "outcome": "success",
+          "reserved_usd": "0.0000",
+          "skill": null,
+          "status": "completed",
+          "step": {
+            "kind": "findings_collected",
+            "label": null,
+            "reason": null,
+            "summary": null,
+            "tool": null
+          }
+        },
+        {
+          "accounting": {
+            "anonymization_applied": true,
+            "basis": "conservative-estimate-or-reported-usage-v1",
+            "charged_usd": "0.0686",
+            "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
+            "estimated_prompt_tokens": 9691,
+            "messages_digest": "799d37e9749db8f1c6b8e0e3f1debeba539cd931df1b7bd4e5ab42c20ce1f272",
+            "model": "native",
+            "provider": "selected",
+            "reported_usage_cost_usd": "0.0003",
+            "reserved_usd": "0.0686",
+            "tier": 1
+          },
+          "charged_usd": "0.0686",
+          "completed_at": "2026-10-08T19:29:00.878990Z",
+          "created_at": "2026-10-08T19:29:00.868962Z",
+          "effect_key": "demo:synthesis:v1",
+          "intent": "run_skill",
+          "outcome": "success",
+          "reserved_usd": "0.0686",
+          "skill": {
+            "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+            "kind": "prompt",
+            "name": "new_harness/orchestrator.v2",
+            "version": "2"
+          },
+          "status": "completed",
+          "step": {
+            "kind": "synthesis",
+            "label": null,
+            "reason": null,
+            "summary": null,
+            "tool": null
+          }
+        }
+      ],
+      "files": [],
+      "outcome": null,
+      "phase": "delivery",
+      "reserved_usd": "0.0000",
+      "session_id": "56181ee6-4a05-41dc-84fa-79e61fbc7acb",
+      "spent_usd": "0.1401",
+      "status": "completed",
+      "tools": [],
+      "turn_limit": 0,
+      "updated_at": "2026-10-08T19:29:00.909632Z"
+    },
+    "root_id": "56181ee6-4a05-41dc-84fa-79e61fbc7acb",
+    "spent_usd": "0.2754",
+    "status": "completed",
+    "stop_reason": null,
+    "verification": "unverified"
+  }
+}

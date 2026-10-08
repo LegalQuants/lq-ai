@@ -18,24 +18,43 @@ import { marked } from 'marked';
 import { describe, expect, it } from 'vitest';
 
 import type { OrchestrationChatRun, RunEffect, StepNote } from '../../api/orchestration';
+import { directAnswerText } from '../activity';
 import {
+	KNOWLEDGE_SEARCH_TOOL,
 	activeRunLabel,
 	activeRunStatusText,
+	answersDirectlyText,
 	buildStartBody,
 	documentRows,
+	documentsSummary,
+	instructionRows,
+	knowledgeBasesLine,
+	knowledgeBasesLineParts,
 	proposeBlocker,
+	routeText,
 	runModeFacts,
 	toolLabelList,
+	toolsOffered,
 	unavailableReason,
 	unreadableReason
 } from '../composer';
 import { evidenceGate, evidenceHint, evidenceStatement } from '../evidence';
-import { formatDeadline, formatUsd, formatValue, humanise, pluralise } from '../format';
-import { planView } from '../plan';
+import {
+	formatDeadline,
+	formatUsd,
+	formatValue,
+	humanise,
+	namedLineText,
+	pluralise
+} from '../format';
+import { failureMessage } from '../load';
+import { orchestratorPin, pinnedText, planView, receiptPin, searchLineParts } from '../plan';
 import { currentSteps, runProgress, taskLatestStep, taskStatusLabel } from '../progress';
 import { describeEffect, refusalText } from '../renderers';
-import { runDetail, runHeadline, stopReasonText } from '../status';
-import { documents, profiles, run } from './fixtures';
+import { runDetail, runHeadline, runTitle, stopReasonText } from '../status';
+import { runSources } from '../sources';
+import { setupView, toolView, turnView } from '../trace';
+import { documents, profiles, run, trace } from './fixtures';
 import { HOSTILE_STRINGS, expectPlainText } from './hostile';
 
 // ---- the helpers --------------------------------------------------------------------------------
@@ -175,6 +194,61 @@ const SINKS: Sink[] = [
 		echo: 'exact',
 		use: (h) => buildStartBody({ requestId: 'r', profile: packet, goal: h, fileIds: [] })
 	},
+	{
+		name: 'unavailableReason: a profile’s title in the sentence about it',
+		echo: 'exact',
+		use: (h) => [
+			unavailableReason({
+				...packet,
+				available: false,
+				reason: 'operator_disabled',
+				reason_text: null,
+				title: h
+			}),
+			unavailableReason({
+				...packet,
+				available: false,
+				reason: 'project_required',
+				reason_text: null,
+				title: h
+			})
+		]
+	},
+	{
+		name: 'routeText: the model and the tier',
+		echo: 'exact',
+		use: (h) => routeText({ ...packet, model: h, routed_tier: 2 })
+	},
+	{
+		name: 'runModeFacts: the reasoning effort',
+		echo: 'exact',
+		use: (h) => runModeFacts({ ...packet, reasoning_effort: h })
+	},
+	{
+		name: 'instructionRows: a prompt’s or a skill’s name, version and role',
+		echo: 'exact',
+		use: (h) =>
+			instructionRows({
+				...packet,
+				instructions: [
+					{ role: 'orchestrator', kind: 'prompt', name: h, version: h },
+					{ role: 'sub-agent', kind: 'skill', name: h, version: h },
+					{ role: h as 'orchestrator', kind: 'prompt', name: 'f/r.v1', version: '1' }
+				]
+			}).flatMap((row) => [row.label, row.name, row.detail])
+	},
+	{
+		name: 'documentsSummary: the owner’s file names',
+		echo: 'exact',
+		use: (h) => {
+			const [file] = documents().documents;
+			return documentsSummary({
+				documents: [{ ...file, filename: h }],
+				selected: [file.file_id],
+				min: 0
+			});
+		}
+	},
 	// evidence
 	{
 		name: 'evidenceGate',
@@ -305,6 +379,342 @@ const SINKS: Sink[] = [
 		name: 'formatValue: inside a structure',
 		echo: 'plain',
 		use: (h) => formatValue({ a: h, b: [h] })
+	},
+	// the evidence line for a run that read no document
+	{
+		name: 'evidenceStatement: a run that read no document, whatever its kind of evidence or packet says',
+		echo: 'none',
+		use: (h) => [
+			evidenceStatement({
+				evidence: 'unverified',
+				evidence_result: null,
+				planning: { documents: [] }
+			}),
+			evidenceStatement({
+				evidence: h as 'unverified',
+				evidence_result: null,
+				planning: { documents: [] }
+			}),
+			evidenceStatement({
+				evidence: 'unverified',
+				evidence_result: null,
+				planning: { documents: [] },
+				packet: h
+			})
+		]
+	},
+	// the heading of a run message and what the orchestrator is pinned to
+	{
+		name: 'runTitle: a profile title, a prompt version and a model',
+		echo: 'exact',
+		use: (h) =>
+			runTitle({
+				profile_title: h,
+				planning: {
+					root: { skill: { name: 'n/o.v1', digest: 'd', kind: 'prompt' } },
+					root_skill_version: h,
+					model: h
+				}
+			}).text
+	},
+	{
+		name: 'pinnedText: a skill’s or a prompt file’s name and version',
+		echo: 'exact',
+		use: (h) => [pinnedText({ name: h }, h), pinnedText({ name: h, kind: 'prompt' }, h)]
+	},
+	{
+		name: 'orchestratorPin: the name, version and digest of what the orchestrator is pinned to',
+		echo: 'exact',
+		use: (h) =>
+			orchestratorPin(
+				edited(run('harness.completed'), (copy) => {
+					copy.tree!.plan.root.skill = { name: h, digest: h, kind: 'prompt' };
+					copy.planning.root_skill_version = h;
+				})
+			)
+	},
+	// how a call was set up, and what the model wrote
+	{
+		name: 'setupView: the pinned system message, its text, the opening and the tools',
+		echo: 'exact',
+		use: (h) => {
+			const call = structuredClone(trace('child.completed').calls[0]);
+			call.system = { kind: 'prompt', name: h, version: h, digest: h, text: h };
+			call.opening = h;
+			call.tools = [
+				{ type: 'function', function: { name: h, description: h, parameters: { type: h } } }
+			];
+			const view = setupView(call);
+			return [
+				view.system,
+				view.systemText,
+				view.opening,
+				view.tools.map((tool) => [tool.name, tool.description])
+			];
+		}
+	},
+	{
+		name: 'toolView: a name and a description in either shape',
+		echo: 'exact',
+		use: (h) =>
+			[
+				toolView({ name: h, description: h }),
+				toolView({ function: { name: h, description: h } })
+			].flatMap((tool) => [tool.name, tool.description])
+	},
+	{
+		name: 'turnView: what a model wrote and the tool calls it made',
+		echo: 'exact',
+		use: (h) => {
+			const turn = turnView({
+				effect_key: 'k',
+				status: 'completed',
+				text: h,
+				tool_calls: [{ id: 'c', name: h, arguments: h }]
+			});
+			return [turn.text, turn.toolCalls.map((call) => [call.name, call.arguments])];
+		}
+	},
+	{
+		name: 'failureMessage: what an error said',
+		echo: 'exact',
+		use: (h) => [failureMessage(new Error(h)), failureMessage(h)]
+	},
+	// a request answered by the orchestrator itself, and a plan handed over as a tool call
+	{
+		name: 'evidenceStatement: an answer the orchestrator gave by itself, whatever its evidence, gate or sources say',
+		echo: 'none',
+		use: (h) => [
+			evidenceStatement({ evidence: 'unverified', evidence_result: null, answered_directly: true }),
+			evidenceStatement({
+				evidence: h as 'unverified',
+				evidence_result: null,
+				planning: { documents: [] },
+				answered_directly: true
+			}),
+			evidenceStatement({
+				evidence: 'citations',
+				evidence_result: { gate_status: h, checked: 3, matched: 1, unmatched: 2 },
+				planning: { documents: [{}] },
+				answered_directly: true,
+				sources: [h]
+			})
+		]
+	},
+	{
+		name: 'runDetail: a stop reason the page has never seen, on a run that stopped any way at all',
+		echo: 'caseless',
+		use: (h) =>
+			['halted', 'expired', 'closed', 'rejected', 'uncertain', 'failed', 'quarantined'].map(
+				(status) => runDetail({ status, stop_reason: h })
+			)
+	},
+	{
+		name: 'directAnswerText: what the orchestrator answered by itself, for the receipt page',
+		echo: 'exact',
+		use: (h) => directAnswerText({ answered_directly: true, direct_answer: h }) ?? []
+	},
+	{
+		name: 'receiptPin: the name and version of a skill or a prompt file',
+		echo: 'exact',
+		use: (h) => [
+			receiptPin({ name: h, version: h, kind: 'prompt' }),
+			receiptPin({ name: h, version: h }),
+			receiptPin({ name: h, kind: h })
+		]
+	},
+	{
+		name: 'toolsOffered and toolLabelList: a hostile label on a tool, with or without the search',
+		echo: 'exact',
+		use: (h) => {
+			const tools = [
+				{ name: 'a_tool', label: h, phase: 'analysis' },
+				{ name: KNOWLEDGE_SEARCH_TOOL, label: h, phase: 'analysis' }
+			];
+			return [
+				toolLabelList(toolsOffered(tools, null)),
+				toolLabelList(toolsOffered(tools, documents('knowledge-bases')))
+			];
+		}
+	},
+	{
+		name: 'evidenceStatement: nothing could be checked, whatever the sources and gate say',
+		echo: 'none',
+		use: (h) => [
+			evidenceStatement({
+				evidence: 'citations',
+				evidence_result: null,
+				planning: { documents: [] },
+				sources: [h]
+			}),
+			evidenceStatement({
+				evidence: 'citations',
+				evidence_result: null,
+				planning: { documents: [h] },
+				sources: [h]
+			}),
+			evidenceStatement({
+				evidence: 'citations',
+				evidence_result: { gate_status: h, checked: 2, matched: 1, unmatched: 0, unresolved: 2 },
+				planning: { documents: [] },
+				sources: [h]
+			})
+		]
+	},
+	{
+		name: 'describeEffect: the first call of a run, read in the run it is in',
+		echo: 'none',
+		use: (h) => [
+			describeEffect(effectWith({ step: { kind: 'planning', label: h }, intent: 'plan' }), {
+				plansByTool: true
+			}).text,
+			describeEffect(effectWith({ step: null, effect_key: 'chat:plan:v1', intent: h }), {
+				plansByTool: true
+			}).text,
+			describeEffect(effectWith({ step: null, effect_key: h, intent: 'plan' }), {
+				plansByTool: true
+			}).text
+		]
+	},
+	{
+		name: 'answersDirectlyText: whatever the server says of the profile',
+		echo: 'none',
+		use: (h) =>
+			[
+				answersDirectlyText({ answers_directly: true }),
+				answersDirectlyText({ answers_directly: h as unknown as boolean })
+			].filter((text): text is string => text !== null)
+	},
+	{
+		name: 'runDetail and stopReasonText: a plan that was not handed over, and one that carried a placeholder',
+		echo: 'none',
+		use: (h) => [
+			runDetail({ status: 'failed', stop_reason: 'plan_not_handed_over' }),
+			runDetail({ status: 'failed', stop_reason: 'plan_has_placeholders' }),
+			runDetail({
+				status: 'planning',
+				stop_reason: null,
+				planning: { terms: { planning: h } }
+			}),
+			runHeadline({ status: 'planning', stop_reason: null, planning: { terms: { planning: h } } })
+		]
+	},
+	// knowledge bases a task may search, and what a search found
+	{
+		name: 'describeEffect: a search of the knowledge bases, with a hostile file name and reason',
+		echo: 'exact',
+		use: (h) => {
+			const view = describeEffect(
+				effectWith({
+					step: {
+						kind: 'knowledge_search',
+						label: h,
+						reason: h,
+						summary: {
+							passages: 1,
+							sources: [{ number: 1, file_id: 'f', document_id: 'd', filename: h }],
+							listed: 1,
+							searched: 1,
+							failed: 0,
+							withheld: 0
+						}
+					}
+				})
+			);
+			return [view.text, view.facts, view.reason];
+		}
+	},
+	{
+		name: 'describeEffect: a search whose summary holds a hostile value where a figure belongs',
+		echo: 'none',
+		use: (h) => {
+			const view = describeEffect(
+				effectWith({
+					step: {
+						kind: 'knowledge_search',
+						summary: { passages: h, sources: h, listed: h, searched: h, failed: h, withheld: h }
+					}
+				})
+			);
+			return [view.text, view.facts];
+		}
+	},
+	{
+		name: 'runSources: a file name, and a session that is hostile',
+		echo: 'exact',
+		use: (h) =>
+			runSources(
+				edited(run('knowledge.completed'), (copy) => {
+					copy.sources = [
+						{ number: 1, file_id: h, filename: h, session_id: copy.sources![0].session_id },
+						{ number: 2, file_id: h, filename: 'a.txt', session_id: h }
+					];
+				})
+			).flatMap((row) => [row.filename, row.text])
+	},
+	{
+		name: 'knowledgeBasesLine: names of knowledge bases, and a count that is hostile',
+		echo: 'exact',
+		use: (h) => [
+			knowledgeBasesLine({
+				knowledge_bases: [
+					{ knowledge_base_id: h, name: h },
+					{ knowledge_base_id: 'b', name: 'Travel' }
+				],
+				knowledge_bases_omitted: 2
+			}),
+			knowledgeBasesLine({
+				knowledge_bases: [{ knowledge_base_id: 'a', name: 'Travel' }],
+				knowledge_bases_omitted: h as unknown as number
+			})
+		]
+	},
+	{
+		name: 'planView: the knowledge bases the tasks of a plan may search',
+		echo: 'exact',
+		use: (h) =>
+			planView(
+				edited(run('knowledge.awaiting-approval'), (copy) => {
+					for (const kb of copy.tree!.plan.knowledge_bases!) kb.name = h;
+				})
+			)!.knowledgeBasesLine
+	},
+	{
+		name: 'knowledgeBasesLineParts: the names, whole and one to an item, and the sentence round them',
+		echo: 'exact',
+		use: (h) => [
+			knowledgeBasesLineParts({
+				knowledge_bases: [
+					{ knowledge_base_id: h, name: h },
+					{ knowledge_base_id: 'b', name: 'Travel' }
+				],
+				knowledge_bases_omitted: 2
+			}),
+			knowledgeBasesLineParts({
+				knowledge_bases: [{ knowledge_base_id: 'a', name: 'Travel' }],
+				knowledge_bases_omitted: h as unknown as number
+			})
+		]
+	},
+	{
+		name: 'planView: the knowledge bases of a plan, in pieces',
+		echo: 'exact',
+		use: (h) =>
+			planView(
+				edited(run('knowledge.awaiting-approval'), (copy) => {
+					for (const kb of copy.tree!.plan.knowledge_bases!) kb.name = h;
+				})
+			)!.knowledgeBases
+	},
+	{
+		name: 'searchLineParts: the names of the knowledge bases a plan names',
+		echo: 'exact',
+		use: (h) => [searchLineParts([h, 'Travel']), searchLineParts([h])]
+	},
+	{
+		name: 'namedLineText: a sentence made of the pieces and a hostile name',
+		echo: 'exact',
+		use: (h) => namedLineText({ lead: 'May search: ', names: [h, 'Travel'], tail: '.' })
 	}
 ];
 
@@ -422,6 +832,35 @@ describe('the scan of the components', () => {
 	});
 });
 
+describe('the model picker, which shows a model name and a reason the server wrote', () => {
+	const source = code(
+		fileURLToPath(new URL('../../components/ModelPicker.svelte', import.meta.url))
+	);
+
+	it('has no way to turn text into markup, a script, a link or a navigation', () => {
+		for (const [what, pattern] of FORBIDDEN) {
+			expect(pattern.test(source), `ModelPicker uses ${what}`).toBe(false);
+		}
+	});
+});
+
+describe('the message list, which draws the empty thread and hands each message to its bubble', () => {
+	const source = code(
+		fileURLToPath(new URL('../../components/MessageList.svelte', import.meta.url))
+	);
+
+	it('has no way to turn text into markup, a script, a link or a navigation', () => {
+		for (const [what, pattern] of FORBIDDEN) {
+			expect(pattern.test(source), `MessageList uses ${what}`).toBe(false);
+		}
+	});
+
+	it('is read, so the check above looks at something', () => {
+		expect(source).toContain('No messages yet.');
+		expect(source).toContain('<MessageBubble');
+	});
+});
+
 describe('the components of the run panel', () => {
 	it('are found, so the checks below look at something', () => {
 		expect(componentFiles.length).toBeGreaterThanOrEqual(12);
@@ -431,7 +870,7 @@ describe('the components of the run panel', () => {
 			'RunChildCard',
 			'RunStepList',
 			'RunDocumentPicker',
-			'RunProfileMenu',
+			'RunModePanel',
 			'RunActiveNotice',
 			'RunAnswerNote'
 		]) {
@@ -578,6 +1017,8 @@ describe('the answer, where it is rendered as HTML', () => {
 		const panel = code(`${COMPONENTS}RunMessage.svelte`);
 		expect(panel).toMatch(/<pre class="answer-text">\{tree\.result\.summary\}<\/pre>/);
 		expect(panel).toMatch(/<pre class="answer-text">\{tree\.partial_summary\}<\/pre>/);
+		// The orchestrator's own answer, where it gave one, is shown the same way.
+		expect(panel).toMatch(/<pre class="answer-text">\{directAnswer\}<\/pre>/);
 	});
 
 	// `marked` on its own does not make anything safe: it passes raw HTML through, links to any

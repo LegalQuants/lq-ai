@@ -1,0 +1,105 @@
+{
+  "answered_directly": false,
+  "chat_id": "d9e762e6-ebf1-411a-88c0-d126b57151fb",
+  "direct_answer": null,
+  "effects": [],
+  "evidence": "unverified",
+  "evidence_result": null,
+  "message_id": "3899234c-4aac-4650-b6ad-d04ce0f8c62b",
+  "packet": null,
+  "planning": {
+    "attempt_timeout_seconds": 300,
+    "budget_usd": "10.0000",
+    "child_skill_version": "2",
+    "contract_version": 3,
+    "deadline": "2026-10-08T21:28:58.899918Z",
+    "delegation_grants": {
+      "analysis": [
+        "plan",
+        "retrieve_chunks",
+        "run_skill",
+        "workspace_read",
+        "workspace_write"
+      ],
+      "delivery": [],
+      "drafting": [
+        "run_skill",
+        "workspace_read",
+        "workspace_share",
+        "workspace_write"
+      ],
+      "ethics_review": [],
+      "intake": []
+    },
+    "documents": [],
+    "gateway_revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "goal": "Shorten that.",
+    "max_active_children": 2,
+    "max_children": 2,
+    "model": "selected/native",
+    "owner_id": "11525fad-80b7-4239-8667-9fec578413ad",
+    "packet_digest": null,
+    "plan_id": "d8e0e2b2-2433-43f5-b1e9-21ce4bd0b120",
+    "planning_allowance_usd": "0.5781",
+    "policy_version": "f7d6f1a73467a9a44e6592e24b980c4bc0d1f6e8be5084b7f9803ce59f0864ca",
+    "profile": "new_harness_v1",
+    "project_id": "4273a16d-af0a-426c-8a43-c0c068ad5017",
+    "root": {
+      "anonymize": true,
+      "grants": {
+        "analysis": [
+          "plan"
+        ],
+        "delivery": [],
+        "drafting": [],
+        "ethics_review": [],
+        "intake": []
+      },
+      "maximum_egress_tier": 0,
+      "minimum_inference_tier": 1,
+      "privileged": false,
+      "resources": {
+        "document_ids": [],
+        "source_names": []
+      },
+      "skill": {
+        "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+        "kind": "prompt",
+        "name": "new_harness/orchestrator.v2"
+      }
+    },
+    "root_allowance_usd": "1.1562",
+    "root_id": "eeebcae1-10df-4216-8404-ad1542bb89cf",
+    "root_skill_version": "2",
+    "terms": {
+      "answer_chars": 16384,
+      "planning": "tool",
+      "read_chars": 40000,
+      "task_answer_chars": 12000,
+      "task_turns": 5
+    },
+    "thread": [
+      {
+        "content": "Explain payment, renewal and termination questions independently.",
+        "cut": false,
+        "role": "user"
+      },
+      {
+        "content": "Fees are due \"within thirty (30) days\" (Source: msa.txt).",
+        "cut": false,
+        "role": "assistant"
+      }
+    ],
+    "today": "2026-10-08"
+  },
+  "profile": "new_harness_v1",
+  "profile_title": "New harness",
+  "reads": "Your request, this chat's recent messages, the documents you select, if any, and in a matter the knowledge bases attached to it. No other files and no live sources.",
+  "reserved_usd": "0.0000",
+  "root_id": "eeebcae1-10df-4216-8404-ad1542bb89cf",
+  "sources": [],
+  "spent_usd": "0.0000",
+  "status": "planning",
+  "stop_reason": null,
+  "tree": null
+}

@@ -1,16 +1,22 @@
 <script lang="ts">
 	/**
 	 * One effect's receipt: what was recorded for a model call, a tool call or a
-	 * file write, with its charge, the skill pin and the provider accounting.
+	 * file write, with its charge, the skill or prompt file pin and the provider accounting.
 	 * Everything here is text; digests and keys are shown as code, never as HTML.
+	 *
+	 * `context` is what the run says of itself that a step does not: how its plan is handed over,
+	 * and what the plan lists for its tasks to read and search (see `RunStepList`).
 	 */
 	import type { RunEffect } from '$lib/lq-ai/api/orchestration';
 	import { describeEffect } from '$lib/lq-ai/run/renderers';
+	import type { StepContext } from '$lib/lq-ai/run/renderers';
 	import { formatUsd } from '$lib/lq-ai/run/format';
+	import { receiptPin } from '$lib/lq-ai/run/plan';
 
 	export let effect: RunEffect;
+	export let context: StepContext = {};
 
-	$: view = describeEffect(effect);
+	$: view = describeEffect(effect, context);
 	$: charge = effect.charged_usd ?? effect.reserved_usd;
 </script>
 
@@ -25,7 +31,7 @@
 	</p>
 	{#if effect.skill}
 		<p class="muted">
-			Skill {effect.skill.name} v{effect.skill.version}
+			{receiptPin(effect.skill)}
 			<code>{effect.skill.digest}</code>
 		</p>
 	{/if}

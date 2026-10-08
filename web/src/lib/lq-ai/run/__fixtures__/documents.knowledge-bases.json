@@ -1,0 +1,18 @@
+{
+  "chat_id": "9a1fa3b9-71e4-4151-8766-66c469ecbd2c",
+  "documents": [],
+  "knowledge_bases": [
+    {
+      "knowledge_base_id": "6b0f3c05-5e2f-4672-ae09-2cda771d530c",
+      "name": "People policies"
+    },
+    {
+      "knowledge_base_id": "0934c89d-7f94-466b-8956-8acc2ebadcfe",
+      "name": "Travel"
+    }
+  ],
+  "knowledge_bases_omitted": 0,
+  "max_documents": 8,
+  "project_id": "5b838029-645e-48c4-9c84-72bb6496607c",
+  "suggested_file_ids": []
+}
