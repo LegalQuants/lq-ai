@@ -59,6 +59,20 @@ export function attachedDocumentsValue(fileNames: string[]): string {
 	return `Attached file(s): ${fileNames.join(', ')}`;
 }
 
+/**
+ * Placeholder for a document input's paste box. Only a required document
+ * input is met by attached files, so an optional one must not suggest
+ * attaching a file.
+ */
+export function documentInputPlaceholder(def: SkillInputDef, readyFileNames: string[]): string {
+	if (def.required !== true) {
+		return 'Paste the text here. Attached files are not matched to this input.';
+	}
+	return readyFileNames.length > 0
+		? 'Paste text here to use it instead of the attached file(s).'
+		: 'Attach the file with + Files, or paste its text here.';
+}
+
 function isBlank(value: unknown): boolean {
 	if (value === undefined || value === null) return true;
 	if (typeof value === 'string') return value.trim() === '';
@@ -150,6 +164,29 @@ export function missingInputsMessage(
 				: ' Attach a file or paste the document text.';
 	}
 	return `Skill "${skillTitle ?? missing.skill}" is missing required inputs: ${names}.${hint}`;
+}
+
+export interface UnloadedSkillInputs {
+	skill: string;
+	/** True when the schema fetch failed; false while it is still in flight. */
+	loadFailed: boolean;
+}
+
+/**
+ * The first attached skill whose input schema is not on hand, or null when
+ * every schema has loaded. The send is held on it: without the schema the
+ * composer cannot tell which inputs are required, and the gateway would
+ * refuse the turn. A skill that declares no inputs loads as an empty list
+ * and is not held.
+ */
+export function firstUnloadedSkillInputs(
+	skillNames: string[],
+	inputDefs: Record<string, SkillInputDef[] | undefined>,
+	failedSkillNames: string[]
+): UnloadedSkillInputs | null {
+	const skill = skillNames.find((name) => !inputDefs[name]);
+	if (skill === undefined) return null;
+	return { skill, loadFailed: failedSkillNames.includes(skill) };
 }
 
 /** The composer's send-blocked message for a skill whose input schema is not on hand. */

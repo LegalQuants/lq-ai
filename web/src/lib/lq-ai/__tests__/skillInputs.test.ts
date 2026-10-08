@@ -19,7 +19,9 @@ import { parse } from 'yaml';
 
 import {
 	attachedDocumentsValue,
+	documentInputPlaceholder,
 	enumOptions,
+	firstUnloadedSkillInputs,
 	flattenSkillInputs,
 	isDocumentInput,
 	isFormInput,
@@ -258,6 +260,92 @@ describe('missingInputsMessage', () => {
 	});
 });
 
+describe('documentInputPlaceholder', () => {
+	const required: SkillInputDef = { name: 'document', type: 'document', required: true };
+	const optional: SkillInputDef = { name: 'order_form', type: 'document', required: false };
+
+	it('offers attach-or-paste for a required document with nothing attached', () => {
+		expect(documentInputPlaceholder(required, [])).toBe(
+			'Attach the file with + Files, or paste its text here.'
+		);
+	});
+
+	it('offers paste as an override once a ready file stands in', () => {
+		expect(documentInputPlaceholder(required, ['nda.pdf'])).toBe(
+			'Paste text here to use it instead of the attached file(s).'
+		);
+	});
+
+	it('does not suggest attaching a file for an optional document', () => {
+		// Attached files are bound to required document inputs only.
+		for (const ready of [[], ['order-form.pdf']]) {
+			const placeholder = documentInputPlaceholder(optional, ready);
+			expect(placeholder).toBe(
+				'Paste the text here. Attached files are not matched to this input.'
+			);
+			expect(placeholder).not.toContain('+ Files');
+		}
+	});
+});
+
+// The send is held until every attached skill's input schema is on hand.
+// Without the schema the composer cannot tell which inputs are required, and
+// `resolveSkillInputsForSend` on its own lets such a skill through.
+describe('firstUnloadedSkillInputs', () => {
+	it('returns null when no skill is attached', () => {
+		expect(firstUnloadedSkillInputs([], {}, [])).toBeNull();
+	});
+
+	it('returns null when every attached skill has its schema', () => {
+		expect(
+			firstUnloadedSkillInputs(
+				['nda-review', 'contract-qa'],
+				{ 'nda-review': NDA_DEFS, 'contract-qa': NDA_DEFS },
+				[]
+			)
+		).toBeNull();
+	});
+
+	it('does not hold a skill that declares no inputs', () => {
+		// Loaded-and-empty is a schema; only a missing one holds the send.
+		expect(firstUnloadedSkillInputs(['nda-snapshot'], { 'nda-snapshot': [] }, [])).toBeNull();
+	});
+
+	it('holds on a skill whose schema is still in flight', () => {
+		expect(firstUnloadedSkillInputs(['nda-review'], {}, [])).toEqual({
+			skill: 'nda-review',
+			loadFailed: false
+		});
+		expect(firstUnloadedSkillInputs(['nda-review'], { 'nda-review': undefined }, [])).toEqual({
+			skill: 'nda-review',
+			loadFailed: false
+		});
+	});
+
+	it('holds on a skill whose schema failed to load, and says so', () => {
+		expect(firstUnloadedSkillInputs(['nda-review'], {}, ['nda-review'])).toEqual({
+			skill: 'nda-review',
+			loadFailed: true
+		});
+	});
+
+	it('reports the first unloaded skill in attach order', () => {
+		expect(
+			firstUnloadedSkillInputs(
+				['nda-review', 'contract-qa', 'msa-review-saas'],
+				{ 'nda-review': NDA_DEFS },
+				['msa-review-saas']
+			)
+		).toEqual({ skill: 'contract-qa', loadFailed: false });
+	});
+
+	it('ignores a failed skill that is no longer attached', () => {
+		expect(
+			firstUnloadedSkillInputs(['nda-review'], { 'nda-review': NDA_DEFS }, ['contract-qa'])
+		).toBeNull();
+	});
+});
+
 describe('skillInputsUnavailableMessage', () => {
 	it('distinguishes a failed load from one still in flight', () => {
 		expect(skillInputsUnavailableMessage('NDA Review', true)).toContain('Could not load');
@@ -270,8 +358,9 @@ describe('skillInputsUnavailableMessage', () => {
 // Corpus pin. The gateway refuses a turn unless every required input a
 // built-in skill declares is bound, so each one must be reachable from the
 // composer: offered by the form, and (for documents) satisfied by a file.
-// Located from this file, not the working directory, and skipped when the
-// skills corpus is not checked out next to web/ (e.g. a web-only context).
+// Located from this file, not the working directory. Skipped when the skills
+// corpus is not checked out next to web/ (e.g. a web-only context), except in
+// CI, where its absence is a failure.
 // ---------------------------------------------------------------------------
 
 const SKILLS_DIR = fileURLToPath(new URL('../../../../../skills', import.meta.url));
@@ -280,8 +369,13 @@ const HAS_CORPUS = existsSync(SKILLS_DIR);
 function declaredInputs(slug: string): SkillInputs {
 	const raw = readFileSync(join(SKILLS_DIR, slug, 'SKILL.md'), 'utf-8');
 	const frontmatter = parse(raw.split(/^---\s*$/m)[1]) ?? {};
-	// Same lookup order as api/app/skills/schema.py::extract_inputs.
-	const block = frontmatter.inputs ?? frontmatter.lq_ai?.inputs ?? {};
+	// Mirrors api/app/skills/schema.py::extract_inputs: a top-level `inputs`
+	// mapping wins; anything else (absent, or a flat list) falls through to
+	// `lq_ai.inputs`. The api's own tests own that contract; this copy only
+	// feeds the composer helpers what the endpoint would return.
+	const top = frontmatter.inputs;
+	const isMapping = typeof top === 'object' && top !== null && !Array.isArray(top);
+	const block = (isMapping ? top : frontmatter.lq_ai?.inputs) ?? {};
 	return { name: slug, required: block.required ?? [], optional: block.optional ?? [] };
 }
 
@@ -293,18 +387,37 @@ function skillsWithRequiredInputs(): string[] {
 		.filter((slug) => {
 			try {
 				return declaredInputs(slug).required.length > 0;
-			} catch {
-				return false; // no SKILL.md (e.g. the community submodule directory)
+			} catch (error) {
+				// No SKILL.md (e.g. the community submodule directory). Anything
+				// else, a frontmatter parse failure included, fails the pin.
+				if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+				throw error;
 			}
 		});
 }
 
-describe.skipIf(!HAS_CORPUS)('built-in skill corpus', () => {
+// The skills that declared required inputs when the pin was written. A new
+// skill joins the pin without being listed here; one of these dropping out
+// (renamed, unparseable, inputs moved somewhere the lookup misses) fails it.
+const KNOWN_REQUIRED_INPUT_SKILLS = [
+	'action-items-from-client-alert',
+	'case-law-research',
+	'comms-improver',
+	'contract-qa',
+	'dpa-checklist-review',
+	'enhance-prompt',
+	'msa-review-commercial-purchase',
+	'msa-review-saas',
+	'nda-review',
+	'playbook-easy-extract',
+	'vendor-privacy-policy-first-pass'
+];
+
+describe.skipIf(!HAS_CORPUS && !process.env.CI)('built-in skill corpus', () => {
 	const slugs = skillsWithRequiredInputs();
 
 	it('finds the skills that declare required inputs', () => {
-		expect(slugs).toContain('nda-review');
-		expect(slugs.length).toBeGreaterThanOrEqual(10);
+		expect(slugs).toEqual(expect.arrayContaining(KNOWN_REQUIRED_INPUT_SKILLS));
 	});
 
 	it.each(slugs)('%s: every required input can be supplied from the composer', (slug) => {
@@ -314,7 +427,9 @@ describe.skipIf(!HAS_CORPUS)('built-in skill corpus', () => {
 
 		// Nothing entered, nothing attached: every required input is reported.
 		const empty = resolveSkillInputsForSend([slug], { [slug]: defs }, {}, []);
-		expect(empty.missing[0].inputs.map((d) => d.name)).toEqual(required.map((d) => d.name));
+		expect((empty.missing[0]?.inputs ?? []).map((d) => d.name)).toEqual(
+			required.map((d) => d.name)
+		);
 
 		// A ready file attached and the non-document fields filled in: nothing
 		// is missing and every required input is bound to a non-empty value.

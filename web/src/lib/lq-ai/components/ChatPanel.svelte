@@ -155,6 +155,7 @@
 		selectFileIdsForSend
 	} from '$lib/lq-ai/chat/attachedFiles';
 	import {
+		firstUnloadedSkillInputs,
 		flattenSkillInputs,
 		missingInputsMessage,
 		resolveSkillInputsForSend,
@@ -737,12 +738,15 @@
 		if (!composerText.trim()) return;
 
 		// Hold the send until every attached skill's input schema is on hand.
-		const unloaded = attachedSkillNames.find((n) => !skillDetails[n]?.inputs);
-		if (unloaded !== undefined) {
+		const inputDefs = Object.fromEntries(
+			attachedSkillNames.map((n) => [n, skillDetails[n]?.inputs])
+		);
+		const unloaded = firstUnloadedSkillInputs(attachedSkillNames, inputDefs, failedSkillNames);
+		if (unloaded) {
 			sendError = null;
 			inputsError = skillInputsUnavailableMessage(
-				skillDetails[unloaded]?.title ?? unloaded,
-				failedSkillNames.includes(unloaded)
+				skillDetails[unloaded.skill]?.title ?? unloaded.skill,
+				unloaded.loadFailed
 			);
 			return;
 		}
@@ -751,7 +755,7 @@
 		// document input left empty is bound to the ready attached files' names.
 		const resolvedInputs = resolveSkillInputsForSend(
 			attachedSkillNames,
-			Object.fromEntries(attachedSkillNames.map((n) => [n, skillDetails[n]?.inputs])),
+			inputDefs,
 			skillInputs,
 			attachedReadyNames
 		);

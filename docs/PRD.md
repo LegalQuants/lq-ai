@@ -2101,7 +2101,7 @@ Entries are tagged with priority (P1 = should be addressed in v1.5; P2 = good fo
 
 **Priority:** P1 · **Effort:** M
 
-**Context:** PRD §3.4 defines the skill-input-form pattern: when a skill is attached and required inputs are missing, the application surfaces them as form elements rather than letting the model ask conversationally. Enhance Prompt's third example demonstrates the pattern. The pattern is not yet implemented for skills generally — only specified.
+**Context:** PRD §3.4 defines the skill-input-form pattern: when a skill is attached and required inputs are missing, the application surfaces them as form elements rather than letting the model ask conversationally. Enhance Prompt's third example demonstrates the pattern. The pattern is implemented in the standalone chat input (see Status below); the Enhance Prompt review screen and per-input file pickers are not yet done.
 
 **Specific scope:**
 - Read `lq_ai.inputs.required` and `lq_ai.inputs.optional` from any attached skill's frontmatter.
@@ -2116,8 +2116,8 @@ Entries are tagged with priority (P1 = should be addressed in v1.5; P2 = good fo
 - **Enhance Prompt review screen.** Unchanged; the form appears in the chat composer only.
 - **Enum and boolean inputs** render as a dropdown and a checkbox, but no shipped skill declares either, so those paths are unit-tested and not exercised by the corpus.
 - **A flat `inputs:` list** (entries carrying their own `required: true`) is not read by the inputs endpoint, which expects `required:` / `optional:` lists; a user skill written that way gets no form.
-- **Skills kept on across a reload** — see DE-398.
-- **Skills attached by the send-time slash fallback** — see DE-399.
+- **Skills kept on across a reload** — see DE-402.
+- **Skills attached by the send-time slash fallback** — see DE-403.
 
 #### DE-011 — Reasoning visibility configuration for Enhance Prompt
 
@@ -5186,15 +5186,15 @@ Before #652, the OCR confusion layer (`was_ocrd=True`) documented idempotence bu
 
 The DE-240 leakage harness measured a 100% miss rate for organization names through the pre-egress anonymization path, and root-caused it: raw spaCy detects the ORG entities, but Presidio's default `AnalyzerEngine` NLP configuration ships `ORGANIZATION` in `labels_to_ignore` (a deliberate upstream precision choice — ORG detection is noisy), and `gateway/app/anonymization/engine.py` never overrides it. For a legal product, organization names in privileged documents are often exactly the sensitive identifier an operator enables the layer to protect. Fix requires a maintainer decision inside the security boundary: un-suppress ORGANIZATION (accepting the precision cost — likely over-pseudonymization of common nouns spaCy mislabels), gate it behind a config flag (e.g. `anonymize_organizations: true|false` defaulting per the committee's risk posture), or document the exclusion prominently in the operator-facing anonymization docs. Whichever lands must re-run the DE-240 harness and update the published rates + the DE-282 calibration plan. Related finding recorded in the rates doc: `ENABLED_DEFAULT_RECOGNIZERS` in `engine.py` is descriptive-only (several undocumented Presidio defaults are active) — documentation drift worth fixing in the same pass.
 
-#### DE-398 — Sticky skills lose their inputs when the chat is reopened
+#### DE-402 — Sticky skills lose their inputs when the chat is reopened
 
-**Priority:** P1 · **Effort:** M · **Status (2026-10-07): filed (from reading the code; not reproduced).**
+**Priority:** P1 · **Effort:** M · **Status (2026-10-08): filed; reproduced through the api on v0.8.0.**
 
 "Keep skills on" persists the chat's skill *names* in `chat.sticky_skills`, and `send_message` (`api/app/api/chats.py`) unions them into every later turn server-side. The inputs are not persisted: they come only from the current request's `skill_inputs`. `ChatPanel.selectChat` resets the attached skills, their input values and the attached files, so after reopening a chat (or reloading the page) the next turn carries a sticky skill with no inputs. Since the gateway enforces required inputs (v0.8.0) that turn is refused with `skill_input_missing`, and the composer shows no form because, client-side, nothing is attached. Same root as DE-390: skill inputs live nowhere but the request. Two candidate fixes, not yet chosen: persist the sticky skills' inputs with the sticky set and replay them, or have the composer re-attach the chat's sticky skills on open so the form re-collects them (which still cannot restore a document bound from a per-message file). Out of scope for the DE-010 form fix, which covers skills attached in the current session.
 
-#### DE-399 — Send-time slash fallback attaches skills without their inputs
+#### DE-403 — Send-time slash fallback attaches skills without their inputs
 
-**Priority:** P1 · **Effort:** S–M (needs a product decision first) · **Status (2026-10-07): filed (from reading the code; not reproduced).**
+**Priority:** P1 · **Effort:** S–M (needs a product decision first) · **Status (2026-10-08): filed; reproduced through the api on v0.8.0.**
 
 When a message starts with `/<slug> ` and the request carries no attached skills, `send_message` resolves the slug server-side (`_maybe_resolve_leading_slash` in `api/app/api/chats.py`) and attaches that skill for the turn. No client has collected its inputs, so for a skill that declares required inputs the gateway refuses the turn with `skill_input_missing` (enforced since v0.8.0). In the web composer this happens when the user dismisses the slash popover, or sends before picking from it, and nothing else is attached; picking from the popover attaches the skill client-side and shows the DE-010 form. Any direct API caller relying on the fallback hits the same refusal. Two candidate fixes, not yet chosen: the api declines to auto-attach a skill that declares required inputs and returns the existing `slash_unresolved` hint instead (an API behaviour change), or the composer refuses to send a message with an unresolved leading `/slug` and prompts the user to pick the skill (web only, leaves API callers as they are).
 

@@ -9,7 +9,12 @@
 	 * - anything else → <input type=text>.
 	 */
 	import type { SkillInputDef } from '../types';
-	import { enumOptions, isDocumentInput, skillInputFieldId } from '../chat/skillInputs';
+	import {
+		documentInputPlaceholder,
+		enumOptions,
+		isDocumentInput,
+		skillInputFieldId
+	} from '../chat/skillInputs';
 
 	export let skillName: string;
 	export let input: SkillInputDef;
@@ -73,9 +78,7 @@
 			id={fieldId}
 			rows="2"
 			class="lq-field-control mt-1 block w-full text-sm"
-			placeholder={bindsAttachedFiles && readyFileNames.length > 0
-				? 'Paste text here to use it instead of the attached file(s).'
-				: 'Attach the file with + Files, or paste its text here.'}
+			placeholder={documentInputPlaceholder(input, readyFileNames)}
 			value={String(value ?? '')}
 			on:input={(e) => onChange((e.target as HTMLTextAreaElement).value)}
 			data-testid={fieldId}
