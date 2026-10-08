@@ -11,7 +11,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 # Importing the profile modules registers the shipped profiles.
-from app.autonomous.orchestration import document_runs as _document_runs  # noqa: F401
+from app.autonomous.orchestration import new_harness as _new_harness  # noqa: F401
 from app.autonomous.orchestration.chat_demo import PROFILE
 from app.autonomous.orchestration.checkpoints import CheckpointRuntime
 from app.autonomous.orchestration.effects import GuardedEffects

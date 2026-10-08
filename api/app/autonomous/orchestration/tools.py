@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from app.autonomous.enums import ToolIntent
-from app.autonomous.orchestration.contracts import DocumentRef
+from app.autonomous.orchestration.contracts import DocumentRef, KnowledgeBaseRef
 from app.errors import ValidationError
 from app.schemas.autonomous import Phase
 
@@ -38,6 +38,11 @@ if TYPE_CHECKING:
 
 _NAME = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
 MAX_NOTES = 5
+# One search returns at most this many passages.
+SEARCH_PASSAGES = 5
+# One task may cite at most this many different knowledge-base files. With four
+# tasks and eight selected documents the largest source number is 108.
+SOURCES_PER_TASK = 25
 
 # Plain aliases, not ``type`` statements: the function schema offered to a model
 # must be self-contained, and a named alias is emitted as a ``$defs`` reference.
@@ -91,6 +96,13 @@ class LoopState:
     documents: tuple[DocumentRef, ...]
     read_chars: int
     note_revisions: dict[str, int] = field(default_factory=dict)
+    knowledge_bases: tuple[KnowledgeBaseRef, ...] = ()
+    # Source numbers for knowledge-base files. A task numbers the files its
+    # searches find, in the order it first sees them, from ``source_base + 1``.
+    # Tasks run side by side, so each has its own block of numbers and no two
+    # tasks can give one number to different files (``source_block``).
+    source_base: int = 0
+    sources: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -203,6 +215,16 @@ def temporary_tool(tool: RunTool) -> Iterator[RunTool]:
 
 def dumps(value: dict[str, Any]) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def source_block(documents: int, position: int) -> int:
+    """The number before the first source number of the task at ``position``.
+
+    Selected documents are numbered 1 to ``documents`` and are the same for
+    every task. Above them each task has ``SOURCES_PER_TASK`` numbers of its
+    own, by its position in the approved plan (1 to 4).
+    """
+    return documents + (position - 1) * SOURCES_PER_TASK
 
 
 def refusal(code: str, message: str) -> str:
@@ -351,6 +373,136 @@ async def _read_note(call: ToolCall) -> ToolOutcome:
     )
 
 
+class SearchKnowledgeBaseInput(ToolInput):
+    query: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, min_length=2, max_length=200),
+        Field(
+            description=(
+                "Two to four distinctive words. A passage is found only when it "
+                "contains every word."
+            )
+        ),
+    ]
+
+
+def _numbered(state: LoopState, data: Any) -> tuple[list[dict[str, Any]], dict[str, int], int]:
+    """Give each passage its file's source number. Returns what would be kept.
+
+    Does not change ``state``. Called once to describe the step for its receipt
+    and once to build the result, so both hold the same numbers. A passage from
+    a file past the task's block of numbers is left out and counted.
+    """
+    assigned = dict(state.sources)
+    kept: list[dict[str, Any]] = []
+    left_out = 0
+    for passage in (data.get("passages") if isinstance(data, dict) else None) or ():
+        file_id = str(passage["file_id"])
+        if file_id not in assigned:
+            if len(assigned) >= SOURCES_PER_TASK:
+                left_out += 1
+                continue
+            assigned[file_id] = state.source_base + len(assigned) + 1
+        kept.append({**passage, "number": assigned[file_id]})
+    return kept, assigned, left_out
+
+
+async def _search_knowledge_base(call: ToolCall) -> ToolOutcome:
+    args = call.args
+    assert isinstance(args, SearchKnowledgeBaseInput)
+    state = call.state
+    if not state.knowledge_bases:
+        return ToolOutcome(
+            refusal("no_knowledge_base", "No knowledge base is available to this task."),
+            ok=False,
+            code="no_knowledge_base",
+        )
+    if state.read_chars < 256:
+        return ToolOutcome(
+            refusal(
+                "input_limit",
+                "This task has no room left to read more. Answer from what you have read.",
+            ),
+            ok=False,
+            code="input_limit",
+        )
+
+    def facts(data: Any) -> dict[str, Any]:
+        # Counts, numbers and the owner's own file names. Never the query's
+        # results as text. The numbers are how a later check resolves a
+        # quotation's marker to the file it names.
+        kept, _, left_out = _numbered(state, data)
+        sources: dict[int, dict[str, Any]] = {}
+        for passage in kept:
+            sources.setdefault(
+                passage["number"],
+                {
+                    "number": passage["number"],
+                    "file_id": str(passage["file_id"]),
+                    "document_id": str(passage["document_id"]),
+                    "filename": str(passage["file_name"])[:256],
+                },
+            )
+        return {
+            "passages": len(kept),
+            "sources": [sources[number] for number in sorted(sources)],
+            "listed": int(data["listed"]),
+            "searched": int(data["searched"]),
+            "failed": int(data["failed"]),
+            "withheld": int(data["withheld"]) + left_out,
+        }
+
+    result = await call.effects.search_knowledge(
+        call.claim,
+        effect_key=call.effect_key,
+        phase=call.phase,
+        knowledge_base_ids=tuple(k.knowledge_base_id for k in state.knowledge_bases),
+        query=args.query,
+        top_k=SEARCH_PASSAGES,
+        max_chars=min(state.read_chars, 65_536),
+        step=call.note(facts),
+        tool_quote=call.quote,
+    )
+    summary = facts(result.data)
+    kept, state.sources, _ = _numbered(state, result.data)
+    names = {str(k.knowledge_base_id): k.name for k in state.knowledge_bases}
+    body: dict[str, Any] = {
+        "query": args.query,
+        "results": [
+            {
+                "source": f"[{passage['number']}]",
+                "file": passage["file_name"],
+                "knowledge_base": names.get(str(passage["kb_id"]), ""),
+                "page": passage["page_start"],
+                "text": passage["content"],
+            }
+            for passage in kept
+        ],
+    }
+    notes = []
+    if not kept and summary["withheld"]:
+        notes.append("Passages matched this query, but none of them can be shown to this task.")
+    elif not kept:
+        notes.append(
+            "No passage contains every word of the query. Search again with fewer or "
+            "different words, or say that the knowledge bases did not answer this."
+        )
+    if summary["searched"] < summary["listed"] or summary["failed"]:
+        notes.append(
+            f"{summary['searched'] - summary['failed']} of {summary['listed']} knowledge bases "
+            "could be searched."
+        )
+    if summary["withheld"]:
+        notes.append(
+            f"{summary['withheld']} matching passages were left out: their files belong to "
+            "another matter, did not fit, or were past this task's limit of "
+            f"{SOURCES_PER_TASK} different files."
+        )
+    if notes:
+        body["note"] = " ".join(notes)
+    return ToolOutcome(dumps(body))
+
+
 READ_DOCUMENT = register_tool(
     RunTool(
         name="read_document",
@@ -388,5 +540,21 @@ READ_NOTE = register_tool(
         handler=_read_note,
         step_kind="note_read",
         pricing_version="local-workspace-v1",
+    )
+)
+SEARCH_KNOWLEDGE_BASE = register_tool(
+    RunTool(
+        name="search_knowledge_base",
+        label="Search the matter's knowledge bases",
+        description=(
+            "Search the knowledge bases attached to this matter by keyword. Returns up to "
+            f"{SEARCH_PASSAGES} passages, each with a source number to cite. A passage is "
+            "found only when it contains every word of the query."
+        ),
+        intent=ToolIntent.retrieve_chunks,
+        input_model=SearchKnowledgeBaseInput,
+        handler=_search_knowledge_base,
+        step_kind="knowledge_search",
+        pricing_version="local-knowledge-search-v1",
     )
 )

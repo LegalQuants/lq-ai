@@ -203,6 +203,7 @@ class InferenceBinding(Snapshot):
         return (
             params.get("model") == self.policy.model_key
             and params.get("max_tokens") == self.policy.max_output_tokens
+            and params.get("reasoning_effort") == self.policy.reasoning_effort
             and digest == self.messages_digest
             and bool(tools) is self.tools_offered
         )
@@ -269,11 +270,19 @@ class InferenceRoutes:
             rates = TokenRates(**parsed)
             anon = config["anonymization"]
             # Match the gateway's established privilege semantics: privileged
-            # requests deliberately skip rewriting. Otherwise an explicit
-            # anonymization requirement cannot be silently skipped by config.
-            expected = scope.anonymize and not scope.privileged
-            if expected and (anon.get("enabled") is not True or tier not in anon["apply_at_tiers"]):
+            # requests deliberately skip rewriting. ``wanted`` is what the run
+            # asks for; ``available`` is what the operator's gateway setting
+            # does at this route's tier.
+            wanted = scope.anonymize and not scope.privileged
+            available = anon.get("enabled") is True and tier in anon["apply_at_tiers"]
+            if wanted and not available and operator.require_anonymization:
+                # A policy that requires it cannot be silently skipped by config.
                 raise ValueError("required anonymization is unavailable")
+            # Where the policy does not require it, the run follows the
+            # operator's setting (ADR 0038 D5). Either way the response must
+            # report exactly this, or the call is refused as untrusted, and the
+            # gateway revision pinned at intake stops a setting changed mid-run.
+            expected = wanted and available
             estimated = input_bytes + 48 * len(messages)  # per-message plus completion framing
             routing = {
                 "provider": {
@@ -422,6 +431,10 @@ def bound_result(binding: InferenceBinding, response: Any, *, intent: str) -> To
             "tier": binding.routed_tier,
             "anonymization_applied": binding.anonymization_expected,
             "config_digest": binding.config_digest,
+            # What was sent, as a digest: the system message, the opening
+            # message, any tool turns and the offered schemas. The owner's
+            # read of how a run was set up rebuilds the request and compares.
+            "messages_digest": binding.messages_digest,
         },
     }
     if calls:

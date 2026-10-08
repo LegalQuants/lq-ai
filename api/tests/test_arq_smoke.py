@@ -56,7 +56,7 @@ def test_orchestration_cron_is_registered_only_when_enabled() -> None:
         settings = get_settings().model_copy(
             update={
                 "orchestration_chat_enabled": False,
-                "orchestration_documents_enabled": False,
+                "new_harness_enabled": False,
                 **switches,
             }
         )
@@ -66,7 +66,7 @@ def test_orchestration_cron_is_registered_only_when_enabled() -> None:
     assert "orchestration_watchdog" not in jobs()
     assert "orchestration_watchdog" in jobs(orchestration_chat_enabled=True)
     # ADR 0038: any enabled run profile needs the recovery sweep, not only the first.
-    assert "orchestration_watchdog" in jobs(orchestration_documents_enabled=True)
+    assert "orchestration_watchdog" in jobs(new_harness_enabled=True)
     assert {"autonomous_idle_watchdog", "autonomous_schedule_dispatcher"} <= jobs()
 
 

@@ -215,6 +215,8 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/chats/{chat_id}/run-documents",
         "/api/v1/chats/{chat_id}/runs",
         "/api/v1/admin/orchestration/profiles",
+        "/api/v1/autonomous/orchestration/{root_id}/sessions/{session_id}/trace",
+        "/api/v1/autonomous/orchestration/prompts/{family}/{name}",
         "/api/v1/skill-workspaces",
         "/api/v1/skill-workspaces/{workspace_id}",
         "/api/v1/skill-workspaces/{workspace_id}/files/{name}",
@@ -377,7 +379,9 @@ async def test_openapi_paths_match_sketch() -> None:
     # /api/v1/admin/community-skills/{slug}/install
     # ADR 0038 adds five paths (157 -> 162): closing an uncertain run, the chat
     # run intake, its two composer reads, and the admin profile-registry read.
-    assert len(actual) == 162
+    # ADR 0038 adds two more (162 -> 164): the owner's read of how one session
+    # of a run was set up, and the text of an engine prompt file.
+    assert len(actual) == 164
 
 
 @pytest.mark.unit

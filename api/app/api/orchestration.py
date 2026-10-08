@@ -7,6 +7,7 @@ reuses :func:`begin_run`.
 """
 
 import hashlib
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
@@ -16,17 +17,30 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
 from app.api.dependencies import ActiveUser, AdminUser, AutonomousEnabledUser
+from app.autonomous.orchestration.assembly import planning_message, planning_tools
 from app.autonomous.orchestration.chat_demo import PACKET, PROFILE, packet
-from app.autonomous.orchestration.contracts import Digest, DocumentRef, TaskText
+from app.autonomous.orchestration.contracts import (
+    Digest,
+    DocumentRef,
+    KnowledgeBaseRef,
+    TaskText,
+)
+from app.autonomous.orchestration.inference import conversation_identity, identity_limit
 from app.autonomous.orchestration.intake import (
     ensure_packet_document,
+    list_knowledge_bases,
     packet as profile_packet,
     prepare_intake,
+    searches_knowledge,
     select_documents,
+    thread_excerpt,
 )
+from app.autonomous.orchestration.planning import ThreadMessage
 from app.autonomous.orchestration.profiles import registered_profiles
+from app.autonomous.orchestration.prompts import load_prompt
 from app.autonomous.orchestration.service import DemonstrationService
 from app.autonomous.orchestration.tools import get_tool
+from app.autonomous.orchestration.trace import SessionTraceRead, read_session_trace
 from app.autonomous.orchestration.views import (
     ChatRunRead,
     ToolRead,
@@ -38,7 +52,7 @@ from app.autonomous.orchestration.views import (
 from app.autonomous.orchestration.workspace import WorkspaceContent
 from app.config import get_settings
 from app.db.session import get_session_factory
-from app.errors import Conflict, Forbidden, NotFound, ValidationError
+from app.errors import Conflict, Forbidden, LQAIError, NotFound, ValidationError
 from app.models.orchestration import OrchestrationRoot
 from app.models.project import Project
 from app.models.user import User
@@ -104,7 +118,7 @@ async def begin_run(
     *,
     user: User,
     request_id: UUID,
-    project_id: UUID,
+    project_id: UUID | None,
     goal: str,
     chat_id: UUID | None = None,
     file_ids: tuple[UUID, ...] = (),
@@ -113,8 +127,12 @@ async def begin_run(
 
     Shared by the chat intake and the retained stand-alone route, so both run
     the same checks: the profile's operator switch, an owned active project the
-    profile permits, a priced route, a funded allowance, and the store's
-    one-active-run rule. Planning is queued only after the root is durable.
+    profile permits (or none, for a profile that allows a chat outside any
+    matter), a priced route, a funded allowance, and the store's one-active-run
+    rule. Planning is queued only after the root is durable.
+
+    Outside a matter nothing sets a privilege flag or a tier floor, so the run
+    is not privileged and its floor is the profile's own (ADR 0038 D5).
     """
     profile = runtime.run_profile
     policy = runtime.require_policy()
@@ -123,34 +141,57 @@ async def begin_run(
         if previous is not None:
             # Owner-only read before comparing input or exposing any state.
             retained = await _chat_read(runtime, request_id, user.id)
+            # A packet profile's document is the installed packet, not a selection.
+            selects = profile.documents in ("selected", "optional")
             if (
                 retained.planning.goal != goal
                 or retained.planning.project_id != project_id
                 or retained.chat_id != chat_id
                 or retained.profile != profile.id
+                or (selects and [d.file_id for d in retained.planning.documents] != list(file_ids))
             ):
                 raise Conflict(message="Request identity was reused with different input")
             return retained
-        project = await db.scalar(
-            select(Project).where(
-                Project.id == project_id,
-                Project.owner_id == user.id,
-                Project.archived_at.is_(None),
+        privileged, tier = False, 5
+        if project_id is not None:
+            project = await db.scalar(
+                select(Project).where(
+                    Project.id == project_id,
+                    Project.owner_id == user.id,
+                    Project.archived_at.is_(None),
+                )
             )
-        )
-        if project is None:
-            raise NotFound(message="Project not found")
-        privileged, tier = project.privileged, project.minimum_inference_tier or 5
+            if project is None:
+                raise NotFound(message="Project not found")
+            privileged, tier = project.privileged, project.minimum_inference_tier or 5
+        elif profile.project_scope != "any":
+            raise Forbidden(message="This run profile starts from a chat inside a matter")
         documents: tuple[DocumentRef, ...] = ()
         attach: tuple[UUID, ...] = ()
-        if profile.documents == "selected":
-            if not file_ids:
+        if profile.documents == "packet":
+            if file_ids:
+                raise ValidationError(message="This profile reads a fixed document")
+        else:
+            if not file_ids and profile.documents == "selected":
                 raise ValidationError(message="Select at least one document for this run")
             documents, attach = await select_documents(
                 db, owner_id=user.id, project_id=project_id, file_ids=file_ids
             )
-        elif file_ids:
-            raise ValidationError(message="This profile reads a fixed document")
+        # Read once, here, and frozen in the intake: a replayed planning call
+        # must see exactly the thread the first attempt saw.
+        thread: tuple[ThreadMessage, ...] = (
+            await thread_excerpt(db, chat_id=chat_id)
+            if profile.reads_thread and chat_id is not None
+            else ()
+        )
+        # The matter's knowledge bases as they are now. The plan names them,
+        # and each search rechecks that one is still attached.
+        knowledge_bases: tuple[KnowledgeBaseRef, ...] = ()
+        if searches_knowledge(profile):
+            knowledge_bases, _ = await list_knowledge_bases(
+                db, owner_id=user.id, project_id=project_id
+            )
+    today = datetime.now(UTC).date().isoformat()
     routes = runtime.effects().inference
     assert routes is not None
     # Quote first, so a route that cannot be priced never files a document.
@@ -166,8 +207,10 @@ async def begin_run(
         goal=goal,
         privileged=privileged,
         minimum_inference_tier=tier,
+        today=today,
     )
     if profile.documents == "packet":
+        assert project_id is not None  # a packet profile is limited to one matter
         documents = (
             await ensure_packet_document(
                 runtime.store.sessions,
@@ -189,7 +232,32 @@ async def begin_run(
         privileged=privileged,
         minimum_inference_tier=tier,
         documents=documents,
+        thread=thread,
+        today=today,
+        knowledge_bases=knowledge_bases,
     )
+    if profile.prompted and policy.inference is not None:
+        # Refuse here, before anything is stored, a request whose planning call
+        # could not be sent. Found later it would leave a run in planning that
+        # nothing can advance, holding the owner's one active-run allowance.
+        # Counted as the route binding counts it: both messages and, where the
+        # plan is handed over by tool call, that tool's schema.
+        pinned = load_prompt(profile.root_prompt)
+        try:
+            _, size = conversation_identity(
+                [
+                    {"role": "system", "content": pinned.text},
+                    {"role": "user", "content": planning_message(profile, snapshot)},
+                ],
+                planning_tools(profile, snapshot) or None,
+                max_bytes=identity_limit(policy.inference),
+            )
+        except LQAIError:
+            size = policy.inference.max_input_bytes + 1
+        if size > policy.inference.max_input_bytes:
+            raise ValidationError(
+                message="The request and this chat's recent messages are too long for one planning call"
+            )
     await runtime.store.start_planning(
         snapshot,
         actor_id=user.id,
@@ -309,9 +377,59 @@ class RejectionRequest(BaseModel):
     revision: Annotated[int, Field(strict=True, ge=1)]
 
 
+class PromptRead(BaseModel):
+    """One of the engine's own versioned prompt files (ADR 0038 D3)."""
+
+    name: str
+    family: str
+    role: str
+    version: int
+    digest: Digest
+    text: str
+
+
+@router.get("/prompts/{family}/{name}", response_model=PromptRead)
+async def prompt(family: str, name: str, user: ActiveUser) -> PromptRead:
+    """The text of one engine prompt, for example ``new_harness/orchestrator.v1``.
+
+    Any signed-in user may read it, before sending anything: a prompt is open
+    work product, like a skill (PRD §1.3). A released file is never edited, so
+    a name and its digest always give the same text.
+    """
+    try:
+        loaded = load_prompt(f"{family}/{name}")
+    except Forbidden:
+        raise NotFound(message="Prompt not found") from None
+    return PromptRead(
+        name=loaded.pin.name,
+        family=loaded.family,
+        role=loaded.role,
+        version=loaded.version,
+        digest=loaded.pin.digest,
+        text=loaded.text,
+    )
+
+
 @router.get("/{root_id}/tree", response_model=TreeRead)
 async def tree(root_id: UUID, user: ActiveUser, runtime: Service) -> TreeRead:
     return await read_tree(runtime.store.sessions, root_id, user.id)
+
+
+@router.get("/{root_id}/sessions/{session_id}/trace", response_model=SessionTraceRead)
+async def session_trace(
+    root_id: UUID, session_id: UUID, user: ActiveUser, runtime: Service
+) -> SessionTraceRead:
+    """How one session of a run was set up, and what its model wrote back.
+
+    Owner-only. ``session_id`` is the run's root for the orchestrator, or one
+    task's dispatch id. Gives the pinned system message, the opening message,
+    the tools offered, and each turn's text and tool calls. See
+    :mod:`app.autonomous.orchestration.trace` for what is rebuilt, how it is
+    checked against what was sent, and what is not kept.
+    """
+    return await read_session_trace(
+        runtime.store.sessions, runtime.skills.current(), root_id, user.id, session_id
+    )
 
 
 @router.post("/{root_id}/approve", response_model=TreeRead)
@@ -368,11 +486,19 @@ class ProfileState(BaseModel):
     switch: str
     # Whether the chat composer offers this profile, as the New harness model.
     composer: bool = False
-    documents: Literal["packet", "selected"]
-    project_scope: Literal["dedicated", "owned"]
+    documents: Literal["packet", "selected", "optional"]
+    project_scope: Literal["dedicated", "owned", "any"]
     evidence: Literal["unverified", "citations"]
+    # The installed skills that instruct each role, or the engine prompt files
+    # that do (ADR 0038 D3). A profile sets one pair and leaves the other empty.
     root_skill: str
     child_skill: str
+    root_prompt: str = ""
+    child_prompt: str = ""
+    # "required": refused unless the gateway pseudonymizes on the route.
+    # "operator": follows the gateway's setting for the routed tier.
+    pseudonymization: Literal["required", "operator"] = "required"
+    reasoning_effort: str | None = None
     provider: str | None = None
     model: str | None = None
     budget_usd: Decimal | None = None
@@ -418,6 +544,10 @@ async def list_profiles(admin: AdminUser, runtime: Service) -> ProfileRegistryRe
                 evidence=profile.evidence,
                 root_skill=profile.root_skill,
                 child_skill=profile.child_skill,
+                root_prompt=profile.root_prompt,
+                child_prompt=profile.child_prompt,
+                pseudonymization=profile.pseudonymization,
+                reasoning_effort=route.reasoning_effort,
                 provider=route.provider or None,
                 model=route.model or None,
                 budget_usd=route.budget_usd,

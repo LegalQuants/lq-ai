@@ -6,15 +6,16 @@ from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError as SchemaError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.autonomous.orchestration.contracts import PreparedPlan
 from app.autonomous.orchestration.evidence import quotation_counts
-from app.autonomous.orchestration.outcomes import DemonstrationResult, TopicOutcome
+from app.autonomous.orchestration.outcomes import DemonstrationResult, DirectAnswer, TopicOutcome
 from app.autonomous.orchestration.planning import PlanningSnapshot
 from app.autonomous.orchestration.profiles import get_profile
+from app.autonomous.orchestration.sourcing import run_sources
 from app.autonomous.orchestration.tools import get_tool
 from app.autonomous.orchestration.workspace import (
     WorkspaceContent,
@@ -119,7 +120,8 @@ async def read_tree(
         if root is None or root.profile == "demonstration":
             raise NotFound(message="Orchestration root not found")
         if root.current_revision is None:
-            raise Conflict(message="The model is still preparing a plan; use the chat run view")
+            # Still planning, ended before a plan, or answered without one.
+            raise Conflict(message="This run has no plan; use the chat run view")
         row = await db.get(PlanRow, (root_id, root.current_revision))
         assert row is not None
         plan = PreparedPlan.model_validate_json(json.dumps(row.snapshot))
@@ -313,10 +315,33 @@ class EvidenceRead(BaseModel):
     unmarked: int = 0
 
 
+class SourceRead(BaseModel):
+    """A knowledge-base file one of the run's searches found, with its source number.
+
+    The number is what a quotation's ``(Source: [N])`` marker carries. Numbers
+    above the selected documents belong to these files. ``session_id`` is the
+    task whose search found it.
+    """
+
+    number: int
+    file_id: UUID
+    filename: str
+    session_id: UUID
+
+
 class ChatRunRead(BaseModel):
     root_id: UUID
     status: str
     stop_reason: str | None
+    # True when the orchestrator answered by itself (ADR 0038 D1): the run is
+    # completed with no plan, no tasks and no approval, and ``tree`` is null.
+    # Nothing was read or searched for that answer.
+    answered_directly: bool = False
+    # That answer, as delivered. Null for every other run: a plan's combined
+    # answer is ``tree.result.summary``.
+    direct_answer: str | None = None
+    # Knowledge-base files the run's searches found, by source number.
+    sources: list[SourceRead] = []
     # The registry profile, and its display facts while it is still registered.
     profile: str = "model_demo_v1"
     profile_title: str | None = None
@@ -367,11 +392,14 @@ async def read_chat_run(
             else None
         )
         snapshot = PlanningSnapshot.model_validate_json(json.dumps(root.planning_snapshot))
+        found = await run_sources(db, root_id)
         # What the checks could not see in the delivered answer, counted from the
-        # answer itself against the numbers of the selected documents.
+        # answer itself against the run's source numbers: the selected documents
+        # and the files its searches found.
         quoted = quotation_counts(
             (bound.content or "") if bound is not None else "",
-            {document.number for document in snapshot.documents},
+            {document.number for document in snapshot.documents}
+            | {source.number for source in found},
         )
         account = await db.get(Account, root_id)
         assert account is not None
@@ -383,16 +411,51 @@ async def read_chat_run(
         ]
         revision, status, reason = root.current_revision, root.status, root.stop_reason
         spent, reserved = account.spent_usd, account.reserved_usd
+        answer: str | None = None
+        if revision is None and status == "completed":
+            session = await db.get(AutonomousSession, root_id)
+            try:
+                answer = DirectAnswer.model_validate_json(
+                    json.dumps(session.result if session else None)
+                ).summary
+            except SchemaError:
+                answer = None
     tree = await read_tree(sessions, root_id, actor_id) if revision else None
     profile = get_profile(profile_id)
+    # Completed with no plan: the orchestrator's own answer.
+    direct = revision is None and status == "completed"
     return ChatRunRead(
         root_id=root_id,
         status=tree.status if tree else status,
         stop_reason=tree.stop_reason if tree else reason,
+        answered_directly=direct,
+        direct_answer=answer,
+        sources=[
+            SourceRead(
+                number=source.number,
+                file_id=source.file_id,
+                filename=source.filename,
+                session_id=source.session_id,
+            )
+            for source in found
+        ],
         profile=profile_id,
         profile_title=profile.title if profile else None,
         reads=profile.reads if profile else None,
-        evidence=profile.evidence if profile else "unverified",
+        # Per run, not per profile: quotations can be checked only against
+        # sources the run had, which are documents it selected and files its
+        # searches found. A run with neither is unverified, and says so, and so
+        # is an answer the orchestrator gave by itself, having read nothing.
+        # A recorded gate means the checks ran, whatever became of the profile.
+        evidence="citations"
+        if gate is not None
+        or (
+            profile is not None
+            and profile.evidence == "citations"
+            and not direct
+            and (snapshot.documents or found)
+        )
+        else "unverified",
         evidence_result=EvidenceRead(
             gate_status=gate.gate_status,
             checked=gate.total_assertions,

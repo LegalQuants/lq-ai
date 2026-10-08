@@ -13,11 +13,10 @@ import hashlib
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import Field, model_validator
-from sqlalchemy import select
+from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.autonomous.enums import ToolIntent
@@ -32,15 +31,15 @@ from app.autonomous.orchestration.contracts import (
     Snapshot,
 )
 from app.autonomous.orchestration.planning import PlanningSnapshot
+from app.autonomous.orchestration.prompts import load_prompt
+from app.autonomous.orchestration.reading import read_locks, readable_documents
 from app.autonomous.orchestration.tools import get_tool
 from app.errors import Forbidden
 from app.models.document import Document
-from app.models.file import File
-from app.models.project import ProjectFile
 from app.research.registry import SOURCE_REGISTRY
 from app.schemas.autonomous import Phase
 from app.skills.loader import LoaderError, _load_one
-from app.skills.registry import MutableSkillRegistry, SkillRecord
+from app.skills.registry import MutableSkillRegistry, SkillRecord, SkillRegistry
 
 _RESEARCH_INTENTS = frozenset(
     {
@@ -96,6 +95,9 @@ class SkillPolicy(Snapshot):
     source_types: tuple[ShortText, ...]
 
 
+ReasoningEffort = Literal["none", "minimal", "low", "medium", "high"]
+
+
 class InferencePolicy(Snapshot):
     """Explicit direct route and input/output limits, included in approval."""
 
@@ -105,12 +107,27 @@ class InferencePolicy(Snapshot):
     # what a child has read on each turn, so its ceiling is above one packet.
     max_input_bytes: Annotated[int, Field(ge=1, le=1_048_576)]
     max_output_tokens: Annotated[int, Field(ge=1, le=8192)]
+    # How much hidden reasoning to ask the model for, where the route's adapter
+    # can set it. Hidden reasoning counts against ``max_output_tokens``, so on a
+    # reasoning model this decides how much of that limit is left for the
+    # answer. None sends nothing and leaves the model's own default.
+    reasoning_effort: ReasoningEffort | None = None
 
     @model_validator(mode="after")
     def direct_route(self) -> InferencePolicy:
         if "/" in self.provider or len(self.model_key) > 256:
             raise ValueError("inference requires a bounded direct provider/model route")
         return self
+
+    @model_serializer(mode="wrap")
+    def serialize_policy(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        value = handler(self)
+        if self.reasoning_effort is None:
+            # This dump is part of the operator policy's version and of every
+            # effect's identity. A route that sets no effort keeps both as they
+            # were before the field existed.
+            value.pop("reasoning_effort", None)
+        return value
 
     @property
     def model_key(self) -> str:
@@ -216,6 +233,42 @@ def skill_pin(record: SkillRecord) -> SkillPin:
     return load_pinned_skill(record).pin
 
 
+@dataclass(frozen=True)
+class PinnedInstructions:
+    """A session's system message as it is now, with the pin its bytes produce."""
+
+    pin: SkillPin
+    instructions: str
+    version: str
+    # A skill may declare its own inference-tier floor. An engine prompt has none.
+    minimum_inference_tier: int = 5
+
+
+def load_instructions(
+    registry: SkillRegistry, kind: Literal["skill", "prompt"], name: str
+) -> PinnedInstructions:
+    """Read the current text for a pin's name, from the place its kind names.
+
+    A prompt name is read only from the engine's prompt files and a skill name
+    only from the installed skills, so neither can stand in for the other. The
+    caller compares the returned pin with the one it holds: a different digest
+    means the text changed after it was approved.
+    """
+    if kind == "prompt":
+        prompt = load_prompt(name)
+        return PinnedInstructions(prompt.pin, prompt.text, str(prompt.version))
+    record = registry.get(name)
+    if record is None:
+        raise Forbidden(message="Pinned skill is unavailable")
+    loaded = load_pinned_skill(record)
+    return PinnedInstructions(
+        loaded.pin,
+        loaded.instructions,
+        record.frontmatter.lq_ai.version or "",
+        record.frontmatter.lq_ai.minimum_inference_tier or 5,
+    )
+
+
 class CurrentPolicy:
     """Store policy callback using current project attachments and local catalogs.
 
@@ -244,25 +297,27 @@ class CurrentPolicy:
         selections: dict[tuple[str, str], SkillPolicy] = {
             (s.pin.name, s.profile): s for s in policy.skills
         }
-        pins: dict[str, SkillPin] = {}
+        pins: dict[tuple[str, str], PinnedInstructions] = {}
         for scope, profile in (
             (plan.root, "orchestrator"),
             *((child.execution, child.profile) for child in plan.children),
         ):
             selected = selections.get((scope.skill.name, profile))
-            record = registry.get(scope.skill.name)
-            if selected is None or record is None:
+            if selected is None or (
+                scope.skill.kind == "skill" and registry.get(scope.skill.name) is None
+            ):
                 raise Forbidden(message="Skill is not enabled for the execution profile")
-            if record.name not in pins:
-                pins[record.name] = skill_pin(record)
-            if scope.skill != selected.pin or scope.skill != pins[record.name]:
+            # A pin's kind decides where its name is read from. Equality below
+            # includes the kind, so a prompt pin never matches a skill pin.
+            key = (scope.skill.kind, scope.skill.name)
+            if key not in pins:
+                pins[key] = load_instructions(registry, scope.skill.kind, scope.skill.name)
+            current = pins[key]
+            if scope.skill != selected.pin or scope.skill != current.pin:
                 raise Forbidden(message="Approved skill artifact has changed")
             if (
                 scope.minimum_inference_tier
-                > min(
-                    policy.minimum_inference_tier,
-                    record.frontmatter.lq_ai.minimum_inference_tier or 5,
-                )
+                > min(policy.minimum_inference_tier, current.minimum_inference_tier)
                 or scope.maximum_egress_tier > policy.maximum_egress_tier
                 or (policy.require_anonymization and not scope.anonymize)
                 or not policy.grants.contains(scope.grants)
@@ -311,20 +366,16 @@ class CurrentPolicy:
 
         selected_ids = set(plan.root.resources.document_ids)
         if selected_ids:
+            # One rule for a matter and for a run outside any matter; see
+            # ``reading``. The same query guards each read at the boundary.
             rows = await db.scalars(
-                select(Document.id)
-                .join(File, File.id == Document.file_id)
-                .join(ProjectFile, ProjectFile.file_id == File.id)
-                .where(
-                    Document.id.in_(selected_ids),
-                    File.owner_id == plan.owner_id,
-                    File.deleted_at.is_(None),
-                    ProjectFile.project_id == plan.project_id,
+                readable_documents(
+                    owner_id=plan.owner_id,
+                    project_id=plan.project_id,
+                    document_ids=selected_ids,
                 )
                 .order_by(Document.id)
-                .with_for_update(read=True, of=(Document, File, ProjectFile))
+                .with_for_update(read=True, of=read_locks(plan.project_id))
             )
             if set(rows) != selected_ids:
-                raise Forbidden(
-                    message="Selected documents are no longer available in this project"
-                )
+                raise Forbidden(message="Selected documents are no longer available to this run")

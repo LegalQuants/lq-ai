@@ -73,10 +73,10 @@ async def test_a_run_is_one_turn_in_the_thread_and_delivers_into_its_message(
     assert fictional["planning_notice"].startswith("Sending asks the model for a plan")
     assert "until you approve the plan" in fictional["planning_notice"]
     # The composer is told which profile it offers. The fictional one is not it.
-    assert offered["composer_profile"] == "contract_qa_documents_v1"
+    assert offered["composer_profile"] == "new_harness_v1"
     assert offered["active_run"] is None
     # Enabling the fictional profile never enables the real-document one.
-    documents = by_id(offered, "contract_qa_documents_v1")
+    documents = by_id(offered, "new_harness_v1")
     assert documents["available"] is False and documents["reason"] == "operator_disabled"
     assert not api.gateway.requests
 
@@ -253,7 +253,7 @@ async def test_each_refusal_writes_no_messages_and_makes_no_model_call(
 
     # A profile that is not in the registry, and one the operator has not enabled.
     await start_in_chat(api, chat_id, profile="made_up_profile", expect=403)
-    await start_in_chat(api, chat_id, profile="contract_qa_documents_v1", expect=403)
+    await start_in_chat(api, chat_id, profile="new_harness_v1", expect=403)
 
     # The fictional profile reads a fixed document; a selection is refused.
     await start_in_chat(api, chat_id, file_ids=[str(uuid4())], expect=400)

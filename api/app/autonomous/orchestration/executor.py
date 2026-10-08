@@ -24,16 +24,26 @@ from langsmith import tracing_context
 from pydantic import ValidationError as SchemaError
 
 from app.autonomous.enums import ToolIntent
+from app.autonomous.orchestration import assembly
 from app.autonomous.orchestration.chat_demo import FICTIONAL_PROFILE, contract_qa_outcome
 from app.autonomous.orchestration.checkpoints import CheckpointRuntime
 from app.autonomous.orchestration.contracts import PreparedPlan
 from app.autonomous.orchestration.effects import GuardedEffects
 from app.autonomous.orchestration.intake import UnfundedPlan, packet, prepare_model_plan
 from app.autonomous.orchestration.loop import run_child_loop
-from app.autonomous.orchestration.outcomes import TopicOutcome, topic_coverage
+from app.autonomous.orchestration.outcomes import (
+    PlanCarriesPlaceholders,
+    PlanWrittenAsText,
+    TopicOutcome,
+    arguments_carry_placeholder,
+    cut_to_limit,
+    direct_answer,
+    general_outcome,
+    topic_coverage,
+)
 from app.autonomous.orchestration.planning import PlanningSnapshot
 from app.autonomous.orchestration.policy import OperatorPolicy
-from app.autonomous.orchestration.profiles import RunProfile
+from app.autonomous.orchestration.profiles import RunProfile, run_terms
 from app.autonomous.orchestration.store import OrchestrationStore, WorkerClaim
 from app.autonomous.orchestration.tools import StepNote
 from app.autonomous.orchestration.workspace import WorkspaceContent, WorkspaceRef
@@ -75,8 +85,18 @@ def child_graph(
 ) -> Any:
     profile = profile or FICTIONAL_PROFILE
 
-    def answer(content: str, finish_reason: str) -> TopicOutcome:
-        return contract_qa_outcome(content, finish_reason, limit=profile.limits.child_answer_chars)
+    async def answer_limit() -> int:
+        # The run's own terms, frozen at intake, not the profile as it is now.
+        view = await store.execution_view(claim)
+        return run_terms(profile, view.planning).task_answer_chars
+
+    def wrapped(limit: int) -> Callable[[str, str], TopicOutcome]:
+        def answer(content: str, finish_reason: str) -> TopicOutcome:
+            # A prompt-pinned profile takes any task; its answer is plain Markdown.
+            wrap = general_outcome if profile.prompted else contract_qa_outcome
+            return wrap(content, finish_reason, limit=limit)
+
+        return answer
 
     async def intake(state: RunState) -> dict[str, Any]:
         await store.phase(claim, Phase.intake)
@@ -116,6 +136,7 @@ def child_graph(
             raise Conflict(message="Working notes are unavailable")
         view = await store.execution_view(claim)
         task = next(c for c in view.plan.children if c.dispatch_id == claim.session_id)
+        answer = wrapped(await answer_limit())
         if model_demo and task.turn_limit:
             # ADR 0038 D4: native tool calls within the plan's granted set.
             outcome = await run_child_loop(
@@ -269,7 +290,6 @@ def root_graph(
     profile: RunProfile | None = None,
 ) -> Any:
     profile = profile or FICTIONAL_PROFILE
-    limit = profile.limits.combined_answer_chars
 
     async def delegate(state: RunState) -> dict[str, Any]:
         await store.phase(claim, Phase.analysis)
@@ -285,6 +305,8 @@ def root_graph(
 
     async def synthesize(state: RunState) -> dict[str, Any]:
         await store.phase(claim, Phase.drafting)
+        # The run's own terms, frozen at intake, not the profile as it is now.
+        limit = run_terms(profile, (await store.execution_view(claim)).planning).answer_chars
         topics = await store.collect_topics(claim)
         collected = []
         for topic in topics:
@@ -326,7 +348,7 @@ def root_graph(
                 "operation": "synthesize_answers" if model_demo else "sample_synthesis",
                 "topics": [topic.model_dump(mode="json") for topic in topics],
             }
-            if model_demo and profile.evidence == "citations":
+            if model_demo and profile.evidence == "citations" and not profile.prompted:
                 inputs["citation_contract"] = (
                     "Keep every quotation exactly as the child wrote it, with its marker, in "
                     'the form "quoted words" (Source: [N]). Do not alter, merge or add '
@@ -340,6 +362,14 @@ def root_graph(
                 step=StepNote(kind="synthesis"),
             )
             summary = result.data.get("content")
+            if (
+                profile.prompted
+                and isinstance(summary, str)
+                and result.data.get("finish_reason") == "stop"
+            ):
+                # A complete answer that runs past the limit is kept up to it
+                # and marked as cut, rather than discarded with the tasks' work.
+                summary = cut_to_limit(summary.strip(), limit)
             if model_demo and (
                 result.data.get("finish_reason") != "stop"
                 or not isinstance(summary, str)
@@ -475,7 +505,11 @@ class OrchestrationExecutor:
         profile = self.profile
         if profile is None or policy is None:
             raise Forbidden(message="Model planning is disabled")
-        inputs: dict[str, Any] = {"operation": "propose_plan"}
+        # For a prompt-pinned profile the opening message is assembled from the
+        # intake itself, and the step's name is all this caller supplies.
+        inputs: dict[str, Any] = {"operation": assembly.PLAN}
+        if profile.prompted:
+            return await self._settle_plan(claim, snapshot, profile, policy, inputs)
         if profile.documents == "packet":
             inputs["document"] = packet(self.effects.skills, profile)
             inputs["redaction_handling"] = (
@@ -488,26 +522,70 @@ class OrchestrationExecutor:
             inputs["documents"] = [
                 {"number": d.number, "filename": d.filename} for d in snapshot.documents
             ]
-        if snapshot.contract_version == 2:
+        if snapshot.contract_version >= 2:
             inputs["max_tasks"] = snapshot.max_children
+        return await self._settle_plan(claim, snapshot, profile, policy, inputs)
+
+    async def _settle_plan(
+        self,
+        claim: WorkerClaim,
+        snapshot: PlanningSnapshot,
+        profile: RunProfile,
+        policy: OperatorPolicy,
+        inputs: dict[str, Any],
+    ) -> Literal["completed"]:
+        """Make the one planning call and promote, deliver or fail its result.
+
+        Where the profile hands its plan over by tool call (ADR 0038 D1), the
+        call is offered ``propose_plan`` and nothing else. Exactly one call to
+        it is a plan, read from the call's arguments. A complete reply with no
+        call is the orchestrator's own answer: it is delivered, and the run
+        ends with no plan and no approval. Anything else fails the plan. No
+        tool result is ever sent back, so planning stays one model call.
+        """
+        terms = run_terms(profile, snapshot)
+        offered = assembly.planning_tools(profile, snapshot)
         result = await self.effects.infer(
             claim,
             effect_key="chat:plan:v1",
             phase=Phase.analysis,
             intent=ToolIntent.plan,
             inputs=inputs,
+            tools=offered or None,
             step=StepNote(kind="planning"),
         )
-        plan = None
+        plan = answer = None
         failure = "invalid_proposal"
         try:
-            content = result.data.get("content")
-            if not isinstance(content, str) or result.data.get("finish_reason") != "stop":
-                raise ValueError("incomplete proposal")
-            plan = prepare_model_plan(profile, snapshot, content, policy)
+            content, finish = result.data.get("content"), result.data.get("finish_reason")
+            calls = result.data.get("tool_calls") or []
+            if offered and calls:
+                # More than one call, or a call to anything else, is not a plan.
+                if len(calls) != 1 or calls[0].get("name") != assembly.PLAN:
+                    raise ValueError("not one call to the plan tool")
+                arguments = calls[0].get("arguments") or ""
+                accounting = result.data.get("accounting") or {}
+                # Anything but a recorded False counts as pseudonymized, so a
+                # result without the flag fails closed.
+                pseudonymized = accounting.get("anonymization_applied") is not False
+                if pseudonymized and arguments_carry_placeholder(arguments):
+                    # The gateway restores placeholders in a reply's text, not
+                    # in a tool call's arguments, and no later call could.
+                    raise PlanCarriesPlaceholders("the plan carries a placeholder")
+                plan = prepare_model_plan(profile, snapshot, arguments, policy, arguments=True)
+            elif offered:
+                answer = direct_answer(content, finish, limit=terms.answer_chars)
+            else:
+                if not isinstance(content, str) or finish != "stop":
+                    raise ValueError("incomplete proposal")
+                plan = prepare_model_plan(profile, snapshot, content, policy)
         except UnfundedPlan:
             failure = "unfunded_plan"
+        except PlanWrittenAsText:
+            failure = "plan_not_handed_over"
+        except PlanCarriesPlaceholders:
+            failure = "plan_has_placeholders"
         except (ValidationError, SchemaError, ValueError):
             pass
-        await self.store.finish_planning(claim, plan, failure=failure)
+        await self.store.finish_planning(claim, plan, failure=failure, answer=answer)
         return "completed"

@@ -640,7 +640,7 @@ async def test_a_job_for_a_profile_the_operator_switched_off_says_disabled_in_it
     # find that this run's own profile is off.
     with monkeypatch.context() as switched:
         switched.setattr(api.runtime.settings, "orchestration_chat_enabled", False)
-        switched.setattr(api.runtime.settings, "orchestration_documents_enabled", True)
+        switched.setattr(api.runtime.settings, "new_harness_enabled", True)
         assert await orchestration_session_job(api.ctx, root, root) == {"status": "disabled"}
 
         (job_span,) = span_exporter.get_finished_spans()

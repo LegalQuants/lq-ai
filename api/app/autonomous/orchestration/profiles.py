@@ -1,8 +1,9 @@
 """The run profile registry: the closed set an operator can enable (ADR 0038 D3).
 
-A profile names pinned skills by role, the tools granted in each phase, the
-resources a run may read, its limits and its model route. Supporting another
-skill in runs means adding an entry here, not engine or interface code.
+A profile names what instructs each role (pinned skills, or the engine's own
+versioned prompt files), the tools granted in each phase, the resources a run
+may read, its limits and its model route. Supporting another skill in runs
+means adding an entry here, not engine or interface code.
 
 The registry lives in code. Each entry reads its operator switch and pinned
 route from settings, so an operator sees and controls every profile
@@ -21,12 +22,15 @@ from uuid import UUID
 
 from app.autonomous.enums import ToolIntent
 from app.autonomous.orchestration.contracts import PhaseGrants, PhaseTools
+from app.autonomous.orchestration.planning import PlanningSnapshot, RunTerms
 from app.autonomous.orchestration.policy import (
     InferencePolicy,
     OperatorPolicy,
+    ReasoningEffort,
     SkillPolicy,
     skill_pin,
 )
+from app.autonomous.orchestration.prompts import load_prompt
 from app.autonomous.orchestration.tools import get_tool
 from app.config import Settings
 from app.errors import Forbidden, ValidationError
@@ -62,6 +66,8 @@ class RouteSettings:
     minimum_tier: int
     timeout_seconds: int
     dedicated_project_id: str = ""
+    # None sends no reasoning effort and leaves the model's own default.
+    reasoning_effort: ReasoningEffort | None = None
 
 
 @dataclass(frozen=True)
@@ -75,6 +81,7 @@ class RunLimits:
 
     max_input_bytes: int = 98304
     max_output_tokens: int = 8192
+    # A task's answer is stored whole as one finding (``outcomes.Finding``).
     child_answer_chars: int = 4096
     combined_answer_chars: int = 16384
     deadline_seconds: int = 3600
@@ -86,7 +93,7 @@ class RunLimits:
         if (
             not 1 <= self.max_input_bytes <= 1_048_576
             or not 1 <= self.max_output_tokens <= 8192
-            or not 1 <= self.child_answer_chars <= 4096
+            or not 1 <= self.child_answer_chars <= 16384
             or not 1 <= self.combined_answer_chars <= 16384
             or not 60 <= self.deadline_seconds <= 86400
             or not 0 <= self.child_turn_limit <= 16
@@ -102,14 +109,18 @@ class RunProfile:
     title: str
     summary: str
     reads: str
+    # The installed skills that instruct each role, or "" for a profile that
+    # pins prompt files instead (``root_prompt``, ``child_prompt``).
     root_skill: str
     child_skill: str
     # "packet": the installed fictional agreement, filed in the dedicated demo
-    # project. "selected": documents the owner picks from the chat's project.
-    documents: Literal["packet", "selected"]
+    # project. "selected": one to eight documents the owner picks.
+    # "optional": none to eight; a run with none reads no document.
+    documents: Literal["packet", "selected", "optional"]
     # "dedicated": only the operator's configured demo project. "owned": any
-    # active project the owner owns.
-    project_scope: Literal["dedicated", "owned"]
+    # active project the owner owns. "any": such a project, or no project at
+    # all, for a chat that is in no matter.
+    project_scope: Literal["dedicated", "owned", "any"]
     child_tools: PhaseTools
     limits: RunLimits
     evidence: Literal["unverified", "citations"]
@@ -120,6 +131,22 @@ class RunProfile:
     # profile that is not offered there stays startable through the API where
     # its switch is on; the fictional fixture is the case.
     composer: bool = False
+    # The engine's own versioned prompt files for each role (ADR 0038 D3), as
+    # ``<family>/<role>.v<N>``. Set both, and leave the two skills empty.
+    root_prompt: str = ""
+    child_prompt: str = ""
+    # Whether the planning call is shown the chat's recent messages and the
+    # date of the request. Such a run's intake is planning snapshot version 3.
+    reads_thread: bool = False
+    # "required": a run is refused unless the gateway pseudonymizes on its
+    # route. "operator": a run follows the operator's gateway setting for the
+    # routed tier, and every call's receipt records what was applied.
+    pseudonymization: Literal["required", "operator"] = "required"
+    # How the orchestrator hands over its plan. "text": a JSON object in its
+    # reply. "tool": one call to ``propose_plan``; a reply with no call is then
+    # the orchestrator's own answer and the run ends without a plan (ADR 0038
+    # D1). Only a prompt-pinned profile may plan by tool.
+    planning: Literal["text", "tool"] = "text"
     planning_notice: str = (
         "Sending asks the model for a plan: one model call within the displayed total cap. "
         "The planning call receives your request only, not earlier messages. "
@@ -129,6 +156,29 @@ class RunProfile:
     @property
     def calls_per_child(self) -> int:
         return self.limits.child_turn_limit + 1 if self.child_tools.names() else 1
+
+    @property
+    def prompted(self) -> bool:
+        """Whether the roles are instructed by prompt files rather than skills."""
+        return bool(self.root_prompt)
+
+    def terms(self) -> RunTerms:
+        """The limits a run of this profile is given when its request is accepted."""
+        return RunTerms(
+            task_turns=self.limits.child_turn_limit,
+            task_answer_chars=self.limits.child_answer_chars,
+            answer_chars=self.limits.combined_answer_chars,
+            read_chars=self.limits.document_read_chars,
+            planning=self.planning,
+        )
+
+    def instructions(
+        self, role: Literal["orchestrator", "research"]
+    ) -> tuple[Literal["skill", "prompt"], str]:
+        """What instructs one role: where its name resolves, and the name."""
+        if self.prompted:
+            return "prompt", self.root_prompt if role == "orchestrator" else self.child_prompt
+        return "skill", self.root_skill if role == "orchestrator" else self.child_skill
 
     def grants(self) -> PhaseGrants:
         """Engine intents plus the intents of every granted tool, per phase."""
@@ -161,6 +211,21 @@ def register_profile(profile: RunProfile) -> RunProfile:
             raise ValidationError(message="Run profile grants an unregistered tool")
     if bool(profile.child_tools.names()) != bool(profile.limits.child_turn_limit):
         raise ValidationError(message="A tool grant and a turn limit are set together")
+    skills = (bool(profile.root_skill), bool(profile.child_skill))
+    prompts = (bool(profile.root_prompt), bool(profile.child_prompt))
+    if skills[0] != skills[1] or prompts[0] != prompts[1] or skills[0] == prompts[0]:
+        raise ValidationError(
+            message="A run profile pins skills for both roles or prompt files for both, not a mix"
+        )
+    if profile.project_scope == "any" and profile.documents == "packet":
+        raise ValidationError(message="The fictional packet is filed in a dedicated matter")
+    if profile.planning == "tool" and not (profile.reads_thread and prompts[0]):
+        # The plan tool and the direct answer are recorded in the run's terms,
+        # which only a version 3 intake carries, and the tool is offered only
+        # to a role that a prompt file instructs.
+        raise ValidationError(
+            message="A profile that plans by tool call is prompt-pinned and records its terms"
+        )
     # The composer shows one model and asks for no profile choice. Which of two
     # offered profiles a request would run is a decision this registry does not
     # hold, so a second is refused instead of being picked by sort order.
@@ -168,6 +233,19 @@ def register_profile(profile: RunProfile) -> RunProfile:
         raise ValidationError(message="Only one run profile is offered in the composer")
     _PROFILES[profile.id] = profile
     return profile
+
+
+def run_terms(profile: RunProfile, snapshot: PlanningSnapshot | None) -> RunTerms:
+    """The terms one retained run is held to.
+
+    A version 3 intake carries them, frozen when its request was accepted. An
+    intake without them is an earlier version, or a version 3 intake recorded
+    before terms were frozen: it reads its profile's present limits, and its
+    plan is a JSON object in the reply, which is all there was then.
+    """
+    if snapshot is not None and snapshot.terms is not None:
+        return snapshot.terms
+    return profile.terms().model_copy(update={"planning": "text"})
 
 
 def composer_profile() -> RunProfile | None:
@@ -226,17 +304,18 @@ def operator_policy(
         raise Forbidden(message="Configure shared child capacity")
     grants = profile.grants()
     selections = []
-    roles: tuple[tuple[str, Literal["orchestrator", "research"]], ...] = (
-        (profile.root_skill, "orchestrator"),
-        (profile.child_skill, "research"),
-    )
-    for name, role in roles:
-        record = skills.current().get(name)
-        if record is None or record.source != "built-in":
-            raise Forbidden(message="Required installed run skill is unavailable")
-        selections.append(
-            SkillPolicy(pin=skill_pin(record), profile=role, grants=grants, source_types=())
-        )
+    roles: tuple[Literal["orchestrator", "research"], ...] = ("orchestrator", "research")
+    for role in roles:
+        kind, name = profile.instructions(role)
+        if kind == "prompt":
+            # An engine prompt file, never looked up among installed skills.
+            pin = load_prompt(name).pin
+        else:
+            record = skills.current().get(name)
+            if record is None or record.source != "built-in":
+                raise Forbidden(message="Required installed run skill is unavailable")
+            pin = skill_pin(record)
+        selections.append(SkillPolicy(pin=pin, profile=role, grants=grants, source_types=()))
     try:
         inference = InferencePolicy(
             provider=route.provider,
@@ -245,6 +324,7 @@ def operator_policy(
             # Reasoning models count hidden reasoning toward the same ceiling.
             # Keep room for the bounded visible plan/answer without retries.
             max_output_tokens=profile.limits.max_output_tokens,
+            reasoning_effort=route.reasoning_effort,
         )
     except ValueError:
         raise Forbidden(message="Configure the run profile's provider and model") from None
@@ -256,11 +336,17 @@ def operator_policy(
         grants=grants,
         minimum_inference_tier=route.minimum_tier,
         maximum_egress_tier=0,
-        require_anonymization=True,
+        # False lets a run follow the operator's gateway setting for its routed
+        # tier instead of being refused where that setting applies none.
+        require_anonymization=profile.pseudonymization == "required",
         deployment_children=settings.orchestration_deployment_children,
         inference=inference,
-        # Left unset for a profile without tools, so a policy that predates the
-        # registry keeps the version its retained approvals are bound to.
+        # Left unset for a profile without tools, so that such a policy hashes as
+        # it did before tools existed. No registered profile is without tools:
+        # the fictional profile gained them after 0.8.0, so its policy version
+        # is not the one a 0.8.0 run was approved under, and a 0.8.0 run still
+        # in flight at upgrade stops at its next admission. Settled runs are
+        # read without the policy and are unaffected.
         tools=profile.child_tools if tooled else None,
         turn_limit=profile.limits.child_turn_limit if tooled else None,
     )

@@ -7,8 +7,12 @@ closing and inspection stay on the owner-only routes in
 * ``GET  /chats/{chat_id}/run-profiles`` — each registry profile's availability
   for this chat, with the reason when it is unavailable, and the owner's active
   run if one is blocking a new start.
-* ``GET  /chats/{chat_id}/run-documents`` — the files a run could read here.
+* ``GET  /chats/{chat_id}/run-documents`` — the files a run could read here, and
+  the knowledge bases its tasks could search.
 * ``POST /chats/{chat_id}/runs`` — accept one planning request (202).
+
+A chat need not be in a matter. A profile says whether it may start from a chat
+outside any matter; New harness may, the fictional fixture may not.
 """
 
 from __future__ import annotations
@@ -28,7 +32,9 @@ from app.autonomous.orchestration.intake import (
     MAX_SELECTED_DOCUMENTS,
     child_allowance,
     list_documents,
-    prepare_intake,
+    list_knowledge_bases,
+    quote_intake,
+    searches_knowledge,
 )
 from app.autonomous.orchestration.profiles import (
     RunProfile,
@@ -53,21 +59,49 @@ Reason = Literal[
     "operator_disabled",
     "not_configured",
     "autonomous_opt_in_required",
+    "chat_archived",
     "project_required",
+    "project_unavailable",
     "project_not_permitted",
     "route_unavailable",
     "active_run",
 ]
 
-_REASON_TEXT: dict[str, str] = {
-    "operator_disabled": "The operator has not enabled this profile.",
-    "not_configured": "The operator has enabled this profile but its configuration is incomplete.",
-    "autonomous_opt_in_required": "Turn on Autonomous in your settings to start a run.",
-    "project_required": "Runs start from a chat inside a matter. This chat has no matter.",
-    "project_not_permitted": "The operator has limited this profile to a dedicated demo matter.",
-    "route_unavailable": "The profile's model route, protection or pricing is unavailable.",
-    "active_run": "Another run of yours is still active. One run can be active at a time.",
-}
+
+def _reason_text(reason: str, profile: RunProfile) -> str:
+    """Why a profile cannot be used here, in words the composer can show as they are."""
+    return {
+        "operator_disabled": f"The operator has not enabled {profile.title}.",
+        "not_configured": (
+            f"The operator has enabled {profile.title} but its configuration is incomplete."
+        ),
+        "autonomous_opt_in_required": "Turn on Autonomous in your settings to start a run.",
+        "chat_archived": "This chat is archived.",
+        "project_required": (
+            f"{profile.title} starts from a chat inside a matter. This chat has no matter."
+        ),
+        "project_unavailable": "This chat's matter is archived or unavailable.",
+        "project_not_permitted": (
+            f"The operator has limited {profile.title} to a dedicated demo matter."
+        ),
+        "route_unavailable": "The model route, protection or pricing is unavailable.",
+        "active_run": "Another run of yours is still active. One run can be active at a time.",
+    }[reason]
+
+
+class InstructionsRef(BaseModel):
+    """What instructs one role of a profile: an installed skill or an engine prompt file.
+
+    For a prompt, ``name`` is ``<family>/<role>.v<N>`` and its text is at
+    ``GET /autonomous/orchestration/prompts/{family}/{role}.v{N}``, so it can
+    be read before anything is sent.
+    """
+
+    role: Literal["orchestrator", "sub-agent"]
+    kind: Literal["skill", "prompt"]
+    name: str
+    version: str | None = None
+    digest: str | None = None
 
 
 class ProfileAvailability(BaseModel):
@@ -77,7 +111,7 @@ class ProfileAvailability(BaseModel):
     title: str
     summary: str
     reads: str
-    documents: Literal["packet", "selected"]
+    documents: Literal["packet", "selected", "optional"]
     evidence: Literal["unverified", "citations"]
     available: bool
     reason: Reason | None = None
@@ -92,7 +126,23 @@ class ProfileAvailability(BaseModel):
     attempt_timeout_seconds: int | None = None
     child_turn_limit: int
     max_documents: int | None = None
+    # 1 where at least one document must be selected; 0 where none is needed.
+    min_documents: int = 0
     tools: list[ToolRead]
+    instructions: list[InstructionsRef] = []
+    # The inference tier the pinned route resolves to for this chat, and whether
+    # calls on it are pseudonymized by the gateway. Known once the route is
+    # priced; null otherwise. For a profile that follows the operator's setting
+    # this is that setting's effect at the routed tier. It is about message
+    # text: the gateway does not rewrite a tool result, so document text a task
+    # reads goes to the model as written, and it does not rewrite tool-call
+    # arguments.
+    routed_tier: int | None = None
+    pseudonymized: bool | None = None
+    reasoning_effort: str | None = None
+    # True where the orchestrator may answer a request by itself: the reply is
+    # then delivered with no plan and no approval, having read nothing.
+    answers_directly: bool = False
 
 
 class ActiveRun(BaseModel):
@@ -125,15 +175,34 @@ class RunDocument(BaseModel):
     characters: int
     attached_to_project: bool
     selectable: bool
-    # unsupported_type | not_ingested | ingestion_failed | no_text
+    # unsupported_type | not_ingested | ingestion_failed | no_text | in_a_matter |
+    # in_another_matter
     reason: str | None = None
+
+
+class RunKnowledgeBase(BaseModel):
+    knowledge_base_id: uuid.UUID
+    name: str
 
 
 class RunDocumentsRead(BaseModel):
     chat_id: uuid.UUID
-    project_id: uuid.UUID
+    # Null for a chat outside any matter: only named candidates are listed.
+    project_id: uuid.UUID | None
     max_documents: int
     documents: list[RunDocument]
+    # The knowledge bases a task of a run from this chat could search: the
+    # owner's own, not archived, attached to the chat's matter. Empty for a
+    # chat outside any matter, and where the offered profile searches none.
+    # They are not picked: a run lists all of them, and its plan names them.
+    knowledge_bases: list[RunKnowledgeBase] = []
+    # How many more are attached than one run lists. Those are not searched.
+    knowledge_bases_omitted: int = 0
+    # The documents the last run in this chat read that can still be read, in
+    # that run's order. A follow-up starts from them, so it does not lose its
+    # documents when the page is reloaded. A suggestion only: nothing is
+    # selected until the owner sends the request with these ids.
+    suggested_file_ids: list[uuid.UUID] = []
 
 
 class ChatRunRequest(BaseModel):
@@ -144,10 +213,11 @@ class ChatRunRequest(BaseModel):
     profile: Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]{0,63}$")]
     goal: TaskText
     file_ids: Annotated[list[uuid.UUID], Field(max_length=MAX_SELECTED_DOCUMENTS)] = []
-    """Documents the run may read, in the owner's order. Required by a profile
-    that reads selected documents and refused by one that reads a fixed one.
-    A file not yet attached to the chat's matter is attached when the run is
-    accepted, with an audit row (ADR 0038 D5)."""
+    """Documents the run may read, in the owner's order. A profile says whether
+    it needs at least one, takes none to eight, or reads a fixed one and
+    refuses any. In a matter, a file not yet attached to the matter is attached
+    when the run is accepted, with an audit row (ADR 0038 D5). Outside a matter
+    nothing is attached and a file that is filed in a matter is refused."""
 
 
 async def _owned_chat(runtime: DemonstrationService, chat_id: uuid.UUID, user: User) -> Chat:
@@ -186,6 +256,9 @@ async def _availability(
     project: Project | None,
     active: ActiveRun | None,
 ) -> ProfileAvailability:
+    roles: tuple[
+        tuple[Literal["orchestrator", "sub-agent"], Literal["orchestrator", "research"]], ...
+    ] = (("orchestrator", "orchestrator"), ("sub-agent", "research"))
     base: dict[str, Any] = {
         "profile": profile.id,
         "title": profile.title,
@@ -194,14 +267,24 @@ async def _availability(
         "documents": profile.documents,
         "evidence": profile.evidence,
         "planning_notice": profile.planning_notice,
+        "answers_directly": profile.planning == "tool",
         "child_turn_limit": profile.limits.child_turn_limit,
-        "max_documents": MAX_SELECTED_DOCUMENTS if profile.documents == "selected" else None,
+        "max_documents": MAX_SELECTED_DOCUMENTS if profile.documents != "packet" else None,
+        "min_documents": 1 if profile.documents == "selected" else 0,
         "tools": _tools(profile),
+        "instructions": [
+            InstructionsRef(role=shown, kind=kind, name=name)
+            for shown, role in roles
+            for kind, name in (profile.instructions(role),)
+        ],
     }
 
     def unavailable(reason: Reason, text: str | None = None) -> ProfileAvailability:
         return ProfileAvailability(
-            **base, available=False, reason=reason, reason_text=text or _REASON_TEXT[reason]
+            **base,
+            available=False,
+            reason=reason,
+            reason_text=text or _reason_text(reason, profile),
         )
 
     model = runtime.for_profile(profile.id)
@@ -214,14 +297,22 @@ async def _availability(
         return unavailable("operator_disabled")
     if not user.autonomous_enabled:
         return unavailable("autonomous_opt_in_required")
-    if chat.archived_at is not None or project is None:
+    if chat.archived_at is not None:
+        return unavailable("chat_archived")
+    if project is None and chat.project_id is not None:
+        return unavailable("project_unavailable")
+    if project is None and profile.project_scope != "any":
         return unavailable("project_required")
-    if policy.demo_project_id is not None and policy.demo_project_id != project.id:
+    if (
+        policy.demo_project_id is not None
+        and project is not None
+        and policy.demo_project_id != project.id
+    ):
         return unavailable("project_not_permitted")
     routes = model.effects().inference
     assert routes is not None and policy.inference is not None
     try:
-        quote = await prepare_intake(
+        quote, binding = await quote_intake(
             profile,
             settings=model.settings,
             skills=model.skills,
@@ -229,13 +320,18 @@ async def _availability(
             routes=routes,
             root_id=uuid.uuid4(),
             owner_id=user.id,
-            project_id=project.id,
+            project_id=project.id if project is not None else None,
             goal="Readiness quote",
-            privileged=project.privileged,
-            minimum_inference_tier=project.minimum_inference_tier or 5,
+            # Outside a matter nothing sets a privilege flag or a tier floor.
+            privileged=project.privileged if project is not None else False,
+            minimum_inference_tier=(project.minimum_inference_tier or 5)
+            if project is not None
+            else 5,
         )
     except LQAIError as exc:
         return unavailable("route_unavailable", exc.message)
+    pins = {selection.profile: selection.pin for selection in policy.skills}
+    versions = {"orchestrator": quote.root_skill_version, "research": quote.child_skill_version}
     priced: dict[str, Any] = {
         "model": policy.inference.model_key,
         "budget_usd": quote.budget_usd,
@@ -244,16 +340,42 @@ async def _availability(
         "child_allowance_usd": child_allowance(profile, quote),
         "max_children": quote.max_children,
         "attempt_timeout_seconds": quote.attempt_timeout_seconds,
+        "routed_tier": binding.routed_tier,
+        "pseudonymized": binding.anonymization_expected,
+        "reasoning_effort": policy.inference.reasoning_effort,
+        "instructions": [
+            InstructionsRef(
+                role=shown,
+                kind=pins[role].kind,
+                name=pins[role].name,
+                version=versions[role],
+                digest=pins[role].digest,
+            )
+            for shown, role in roles
+        ],
     }
     if active is not None:
         return ProfileAvailability(
-            **base,
-            **priced,
+            **{**base, **priced},
             available=False,
             reason="active_run",
-            reason_text=_REASON_TEXT["active_run"],
+            reason_text=_reason_text("active_run", profile),
         )
-    return ProfileAvailability(**base, **priced, available=True)
+    return ProfileAvailability(**{**base, **priced}, available=True)
+
+
+async def _chat_project(db: Any, chat: Chat, user: User) -> Project | None:
+    """The chat's matter while the owner still owns it and it is not archived."""
+    if chat.project_id is None:
+        return None
+    project: Project | None = await db.scalar(
+        select(Project).where(
+            Project.id == chat.project_id,
+            Project.owner_id == user.id,
+            Project.archived_at.is_(None),
+        )
+    )
+    return project
 
 
 @router.get(
@@ -265,23 +387,15 @@ async def run_profiles(chat_id: uuid.UUID, user: ActiveUser, runtime: Service) -
     """Each registry profile's availability here, and why when it is not.
 
     Reports the allowances a run would be quoted before any planning is paid
-    for. Makes no model call. ``active_run`` names the owner's run that is
-    holding the single active-run allowance, in any chat, so the composer can
-    say which one is blocking and offer to close it when it is uncertain.
+    for, the inference tier its pinned route resolves to, and whether message
+    text on that route is pseudonymized. Makes no model call. ``active_run`` names the
+    owner's run that is holding the single active-run allowance, in any chat,
+    so the composer can say which one is blocking and offer to close it when it
+    is uncertain.
     """
     chat = await _owned_chat(runtime, chat_id, user)
     async with runtime.store.sessions() as db:
-        project = (
-            await db.scalar(
-                select(Project).where(
-                    Project.id == chat.project_id,
-                    Project.owner_id == user.id,
-                    Project.archived_at.is_(None),
-                )
-            )
-            if chat.project_id is not None
-            else None
-        )
+        project = await _chat_project(db, chat, user)
         row = (
             await db.execute(
                 select(OrchestrationRoot, Message.chat_id, Message.id, Chat.title)
@@ -340,31 +454,53 @@ async def run_documents(
         ),
     ] = None,
 ) -> RunDocumentsRead:
-    """The matter's files, plus named candidates, with whether each can be read.
+    """The files a run from this chat could read, with whether each can be.
+
+    Also the knowledge bases a task could search: those attached to the chat's
+    matter, where the composer's profile grants the search. None outside a
+    matter.
+
+    In a matter: the matter's files, plus named candidates. Selecting a
+    candidate attaches it to the matter when the run is accepted. Outside a
+    matter: named candidates only, and one that is filed in a matter is listed
+    as unreadable here. The documents the last run in this chat read are always
+    listed, and are returned as the suggested selection while they can still be
+    read.
 
     A file that cannot be read is listed with its reason and is not selectable;
-    it is never silently omitted (ADR 0038 D5). Selecting a candidate attaches
-    it to the matter when the run is accepted.
+    it is never silently omitted (ADR 0038 D5).
     """
     chat = await _owned_chat(runtime, chat_id, user)
-    if chat.project_id is None:
-        raise Forbidden(message=_REASON_TEXT["project_required"])
     async with runtime.store.sessions() as db:
-        project = await db.scalar(
-            select(Project.id).where(
-                Project.id == chat.project_id,
-                Project.owner_id == user.id,
-                Project.archived_at.is_(None),
-            )
-        )
-        if project is None:
+        project = await _chat_project(db, chat, user)
+        if chat.project_id is not None and project is None:
             raise NotFound(message="Project not found")
+        previous = await db.scalar(
+            select(OrchestrationRoot.planning_snapshot)
+            .join(Message, Message.autonomous_session_id == OrchestrationRoot.session_id)
+            .where(Message.chat_id == chat.id, OrchestrationRoot.owner_id == user.id)
+            .order_by(OrchestrationRoot.created_at.desc())
+            .limit(1)
+        )
+        earlier: list[uuid.UUID] = []
+        for entry in (previous or {}).get("documents") or ():
+            try:
+                earlier.append(uuid.UUID(str(entry["file_id"])))
+            except (KeyError, TypeError, ValueError):
+                continue
         listed = await list_documents(
             db,
             owner_id=user.id,
             project_id=chat.project_id,
-            candidate_file_ids=tuple(file_id or ()),
+            candidate_file_ids=tuple(dict.fromkeys([*(file_id or ()), *earlier])),
         )
+        offered = composer_profile()
+        searched, omitted = (
+            await list_knowledge_bases(db, owner_id=user.id, project_id=chat.project_id)
+            if offered is not None and searches_knowledge(offered)
+            else ((), 0)
+        )
+    selectable = {d.file_id for d in listed if d.selectable}
     return RunDocumentsRead(
         chat_id=chat.id,
         project_id=chat.project_id,
@@ -382,6 +518,11 @@ async def run_documents(
             )
             for d in listed
         ],
+        suggested_file_ids=[f for f in earlier if f in selectable][:MAX_SELECTED_DOCUMENTS],
+        knowledge_bases=[
+            RunKnowledgeBase(knowledge_base_id=k.knowledge_base_id, name=k.name) for k in searched
+        ],
+        knowledge_bases_omitted=omitted,
     )
 
 
@@ -402,13 +543,15 @@ async def start_run(
     request authorizes one planning call within the disclosed allowance. Child
     work needs the owner's approval of the exact plan on the existing route.
 
-    The planning call receives ``goal`` only, never earlier messages.
+    What the planning call receives is the profile's to say and is in its
+    ``planning_notice``: the request only, or the request with the chat's
+    recent messages. What it received is kept with the run.
+
+    The chat may be outside any matter where the profile allows it.
     """
     chat = await _owned_chat(runtime, chat_id, user)
     if chat.archived_at is not None:
         raise NotFound(f"Chat {chat_id} not found.", details={"chat_id": str(chat_id)})
-    if chat.project_id is None:
-        raise Forbidden(message=_REASON_TEXT["project_required"])
     return await begin_run(
         runtime.for_profile(body.profile),
         user=user,

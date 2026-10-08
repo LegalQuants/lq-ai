@@ -1472,6 +1472,52 @@ components:
       - logs_hint
       title: BootstrapStatus
       type: object
+    CallRead:
+      description: What one model call was opened with.
+      properties:
+        check:
+          enum:
+          - matches
+          - differs
+          - not_recorded
+          - not_rebuilt
+          title: Check
+          type: string
+        effect_key:
+          title: Effect Key
+          type: string
+        opening:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Opening
+        sent:
+          title: Sent
+          type: boolean
+        step:
+          enum:
+          - plan
+          - task
+          - combine
+          title: Step
+          type: string
+        system:
+          $ref: '#/components/schemas/InstructionsRead'
+        tools:
+          default: []
+          items:
+            additionalProperties: true
+            type: object
+          title: Tools
+          type: array
+      required:
+      - step
+      - effect_key
+      - sent
+      - system
+      - check
+      title: CallRead
+      type: object
     CellResult:
       description: 'One cell in the tabular grid.
 
@@ -1769,12 +1815,21 @@ components:
       type: object
     ChatRunRead:
       properties:
+        answered_directly:
+          default: false
+          title: Answered Directly
+          type: boolean
         chat_id:
           anyOf:
           - format: uuid
             type: string
           - type: 'null'
           title: Chat Id
+        direct_answer:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Direct Answer
         effects:
           items:
             $ref: '#/components/schemas/EffectRead'
@@ -1826,6 +1881,12 @@ components:
           format: uuid
           title: Root Id
           type: string
+        sources:
+          default: []
+          items:
+            $ref: '#/components/schemas/SourceRead'
+          title: Sources
+          type: array
         spent_usd:
           pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           title: Spent Usd
@@ -3166,6 +3227,10 @@ components:
       - snippet
       title: FindMatch
       type: object
+    Finding:
+      maxLength: 16384
+      minLength: 1
+      type: string
     HTTPValidationError:
       properties:
         detail:
@@ -3245,6 +3310,79 @@ components:
       - parse_failed
       - total_documents
       title: IngestHealthResponse
+      type: object
+    InstructionsRead:
+      description: A session's pinned system message.
+      properties:
+        digest:
+          title: Digest
+          type: string
+        kind:
+          enum:
+          - skill
+          - prompt
+          title: Kind
+          type: string
+        name:
+          title: Name
+          type: string
+        text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Text
+        version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Version
+      required:
+      - kind
+      - name
+      - digest
+      title: InstructionsRead
+      type: object
+    InstructionsRef:
+      description: 'What instructs one role of a profile: an installed skill or an
+        engine prompt file.
+
+
+        For a prompt, ``name`` is ``<family>/<role>.v<N>`` and its text is at
+
+        ``GET /autonomous/orchestration/prompts/{family}/{role}.v{N}``, so it can
+
+        be read before anything is sent.'
+      properties:
+        digest:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Digest
+        kind:
+          enum:
+          - skill
+          - prompt
+          title: Kind
+          type: string
+        name:
+          title: Name
+          type: string
+        role:
+          enum:
+          - orchestrator
+          - sub-agent
+          title: Role
+          type: string
+        version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Version
+      required:
+      - role
+      - kind
+      - name
+      title: InstructionsRef
       type: object
     IntakeBridgesList:
       description: Section-split response for the admin intake-bridges list.
@@ -3463,6 +3601,29 @@ components:
       required:
       - name
       title: KnowledgeBaseCreateRequest
+      type: object
+    KnowledgeBaseRef:
+      additionalProperties: false
+      description: 'One knowledge base a run''s tasks may search, as the plan lists
+        it (ADR 0038 D5).
+
+
+        The name is display data from the owner''s own record, taken when the
+
+        request was accepted. Neither field grants a search: the boundary rechecks
+
+        ownership, archival and attachment to the run''s matter at every call.'
+      properties:
+        knowledge_base_id:
+          format: uuid
+          title: Knowledge Base Id
+          type: string
+        name:
+          $ref: '#/components/schemas/ShortText'
+      required:
+      - knowledge_base_id
+      - name
+      title: KnowledgeBaseRef
       type: object
     KnowledgeBaseResponse:
       description: '``KnowledgeBase`` schema from backend-openapi.yaml.
@@ -4778,6 +4939,10 @@ components:
     ProfileAvailability:
       description: One registry profile, as the composer shows it for this chat.
       properties:
+        answers_directly:
+          default: false
+          title: Answers Directly
+          type: boolean
         attempt_timeout_seconds:
           anyOf:
           - type: integer
@@ -4805,6 +4970,7 @@ components:
           enum:
           - packet
           - selected
+          - optional
           title: Documents
           type: string
         evidence:
@@ -4813,6 +4979,12 @@ components:
           - citations
           title: Evidence
           type: string
+        instructions:
+          default: []
+          items:
+            $ref: '#/components/schemas/InstructionsRef'
+          title: Instructions
+          type: array
         max_children:
           anyOf:
           - type: integer
@@ -4823,6 +4995,10 @@ components:
           - type: integer
           - type: 'null'
           title: Max Documents
+        min_documents:
+          default: 0
+          title: Min Documents
+          type: integer
         model:
           anyOf:
           - type: string
@@ -4840,6 +5016,11 @@ components:
         profile:
           title: Profile
           type: string
+        pseudonymized:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Pseudonymized
         reads:
           title: Reads
           type: string
@@ -4849,7 +5030,9 @@ components:
             - operator_disabled
             - not_configured
             - autonomous_opt_in_required
+            - chat_archived
             - project_required
+            - project_unavailable
             - project_not_permitted
             - route_unavailable
             - active_run
@@ -4861,12 +5044,22 @@ components:
           - type: string
           - type: 'null'
           title: Reason Text
+        reasoning_effort:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reasoning Effort
         root_allowance_usd:
           anyOf:
           - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
             type: string
           - type: 'null'
           title: Root Allowance Usd
+        routed_tier:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Routed Tier
         summary:
           title: Summary
           type: string
@@ -4922,6 +5115,10 @@ components:
             type: string
           - type: 'null'
           title: Budget Usd
+        child_prompt:
+          default: ''
+          title: Child Prompt
+          type: string
         child_skill:
           title: Child Skill
           type: string
@@ -4933,6 +5130,7 @@ components:
           enum:
           - packet
           - selected
+          - optional
           title: Documents
           type: string
         enabled:
@@ -4970,6 +5168,7 @@ components:
           enum:
           - dedicated
           - owned
+          - any
           title: Project Scope
           type: string
         provider:
@@ -4977,8 +5176,24 @@ components:
           - type: string
           - type: 'null'
           title: Provider
+        pseudonymization:
+          default: required
+          enum:
+          - required
+          - operator
+          title: Pseudonymization
+          type: string
         reads:
           title: Reads
+          type: string
+        reasoning_effort:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reasoning Effort
+        root_prompt:
+          default: ''
+          title: Root Prompt
           type: string
         root_skill:
           title: Root Skill
@@ -5365,6 +5580,35 @@ components:
       - project_id
       title: PromotePrecedentRequest
       type: object
+    PromptRead:
+      description: One of the engine's own versioned prompt files (ADR 0038 D3).
+      properties:
+        digest:
+          $ref: '#/components/schemas/Digest'
+        family:
+          title: Family
+          type: string
+        name:
+          title: Name
+          type: string
+        role:
+          title: Role
+          type: string
+        text:
+          title: Text
+          type: string
+        version:
+          title: Version
+          type: integer
+      required:
+      - name
+      - family
+      - role
+      - version
+      - digest
+      - text
+      title: PromptRead
+      type: object
     ProposalState:
       description: 'Lifecycle state of a project-context promotion proposal.
 
@@ -5509,32 +5753,7 @@ components:
       title: ResearchTask
       type: object
     ResourceScope:
-      additionalProperties: false
-      description: 'Selected document IDs and configured source names, including empty
-        scope.
-
-
-        The resolver must check adapter-specific operations at call time; a source
-
-        name never grants every operation offered by that provider.'
-      properties:
-        document_ids:
-          items:
-            format: uuid
-            type: string
-          maxItems: 128
-          title: Document Ids
-          type: array
-        source_names:
-          items:
-            $ref: '#/components/schemas/ShortText'
-          maxItems: 32
-          title: Source Names
-          type: array
-      required:
-      - document_ids
-      - source_names
-      title: ResourceScope
+      additionalProperties: true
       type: object
     RunDocument:
       properties:
@@ -5586,19 +5805,52 @@ components:
             $ref: '#/components/schemas/RunDocument'
           title: Documents
           type: array
+        knowledge_bases:
+          default: []
+          items:
+            $ref: '#/components/schemas/RunKnowledgeBase'
+          title: Knowledge Bases
+          type: array
+        knowledge_bases_omitted:
+          default: 0
+          title: Knowledge Bases Omitted
+          type: integer
         max_documents:
           title: Max Documents
           type: integer
         project_id:
-          format: uuid
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
           title: Project Id
-          type: string
+        suggested_file_ids:
+          default: []
+          items:
+            format: uuid
+            type: string
+          title: Suggested File Ids
+          type: array
       required:
       - chat_id
       - project_id
       - max_documents
       - documents
       title: RunDocumentsRead
+      type: object
+    RunKnowledgeBase:
+      properties:
+        knowledge_base_id:
+          format: uuid
+          title: Knowledge Base Id
+          type: string
+        name:
+          title: Name
+          type: string
+      required:
+      - knowledge_base_id
+      - name
+      title: RunKnowledgeBase
       type: object
     RunProfilesRead:
       properties:
@@ -5696,6 +5948,66 @@ components:
       - updated_at
       - effects
       title: RunRead
+      type: object
+    RunTerms:
+      additionalProperties: false
+      description: 'The limits a run states to its models and is held to, frozen at
+        intake.
+
+
+        Taken from the profile when the request is accepted. The run''s messages
+
+        state these numbers and the engine enforces the same ones, so a later
+
+        change to the profile changes neither for a retained run.
+
+
+        ``planning`` is how the orchestrator hands over its plan. ``text`` is a
+
+        JSON object in the reply. ``tool`` is one call to ``propose_plan``; under
+
+        it a reply with no call is the orchestrator''s own answer, and no plan
+
+        exists (ADR 0038 D1).
+
+
+        The number of tool calls one turn may make is a constant of the engine
+
+        (``inference.MAX_TOOL_CALLS``), not a profile''s choice, and is not here.'
+      properties:
+        answer_chars:
+          maximum: 16384.0
+          minimum: 1.0
+          title: Answer Chars
+          type: integer
+        planning:
+          default: text
+          enum:
+          - text
+          - tool
+          title: Planning
+          type: string
+        read_chars:
+          maximum: 65536.0
+          minimum: 256.0
+          title: Read Chars
+          type: integer
+        task_answer_chars:
+          maximum: 16384.0
+          minimum: 1.0
+          title: Task Answer Chars
+          type: integer
+        task_turns:
+          maximum: 16.0
+          minimum: 0.0
+          title: Task Turns
+          type: integer
+      required:
+      - task_turns
+      - task_answer_chars
+      - answer_chars
+      - read_chars
+      title: RunTerms
       type: object
     SavedContent:
       properties:
@@ -6068,6 +6380,48 @@ components:
       - failed
       title: SessionStatus
       type: string
+    SessionTraceRead:
+      properties:
+        calls:
+          items:
+            $ref: '#/components/schemas/CallRead'
+          title: Calls
+          type: array
+        note:
+          default: The opening messages are rebuilt from this run's records by the
+            code that sent them. They are what the application sent to the gateway,
+            before any pseudonymization there. A later turn's full request is not
+            kept; its reply and tool calls are. Document text returned by a read,
+            and passages returned by a search, are not shown here.
+          title: Note
+          type: string
+        role:
+          enum:
+          - orchestrator
+          - sub-agent
+          title: Role
+          type: string
+        root_id:
+          format: uuid
+          title: Root Id
+          type: string
+        session_id:
+          format: uuid
+          title: Session Id
+          type: string
+        turns:
+          items:
+            $ref: '#/components/schemas/TurnRead'
+          title: Turns
+          type: array
+      required:
+      - root_id
+      - session_id
+      - role
+      - calls
+      - turns
+      title: SessionTraceRead
+      type: object
     ShortText:
       maxLength: 256
       minLength: 1
@@ -6228,16 +6582,7 @@ components:
       title: SkillInputs
       type: object
     SkillPin:
-      additionalProperties: false
-      properties:
-        digest:
-          $ref: '#/components/schemas/Digest'
-        name:
-          $ref: '#/components/schemas/ShortText'
-      required:
-      - name
-      - digest
-      title: SkillPin
+      additionalProperties: true
       type: object
     SlackWorkspaceCreate:
       additionalProperties: false
@@ -6361,6 +6706,38 @@ components:
       - installer_slack_user_id
       - installed_at
       title: SlackWorkspaceSummary
+      type: object
+    SourceRead:
+      description: 'A knowledge-base file one of the run''s searches found, with its
+        source number.
+
+
+        The number is what a quotation''s ``(Source: [N])`` marker carries. Numbers
+
+        above the selected documents belong to these files. ``session_id`` is the
+
+        task whose search found it.'
+      properties:
+        file_id:
+          format: uuid
+          title: File Id
+          type: string
+        filename:
+          title: Filename
+          type: string
+        number:
+          title: Number
+          type: integer
+        session_id:
+          format: uuid
+          title: Session Id
+          type: string
+      required:
+      - number
+      - file_id
+      - filename
+      - session_id
+      title: SourceRead
       type: object
     SourcesResponse:
       description: Envelope for GET /api/v1/research/sources.
@@ -7453,6 +7830,38 @@ components:
       - installed_at
       title: TeamsTenantSummary
       type: object
+    ThreadMessage:
+      additionalProperties: false
+      description: 'One earlier message of the chat, as the planning call is shown
+        it.
+
+
+        Frozen at intake: an effect''s identity covers its input, so a replay must
+
+        read exactly what the first attempt read. ``cut`` says the text was
+
+        shortened to fit, so the model and the owner can both see that it was.'
+      properties:
+        content:
+          maxLength: 6000
+          minLength: 1
+          title: Content
+          type: string
+        cut:
+          default: false
+          title: Cut
+          type: boolean
+        role:
+          enum:
+          - user
+          - assistant
+          title: Role
+          type: string
+      required:
+      - role
+      - content
+      title: ThreadMessage
+      type: object
     TierConfigResponse:
       description: '``GET /inference/tier-config`` response — the operator''s tier
         policy.'
@@ -7574,6 +7983,23 @@ components:
       - refresh_token
       title: TokenResponse
       type: object
+    ToolCallRead:
+      properties:
+        arguments:
+          title: Arguments
+          type: string
+        id:
+          title: Id
+          type: string
+        name:
+          title: Name
+          type: string
+      required:
+      - id
+      - name
+      - arguments
+      title: ToolCallRead
+      type: object
     ToolIntent:
       description: 'The closed set of tool intents the autonomous executor can invoke.
 
@@ -7681,7 +8107,7 @@ components:
           title: Failure Code
         findings:
           items:
-            $ref: '#/components/schemas/TaskText'
+            $ref: '#/components/schemas/Finding'
           maxItems: 8
           title: Findings
           type: array
@@ -7787,6 +8213,37 @@ components:
       - manual
       title: TriggerKind
       type: string
+    TurnRead:
+      description: 'One model reply. ``text`` is model-written: display it as text
+        only.'
+      properties:
+        effect_key:
+          title: Effect Key
+          type: string
+        finish_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Finish Reason
+        status:
+          title: Status
+          type: string
+        text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Text
+        tool_calls:
+          default: []
+          items:
+            $ref: '#/components/schemas/ToolCallRead'
+          title: Tool Calls
+          type: array
+      required:
+      - effect_key
+      - status
+      title: TurnRead
+      type: object
     UsageResponse:
       properties:
         group_by:
@@ -10923,6 +11380,48 @@ paths:
       summary: Halt Chat
       tags:
       - autonomous
+  /api/v1/autonomous/orchestration/prompts/{family}/{name}:
+    get:
+      description: 'The text of one engine prompt, for example ``new_harness/orchestrator.v1``.
+
+
+        Any signed-in user may read it, before sending anything: a prompt is open
+
+        work product, like a skill (PRD §1.3). A released file is never edited, so
+
+        a name and its digest always give the same text.'
+      operationId: prompt_api_v1_autonomous_orchestration_prompts__family___name__get
+      parameters:
+      - in: path
+        name: family
+        required: true
+        schema:
+          title: Family
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          title: Name
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptRead'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Prompt
+      tags:
+      - autonomous
   /api/v1/autonomous/orchestration/{root_id}/approve:
     post:
       operationId: approve_api_v1_autonomous_orchestration__root_id__approve_post
@@ -11062,6 +11561,55 @@ paths:
       security:
       - OAuth2PasswordBearer: []
       summary: Reject
+      tags:
+      - autonomous
+  /api/v1/autonomous/orchestration/{root_id}/sessions/{session_id}/trace:
+    get:
+      description: 'How one session of a run was set up, and what its model wrote
+        back.
+
+
+        Owner-only. ``session_id`` is the run''s root for the orchestrator, or one
+
+        task''s dispatch id. Gives the pinned system message, the opening message,
+
+        the tools offered, and each turn''s text and tool calls. See
+
+        :mod:`app.autonomous.orchestration.trace` for what is rebuilt, how it is
+
+        checked against what was sent, and what is not kept.'
+      operationId: session_trace_api_v1_autonomous_orchestration__root_id__sessions__session_id__trace_get
+      parameters:
+      - in: path
+        name: root_id
+        required: true
+        schema:
+          format: uuid
+          title: Root Id
+          type: string
+      - in: path
+        name: session_id
+        required: true
+        schema:
+          format: uuid
+          title: Session Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionTraceRead'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Session Trace
       tags:
       - autonomous
   /api/v1/autonomous/orchestration/{root_id}/tree:
@@ -12888,15 +13436,33 @@ paths:
       - chats
   /api/v1/chats/{chat_id}/run-documents:
     get:
-      description: 'The matter''s files, plus named candidates, with whether each
-        can be read.
+      description: 'The files a run from this chat could read, with whether each can
+        be.
+
+
+        Also the knowledge bases a task could search: those attached to the chat''s
+
+        matter, where the composer''s profile grants the search. None outside a
+
+        matter.
+
+
+        In a matter: the matter''s files, plus named candidates. Selecting a
+
+        candidate attaches it to the matter when the run is accepted. Outside a
+
+        matter: named candidates only, and one that is filed in a matter is listed
+
+        as unreadable here. The documents the last run in this chat read are always
+
+        listed, and are returned as the suggested selection while they can still be
+
+        read.
 
 
         A file that cannot be read is listed with its reason and is not selectable;
 
-        it is never silently omitted (ADR 0038 D5). Selecting a candidate attaches
-
-        it to the matter when the run is accepted.'
+        it is never silently omitted (ADR 0038 D5).'
       operationId: run_documents_api_v1_chats__chat_id__run_documents_get
       parameters:
       - in: path
@@ -12948,11 +13514,16 @@ paths:
 
         Reports the allowances a run would be quoted before any planning is paid
 
-        for. Makes no model call. ``active_run`` names the owner''s run that is
+        for, the inference tier its pinned route resolves to, and whether message
 
-        holding the single active-run allowance, in any chat, so the composer can
+        text on that route is pseudonymized. Makes no model call. ``active_run`` names
+        the
 
-        say which one is blocking and offer to close it when it is uncertain.'
+        owner''s run that is holding the single active-run allowance, in any chat,
+
+        so the composer can say which one is blocking and offer to close it when it
+
+        is uncertain.'
       operationId: run_profiles_api_v1_chats__chat_id__run_profiles_get
       parameters:
       - in: path
@@ -12996,7 +13567,14 @@ paths:
         work needs the owner''s approval of the exact plan on the existing route.
 
 
-        The planning call receives ``goal`` only, never earlier messages.'
+        What the planning call receives is the profile''s to say and is in its
+
+        ``planning_notice``: the request only, or the request with the chat''s
+
+        recent messages. What it received is kept with the run.
+
+
+        The chat may be outside any matter where the profile allows it.'
       operationId: start_run_api_v1_chats__chat_id__runs_post
       parameters:
       - in: path

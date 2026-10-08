@@ -24,11 +24,12 @@ from typing import Any
 
 from pydantic import ValidationError as SchemaError
 
+from app.autonomous.orchestration import assembly
 from app.autonomous.orchestration.contracts import ChildAssignment, DocumentRef, PreparedPlan
 from app.autonomous.orchestration.effects import CostQuote, GuardedEffects
 from app.autonomous.orchestration.inference import InputLimitExceeded
 from app.autonomous.orchestration.outcomes import TopicOutcome
-from app.autonomous.orchestration.profiles import RunProfile
+from app.autonomous.orchestration.profiles import RunProfile, run_terms
 from app.autonomous.orchestration.store import BudgetExhausted, OrchestrationStore, WorkerClaim
 from app.autonomous.orchestration.tools import (
     LoopState,
@@ -36,6 +37,7 @@ from app.autonomous.orchestration.tools import (
     ToolCall,
     get_tool,
     refusal,
+    source_block,
 )
 from app.errors import Conflict, Forbidden, ToolNotGranted
 from app.schemas.autonomous import Phase
@@ -169,8 +171,23 @@ async def run_child_loop(
     child = next(c for c in plan.children if c.dispatch_id == claim.session_id)
     granted = child.tools.for_phase(PHASE)
     offered = [tool.schema() for name in granted if (tool := get_tool(name)) is not None]
-    inputs = child_inputs(profile, child, plan.documents, notes)
-    state = LoopState(documents=plan.documents, read_chars=profile.limits.document_read_chars)
+    # A prompt-pinned task's opening message is assembled from the approved plan.
+    inputs = (
+        {"operation": assembly.TASK}
+        if profile.prompted
+        else child_inputs(profile, child, plan.documents, notes)
+    )
+    # The run's own terms, frozen at intake, not the profile as it is now.
+    read_limit = run_terms(profile, view.planning).read_chars
+    position = next(
+        index for index, c in enumerate(plan.children, 1) if c.dispatch_id == claim.session_id
+    )
+    state = LoopState(
+        documents=plan.documents,
+        read_chars=read_limit,
+        knowledge_bases=plan.knowledge_bases,
+        source_base=source_block(len(plan.documents), position),
+    )
     turns: list[dict[str, Any]] = []
     base_bytes = 0
     bytes_per_char = 4.0
@@ -217,9 +234,7 @@ async def run_child_loop(
             }
         )
         for index, call in enumerate(calls):
-            state.read_chars = max(
-                0, min(profile.limits.document_read_chars, int(room() / bytes_per_char))
-            )
+            state.read_chars = max(0, min(read_limit, int(room() / bytes_per_char)))
             content = await _run_call(
                 effects, claim, f"topic:t{turn}:c{index}", call, granted=granted, state=state
             )

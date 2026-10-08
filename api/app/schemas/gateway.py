@@ -134,6 +134,12 @@ class ChatCompletionRequest(BaseModel):
     chat_id: str | None = None
     anonymize: bool = True
 
+    reasoning_effort: Literal["none", "minimal", "low", "medium", "high"] | None = None
+    """How much hidden reasoning to ask the model for. The gateway maps it to
+    Ollama's ``think``, sends it as it is to OpenAI and Azure OpenAI (it is
+    OpenAI's own parameter), and sends nothing for it to Anthropic. Omitted
+    from the wire when unset."""
+
     lq_ai_privileged: bool = False
     """M2-B3: backend forwards ``Project.privileged`` here when the chat
     lives in a project. The gateway's anonymization middleware skips

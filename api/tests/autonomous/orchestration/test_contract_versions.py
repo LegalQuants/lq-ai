@@ -13,7 +13,7 @@ from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -142,7 +142,7 @@ def test_a_snapshot_is_versioned_like_a_plan() -> None:
         {
             **legacy.model_dump(),
             "contract_version": 2,
-            "profile": "contract_qa_documents_v1",
+            "profile": "new_harness_v1",
             "documents": (document,),
             "root": scope,
             "packet_digest": None,
@@ -150,7 +150,7 @@ def test_a_snapshot_is_versioned_like_a_plan() -> None:
         }
     )
     dumped = registry.model_dump(mode="json")
-    assert dumped["profile"] == "contract_qa_documents_v1" and dumped["max_children"] == 2
+    assert dumped["profile"] == "new_harness_v1" and dumped["max_children"] == 2
     assert dumped["documents"][0]["filename"] == "agreement.md"
     assert registry.approval_hash() != legacy.approval_hash()
     # Version 1 is the fixed fictional packet and cannot carry a selection.
@@ -318,3 +318,212 @@ def test_tool_names_are_unique_and_ordered_in_a_grant() -> None:
     assert not grant.contains(PhaseTools(drafting=("read_document",)))
     with pytest.raises(ValueError):
         PhaseTools(analysis=("read_document", "read_document"))
+
+
+# --- Golden hashes: what was approved must hash as it did ---------------------------------
+#
+# A plan's hash is what the owner consented to, and a retained plan is checked against it
+# every time it is loaded. The fields added for knowledge bases and for a run's terms must
+# leave no trace in the canonical form of anything that has none, or every retained plan
+# stops matching its own hash. These literals are the digests as recorded; a change to a
+# serializer shows here as a changed literal.
+
+NEW_KEYS = frozenset({"knowledge_base_ids", "knowledge_bases", "terms"})
+
+# (intake digest, plan digest or None), as recorded in docs/uat/adr35-chat in 0.8.0.
+RECORDED_DIGESTS = {
+    "model-run.json": (
+        "efeac949c6698ece11a5fc990f7b2660181896d4767d6011a9ccc4f585326b84",
+        "05c9d5c97c553f14b6f42d7528daa94960508afd8a55b9af295b1d8fd839306d",
+    ),
+    "rejected-run.json": (
+        "b0cf7b2c98665d30ada0e4852e8511350df99162492072c455c6c97f7f24f60b",
+        "8340e3b5b26e3333bc40fe2ded40847b879f3c1f611f13504bfabf2005a1693c",
+    ),
+    "stalled-model-run.json": (
+        "cfcbbaeba0873af325f2dfb795b59a83a136f3e78c082dcd467f6ed5713015b0",
+        "f155544164c4e5a3507428106cb17a8afd5b48e3fba7a80107893cb3169d7006",
+    ),
+    "timeout-run.json": (
+        "d6da0d1cb5326721d12b1a827d255432150e250f02ca4ffbed510f61df971547",
+        "e5a0976c0a85c459d637b00465b61521f76588d91cee55c34234be27475f9fa4",
+    ),
+    "fenced-plan-run.json": (
+        "8277b259142264620f4470ad60b417df328c771c87f15cbdf5775a4d569deaca",
+        None,
+    ),
+    "truncated-plan-run.json": (
+        "001aa8e5c5fe398334133df16d264360550ecb9832df8d5a3925c0dbc611b7bc",
+        None,
+    ),
+}
+# Registry contracts built below from fixed identifiers, with no knowledge base and no
+# terms, as increments 1 and 2 built them. Digests computed when the fields were added.
+FIXED_DIGESTS = {
+    "v2_snapshot": "8bb171ffe6c3ac7e5beb7d36ed2ce83a1674895bc1104291a0e1bf2a295a336b",
+    "v3_snapshot": "16921adce4e88e97e30fa348fc90201c18ed13b2f3377e3c99debce2734f098b",
+    "v3_plan": "61e16e856ae51d4cbe14b6e2e80900566b8356c4699a1be4951a920ae067a760",
+}
+DOCUMENT = {
+    "number": 1,
+    "document_id": str(UUID(int=0xD0C)),
+    "file_id": str(UUID(int=0xF11E)),
+    "filename": "agreement.md",
+    "attached_for_run": False,
+}
+KNOWLEDGE_BASE = {"knowledge_base_id": str(UUID(int=0xB5)), "name": "Policies"}
+
+
+def _keys_in(value: Any) -> set[str]:
+    """Every key of every object nested anywhere in a dump."""
+    if isinstance(value, dict):
+        return set(value) | {k for v in value.values() for k in _keys_in(v)}
+    if isinstance(value, list):
+        return {k for v in value for k in _keys_in(v)}
+    return set()
+
+
+def _canonical_hash(dump: dict[str, Any]) -> str:
+    """The canonical form a hash is taken over: sorted keys, compact separators."""
+    return hashlib.sha256(
+        json.dumps(dump, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+def _recorded(name: str) -> dict[str, Any]:
+    return json.loads((RECORDED / name).read_text())
+
+
+@pytest.mark.parametrize("name", RUNS)
+def test_a_recorded_0_8_0_run_has_the_digests_it_had_and_none_of_the_new_keys(name: str) -> None:
+    run = _recorded(name)
+    intake_digest, plan_digest = RECORDED_DIGESTS[name]
+    snapshot = PlanningSnapshot.model_validate_json(json.dumps(run["planning"]))
+    dumped = snapshot.model_dump(mode="json")
+    assert not NEW_KEYS & _keys_in(dumped)
+    assert snapshot.approval_hash() == intake_digest == _canonical_hash(dumped)
+    assert (run["tree"] is None) is (plan_digest is None)
+    if plan_digest is None:
+        return
+    plan = PreparedPlan.model_validate_json(json.dumps(run["tree"]["plan"]))
+    dumped_plan = plan.model_dump(mode="json")
+    assert not NEW_KEYS & _keys_in(dumped_plan)
+    assert plan.approval_hash() == plan_digest == run["tree"]["plan_hash"]
+    assert plan.approval_hash() == _canonical_hash(dumped_plan)
+
+
+def _version_two_snapshot() -> dict[str, Any]:
+    """A registry intake as increment 1 recorded it: a profile and a numbered selection."""
+    snapshot = _recorded("model-run.json")["planning"]
+    snapshot["root"]["resources"]["document_ids"] = [DOCUMENT["document_id"]]
+    snapshot.update(
+        contract_version=2,
+        profile="new_harness_v1",
+        documents=[DOCUMENT],
+        packet_digest=None,
+        max_children=2,
+    )
+    return snapshot
+
+
+def _version_three_snapshot() -> dict[str, Any]:
+    """A registry intake as increment 2 recorded it: the chat so far and the date."""
+    snapshot = _version_two_snapshot()
+    snapshot.update(
+        contract_version=3,
+        today="2026-01-02",
+        thread=[
+            {"role": "user", "content": "An earlier question.", "cut": False},
+            {"role": "assistant", "content": "An earlier answer.", "cut": True},
+        ],
+    )
+    return snapshot
+
+
+def _version_three_plan() -> dict[str, Any]:
+    """A registry plan as increment 2 approved it, built as the version 3 test above builds one."""
+    plan = _recorded("model-run.json")["tree"]["plan"]
+    for scope in (plan["root"], *(c["execution"] for c in plan["children"])):
+        scope["resources"]["document_ids"] = [DOCUMENT["document_id"]]
+        scope["grants"]["analysis"] = sorted({*scope["grants"]["analysis"], "retrieve_chunks"})
+    plan["delegation_grants"]["analysis"] = sorted(
+        {*plan["delegation_grants"]["analysis"], "retrieve_chunks"}
+    )
+    plan.update(contract_version=3, profile="new_harness_v1", documents=[DOCUMENT])
+    for child in plan["children"]:
+        child["tools"] = {"analysis": ["read_document"]}
+        child["turn_limit"] = 2
+    return plan
+
+
+def _with_a_knowledge_base(contract: dict[str, Any]) -> dict[str, Any]:
+    """The same contract with one knowledge base listed, as a run in a matter lists it."""
+    value = json.loads(json.dumps(contract))
+    scopes = [value["root"], *(c["execution"] for c in value.get("children", ()))]
+    for scope in scopes:
+        scope["resources"]["knowledge_base_ids"] = [KNOWLEDGE_BASE["knowledge_base_id"]]
+    value["knowledge_bases"] = [KNOWLEDGE_BASE]
+    return value
+
+
+TERMS = {
+    "task_turns": 5,
+    "task_answer_chars": 12000,
+    "answer_chars": 16384,
+    "read_chars": 40000,
+    "planning": "tool",
+}
+
+
+def test_a_registry_contract_without_knowledge_bases_or_terms_keeps_its_digest() -> None:
+    contracts: dict[str, PlanningSnapshot | PreparedPlan] = {
+        "v2_snapshot": PlanningSnapshot.model_validate_json(json.dumps(_version_two_snapshot())),
+        "v3_snapshot": PlanningSnapshot.model_validate_json(json.dumps(_version_three_snapshot())),
+        "v3_plan": PreparedPlan.model_validate_json(json.dumps(_version_three_plan())),
+    }
+    assert [c.contract_version for c in contracts.values()] == [2, 3, 3]
+    for name, contract in contracts.items():
+        dumped = contract.model_dump(mode="json")
+        # Nothing of the newer fields is in the canonical form, and the hash is the literal.
+        assert not NEW_KEYS & _keys_in(dumped), name
+        assert contract.approval_hash() == _canonical_hash(dumped), name
+        assert contract.approval_hash() == FIXED_DIGESTS[name], name
+
+
+def test_listing_a_knowledge_base_or_stating_terms_changes_the_digest_and_the_dump() -> None:
+    snapshot, plan = _version_three_snapshot(), _version_three_plan()
+    for kind, contract, model in (
+        ("snapshot", snapshot, PlanningSnapshot),
+        ("plan", plan, PreparedPlan),
+    ):
+        plain = model.model_validate_json(json.dumps(contract))
+        listed = model.model_validate_json(json.dumps(_with_a_knowledge_base(contract)))
+        assert listed.approval_hash() != plain.approval_hash(), kind
+        dumped = listed.model_dump(mode="json")
+        assert {"knowledge_base_ids", "knowledge_bases"} <= _keys_in(dumped), kind
+        assert listed.approval_hash() == _canonical_hash(dumped), kind
+        # Taking it out again gives back the digest it had.
+        again = json.loads(json.dumps(dumped))
+        again.pop("knowledge_bases")
+        for scope in (again["root"], *(c["execution"] for c in again.get("children", ()))):
+            scope["resources"].pop("knowledge_base_ids")
+        assert model.model_validate_json(json.dumps(again)).approval_hash() == plain.approval_hash()
+    # Terms are part of an intake that has them, and of nothing else.
+    plain_snapshot = PlanningSnapshot.model_validate_json(json.dumps(snapshot))
+    with_terms = PlanningSnapshot.model_validate_json(json.dumps({**snapshot, "terms": TERMS}))
+    assert "terms" in with_terms.model_dump(mode="json")
+    assert with_terms.approval_hash() != plain_snapshot.approval_hash()
+    assert with_terms.approval_hash() == _canonical_hash(with_terms.model_dump(mode="json"))
+    # Each of the terms changes it, and the way the plan is handed over does.
+    for change in ({"task_turns": 4}, {"read_chars": 20000}, {"planning": "text"}):
+        other = PlanningSnapshot.model_validate_json(
+            json.dumps({**snapshot, "terms": {**TERMS, **change}})
+        )
+        assert other.approval_hash() != with_terms.approval_hash()
+    # An earlier contract version cannot carry either.
+    for refused in (
+        {**_version_two_snapshot(), "terms": TERMS},
+        _with_a_knowledge_base(_version_two_snapshot()),
+    ):
+        with pytest.raises(ValueError):
+            PlanningSnapshot.model_validate_json(json.dumps(refused))

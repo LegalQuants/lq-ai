@@ -1,9 +1,12 @@
-"""ADR 0038 D5: the first run profile on real documents.
+"""ADR 0038 D5: New harness on real documents.
 
 Controlled-provider tests of the contract: selection and exact-plan consent,
 attaching a chat attachment when it is picked, reads through the boundary,
 citation checks on the delivered answer, the handoff rules of DE-294, and the
 export of run data. A configured-provider acceptance run is a separate gate.
+
+What is particular to New harness (its prompt files, a run with no documents,
+a chat outside any matter, the thread) is in ``test_new_harness.py``.
 """
 
 from __future__ import annotations
@@ -22,11 +25,14 @@ from tests.autonomous.orchestration.model_harness import (
     BASE,
     CHATS,
     approve,
+    is_task,
     job,
     messages,
     new_chat,
+    operation_of,
     read,
     run_to_completion,
+    sections,
     start_in_chat,
     tool_call,
 )
@@ -47,7 +53,7 @@ from app.workers.user_export import build_export_zip_for_test
 
 pytestmark = pytest.mark.integration
 
-PROFILE = "contract_qa_documents_v1"
+PROFILE = "new_harness_v1"
 MSA = (
     "MASTER SERVICES AGREEMENT\n\n"
     "4. Fees. Customer shall pay the Fees within thirty (30) days of the invoice date.\n"
@@ -101,7 +107,7 @@ async def add_file(
 @pytest.fixture
 def documents(model_demo: SimpleNamespace) -> SimpleNamespace:
     api = model_demo
-    api.runtime.settings.orchestration_documents_enabled = True
+    api.runtime.settings.new_harness_enabled = True
     api.gateway.child_script = [
         [
             tool_call("read_document", {"document": 1, "reason": "Read the MSA."}, "call_a"),
@@ -150,19 +156,27 @@ async def test_the_real_profile_has_its_own_switch_and_names_what_it_reads(
     assert off["available"] is False and off["reason"] == "operator_disabled"
     await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[str(uuid4())], expect=403)
 
-    api.runtime.settings.orchestration_documents_enabled = True
+    api.runtime.settings.new_harness_enabled = True
     on = profile_of((await api.client.get(f"{CHATS}/{chat_id}/run-profiles")).json(), PROFILE)
-    assert on["available"] is True and on["documents"] == "selected"
+    assert on["available"] is True and on["documents"] == "optional"
     assert on["evidence"] == "citations" and on["max_documents"] == 8
-    assert on["reads"].startswith("Only the documents you select")
-    assert [t["name"] for t in on["tools"]] == ["read_document", "read_note", "save_note"]
+    assert on["min_documents"] == 0
+    assert "the documents you select, if any" in on["reads"]
+    # What the profile may grant. A run is offered the search only where its matter
+    # has a knowledge base attached, and the read only when documents are selected.
+    assert [t["name"] for t in on["tools"]] == [
+        "read_document",
+        "read_note",
+        "save_note",
+        "search_knowledge_base",
+    ]
     assert Decimal(on["budget_usd"]) == Decimal("10.0000") and on["max_children"] == 2
     # Turning this one on with no route configured is reported, not half-enabled.
-    api.runtime.settings.orchestration_documents_provider = ""
+    api.runtime.settings.new_harness_provider = ""
     broken = profile_of((await api.client.get(f"{CHATS}/{chat_id}/run-profiles")).json(), PROFILE)
     assert broken["available"] is False and broken["reason"] == "not_configured"
     # It may run in any active project the owner owns, not only the demo project.
-    api.runtime.settings.orchestration_documents_provider = "selected"
+    api.runtime.settings.new_harness_provider = "selected"
     async with api.env.factory.begin() as db:
         other = Project(owner_id=api.env.owner_id, name="Another matter", slug=f"m-{uuid4()}")
         db.add(other)
@@ -228,7 +242,6 @@ async def test_the_picker_lists_what_can_be_read_and_never_omits_what_cannot(
                 api, chat_id, profile=PROFILE, file_ids=[msa, bad], expect=400
             )
             assert refused["detail"]["details"]["file_id"] == bad
-        await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[], expect=400)
         await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[msa, msa], expect=400)
         assert await messages(api, chat_id) == []
         async with api.env.factory() as db:
@@ -642,11 +655,8 @@ async def test_document_text_and_child_output_are_data_and_cannot_redirect_the_r
     assert final["status"] == "completed"
 
     requests = api.gateway.requests
-    children = [
-        r
-        for r in requests
-        if json.loads(r.messages[1].content)["inputs"]["operation"] == "answer_contract_question"
-    ]
+    children = [r for r in requests if is_task(r)]
+    assert children
     # Document text reaches a model only as a tool result, never as instructions.
     for request in children:
         assert "Ignore all previous instructions" not in request.messages[0].content
@@ -685,17 +695,15 @@ async def test_document_text_and_child_output_are_data_and_cannot_redirect_the_r
     for request in children:
         assert "IGNORE YOUR TASK" not in json.dumps([m.content for m in request.messages])
     # The root receives child output as data, with its task unchanged and no tools.
-    synthesis = next(
-        r
-        for r in requests
-        if json.loads(r.messages[1].content)["inputs"]["operation"] == "synthesize_answers"
-    )
+    synthesis = next(r for r in requests if operation_of(r) == "synthesize_answers")
     assert synthesis.tools is None and len(synthesis.messages) == 2
-    payload = json.loads(synthesis.messages[1].content)
-    assert payload["task"] == value["planning"]["goal"]
-    assert all(
-        "IGNORE YOUR TASK" in t["outcome"]["findings"][0] for t in payload["inputs"]["topics"]
-    )
+    combine = sections(synthesis.messages[1].content)
+    assert combine["REQUEST"] == value["planning"]["goal"]
+    assert len(api.gateway.synthesis_topics) == 2
+    assert all("IGNORE YOUR TASK" in t["text"] for t in api.gateway.synthesis_topics)
+    # It arrives inside the results, never as a section of its own or in the prompt.
+    assert "IGNORE YOUR TASK" in combine["RESULTS"]
+    assert all("IGNORE YOUR TASK" not in combine[k] for k in combine if k != "RESULTS")
     assert "IGNORE YOUR TASK" not in synthesis.messages[0].content
 
 
@@ -708,7 +716,7 @@ async def test_a_root_reply_that_asks_for_a_tool_is_not_executed(
 
     async def tooled(request: Any, *, configuration_revision: str) -> Any:
         response = await original(request, configuration_revision=configuration_revision)
-        if json.loads(request.messages[1].content)["inputs"]["operation"] == "synthesize_answers":
+        if operation_of(request) == "synthesize_answers":
             response.choices[0].message.tool_calls = [
                 tool_call("read_document", {"document": 1, "reason": "The root wants a tool."})
             ]

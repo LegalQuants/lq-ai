@@ -27,7 +27,8 @@ class OrchestrationRoot(Base):
         ForeignKey("autonomous_sessions.id", ondelete="CASCADE"), primary_key=True
     )
     owner_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id", ondelete="RESTRICT"))
+    # Null for a run started from a chat outside any matter (0072).
+    project_id: Mapped[UUID | None] = mapped_column(ForeignKey("projects.id", ondelete="RESTRICT"))
     plan_id: Mapped[UUID] = mapped_column(unique=True)
     current_revision: Mapped[int | None] = mapped_column(Integer)
     profile: Mapped[str] = mapped_column(Text, server_default=text("'demonstration'"))

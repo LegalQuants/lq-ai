@@ -249,7 +249,7 @@ async def test_the_operator_can_read_every_registry_profile_and_its_state(
     assert response.status_code == 200, response.text
     value = response.json()
     states = {p["profile"]: p for p in value["profiles"]}
-    assert set(states) == {"model_demo_v1", "contract_qa_documents_v1", PROFILE}
+    assert set(states) == {"model_demo_v1", "new_harness_v1", PROFILE}
     assert value["deployment_children"] == 2
     fictional = states["model_demo_v1"]
     assert (
@@ -257,13 +257,24 @@ async def test_the_operator_can_read_every_registry_profile_and_its_state(
     )
     assert fictional["documents"] == "packet" and fictional["project_scope"] == "dedicated"
     assert fictional["limits"]["child_turn_limit"] == 2
-    documents = states["contract_qa_documents_v1"]
+    documents = states["new_harness_v1"]
     assert documents["enabled"] is False and documents["problem"] is None
-    assert documents["switch"] == "LQ_AI_ORCHESTRATION_DOCUMENTS_ENABLED"
+    assert documents["switch"] == "LQ_AI_NEW_HARNESS_ENABLED"
     # The composer offers one profile as the New harness model; the operator sees which.
     assert documents["composer"] is True and fictional["composer"] is False
     assert states[PROFILE]["composer"] is False
-    assert documents["evidence"] == "citations" and documents["project_scope"] == "owned"
+    # It may start from a chat in any owned matter, or in none.
+    assert documents["evidence"] == "citations" and documents["project_scope"] == "any"
+    assert documents["documents"] == "optional"
+    # Its two roles are instructed by engine prompt files, not installed skills.
+    assert (documents["root_skill"], documents["child_skill"]) == ("", "")
+    assert documents["root_prompt"] == "new_harness/orchestrator.v2"
+    assert documents["child_prompt"] == "new_harness/subagent.v2"
+    assert (fictional["root_prompt"], fictional["child_prompt"]) == ("", "")
+    assert fictional["root_skill"] == "orchestration-chat-demo"
+    # It follows the operator's gateway setting; the fixture still requires it.
+    assert documents["pseudonymization"] == "operator"
+    assert fictional["pseudonymization"] == "required"
     assert [t["name"] for t in states[PROFILE]["tools"]] == ["read_document", "stamp_note"]
 
     # A switch that is on with an incomplete configuration is reported, not enabled.
@@ -285,8 +296,10 @@ async def test_the_registry_read_is_for_administrators(model_demo: SimpleNamespa
 
 def test_the_registries_refuse_what_a_run_must_never_be_granted() -> None:
     shipped_tools = {t.name for t in registered_tools()}
-    assert shipped_tools == {"read_document", "read_note", "save_note"}
-    assert {p.id for p in registered_profiles()} == {"model_demo_v1", "contract_qa_documents_v1"}
+    # The plan tool is not here: it is offered to the planning call only, and
+    # no handler runs for it.
+    assert shipped_tools == {"read_document", "read_note", "save_note", "search_knowledge_base"}
+    assert {p.id for p in registered_profiles()} == {"model_demo_v1", "new_harness_v1"}
 
     def make(**changes: Any) -> RunTool:
         base: dict[str, Any] = {
@@ -329,4 +342,4 @@ def test_the_registries_refuse_what_a_run_must_never_be_granted() -> None:
             register_profile(RunProfile(**{**shipped.__dict__, **changes}))
     with pytest.raises(ValidationError):
         RunLimits(max_input_bytes=2_000_000)
-    assert {p.id for p in registered_profiles()} == {"model_demo_v1", "contract_qa_documents_v1"}
+    assert {p.id for p in registered_profiles()} == {"model_demo_v1", "new_harness_v1"}

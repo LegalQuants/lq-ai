@@ -227,7 +227,7 @@ async def _serialize_runs(session: AsyncSession, user: User) -> list[dict[str, A
                 "profile": root.profile,
                 "status": root.status,
                 "stop_reason": root.stop_reason,
-                "project_id": str(root.project_id),
+                "project_id": str(root.project_id) if root.project_id else None,
                 "chat_id": str(bound.chat_id) if bound else None,
                 "message_id": str(bound.id) if bound else None,
                 "created_at": _iso(root.created_at),

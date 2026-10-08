@@ -36,6 +36,7 @@ from app.models.audit import AuditLog
 from app.models.autonomous import AutonomousSession
 from app.models.chat import Chat
 from app.models.file import File
+from app.models.knowledge import KnowledgeBase
 from app.models.project import Project
 from app.models.user import User
 from app.skills.loader import load_registry
@@ -147,6 +148,9 @@ async def env(test_engine: AsyncEngine) -> AsyncIterator[SimpleNamespace]:
             # A run hosted in a chat writes messages, and the fictional
             # agreement is filed as a real file; both restrict the owner's delete.
             await db.execute(delete(Chat).where(Chat.owner_id == owner_id))
+            # A knowledge base restricts its owner's delete; its attachments
+            # to files and matters go with it.
+            await db.execute(delete(KnowledgeBase).where(KnowledgeBase.owner_id == owner_id))
             await db.execute(delete(File).where(File.owner_id == owner_id))
             await db.execute(delete(Project).where(Project.owner_id == owner_id))
             await db.execute(delete(User).where(User.id == owner_id))

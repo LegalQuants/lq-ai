@@ -5439,6 +5439,34 @@ paths:
   # supported_only or flagged). Null means nothing was checked and the answer is
   # unverified. USD amounts are strings. backend-openapi.generated.yaml holds the
   # exact shapes.
+  #
+  # New harness (profile ``new_harness_v1``) adds: the planning snapshot's version 3,
+  # with ``thread`` (the chat's earlier messages as the planning call was shown them,
+  # each {role, content, cut}), ``today`` (the UTC date of the request) and a null
+  # ``project_id`` for a run started from a chat outside any matter; a ``kind`` of
+  # ``prompt`` on a pinned-instructions entry that is an engine prompt file and not an
+  # installed skill (absent for a skill, so earlier plans keep their hashes); and
+  # ``messages_digest`` in an effect's ``accounting``. ChatRunRead.evidence is per run:
+  # ``citations`` only when the run had a source to check against: a selected document,
+  # or a file one of its knowledge-base searches found.
+  #
+  # The orchestrator's turn and knowledge-base search add: ``ChatRunRead.answered_directly``
+  # (true for a run that completed with no plan because the orchestrator answered the
+  # request by itself; ``tree`` is then null and nothing was read, searched or approved);
+  # ``ChatRunRead.sources`` (the knowledge-base files the run's searches found, each
+  # {number, file_id, filename, session_id}, where ``number`` is what a quotation's
+  # ``(Source: [N])`` marker carries and is above the selected documents' numbers); the
+  # planning snapshot's ``terms`` ({task_turns, task_answer_chars, answer_chars, read_chars,
+  # planning}: the limits the run states and is held to, frozen when the request was
+  # accepted, with ``planning`` ``tool`` where the plan is handed over as a tool call) and
+  # ``knowledge_bases`` (each {knowledge_base_id, name}), which the plan snapshot also
+  # carries; a step of kind ``knowledge_search`` whose summary is {passages, sources,
+  # listed, searched, failed, withheld} and holds no passage text; and the stop reasons
+  # ``plan_not_handed_over``, for a planning reply that wrote the plan out as text, and
+  # ``plan_has_placeholders``, for a plan from a pseudonymized call that carries a
+  # gateway placeholder.
+  # ``terms`` and ``knowledge_bases`` are left out of a snapshot that has none, so a
+  # retained plan keeps the hash its approval is bound to.
   /api/v1/chats/{chat_id}/runs:
     parameters:
       - {name: chat_id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -5447,8 +5475,9 @@ paths:
       summary: "ADR 0038 (proposed): start a governed run as a turn in this chat"
       description: |
         Proposed by ADR 0038; implemented on an unmerged branch and not ratified.
-        Requires the owner's Autonomous opt-in, a chat inside an active owned
-        project and an operator-enabled profile. Accepts one planning request.
+        Requires the owner's Autonomous opt-in and an operator-enabled profile.
+        The chat is inside an active owned project, or, where the profile allows
+        it, in no project at all. Accepts one planning request.
         The request becomes an ordinary user message and the reply is one
         assistant message of ``kind: run`` linked to the run's root session by
         ``autonomous_session_id``. Both are written with the run, so a run never
@@ -5459,16 +5488,57 @@ paths:
         row. A run that ends without an answer leaves the reply empty. Accepting
         the request authorizes one planning call within the disclosed allowance;
         child work needs the owner's approval of the exact plan on the existing
-        approve route. The planning call receives ``goal`` only, never earlier
-        messages.
+        approve route.
+
+        Where the profile hands its plan over by tool call (New harness; see
+        ``answers_directly`` on the run-profiles read), that one call is offered
+        the ``propose_plan`` tool. One call to it is the plan, read from the
+        call's arguments by the same strict parser; nothing is sent back to the
+        model. A complete reply with no call is the orchestrator's own answer:
+        it is written into the reply in the same way, the run ends ``completed``
+        with ``answered_directly`` true, and there is no plan, no child work and
+        no approval. Nothing was read or searched for that answer, and it is
+        unverified; if the run selected documents, quotations it marks with a
+        source are still checked and reported. Any other reply fails the plan:
+        more than one call, a call to another tool, arguments that are not a
+        valid plan (``invalid_proposal``), or a plan written out as text
+        (``plan_not_handed_over``). This amends ADR 0035 D1 and is not ratified.
+
+        On a route that pseudonymizes, the gateway replaces a name in message
+        text with a placeholder and puts it back in a reply's text. It does not
+        touch tool-call arguments. A plan handed over as a tool call would keep
+        its placeholders, and no later call could restore them, so a plan from a
+        pseudonymized call that carries one fails with ``plan_has_placeholders``
+        and nothing runs. The orchestrator's own answer is reply text and is
+        restored as usual.
+
+        In a project, the run lists the knowledge bases attached to that project
+        when the request is accepted (the owner's own, not archived, at most 16)
+        and its tasks may search them by keyword. They are named in the plan the
+        owner approves. A run outside any project searches none.
+
+        What the planning call receives is the profile's to say, in its
+        ``planning_notice``. The fictional profile sends ``goal`` only. New
+        harness also sends the chat's recent messages (at most 20, each cut to
+        6,000 characters, 32,768 bytes in all, errored and empty messages left
+        out), the date and the selected documents' names. That excerpt is read
+        once when the run is accepted and kept in the run's planning snapshot, so
+        the owner can read exactly what was sent and it is exported and deleted
+        with the run.
 
         ``request_id`` is idempotent: a repeated send returns the same run, and
-        the same id with different input is a 409. A profile that reads selected
-        documents needs one to eight ``file_ids`` and refuses the whole selection
-        if any file is missing, another owner's or unreadable; a profile that
-        reads a fixed document refuses ``file_ids``. A selected file that is not
-        yet attached to the project is attached when the run is accepted, with an
-        audit row.
+        the same id with different input is a 409. ``file_ids`` depends on the
+        profile's ``documents``: ``selected`` needs one to eight, ``optional``
+        takes none to eight, and ``packet`` reads a fixed document and refuses
+        any. The whole selection is refused if any file is missing, another
+        owner's or unreadable. In a project, a selected file that is not yet
+        attached to it is attached when the run is accepted, with an audit row.
+
+        A run from a chat outside any project is never privileged, its
+        inference-tier floor is the profile's own, nothing is attached, and it
+        reads only the owner's files that are filed in no project: a file that
+        belongs to a project carries that project's tier floor and privilege
+        flag, which such a run does not apply.
       requestBody:
         required: true
         content:
@@ -5482,8 +5552,8 @@ paths:
             application/json:
               schema:
                 $ref: './backend-openapi.generated.yaml#/components/schemas/ChatRunRead'
-        '400': {description: "Selection refused (none, duplicates, more than eight, or a file that cannot be read), or file_ids sent to a profile that reads a fixed document"}
-        '403': {description: "Unknown or switched-off profile, Autonomous opt-in absent, chat has no project, project not permitted for the profile, route or pricing unavailable, or the cap cannot fund planning, one task and synthesis"}
+        '400': {description: "Selection refused (none where the profile needs one, duplicates, more than eight, or a file that cannot be read, including a file in a project selected from a chat outside any project), or file_ids sent to a profile that reads a fixed document"}
+        '403': {description: "Unknown or switched-off profile, Autonomous opt-in absent, chat has no project and the profile needs one, project not permitted for the profile, route or pricing unavailable, or the cap cannot fund planning, one task and synthesis"}
         '404': {description: "Chat absent, archived or owned by another user, or project not found"}
         '409': {description: "Another run of the owner is active, or the request identity was reused with different input"}
         '422': {description: "Request body does not match the schema, for example more than eight file_ids"}
@@ -5498,14 +5568,32 @@ paths:
         Proposed by ADR 0038; implemented on an unmerged branch and not ratified.
         Each registry profile's availability for this chat, and the reason when
         it is unavailable (``operator_disabled``, ``not_configured``,
-        ``autonomous_opt_in_required``, ``project_required``,
-        ``project_not_permitted``, ``route_unavailable`` or ``active_run``).
+        ``autonomous_opt_in_required``, ``chat_archived``, ``project_required``,
+        ``project_unavailable``, ``project_not_permitted``, ``route_unavailable``
+        or ``active_run``). ``project_required`` is given only by a profile that
+        cannot start from a chat outside any project.
         Reports what the composer shows before any planning is paid for: the
         pinned model, the total cap, the planning, root and per-task allowances,
         the number of tasks the cap can fund, the attempt limit, the tool-turn
-        limit, the document limit and the tools the profile grants. Makes no
-        model call. ``active_run`` names the owner's run that holds the single
-        active-run allowance, in any chat.
+        limit, the document limits (``min_documents``, ``max_documents``) and the
+        tools the profile grants. Once the route is priced it also reports
+        ``routed_tier``, the inference tier the pinned route resolves to for this
+        chat, ``pseudonymized``, whether the gateway pseudonymizes message text
+        on that route (document text a task reads is returned to the model as
+        a tool result, which the gateway does not rewrite, and tool-call
+        arguments are not rewritten either), ``reasoning_effort`` when the
+        operator set one, ``answers_directly`` (true where the orchestrator may
+        answer a request that needs nothing read by itself, with no plan and no
+        approval), and
+        ``instructions``: for each role, whether it is instructed by an installed
+        skill or an engine prompt file, with its name, version and digest. Makes
+        no model call. ``composer_profile`` names the one profile the composer
+        offers, as the experimental "New harness" entry in the model picker, or
+        is null when the registry offers none; the server names it so a client
+        never chooses between profiles. A profile that is not offered there
+        stays startable through ``POST /chats/{chat_id}/runs`` where its
+        operator switch is on. ``active_run`` names the owner's run that holds
+        the single active-run allowance, in any chat.
       responses:
         '200':
           description: One entry per registry profile, and the owner's active run if any
@@ -5523,13 +5611,32 @@ paths:
       summary: "ADR 0038 (proposed): files a run started from this chat could read"
       description: |
         Proposed by ADR 0038; implemented on an unmerged branch and not ratified.
-        The project's files, plus any named candidates, each with whether a run
-        can read it. A file that cannot be read is listed with its reason
-        (``unsupported_type``, ``not_ingested``, ``ingestion_failed`` or
-        ``no_text``) and is not selectable; it is never silently omitted. Only
-        PDF with text, plain text and Markdown are selectable. Another owner's
-        file is never listed. Choosing a candidate attaches it to the project
-        when the run is accepted.
+        In a project: the project's files, plus any named candidates, each with
+        whether a run can read it. Choosing a candidate attaches it to the
+        project when the run is accepted. Outside any project
+        (``project_id`` null): named candidates only, and nothing is attached.
+        A file that cannot be read is listed with its reason
+        (``unsupported_type``, ``not_ingested``, ``ingestion_failed``,
+        ``no_text``, ``in_a_matter`` for a file that belongs to a project
+        when the chat is in none, or ``in_another_matter`` for a candidate
+        that only another project holds) and is not selectable; it is never
+        silently omitted. A run does not move a file from one project into
+        another. Only PDF with text, plain text and Markdown are selectable.
+        Another owner's file is never listed.
+
+        The documents the last run in this chat read are always listed, and
+        ``suggested_file_ids`` returns those of them that can still be read, in
+        that run's order, so a follow-up request can start from the same
+        documents after a reload. It is a suggestion: nothing is selected until
+        a run is started with those ids.
+
+        ``knowledge_bases`` lists the knowledge bases a task of a run from this
+        chat could search: the owner's own, not archived, attached to the chat's
+        project, where the composer's profile grants the search. They are not
+        picked: a run lists all of them, up to 16, and
+        ``knowledge_bases_omitted`` says how many more are attached and would
+        not be searched. Empty outside any project. The search is by keyword
+        (full-text) only; no query embedding is requested.
       parameters:
         - name: file_id
           in: query
@@ -5548,8 +5655,74 @@ paths:
             application/json:
               schema:
                 $ref: './backend-openapi.generated.yaml#/components/schemas/RunDocumentsRead'
-        '403': {description: Chat has no project}
         '404': {description: Chat or project absent, or the chat is owned by another user}
+
+  /api/v1/autonomous/orchestration/{root_id}/sessions/{session_id}/trace:
+    parameters:
+      - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: session_id, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      tags: [autonomous]
+      summary: "ADR 0038 (proposed): how one session of a run was set up, and what its model wrote back"
+      description: |
+        Proposed by ADR 0038; implemented on an unmerged branch and not ratified.
+        Owner-only. ``session_id`` is the run's root for the orchestrator, or one
+        task's dispatch id. ``calls`` gives each model call's opening: the pinned
+        system message (an installed skill or an engine prompt file), the opening
+        user message, and the tool schemas offered. ``turns`` gives each reply:
+        the text the model wrote and the tool calls it asked for, with their
+        arguments as text.
+
+        The opening is not stored. It is rebuilt from the run's own records by
+        the code that sent it, and ``check`` says how the rebuilt request compares
+        with the digest recorded when the call went out: ``matches``, ``differs``,
+        ``not_recorded`` (no digest was kept, or the call has not been made), or
+        ``not_rebuilt`` (a skill-pinned session, whose opening this read does not
+        rebuild, or pinned text that is no longer installed with that digest).
+
+        It is what the application sent to the gateway, before any
+        pseudonymization there. A later turn's full request is not kept. Document
+        text returned by a read tool, and passages returned by a knowledge-base
+        search, are not included. Full payload capture is PRD 5.4 and is not
+        built.
+
+        For a run whose plan is handed over by tool call, the planning call's
+        ``tools`` holds ``propose_plan``, and its turn holds either that one call
+        with the plan as its arguments, or the text of the orchestrator's own
+        answer.
+      responses:
+        '200':
+          description: The session's calls and turns
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/SessionTraceRead'
+        '404': {description: "Run absent or owned by another user, or the session is not part of its plan"}
+
+  /api/v1/autonomous/orchestration/prompts/{family}/{name}:
+    parameters:
+      - {name: family, in: path, required: true, schema: {type: string}}
+      - {name: name, in: path, required: true, schema: {type: string}, description: "``<role>.v<N>``, for example ``orchestrator.v1``"}
+    get:
+      tags: [autonomous]
+      summary: "ADR 0038 (proposed): the text of one engine prompt file"
+      description: |
+        Proposed by ADR 0038; implemented on an unmerged branch and not ratified.
+        Any signed-in user. Returns one of the engine's own versioned prompt
+        files, for example ``new_harness/orchestrator.v2``, with its version and
+        the digest a run pins. An earlier version stays readable, so a run that
+        pinned it can still show its text. These are the system messages of a profile that is
+        instructed by prompt files instead of installed skills. They are not in
+        the skill library and cannot be attached to a chat. A released file is
+        never edited; a change is a new version.
+      responses:
+        '200':
+          description: The prompt's text, version and digest
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/PromptRead'
+        '404': {description: No prompt with that name}
 
   /api/v1/admin/orchestration/profiles:
     get:
@@ -5560,7 +5733,9 @@ paths:
         Administrator-only and read-only. Profiles are switched on and routed
         through deployment configuration; this route reports what that
         configuration yields. Each entry names the switch, what the profile reads,
-        its project scope and evidence mode, its pinned skills and route, the
+        its project scope and evidence mode, what instructs its two roles (pinned
+        skills, or engine prompt files), whether it requires pseudonymization or
+        follows the gateway's setting, its route and any reasoning effort, the
         total cap, the tier floor, the attempt timeout, the granted tools and the
         limits. ``problem`` is set when a profile's switch is on but its
         configuration is incomplete, and ``enabled`` is then false.

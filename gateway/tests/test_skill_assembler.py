@@ -966,7 +966,6 @@ _SHIPPED_REQUIRED_INPUTS: dict[str, list[str]] = {
     "case-law-research": ["question"],
     "comms-improver": ["text", "audience"],
     "contract-qa": ["document", "question"],
-    "contract-questions-orchestrator": [],
     "contract-snapshot": [],
     "dpa-checklist-review": ["document", "regulatory_regime"],
     "enhance-prompt": ["raw_input"],

@@ -446,7 +446,7 @@ CREATE UNIQUE INDEX uq_messages_autonomous_session
   leaves `content` empty, and history replay skips assistant messages with no
   content.
 - Downgrade refuses while any message has `kind = 'run'` or a session link;
-  see [Governed runs in chat and closing a run](#governed-runs-in-chat-and-closing-a-run-0070-0071-adr-0038-proposed).
+  see [Governed runs in chat and closing a run](#governed-runs-in-chat-and-closing-a-run-0070-to-0073-adr-0038-proposed).
 
 ### `inference_routing_log` FK closure (Task C3)
 
@@ -1891,8 +1891,9 @@ call and may have `current_revision = NULL` until a valid proposal is retained.
 The new `planning` status participates in the one-active-root-per-owner index.
 Sample roots continue to require a current prepared revision and no planning
 snapshot. A root in `planning` cannot reference a prepared revision. Migration 0070
-later replaces the enumerated `profile` check and 0071 adds the `closed` status; see
-[Governed runs in chat and closing a run](#governed-runs-in-chat-and-closing-a-run-0070-0071-adr-0038-proposed).
+later replaces the enumerated `profile` check, 0071 adds the `closed` status, 0072
+lets `project_id` be null and 0073 lets a registry run complete without a plan; see
+[Governed runs in chat and closing a run](#governed-runs-in-chat-and-closing-a-run-0070-to-0073-adr-0038-proposed).
 
 The immutable intake snapshot pins owner/project, skill and packet digests,
 gateway revision, direct route, grants, deadlines, and root/planning allowances.
@@ -1914,7 +1915,7 @@ cascades children. Existing single-session status/phase enums are unchanged.
 
 | Table | Keys and fields | Constraints and lifecycle |
 |---|---|---|
-| `orchestration_roots` | `session_id` PK/FK; `owner_id`, `project_id`, unique `plan_id`; `current_revision`, nullable `admitted_revision`; `status`, `stop_reason`, created/updated timestamps | One active root per owner, including approval/child waits and uncertainty. Deferred composite FK binds current revision to a stored plan. An admitted revision equals the current revision and prevents recreating a deleted batch. |
+| `orchestration_roots` | `session_id` PK/FK; `owner_id`, `project_id` (nullable from 0072), unique `plan_id`; `current_revision`, nullable `admitted_revision`; `status`, `stop_reason`, created/updated timestamps | One active root per owner, including approval/child waits and uncertainty. Deferred composite FK binds current revision to a stored plan. An admitted revision equals the current revision and prevents recreating a deleted batch. |
 | `orchestration_plans` | PK `(root_id, revision)`; `plan_hash`, private JSONB `snapshot`, `status`, nullable JSONB `approval`, creation timestamp | Positive revision; SHA-256 digest shape; proposed/approved/rejected/superseded states. Approved requires consent. Superseding retains prior consent for inspection; never edits old snapshot content. |
 | `orchestration_admissions` | `session_id` PK/FK; `root_id`, `revision`, `dispatch_id`, `child_order`, creation timestamp | FK to stored plan; unique `(root, revision, dispatch)` and `(root, revision, order)`. Approval, child sessions, fixed allocations and admission audit are serialized by the root transaction. |
 | `orchestration_accounts` | `session_id` PK/FK; `root_id`; `allocation_usd NUMERIC(10,4)`, `spent_usd/reserved_usd NUMERIC(14,4)`; generation, worker UUID, lease expiry, fixed attempt deadline | Nonnegative amounts/generation. Worker, lease and attempt deadline are all set or all null; lease cannot exceed attempt deadline. Larger spent field records observed overruns honestly; admission enforces available allocation in a locked transaction. |
@@ -2043,14 +2044,15 @@ A scope ceiling of `0` refuses in the API and is never sent to the gateway.
 An unreadable policy fail-closes: no dispatch, refused audit row with
 `ceiling_source="unresolved"`.
 
-### Governed runs in chat and closing a run (0070, 0071; ADR 0038 proposed)
+### Governed runs in chat and closing a run (0070 to 0073; ADR 0038 proposed)
 
 Implemented on an unmerged branch; [ADR 0038](adr/0038-skill-backed-orchestration-profile.md)
-is proposed, not ratified. Both migrations are additive on a 0.8.0 database, which
-already carries the orchestration tables. The authoritative DDL is in
+is proposed, not ratified. The four migrations are additive on a 0.8.0 database, which
+already carries the orchestration tables. The authoritative DDL for the first two is in
 [`0070_runs_in_chat.py`](../api/alembic/versions/0070_runs_in_chat.py) and
 [`0071_close_uncertain_runs.py`](../api/alembic/versions/0071_close_uncertain_runs.py);
-this section names the constraints they replace. The `messages` changes of 0070 are
+0072 and 0073 are described further down, each with its file.
+This section names the constraints they replace. The `messages` changes of 0070 are
 described [with that table](#runs-in-chat-kind--run-and-autonomous_session_id-0070-adr-0038-proposed).
 
 **0070: registry profiles.** The profile is validated against the application's
@@ -2063,7 +2065,8 @@ closed profile registry, so the database keeps only its shape.
 
 `demonstration` stays reserved for the earlier sample profile, which was removed; a
 registry profile cannot use it. The registered profiles are `model_demo_v1`, the
-fictional agreement, and `contract_qa_documents_v1`, the documents the owner selects.
+fictional agreement, and `new_harness_v1`, the profile the chat composer offers as the
+experimental New harness model.
 
 **0071: closing an uncertain run.** ADR 0035 D5 stands: an effect with an uncertain
 outcome is never repeated, and its reservation is retained. Closing is the owner's way
@@ -2096,10 +2099,59 @@ to `halted`. `closed` is outside the partial unique indexes
 closing releases the owner's single active-run allowance and a closed effect no longer
 blocks its session.
 
-**Downgrade.** Both migrations refuse to downgrade while the rows they introduced are
-retained, as 0067 does: 0070 while any message has `kind = 'run'` or a session link, or
-any root has a profile other than `demonstration` and `model_demo_v1`; 0071 while any
-root or effect has status `closed`. Nothing is dropped silently; those runs need an
+**0072: a run outside a matter.** Authoritative DDL:
+[`0072_runs_outside_a_matter.py`](../api/alembic/versions/0072_runs_outside_a_matter.py).
+`orchestration_roots.project_id` becomes nullable. A run started from a chat that is in
+no matter has no project, and neither do its sessions (`autonomous_sessions.project_id`
+was already nullable, and the tree trigger from 0067 compares projects with
+`IS DISTINCT FROM`). The foreign key and its `ON DELETE RESTRICT` are unchanged, so a
+matter still cannot be deleted from under a run that belongs to it.
+
+The column says only that there is no matter. What follows from that is enforced by the
+application, at intake, on every policy check while the run is live, and at each read:
+
+| Rule | Where |
+|---|---|
+| The run is never privileged, and a plan that says otherwise is refused. | `store._project_scope` |
+| Its inference-tier floor is the profile's own; no matter sets one. | `begin_run`, `intake.quote_intake` |
+| It reads only the owner's undeleted files that are filed in no matter: `files.project_id IS NULL` and no `project_files` row. | `reading.readable_documents`, used by intake, `policy.CurrentPolicy` and `boundary.constrain_call` |
+| Nothing is attached to a matter for it. | `store.start_planning` |
+
+A file that belongs to a matter carries that matter's tier floor and privilege flag. A
+run with no matter applies neither, which is why it does not read one. A profile says
+whether it may start outside a matter (`project_scope = "any"`); New harness may, and
+the fictional profile, which is limited to one dedicated matter, may not.
+
+**0073: a run answered without a plan.** Authoritative DDL:
+[`0073_runs_answered_without_a_plan.py`](../api/alembic/versions/0073_runs_answered_without_a_plan.py).
+`ck_orchestration_planning` is replaced once more. Until 0073 a registry run with no plan
+revision (`current_revision IS NULL`) could end only as `uncertain`, `halted`, `failed`,
+`expired` or `closed`. It may now also end `completed`: the orchestrator answered the
+request by itself, so there is no `orchestration_plans` row, no admission and no child
+session. No column or table is added. The answer is the bound chat message's content, and
+the root session's `result` holds `{"kind": "orchestration_direct_answer", "verification":
+"unverified", "summary": ...}`.
+
+The constraint cannot say that such a run made one model call and admitted no child. The
+application holds that: the planning call is the only effect a run may admit before it has
+an approved plan (`store.begin_effect`), and children are admitted only under one
+(`store.admit_children`). A sample (`demonstration`) root still requires a prepared
+revision, and no run can wait for approval, be queued or run without one.
+
+Knowledge-base search adds no schema. The knowledge bases a run may search and its frozen
+terms are in `orchestration_roots.planning_snapshot` and the plan snapshot. A search
+step's `orchestration_effects.result` holds the passages the search returned, as a document
+read's holds the text it returned. The source number a search gives a file is in that
+result's step note (`result.step.summary`), with the file's identifiers and name and no
+passage text; it is read back from there when a delivered answer's quotations are checked.
+Of a search step's result, the step note is the only part that a view of the run or the
+owner's export returns.
+
+**Downgrade.** All four migrations refuse to downgrade while the rows they introduced
+are retained, as 0067 does: 0070 while any message has `kind = 'run'` or a session link,
+or any root has a profile other than `demonstration` and `model_demo_v1`; 0071 while any
+root or effect has status `closed`; 0072 while any root has no project; 0073 while any
+root is `completed` with no plan revision. Nothing is dropped silently; those runs need an
 explicit export and removal first.
 
 ### `autonomous_schedules` (M4)

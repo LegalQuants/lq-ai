@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.autonomous.enums import ToolIntent
 from app.autonomous.guard import ToolResult, guarded_tool_call
+from app.autonomous.orchestration import assembly
 from app.autonomous.orchestration.contracts import (
     ExecutionScope,
     Money,
@@ -35,7 +36,9 @@ from app.autonomous.orchestration.inference import (
     InferenceRoutes,
     identity_limit,
 )
-from app.autonomous.orchestration.policy import load_pinned_skill
+from app.autonomous.orchestration.planning import PlanningSnapshot
+from app.autonomous.orchestration.policy import load_instructions
+from app.autonomous.orchestration.profiles import get_profile
 from app.autonomous.orchestration.sources import AuthoritySources, SourceBinding
 from app.autonomous.orchestration.store import (
     EffectReceipt,
@@ -211,6 +214,9 @@ class _Invocation:
                 if self.claim.root_id == self.claim.session_id
                 else snapshot.child_skill_version,
             }
+            if self.view.scope.skill.kind != "skill":
+                # An engine prompt file, not an installed skill (ADR 0038 D3).
+                result.data["skill"]["kind"] = self.view.scope.skill.kind
         if self.tool_quote is not None and result.cost_usd == 0 and result.outcome == "success":
             # A fixed-price registry tool is charged its quote when it ran.
             result.cost_usd = self.tool_quote.amount_usd
@@ -278,50 +284,80 @@ class GuardedEffects:
         tools: list[dict[str, Any]] | None = None,
         step: StepNote | None = None,
     ) -> ToolResult:
-        """One pinned-skill inference.
+        """One inference under the session's pinned instructions.
 
         ``turns`` are an approved child's own earlier tool turns and ``tools``
         the function schemas its plan grants (ADR 0038 D4). Both are built by
         the engine from durable receipts and the registry; a caller cannot
         supply a system prompt, and the route binding covers every byte sent.
+
+        A planning call takes no turns. It may be offered one tool, the plan
+        tool of a profile that hands its plan over that way, and the schema
+        passed here must be exactly the one the run's intake produces.
+
+        The system message is the pinned skill or prompt file, whole. For a
+        skill the user message is the task and ``inputs`` as JSON, as in 0.8.0.
+        For a prompt file it is assembled from the run's plan and intake
+        (:mod:`..assembly`); ``inputs`` then names the step only, plus the
+        collected results when combining.
         """
         if intent not in {ToolIntent.run_skill, ToolIntent.plan}:
             raise Forbidden(message="Inference intent is not supported by this adapter")
-        if (turns or tools) and (self.inference is None or intent != ToolIntent.run_skill):
+        if (turns or tools) and self.inference is None:
             raise Forbidden(message="Tool turns require a bound skill inference")
+        if turns and intent != ToolIntent.run_skill:
+            raise Forbidden(message="Only an approved task has tool turns")
         # Copy before the first await; only this bounded JSON becomes user data.
         inputs_json = _bounded_json(inputs)
         turns_json = json.dumps(turns or [], allow_nan=False)
         tools_json = json.dumps(tools or [], allow_nan=False)
         view = await self.store.execution_view(claim)
-        record = self.skills.current().get(view.scope.skill.name)
-        if record is None:
-            raise Forbidden(message="Pinned skill is unavailable")
-        artifact = load_pinned_skill(record)
+        # The pin's kind decides where its name is read from: a prompt name is
+        # never looked up among installed skills, nor a skill among prompts.
+        artifact = load_instructions(
+            self.skills.current(), view.scope.skill.kind, view.scope.skill.name
+        )
         if artifact.pin != view.scope.skill:
             raise Forbidden(message="Pinned skill has changed")
-        task: Any = (
-            view.plan.goal
-            if claim.session_id == claim.root_id
-            else next(
-                c.task.model_dump(mode="json")
-                for c in view.plan.children
-                if c.dispatch_id == claim.session_id
+        offered = json.loads(tools_json)
+        plan_tools: list[dict[str, Any]] = []
+        if view.scope.skill.kind == "prompt":
+            profile = get_profile(view.plan.profile or "")
+            if profile is None or not profile.prompted:
+                raise Forbidden(message="Pinned prompt does not belong to the run's profile")
+            if isinstance(view.plan, PlanningSnapshot):
+                plan_tools = assembly.planning_tools(profile, view.plan)
+        if intent == ToolIntent.plan and offered != plan_tools:
+            raise Forbidden(message="A planning call is offered its plan tool and nothing else")
+        if view.scope.skill.kind == "prompt":
+            assert profile is not None
+            opening = assembly.opening(
+                profile,
+                plan=view.plan,
+                snapshot=view.planning,
+                session_id=claim.session_id,
+                inputs=json.loads(inputs_json),
             )
-        )
+        else:
+            task: Any = (
+                view.plan.goal
+                if claim.session_id == claim.root_id
+                else next(
+                    c.task.model_dump(mode="json")
+                    for c in view.plan.children
+                    if c.dispatch_id == claim.session_id
+                )
+            )
+            opening = _bounded_json({"task": task, "inputs": json.loads(inputs_json)})
         params: dict[str, Any] = {
             "model": self.model,
             "max_tokens": self.max_tokens,
             "messages": [
                 {"role": "system", "content": artifact.instructions},
-                {
-                    "role": "user",
-                    "content": _bounded_json({"task": task, "inputs": json.loads(inputs_json)}),
-                },
+                {"role": "user", "content": opening},
                 *json.loads(turns_json),
             ],
         }
-        offered = json.loads(tools_json)
         if offered:
             params["tools"] = offered
         binding = None
@@ -334,6 +370,10 @@ class GuardedEffects:
                 raise Forbidden(message="Gateway configuration changed; start a new approved run")
             params["model"] = binding.policy.model_key
             params["max_tokens"] = binding.policy.max_output_tokens
+            if binding.policy.reasoning_effort is not None:
+                # Part of the bound policy, so of the call's identity. Absent
+                # when the route sets none, as before the field existed.
+                params["reasoning_effort"] = binding.policy.reasoning_effort
             view = await self.store.execution_view(claim)
         return await self._call(
             claim, view, effect_key, phase, intent, params, inference_binding=binding, step=step
@@ -397,6 +437,42 @@ class GuardedEffects:
             phase,
             ToolIntent.retrieve_chunks,
             {"file_id": str(file_id), "offset": offset, "max_chars": max_chars},
+            step=step,
+            tool_quote=tool_quote,
+        )
+
+    async def search_knowledge(
+        self,
+        claim: WorkerClaim,
+        *,
+        effect_key: str,
+        phase: Phase,
+        knowledge_base_ids: tuple[UUID, ...],
+        query: str,
+        top_k: int,
+        max_chars: int,
+        step: StepNote | None = None,
+        tool_quote: CostQuote | None = None,
+    ) -> ToolResult:
+        """One keyword search of the knowledge bases the plan lists, through the boundary.
+
+        The request names every listed knowledge base, so it is the same on a
+        replay whatever has changed since. Which of them may still be searched
+        is decided inside the call, when it runs.
+        """
+        view = await self.store.execution_view(claim)
+        return await self._call(
+            claim,
+            view,
+            effect_key,
+            phase,
+            ToolIntent.retrieve_chunks,
+            {
+                "kb_ids": sorted(str(k) for k in knowledge_base_ids),
+                "query": query,
+                "top_k": top_k,
+                "max_chars": max_chars,
+            },
             step=step,
             tool_quote=tool_quote,
         )

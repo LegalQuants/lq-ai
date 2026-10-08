@@ -114,8 +114,28 @@ def parse_research_proposal(content: str) -> ResearchProposal:
 
 
 class SkillPin(Snapshot):
+    """Pinned instructions for one session: a name and the digest of its bytes.
+
+    ``kind`` says where the name resolves: an installed skill, or one of the
+    engine's own versioned prompt files (ADR 0038 D3). A prompt name is never
+    looked up in the skill library, and a skill name never among the prompts.
+    A skill pin serializes without ``kind``, as it did before prompts existed,
+    so a retained plan keeps the hash its approval is bound to.
+    """
+
     name: ShortText
     digest: Digest
+    kind: Literal["skill", "prompt"] = "skill"
+
+    @model_serializer(mode="wrap")
+    def serialize_pin(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        value = handler(self)
+        if self.kind == "skill":
+            value.pop("kind", None)
+        return value
+
+
+MAX_KNOWLEDGE_BASES = 16
 
 
 class ResourceScope(Snapshot):
@@ -123,21 +143,38 @@ class ResourceScope(Snapshot):
 
     The resolver must check adapter-specific operations at call time; a source
     name never grants every operation offered by that provider.
+
+    ``knowledge_base_ids`` are the knowledge bases a run may search (ADR 0038
+    D5): the ones attached to its matter when the request was accepted. Being
+    listed grants no search. Each call rechecks that the knowledge base is
+    still the owner's, not archived and still attached to the run's matter.
     """
 
     document_ids: Annotated[tuple[UUID, ...], Field(max_length=128)]
     source_names: Annotated[tuple[ShortText, ...], Field(max_length=32)]
+    knowledge_base_ids: Annotated[tuple[UUID, ...], Field(max_length=MAX_KNOWLEDGE_BASES)] = ()
 
-    @field_validator("document_ids", "source_names")
+    @field_validator("document_ids", "source_names", "knowledge_base_ids")
     @classmethod
     def unique_selections(cls, value: tuple) -> tuple:
         if len(set(value)) != len(value):
             raise ValueError("duplicate selected resource")
         return tuple(sorted(value))
 
+    @model_serializer(mode="wrap")
+    def serialize_scope(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        value = handler(self)
+        if not self.knowledge_base_ids:
+            # A scope without knowledge bases keeps the form it had before they
+            # existed. This dump is part of every plan's and intake's hash.
+            value.pop("knowledge_base_ids", None)
+        return value
+
     def contains(self, other: ResourceScope) -> bool:
-        return set(other.document_ids) <= set(self.document_ids) and set(other.source_names) <= set(
-            self.source_names
+        return (
+            set(other.document_ids) <= set(self.document_ids)
+            and set(other.source_names) <= set(self.source_names)
+            and set(other.knowledge_base_ids) <= set(self.knowledge_base_ids)
         )
 
 
@@ -217,6 +254,18 @@ class DocumentRef(Snapshot):
     attached_for_run: bool = False
 
 
+class KnowledgeBaseRef(Snapshot):
+    """One knowledge base a run's tasks may search, as the plan lists it (ADR 0038 D5).
+
+    The name is display data from the owner's own record, taken when the
+    request was accepted. Neither field grants a search: the boundary rechecks
+    ownership, archival and attachment to the run's matter at every call.
+    """
+
+    knowledge_base_id: UUID
+    name: ShortText
+
+
 def _numbered_selection(documents: tuple[DocumentRef, ...], resources: ResourceScope) -> None:
     if [d.number for d in documents] != list(range(1, len(documents) + 1)):
         raise ValueError("selected documents must be numbered in order")
@@ -224,6 +273,14 @@ def _numbered_selection(documents: tuple[DocumentRef, ...], resources: ResourceS
         d.document_id for d in documents
     } != set(resources.document_ids):
         raise ValueError("selected documents differ from the root resource scope")
+
+
+def _listed_knowledge_bases(
+    knowledge_bases: tuple[KnowledgeBaseRef, ...], resources: ResourceScope
+) -> None:
+    ids = [k.knowledge_base_id for k in knowledge_bases]
+    if len(set(ids)) != len(ids) or set(ids) != set(resources.knowledge_base_ids):
+        raise ValueError("listed knowledge bases differ from the root resource scope")
 
 
 class ExecutionScope(Snapshot):
@@ -275,10 +332,18 @@ class PreparedPlan(Snapshot):
     # document selection are part of what the owner approves.
     profile: ShortText | None = None
     documents: Annotated[tuple[DocumentRef, ...], Field(max_length=128)] = ()
+    # The knowledge bases the tasks may search, named so that approving the
+    # plan is consent to it. Version 3 only; left out of the canonical form
+    # when there are none.
+    knowledge_bases: Annotated[
+        tuple[KnowledgeBaseRef, ...], Field(max_length=MAX_KNOWLEDGE_BASES)
+    ] = ()
     plan_id: UUID
     revision: Annotated[int, Field(ge=1)]
     root_id: UUID
-    project_id: UUID
+    # None for a run started from a chat outside any matter (ADR 0038 D1).
+    # Required, never defaulted: a plan always states which it is.
+    project_id: UUID | None
     owner_id: UUID
     goal: TaskText
     policy_version: ShortText
@@ -311,13 +376,20 @@ class PreparedPlan(Snapshot):
     def bounded_delegation(self) -> Self:
         if (self.contract_version >= 2) != (self.planning_digest is not None):
             raise ValueError("model plans require their planning scope digest")
+        if self.project_id is None and self.contract_version != 3:
+            raise ValueError("only a registry plan can run outside a matter")
         if self.contract_version == 3:
             if self.profile is None:
                 raise ValueError("registry plans name their profile")
             _numbered_selection(self.documents, self.root.resources)
+            _listed_knowledge_bases(self.knowledge_bases, self.root.resources)
+            if self.knowledge_bases and self.project_id is None:
+                raise ValueError("a run outside a matter searches no knowledge base")
         elif (
             self.profile is not None
             or self.documents
+            or self.knowledge_bases
+            or self.root.resources.knowledge_base_ids
             or any(child.tools.names() or child.turn_limit for child in self.children)
         ):
             raise ValueError("profiles, documents and tools require contract version 3")
@@ -356,6 +428,9 @@ class PreparedPlan(Snapshot):
             for child in value["children"]:
                 child.pop("tools", None)
                 child.pop("turn_limit", None)
+        if not self.knowledge_bases:
+            # Likewise a plan with no knowledge bases, of any version.
+            value.pop("knowledge_bases", None)
         return value
 
     def approval_hash(self) -> str:
@@ -393,7 +468,7 @@ class ApprovalBinding(Snapshot):
 
     plan_id: UUID
     root_id: UUID
-    project_id: UUID
+    project_id: UUID | None
     revision: Annotated[int, Field(ge=1)]
     plan_hash: Digest
     approving_user_id: UUID

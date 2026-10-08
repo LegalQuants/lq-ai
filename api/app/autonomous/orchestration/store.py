@@ -6,6 +6,8 @@ skills, selected resources and current operator grants with database/local polic
 reads only. No permissive production checker or dispatch endpoint is supplied.
 
 Lock order: owner -> project -> chat -> root -> account -> effect -> message.
+A run outside any matter has no project; its lock on the project row selects
+nothing, and the order is otherwise the same (ADR 0038 D1).
 The owner/project share locks also serialize revocation with admission. Every
 worker operation locks the root; root halt and effect admission therefore have
 one ordering. The chat is locked only at intake, before its run's root exists,
@@ -40,7 +42,9 @@ from app.autonomous.orchestration.contracts import (
 from app.autonomous.orchestration.outcomes import (
     CollectedTopic,
     DemonstrationResult,
+    DirectAnswer,
     TopicOutcome,
+    direct_answer,
     topic_coverage,
 )
 from app.autonomous.orchestration.planning import PlanningSnapshot
@@ -88,6 +92,7 @@ _EVENTS = frozenset(
         "phase_changed",
         "topic_delivered",
         "root_delivered",
+        "answered_directly",
         "tool_refused",
         "run_closed",
     }
@@ -100,12 +105,14 @@ class BudgetExhausted(Conflict):
 
 class DeliveryHook(Protocol):
     async def __call__(
-        self, db: AsyncSession, root: Root, plan: PreparedPlan, message: Message
+        self, db: AsyncSession, root: Root, plan: PreparedPlan | PlanningSnapshot, message: Message
     ) -> dict[str, Any]:
         """Local checks on a delivered answer, inside the delivery transaction.
 
-        No remote I/O and no commit. Returns counts and labels for the audit
-        row; never text. Raising rolls delivery back.
+        ``plan`` is the approved plan, or the intake when the orchestrator
+        answered by itself and no plan exists. No remote I/O and no commit.
+        Returns counts and labels for the audit row; never text. Raising rolls
+        delivery back.
         """
         ...
 
@@ -166,7 +173,14 @@ async def _now(db: AsyncSession) -> datetime:
     return (await db.execute(select(func.clock_timestamp()))).scalar_one()
 
 
-def _project_scope(project: Project, plan: PreparedPlan | PlanningSnapshot) -> None:
+def _project_scope(project: Project | None, plan: PreparedPlan | PlanningSnapshot) -> None:
+    if project is None:
+        # Outside a matter nothing sets a tier floor or a privilege flag. The
+        # privilege flag turns pseudonymization off at the gateway, so a run
+        # with no privileged matter behind it must not carry one.
+        if plan.root.privileged:
+            raise Forbidden(message="A run outside a matter cannot be privileged")
+        return
     # Gateway tier semantics: lower numbers provide stronger protection.
     # An unset project floor adds no restriction beyond the explicit plan.
     if plan.root.minimum_inference_tier > (project.minimum_inference_tier or 5) or (
@@ -210,13 +224,15 @@ class OrchestrationStore:
         self.on_delivered = on_delivered
 
     async def _owner_project(
-        self, db: AsyncSession, owner_id: UUID, project_id: UUID, *, creating: bool = False
-    ) -> Project:
+        self, db: AsyncSession, owner_id: UUID, project_id: UUID | None, *, creating: bool = False
+    ) -> Project | None:
         owner = await db.scalar(
             select(User).where(User.id == owner_id).with_for_update(read=not creating)
         )
         if owner is None or not owner.autonomous_enabled:
             raise Forbidden(message="Autonomous execution is not enabled for this owner")
+        if project_id is None:
+            return None
         project = await db.scalar(
             select(Project).where(Project.id == project_id).with_for_update(read=True)
         )
@@ -507,7 +523,11 @@ class OrchestrationStore:
                         or chat.autonomous_session_id is not None
                         or chat.project_id != snapshot.project_id
                     ):
-                        raise Forbidden(message="A run needs an active chat in the run's project")
+                        raise Forbidden(
+                            message="A run needs an active chat in the run's own matter"
+                        )
+                if attach_file_ids and project is None:
+                    raise ValidationError(message="A run outside a matter attaches no files")
                 existing = await db.get(Root, snapshot.root_id)
                 if existing is not None:
                     if existing.owner_id != actor_id or existing.profile != profile:
@@ -568,7 +588,11 @@ class OrchestrationStore:
                         params={
                             "orchestration_profile": profile,
                             "query": snapshot.goal,
-                            "skill_ref": snapshot.root.skill.name,
+                            # ``skill_ref`` names an installed skill and is read
+                            # by the skill tools; a prompt file is not one.
+                            (
+                                "skill_ref" if snapshot.root.skill.kind == "skill" else "prompt_ref"
+                            ): snapshot.root.skill.name,
                         },
                     )
                 )
@@ -629,8 +653,17 @@ class OrchestrationStore:
         plan: PreparedPlan | None,
         *,
         failure: str = "invalid_proposal",
+        answer: str | None = None,
     ) -> None:
-        """Promote a paid planning result atomically, without resetting its ledger."""
+        """Promote a paid planning result atomically, without resetting its ledger.
+
+        One of three things happens. A plan is stored for the owner to approve.
+        The planning call failed, and the run ends. Or the orchestrator answered
+        by itself (``answer``): that reply is delivered and the run ends
+        completed, with no plan row, no children and no approval (ADR 0038 D1).
+        """
+        if plan is not None and answer is not None:
+            raise ValidationError(message="A planning result is a plan or an answer, not both")
         async with self.sessions.begin() as db:
             root, snapshot, now = await self._root(db, claim.root_id)
             if not isinstance(snapshot, PlanningSnapshot):
@@ -641,10 +674,23 @@ class OrchestrationStore:
             receipt = await db.get(Effect, (claim.session_id, "chat:plan:v1"))
             if account.reserved_usd or receipt is None or receipt.status != "completed":
                 raise Conflict(message="Planning effect must be settled before promotion")
+            if answer is not None:
+                # Nothing further is funded from this run, so the rule below,
+                # which keeps room for the tasks and the combining call, does
+                # not apply. A charge past the root's whole allocation has
+                # already halted the run when the call settled.
+                await self._deliver_direct(db, root, snapshot, answer, now, receipt.result)
+                root.updated_at = now
+                return
             if account.spent_usd > snapshot.planning_allowance_usd:
                 plan, failure = None, "unfunded_plan"
             if plan is None:
-                if failure not in {"invalid_proposal", "unfunded_plan"}:
+                if failure not in {
+                    "invalid_proposal",
+                    "unfunded_plan",
+                    "plan_not_handed_over",
+                    "plan_has_placeholders",
+                }:
                     raise ValidationError(message="Invalid planning failure code")
                 root.status, root.stop_reason = "failed", failure
                 session = await db.get(AutonomousSession, root.session_id)
@@ -670,6 +716,7 @@ class OrchestrationStore:
                     "delegation_grants",
                     "profile",
                     "documents",
+                    "knowledge_bases",
                 ):
                     if getattr(plan, key) != getattr(snapshot, key):
                         raise Forbidden(message="Prepared plan differs from planning authority")
@@ -694,6 +741,73 @@ class OrchestrationStore:
                 )
                 await _audit(db, root, "plan_saved", revision=1, child_count=len(plan.children))
             root.updated_at = now
+
+    async def _deliver_direct(
+        self,
+        db: AsyncSession,
+        root: Root,
+        snapshot: PlanningSnapshot,
+        answer: str,
+        now: datetime,
+        planned: dict[str, Any] | None,
+    ) -> None:
+        """Deliver the orchestrator's own answer: no plan, no tasks, no approval.
+
+        Sending the request authorized the one planning call, and that call is
+        all that ran. The answer is written into the bound chat message in this
+        transaction, with its audit row, as a combined answer is. It is
+        unverified. If the run has selected documents the quotation checks
+        still run on it: the orchestrator read none of them, so a quotation it
+        marks with a source is reported as it is found.
+        """
+        if snapshot.terms is None or snapshot.terms.planning != "tool":
+            raise Forbidden(message="This run cannot answer without a plan")
+        # The answer is the planning call's own stored reply and nothing else:
+        # a caller cannot have another text delivered under this run.
+        reply = (planned or {}).get("data")
+        reply = reply if isinstance(reply, dict) else {}
+        try:
+            own = (
+                None
+                if reply.get("tool_calls")
+                else direct_answer(
+                    reply.get("content"),
+                    reply.get("finish_reason"),
+                    limit=snapshot.terms.answer_chars,
+                )
+            )
+        except ValueError:
+            own = None
+        if own is None or own != answer:
+            raise Conflict(message="Direct answer differs from the planning call's reply")
+        try:
+            result = DirectAnswer(summary=answer)
+        except SchemaError:
+            raise ValidationError(message="Direct answer is outside its bounds") from None
+        session = await db.get(AutonomousSession, root.session_id)
+        assert session is not None
+        session.result = result.model_dump(mode="json")
+        session.current_phase = Phase.delivery.value
+        root.status = session.status = "completed"
+        session.completed_at = session.last_activity_at = now
+        details: dict[str, Any] = {"verification": "unverified"}
+        message = await db.scalar(
+            select(Message)
+            .where(Message.autonomous_session_id == root.session_id)
+            .with_for_update()
+        )
+        if message is not None:
+            await self._write_answer(db, root, snapshot, message, result.summary)
+            details.update(chat_id=str(message.chat_id), message_id=str(message.id))
+            if self.on_delivered is not None and snapshot.documents:
+                try:
+                    async with db.begin_nested():
+                        details.update(await self.on_delivered(db, root, snapshot, message))
+                except Exception:
+                    # No exception text: it can carry quoted document content.
+                    log.warning("Run answer checks failed; delivered unverified")
+                    details.update(verification="unverified", checks="failed")
+        await _audit(db, root, "answered_directly", **details)
 
     async def approve(
         self, root_id: UUID, *, actor_id: UUID, revision: int, plan_hash: str
@@ -1295,7 +1409,10 @@ class OrchestrationStore:
                 assert isinstance(plan, PreparedPlan)
                 await self._write_answer(db, root, plan, message, result.summary)
                 details.update(chat_id=str(message.chat_id), message_id=str(message.id))
-                if self.on_delivered is not None:
+                if self.on_delivered is not None and (plan.documents or plan.knowledge_bases):
+                    # Nothing to check an answer against when the run selected
+                    # no document and could search no knowledge base; it stays
+                    # labelled unverified.
                     # The answer is delivered whether or not it could be
                     # checked. A check that fails is rolled back to its
                     # savepoint and the answer stays labelled unverified.
@@ -1309,13 +1426,19 @@ class OrchestrationStore:
             await _audit(db, root, "root_delivered", coverage=result.coverage, **details)
 
     async def _write_answer(
-        self, db: AsyncSession, root: Root, plan: PreparedPlan, message: Message, answer: str
+        self,
+        db: AsyncSession,
+        root: Root,
+        plan: PreparedPlan | PlanningSnapshot,
+        message: Message,
+        answer: str,
     ) -> None:
         """Fill the message fields an ordinary assistant turn carries (D2).
 
         Skills are the plan's pinned skills. Provider, model and tier come from
         the run's settled inference receipts. Tokens are summed across the
-        tree, and cost is the tree's accounted spend.
+        tree, and cost is the tree's accounted spend. ``plan`` is the intake
+        when the orchestrator answered by itself: one session, one receipt.
         """
         receipts = (
             await db.scalars(
@@ -1342,10 +1465,12 @@ class OrchestrationStore:
                 Account.root_id == root.session_id
             )
         )
+        # Installed skills only. A session instructed by an engine prompt file
+        # applied no skill (ADR 0038 D3); the run's own record names the prompt.
         skills: list[str] = []
-        for name in (plan.root.skill.name, *(c.execution.skill.name for c in plan.children)):
-            if name not in skills:
-                skills.append(name)
+        for pin in (plan.root.skill, *(c.execution.skill for c in plan.children)):
+            if pin.kind == "skill" and pin.name not in skills:
+                skills.append(pin.name)
         message.content = answer
         message.applied_skills = skills
         message.routed_provider = provider if isinstance(provider, str) else None

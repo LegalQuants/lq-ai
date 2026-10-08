@@ -38,10 +38,12 @@ from tests.autonomous.orchestration.model_harness import (
 
 from app.api.dependencies import get_admin_user
 from app.main import app
-from app.models.document import Document
+from app.models.document import Document, DocumentChunk
 from app.models.file import File
+from app.models.knowledge import KnowledgeBase, KnowledgeBaseFile
 from app.models.orchestration import OrchestrationAccount as Account
 from app.models.project import ProjectFile
+from app.models.project_knowledge_base import ProjectKnowledgeBase
 
 TARGET = os.environ.get("LQ_DUMP_RUN_FIXTURES")
 pytestmark = [
@@ -261,7 +263,7 @@ async def test_record_refusals_and_a_failed_topic(model_demo: SimpleNamespace) -
 
 async def test_record_the_real_document_profile(model_demo: SimpleNamespace) -> None:
     api = model_demo
-    api.runtime.settings.orchestration_documents_enabled = True
+    api.runtime.settings.new_harness_enabled = True
     chat_id = await new_chat(api)
     msa_text = (
         "MASTER SERVICES AGREEMENT\n\n"
@@ -310,9 +312,7 @@ async def test_record_the_real_document_profile(model_demo: SimpleNamespace) -> 
         + quoted
         + ' The liability cap is "twelve months of fees" (Source: [1]).'
     )
-    value = await start_in_chat(
-        api, chat_id, profile="contract_qa_documents_v1", file_ids=[msa, dpa]
-    )
+    value = await start_in_chat(api, chat_id, profile="new_harness_v1", file_ids=[msa, dpa])
     save("run.documents.planning", value)
     root = value["root_id"]
     assert await job(api, root) == "completed"
@@ -332,6 +332,247 @@ async def test_record_the_real_document_profile(model_demo: SimpleNamespace) -> 
         save("admin.profiles", await get(api, "/api/v1/admin/orchestration/profiles"))
     finally:
         app.dependency_overrides.pop(get_admin_user, None)
+
+
+async def test_record_new_harness_traces_and_runs_without_documents_or_a_matter(
+    model_demo: SimpleNamespace,
+) -> None:
+    """What is particular to New harness: its prompts, a session's trace, a run with no
+    documents, a chat outside any matter, and a follow-up that is shown the thread."""
+    api = model_demo
+    api.runtime.settings.new_harness_enabled = True
+    profile = "new_harness_v1"
+    base = "/api/v1/autonomous/orchestration"
+    save("prompt.orchestrator", await get(api, f"{base}/prompts/new_harness/orchestrator.v2"))
+    save("prompt.subagent", await get(api, f"{base}/prompts/new_harness/subagent.v2"))
+
+    # A run on two documents: the trace of the orchestrator and of one sub-agent.
+    chat_id = await new_chat(api)
+    msa = await add_file(
+        api, "msa.txt", "MASTER SERVICES AGREEMENT\n\n4. Fees are due within thirty (30) days.\n"
+    )
+    dpa = await add_file(
+        api,
+        "dpa.md",
+        "DATA PROCESSING ADDENDUM\n\n3. Notice within 72 hours.\n",
+        mime="text/markdown",
+    )
+    api.gateway.expected_documents = [
+        {"number": 1, "filename": "msa.txt"},
+        {"number": 2, "filename": "dpa.md"},
+    ]
+    api.gateway.child_script = [
+        [
+            tool_call("read_document", {"document": 1, "reason": "Read the MSA."}, "call_a"),
+            tool_call(
+                "save_note",
+                {"name": "note-fees.md", "content": "Fees: 30 days.", "reason": "Keep the term."},
+                "call_b",
+            ),
+        ],
+        None,
+    ]
+    api.gateway.child_answer = 'Fees are due "within thirty (30) days" (Source: [1]).'
+    api.gateway.synthesis_answer = 'Fees are due "within thirty (30) days" (Source: [1]).'
+    value = await start_in_chat(api, chat_id, profile=profile, file_ids=[msa, dpa])
+    root = value["root_id"]
+    assert await job(api, root) == "completed"
+    save("trace.root.planned", await get(api, f"{base}/{root}/sessions/{root}/trace"))
+    final = await run_documents_to_completion(api, root)
+    save("run.harness.completed", final)
+    save("thread.harness.completed", await messages(api, chat_id))
+    save("trace.root.completed", await get(api, f"{base}/{root}/sessions/{root}/trace"))
+    child = final["tree"]["children"][0]["session_id"]
+    save("trace.child.completed", await get(api, f"{base}/{root}/sessions/{child}/trace"))
+    # After a run, its documents are suggested for the next request in this chat.
+    save("documents.after-run", await get(api, f"{CHATS}/{chat_id}/run-documents"))
+
+    # A follow-up in the same chat with no documents: the thread is in its intake.
+    api.gateway.expected_documents = []
+    api.gateway.child_script = [None]
+    api.gateway.child_answer = "A shorter statement of the payment term, from general knowledge."
+    api.gateway.synthesis_answer = "Fees are due in thirty days."
+    follow = await start_in_chat(api, chat_id, profile=profile, goal="Shorten that.", file_ids=[])
+    save("run.harness.follow-up.planning", follow)
+    assert await job(api, follow["root_id"]) == "completed"
+    save("run.harness.no-documents.awaiting-approval", await read(api, follow["root_id"]))
+    done = await run_documents_to_completion(api, follow["root_id"])
+    save("run.harness.no-documents.completed", done)
+    save("thread.harness.follow-up", await messages(api, chat_id))
+
+    # A chat outside any matter.
+    outside = await new_chat(api, in_project=False)
+    save("profiles.harness-no-project", await get(api, f"{CHATS}/{outside}/run-profiles"))
+    async with api.env.factory.begin() as db:
+        loose = File(
+            owner_id=api.env.owner_id,
+            project_id=None,
+            filename="loose-note.txt",
+            mime_type="text/plain",
+            size_bytes=20,
+            hash_sha256="0" * 64,
+            storage_path=str(uuid4()),
+            ingestion_status="ready",
+        )
+        db.add(loose)
+        await db.flush()
+        db.add(
+            Document(
+                file_id=loose.id,
+                parser="fixture",
+                character_count=20,
+                normalized_content="A note in no matter.",
+            )
+        )
+        loose_id = str(loose.id)
+    save(
+        "documents.no-project",
+        await get(api, f"{CHATS}/{outside}/run-documents", file_id=[loose_id, msa]),
+    )
+
+
+async def test_record_a_direct_answer_and_a_knowledge_base_search(
+    model_demo: SimpleNamespace,
+) -> None:
+    """The orchestrator's turn: an answer it gives by itself, a plan it wrote out as text
+    instead of handing over, and a run whose task searches the matter's knowledge bases."""
+    api = model_demo
+    api.runtime.settings.new_harness_enabled = True
+    profile = "new_harness_v1"
+    base = "/api/v1/autonomous/orchestration"
+    api.gateway.expected_documents = []
+    proposal = api.gateway.proposal
+
+    # 1. The orchestrator answers by itself: completed, no plan, no approval.
+    chat_id = await new_chat(api)
+    api.gateway.direct_answer = (
+        "You're welcome.\n\nNothing was read or searched for this reply: it rests on this "
+        "conversation only."
+    )
+    direct = await start_in_chat(api, chat_id, profile=profile, goal="Thanks, that helps.")
+    save("run.direct.planning", direct)
+    root = direct["root_id"]
+    assert await job(api, root) == "completed"
+    save("run.direct.completed", await read(api, root))
+    save("thread.direct.completed", await messages(api, chat_id))
+    save("trace.root.direct", await get(api, f"{base}/{root}/sessions/{root}/trace"))
+    save("receipts.direct", await get(api, f"{CHATS}/{chat_id}/receipts"))
+
+    # 2. A plan written out as text was not handed over: the run fails, nothing is shown.
+    api.gateway.direct_answer = None
+    api.gateway.plan_reply = (proposal, None)
+    written = await start_in_chat(api, chat_id, profile=profile, goal="Compare the two.")
+    assert await job(api, written["root_id"]) == "completed"
+    save("run.plan-not-handed-over", await read(api, written["root_id"]))
+    # A plan that carries a gateway placeholder, from a call that was pseudonymized.
+    carried = {
+        **json.loads(proposal)["tasks"][0],
+        "question": "What notice must PERSON_0002 give to end the agreement early?",
+    }
+    api.gateway.plan_reply = ("", [tool_call("propose_plan", {"tasks": [carried]})])
+    placeholder = await start_in_chat(api, chat_id, profile=profile, goal="Can she end it early?")
+    assert await job(api, placeholder["root_id"]) == "completed"
+    save("run.plan-has-placeholders", await read(api, placeholder["root_id"]))
+    api.gateway.plan_reply = None
+
+    # 3. A matter with two knowledge bases. One task searches them and quotes a passage.
+    leave = (
+        "LEAVE POLICY\n\n2. Annual leave. Each employee is entitled to eighteen (18) days "
+        "of annual leave in each calendar year.\n"
+    )
+    travel = (
+        "TRAVEL POLICY\n\n3. Approval. Overseas travel requires written approval from a "
+        "director at least fourteen (14) days before departure.\n"
+    )
+    for name, files in (
+        ("People policies", {"leave-policy.txt": leave}),
+        ("Travel", {"travel-policy.txt": travel}),
+    ):
+        async with api.env.factory.begin() as db:
+            kb = KnowledgeBase(owner_id=api.env.owner_id, name=name, hybrid_alpha=0.5)
+            db.add(kb)
+            await db.flush()
+            for filename, text in files.items():
+                file = File(
+                    owner_id=api.env.owner_id,
+                    project_id=None,
+                    filename=filename,
+                    mime_type="text/plain",
+                    size_bytes=len(text.encode()),
+                    hash_sha256="0" * 64,
+                    storage_path=str(uuid4()),
+                    ingestion_status="ready",
+                )
+                db.add(file)
+                await db.flush()
+                document = Document(
+                    file_id=file.id,
+                    parser="fixture",
+                    character_count=len(text),
+                    normalized_content=text,
+                )
+                db.add(document)
+                await db.flush()
+                db.add(
+                    DocumentChunk(
+                        document_id=document.id,
+                        chunk_index=0,
+                        content=text,
+                        page_start=1,
+                        page_end=1,
+                        char_offset_start=0,
+                        char_offset_end=len(text),
+                        tokens=None,
+                        metadata_json={},
+                    )
+                )
+                db.add(KnowledgeBaseFile(kb_id=kb.id, file_id=file.id))
+            db.add(ProjectKnowledgeBase(project_id=api.env.project_id, knowledge_base_id=kb.id))
+    searching = await new_chat(api)
+    save("documents.knowledge-bases", await get(api, f"{CHATS}/{searching}/run-documents"))
+    save("profiles.harness", await get(api, f"{CHATS}/{searching}/run-profiles"))
+    quote = '"eighteen (18) days of annual leave" (Source: [1])'
+    api.gateway.proposal = json.dumps({"tasks": json.loads(proposal)["tasks"][:1]})
+    api.gateway.child_script = [
+        [
+            tool_call(
+                "search_knowledge_base",
+                {"query": "annual leave", "reason": "Find the leave entitlement."},
+                "call_a",
+            ),
+            tool_call(
+                "search_knowledge_base",
+                {"query": "sabbatical", "reason": "Check for a sabbatical rule."},
+                "call_b",
+            ),
+        ],
+        None,
+    ]
+    api.gateway.child_answer = (
+        f"Each employee gets {quote}. A search for a sabbatical rule found nothing."
+    )
+    api.gateway.synthesis_answer = (
+        f"## Leave\n\nThe entitlement is {quote}.\n\nThe knowledge bases say nothing found "
+        "about a sabbatical."
+    )
+    value = await start_in_chat(
+        api, searching, profile=profile, goal="How much annual leave do staff get?"
+    )
+    root = value["root_id"]
+    save("run.knowledge.planning", value)
+    assert await job(api, root) == "completed"
+    save("run.knowledge.awaiting-approval", await read(api, root))
+    final = await run_documents_to_completion(api, root)
+    save("run.knowledge.completed", final)
+    thread = await messages(api, searching)
+    save("thread.knowledge.completed", thread)
+    child = final["tree"]["children"][0]["session_id"]
+    save("trace.child.knowledge", await get(api, f"{base}/{root}/sessions/{child}/trace"))
+    message_id = thread[-1]["id"]
+    save(
+        "citations.knowledge",
+        await get(api, f"{CHATS}/{searching}/messages/{message_id}/citations"),
+    )
 
 
 async def run_documents_to_completion(api: SimpleNamespace, root: str) -> dict[str, Any]:
