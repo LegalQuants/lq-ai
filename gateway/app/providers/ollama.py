@@ -560,7 +560,10 @@ def _tool_calls_from_ollama(raw: Any, *, start_index: int = 0) -> list[dict[str,
             continue
         arguments = function.get("arguments")
         if not isinstance(arguments, str):
-            arguments = json.dumps(arguments if arguments is not None else {})
+            # Characters as themselves, not ``\uXXXX``: an escape makes the
+            # string longer than the text it stands for, and a caller that
+            # bounds a call's arguments in bytes would count the difference.
+            arguments = json.dumps(arguments if arguments is not None else {}, ensure_ascii=False)
         call_id = item.get("id")
         out.append(
             {

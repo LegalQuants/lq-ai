@@ -317,6 +317,28 @@ def test_tool_results_without_a_name_take_it_from_the_call_they_answer() -> None
 
 
 @pytest.mark.unit
+def test_tool_call_arguments_keep_their_characters() -> None:
+    """A section mark or a curly quote is sent as itself, not as an escape."""
+    quoted = "“thirty days\u2019 notice”"
+    arguments = {"reason": f"Clause §5 says {quoted}", "name": "note-é.md"}
+    payload = {
+        "model": MODEL,
+        "message": {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{"function": {"name": "save_note", "arguments": arguments}}],
+        },
+        "done": True,
+        "done_reason": "stop",
+    }
+    calls = _from_ollama_response(payload, requested_model=MODEL).choices[0].message.tool_calls
+    assert calls is not None
+    raw = calls[0]["function"]["arguments"]
+    assert "§5" in raw and quoted in raw and "\\u" not in raw
+    assert json.loads(raw) == arguments
+
+
+@pytest.mark.unit
 def test_plain_messages_get_no_tool_keys() -> None:
     req = _request(
         messages=[
