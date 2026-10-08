@@ -1,97 +1,77 @@
 <script lang="ts">
 	/**
-	 * Renders the inputs declared in a skill's frontmatter as a form.
+	 * Renders the inputs a skill declares in its frontmatter as a form.
 	 *
-	 * For each input:
-	 * - `enum` → <select>.
-	 * - `boolean` → <input type=checkbox>.
-	 * - `integer` → <input type=number>.
-	 * - else → <input type=text> (string).
-	 *
-	 * `required` inputs that the user leaves empty block submission.
+	 * Required inputs are always visible; optional ones sit behind a
+	 * collapsed disclosure so a skill with many of them does not take over
+	 * the composer. Send-time validation lives in `chat/skillInputs.ts`
+	 * (`resolveSkillInputsForSend`), which also binds ready attached files to
+	 * a required document input the user left empty.
 	 */
 	import type { SkillInputDef } from '../types';
+	import { isFormInput } from '../chat/skillInputs';
+	import SkillInputField from './SkillInputField.svelte';
 
+	export let skillName: string;
 	export let inputs: SkillInputDef[] = [];
 	export let values: Record<string, unknown> = {};
+	export let readyFileNames: string[] = [];
+	export let processingFileNames: string[] = [];
 	export let onChange: (next: Record<string, unknown>) => void = () => undefined;
 
-	function update(name: string, value: unknown) {
-		const next = { ...values, [name]: value };
-		onChange(next);
-	}
+	$: formInputs = inputs.filter(isFormInput);
+	$: requiredInputs = formInputs.filter((inp) => inp.required);
+	$: optionalInputs = formInputs.filter((inp) => !inp.required);
 
-	export function validate(): { ok: boolean; missing: string[] } {
-		const missing: string[] = [];
-		for (const inp of inputs) {
-			if (!inp.required) continue;
-			const v = values[inp.name];
-			if (v === undefined || v === null || v === '') {
-				missing.push(inp.name);
-			}
-		}
-		return { ok: missing.length === 0, missing };
+	function update(name: string, value: unknown) {
+		onChange({ ...values, [name]: value });
 	}
 </script>
 
-{#if inputs.length === 0}
-	<p class="text-xs text-gray-500 italic">This skill has no required inputs.</p>
+{#if formInputs.length === 0}
+	<p class="lq-form-empty text-xs italic">This skill has no inputs.</p>
 {:else}
-	<form class="space-y-2" data-testid="lq-ai-skill-input-form">
-		{#each inputs as inp (inp.name)}
-			<div>
-				<label
-					for={`lq-ai-skill-input-${inp.name}`}
-					class="block text-xs font-medium text-gray-700 dark:text-gray-300"
-				>
-					{inp.name}
-					{#if inp.required}
-						<span class="text-rose-600">*</span>
-					{/if}
-				</label>
-				{#if inp.description}
-					<p class="text-xs text-gray-500">{inp.description}</p>
-				{/if}
-
-				{#if inp.type === 'enum' && inp.enum}
-					<select
-						class="mt-1 block w-full text-sm border border-gray-300 rounded px-2 py-1 dark:bg-gray-800"
-						value={values[inp.name] ?? inp.default ?? ''}
-						on:change={(e) => update(inp.name, (e.target as HTMLSelectElement).value)}
-						data-testid={`lq-ai-skill-input-${inp.name}`}
-					>
-						<option value="" disabled>— select —</option>
-						{#each inp.enum as opt}
-							<option value={opt}>{opt}</option>
-						{/each}
-					</select>
-				{:else if inp.type === 'boolean'}
-					<input
-						type="checkbox"
-						class="mt-1"
-						checked={Boolean(values[inp.name] ?? inp.default ?? false)}
-						on:change={(e) => update(inp.name, (e.target as HTMLInputElement).checked)}
-						data-testid={`lq-ai-skill-input-${inp.name}`}
-					/>
-				{:else if inp.type === 'integer'}
-					<input
-						type="number"
-						class="mt-1 block w-full text-sm border border-gray-300 rounded px-2 py-1 dark:bg-gray-800"
-						value={values[inp.name] ?? inp.default ?? ''}
-						on:input={(e) =>
-							update(inp.name, parseInt((e.target as HTMLInputElement).value, 10))}
-						data-testid={`lq-ai-skill-input-${inp.name}`}
-					/>
-				{:else}
-					<input
-						type="text"
-						class="mt-1 block w-full text-sm border border-gray-300 rounded px-2 py-1 dark:bg-gray-800"
-						value={String(values[inp.name] ?? inp.default ?? '')}
-						on:input={(e) => update(inp.name, (e.target as HTMLInputElement).value)}
-						data-testid={`lq-ai-skill-input-${inp.name}`}
-					/>
-				{/if}
-			</div>
+	<form class="space-y-2" data-testid="lq-ai-skill-input-form" on:submit|preventDefault>
+		{#each requiredInputs as inp (inp.name)}
+			<SkillInputField
+				{skillName}
+				input={inp}
+				value={values[inp.name]}
+				{readyFileNames}
+				{processingFileNames}
+				onChange={(value) => update(inp.name, value)}
+			/>
 		{/each}
+		{#if optionalInputs.length > 0}
+			<details data-testid="lq-ai-skill-input-optional">
+				<summary class="lq-form-summary text-xs font-medium cursor-pointer">
+					More options ({optionalInputs.length})
+				</summary>
+				<div class="mt-2 space-y-2">
+					{#each optionalInputs as inp (inp.name)}
+						<SkillInputField
+							{skillName}
+							input={inp}
+							value={values[inp.name]}
+							{readyFileNames}
+							{processingFileNames}
+							onChange={(value) => update(inp.name, value)}
+						/>
+					{/each}
+				</div>
+			</details>
+		{/if}
 	</form>
 {/if}
+
+<style>
+	@import '../styles/practice.css';
+
+	.lq-form-empty {
+		color: var(--lq-text-tertiary);
+	}
+
+	.lq-form-summary {
+		color: var(--lq-text-secondary);
+	}
+</style>

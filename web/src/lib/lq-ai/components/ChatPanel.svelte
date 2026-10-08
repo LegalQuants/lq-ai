@@ -148,7 +148,19 @@
 	} from '$lib/lq-ai/stores';
 	import { consumeMessageStream } from '$lib/lq-ai/sse/parser';
 	import { buildAuthorizeUrl, type PendingGate } from '$lib/lq-ai/chat/toolGate';
-	import { canAttachChatFile, selectFileIdsForSend } from '$lib/lq-ai/chat/attachedFiles';
+	import {
+		canAttachChatFile,
+		processingFileNames,
+		readyFileNames,
+		selectFileIdsForSend
+	} from '$lib/lq-ai/chat/attachedFiles';
+	import {
+		firstUnloadedSkillInputs,
+		flattenSkillInputs,
+		missingInputsMessage,
+		resolveSkillInputsForSend,
+		skillInputsUnavailableMessage
+	} from '$lib/lq-ai/chat/skillInputs';
 	import type { Chat, FileMeta, Message, Project, Skill } from '$lib/lq-ai/types';
 
 	import ChatSidebar from '$lib/lq-ai/components/ChatSidebar.svelte';
@@ -252,6 +264,28 @@
 	let streamingMessageId: string | null = null;
 	let streamAbort: AbortController | null = null;
 	let sendError: string | null = null;
+	// Why the composer refused to send (a skill's inputs are missing or not
+	// loaded). Kept apart from `sendError` because it describes the form's
+	// current state: it is dropped as soon as the skills, their inputs or the
+	// attached files change, where a server error stays until the next send.
+	let inputsError: string | null = null;
+	$: attachedReadyNames = readyFileNames(chatFiles);
+	$: attachedProcessingNames = processingFileNames(chatFiles);
+	// Keyed on values, not array identity: the ingestion poll replaces
+	// `chatFiles` on every tick, which must not wipe a notice that says a
+	// file is still processing.
+	$: inputStateKey = JSON.stringify([
+		attachedSkillNames,
+		skillInputs,
+		attachedReadyNames,
+		attachedProcessingNames
+	]);
+	$: {
+		void inputStateKey;
+		inputsError = null;
+	}
+	// Attached skills whose detail or input schema failed to load.
+	let failedSkillNames: string[] = [];
 
 	// PR6b — governed tool-loop gate. When the stream pauses on a
 	// `tool_confirmation_required` or `mcp_authorization_required` terminal
@@ -408,6 +442,7 @@
 		// Reset draft state.
 		composerText = '';
 		attachedSkillNames = [];
+		failedSkillNames = [];
 		attachmentSources = {};
 		skillInputs = {};
 		// Attached files are per-chat draft state too — reset them (and stop
@@ -507,16 +542,38 @@
 			attachmentSources = { ...attachmentSources, [name]: 'picker' };
 		}
 		attachedSkillNames = [...attachedSkillNames, name];
+		await loadSkillDetail(name);
+	}
+
+	// Also the picker's Retry handler. Send is blocked until this has
+	// succeeded for every attached skill: without the schema the composer
+	// cannot tell which inputs the gateway will insist on.
+	async function loadSkillDetail(name: string) {
+		failedSkillNames = failedSkillNames.filter((n) => n !== name);
 		try {
-			const detail = await skillsApi.getSkill(name);
-			skillDetails = { ...skillDetails, [name]: detail };
+			// The form schema comes from the api's own resolver (user > team >
+			// built-in, both frontmatter shapes) so the form and the gateway's
+			// required-input check read the same declaration.
+			const [detail, inputs] = await Promise.all([
+				skillsApi.getSkill(name),
+				skillsApi.getInputs(name)
+			]);
+			skillDetails = {
+				...skillDetails,
+				[name]: { ...detail, inputs: flattenSkillInputs(inputs) }
+			};
 		} catch (e) {
 			console.error('lq-ai: failed to load skill detail', e);
+			// Detached (or the chat changed) while loading: nothing to flag.
+			if (attachedSkillNames.includes(name) && !failedSkillNames.includes(name)) {
+				failedSkillNames = [...failedSkillNames, name];
+			}
 		}
 	}
 
 	function detachSkill(name: string) {
 		attachedSkillNames = attachedSkillNames.filter((n) => n !== name);
+		failedSkillNames = failedSkillNames.filter((n) => n !== name);
 		const next = { ...skillInputs };
 		delete next[name];
 		skillInputs = next;
@@ -680,22 +737,37 @@
 		if (!chat) return;
 		if (!composerText.trim()) return;
 
-		// Validate required skill inputs.
-		for (const name of attachedSkillNames) {
-			const detail = skillDetails[name];
-			if (!detail || !detail.inputs) continue;
-			const missing = detail.inputs
-				.filter((i) => i.required)
-				.filter((i) => {
-					const v = skillInputs[name]?.[i.name];
-					return v === undefined || v === null || v === '';
-				});
-			if (missing.length > 0) {
-				sendError = `Skill "${name}" is missing required inputs: ${missing
-					.map((m) => m.name)
-					.join(', ')}.`;
-				return;
-			}
+		// Hold the send until every attached skill's input schema is on hand.
+		const inputDefs = Object.fromEntries(
+			attachedSkillNames.map((n) => [n, skillDetails[n]?.inputs])
+		);
+		const unloaded = firstUnloadedSkillInputs(attachedSkillNames, inputDefs, failedSkillNames);
+		if (unloaded) {
+			sendError = null;
+			inputsError = skillInputsUnavailableMessage(
+				skillDetails[unloaded.skill]?.title ?? unloaded.skill,
+				unloaded.loadFailed
+			);
+			return;
+		}
+
+		// Validate required skill inputs and build the payload. A required
+		// document input left empty is bound to the ready attached files' names.
+		const resolvedInputs = resolveSkillInputsForSend(
+			attachedSkillNames,
+			inputDefs,
+			skillInputs,
+			attachedReadyNames
+		);
+		if (resolvedInputs.missing.length > 0) {
+			const first = resolvedInputs.missing[0];
+			sendError = null;
+			inputsError = missingInputsMessage(
+				first,
+				skillDetails[first.skill]?.title,
+				attachedProcessingNames
+			);
+			return;
 		}
 
 		sendError = null;
@@ -774,10 +846,7 @@
 					content: composerText,
 					model: currentModelId ?? undefined,
 					attached_skills: attachedSkillsPayload.length > 0 ? attachedSkillsPayload : undefined,
-					skill_inputs:
-						Object.keys(skillInputs).length > 0
-							? (skillInputs as Record<string, Record<string, unknown>>)
-							: undefined,
+					skill_inputs: resolvedInputs.skillInputs,
 					// Issue #207 finding 4 — only send set_sticky on a real toggle
 					// change; otherwise leave the chat's sticky set unchanged.
 					set_sticky: stickyDirty ? stickyEnabled : undefined,
@@ -1193,8 +1262,12 @@
 					{projectAttachedSkills}
 					{skillDetails}
 					{skillInputs}
+					readyFileNames={attachedReadyNames}
+					processingFileNames={attachedProcessingNames}
+					{failedSkillNames}
 					onAttach={attachSkill}
 					onDetach={detachSkill}
+					onRetry={loadSkillDetail}
 					onUpdateInputs={updateSkillInputs}
 				/>
 
@@ -1204,12 +1277,12 @@
 					}}
 				/>
 
-				{#if sendError}
+				{#if sendError ?? inputsError}
 					<div
 						class="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1"
 						data-testid="lq-ai-send-error"
 					>
-						{sendError}
+						{sendError ?? inputsError}
 					</div>
 				{/if}
 
