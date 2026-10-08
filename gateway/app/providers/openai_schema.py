@@ -177,6 +177,26 @@ class ChatCompletionRequest(BaseModel):
     """OpenAI-style tool_choice (``"auto"`` / ``"none"`` / a forced
     function). Forwarded verbatim to providers that support it."""
 
+    reasoning_effort: Literal["none", "minimal", "low", "medium", "high"] | None = None
+    """How much hidden reasoning to ask the model for, in OpenAI's vocabulary.
+
+    Hidden reasoning counts against ``max_tokens`` on a reasoning model, so a
+    caller with a fixed output limit uses this to keep room for the answer.
+    Unset (the default) sends nothing to the provider and leaves the model's
+    own default in place, so existing callers are unaffected.
+
+    What each adapter does with it:
+
+    * Ollama maps it to ``think``
+      (see :func:`app.providers.ollama._effort_to_think`).
+    * OpenAI and Azure OpenAI send it as it is: it is OpenAI's own parameter.
+    * Anthropic builds its body field by field and sends nothing for it.
+
+    What a given model does with a level is the model's business: some
+    treat every level as "on", and a model that does not take the parameter,
+    or cannot think, may refuse a request that carries it. A caller should
+    set it only for a route whose model it has been tried against."""
+
     # --- LQ.AI extensions (per gateway-openapi.yaml) -------------------------
     minimum_inference_tier: int | None = Field(default=None, ge=1, le=5)
     """D1: per-call request override of the tier floor. The most restrictive

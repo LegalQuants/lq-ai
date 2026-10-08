@@ -339,6 +339,29 @@ def test_tool_call_arguments_keep_their_characters() -> None:
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    ("effort", "think"),
+    [("none", False), ("minimal", "low"), ("low", "low"), ("medium", "medium"), ("high", "high")],
+)
+def test_reasoning_effort_becomes_ollama_think(effort: str, think: Any) -> None:
+    req = _request(messages=[{"role": "user", "content": "hi"}], reasoning_effort=effort)
+    assert _to_ollama_request(req, model=MODEL, stream=False)["think"] == think
+
+
+@pytest.mark.unit
+def test_no_reasoning_effort_sends_no_think() -> None:
+    """Unset leaves the model's own default, and the wire shape as it was."""
+    req = _request(messages=[{"role": "user", "content": "hi"}])
+    assert "think" not in _to_ollama_request(req, model=MODEL, stream=False)
+
+
+@pytest.mark.unit
+def test_an_unknown_reasoning_effort_is_refused() -> None:
+    with pytest.raises(ValueError):
+        _request(messages=[{"role": "user", "content": "hi"}], reasoning_effort="maximum")
+
+
+@pytest.mark.unit
 def test_plain_messages_get_no_tool_keys() -> None:
     req = _request(
         messages=[

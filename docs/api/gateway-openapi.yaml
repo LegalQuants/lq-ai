@@ -1111,6 +1111,26 @@ components:
               enum: [auto, none, required]
             - type: object
               additionalProperties: true
+        reasoning_effort:
+          type: string
+          enum: [none, minimal, low, medium, high]
+          description: |
+            How much hidden reasoning to ask the model for, in OpenAI's
+            vocabulary. Hidden reasoning counts against `max_tokens` on a
+            reasoning model, so a caller with a fixed output limit uses
+            this to keep room for the answer. Absent (the default) sends
+            nothing to the provider and leaves the model's own default,
+            so existing callers are unaffected.
+
+            The Ollama adapter maps it to Ollama's top-level `think`:
+            `none` → `false`, `minimal` and `low` → `"low"`, `medium` →
+            `"medium"`, `high` → `"high"`. The OpenAI and Azure OpenAI
+            adapters send it as it is, since it is OpenAI's own
+            parameter. The Anthropic adapter sends nothing for it. What
+            a model does with a level is the model's business: some
+            treat every level as "on", and a model that does not take
+            the parameter, or cannot think, may refuse a request that
+            carries it.
         # LQ.AI extensions
         minimum_inference_tier:
           type: integer

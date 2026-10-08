@@ -515,7 +515,30 @@ def _to_ollama_request(
     if tool_choice is not None:
         body["tool_choice"] = tool_choice
 
+    # Reasoning effort. Ollama takes a top-level ``think``. Nothing is sent
+    # when the caller set none, so the model's own default stands.
+    think = _effort_to_think(request.reasoning_effort)
+    if think is not None:
+        body["think"] = think
+
     return body
+
+
+# OpenAI's ``reasoning_effort`` values as Ollama's ``think``: ``false`` turns
+# thinking off, and the levels are passed on for models that support levels.
+_EFFORT_TO_THINK: dict[str, bool | str] = {
+    "none": False,
+    "minimal": "low",
+    "low": "low",
+    "medium": "medium",
+    "high": "high",
+}
+
+
+def _effort_to_think(effort: str | None) -> bool | str | None:
+    """Map a reasoning effort to Ollama's ``think``, or None to send nothing."""
+
+    return _EFFORT_TO_THINK.get(effort) if effort is not None else None
 
 
 def _tool_call_to_ollama(tool_call: dict[str, Any]) -> dict[str, Any]:
